@@ -39,7 +39,7 @@ var noop = function () {};
  * Return the `CouchbaseStore` extending `express`'s session Store.
  *
  * @param {object} express session
- * @return {Function}
+ * @returns {Function}
  * @api public
  */
 

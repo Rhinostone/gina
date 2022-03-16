@@ -45,7 +45,7 @@ if ( typeof(JSON.clone) == 'undefined' ) {
      * @param {object} source
      * @param {object} [target]
      * 
-     * @return {object} cloned JSON object
+     * @returns {object} cloned JSON object
      **/
     var clone = function(source, target) {
         if (source == null || typeof source != 'object') return source;
@@ -90,7 +90,7 @@ if ( typeof(JSON.escape) == 'undefined' ) {
      * 
      * @param {object} jsonStr
      * 
-     * @return {object} escaped JSON string
+     * @returns {object} escaped JSON string
      **/
      var escape = function(jsonStr){
         try {

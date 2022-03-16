@@ -45,7 +45,7 @@
  * @param {number} a The number to test.
  * @param {number} min The minimum value in the range, inclusive.
  * @param {number} max The maximum value in the range, inclusive.
- * @return {boolean} True if a >= min and a <= max.
+ * @returns {boolean} True if a >= min and a <= max.
  */
 function inRange(a, min, max) {
   return min <= a && a <= max;
@@ -54,7 +54,7 @@ function inRange(a, min, max) {
 /**
  * @param {number} n The numerator.
  * @param {number} d The denominator.
- * @return {number} The result of the integer division of n by d.
+ * @returns {number} The result of the integer division of n by d.
  */
 function div(n, d) {
   return Math.floor(n / d);
@@ -87,7 +87,7 @@ function ByteInputStream(bytes) {
 
   /**
    * @this {ByteInputStream}
-   * @return {number} Get the next byte from the stream.
+   * @returns {number} Get the next byte from the stream.
    */
   this.get = function() {
     return (pos >= bytes.length) ? EOF_byte : Number(bytes[pos]);
@@ -107,7 +107,7 @@ function ByteInputStream(bytes) {
 
   /**
    * @param {Array.<number>} test Array of bytes to compare against.
-   * @return {boolean} True if the start of the stream matches the test
+   * @returns {boolean} True if the start of the stream matches the test
    *     bytes.
    */
   this.match = function(test) {
@@ -134,7 +134,7 @@ function ByteOutputStream(bytes) {
 
   /**
    * @param {...number} var_args The byte or bytes to emit into the stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.emit = function(var_args) {
     /** @type {number} */
@@ -155,7 +155,7 @@ function ByteOutputStream(bytes) {
 function CodePointInputStream(string) {
   /**
    * @param {string} string Input string of UTF-16 code units.
-   * @return {Array.<number>} Code points.
+   * @returns {Array.<number>} Code points.
    */
   function stringToCodePoints(string) {
     /** @type {Array.<number>} */
@@ -206,7 +206,7 @@ function CodePointInputStream(string) {
   };
 
 
-  /** @return {number} Get the next code point from the stream. */
+  /** @returns {number} Get the next code point from the stream. */
   this.get = function() {
     if (pos >= cps.length) {
       return EOF_code_point;
@@ -222,7 +222,7 @@ function CodePointOutputStream() {
   /** @type {string} */
   var string = '';
 
-  /** @return {string} The accumulated string. */
+  /** @returns {string} The accumulated string. */
   this.string = function() {
     return string;
   };
@@ -253,7 +253,7 @@ EncodingError.prototype = Error.prototype;
 /**
  * @param {boolean} fatal If true, decoding errors raise an exception.
  * @param {number=} opt_code_point Override the standard fallback code point.
- * @return {number} The code point to insert on a decoding error.
+ * @returns {number} The code point to insert on a decoding error.
  */
 function decoderError(fatal, opt_code_point) {
   if (fatal) {
@@ -264,7 +264,7 @@ function decoderError(fatal, opt_code_point) {
 
 /**
  * @param {number} code_point The code point that could not be encoded.
- * @return {number} Always throws, no value is actually returned.
+ * @returns {number} Always throws, no value is actually returned.
  */
 function encoderError(code_point) {
   throw new EncodingError('The code point ' + code_point +
@@ -273,7 +273,7 @@ function encoderError(code_point) {
 
 /**
  * @param {string} label The encoding label.
- * @return {?{name:string,labels:Array.<string>}}
+ * @returns {?{name:string,labels:Array.<string>}}
  */
 function getEncoding(label) {
   label = String(label).trim().toLowerCase();
@@ -771,7 +771,7 @@ encodings.forEach(function(category) {
 /**
  * @param {number} pointer The |pointer| to search for.
  * @param {Array.<?number>|undefined} index The |index| to search within.
- * @return {?number} The code point corresponding to |pointer| in |index|,
+ * @returns {?number} The code point corresponding to |pointer| in |index|,
  *     or null if |code point| is not in |index|.
  */
 function indexCodePointFor(pointer, index) {
@@ -782,7 +782,7 @@ function indexCodePointFor(pointer, index) {
 /**
  * @param {number} code_point The |code point| to search for.
  * @param {Array.<?number>} index The |index| to search within.
- * @return {?number} The first pointer corresponding to |code point| in
+ * @returns {?number} The first pointer corresponding to |code point| in
  *     |index|, or null if |code point| is not in |index|.
  */
 function indexPointerFor(code_point, index) {
@@ -795,7 +795,7 @@ var indexes = require('./encoding-indexes');
 
 /**
  * @param {number} pointer The |pointer| to search for in the gb18030 index.
- * @return {?number} The code point corresponding to |pointer| in |index|,
+ * @returns {?number} The code point corresponding to |pointer| in |index|,
  *     or null if |code point| is not in the gb18030 index.
  */
 function indexGB18030CodePointFor(pointer) {
@@ -820,7 +820,7 @@ function indexGB18030CodePointFor(pointer) {
 
 /**
  * @param {number} code_point The |code point| to locate in the gb18030 index.
- * @return {number} The first pointer corresponding to |code point| in the
+ * @returns {number} The first pointer corresponding to |code point| in the
  *     gb18030 index.
  */
 function indexGB18030PointerFor(code_point) {
@@ -1032,7 +1032,7 @@ function UTF8Decoder(options) {
 
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1104,7 +1104,7 @@ function UTF8Encoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     /** @type {number} */
@@ -1163,7 +1163,7 @@ function SingleByteDecoder(index, options) {
   var fatal = options.fatal;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1193,7 +1193,7 @@ function SingleByteEncoder(index, options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -1248,7 +1248,7 @@ function GBKDecoder(gb18030, options) {
       /** @type {number} */ gbk_third = 0x00;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1338,7 +1338,7 @@ function GBKEncoder(gb18030, options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -1400,7 +1400,7 @@ function HZGB2312Decoder(options) {
       /** @type {number} */ hzgb2312_lead = 0x00;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1480,7 +1480,7 @@ function HZGB2312Encoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -1543,7 +1543,7 @@ function Big5Decoder(options) {
 
   /**
    * @param {ByteInputStream} byte_pointer The byte steram to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1616,7 +1616,7 @@ function Big5Encoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -1667,7 +1667,7 @@ function EUCJPDecoder(options) {
       /** @type {number} */ eucjp_second = 0x00;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1744,7 +1744,7 @@ function EUCJPEncoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -1807,7 +1807,7 @@ function ISO2022JPDecoder(options) {
       /** @type {number} */ iso2022jp_lead = 0x00;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -1950,7 +1950,7 @@ function ISO2022JPEncoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -2018,7 +2018,7 @@ function ShiftJISDecoder(options) {
   var /** @type {number} */ shiftjis_lead = 0x00;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -2070,7 +2070,7 @@ function ShiftJISEncoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -2126,7 +2126,7 @@ function EUCKRDecoder(options) {
   var /** @type {number} */ euckr_lead = 0x00;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -2193,7 +2193,7 @@ function EUCKREncoder(options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     var code_point = code_point_pointer.get();
@@ -2253,7 +2253,7 @@ function UTF16Decoder(utf16_be, options) {
       /** @type {?number} */ utf16_lead_surrogate = null;
   /**
    * @param {ByteInputStream} byte_pointer The byte stream to decode.
-   * @return {?number} The next code point decoded, or null if not enough
+   * @returns {?number} The next code point decoded, or null if not enough
    *     data exists in the input stream to decode a complete code point.
    */
   this.decode = function(byte_pointer) {
@@ -2309,12 +2309,12 @@ function UTF16Encoder(utf16_be, options) {
   /**
    * @param {ByteOutputStream} output_byte_stream Output byte stream.
    * @param {CodePointInputStream} code_point_pointer Input stream.
-   * @return {number} The last byte emitted.
+   * @returns {number} The last byte emitted.
    */
   this.encode = function(output_byte_stream, code_point_pointer) {
     /**
      * @param {number} code_unit
-     * @return {number} last byte emitted
+     * @returns {number} last byte emitted
      */
     function convert_to_bytes(code_unit) {
       var byte1 = code_unit >> 8;

@@ -70,7 +70,7 @@ function MainHelper(opt) {
      * @param {object} target - Target object
      * @param {object} source - Source object
      *
-     * @return {object} [result]
+     * @returns {object} [result]
      * */
     // extend = function() {
     //     var target = arguments[ 0 ] || {};
@@ -256,7 +256,7 @@ function MainHelper(opt) {
     /**
      * Get log path - %SystemRoot%\system32\winevt\logs or /
      *
-     * @return {string} logPath
+     * @returns {string} logPath
      * */
     getLogDir = function() {
         var log = function() {
@@ -281,7 +281,7 @@ function MainHelper(opt) {
 
     /**
      * Get run\lock path
-     * @return {string} rundir
+     * @returns {string} rundir
      * */
     getRunDir = function() {
         if ( isWin32() ) {

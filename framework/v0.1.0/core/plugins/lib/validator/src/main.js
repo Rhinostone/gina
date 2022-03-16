@@ -246,7 +246,8 @@
         
         if ( typeof(instance.$forms[_id]) != 'undefined' ) {            
             instance['$forms'][_id].withUserBindings = true;
-            if ( typeof(this.$forms[_id]) == 'undefined') {                
+            
+            if ( typeof(this.$forms) != 'undefined' && typeof(this.$forms[_id]) == 'undefined' ) {                
                 $form = this.$forms[_id] = instance['$forms'][_id];
             } else {
                 $form = instance.$forms[_id];
@@ -288,7 +289,7 @@
     /**
      * isPopinContext
      * 
-     * @return {boolean} isPopinContext
+     * @returns {boolean} isPopinContext
      */
     var isPopinContext = function() {
         var isPopinInUse = false, $activePopin = null;
@@ -311,7 +312,7 @@
      * @param {string} formId
      * @param {object} [customRule]
      *
-     * @return {object} $form
+     * @returns {object} $form
      * */
     var validateFormById = function(formId, customRule) {
         var $form = null
@@ -351,7 +352,7 @@
 
         checkForDuplicateForm(_id);
         
-        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {            
+        if ( typeof(this.$forms) != 'undefined' && typeof(instance['$forms'][_id]) != 'undefined' ) {            
             $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
             $target             = document.getElementById(_id);
@@ -1538,7 +1539,8 @@
                             
                                             var objCallback = {
                                                 id      : id,
-                                                sent    : ( typeof(data) == 'string' ) ? JSON.parse(data) : data
+                                                sent    : data
+                                                //sent    : ( typeof(data) == 'string' ) ? JSON.parse(data) : data
                                             };
                             
                                             window.ginaToolbar.update('forms', objCallback);
@@ -1991,7 +1993,7 @@
      * @param {array} buffer
      * @param {number} [byteLength] e.g.: 8, 16 or 32
      * 
-     * @return {string} stringBufffer
+     * @returns {string} stringBufffer
      */
     var ab2str = function(event, buf, byteLength) {
 
@@ -2720,18 +2722,47 @@
         return ruleObj
     }
     
-    
-    var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
-                        
+      
+    /**
+     * makeObjectFromArgs
+     * 
+     * 
+     * @param {string} root 
+     * @param {array} args 
+     * @param {object} obj 
+     * @param {number} len 
+     * @param {number} i 
+     * @param {string|object} value 
+     * @param {object} [rootObj]
+     * 
+     * @returns {Object} rootObj
+     */
+    var makeObjectFromArgs = function(_root, args, _obj, len, i, _value, _rootObj) {
+        
+        // Closure Compiler requirements 
+        var _global = window['gina']['_global'];        
+        // js_externs
+        _global.register({
+            'root'      : _root || null,
+            'obj'       : _obj || null,
+            'value'     : _value || null,
+            'rootObj'   : _rootObj || null
+        });
+        
+        
         if (i == len) { // end
             eval(root +'=value');
-            return rootObj
+            // backup result
+            var result = JSON.clone(rootObj);
+            // cleanup _global
+            _global.unregister(['root', 'obj', 'rootObj', 'value', 'valueType']);        
+            return result
         }
         
         var key = args[i].replace(/^\[|\]$/g, '');
-
+        
         // init root object
-        if ( typeof(rootObj) == 'undefined' ) {
+        if ( typeof(rootObj) == 'undefined' || !rootObj ) {
             rootObj = {};
             root = 'rootObj';
             
@@ -2743,7 +2774,10 @@
         
 
         var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
-        var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
+        var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {};
+        _global.register({
+            'valueType' : valueType
+        });
         if ( nextKey ) {            
             eval(root +' = valueType');
         }
@@ -2797,7 +2831,7 @@
         var tmpObj = null;
         if ( Array.isArray(obj[key]) ) {
             //makeObjectFromArgs(obj[key], args, obj[key], args.length, 1, value);
-            tmpObj = makeObjectFromArgs(key, args, obj[key], args.length, 1, value);
+            tmpObj = makeObjectFromArgs(key, args, obj[key], args.length, 1, value, null);
             obj[key] = merge(obj[key], tmpObj);
             makeObject(obj[key], value, args, len, i + 1);
         } else {
@@ -3513,7 +3547,7 @@
      * 
      * @param {object} HTMLElement
      * @param {object} rules
-     * @return {object} formValidatorInstance
+     * @returns {object} formValidatorInstance
      */
     var reBindForm = function($target, rules, cb) {
         // Unbind form
@@ -4151,8 +4185,12 @@
                         }
                         
                         if ( !$uploadForm ) {
+                            try {
+                                $uploadForm = getFormById(uploadFormId) || null;
+                            } catch (noExistingFormErr) {
+                                // do nothing
+                            }
                             
-                            $uploadForm = getFormById(uploadFormId);
                             if (!$uploadForm) {
                                 $uploadForm = (isPopinContext()) 
                                             ? $activePopin.$target.createElement('form') 
@@ -4162,6 +4200,8 @@
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
+                            // setAttribute() not needed ?
+                            //$uploadForm.setAttribute('id', uploadFormId);
                             $uploadForm.action   = url;
                             $uploadForm.enctype  = 'multipart/form-data';
                             $uploadForm.method   = 'POST';
@@ -4341,7 +4381,7 @@
                         // binding form
                         try {
                             var $uploadFormValidator = getFormById(uploadFormId);
-                            // create a FormData object which will be sent as the data payload in the          
+                            // create a FormData object which will be sent as the data payload          
                             var formData = new FormData();
                             // add the files to formData object for the data payload
                             var file = null;          
@@ -4349,6 +4389,7 @@
                                 file = files[l];
                                 formData.append(fileId, file, file.name);
                             }
+                            
                             
                             $uploadFormValidator
                                 // .on('error', function(e, result) {
@@ -4409,7 +4450,7 @@
                     
                                 // }
                                 }) */            
-                                .send(formData, { withCredentials: true/*, isSynchrone: true*/ });
+                                .send(formData, { withCredentials: true/** , isSynchrone: true*/ });
                             
                         } catch (formErr) {
                             throw formErr;
@@ -5646,7 +5687,7 @@
      * @param {object} $form - form target (DOMObject), not the instance
      * @param {object} [rules]
      * 
-     * @return {object} { .fields, .$fields, .rules }
+     * @returns {object} { .fields, .$fields, .rules }
      */
     var getFormValidationInfos = function($form, rules, isOnResetMode) {
         // patching form reset

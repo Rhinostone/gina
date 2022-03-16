@@ -259,10 +259,10 @@ function Model(namespace, _config) {
     /**
      * Get Model Configuration
      *
-     * @return {object|undefined} configuration
+     * @returns {object|undefined} configuration
      * */
     this.getConfig = function(connector){
-        var connector = ( typeof(connector) == 'undefined' ) ?  _connector : connector;
+        connector = ( typeof(connector) == 'undefined' ) ?  _connector : connector;
 
         if (_configuration) {
             return ( typeof(connector) != 'undefined' ) ? _configuration[connector] : undefined

@@ -7,8 +7,8 @@
  */
 var fs      = require('fs');
 var os      = require('os');
-var merge   = require('./../lib/merge');
-var console = require('./../lib/logger');
+//var merge   = require('./../lib/merge');
+//var console = require('./../lib/logger');
 
 /**
  * ContextHelper
@@ -18,12 +18,12 @@ var console = require('./../lib/logger');
  * @api public
  * */
 function ContextHelper(contexts) {
-
-    var self = {};
     
-    // if ( typeof(merge) == 'undefined' ) {
-    //     merge  = require('./../lib/merge');
-    // }
+    var merge   = require('./../lib/merge');
+    var console = require('./../lib/logger');
+    
+    var self = {};
+        
 
     /**
      * ContextHelper Constructor
@@ -54,7 +54,7 @@ function ContextHelper(contexts) {
         joinContext(contexts)
     }
 
-    joinContext = function(context) {
+    joinContext = function(context) {        
         merge(self.contexts, context, true)
     }
 
@@ -78,7 +78,7 @@ function ContextHelper(contexts) {
         if (arguments.length > 1) {
             //console.log("Globla setter active ", name, obj);
             if ( typeof(name) == 'undefined' || name == '' ) {
-                var name = 'global'
+                name = 'global'
             }
 
             if (/\./.test(name) ) {
@@ -196,7 +196,7 @@ function ContextHelper(contexts) {
      *
      * */
     getConfig = function(bundle, confName) {
-        
+        var merge = require('./../lib/merge');        
         var ctx             = null
             , ctxFilename   = getContext('argvFilename') // for workers ctx
             , confPath      = null
@@ -220,13 +220,12 @@ function ContextHelper(contexts) {
         }
 
         if (arguments.length == 1 || !bundle) {
-
-            var confName = (arguments.length == 1) ? bundle : confName
-                , bundle = null
-                , file = null
+            
+            confName = (arguments.length == 1) ? bundle : confName;
+            var file = null
                 , stackFileName = null;
 
-            for (var i = 1, len = 10; i < len; ++i) {
+            for (let i = 1, len = 10; i < len; ++i) {
                 stackFileName = __stack[i].getFileName();
                 if (stackFileName && !/node_modules/.test(stackFileName)) {
                     file = stackFileName;
@@ -362,7 +361,7 @@ function ContextHelper(contexts) {
         }
 
         var env         = process.env.NODE_ENV || GINA_ENV;
-        var envIsDev    = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;//GINA_ENV_IS_DEV;
+        var envIsDev    = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
         var Config      = ctx.gina.Config;
         var conf = new Config({
             env             : env,
@@ -391,14 +390,14 @@ function ContextHelper(contexts) {
                      *
                      * @param {string} [name]
                      *
-                     * @return {object} bundleConfiguration - By default config from the bundle where the lib is located
+                     * @returns {object} bundleConfiguration - By default config from the bundle where the lib is located
                      * */
                     LibClass.prototype.getConfig = function (name) {
                         if ( typeof(name) != 'undefined' && typeof( conf.envConf[bundle][env].content[name] ) != 'undefined' ) {
-                            return conf.envConf[bundle][env].content[name]
+                            return JSON.clone(conf.envConf[bundle][env].content[name])
                         }
 
-                        return conf.envConf[bundle][env]
+                        return JSON.clone(conf.envConf[bundle][env])
                     };
 
                     return new LibClass ({
@@ -432,7 +431,7 @@ function ContextHelper(contexts) {
      * @param {object} dictionary
      * @param {object} replaceable
      *
-     * @return {object} revealed
+     * @returns {object} revealed
      * */
     whisper = function(dictionary, replaceable, rule) {
         
@@ -517,7 +516,7 @@ function ContextHelper(contexts) {
     /**
      * Get defiend constants
      *
-     * @return {array} constants
+     * @returns {array} constants
      * */
     getDefined = function(){
         var a = [];

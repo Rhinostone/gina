@@ -2161,7 +2161,7 @@ function Merge() {
      * @param {object} source - Source object
      * @param {boolean} [override] - Override when copying
      *
-     * @return {object} [result]
+     * @returns {object} [result]
      * */
     var browse = function (target, source) {
         
@@ -3589,15 +3589,24 @@ function PrototypesHelper(instance) {
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     
     var local = instance || null;
-    // since in for some cases we cannot use gina envVars directly
+    var envVars = null;
+    // since for some cases we cannot use gina envVars directly
     if (        
         typeof(GINA_DIR) == 'undefined'
         && !isGFFCtx
         && typeof(process) != 'undefined' 
-        && process.argv.length > 3 
-        && /^\{/.test(process.argv[2]) 
+        && process.argv.length > 3
     ) {
-        envVars = JSON.parse(process.argv[2]).envVars;
+        if ( /^\{/.test(process.argv[2]) ) {
+            envVars = JSON.parse(process.argv[2]).envVars;
+        }
+        // minions case
+        else if ( /\.ctx$/.test(process.argv[2]) ) {
+            var fs = require('fs');
+            var envVarFile = process.argv[2].split(/\-\-argv\-filename\=/)[1];
+            envVars = JSON.parse(fs.readFileSync(envVarFile).toString()).envVars;
+        }
+        
     }
     // else if (isGFFCtx) {
     //     envVars = window;
@@ -3638,7 +3647,7 @@ function PrototypesHelper(instance) {
         /**
          * clone array
          * 
-         * @return {array} Return cloned array
+         * @returns {array} Return cloned array
          * @supress {misplacedTypeAnnotation}
          **/
         Object.defineProperty( Array.prototype, 'clone', {
@@ -3651,7 +3660,11 @@ function PrototypesHelper(instance) {
     }
     
     if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
-        JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
+        if ( typeof(envVars) != 'undefined' ) {
+            JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
+        } else {
+            JSON.clone = require( GINA_DIR +'/utils/prototypes.json_clone');
+        }        
     }
     
     if ( typeof(JSON.escape) == 'undefined' ) {
@@ -3666,7 +3679,7 @@ function PrototypesHelper(instance) {
          * 
          * @param {object} jsonStr
          * 
-         * @return {object} escaped JSON string
+         * @returns {object} escaped JSON string
          **/
          var escape = function(jsonStr){
             try {
@@ -3755,7 +3768,7 @@ function PrototypesHelper(instance) {
     if ( typeof(global) != 'undefined' && typeof(global.__stack) == 'undefined' ) {
         /**
          * __stack Get current stack
-         * @return {Object} stack Current stack
+         * @returns {Object} stack Current stack
          * @suppress {es5Strict}
          **/
         Object.defineProperty(global, '__stack', {
@@ -3819,8 +3832,8 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 function DateFormatHelper() {
     
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
-
     var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+    
     
     // if ( typeof(define) === 'function' && define.amd ) {
     //     var Date = this.Date;
@@ -3912,10 +3925,26 @@ function DateFormatHelper() {
     }
 
     var format = function(date, mask, utc) {
+        
+        // if ( typeof(merge) == 'undefined' || !merge ) {
+        //     merge = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+            
+        // }
+        
         var dF          = self
             , i18n      = dF.i18n[dF.lang] || dF.i18n['en']
-            , masksList = merge(i18n.masks, dF.masks)
+            //, masksList = merge(i18n.masks, dF.masks)
+            , masksList = null
         ;
+        
+        try {
+            masksList = merge(i18n.masks, dF.masks);
+        } catch( mergeErr) {
+            // called from logger - redefinition needed for none-dev env: cache issue
+            isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
+            merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+            masksList = merge(i18n.masks, dF.masks);
+        }
         
         if ( typeof(dF.i18n[dF.culture]) != 'undefined' ) {
             i18n  = dF.i18n[dF.culture];
@@ -4004,7 +4033,7 @@ function DateFormatHelper() {
      *
      * @param {string} format
      *
-     * @return {string} maskName
+     * @returns {string} maskName
      * */
     // var getMaskNameFromFormat = function (format) {
 
@@ -4026,7 +4055,7 @@ function DateFormatHelper() {
      *  TODO - add a closure to `ignoreFromList(array)` based on Lib::Validator
      *
      *  @param {object} dateTo
-     *  @return {number} count
+     *  @returns {number} count
      * */
     var countDaysTo = function(date, dateTo) {
 
@@ -4057,7 +4086,7 @@ function DateFormatHelper() {
      *  @param {object} dateTo
      *  @param {string} [ mask ]
      *
-     *  @return {array} dates
+     *  @returns {array} dates
      * */
     var getDaysTo = function(date, dateTo, mask) {
 
@@ -4110,7 +4139,7 @@ function DateFormatHelper() {
      * @param {object} [date] if not defined, will take today's value
      * @param {string} [code] - us|eu
      * 
-     * @return {number} quarterNumber - 1 to 4
+     * @returns {number} quarterNumber - 1 to 4
      */
     var fiscalCodes = ['us', 'eu', 'corporate'];
     var getQuarter = function(date, code) {
@@ -4159,7 +4188,7 @@ function DateFormatHelper() {
      * @param {object} date 
      * @param {string} code
      * 
-     * @return halfYear number - 1 to 2
+     * @returns halfYear number - 1 to 2
      */
     var getHalfYear = function(date, code) {
         if (
@@ -4192,7 +4221,7 @@ function DateFormatHelper() {
      * 
      * @param {object} [date] if not defined, will take today's value
      * 
-     * @return {number} weekNumber
+     * @returns {number} weekNumber
      */
     var getWeekISO8601 = function(date) {
         // Copy date so don't modify original
@@ -4212,7 +4241,7 @@ function DateFormatHelper() {
      * 
      * @param {object} [date] if not defined, will take today's value
      * 
-     * @return {number} weekNumber - 1 to 53
+     * @returns {number} weekNumber - 1 to 53
      */
     var getWeek = function(date, standardMethod) {
         if ( typeof(date) == 'undefined' ) {
@@ -4320,7 +4349,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  * @param {array} collection
  * @param {object} [options]
  *
- * @return {object} instance
+ * @returns {object} instance
  * 
  * Collection.length will return result length : dont't use .count() which is going to include functions to the count
  *
@@ -4336,17 +4365,17 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *      eg.: { activity: null }
  *      eg.: { isActive: false }
  *
- *  @return {array} result
+ *  @returns {array} result
  *
  * Collection::findOne
  *  @param {object} filter
- *  @return {object|array|string} result
+ *  @returns {object|array|string} result
  *
  * Collection::update
  *  @param {object} filter
  *  @param {object} set
  *
- *  @return {array} result
+ *  @returns {array} result
  *      rasult.toRaw() will give result without chaining & _uuid
  *
  * */
@@ -4437,7 +4466,7 @@ function Collection(content, options) {
      * @param {string} [searchRule]
      * @param {boolean} [searchRuleValue] - true to enable, false to disabled
      * 
-     * @return {object} instance with local search options
+     * @returns {object} instance with local search options
      */
     instance['setSearchOption'] = function() {
         
@@ -4874,7 +4903,7 @@ function Collection(content, options) {
      * 
      * @param {object} filter
      * 
-     * @return {object} result
+     * @returns {object} result
      * 
     */
     instance['findOne'] = function() {
@@ -5176,7 +5205,7 @@ function Collection(content, options) {
      * @param {object} filter
      * @param {object} set
      * 
-     * @return {objet} instance
+     * @returns {objet} instance
      */    
     instance['update'] = function() {
         var key         = '_uuid' // comparison key is _uuid by default
@@ -5366,7 +5395,7 @@ function Collection(content, options) {
      * If you want to delete without key comparison, disable `uuid` search mode
      * .delete({ name: 'Jordan' }, false)
      * 
-     * @return {array} result
+     * @returns {array} result
      */
     instance['delete'] = function() {
 
@@ -5427,7 +5456,7 @@ function Collection(content, options) {
      * 
      * @param {object|array} filter
      * 
-     * @return {number|date|string}
+     * @returns {number|date|string}
      * */
     instance['max'] = function () {
         if ( typeof(arguments) == 'undefined' || arguments.length < 1)
@@ -5685,7 +5714,7 @@ function Collection(content, options) {
      * toRaw
      * Transform result into a clean format (without _uuid)
      *
-     * @return {array} result
+     * @returns {array} result
      * */
     instance['toRaw'] = function() {
 
@@ -5706,7 +5735,7 @@ function Collection(content, options) {
      *  e.g: 'id'
      *  e.g: ['id', 'name']
      *
-     * @return {array} rawFilteredResult
+     * @returns {array} rawFilteredResult
      * */
      instance['filter'] = function(filter) {
         
@@ -6736,7 +6765,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *  @param {number} minLength
          *  @param {number} maxLength
          *
-         *  @return {object} result
+         *  @returns {object} result
          * */
         self[el]['isNumber'] = function(minLength, maxLength) {
             var val             = this.value
@@ -7158,7 +7187,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *
          * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
-         * @return {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el]['isDate'] = function(mask) {                        
             var val         = this.value
@@ -7296,7 +7325,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         /**
          * Exclude when converting back to datas
          *
-         * @return {object} data
+         * @returns {object} data
          * */
         self[el]['exclude'] = function(isApplicable) {
 
@@ -7387,7 +7416,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     /**
      * Check if errors found during validation
      *
-     * @return {boolean}
+     * @returns {boolean}
      * */
     self['isValid'] = function() {
         return (self['getErrors']().count() > 0) ? false : true;
@@ -7581,7 +7610,7 @@ function Routing() {
      * @param {string} [bundle]
      * @param {string} [env] 
      * 
-     * @return {object} urlProps - { .host, .hostname, .webroot }
+     * @returns {object} urlProps - { .host, .hostname, .webroot }
      */
     self.getUrlProps = function(bundle, env) {
         var config = null, urlProps = {}, _route = null;
@@ -7660,7 +7689,7 @@ function Routing() {
      * @param {object} [response] - only used for query validation
      * @param {object} [next] - only used for query validation
      *
-     * @return {object|false} foundRoute
+     * @returns {object|false} foundRoute
      * */
     self.compareUrls = async function(params, url, request, response, next) {
         
@@ -7696,7 +7725,7 @@ function Routing() {
      * Check if rule has params
      *
      * @param {string} pathname
-     * @return {boolean} found
+     * @returns {boolean} found
      *
      * @private
      * */
@@ -7713,7 +7742,7 @@ function Routing() {
      * @param {object} [response] - Only used for query validation
      * @param {object} [next] - Only used for query validation
      *
-     * @return {object} foundRoute
+     * @returns {object} foundRoute
      *
      * */
     var parseRouting = async function(params, url, request, response, next) {
@@ -8073,7 +8102,7 @@ function Routing() {
      * @param {string} urlVal
      * @param {object} params
      *
-     * @return {boolean} true|false - `true` if it fits
+     * @returns {boolean} true|false - `true` if it fits
      *
      * @private
      * */
@@ -8440,7 +8469,7 @@ function Routing() {
      * @param {object} params
      * @param {number} [urlIndex] in case you have more than one url registered for the current route, you can select the one you want to use. Default is 0.
      *
-     * @return {object} route
+     * @returns {object} route
      * */
     self.getRoute = function(rule, params, urlIndex) {
         
@@ -8691,7 +8720,7 @@ function Routing() {
      * @param {object} [request] 
      * @param {boolean} [isOverridinMethod] // will replace request.method by the provided method - Used for redirections
      * 
-     * @return {object|boolean} route - when route is found; `false` when not found
+     * @returns {object|boolean} route - when route is found; `false` when not found
      * */
     
     self.getRouteByUrl = function (url, bundle, method, request, isOverridinMethod) {
@@ -9259,7 +9288,7 @@ function StoragePlugin(options) {
      * @param {object} filter
      * @param {object} [options] - e.g.: limit
      *
-     * @return {array} result
+     * @returns {array} result
      * */
     function collectionFind(filter, options) {
         if (!filter) {
@@ -9388,7 +9417,7 @@ function StoragePlugin(options) {
      *
      * @param {object} filter
      *
-     * @return {array} result
+     * @returns {array} result
      * */
     function collectionDelete(filter) {
 
@@ -9761,7 +9790,8 @@ define("utils/dom", function(){});
         
         if ( typeof(instance.$forms[_id]) != 'undefined' ) {            
             instance['$forms'][_id].withUserBindings = true;
-            if ( typeof(this.$forms[_id]) == 'undefined') {                
+            
+            if ( typeof(this.$forms) != 'undefined' && typeof(this.$forms[_id]) == 'undefined' ) {                
                 $form = this.$forms[_id] = instance['$forms'][_id];
             } else {
                 $form = instance.$forms[_id];
@@ -9803,7 +9833,7 @@ define("utils/dom", function(){});
     /**
      * isPopinContext
      * 
-     * @return {boolean} isPopinContext
+     * @returns {boolean} isPopinContext
      */
     var isPopinContext = function() {
         var isPopinInUse = false, $activePopin = null;
@@ -9826,7 +9856,7 @@ define("utils/dom", function(){});
      * @param {string} formId
      * @param {object} [customRule]
      *
-     * @return {object} $form
+     * @returns {object} $form
      * */
     var validateFormById = function(formId, customRule) {
         var $form = null
@@ -9866,7 +9896,7 @@ define("utils/dom", function(){});
 
         checkForDuplicateForm(_id);
         
-        if ( typeof(instance['$forms'][_id]) != 'undefined' ) {            
+        if ( typeof(this.$forms) != 'undefined' && typeof(instance['$forms'][_id]) != 'undefined' ) {            
             $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
             $target             = document.getElementById(_id);
@@ -11053,7 +11083,8 @@ define("utils/dom", function(){});
                             
                                             var objCallback = {
                                                 id      : id,
-                                                sent    : ( typeof(data) == 'string' ) ? JSON.parse(data) : data
+                                                sent    : data
+                                                //sent    : ( typeof(data) == 'string' ) ? JSON.parse(data) : data
                                             };
                             
                                             window.ginaToolbar.update('forms', objCallback);
@@ -11506,7 +11537,7 @@ define("utils/dom", function(){});
      * @param {array} buffer
      * @param {number} [byteLength] e.g.: 8, 16 or 32
      * 
-     * @return {string} stringBufffer
+     * @returns {string} stringBufffer
      */
     var ab2str = function(event, buf, byteLength) {
 
@@ -12235,18 +12266,47 @@ define("utils/dom", function(){});
         return ruleObj
     }
     
-    
-    var makeObjectFromArgs = function(root, args, obj, len, i, value, rootObj) {
-                        
+      
+    /**
+     * makeObjectFromArgs
+     * 
+     * 
+     * @param {string} root 
+     * @param {array} args 
+     * @param {object} obj 
+     * @param {number} len 
+     * @param {number} i 
+     * @param {string|object} value 
+     * @param {object} [rootObj]
+     * 
+     * @returns {Object} rootObj
+     */
+    var makeObjectFromArgs = function(_root, args, _obj, len, i, _value, _rootObj) {
+        
+        // Closure Compiler requirements 
+        var _global = window['gina']['_global'];        
+        // js_externs
+        _global.register({
+            'root'      : _root || null,
+            'obj'       : _obj || null,
+            'value'     : _value || null,
+            'rootObj'   : _rootObj || null
+        });
+        
+        
         if (i == len) { // end
             eval(root +'=value');
-            return rootObj
+            // backup result
+            var result = JSON.clone(rootObj);
+            // cleanup _global
+            _global.unregister(['root', 'obj', 'rootObj', 'value', 'valueType']);        
+            return result
         }
         
         var key = args[i].replace(/^\[|\]$/g, '');
-
+        
         // init root object
-        if ( typeof(rootObj) == 'undefined' ) {
+        if ( typeof(rootObj) == 'undefined' || !rootObj ) {
             rootObj = {};
             root = 'rootObj';
             
@@ -12258,7 +12318,10 @@ define("utils/dom", function(){});
         
 
         var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
-        var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {}
+        var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {};
+        _global.register({
+            'valueType' : valueType
+        });
         if ( nextKey ) {            
             eval(root +' = valueType');
         }
@@ -12312,7 +12375,7 @@ define("utils/dom", function(){});
         var tmpObj = null;
         if ( Array.isArray(obj[key]) ) {
             //makeObjectFromArgs(obj[key], args, obj[key], args.length, 1, value);
-            tmpObj = makeObjectFromArgs(key, args, obj[key], args.length, 1, value);
+            tmpObj = makeObjectFromArgs(key, args, obj[key], args.length, 1, value, null);
             obj[key] = merge(obj[key], tmpObj);
             makeObject(obj[key], value, args, len, i + 1);
         } else {
@@ -13028,7 +13091,7 @@ define("utils/dom", function(){});
      * 
      * @param {object} HTMLElement
      * @param {object} rules
-     * @return {object} formValidatorInstance
+     * @returns {object} formValidatorInstance
      */
     var reBindForm = function($target, rules, cb) {
         // Unbind form
@@ -13666,8 +13729,12 @@ define("utils/dom", function(){});
                         }
                         
                         if ( !$uploadForm ) {
+                            try {
+                                $uploadForm = getFormById(uploadFormId) || null;
+                            } catch (noExistingFormErr) {
+                                // do nothing
+                            }
                             
-                            $uploadForm = getFormById(uploadFormId);
                             if (!$uploadForm) {
                                 $uploadForm = (isPopinContext()) 
                                             ? $activePopin.$target.createElement('form') 
@@ -13677,6 +13744,8 @@ define("utils/dom", function(){});
 
                             // adding form attributes
                             $uploadForm.id       = uploadFormId;
+                            // setAttribute() not needed ?
+                            //$uploadForm.setAttribute('id', uploadFormId);
                             $uploadForm.action   = url;
                             $uploadForm.enctype  = 'multipart/form-data';
                             $uploadForm.method   = 'POST';
@@ -13856,7 +13925,7 @@ define("utils/dom", function(){});
                         // binding form
                         try {
                             var $uploadFormValidator = getFormById(uploadFormId);
-                            // create a FormData object which will be sent as the data payload in the          
+                            // create a FormData object which will be sent as the data payload          
                             var formData = new FormData();
                             // add the files to formData object for the data payload
                             var file = null;          
@@ -13864,6 +13933,7 @@ define("utils/dom", function(){});
                                 file = files[l];
                                 formData.append(fileId, file, file.name);
                             }
+                            
                             
                             $uploadFormValidator
                                 // .on('error', function(e, result) {
@@ -13924,7 +13994,7 @@ define("utils/dom", function(){});
                     
                                 // }
                                 }) */            
-                                .send(formData, { withCredentials: true/*, isSynchrone: true*/ });
+                                .send(formData, { withCredentials: true/** , isSynchrone: true*/ });
                             
                         } catch (formErr) {
                             throw formErr;
@@ -15161,7 +15231,7 @@ define("utils/dom", function(){});
      * @param {object} $form - form target (DOMObject), not the instance
      * @param {object} [rules]
      * 
-     * @return {object} { .fields, .$fields, .rules }
+     * @returns {object} { .fields, .$fields, .rules }
      */
     var getFormValidationInfos = function($form, rules, isOnResetMode) {
         // patching form reset
@@ -17963,7 +18033,7 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
         /**
          * Returns the roster widget element.
          * @this {Window}
-         * @return {ComputedStyle}
+         * @returns {ComputedStyle}
          */
 
         window.getComputedStyle = function(el, pseudo) {
@@ -20353,7 +20423,7 @@ if ( typeof(JSON.clone) == 'undefined' ) {
      * @param {object} source
      * @param {object} [target]
      * 
-     * @return {object} cloned JSON object
+     * @returns {object} cloned JSON object
      **/
     var clone = function(source, target) {
         if (source == null || typeof source != 'object') return source;
@@ -20398,7 +20468,7 @@ if ( typeof(JSON.escape) == 'undefined' ) {
      * 
      * @param {object} jsonStr
      * 
-     * @return {object} escaped JSON string
+     * @returns {object} escaped JSON string
      **/
      var escape = function(jsonStr){
         try {
@@ -20617,6 +20687,53 @@ function readyStateChange() {
 if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 
     var gina = {
+        /**
+         * `_global` is used mainly for google closure compilation in some cases
+         * where eval() is called
+         * It will store extenal variable definitions
+         * e.g.: 
+         *  root -> window.root
+         *  then you need to call :
+         *      gina._global.register({'root': yourValue });
+         *      => `window.root`now accessible
+         *  before using:
+         *      eval(root +'=value');
+         *  
+         *  when not required anymore
+         *      gina._global.unregister(['root])
+         */
+        /**@js_externs _global*/
+        _global: {
+            
+            /**@js_externs register*/
+            register: function(variables) {
+                if ( typeof(variables) != 'undefined') {
+                    for (let k in variables) {                        
+                        // if ( typeof(window[k]) != 'undefined' ) {
+                        //     // already register
+                        //     continue;
+                        //     //throw new Error('Gina cannot register _global.'+k+': variable name need to be changed, or you need to called `_global.unregister(['+k+'])` in order to use it');
+                        // }
+                        //window.gina['_global'][k] = variables[k];                        
+                        window[k] = variables[k];
+                    }
+                }
+            },
+            /**@js_externs unregister*/
+            unregister: function(variables) {
+                if ( typeof(variables) == 'undefined' || !Array.isArray(variables)) {
+                    throw new Error('`variables` needs to ba an array')
+                }
+                
+                for (let i = 0, len = variables.length; i < len; i++) {
+                    //delete  window.gina['_global'][ variables[i] ];
+                    //if ( typeof(window[ variables[i] ]) != 'undefined' ) {
+                        //console.debug('now removing: '+ variables[i]);
+                        delete window[ variables[i] ]
+                    //}
+                }
+            }
+        },
         /**
          * ready
          * This is the one public interface use to wrap `handlers`

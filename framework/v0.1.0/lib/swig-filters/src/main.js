@@ -53,14 +53,14 @@ function SwigFilters(conf) {
 
     var getInstance = function() {
         if (conf) {
-            self.options = SwigFilters.instance._options = conf;
+            self.options = SwigFilters.instance._options = JSON.clone(conf);
         }
             
         return SwigFilters.instance
     }
     
     self.getConfig = function() {
-        return self.options
+        return JSON.clone(self.options)
     }
     
     // Allows you to get a bundle web root
@@ -110,7 +110,7 @@ function SwigFilters(conf) {
      * @param {object} params - can't be left blank if base is required -> null if not defined
      * @param {string} [base] - can be a CDN, the http://domain.com or a bundle name
      *
-     * @return {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
+     * @returns {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
      * */
     self.getUrl = function (route, params, base) {                        
         

@@ -448,7 +448,7 @@ function ModelUtil() {
      * @param {string} [ bundle ] - Bundle name
      * @param {string} model - Model name
      *
-     * @return {object} model - Model entities
+     * @returns {object} model - Model entities
      * */
     getModel = function(bundle, model) {
         
@@ -566,7 +566,7 @@ function ModelUtil() {
      * @param {string} entityName
      * @param {object} conn
      *
-     * @return {object} entity
+     * @returns {object} entity
      * */
     getModelEntity = function(bundle, model, entityClassName, conn) {
         if ( typeof(entityClassName) != 'undefined' ) {

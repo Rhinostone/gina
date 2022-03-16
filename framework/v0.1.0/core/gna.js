@@ -326,7 +326,7 @@ var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
  *
  *
  * @param {function} callback
- * @return {object} data - Result conf object
+ * @returns {object} data - Result conf object
  * */
 gna.getProjectConfiguration = function (callback){
 
@@ -537,15 +537,17 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                             if ( typeof(name) != 'undefined' ) {
                                 try {
                                     //Protect it.
-                                    tmp = JSON.stringify(conf.content[name]);
-                                    return JSON.parse(tmp)
+                                    // tmp = JSON.stringify(conf.content[name]);
+                                    // return JSON.parse(tmp)
+                                    return JSON.clone(conf.content[name])
                                 } catch (err) {
                                     console.error('[ FRAMEWORK ] ', err.stack);
                                     return undefined
                                 }
                             } else {                            
-                                tmp = JSON.stringify(conf);
-                                return JSON.parse(tmp)
+                                // tmp = JSON.stringify(conf);
+                                // return JSON.parse(tmp)
+                                return JSON.clone(conf)
                             }
                         };
                         try {

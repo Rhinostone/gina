@@ -47,7 +47,7 @@ function MathHelper() {
      *
      *  @param {string} calcultation
      *
-     *  @return {number} result
+     *  @returns {number} result
      * */
     self.operate = function(computation) {
         return new Function('return ' + computation)();
@@ -61,7 +61,7 @@ function MathHelper() {
      * @param {string} algorithm
      * @param {string} [ encoding ] - e.g.: hex
      *
-     * @return {string} checksum
+     * @returns {string} checksum
      * */
     var checkSum = function (str, algorithm, encoding) {
         try {
@@ -135,7 +135,7 @@ function MathHelper() {
      * @param {string} algorithm
      * @param {string} encoding
      *
-     * @return {string} checksum
+     * @returns {string} checksum
      * */
     self.checkSumSync = function(filename, algorithm, encoding) {
         var sum = null;

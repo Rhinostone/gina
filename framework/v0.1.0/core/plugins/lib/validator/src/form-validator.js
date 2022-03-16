@@ -971,7 +971,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *  @param {number} minLength
          *  @param {number} maxLength
          *
-         *  @return {object} result
+         *  @returns {object} result
          * */
         self[el]['isNumber'] = function(minLength, maxLength) {
             var val             = this.value
@@ -1393,7 +1393,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *
          * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
-         * @return {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el]['isDate'] = function(mask) {                        
             var val         = this.value
@@ -1531,7 +1531,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         /**
          * Exclude when converting back to datas
          *
-         * @return {object} data
+         * @returns {object} data
          * */
         self[el]['exclude'] = function(isApplicable) {
 
@@ -1622,7 +1622,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     /**
      * Check if errors found during validation
      *
-     * @return {boolean}
+     * @returns {boolean}
      * */
     self['isValid'] = function() {
         return (self['getErrors']().count() > 0) ? false : true;

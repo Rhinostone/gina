@@ -14,7 +14,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  * @param {array} collection
  * @param {object} [options]
  *
- * @return {object} instance
+ * @returns {object} instance
  * 
  * Collection.length will return result length : dont't use .count() which is going to include functions to the count
  *
@@ -30,17 +30,17 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *      eg.: { activity: null }
  *      eg.: { isActive: false }
  *
- *  @return {array} result
+ *  @returns {array} result
  *
  * Collection::findOne
  *  @param {object} filter
- *  @return {object|array|string} result
+ *  @returns {object|array|string} result
  *
  * Collection::update
  *  @param {object} filter
  *  @param {object} set
  *
- *  @return {array} result
+ *  @returns {array} result
  *      rasult.toRaw() will give result without chaining & _uuid
  *
  * */
@@ -131,7 +131,7 @@ function Collection(content, options) {
      * @param {string} [searchRule]
      * @param {boolean} [searchRuleValue] - true to enable, false to disabled
      * 
-     * @return {object} instance with local search options
+     * @returns {object} instance with local search options
      */
     instance['setSearchOption'] = function() {
         
@@ -568,7 +568,7 @@ function Collection(content, options) {
      * 
      * @param {object} filter
      * 
-     * @return {object} result
+     * @returns {object} result
      * 
     */
     instance['findOne'] = function() {
@@ -870,7 +870,7 @@ function Collection(content, options) {
      * @param {object} filter
      * @param {object} set
      * 
-     * @return {objet} instance
+     * @returns {objet} instance
      */    
     instance['update'] = function() {
         var key         = '_uuid' // comparison key is _uuid by default
@@ -1060,7 +1060,7 @@ function Collection(content, options) {
      * If you want to delete without key comparison, disable `uuid` search mode
      * .delete({ name: 'Jordan' }, false)
      * 
-     * @return {array} result
+     * @returns {array} result
      */
     instance['delete'] = function() {
 
@@ -1121,7 +1121,7 @@ function Collection(content, options) {
      * 
      * @param {object|array} filter
      * 
-     * @return {number|date|string}
+     * @returns {number|date|string}
      * */
     instance['max'] = function () {
         if ( typeof(arguments) == 'undefined' || arguments.length < 1)
@@ -1379,7 +1379,7 @@ function Collection(content, options) {
      * toRaw
      * Transform result into a clean format (without _uuid)
      *
-     * @return {array} result
+     * @returns {array} result
      * */
     instance['toRaw'] = function() {
 
@@ -1400,7 +1400,7 @@ function Collection(content, options) {
      *  e.g: 'id'
      *  e.g: ['id', 'name']
      *
-     * @return {array} rawFilteredResult
+     * @returns {array} rawFilteredResult
      * */
      instance['filter'] = function(filter) {
         

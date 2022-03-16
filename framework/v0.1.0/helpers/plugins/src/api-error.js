@@ -24,7 +24,7 @@ var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
  * @param {string} [fieldName]
  * @param {number} [errorStatus] - 500 by default for the server and 412 for the client
  * 
- * @return {object} errorObject
+ * @returns {object} errorObject
  */
 function ApiError(errorMessage, fieldName, errorStatus) {
     var e = null;

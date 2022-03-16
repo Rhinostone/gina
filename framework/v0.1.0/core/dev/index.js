@@ -19,7 +19,7 @@
 /**
  * Get function arguments outside its context
  *
- * @return {}
+ * @returns {}
  * */
 Object.defineProperty( Function.prototype, 'getArguments', {
     writable:   false,
@@ -36,7 +36,7 @@ Object.defineProperty( Function.prototype, 'getArguments', {
 /**
  * Check if function has callbacks
  *
- * @return {object|boolean} callbacksObject|false
+ * @returns {object|boolean} callbacksObject|false
  * */
 Object.defineProperty( Function.prototype, 'hasCallbacks', {
     writable:   false,
@@ -61,7 +61,7 @@ Object.defineProperty( Function.prototype, 'hasCallbacks', {
 /**
  * Remove comments
  *
- * @return {}
+ * @returns {}
  * */
 Object.defineProperty( Object.prototype, 'removeComments', {
     writable:   false,

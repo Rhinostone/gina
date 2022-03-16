@@ -157,7 +157,7 @@ function CmdHelper(cmd, client, debug) {
      * Used once at init to filter argv inputs and set some assets variables
      *
      *
-     * @return {boolean} isConfigured
+     * @returns {boolean} isConfigured
      * */
     isCmdConfigured = function() {
         
@@ -787,7 +787,7 @@ function CmdHelper(cmd, client, debug) {
      * @param {string} type [ project | bundle | env ]
      * @param {string} name
      *
-     * @return {boolean} exists
+     * @returns {boolean} exists
      * */
     isDefined = function(type, name) {
 

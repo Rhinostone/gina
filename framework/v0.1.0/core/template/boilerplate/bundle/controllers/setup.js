@@ -83,7 +83,7 @@ function SetupClass(req, res, next){
     //     *
     //     * @param {string} text - markdown text string
     //     *
-    //     * @return {string} html
+    //     * @returns {string} html
     //     */
     //    swig.setFilter('markdownToHtml', function (text, options) {
 

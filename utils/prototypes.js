@@ -1,7 +1,7 @@
 /**
  * clone array
  * 
- * @return {array} Return cloned array
+ * @returns {array} Return cloned array
  * @supress {misplacedTypeAnnotation}
  **/
 Object.defineProperty( Array.prototype, 'clone', {
@@ -29,7 +29,7 @@ if ( typeof(JSON.escape) == 'undefined' ) {
      * 
      * @param {object} jsonStr
      * 
-     * @return {object} escaped JSON string
+     * @returns {object} escaped JSON string
      **/
      var escape = function(jsonStr){
         try {
@@ -97,7 +97,7 @@ Object.defineProperty( Object.prototype, 'functionCount', {
 
 /**
  * __stack Get current stack
- * @return {Object} stack Current stack
+ * @returns {Object} stack Current stack
  * 
  * @suppress {es5Strict}
  **/
@@ -122,7 +122,7 @@ Object.defineProperty(global, '__stack', {
 
 /**
  * __line Get current line number
- * @return {Number} stack Current line number
+ * @returns {Number} stack Current line number
  * */
 Object.defineProperty(global, '__line', {
     //If loaded several times, it can lead to an exception. That's why I put this.
@@ -135,7 +135,7 @@ Object.defineProperty(global, '__line', {
 
 /**
  * __function Get current function name
- * @return {String} function Current function name
+ * @returns {String} function Current function name
  * */
 Object.defineProperty(global, '__function', {
     //If loaded several times, it can lead to an exception. That's why I put this.
@@ -147,7 +147,7 @@ Object.defineProperty(global, '__function', {
 
 /**
  * __module Get current module name
- * @return {String} module Current module name
+ * @returns {String} module Current module name
  * */
 Object.defineProperty(global, '__module', {
     //If loaded several times, it can lead to an exception. That's why I put this.
@@ -159,7 +159,7 @@ Object.defineProperty(global, '__module', {
 
 /**
  * __filename Get current file path
- * @return {String} stack Current file path
+ * @returns {String} stack Current file path
  * */
 Object.defineProperty(global, '__filename', {
     //If loaded several times, it can lead to an exception. That's why I put this.
@@ -171,7 +171,7 @@ Object.defineProperty(global, '__filename', {
 
 /**
  * __file Get current file name
- * @return {Integer} stack Current file name
+ * @returns {Integer} stack Current file name
  * */
 Object.defineProperty(global, '__file', {
     //If loaded several times, it can lead to an exception. That's why I put this.
@@ -184,7 +184,7 @@ Object.defineProperty(global, '__file', {
 
 /**
  * __column Get current column number
- * @return {Integer} stack Current column number
+ * @returns {Integer} stack Current column number
  * */
 Object.defineProperty(global, '__column', {
     //If loaded several times, it can lead to an exception. That's why I put this.
@@ -221,7 +221,7 @@ Object.defineProperty(global, '__column', {
 ///**
 // * String.toArray() Convert string path to array
 // * @param {String} delimiter Delimiter caracter for implode
-// * @return {Array} array Imploded Array
+// * @returns {Array} array Imploded Array
 // * */
 //String.prototype.toArray = function(delimiter) {
 //    if (typeof(delimiter) != "undefined") {

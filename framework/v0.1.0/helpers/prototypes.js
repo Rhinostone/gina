@@ -61,7 +61,7 @@ function PrototypesHelper(instance) {
         /**
          * clone array
          * 
-         * @return {array} Return cloned array
+         * @returns {array} Return cloned array
          * @supress {misplacedTypeAnnotation}
          **/
         Object.defineProperty( Array.prototype, 'clone', {
@@ -93,7 +93,7 @@ function PrototypesHelper(instance) {
          * 
          * @param {object} jsonStr
          * 
-         * @return {object} escaped JSON string
+         * @returns {object} escaped JSON string
          **/
          var escape = function(jsonStr){
             try {
@@ -182,7 +182,7 @@ function PrototypesHelper(instance) {
     if ( typeof(global) != 'undefined' && typeof(global.__stack) == 'undefined' ) {
         /**
          * __stack Get current stack
-         * @return {Object} stack Current stack
+         * @returns {Object} stack Current stack
          * @suppress {es5Strict}
          **/
         Object.defineProperty(global, '__stack', {

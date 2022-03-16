@@ -54,7 +54,7 @@ window['onGinaLoaded']      = function(gina) {
          * 
          * @param {string} [bundle]
          * 
-         * @return {object} routing
+         * @returns {Object} routing
          * 
         */        
         gina['config']['getRouting'] = function(bundle) {

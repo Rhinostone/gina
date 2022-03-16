@@ -744,9 +744,13 @@ function Server(options) {
             if ( /data\:/.test(url) ) { // ignoring "data:..."
                 continue
             }
-            url = url.replace(/((src|href)\=\"|(src|href)\=\'|\"|\')/g, '');
+            //url = url.replace(/((src|href)\=\"|(src|href)\=\'|\"|\')/g, '');
+            url = url.replace(/((src|href)\=\"|(src|href)\=\')/g, '');
+            if ( !/^\{\{/.test(url) ) {
+                url = url.replace(/(\"|\')/g, '');
+            }
             if (swig && /^\{\{/.test(url) )
-                url = swig.compile(url)(data);
+                url = swig.compile(url, swig.getOptions())(data);
             
             if (!/(\:\/\/|^\/\/)/.test(url) ) {
                 filename = getAssetFilenameFromUrl(bundleConf, url);
@@ -976,7 +980,7 @@ function Server(options) {
         
         if (swig) {
             var assetsStr = JSON.stringify(assets);        
-            assets = swig.compile( assetsStr.substring(1, assetsStr.length-1) )(data);
+            assets = swig.compile( assetsStr.substring(1, assetsStr.length-1), swig.getOptions() )(data);
             return '{'+ assets +'}'
         } else {
             return assets

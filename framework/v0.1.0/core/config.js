@@ -219,7 +219,7 @@ function Config(opt) {
      * Get Instance
      *
      * @param {string} [bundle]
-     * @return {object|undefined} configuration|"undefined"
+     * @returns {(Object|Undefined)} configuration|"undefined"
      * */
 
     this.getInstance = function(bundle) {
@@ -307,7 +307,7 @@ function Config(opt) {
 
         /**
          * Get active env
-         * @return {String} env
+         * @returns {String} env
          **/
         get : function() {
             return this.current
@@ -319,7 +319,7 @@ function Config(opt) {
          * @param {string} bundle
          * @param {string} env
          *
-         * @return {Object} json conf
+         * @returns {Object} json conf
          **/
         getConf : function(bundle, env) {
 
@@ -393,7 +393,7 @@ function Config(opt) {
         /**
          * Set Master instance
          * @param {String} appName Application name
-         * @return {Object} instance Instance of the master node
+         * @returns {Object} instance Instance of the master node
          * */
         setMaster : function(appName) {
             if(typeof(this.master) == "undefined" && this.master !== "") {
@@ -402,7 +402,7 @@ function Config(opt) {
         },
         /**
          * Get Master instance
-         * @return {Object} instance Instance of the master node
+         * @returns {Object} instance Instance of the master node
          * */
         getMaster : function() {
             return this.master
@@ -452,7 +452,7 @@ function Config(opt) {
      * Load config according to specific template
      * @param {String} filename  Path of source config file
      * @param {String} template Path of the template to merge with
-     * @return {Oject} JSON of the merged config
+     * @returns {Oject} JSON of the merged config
      **/
     var loadWithTemplate = function(userConf, template, callback) {
 
@@ -831,7 +831,7 @@ function Config(opt) {
     /**
      * Get Registered bundles sharing the same port #
      *
-     * @return {array} bundles
+     * @returns {Array} bundles
      * */
     this.getBundles = function() {
         //Registered apps only.
@@ -854,7 +854,7 @@ function Config(opt) {
      * @param {string} rule
      * @param {object} routing
      *
-     * @return {string} originalRule
+     * @returns {string} originalRule
      * */
     this.getOriginalRule = function(rule, routing) {
 
@@ -2138,7 +2138,7 @@ function Config(opt) {
     /**
      * Check is cache is disabled
      *
-     * @return {boolean} isUsingCache
+     * @returns {boolean} isUsingCache
      * */
     this.isCacheless = function() {
         //Also defined in core/gna.
