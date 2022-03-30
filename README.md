@@ -18,6 +18,7 @@ Note that Gina does not rely on Connect or ExpressJS, still, you can use all plu
 
 ### Installing Gina
 Gina aims to be at the same time a framework, a deployment and monitoring environment for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
+> For Microsoft Windows, you might have to run the command line with Administrator privileges.
 
 ```  tty
 npm install -g gina@latest

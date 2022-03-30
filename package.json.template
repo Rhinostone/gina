@@ -23,19 +23,19 @@
     "name": "Rhinostone",
     "email": "gina@rhinostone.com"
   },
-  "copyright" : "Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>",
+  "copyright": "Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>",
   "dependencies": {
     "tar": ""
   },
   "engine": [
     "node >=0.10.25"
   ],
-  "preferGlobal": "true",
+  "preferGlobal": true,
   "bin": {
-    "gina" : "./bin/cli",
-    "gina-debug": "./bin/cli"
+    "gina": "./bin/cli",
+    "gina-debug": "./bin/cli-debug"
   },
-  "man" : [
+  "man": [
     "./doc/man/gina.1",
     "./doc/man/gina-framework.1",
     "./doc/man/gina-project.1",
@@ -44,8 +44,7 @@
     "./doc/man/gina-env.1"
   ],
   "main": "./framework/v0.1.0/core/gna",
-  "scripts": {
-  },
+  "scripts": {},
   "license": "MIT",
   "readmeFilename": "README.md"
 }
