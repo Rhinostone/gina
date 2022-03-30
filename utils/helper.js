@@ -11,14 +11,22 @@ function MainHelper(opt) {
         config : {}
     };
 
-    //Logger = function(){ return require( __dirname+ '/logger')};
 
     var init = function(opt) {
         //Load prototypes.
         require('./prototypes');
 
         //Load librairies.
-        lib         = require('../script/lib');
+        var isWin32 = (process.platform === 'win32') ? true : false;
+        var scriptPath = __dirname;
+        var ginaPath = (scriptPath.replace(/\\/g, '/')).replace('/utils', '');
+        var pack        = ginaPath + '/package.json';
+        pack =  (isWin32) ? pack.replace(/\//g, '\\') : pack;
+        var packObj = require(pack);
+        var version =  getEnvVar('GINA_VERSION') || packObj.version;
+        var frameworkPath = ginaPath + '/framework/v' + version;
+        
+        lib         = require(frameworkPath + '/lib');
         console     = lib.logger;
         merge       = lib.merge;
     }

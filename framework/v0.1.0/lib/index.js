@@ -14,7 +14,7 @@
  * @author     Rhinostone <gina@rhinostone.com>
  */
 
-var merge = require('./merge');
+//var merge = require('./merge');
 
 function Lib() {
 

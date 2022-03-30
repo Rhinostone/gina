@@ -18,7 +18,7 @@ module.exports = function () {
      *
      *
      * */
-	run = function(cmdline, opt) {
+	run = function(cmdline, opt, cb) {
         
 		var pathArr = (new _(__dirname).toUnixStyle().split(/\//g));
 		var root =  pathArr.splice(0, pathArr.length-6).join('/');
@@ -124,8 +124,16 @@ module.exports = function () {
                 }
 
                 if (code == 0 ) {
+                    if (cb) {
+                        cb(error, result);
+                        return;
+                    }
                     e.emit('run#complete', error, result)
                 } else {
+                    if (cb) {
+                        cb('task::run encountered an error: ' + error, result);
+                        return;
+                    }
                     e.emit('run#complete', 'task::run encountered an error: ' + error, result)
                 }
 

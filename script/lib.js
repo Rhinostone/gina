@@ -15,6 +15,16 @@ try {
     setEnvVar('GINA_FRAMEWORK', frameworkPath);
     setEnvVar('GINA_CORE', frameworkPath + '/core');
     setEnvVar('GINA_LIB', frameworkPath + '/lib');
+    
+    // in case the script is being called without gina CLI
+    // if ( !getEnvVar('GINA_ENV') ) {
+    //     var initEnvVars = require(frameworkPath + '/lib/cmd/framework/init');
+    //     initEnvVars({
+    //         homedir:,
+    //         pack:,
+    //         release:
+    //     })
+    // }
 
     var lib = require(frameworkPath + '/lib');
 

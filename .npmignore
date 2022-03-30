@@ -4,7 +4,6 @@
 nbproject
 .vscode
 .history
-
 support
 test
 examples
@@ -17,6 +16,7 @@ framework/v*/core/asset/js/plugin/build*
 ./node_modules
 /tmp/*
 *.old
+.*.js
 gina.com
 MIDDLEWARE
 package-lock.json
