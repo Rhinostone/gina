@@ -1,7 +1,9 @@
 # The contributor guide
+> This is a document is a work in progress.
+> If you would like to contribute, you can contact us at `contact@gina.io` 
 
 ### Setting the framework default environment (Gina contributors only)
-> By default, Gina comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the frameworkn we advise you you to use the `dev` environment.
+> By default, Gina comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework we advise you you to use the `dev` environment.
 
 __Changing default env__
 By default, Gina is installed with `dev` environment which allow you to display the toolbar.

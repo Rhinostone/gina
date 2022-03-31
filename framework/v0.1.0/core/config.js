@@ -1,7 +1,7 @@
 //"use strict";
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -27,7 +27,7 @@ var modelUtil       = new lib.Model();
  *
  * @package     Gina
  * @namespace
- * @author      Rhinostone <gina@rhinostone.com>
+ * @author      Rhinostone <contact@gina.io>
  * @api         Public
  *
  * TODO - split Config.Env & Config.Host
@@ -287,7 +287,7 @@ function Config(opt) {
      *
      * @package     Gina.Config
      * @namespace   Gina.Config.Env
-     * @author      Rhinostone <gina@rhinostone.com>
+     * @author      Rhinostone <contact@gina.io>
      */
     this.Env = {
         template : requireJSON(GINA_FRAMEWORK_DIR +'/core/template/conf/env.json'),
@@ -385,7 +385,7 @@ function Config(opt) {
      * Host Class
      *
      * @package    Gina.Config
-     * @author     Rhinostone <gina@rhinostone.com>
+     * @author     Rhinostone <contact@gina.io>
      */
     this.Host = {
         //By default.

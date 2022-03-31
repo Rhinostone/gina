@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -12,7 +12,7 @@ var fs              = require('fs');
  * Gina.Core.Locales Class
  *
  * @package    Gina.Core
- * @author     Rhinostone <gina@rhinostone.com>
+ * @author     Rhinostone <contact@gina.io>
  */
 
 function Locales() {
