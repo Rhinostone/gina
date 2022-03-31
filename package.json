@@ -14,7 +14,7 @@
     "gina.io",
     "ginajs"
   ],
-  "version": "0.1.0",
+  "version": "0.1.1",
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"
@@ -47,7 +47,7 @@
   "scripts": {
     "prepare": "node ./script/prepare.js -g",
     "preisntall": "node ./script/pre_install.js -g",
-    "postisntall": "node ./script/post_install.js -g"    
+    "postisntall": "node ./script/post_install.js -g"
   },
   "license": "MIT",
   "readmeFilename": "README.md"
