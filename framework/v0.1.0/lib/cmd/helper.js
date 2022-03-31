@@ -6,7 +6,7 @@ var helpers     = require( getPath('gina').helpers);
  * CmdHelper
  *
  * @package     gina.lib.cmd
- * @author      Rhinostone <gina@rhinostone.com>
+ * @author      Rhinostone <contact@gina.io>
  * @api public
  * */
 function CmdHelper(cmd, client, debug) {

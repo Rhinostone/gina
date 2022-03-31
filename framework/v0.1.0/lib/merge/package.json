@@ -5,10 +5,10 @@
   "authors": [
     {
       "name": "Maritn-Luther ETOUMAN",
-      "email": "gina@rhinostone.com"
+      "email": "contact@gina.io"
     }
   ],
-  "copyright": "Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>",
+  "copyright": "Copyright (c) 2009-2022 Rhinostone <contact@gina.io>",
   "engines": {
     "node": ">=0.10.22"
   },

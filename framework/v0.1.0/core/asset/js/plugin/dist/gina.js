@@ -3802,7 +3802,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     ;
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -7556,7 +7556,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 };
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -7567,7 +7567,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  *
  * @package     Gina.Lib
  * @namespace   Gina.Lib.Routing
- * @author      Rhinostone <gina@rhinostone.com>
+ * @author      Rhinostone <contact@gina.io>
  * */
 
 function Routing() {
@@ -20489,7 +20489,7 @@ define("utils/polyfill", function(){});
 
 /**
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -20500,7 +20500,7 @@ define("utils/polyfill", function(){});
  *
  * @package gina.utils
  * @namesame gina.utils.inherits
- * @author Rhinostone <gina@rhinostone.com>
+ * @author Rhinostone <contact@gina.io>
  *
  * @api Public
  * */

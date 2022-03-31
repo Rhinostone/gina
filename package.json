@@ -21,9 +21,9 @@
   },
   "author": {
     "name": "Rhinostone",
-    "email": "gina@rhinostone.com"
+    "email": "contact@gina.io"
   },
-  "copyright": "Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>",
+  "copyright": "Copyright (c) 2009-2022 Rhinostone <contact@gina.io>",
   "dependencies": {
     "tar": ""
   },
@@ -44,7 +44,11 @@
     "./doc/man/gina-env.1"
   ],
   "main": "./framework/v0.1.0/core/gna",
-  "scripts": {},
+  "scripts": {
+    "prepare": "./script/prepare.js",
+    "preisntall": "./script/pre_install.js",
+    "postisntall": "./script/post_install.js"    
+  },
   "license": "MIT",
   "readmeFilename": "README.md"
 }

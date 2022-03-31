@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <gina@rhinostone.com>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -8,19 +8,40 @@
 
 //Imports.
 var fs          = require('fs');
-var spawn       = require('child_process').spawn;
+var util        = require('util');
+var promisify   = util.promisify;
+const { execSync } = require('child_process');
+const { spawn } = require('child_process');
 
 var lib         = require('./lib');
 var console     = lib.logger;
 
-function PrePublish() {
+
+function Prepare() {
     var self = this;
     this.path = getEnvVar('GINA_DIR');
     //this.projectPath = _( __dirname.substring(0, (__dirname.length - "node_modules/gina/script".length)) );
 
     var init = function() {
+        
+        var args = process.argv, i = 0, len = args.length;
+        for (; i < len; ++i) {
+            if (args[i] == '-g' ) {
+                self.isGlobalInstall = true;
+                break;
+            }
+        }
+        
+        if ( !self.isGlobalInstall ) { //global install
+            self.root = process.cwd(); // project path
+            console.error('local installation is not supported for this version at the moment.');
+            console.info('please use `npm install -g gina`');
+            process.exit(1);
+        }
+        
         self.tasksCount = 0;
-        var list = [], i = 0;
+        i = 0;
+        var list = [];
         for(var t in self) {
             if( typeof(self[t]) == 'function') {
                 list[i] = {
@@ -30,7 +51,7 @@ function PrePublish() {
                 ++i
             }
         }
-        run(list)
+        runTask(list)
     },
     count = function() {
         return self.tasksCount;
@@ -38,7 +59,7 @@ function PrePublish() {
     /**
      * Run tasks - Will run in order of declaration
      * */
-    run = function(list) {
+     runTask = function(list) {
 
         var i = self.tasksCount;
 
@@ -60,7 +81,7 @@ function PrePublish() {
                         console.info(data);
                     }
                     ++self.tasksCount;
-                    run(list)
+                    runTask(list)
                 }
 
             })
@@ -68,7 +89,7 @@ function PrePublish() {
             try {
                 list[i].func();
                 ++self.tasksCount;
-                run(list)
+                runTask(list)
             } catch (err) {
                 console.error(err.stack);
                 process.exit(1)
@@ -96,64 +117,7 @@ function PrePublish() {
 
         return found
     };
-
-
-    var exec = function(cmdLine, cb) {
-        var outFile = _('./out.log');
-        var errFile = _('./err.log');
-        var out = fs.openSync(outFile, 'a');
-        var err = fs.openSync(errFile, 'a');
-
-        var result, error = false;
-
-        var cmd;
-        console.info('running: ' + cmdLine.join(' '));
-        cmd = spawn(cmdLine.splice(0,1).toString(), cmdLine, { stdio: [ 'ignore', out, err ] });
-        cmd.on('stdout', function(data) {
-            var str = data.toString();
-            var lines = str.split(/(\r?\n)/g).join('');
-            result = lines;
-            cb(false, lines)
-        });
-
-        cmd.on('stderr', function (err) {
-            var str = err.toString();
-            error = str;
-            cb(str)
-        });
-
-        cmd.on('close', function (code) {
-
-            try {
-                var error = ( fs.existsSync(errFile) ) ? fs.readFileSync(errFile).toString() : undefined;
-                //closing
-                fs.closeSync(err);
-                fs.unlinkSync(errFile);
-
-                if (error) {
-                    cmd.emit('stderr', Buffer.from(error))
-                }
-
-                var data = ( fs.existsSync(outFile) ) ? fs.readFileSync(outFile).toString() : undefined;
-                fs.closeSync(out);
-                fs.unlinkSync(outFile);
-
-                if ( data ) {
-                    cmd.emit('stdout', Buffer.from(data))
-                }
-
-            } catch (err) {
-                error = err.stack || err.message;
-                console.error(error)
-            }
-
-            if (code == 0 ) {
-                cb(error, result)
-            } else {
-                cb( new Error('Prepublish encountered an error: ' + error) )
-            }
-        })
-    }
+    
 
     // this.runTests = function(cb) {
     //     if ( fs.existsSync(self.path+'/test') ) {
@@ -200,4 +164,4 @@ function PrePublish() {
     init()
 };
 
-new PrePublish()
+new Prepare()
