@@ -45,9 +45,9 @@
   ],
   "main": "./framework/v0.1.0/core/gna",
   "scripts": {
-    "prepare": "./script/prepare.js",
-    "preisntall": "./script/pre_install.js",
-    "postisntall": "./script/post_install.js"    
+    "prepare": "node ./script/prepare.js -g",
+    "preisntall": "node ./script/pre_install.js -g",
+    "postisntall": "node ./script/post_install.js -g"    
   },
   "license": "MIT",
   "readmeFilename": "README.md"
