@@ -261,6 +261,7 @@ function PrepareVersion() {
     
     self.pushChangesToGit = function(done) {
         
+        var cmd = null;
         var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
         
         // getting current branch
@@ -284,66 +285,77 @@ function PrepareVersion() {
         console.debug('[GIT] Current branch: '+ currentBranch);
         console.debug('[GIT] Targeted branch: '+ targetedBranch);
         
-        //if (currentBranch != targetedBranch) {
-            // check if targeted branch exists
-            // git rev-parse --verify 011
-            var branchExists = null;
+        
+        // check if targeted branch exists
+        // git rev-parse --verify 011
+        var branchExists = null;
+        try {
+            branchExists = execSync("git rev-parse --verify "+ targetedBranch)
+                            .toString()
+                            .replace(/(\n|\r|\t)/g, '');                
+        } catch (err) {
+            // nothing to do                
+        }
+        
+        if (!branchExists) {
+            console.debug('No existing branch found, creating a new one !');
+            var newBranchCreated = null;
             try {
-                branchExists = execSync("git rev-parse --verify "+ targetedBranch)
-                                .toString()
-                                .replace(/(\n|\r|\t)/g, '');                
+                newBranchCreated = execSync("git checkout -b "+ targetedBranch)
+                                    .toString()
+                                    .replace(/(\n|\r|\t)/g, '');
+                // pushing to new branch
+                console.debug('setting up remote branch `'+ targetedBranch +'` to git ...');
+                execSync("git push --set-upstream origin "+ targetedBranch);
             } catch (err) {
                 // nothing to do                
             }
+        }
+        // use existing to push updates
+        else {
             
-            if (!branchExists) {
-                console.debug('No existing branch found, creating a new one !');
-                var newBranchCreated = null;
+            if (currentBranch != targetedBranch) {
+                console.debug('Switching from branch `'+ currentBranch +'` to branch `'+ targetedBranch +'`');
+                // git checkout 010
                 try {
-                    newBranchCreated = execSync("git checkout -b "+ targetedBranch)
-                                        .toString()
-                                        .replace(/(\n|\r|\t)/g, '');
-                    // pushing to new branch
-                    console.debug('setting up remote branch `'+ targetedBranch +'` to git ...');
-                    execSync("git push --set-upstream origin "+ targetedBranch);
+                    cmd = execSync("git checkout "+ targetedBranch);                
                 } catch (err) {
-                    // nothing to do                
+                    console.error(err.stack||err.message||err);
+                    return done(err);               
                 }
+            } else {
+                console.debug('Reusing branch `'+ targetedBranch +'`');
             }
-            // use existing to push updates
-            else {
-                console.debug('Reusing existing branch');
-            }
+        }
+        
+        
+        // git add --all        
+        try {
+            cmd = execSync("git add --all ");                
+        } catch (err) {
+            console.error(err.stack||err.message||err);
+            return done(err);               
+        }
+        // git commit -m'Packaging version v'+ version            
+        try {
+            var msg = (!branchExists) ? 'New version' : 'Prerelease update';
+            cmd = execSync("git commit -am'"+ msg +"'");                
+        } catch (err) {
+            console.error(err.stack||err.message||err);
+            return done(err);               
+        }
+        
+        console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
+        // git push origin 010
+        try {
+            cmd = execSync("git push origin "+ targetedBranch );                
+        } catch (err) {
+            console.error(err.stack||err.message||err);
+            return done(err);               
+        }
             
             
-            // git add --all
-            var cmd = null;
-            try {
-                cmd = execSync("git add --all ");                
-            } catch (err) {
-                console.error(err.stack||err.message||err);
-                return done(err);               
-            }
-            // git commit -m'Packaging version v'+ version            
-            try {
-                var msg = (!branchExists) ? 'New version' : 'Prerelease update';
-                cmd = execSync("git commit -am'"+ msg +"'");                
-            } catch (err) {
-                console.error(err.stack||err.message||err);
-                return done(err);               
-            }
-            
-            console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
-            // git push origin 010
-            try {
-                cmd = execSync("git push origin "+ targetedBranch );                
-            } catch (err) {
-                console.error(err.stack||err.message||err);
-                return done(err);               
-            }
-            
-            
-        //}
+        
         
         
         // push to branh        
