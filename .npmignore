@@ -8,15 +8,19 @@ support
 test
 examples
 *.sock
-./test/workspace
+script/prepare.js
+test/workspace
 framework/v*/node_modules
 framework/v*/core/asset/js/plugin/lib
 framework/v*/core/asset/js/plugin/src
 framework/v*/core/asset/js/plugin/build*
-./node_modules
-/tmp/*
+framework/v*/SUCCESS
+framework/v*/MIDDLEWARE
+node_modules
+tmp/*
 *.old
 .*.js
+* copy
 gina.com
 MIDDLEWARE
 package-lock.json

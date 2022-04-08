@@ -15,6 +15,7 @@ node_modules*
 VERSION
 MIDDLEWARE
 package-lock.json
+* copy
 # SCM
 .svn
 .git

@@ -33,7 +33,7 @@ function PathHelper() {
 
     this.paths = [];
     var _this = this;
-
+    
     /**
      * _
      * PathHelper Constructor
@@ -57,7 +57,7 @@ function PathHelper() {
         }
         // Attention : _('/my/path/../folder/file.ext') will output -> /my/folder/file.ext
         path = Path.normalize(path);
-        var isConstructor = false;
+        var isConstructor = false, p = null;
         if (
             this instanceof _ // <- You could use arguments.callee instead of _ here,
             // except in in EcmaScript 5 strict mode.
@@ -69,15 +69,13 @@ function PathHelper() {
         if ( typeof(path) != 'undefined' && path != '' ) {
 
             if (isConstructor) {
-                var self = _;
-
                 //console.debug("creating path record: ", path, isConstructor );
                 this.path = path;
                 if (process.platform == "win32") {
                     //In case of mixed slashes.
                     this.value = path.replace(/\\/g, "/");// Make it unix like.
 
-                    var p = this.value;
+                    p = this.value;
 
                     this.isWindowsStyle = true;
                     this.key = path;
@@ -88,7 +86,7 @@ function PathHelper() {
                     //console.debug("linux style");
                     //we don't want empty spaces
                     this.value = path.replace(/\\/g, "/");
-                    var p = this.value;
+                    p = this.value;
                     //console.debug("path ", p);
                     this.key = path;
                     if (_this.paths.indexOf(path) < 0 ) {
@@ -117,12 +115,14 @@ function PathHelper() {
                     if (_this.paths.indexOf(path) < 0) {
                         _this.paths.push(path)
                     }
-                }
+                }                
+                
                 return path
             }
         }
         return null
     };
+    
 
     _.prototype.sep = Path.sep;
     _.prototype.start = (process.platform != "win32") ? "/" : "";
@@ -551,8 +551,8 @@ function PathHelper() {
             throw err
         }        
     }
-
-
+    
+    
     /**
      * copy, file or entire folder
      *
@@ -589,6 +589,7 @@ function PathHelper() {
         //Enter dir & start rm.
         var p = self.value;
         //console.debug("starting copying ", p, " => ", target);
+                        
         cp(p, target, excluded)
             .onComplete( function(err, destination, method) {
                 cb(err, destination);

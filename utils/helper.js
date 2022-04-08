@@ -26,9 +26,17 @@ function MainHelper(opt) {
         var version =  getEnvVar('GINA_VERSION') || packObj.version;
         var frameworkPath = ginaPath + '/framework/v' + version;
         
-        lib         = require(frameworkPath + '/lib');
-        console     = lib.logger;
-        merge       = lib.merge;
+        try {
+            lib         = require(frameworkPath + '/lib');
+            console     = lib.logger;
+            merge       = lib.merge;
+        } catch (err) {
+            // this can happen in certain conditions
+            // like scripts running out of the framework context
+            // we'll just ignore it
+        }
+        
+        
     }
 
     /**
