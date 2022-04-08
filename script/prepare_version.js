@@ -8,9 +8,11 @@
 
 //Imports.
 var fs          = require('fs');
+// var process     = require('process');
 var util        = require('util');
 var promisify   = util.promisify;
 const { execSync } = require('child_process');
+
 
 var scriptPath = __dirname;
 var ginaPath = (scriptPath.replace(/\\/g, '/')).replace('/script', '');
@@ -34,11 +36,9 @@ var lib         = null;
  * */
 function PrepareVersion() {
     var self    = {};
-    var lib     = null;
-
     
     /**
-     * Bebin Checking - Will run checking tasks in order of declaration
+     * Bebin - Will run checking tasks in order of declaration
      * */
      var begin = async function(i) {
         //console.debug('i is ', i);
@@ -57,7 +57,7 @@ function PrepareVersion() {
             }
         }
         
-        // to handle sync vs async to allow execution in order of declarations
+        // to handle sync vs async to allow execution in order of declaration
         if (funct) {
             eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e)}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');            
         }          
@@ -96,14 +96,29 @@ function PrepareVersion() {
         
         console.debug('selected version : ', selectedVersion);
         console.debug('targeted version : ', targetedVersion);
+        
+        // setting up requirements
+        var shortVersion = selectedVersion.split('.');
+        shortVersion.splice(2);
+        shortVersion = shortVersion.join('.');
+        var settingsConfigPath  = ginaHomeDir+'/'+shortVersion+'/settings.json';
+        var settingsConfig      = require(settingsConfigPath);
+        var ginaPath            = settingsConfig.dir;
+        self.ginaPath = ginaPath;
+            
+        var frameworkPath       = ginaPath +'/framework/v'+selectedVersion;
+        self.frameworkPath      = frameworkPath;        
+        helpers     = require(frameworkPath +'/helpers');
+        lib         = require(frameworkPath +'/lib');
+            
+            
         if ( 
             selectedVersion !== targetedVersion
             //&& selectedVersion < targetedVersion 
-        ) {
+        ) {            
             
-            
-            // update selected version
-            var shortVersion = targetedVersion.split('.');
+            // update selected version & requirements
+            shortVersion = targetedVersion.split('.');
             shortVersion.splice(2);
             shortVersion = shortVersion.join('.');
             if ( typeof(mainConfig.frameworks[shortVersion]) == 'undefined' ) {
@@ -116,22 +131,16 @@ function PrepareVersion() {
             }
             
             
-            var settingsConfigPath  = ginaHomeDir+'/'+shortVersion+'/settings.json';
-            var settingsConfig      = require(settingsConfigPath);
+            settingsConfigPath  = ginaHomeDir+'/'+shortVersion+'/settings.json';
+            settingsConfig      = require(settingsConfigPath);
             
             // setting def_framework
             mainConfig.def_framework    = targetedVersion;            
-            settingsConfig.version      = targetedVersion;
-            
-                       
-            
-            var ginaPath            = settingsConfig.dir;            
+            settingsConfig.version      = targetedVersion;            
+            ginaPath                    = settingsConfig.dir;            
+            self.ginaPath = ginaPath;
             // backup of folder version to archives
-            var frameworkPath       =  ginaPath +'/framework/v'+selectedVersion;
             
-            // setting up requirements 
-            helpers     = require(frameworkPath +'/helpers');
-            lib         = require(frameworkPath +'/lib');
             
             
             // console.debug('mainConfig: ', JSON.stringify(mainConfig, null, 2));
@@ -182,6 +191,16 @@ function PrepareVersion() {
         done()
     };
     
+    self.setupScriptCWD = function(done) {
+        var currentWorkingDir = process.cwd();
+        if ( self.ginaPath != currentWorkingDir ) {
+            console.debug('Changing current working dir from `'+ currentWorkingDir +'` to `'+ self.ginaPath +'`');
+            process.chdir(self.ginaPath);    
+        }
+        
+        done();
+    }
+    
     self.updateVersionIfNeeded = function(done) {
         
         var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
@@ -204,6 +223,7 @@ function PrepareVersion() {
     }
     
     self.updateMiddlewareIfNeeded = function(done) {
+        
         var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
         var middleware = 'isaac@'+version; // by default
         var deps = require(_(self.frameworkPath, true) + '/package.json').dependecies;
@@ -239,23 +259,91 @@ function PrepareVersion() {
     };
     
     
-    // self.pushingToGit = function(done) {
-    //     var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
+    self.pushChangesToGit = function(done) {
         
-    //     // git add --all
-    //     // git commit -m'Packaging version v'+ version
+        var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
+        
+        // getting current branch
+        // git rev-parse --abbrev-ref HEAD
+        // => 010
+        var currentBranch = null;
+        try {
+            currentBranch = execSync("git rev-parse --abbrev-ref HEAD")
+                            .toString()
+                            .replace(/(\n|\r|\t)/g, '');
+        } catch (err) {
+            // nothing to do
+            return done( new Error('[GIT] No branch selected') )
+        }
+                
+        
+        // create new branch if needed
+        // e.g: 0.1.0-alpha.1 -> 010-alpha1
+        var targetedBranch = version.replace(/\./g, '');
+        
+        console.debug('[GIT] Current branch: '+ currentBranch);
+        console.debug('[GIT] Targeted branch: '+ targetedBranch);
+        
+        //if (currentBranch != targetedBranch) {
+            // check if targeted branch exists
+            // git rev-parse --verify 011
+            var branchExists = null;
+            try {
+                branchExists = execSync("git rev-parse --verify "+ targetedBranch)
+                                .toString()
+                                .replace(/(\n|\r|\t)/g, '');                
+            } catch (err) {
+                // nothing to do                
+            }
+            
+            if (!branchExists) {
+                console.debug('No existing branch found, creating a new one !');
+                var newBranchCreated = null;
+                try {
+                    newBranchCreated = execSync("git checkout -b "+ targetedBranch)
+                                        .toString()
+                                        .replace(/(\n|\r|\t)/g, '');
+                    // pushing to new branch
+                    console.debug('setting up remote branch `'+ targetedBranch +'` to git ...');
+                    execSync("git push --set-upstream origin "+ targetedBranch);
+                } catch (err) {
+                    // nothing to do                
+                }
+            }
+            // use existing to push updates
+            else {
+                console.debug('Reusing existing branch');
+            }
+            
+            console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git ...');
+            // git add --all
+            var cmd = null;
+            try {
+                cmd = execSync("git add --all ")
+                                .toString()
+                                .replace(/(\n|\r|\t)/g, '');                
+            } catch (err) {
+                console.error(err.stack||err.message||err);
+                return done(err);               
+            }
+            // git commit -m'Packaging version v'+ version            
+            try {
+                var msg = (!branchExists) ? 'New version' : 'Prerelease update';
+                cmd = execSync("git commit -m'"+ msg +"'")
+                                .toString()
+                                .replace(/(\n|\r|\t)/g, '');                
+            } catch (err) {
+                console.error(err.stack||err.message||err);
+                return done(err);               
+            }
+        //}
         
         
-    //     // create new branch if needed
-    //     // e.g: 0.1.0-alpha.1 -> 010-alpha1
-    //     var branch = version.replace(/\./g, '');
+        // push to branh        
         
         
-    //     // push to branh        
-    //     console.debug('pushing to git');
-        
-    //     done()
-    // }
+        done()
+    }
     
     /**
      * Write version number in the VERSION file
