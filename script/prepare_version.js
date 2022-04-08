@@ -319,9 +319,7 @@ function PrepareVersion() {
             // git add --all
             var cmd = null;
             try {
-                cmd = execSync("git add --all ")
-                                .toString()
-                                .replace(/(\n|\r|\t)/g, '');                
+                cmd = execSync("git add --all ");                
             } catch (err) {
                 console.error(err.stack||err.message||err);
                 return done(err);               
@@ -329,9 +327,7 @@ function PrepareVersion() {
             // git commit -m'Packaging version v'+ version            
             try {
                 var msg = (!branchExists) ? 'New version' : 'Prerelease update';
-                cmd = execSync("git commit -m'"+ msg +"'")
-                                .toString()
-                                .replace(/(\n|\r|\t)/g, '');                
+                cmd = execSync("git commit -am'"+ msg +"'");                
             } catch (err) {
                 console.error(err.stack||err.message||err);
                 return done(err);               
@@ -340,9 +336,7 @@ function PrepareVersion() {
             console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
             // git push origin 010
             try {
-                cmd = execSync("git push origin "+ targetedBranch )
-                                .toString()
-                                .replace(/(\n|\r|\t)/g, '');                
+                cmd = execSync("git push origin "+ targetedBranch );                
             } catch (err) {
                 console.error(err.stack||err.message||err);
                 return done(err);               
