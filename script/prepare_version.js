@@ -315,7 +315,7 @@ function PrepareVersion() {
                 console.debug('Reusing existing branch');
             }
             
-            console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git ...');
+            
             // git add --all
             var cmd = null;
             try {
@@ -336,6 +336,19 @@ function PrepareVersion() {
                 console.error(err.stack||err.message||err);
                 return done(err);               
             }
+            
+            console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
+            // git push origin 010
+            try {
+                cmd = execSync("git push origin "+ targetedBranch )
+                                .toString()
+                                .replace(/(\n|\r|\t)/g, '');                
+            } catch (err) {
+                console.error(err.stack||err.message||err);
+                return done(err);               
+            }
+            
+            
         //}
         
         
