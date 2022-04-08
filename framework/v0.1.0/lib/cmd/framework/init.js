@@ -100,7 +100,7 @@ function Initialize(opt) {
         
         if ( !getEnvVar('GINA_SHORT_VERSION') ) {
             var shortVersion = version.split('.');
-            shortVersion.splice(2,1);
+            shortVersion.splice(2);
             shortVersion = shortVersion.join('.');
             setEnvVar('GINA_SHORT_VERSION', shortVersion);
         }

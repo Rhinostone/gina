@@ -264,12 +264,8 @@ function PostInstall() {
             .onData(function onData(data){
                 console.info(data)
             })
-            .onComplete( function done(err, data){
-                
+            .onComplete( function done(err, data){                
                 if (!err) {
-                //    console.error(err)
-                //} else {
-                    //console.info(data);
                     end()
                 }
             })
@@ -285,7 +281,7 @@ function PostInstall() {
         var version = require( _(self.gina + '/package.json') ).version;
         var middleware = 'isaac@'+version; // by default
 
-        for (var d in deps) {
+        for (let d in deps) {
             if (d === 'express' && deps[d] != '') {
                 middleware = d +'@'+ deps[d]
             }
@@ -297,7 +293,6 @@ function PostInstall() {
             middleware = 'express@' + middleware;
         } else if (typeof(middleware) == 'undefined') {
             throw new Error('No middleware found !!');
-            //process.exit(1)
         }
 
         if ( fs.existsSync(filename) ) { // update
