@@ -3,7 +3,6 @@
 
 var fs      = require('fs');
 var net     = require('net');
-
 var console = lib.logger;
 
 function Cmd(opt, runOffine) {
@@ -82,7 +81,8 @@ function Cmd(opt, runOffine) {
                         , pids = fs.readdirSync( path )
                         , i = 0
                         , str = ''
-                        , pid = undefined;
+                        , pid = undefined
+                    ;
 
                     while(i< pids.length) {
                         str = fs.readFileSync(_(path +'/'+ pids[i])).toString();
@@ -92,7 +92,7 @@ function Cmd(opt, runOffine) {
                         }
                         ++i
                     }
-                    console.warn('Framework already running: [ '+ pid+' ]')
+                    console.warn('Framework already running: [ '+ pid+' ]');
                 } else {
 
                 }
@@ -150,7 +150,7 @@ function Cmd(opt, runOffine) {
 
         var home        = getEnvVar('GINA_HOMEDIR')
         var mainFile    = home + '/main.json';
-
+        
         if ( !fs.existsSync(mainFile) ) {
 
             var mainSrc = getEnvVar('GINA_DIR') + '/resources/home/main.json';

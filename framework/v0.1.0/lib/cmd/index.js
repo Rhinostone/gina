@@ -98,7 +98,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
         //Framework CMD.
         if (opt.task.action == 'start') {
             init.onComplete( function done(err, run){
-                console.debug('loading task ',  opt.task.action);
+                console.debug('loading task `',  opt.task.topic +':'+ opt.task.action, '`');
                 
                 //Setting master process with its own PID file.                
                 cmd.proc = new Proc('gina', process);

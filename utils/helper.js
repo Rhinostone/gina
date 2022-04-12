@@ -195,7 +195,7 @@ function MainHelper(opt) {
         ;
 
         if ( typeof(process.env['gina']) == 'undefined') {
-            process['gina'] = {}
+            process.env['gina'] = {}
         }
 
         var newArgv = {};
@@ -275,20 +275,34 @@ function MainHelper(opt) {
      * @returns {string} logPath
      * */
     getLogDir = function() {
-        var log = function() {
-            if ( isWin32() ) {
-                return process.env.LOG ||
-                    process.env.LOGS ||
-                    (process.env.SystemRoot || process.env.windir) + '\\System32\\Winevt\\Logs'
-            } else {
-                return process.env.LOGDIR ||
-                    process.env.LOG ||
-                    process.env.LOGS ||
-                    '/var/log'
+        // Trying to retrieve original value if already defined
+        var logDir = getEnvVar('GINA_LOGDIR') || null;
+        if ( logDir ) {
+            if ( !/gina$/.test(logDir) ) {
+                logDir += ( isWin32() ) ? '\\gina' : '/gina'
             }
-        };
-
-        return ( typeof(log) == 'function') ?  log() : log
+            return logDir
+        }
+        if ( isWin32() ) {
+            logDir = process.env.LOG ||
+                process.env.LOGS ||
+                (process.env.SystemRoot || process.env.windir) + '\\System32\\Winevt\\Logs'
+            ;
+            if ( !/gina$/.test(logDir) ) {
+                logDir += '\\gina'
+            }
+        } else {
+            logDir = process.env.LOGDIR ||
+                process.env.LOG ||
+                process.env.LOGS ||
+                '/usr/local/var/log'
+            ;
+            if ( !/gina$/.test(logDir) ) {
+                logDir += '/gina'
+            }
+        }
+        
+        return logDir;
     }
 
     getProtected = function() {
@@ -300,12 +314,25 @@ function MainHelper(opt) {
      * @returns {string} rundir
      * */
     getRunDir = function() {
+        // Trying to retrieve original value if already defined
+        var runDir = getEnvVar('GINA_RUNDIR') || null;
+        if ( runDir ) {
+            if ( !/gina$/.test(runDir) ) {
+                runDir += ( isWin32() ) ? '\\gina' : '/gina'
+            }
+            return runDir
+        }
+        
         if ( isWin32() ) {
             console.debug('check /gina/utils/helper.js around on getRunDir()')
-        } else {
-            // Means /var/run or /var/lock by default.
-            var runDir = '/usr/local/var/run';
-            return ( fs.existsSync(runDir) ) ? runDir : '/usr/local/var/lock'//by default.
+        } else {                        
+            // Means `/usr/local/var/lock` or `/usr/local/var/run` by default.
+            runDirObj = new _('/usr/local/var/lock', true);
+            if ( runDirObj.existsSync() ) {
+                return _( runDirObj.toUnixStyle() +'/gina', true );
+            }
+            // by default
+            return _('/usr/local/var/run/gina', true)//by default.
         }
     }
 
@@ -315,12 +342,12 @@ function MainHelper(opt) {
             if ( isWin32() ) {
                 return process.env.TEMP ||
                     process.env.TMP ||
-                    (process.env.SystemRoot || process.env.windir) + '\\temp'
+                    (process.env.SystemRoot || process.env.windir) + '\\Temp'
             } else {
                 return process.env.TMPDIR ||
                     process.env.TMP ||
                     process.env.TEMP ||
-                    '/tmp'
+                    '/usr/local/var/tmp'
             }
         };
 
@@ -398,7 +425,7 @@ function MainHelper(opt) {
     }
 
     defineDefault = function(obj) {
-        for (var c in obj) {
+        for (let c in obj) {
             define(c, obj[c])
         }
         delete  obj

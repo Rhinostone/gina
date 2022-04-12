@@ -4,7 +4,8 @@
 
 > This is a `preview release`. We are looking for people to help us test and improve `Windows` support.
 > Some commands or features might not work since the framework is still under development & testing
-> We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience !
+> 
+> We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience.
 
 ## Philosophy behind
 
@@ -30,6 +31,12 @@ gina version
 ```
 __NB.:__ This is a shortcut for `gina framework:version`
 
+
+### Starting the framework
+``` tty
+gina start
+```
+__NB.:__ This is an alias for `gina framework:start` 
 
 ### Initializing a project
 Let's create our first project and install Gina.

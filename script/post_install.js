@@ -8,10 +8,12 @@
 
 //Imports
 var fs      = require('fs');
+var util        = require('util');
+var promisify   = util.promisify;
+const { execSync } = require('child_process');
 
 var lib         = require('./lib');
 var console     = lib.logger;
-var generator   = lib.generator;
 
 
 
@@ -22,7 +24,7 @@ var generator   = lib.generator;
  * */
 function PostInstall() {
 
-    var self = this;
+    var self = {}, _this = this;
 
     //Initialize post installation scripts.
     var init = function() {
@@ -40,24 +42,7 @@ function PostInstall() {
             }
         }
         
-        // var path = new _(process.env.PATH.split(':')[1]).toUnixStyle();
-        // path = path.split('/');
-        // var root = '';
-        // for (var p = 0; p < path.length; ++p) {
-        //     if (path[p] == 'node_modules') {
-        //         root = root.substr(0, root.length-1);
-        //         break
-        //     }
-        //     root += path[p] + '/'
-        // }
-        // self.root = root;
-        
-        
-
-        
-        console.debug('is this for Windows ? ' +  self.isWin32);
-             
-        
+        console.debug('Is this for Windows ? ' +  self.isWin32);
 
         if ( !self.isGlobalInstall ) { //global install
             self.root = process.cwd(); // project path
@@ -72,18 +57,37 @@ function PostInstall() {
         console.debug('cwd path: ' + self.root );
         console.debug('this is a global install ...');
         
-        createVersionFile(function onFileCreated(err) {
-            if (err) {
-                console.error(err.stack);
-                process.exit(1);
-            }
-            createGinaFileForPlatform()
-        })
-         
+        begin(0);         
     }
+    
+    /**
+     * Bebin - Will run checking tasks in order of declaration
+     * */
+     var begin = async function(i) {
+        //console.debug('i is ', i);
+        var n = 0, funct = null, functName = null;
+        for (let t in self) {            
+            if ( typeof(self[t]) == 'function') {
+                if (n == i){
+                    //let func = 'self.' + t + '()';
+                    let func = 'self.' + t;
+                    console.debug('Running [ ' + func + '() ]');
+                    funct       = func;
+                    functName   = t;
+                    break;
+                }                
+                n++;
+            }
+        }
+        
+        // to handle sync vs async to allow execution in order of declaration
+        if (funct) {
+            eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e); process.exit(-1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');            
+        }          
+    }    
+    
 
-    var createVersionFile = function(callback) {
-        //var location = (self.gina === process.cwd() ) ? self.gina : self.root;
+    self.createVersionFile = function(done) {        
         var version = require( _(self.gina + '/package.json') ).version;
         console.debug('writting version number: '+ version);
         
@@ -93,10 +97,11 @@ function PostInstall() {
                 fs.unlinkSync(target)
             }
             fs.writeFileSync(target, version);
-            callback(false)
         } catch(err) {
-            callback(err)
+            return done(err)
         }
+        
+        done();
     }
     
     var configureGina = function(callback) {
@@ -120,7 +125,7 @@ function PostInstall() {
                 .onData(function(data){
                     console.info(data)
                 })
-                .onComplete( function done(err, data){
+                .onComplete( function onDone(err, data){
                     if (err) {
                         console.error(err);
                         console.warn('try to run : sudo ' + cmd);
@@ -132,7 +137,7 @@ function PostInstall() {
                 .onData(function(data){
                     console.info(data)
                 })
-                .onComplete( function done(err, data){
+                .onComplete( function onDone(err, data){
                     if (err) {
                         console.error(err);
                         console.warn('try to run : sudo ' + cmd);
@@ -157,7 +162,7 @@ function PostInstall() {
         console.info('linking to binaries dir ... ');
         if ( typeof(callback) != 'undefined') {
             if ( !self.isGlobalInstall ) { // local install only
-                generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
+                lib.generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
                     callback(err)
                     
                 })
@@ -168,7 +173,7 @@ function PostInstall() {
             }
         } else {
             if ( !self.isGlobalInstall ) {
-                generator.createFileFromTemplate(source, target)
+                lib.generator.createFileFromTemplate(source, target)
             } else {
                 
                 configureGina();       
@@ -176,8 +181,8 @@ function PostInstall() {
         }
     }
 
-    var createGinaFileForPlatform = function() {
-        console.info('creating platform file');
+    self.createGinaFileForPlatform = async function(done) {
+        console.info('Creating platform file');
         var name = require( _(self.path + '/package.json') ).name;
 
         var filename = ( (self.isWin32) ? '.' : '' ) + name;
@@ -185,7 +190,9 @@ function PostInstall() {
         var keepGoing = function(filename) {
 
             createGinaFile(filename, function onFileCreated(err) {
-                if (err) console.error(err.stack);
+                if (err) {
+                    return done(err)
+                }
 
                 // this is done to allow multiple calls of post_install.js
                 var filename = _(self.path + '/SUCCESS');
@@ -208,17 +215,16 @@ function PostInstall() {
 
                 // Check if npm install has been done
                 if ( !hasNodeModulesSync() ) {
-                    npmInstall()
+                    return npmInstall(done)
                 } else {
                     var target = new _(self.path + '/node_modules');
                     console.debug('replacing: ', target.toString() );
-                    target
-                        .rm( function(err) {
+                    return target
+                        .rm( function onRemove(err) {
                             if (err) {
-                                console.error(err.stack);
-                                process.exit(1)
+                                return done(err);
                             } else {
-                                npmInstall()
+                                return npmInstall(done)
                             }
                         })
                 }
@@ -233,21 +239,18 @@ function PostInstall() {
             if ( fs.existsSync(target) ) {
                 fs.unlinkSync(target);
                 // have to wait for windows to complete this
-                setTimeout( function(){
-                    generator.createFileFromTemplate(source, target);
-                    keepGoing(filename)
+                setTimeout( async function(){
+                    lib.generator.createFileFromTemplate(source, target);
+                    await keepGoing(filename)
                 }, 1000)
             } else {
-                generator.createFileFromTemplate(source, target);
-                keepGoing(filename)
+                lib.generator.createFileFromTemplate(source, target);
+                await keepGoing(filename)
             }
 
         } else {
-            keepGoing(filename)
+            await keepGoing(filename)
         }
-
-
-
     }
 
     var hasNodeModulesSync = function() {
@@ -256,7 +259,7 @@ function PostInstall() {
 
 
 
-    var npmInstall = function() {
+    var npmInstall = function(done) {
         console.info('now installing modules: please, wait ...');
         var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
 
@@ -264,14 +267,39 @@ function PostInstall() {
             .onData(function onData(data){
                 console.info(data)
             })
-            .onComplete( function done(err, data){                
+            .onComplete( function onDone(err, data){                
                 if (!err) {
-                    end()
+                    return done()
                 }
+                done(err)
             })
     }
+    
+    self.cleanupIfNeeded = function(done) {
+        
+        var frameworkPath = self.gina;
+        console.debug('Framework path is: ' + frameworkPath);
+        
+        // Let's cleanup `colors` from `GINA_DIR`
+        if ( new _(frameworkPath +'/node_modules/colors', true).existsSync() ) {
+            var initialDir = process.cwd();    
+            process.chdir(frameworkPath);
+            var cmd = ( isWin32() ) ? 'npm.cmd rm colors' : 'npm rm colors';
+            try {
+                execSync(cmd);
+                console.debug('Removed default `colors` module from `GINA_DIR`... This is normal ;)');
+            } catch (npmErr) {
+                return done(npmErr);
+            }
+            
+             
+            process.chdir(initialDir);
+        }
+        
+        done()
+    }
 
-    var end = function() {
+    self.end = function(done) {
         // Update middleware file
         var filename = _(self.path) + '/MIDDLEWARE';
         var msg = "Gina's command line tool has been installed.";
@@ -292,7 +320,7 @@ function PostInstall() {
             middleware = require(expressPackage).version;
             middleware = 'express@' + middleware;
         } else if (typeof(middleware) == 'undefined') {
-            throw new Error('No middleware found !!');
+            return done( new Error('No middleware found !!') );
         }
 
         if ( fs.existsSync(filename) ) { // update
@@ -301,23 +329,23 @@ function PostInstall() {
             if (def !== middleware) {
                 fs.writeFile(filename, middleware, function onWrote(err){
                     if (err) {
-                        throw new Error(err.stack||err.message||err);
-                    } else {
-                        console.info(msg)
+                        return done(err)
                     }
+                    console.info(msg);
+                    done()
                 })
             } // else, nothing to do
         } else { // create
             fs.writeFile(filename, middleware, function onWrote(err){
                 if (err) {
-                    throw new Error(err.stack||err.message||err);
-                } else {
-                    console.info(msg)
+                    return done(err)
                 }
+                console.info(msg);
+                done()
             })
         }
     }
 
     init()
-};
+}
 new PostInstall()

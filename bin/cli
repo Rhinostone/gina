@@ -30,7 +30,7 @@ try {
         , params            = process.argv
         , isUpdateRequired  = false
     ;
-        
+    //process.stdout.write('params '+ params.join(', ') + '\n');    
     if ( params.length > 0 ) {
         for (var p = 0, len = params.length; p < len; ++p) {
             if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {

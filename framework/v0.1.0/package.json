@@ -1,7 +1,7 @@
 {
   "dependencies": {
     "busboy": "^0.2.14",
-    "colors": "^1.4.1",
+    "colors": "^1.4.0",
     "engine.io": "^6",
     "engine.io-client": "^6",
     "requirejs": "^2.3.6",

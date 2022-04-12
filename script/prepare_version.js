@@ -8,7 +8,6 @@
 
 //Imports.
 var fs          = require('fs');
-// var process     = require('process');
 var util        = require('util');
 var promisify   = util.promisify;
 const { execSync } = require('child_process');
@@ -25,7 +24,12 @@ var lib         = null;
 /**
  * PrepareVersion constructor
  * 
- * NB.: this script can only be executed on Mac OS X or on Linux distributions
+ * NB.: 
+ *  This script can only be executed on Mac OS X or on Linux distributions
+ *  It will: 
+ *      - commit & push all modifications to the appropriate branch
+ *      - create if needed a new branch for the new version & remotely push to this new branch
+ *      - update local default version with the new one
  * 
  * if you need to test, go to gina main folder
  * $ node --inspect-brk=5858 ./script/prepare_version.js -g
@@ -36,6 +40,11 @@ var lib         = null;
  * */
 function PrepareVersion() {
     var self    = {};
+    
+    var init = function() {
+        self.isWin32 = isWin32();
+        begin(0);
+    };
     
     /**
      * Bebin - Will run checking tasks in order of declaration
@@ -59,25 +68,16 @@ function PrepareVersion() {
         
         // to handle sync vs async to allow execution in order of declaration
         if (funct) {
-            eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e)}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');            
+            eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e); process.exit(-1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');            
         }          
     }
-
-    var init = function() {
-        self.isWin32 = isWin32();
-        begin(0);
-    };
-    
+       
     
     self.getSelectedVersion = async function(done) {
         var homeDir = getUserHome() || null;
-        // try {
-        //     homeDir = execSync('echo $HOME').toString();
-        // } catch(err) {}
         
-        if (!homeDir) {
-            console.error('No $HOME path found !');
-            process.exit(-1);
+        if (!homeDir) {        
+            return done(new Error('No $HOME path found !'))
         }
         
         var ginaHomeDir = homeDir.replace(/\n/g, '') + '/.gina';
@@ -112,10 +112,10 @@ function PrepareVersion() {
         lib         = require(frameworkPath +'/lib');
             
             
-        if ( 
-            selectedVersion !== targetedVersion
-            //&& selectedVersion < targetedVersion 
-        ) {            
+        // if ( 
+        //     selectedVersion !== targetedVersion
+        //     //&& selectedVersion < targetedVersion 
+        // ) {            
             
             // update selected version & requirements
             shortVersion = targetedVersion.split('.');
@@ -186,7 +186,7 @@ function PrepareVersion() {
             self.frameworkPath = frameworkPath = ginaPath +'/framework/v'+targetedVersion;
             helpers             = require(frameworkPath +'/helpers');
             lib                 = require(frameworkPath +'/lib');            
-        }
+        //}
         
         done()
     };
@@ -299,16 +299,14 @@ function PrepareVersion() {
         
         if (!branchExists) {
             console.debug('No existing branch found, creating a new one !');
-            var newBranchCreated = null;
             try {
-                newBranchCreated = execSync("git checkout -b "+ targetedBranch)
-                                    .toString()
-                                    .replace(/(\n|\r|\t)/g, '');
+                execSync("git checkout -b "+ targetedBranch);
                 // pushing to new branch
                 console.debug('setting up remote branch `'+ targetedBranch +'` to git ...');
                 execSync("git push --set-upstream origin "+ targetedBranch);
             } catch (err) {
-                // nothing to do                
+                console.error(err.stack||err.message||err);
+                return done(err);              
             }
         }
         // use existing to push updates
@@ -353,33 +351,11 @@ function PrepareVersion() {
             console.error(err.stack||err.message||err);
             return done(err);               
         }
-            
-            
-        
-        
-        
-        // push to branh        
-        
         
         done()
     }
     
-    /**
-     * Write version number in the VERSION file
-     * */
-    // self.setVersion = function() {
-    //     console.info('setting version number ...');
-    //     try {
-    //         var version = require( _(self.path + 'package.json') ).version;
-    //         var path = _(self.path + 'VERSION');
-    //         fs.writeFileSync(path, version)
-    //     } catch (err) {
-    //         console.error(err.stack)
-    //     }
-    //     done();
-    // };
-
     init()
-};
+}
 
 new PrepareVersion()
