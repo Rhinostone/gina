@@ -163,7 +163,7 @@ function PathHelper() {
         }
 
         arr.index = function(i) {
-            if ( typeof(arr[i]) != 'undefiend')
+            if ( typeof(arr[i]) != 'undefined' )
                 return arr[i];
             else
                 return undefined;
@@ -202,7 +202,7 @@ function PathHelper() {
         }
 
         arr.index = function(i) {
-            if ( typeof(arr[i]) != 'undefiend')
+            if ( typeof(arr[i]) != 'undefined')
                 return arr[i];
             else
                 return undefined;
@@ -327,7 +327,7 @@ function PathHelper() {
      *
      * @param {string} permission Folder permission
      * */
-    _.prototype.mkdirSync = function(permission) {
+    _.prototype.mkdirSync = function(permission, pathArr) {
 
         if ( existsSync(this.value) ) {
             return this // always return the instance for sync
@@ -336,11 +336,11 @@ function PathHelper() {
 
         //by default.
         if ( typeof(permission) == 'undefined' ) {
-            var permission = 0775
+            permission = 0775
         }
 
         if ( typeof(pathArr) == 'undefined' ) {
-            var pathArr = toArray(this)
+            pathArr = toArray(this)
         }
 
         try {
@@ -366,7 +366,7 @@ function PathHelper() {
         if (i+1 < pathArr.length) {
 
             if ( typeof(path) == 'undefined') {
-                var path =   self.start + pathArr[0]
+                path =   self.start + pathArr[0]
             } else {
                 ++i;
                 path += '/' + pathArr[i]
@@ -390,8 +390,8 @@ function PathHelper() {
      * */
     _.prototype.mkdir = function(permission, callback) {
         if ( typeof(permission) == "function") {
-            var callback = permission;
-            var permission = 0775
+            callback = permission;
+            permission = 0775
         }
         var self = this;
         self = cleanSlashes(self);
@@ -447,21 +447,21 @@ function PathHelper() {
 
         //by default.
         if ( typeof(permission) == 'undefined' ) {
-            var permission = 0775
+            permission = 0775
         }
 
         if ( typeof(pathArr) == 'undefined' ) {
-            var pathArr = toArray(self)
+            pathArr = toArray(self)
         }
 
         if ( typeof(i) == 'undefined' ) {
-            var i = 0
+            i = 0
         }
 
         if (i+1 < pathArr.length) {
 
             if ( typeof(path) == 'undefined') {
-                var path =   self.start + pathArr[0]
+                path =   self.start + pathArr[0]
             } else {
                 ++i;
                 path += '/' + pathArr[i]
@@ -721,7 +721,7 @@ function PathHelper() {
                                 }
                             }
                             if (!isExcluded) {
-                                var target = new _(destination).mkdir( function(err, path) {
+                                target = new _(destination).mkdir( function(err, path) {
 
                                     browseCopy(source, path, excluded, function(err) {
                                         //console.debug("copy Dir to Dir done");
@@ -1583,6 +1583,6 @@ function PathHelper() {
         return getContext("paths")
     }
 
-};//EO PathHelper.
+}//EO PathHelper.
 
 module.exports = PathHelper

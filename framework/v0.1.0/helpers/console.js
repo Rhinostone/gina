@@ -25,7 +25,7 @@ function ConsoleHelper() {
         //console.log("arg: ", args);
         //To handle logs with coma speparated arguments.
 
-        for (var i=0; i<args.length; ++i) {
+        for (let i=0; i<args.length; ++i) {
 
             if (args[i] instanceof Object) {
                 //console.log("\n...", args[i], args[i].toString());

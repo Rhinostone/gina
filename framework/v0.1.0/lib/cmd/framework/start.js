@@ -47,7 +47,7 @@ function Start(opt){
 
     var cleanPIDs = function() {
         var f = 0
-            , path = _(GINA_RUNDIR + '/gina')
+            , path = _(GINA_RUNDIR)
             , files = null
         ;
 
@@ -67,7 +67,21 @@ function Start(opt){
 
 
             for (;f < files.length; ++f) {
-                if (files[f] != self.pid) {
+                
+                // skip all but framework pid files
+                if ( files[f] != process.title +'.pid' ) {
+                    continue;
+                }
+                
+                let filePid = null;
+                try {
+                    filePid = fs.readFileSync(_(path +'/'+ files[f], true)).toString().trim();
+                } catch(fileErr) {
+                    fs.unlinkSync(_(path +'/'+ files[f], true));
+                    continue;
+                }
+                // remove old framework pid files
+                if (filePid && filePid != self.pid) {
                     try {
                         new _(path +'/'+ files[f]).rmSync()
                     } catch(err) {
@@ -77,49 +91,9 @@ function Start(opt){
                 }
             }
         }
-
-
-
     }
 
-    /**
-     * Check is the service is a real one.
-     *
-     * */
-    // var isReal = function(bundle){
-    //     return ( typeof(self.bundles[bundle]) != 'undefined') ? true : false
-    // };
-
-
-    // var startAllServices = function() {
-    //     for (var service in self.servicesList) {
-    //         if (self.servicesList[service] == 'framework') {
-    //             //spawn cmd + service
-    //             startService(service)
-    //         }
-    //     }
-    // };
-
-    // var startSelectedServices = function(services){
-
-    //     //process.argv[i]
-    //     for (var s=0; s < services.length; ++s) {
-    //         startService(services[s])
-    //     }
-    // };
-
-    // var startService = function(service) {
-    //     if (isReal(service)) {
-    //         var cmd = 'gina '+ self.cmd +' ';
-    //         console.log('starting service: ', service)
-    //     } else {
-    //         console.log('gina: [ '+ service +' ] is not a real service.')
-    //         //stops all.
-
-    //     }
-    // }
-
     init(opt)
-};
+}
 
-module.exports = Start
+module.exports = Start;

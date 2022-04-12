@@ -3,7 +3,7 @@
 > If you would like to contribute, you can contact us at `contact@gina.io` 
 
 ### Installing Gina
-You cannot just install the framework with the `NPM` CLI. You will need to fetch sources from the [github page](https://github.com/Rhinostone/gina).
+You cannot just install the framework with the `NPM` CLI. You will need to fetch sources from the [github page](https://github.com/Rhinostone/gina) since all files are not published to `NPM`.
 
 Targeted folder should be: `/usr/local/lib/node_modules/gina`
 Make sure you have the appropriate permissions to write.
@@ -11,6 +11,12 @@ Then go to `/usr/local/lib/node_modules/gina`
 ```tty
 cd /usr/local/lib/node_modules/gina
 ```
+
+Run the `pre installation script` in order to setup permissions
+```tty
+node ./script/pre_install.js
+```
+
 Then run the `post installation script`
 ```tty
 node ./script/post_install.js
@@ -22,7 +28,7 @@ gina version
 ```
 
 ### Setting the framework default environment
-> By default, Gina comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework we advise you you to use the `dev` environment.
+> By default, Gina comes with 2 environments : `dev` and `prod`. The default is `prod`. But if you are contributing to the framework we advise you you to use the `dev` environment: you will get a lot of debug messages, but it is easier to track what is being done in background.
 
 __Changing default env__
 By default, Gina is installed with `dev` environment which allow you to display the toolbar.

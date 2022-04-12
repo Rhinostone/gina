@@ -12,29 +12,20 @@
 
 
 NODE=/opt/node/bin/node
-DAEMON=/var/node/aikos/platform/gina
-DAEMON_NAME=aikos-platform
+DAEMON=/usr/local/lib/node_modules/gina
+DAEMON_NAME=gina
 
-CMD=/var/node/aikos/platform/gina
+CMD=/usr/local/gina
 
-ENV=stage
-START_ALL=/var/node/aikos/platform/start-all.sh
-
-
-SHUTDOWN=shutdown
-MAPI=mobileAPI
-BAPI=boxAPI
-
-LOG=/var/log/aikos
-PID=/var/run/aikos/platform.pid
+ENV=${GINA_ENV}
+LOG=${GINA_LOGDIR}
+# The process ID of the script when it runs is stored here:
+PID=${GINA_RUNDIR}'/'${DAEMON_NAME}.pid
 
 # This next line determines what user the script runs as.
 # Root generally not recommended but necessary if you are using the Raspberry Pi GPIO from Python.
-DAEMON_USER=root
+DAEMON_USER=${USER}
 
-
-# The process ID of the script when it runs is stored here:
-PIDFILE=/var/run/$DAEMON_NAME.pid
 
 . /lib/lsb/init-functions
 

@@ -7,9 +7,22 @@
  * file that was distributed with this source code.
  */
 // Imports
-var util            = require('util');
-var EventEmitter    = require('events').EventEmitter;
-var colors          = require('colors');  
+var util                = require('util');
+var promisify           = util.promisify;
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const { execSync }      = require('child_process');
+const { EventEmitter }  = require('events');
+
+// During initial pre-install & post-install, `colors` might not be installed !
+var colors          = null;
+var frameworkPath   = __dirname +'/../../../..';
+try {
+    colors = require('colors') || require(frameworkPath +'/node_modules/colors');
+} catch (err) {   
+    // colors not found
+    // It is ok, since this case is handled by the `pre-install` script
+    throw err   
+}
 
 var e = new EventEmitter();
 
@@ -37,7 +50,8 @@ function Logger(opt) {
         name: 'gina',
         template: '%d [%s][%a] %m',
         
-        // Where the events flow will be dispatched - e.g.: event.on('logger#default', function(code, level, message){ ... })
+        // Where the events flow will be dispatched - e.g.: event.on('logger#<container_name>', function(bundle, code, severityLevel, content){ ... })
+        // `flow` is binded to containers - `file` is the default
         flow: 'default',
         //containers: [],
         //'format' : '',
@@ -116,7 +130,7 @@ function Logger(opt) {
         },
         // logging hierarchy
         // Descriptions from https://sematext.com/blog/logging-levels/
-        hierarchy: process.env.LOG_LEVEL || 'info', // by default: fatal
+        hierarchy: process.env.LOG_LEVEL || 'info', // by default: info
         hierarchies: {
             /**
              * TRACE
@@ -223,6 +237,8 @@ function Logger(opt) {
         }        
              
         //console.debug('Logger instance ready.');
+        
+        // TODO - load container/flow if !== `default`
         
         
         return Logger.instance
@@ -431,7 +447,9 @@ function Logger(opt) {
                 //return process.stdout.write(content+'\r')
                 
             } else {
-                process.emit('message', opt.flow, opt.levels[s].code, s, content);
+                // Binded to containers
+                //process.emit('message', opt.flow, opt.levels[s].code, s, content);
+                process.emit('logger#'+opt.flow, opt.name, opt.levels[s].code, s, content);
             }
         }
     }
@@ -585,7 +603,6 @@ function Logger(opt) {
         if (content != '')
             process.stdout.write(content + '\n');
     };
-
 
     return init(opt);
 }

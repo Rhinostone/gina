@@ -65,7 +65,7 @@ function Proc(bundle, proc, usePidFile){
     }
 
     //default path to store pid files.
-    var pathObj = new _( GINA_RUNDIR + '/gina' );
+    var pathObj = new _( GINA_RUNDIR );
 
     var self    = {
         PID         : proc.pid,
@@ -132,8 +132,8 @@ function Proc(bundle, proc, usePidFile){
         }
 
 
-        // var outPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
-        // var errPath = _(GINA_LOGDIR + '/gina/out.'+bundle+'.'+version+'.log');
+        // var outPath = _(GINA_LOGDIR + '/out.'+bundle+'.'+version+'.log');
+        // var errPath = _(GINA_LOGDIR + '/out.'+bundle+'.'+version+'.log');
         //var nodePath = getPath('node');
         //var ginaPath = _(root + '/gina');
 
@@ -282,9 +282,10 @@ function Proc(bundle, proc, usePidFile){
                     
                 if ( process.list[p].pid == pid && process.list[p].name != 'gina' ) {
                     index       = p;
-                    pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);
-                    if ( fs.existsSync(pidPath) )
-                        fs.unlinkSync( pidPath );
+                    // pidPath     = _(GINA_RUNDIR + '/' + process.list[p].pid);
+                    // if ( fs.existsSync(pidPath) )
+                    //     fs.unlinkSync( pidPath );
+                    removePidFileSync(process.list[p].pid);
                     try {
                         if ( typeof(process.isMinion) == 'undefined' ) {
                             mountPath   =  _(getPath('mountPath') + '/' + process.list[p].name);
@@ -300,10 +301,10 @@ function Proc(bundle, proc, usePidFile){
                     
                 } else if ( process.list[p].pid == pid && process.list[p].name == 'gina' ) {
                     index       = p;
-                    pidPath     = _(GINA_RUNDIR + '/gina/' + process.list[p].pid);
-
-                    if ( fs.existsSync(pidPath) )
-                        fs.unlinkSync( pidPath );
+                    // pidPath     = _(GINA_RUNDIR + '/' + process.list[p].pid);
+                    // if ( fs.existsSync(pidPath) )
+                    //     fs.unlinkSync( pidPath );
+                    removePidFileSync(process.list[p].pid);
                 }
             }
         } catch (err) {
@@ -316,14 +317,29 @@ function Proc(bundle, proc, usePidFile){
 
         // handles only signals that cannot be cannot be caught or ignored
         if ( /(SIGKILL|SIGSTOP)/i.test(signal) ) {
-            pidPath     = _(GINA_RUNDIR + '/gina/' + pid);
-
-            if ( fs.existsSync(pidPath) )
-                fs.unlinkSync( pidPath );
+            // pidPath     = _(GINA_RUNDIR + '/' + pid);
+            // if ( fs.existsSync(pidPath) )
+            //     fs.unlinkSync( pidPath );
+            removePidFileSync(pid);
         }
 
         console.debug('[ FRAMEWORK ][ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
     };
+    
+    var removePidFileSync = function(pid) {
+        var files = fs.readdirSync( GINA_RUNDIR );
+        var pidPath = null;
+        for ( let i=0, len=files.length; i<len; i++) {
+            let id = fs.readFileSync( _(GINA_RUNDIR +'/'+ files[i], true) ).toString().trim();
+            if (id == pid) {
+                pidPath = _(GINA_RUNDIR +'/'+ files[i], true);
+                break;
+            }
+        }
+        if (pidPath) {
+            fs.unlinkSync( pidPath );
+        }
+    }
 
     /**
      * Save PID file
@@ -346,9 +362,11 @@ function Proc(bundle, proc, usePidFile){
             && typeof(proc) != "undefined" && proc != '' && proc != null
         ) {
             try {
-                var fileStream = fs.createWriteStream(path + PID);
+                //var fileStream = fs.createWriteStream(path + PID);
+                var fileStream = fs.createWriteStream(path + proc.title +'.pid');
                 fileStream.once('open', function(fd) {
-                    fileStream.write(bundle);
+                    //fileStream.write(bundle);
+                    fileStream.write(''+PID);
                     fileStream.end();
                     e.emit('proc#complete-'+self.PID, false, PID)
                 });
@@ -357,7 +375,7 @@ function Proc(bundle, proc, usePidFile){
             }
 
         } else {
-            e.emit('proc#complete-'+self.PID, new Error('encountered troubles while trying to save Process [ '+ PID +' ] file'))
+            e.emit('proc#complete-'+self.PID, new Error('encountered troubles while trying to save Process [ '+ proc.title +' ] pid file'))
         }
     };
 

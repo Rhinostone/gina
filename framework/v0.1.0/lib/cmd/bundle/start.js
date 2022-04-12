@@ -1,6 +1,6 @@
 const { debug } = require('console');
 var fs          = require('fs');
-var spawn       = require('child_process').spawn;
+const { spawn } = require('child_process');
 
 var CmdHelper   = require('./../helper');
 var console     = lib.logger;
