@@ -105,21 +105,22 @@ function PostInstall() {
     }
     
     var configureGina = function(callback) {
-        // link to ./bin/cli to binaries dir
-        // link to ./bin/cli-debug to binaries dir      
+        // link to ./bin/cli to binaries dir   
         if (!self.isWin32) {
             var binPath     = _('/usr/local/bin');
             var cli         = _(binPath +'/gina');
+            // TODO - remove this part for the next version
             var cliDebug    = _(binPath +'/gina-debug');
             
             if ( fs.existsSync(cli) ) {
                 fs.unlinkSync(cli)
             }
+            // TODO - remove this part for the next version
             if ( fs.existsSync(cliDebug) ) {
                 fs.unlinkSync(cliDebug)
             }
             
-            var cmd = 'ln -s '+ self.gina +'/bin/cli '+ binPath +'/gina';
+            var cmd = 'ln -s '+ self.gina +'/bin/gina '+ binPath +'/gina';
             console.debug('running: '+ cmd);
             run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
                 .onData(function(data){
@@ -131,18 +132,21 @@ function PostInstall() {
                         console.warn('try to run : sudo ' + cmd);
                     }
                 });
-            
-            cmd = 'ln -s '+ self.gina +'/bin/cli-debug '+ binPath +'/gina-debug';   
-            run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
-                .onData(function(data){
-                    console.info(data)
-                })
-                .onComplete( function onDone(err, data){
-                    if (err) {
-                        console.error(err);
-                        console.warn('try to run : sudo ' + cmd);
-                    }
-                });
+            // To debug, you just need to run: 
+            //          gina <topic>:<task> --inspect-gina
+            // 
+            // TODO - remove this part for the next version
+            // cmd = 'ln -s '+ self.gina +'/bin/cli-debug '+ binPath +'/gina-debug';   
+            // run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+            //     .onData(function(data){
+            //         console.info(data)
+            //     })
+            //     .onComplete( function onDone(err, data){
+            //         if (err) {
+            //             console.error(err);
+            //             console.warn('try to run : sudo ' + cmd);
+            //         }
+            //     });
             
         } else {
             console.warn('linking gina binary is not supported yet for Windows.');

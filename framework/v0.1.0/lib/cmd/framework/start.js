@@ -37,11 +37,8 @@ function Start(opt){
         self.services   = [];
         self.bundles    = [];
 
-        cleanPIDs();        
-        //console.info('Framework ready for connections');
+        cleanPIDs();
         console.notice('Framework ready for connections\n');
-
-        //var frameworkPath = getPath('framework');
 
     };
 

@@ -335,14 +335,20 @@ function Initialize(opt) {
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
         ;
         
-        // case of debug_port updated
+        // case of port & debug_port updated
         var targetObj = new _(target);
-        if ( !getEnvVar('GINA_DEBUG_PORT') && targetObj.existsSync() ) {
-            var localUserSettings = requireJSON(target);
+        var localUserSettings = requireJSON(target);
+        if ( !getEnvVar('GINA_PORT') && targetObj.existsSync() ) {
+            if ( typeof(localUserSettings.port) != 'undefined' ) {
+                setEnvVar('GINA_PORT', ~~localUserSettings.port);
+            }
+        }
+        if ( !getEnvVar('GINA_DEBUG_PORT') && targetObj.existsSync() ) {            
             if ( typeof(localUserSettings.debug_port) != 'undefined' ) {
                 setEnvVar('GINA_DEBUG_PORT', ~~localUserSettings.debug_port);
             }
-        }
+        }        
+        
 
         // updated on framework start : you never know which user is going to start gina (root ? sudo ? regular user)
         // user settings override is passed through argv while using `gina framework:set` : —-logdir=value  —-tmpdir=value —-rundir=value —-homedir=value
@@ -368,6 +374,7 @@ function Initialize(opt) {
                 'culture' : getEnvVar('GINA_CULTURE'),
                 'timezone' : getEnvVar('GINA_TIMEZONE'),
                 'node_version': process.version,
+                'port' : getEnvVar('GINA_PORT') || 8124, // TODO - scan for the next available port
                 'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 5757,
                 'user' : process.env.USER,
                 'uid' : uid,
@@ -384,6 +391,7 @@ function Initialize(opt) {
             settings = merge(userSettings, settings);
             self.settings = settings;
             
+            setEnvVar('GINA_PORT', settings['port']);
             setEnvVar('GINA_DEBUG_PORT', settings['debug_port']);
             setEnvVar('GINA_ENV_IS_DEV', settings['env_is_dev']);
             setEnvVar('GINA_SCOPE_IS_LOCAL', settings['scope_is_local']);

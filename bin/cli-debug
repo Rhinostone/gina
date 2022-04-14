@@ -33,12 +33,16 @@ var debugPort = null;
 var params = argv.split(/\s+/g);
 if ( params.length > 0 ) {
     for (var p = 0, len = params.length; p < len; ++p) {
+        if ( /^\-\-port/.test(params[p]) ) {
+            setEnvVar('GINA_PORT', ~~params[p].split(/\=/)[1]);
+            continue;
+        }
         if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
-            setEnvVar('GINA_DEBUG_PORT', params[p].split(/\=/)[1]);
+            setEnvVar('GINA_DEBUG_PORT', ~~params[p].split(/\=/)[1]);
             continue;
         }
         if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
-            debugPort = params[p];
+            debugPort = ~~params[p].split(/\=/)[1];
             process.argv.splice(p,1);   
         }
     }

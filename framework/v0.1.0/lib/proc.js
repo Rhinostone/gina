@@ -48,6 +48,7 @@ var UtilsConfig = require( _(__dirname + '/config') );
 var inherits    = require( _(__dirname + '/inherits') );
 var console     = require( _(__dirname + '/logger') );
 var Collection  = require( _(__dirname + '/collection') );
+var generator   = require( _(__dirname + '/generator') );
 //var helpers     = require( _(__dirname + '/helpers') );
 
 /**
@@ -92,17 +93,7 @@ function Proc(bundle, proc, usePidFile){
         return (self.master) ? true : false;
     };
 
-    // var getShutdownConnectorSync = function(bundle) {
-    //     var bundlesPath = getPath('bundlesPath');
-    //     var connPath = _(bundlesPath +'/'+ bundle + '/config/connector.json');
-    //     try {
-    //         console.debug('[ FRAMEWORK ][ PROC ] Reading connPath: ', connPath);
-    //         var content = fs.readFileSync(connPath);
-    //         return JSON.parse(content).httpClient.shutdown
-    //     } catch (err) {
-    //         return undefined
-    //     }
-    // }
+    
     /**
      * Going to force restart by third party (kill 9).
      *
@@ -130,44 +121,13 @@ function Proc(bundle, proc, usePidFile){
             console.debug('[ FRAMEWORK ][ PROC ] Bundle [ '+ bundle +' ] already running or [ '+env+' ] port is use by another process');
             dismiss(process.pid);
         }
-
-
-        // var outPath = _(GINA_LOGDIR + '/out.'+bundle+'.'+version+'.log');
-        // var errPath = _(GINA_LOGDIR + '/out.'+bundle+'.'+version+'.log');
-        //var nodePath = getPath('node');
-        //var ginaPath = _(root + '/gina');
-
-        // if (env == 'prod') { //won't loop forever for others env.
-        //
-        //     //var opt = process.getShutdownConnectorSync();
-        //     var opt = getShutdownConnectorSync(bundle);
-        //     //Should kill existing one..
-        //     opt.path = '/' + bundle + '/restart/' + pid + '/' + env;
-        //
-        //     var HttpClient = require('gina.com').Http;
-        //     var httpClient = new HttpClient();
-        //
-        //     if (httpClient) {
-        //         //httpClient.query(opt);
-        //         //We are not waiting for anything particular...do we ?
-        //         httpClient.query(opt, function (err, msg) {
-        //             //Now start new bundle.
-        //             callback(err);
-        //         });
-        //     } else {
-        //         var err = new Error('No shutdown connector found.');
-        //         console.error(err);
-        //         callback(err);
-        //     }
-        //
-        // } else {
-            callback(false);
-        //}
+        
+        callback(false);
     };
 
     var setPID = function(bundle, PID, proc) {
 
-        if (bundle != 'gina') {
+        if ( !/^gina\-/.test(bundle) ) {
             proc.title = 'gina: '+ bundle;
         } else {
             proc.title = bundle;
@@ -186,12 +146,11 @@ function Proc(bundle, proc, usePidFile){
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
 
-
+                        
             proc.on('SIGTERM', function(code){
-
                 if ( typeof(code) == 'undefined')
                     code = 0;
-
+                // will handle `dismiss()`
                 proc.exit(code);
             });
 
@@ -201,7 +160,8 @@ function Proc(bundle, proc, usePidFile){
                     code = 0;
 
                 console.info('[ FRAMEWORK ][ PROC ] Got exit code. Now killing: ', code);
-                proc.exit(code);//tigger exit event.
+                // will handle `dismiss()`
+                proc.exit(code);
             });
 
             //Will prevent the server from stopping.
@@ -240,12 +200,13 @@ function Proc(bundle, proc, usePidFile){
                     code = 0;
                 }
 
-                var bundle = self.bundle;
-                var env =  process.env.NODE_ENV || 'prod';
-                var pid = self.getPidByBundleName(bundle);
+                // var bundle = self.bundle;
+                // var env =  process.env.NODE_ENV || 'prod';
+                // var pid = self.getPidByBundleName(bundle);
                 
                 var currentProcess = process.list[process.list.count()-1];
                 if ( typeof(currentProcess) != 'undefined' ) {
+                    console.debug('Removing `currentProcess.pid`: ', currentProcess.pid);
                     dismiss(currentProcess.pid, "SIGKILL")
                 }
             });
@@ -254,7 +215,7 @@ function Proc(bundle, proc, usePidFile){
                 console.debug('[ FRAMEWORK ] Hanging up ! Code: '+ code +'\n'+ process.argv);
 
                 var bundle = self.bundle;
-                var env =  process.env.NODE_ENV || 'prod';
+                // var env =  process.env.NODE_ENV || 'prod';
                 var pid = self.getPidByBundleName(bundle);
 
                 dismiss(process.pid, "SIGINT");
@@ -273,20 +234,17 @@ function Proc(bundle, proc, usePidFile){
             //console.debug('[ FRAMEWORK ][ PROC ] => '+ JSON.stringify(process.list, null, 4));
             var index       = null
                 , mountPath = null
-                , pidPath   = null
             ;
 
-            for (var p in process.list) {
+            for (let p in process.list) {
                 if ( typeof(process.list[p]) == 'undefined' || process.list[p] == null )
                     continue;
                     
-                if ( process.list[p].pid == pid && process.list[p].name != 'gina' ) {
+                if ( process.list[p].pid == pid &&  !/^gina\-/.test(process.list[p].name) ) {
                     index       = p;
-                    // pidPath     = _(GINA_RUNDIR + '/' + process.list[p].pid);
-                    // if ( fs.existsSync(pidPath) )
-                    //     fs.unlinkSync( pidPath );
-                    removePidFileSync(process.list[p].pid);
+                    
                     try {
+                        removePidFileSync(process.list[p].pid);
                         if ( typeof(process.isMinion) == 'undefined' ) {
                             mountPath   =  _(getPath('mountPath') + '/' + process.list[p].name);
                             if ( fs.existsSync(mountPath) )
@@ -299,12 +257,10 @@ function Proc(bundle, proc, usePidFile){
                     }
                     
                     
-                } else if ( process.list[p].pid == pid && process.list[p].name == 'gina' ) {
+                } else if ( process.list[p].pid == pid && /^gina\-/.test(process.list[p].name) ) {
                     index       = p;
-                    // pidPath     = _(GINA_RUNDIR + '/' + process.list[p].pid);
-                    // if ( fs.existsSync(pidPath) )
-                    //     fs.unlinkSync( pidPath );
                     removePidFileSync(process.list[p].pid);
+                    removeRunningProc(process.list[p].pid);
                 }
             }
         } catch (err) {
@@ -317,9 +273,6 @@ function Proc(bundle, proc, usePidFile){
 
         // handles only signals that cannot be cannot be caught or ignored
         if ( /(SIGKILL|SIGSTOP)/i.test(signal) ) {
-            // pidPath     = _(GINA_RUNDIR + '/' + pid);
-            // if ( fs.existsSync(pidPath) )
-            //     fs.unlinkSync( pidPath );
             removePidFileSync(pid);
         }
 
@@ -363,7 +316,7 @@ function Proc(bundle, proc, usePidFile){
         ) {
             try {
                 //var fileStream = fs.createWriteStream(path + PID);
-                var fileStream = fs.createWriteStream(path + proc.title +'.pid');
+                var fileStream = fs.createWriteStream(path + proc.title.replace(/^gina\:\s+/, '') +'.pid');
                 fileStream.once('open', function(fd) {
                     //fileStream.write(bundle);
                     fileStream.write(''+PID);
@@ -378,6 +331,52 @@ function Proc(bundle, proc, usePidFile){
             e.emit('proc#complete-'+self.PID, new Error('encountered troubles while trying to save Process [ '+ proc.title +' ] pid file'))
         }
     };
+    
+    var saveRunningProc = function(bundle) {
+        
+        var runningProcsPath = _(GINA_HOMEDIR + '/procs.json', true)
+            , runningProcsPathObj = new _(runningProcsPath)
+            , runningProcs = {}
+            , proc  = self.proc
+            , PID   = self.PID 
+        ;
+        
+        if ( runningProcsPathObj.existsSync() ) {
+            runningProcs = requireJSON(runningProcsPath);
+        }
+        
+        if ( typeof(runningProcs[bundle]) == 'undefined' ) {
+            runningProcs[bundle] = {}
+        }
+        runningProcs[bundle].pid        = PID;
+        runningProcs[bundle].title      = proc.title;
+        runningProcs[bundle].version    = GINA_VERSION;
+        runningProcs[bundle].port       = ~~GINA_PORT;
+        
+        var argvStr = process.argv.join(',');
+        if ( /\-\-fake\-daemon\-pid/.test(argvStr) ) {
+            runningProcs[bundle].fakeDaemonPid = ~~(argvStr.match(/\-\-fake\-daemon\-pid\=\d+/)[0].split(/\=/)[1])
+        }
+        
+        generator.createFileFromDataSync( JSON.stringify(runningProcs, null, 2), runningProcsPath);
+    }
+    
+    var removeRunningProc = function(pid) {
+        var runningProcsPath = _(GINA_HOMEDIR + '/procs.json', true)
+            , runningProcsPathObj = new _(runningProcsPath)
+            , runningProcs = {}
+        ;
+        if ( runningProcsPathObj.existsSync() ) {
+            runningProcs = requireJSON(runningProcsPath);
+            for (let name in runningProcs) {
+                if (runningProcs[name].pid == pid) {
+                    delete runningProcs[bundle];
+                    generator.createFileFromDataSync( JSON.stringify(runningProcs, null, 2), runningProcsPath);
+                    break;
+                }
+            }
+        }
+    }
 
 
     /**
@@ -439,14 +438,18 @@ function Proc(bundle, proc, usePidFile){
         }
         
         
-        if ( bundle == 'gina'  || bundle != 'gina' && self.bundles.indexOf(bundle) == -1 ) {
+        if ( /^gina\-/.test(bundle) || !/^gina\-/.test(bundle) && self.bundles.indexOf(bundle) < 0 ) {
             console.debug('[ FRAMEWORK ][ PROC ] Now registering `'+bundle+'` with PID `'+ pid +'`');
             var list = {};
 
             var processRegistration = function () {
 
-                if (bundle != 'gina' && !existingProcess) {
+                if (!/^gina\-/.test(bundle) && !existingProcess) {
                     self.bundles.push(bundle);
+                }
+                // save to ~/.gina/procs.json
+                else if (/^gina\-/.test(bundle)) {
+                    saveRunningProc(bundle)
                 }
                 
                 list['pid']     = pid;
@@ -459,28 +462,32 @@ function Proc(bundle, proc, usePidFile){
                 
                 //isBundleMounted(projects, bundlesPath, getContext('bundle'));
             };
+            
+            var isReplacementNeeded = false, path = _(pathObj.toUnixStyle(), true);
+            if ( self.usePidFile && !pathObj.existsSync() ) {
+                try {
+                    pathObj.mkdirSync();
+                    console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +')');
+                    isReplacementNeeded = true;
+                } catch (pathErr) {
+                    throw pathErr
+                }
+            }
 
             if (self.usePidFile) {
-                pathObj.mkdir( function(err, path){
-                    console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +') now saving `'+bundle+'` PID ');
-                    //save file
-                    if (err)
-                        console.debug('[ FRAMEWORK ][ PROC ] Found '+ path +': not replacing');
+                console.debug('[ FRAMEWORK ][ PROC ] Now saving `'+bundle+'` PID ');
+                // save file
+                if (!isReplacementNeeded) {
+                    self.PID    = self.proc.pid;
+                    self.path   = path + pathObj.sep;
 
-                    if (!err) {
-                        self.PID    = self.proc.pid;
-                        self.path   = path + pathObj.sep;
-
-                        //Add PID file.
-                        setPID(bundle, self.PID, self.proc);
-                        save(bundle, self.PID, self.proc);
-
-                        processRegistration()
-                    }
-                })
-            } else {
-                processRegistration()
+                    //Add PID file.
+                    setPID(bundle, self.PID, self.proc);
+                    save(bundle, self.PID, self.proc);
+                }
             }
+            
+            processRegistration()
         }
     };
 

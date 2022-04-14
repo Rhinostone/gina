@@ -33,9 +33,17 @@ try {
     //process.stdout.write('params '+ params.join(', ') + '\n');    
     if ( params.length > 0 ) {
         for (var p = 0, len = params.length; p < len; ++p) {
+            
+            if ( /^\-\-port/.test(params[p]) ) {
+                let port = params[p].split(/\=/)[1];
+                setEnvVar('GINA_PORT', ~~port);
+                isUpdateRequired = true;            
+                continue;
+            }
+            
             if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
                 let port = params[p].split(/\=/)[1];
-                setEnvVar('GINA_DEBUG_PORT', port);
+                setEnvVar('GINA_DEBUG_PORT', ~~port);
                 isUpdateRequired = true;            
                 continue;
             }
@@ -105,7 +113,8 @@ if (!home) {
 setEnvVar('GINA_IS_WIN32', isWin32, true);
 
 if (isUpdateRequired) {    
-    settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT');
+    settings['port'] = getEnvVar('GINA_PORT') || null;
+    settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT') || null;
     console.debug('Updating debug settings: #'+  getEnvVar('GINA_DEBUG_PORT'));
     generator.createFileFromDataSync(settings, settingsPath);
 }
@@ -113,6 +122,7 @@ if (isUpdateRequired) {
 
 /**
  * Framework port
+ * TODO - Add a port scanner & compare with ~/.gina/{shortVersion}/settings.json on `post_install`
  * */
 var port = 8124;
 
