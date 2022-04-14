@@ -42,6 +42,10 @@ function Set(opt){
                 setCulture(v);
             break;
             
+            case '--port':
+                setPort(v);
+            break;  
+            
             case '--debug_port':
             case '--debug-port':
                 setDebugPort(v);
@@ -122,11 +126,19 @@ function Set(opt){
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
     
+    var setPort = function(port) {
+        console.debug('Setting `port` to #'+ port);
+        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+        process['gina']['port'] = ~~port;
+        mainSettingsConf['port'] = ~~port;
+        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
+    }
+    
     var setDebugPort = function(port) {
         console.debug('Setting `debug port` to #'+ port);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
-        process['gina']['debug_port'] = port;
-        mainSettingsConf['debug_port'] = port;
+        process['gina']['debug_port'] = ~~port;
+        mainSettingsConf['debug_port'] = ~~port;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
     

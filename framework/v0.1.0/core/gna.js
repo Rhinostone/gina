@@ -988,6 +988,9 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
         }
 
         try {
+            var projectName     = null;
+            var processList     = null;
+            var bundleProcess   = null;
             //finding app.
             if (!isLoadedThroughWorker) {
                 var target, source, tmp;
@@ -1025,7 +1028,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                     // else, not a bundle
                 } // EO for (let bundle in packs) {
                 
-                if (gna.isAborting) {
+                if ( /^true$/i.test(gna.isAborting) ) {
                     return;
                 }
                 
@@ -1035,24 +1038,21 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                 } else {
                     setContext('bundle', appName);
                     //to remove after merging gina processes into a single process.
-                    var projectName = getContext('projectName');
-                    var processList = getContext('processList');
+                    projectName = getContext('projectName');
+                    processList = getContext('processList');
                     process.list = processList;
-                    var bundleProcess = new Proc(appName + '@' + projectName, process);
+                    bundleProcess = new Proc(appName + '@' + projectName, process);
                     bundleProcess.register(appName + '@' + projectName, process.pid)
                 }
 
             } else {
                 appName = getContext('bundle');
-                var projectName = getContext('projectName');
-                var processList = getContext('processList');
+                projectName = getContext('projectName');
+                processList = getContext('processList');
                 process.list = processList;
-                var bundleProcess = new Proc(appName + '@' + projectName, process);
+                bundleProcess = new Proc(appName + '@' + projectName, process);
                 bundleProcess.register(appName + '@' + projectName, process.pid)
             }
-            
-            
-
         } catch (err) {
             abort(err)
         }

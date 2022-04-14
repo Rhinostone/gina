@@ -20,7 +20,7 @@ function Cmd(opt, runOffine) {
         local.ginaPath          = opt.ginaPath;
         local.homedir           = opt.homedir;
         local.frameworkPath     = opt.frameworkPath;
-
+        
         lib = require(local.frameworkPath + "/lib");
 
         checkIfSettings();
@@ -75,23 +75,17 @@ function Cmd(opt, runOffine) {
         framework.on('error', function(err) {
             if (err.code === 'EADDRINUSE') {
                 if (process.argv[2] == 'framework:start') {
-                    var shortVersion = getEnvVar('GINA_SHORT_VERSION')
-                        , rundir = require( getEnvVar('GINA_HOMEDIR') +'/'+ shortVersion +'/settings.json').rundir
-                        , path = _( rundir +'/gina')
-                        , pids = fs.readdirSync( path )
-                        , i = 0
-                        , str = ''
-                        , pid = undefined
-                    ;
-
-                    while(i< pids.length) {
-                        str = fs.readFileSync(_(path +'/'+ pids[i])).toString();
-                        if ( str === 'gina' ) {
-                            pid = pids[i];
-                            break
+                    var pid = null;
+                    var port  = err.port || getEnvVar('GINA_PORT');
+                    var runningProcs = requireJSON( _(getEnvVar('GINA_HOMEDIR') +'/procs.json', true) );
+                    for (let i in runningProcs) {
+                        if (runningProcs[i].port == port) {
+                            pid = runningProcs[i].pid;
+                            break;
                         }
-                        ++i
                     }
+                    
+                    
                     console.warn('Framework already running: [ '+ pid+' ]');
                 } else {
 

@@ -1,11 +1,7 @@
-const { debug } = require('console');
 var fs          = require('fs');
-const spawn       = require('child_process');
-const execSync    = require('child_process');
-
-// var help    = require( getPath('gina').root + '/utils/helper');
-// var lib     = require( getPath('gina').lib );
-//var helpers     = require( getPath('gina').helpers );
+const {spawn}       = require('child_process');
+const {execSync}    = require('child_process');
+//const { debug } = require('console');
 
 var CmdHelper   = require('./../helper');
 var console     = lib.logger;
@@ -14,7 +10,8 @@ var console     = lib.logger;
  *
  * e.g.
  *  gina framework:status
- *  
+ *  or
+ *  gina status
  *
  * */
 function Status(opt, cmd) {
@@ -40,17 +37,23 @@ function Status(opt, cmd) {
     }
     
     var status = function(opt, cmd) {
-        var pidFiles = fs.readdirSync(GINA_RUNDIR);
+        var pidFiles = null;
+        try {
+            pidFiles = fs.readdirSync(GINA_RUNDIR);
+        } catch (fileError) {
+            throw fileError
+        }
+        
         var runningVersions = [];
         for (let i=0, len=pidFiles.length; i<len; i++) {
             let file = pidFiles[i];
-            if ( !/^gina/.test(file) ) {
+            if ( !/^gina\-/.test(file) ) {
                 continue;
             }
+            let pid = fs.readFileSync(_(GINA_RUNDIR +'/'+ file)).toString().trim() || null;
             runningVersions.push({
                 title   : file.replace(/\.pid$/, ''),
-                pid     : fs.readFileSync(_(GINA_RUNDIR +'/'+ file)).toString().trim()
-                // TODO - Add the running version
+                pid     : ~~pid
             });
         }
         

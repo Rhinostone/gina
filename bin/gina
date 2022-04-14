@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 /**
+ * Fake Daemon
+ * 
+ * For service production script, you should use `./bin/cli` instead of `./bin/gina`
+ * 
  * Usage:
  * $ gina <topic>:<task> <arguments>
  * 
@@ -18,27 +22,37 @@
  * 
  * Start a bundle
  * $ gina bundle:start demo @myproject
+ * 
+ * For zsh, if we want to hide all outputs
+ * $ gina start  >&/dev/null &!
  */
 var fs      = require('fs');
 const {spawn}   = require('child_process');
 const {execSync}   = require('child_process');
 
+var restartPid = null;
+
 function runAsSubProcess() {
-    // console.debug('arguments ', Array.from(process.argv));
-    // console.debug('Running gina as a sub process');
-    var argv    =  Array.from(process.argv);
-    var nodeBin = execSync('which node').toString().trim();
-    var cliBin  = __dirname + '/cli';
+    
+    var argv            =  Array.from(process.argv);
+    var nodeBin         = execSync('which node').toString().trim();
+    var cliBin          = __dirname + '/cli';
+    var fakeDaemonPid   = '--fake-daemon-pid='+ process.pid;
+    
     if ( argv.indexOf('--inspect-gina') > -1 ) {
         cliBin  = __dirname + '/cli-debug';
         argv.splice(argv.indexOf('--inspect-gina'), 1);
+        // removing `--inspect-gina`
         Array.prototype.splice.call(process.argv, argv.indexOf('--inspect-gina'), 1);
     }
     
     argv.splice(0, 0, cliBin);
+    argv.splice(argv.length, 0, fakeDaemonPid);
+    
     // overriding process.argv which is used in `./cli`
     Array.prototype.splice.call(process.argv, 0, 0, nodeBin);
     Array.prototype.splice.call(process.argv, 0, 0, cliBin);
+    Array.prototype.splice.call(process.argv, process.argv.length, 0, fakeDaemonPid);
     
     var child = spawn(nodeBin, argv,
         {
@@ -46,11 +60,16 @@ function runAsSubProcess() {
         }
     );
     var pid = null;
-    child.stdout.setEncoding('utf8');//Set encoding.
-    child.stdout.on('data', function(data) {
-        // Uncomment if you want all the noise to debug
-        process.stdout.write(data);
         
+    // set encoding
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', function(data) {
+        
+        // Uncomment if you want all the noise to debug
+        // TODO - Allow if `GINA_ENV_IS_DEV` == true
+        // check `~/.gina/{shortVersion}/settings.json`
+        process.stdout.write(data);
+                
         /**
          * Filter messages from Logger
          */
@@ -58,18 +77,37 @@ function runAsSubProcess() {
         // Normal case
         if ( new RegExp('Framework ready for connections','gmi').test(data) ) {
             console.info('Gina server started with PID `'+ child.pid +'`');
+            // sending kill command to parent restart process
+            if (restartPid) {
+                // we can't just use process.kill() here ...
+                process.stdout.write('[ quit ]\n');
+            }
+            // Do not use `process.exit(0)` right away or the framework PID file will be removed
+            // after bundle:start, and only God knows whatever shit is going to happen
+            // Make a pause until the CLI tels otherwise (process.kill(cmd.pid, 'SIGCONT');)
+            process.kill(process.pid, 'SIGSTOP');
+            // important to prevent unwanted outputs
             process.exit(0);
         }
         
         // If framework is already running        
         if ( new RegExp('Framework already running','gmi').test(data) ) {   
-            pid = ''+data.match(/\[\s+\d+\s+\]/)[0].replace(/\[|\]|\s+/g, '');
-            console.info('Gina server is already running with PID `'+ pid +'`');
+            pid = ''+data.match(/\[\s+\d+\s+\]/);
+            if (pid && pid.length > 0) {
+                if (Array.isArray(pid) ) {
+                    pid = pid[0].replace(/\[|\]|\s+/g, '');
+                } else {
+                    pid = pid.replace(/\[|\]|\s+/g, '');
+                }
+                
+                console.info('Gina server is already running with PID `'+ pid +'`');
+            } else {
+                console.info('Gina server is already running');
+            }
+            // important to prevent unwanted outputs
             process.exit(0);
-        }
-        
-        
-        return;
+        }        
+         
     });
     
     //when an exception is thrown, it is sent to the client
@@ -84,13 +122,13 @@ function runAsSubProcess() {
         console.error(error);
     });
     
+    //  TODO - Remove this, we should be able to check the logs in case of troubles
     child.on('exit', function(code, signal) {                   
         // handles only signals that cannot be cannot be caught or ignored
         // ref.: `framework/<version>/lib/proc.js`
         if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
             console.emerg('[' + this.pid + '] exiting with signal: ', signal);
-            process.exit(0);
-        }
+        }        
     });
 }
 
@@ -98,10 +136,28 @@ function runAsSubProcess() {
  * Will spawn gina CLI with its arguments
  * This is done to allow gina to run in background
  * NB.: If you want to use gina as a daemon, do not point to this file
- *      Use `cli` instead
+ *      Use `./bin/cli` instead
 */
 function runCMD() {
     var argv = Array.from(process.argv);
+    // BO - filter restartPid
+    var r = 0;
+    for (let i=0, len=process.argv.length; i<len; i++) {
+        let arg = process.argv[i];
+        if ( /\-\-restart\-pid/.test(arg) ) {
+            restartPid = ~~(arg.split(/\=/)[1]);
+            r = i;
+            break;
+        }
+    
+    }    
+    if (restartPid) {       
+        console.debug('removing `--restart-pid`: '+ restartPid);
+        // removing `--restart-pid`
+        Array.prototype.splice.call(process.argv, r, 1);
+    }
+    // EO - filter restartPid
+    
     if ( /^(start|framework:start)$/.test(argv[2]) ) {
         try {
             // Filter args

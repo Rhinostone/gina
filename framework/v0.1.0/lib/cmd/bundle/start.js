@@ -270,7 +270,6 @@ function Start(opt, cmd) {
                             console.emerg('[' + this.pid + '] exiting with signal: ', signal);
                             cmd.proc.dismiss(this.pid, signal);
                         }
-
                     });
 
                     

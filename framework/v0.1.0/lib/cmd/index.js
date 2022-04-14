@@ -91,17 +91,41 @@ cmd.onExec = function(client, isFromFramework, opt) {
     };
 
 
-
+    var init = null;
     if (self.isFromFramework) {
         
-        var init = require('./framework/init')(opt);
+        init = require('./framework/init')(opt);
         //Framework CMD.
         if (opt.task.action == 'start') {
+            // Current version of the framework by default 
+            // But can be overriden with argument: @{version_number}
+            // eg.: gina stop @1.0.0
+            self.version = getEnvVar('GINA_VERSION');
+            // checkcking version number
+            if ( typeof(opt.argv[3]) != 'undefined' && /^@/.test(opt.argv[3]) ) {
+                var err = null;
+                var version = opt.argv[3].replace(/\@/, '');            
+                var shortVersion = version.split('.').splice(0,2).join('.');
+                if ( !/^\d\.\d/.test(shortVersion) ) {
+                    err = new Error('Wrong version: '+ version);
+                    console.log(err.message);
+                    return;
+                }
+                var availableVersions = requireJSON(_(getEnvVar('GINA_HOMEDIR') +'/main.json', true)).frameworks[shortVersion];
+                if ( availableVersions.indexOf(version) < 0 ) {
+                    err = new Error('Version not installed: '+ version);
+                    console.log(err.message);
+                    return;
+                }
+                
+                self.version = version;
+            }
+            
             init.onComplete( function done(err, run){
                 console.debug('loading task `',  opt.task.topic +':'+ opt.task.action, '`');
                 
                 //Setting master process with its own PID file.                
-                cmd.proc = new Proc('gina', process);
+                cmd.proc = new Proc('gina-v' + self.version, process);
                 cmd.proc.setMaster(process.pid);
 
                 cmd.proc.onReady( function(err, pid){ //starting others
@@ -132,18 +156,8 @@ cmd.onExec = function(client, isFromFramework, opt) {
         opt.task.action = arr[1];
         
         console.debug('[ FRAMEWORK ] is starting online CLI '+ arr[0] +':'+arr[1]);
-        // var hasCmdStarted = false;                    
-        // var interval = 1000; // will abort after 5 sec timeout
-
-        // var taskTimeoutId = setInterval(function onTimeout(){
-        //     console.debug('[ FRAMEWORK ] has `'+ arr[0] +':'+arr[1] +'` started ? '+ hasCmdStarted);
-        //     // if (!gna.started) {
-        //     //     abort(new Error('[ FRAMEWORK ] Gina encountered an error when trying to start `'+ (appName || getContext('bunlde')) +'`'))
-        //     // }
-        // }, interval);  
-        // console.debug('[ FRAMEWORK ] starting `'+ arr[0] +':'+arr[1] +'` interval check: #'+ taskTimeoutId);
         
-        var init = require('./framework/init')(opt);
+        init = require('./framework/init')(opt);
         init.onListen( function done(err, run, opt){            
             run(opt, cmd)
         })
