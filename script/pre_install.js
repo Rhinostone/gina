@@ -74,7 +74,7 @@ function PreInstall() {
         
         // to handle sync vs async to allow execution in order of declaration
         if (funct) {
-            eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e); process.exit(-1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');            
+            eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e); process.exit(-1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');// jshint ignore:line
         }          
     }
     
@@ -190,9 +190,9 @@ function PreInstall() {
         }
         
         // check if framework version folder is found
-        var versionsFolders = null;        
+        var versionsFolders = null, frameworkPath = null;        
         try {
-            var frameworkPath = _(self.root +'/framework', true);
+            frameworkPath = _(self.root +'/framework', true);
             console.info('frameworkPath: ', frameworkPath);
             if ( !new _(frameworkPath).existsSync() ) {
                 return done();
@@ -236,15 +236,15 @@ function PreInstall() {
             let frameworkPathObj = new _(frameworkPath +'/'+ dir);
             
             // since we cannot yet promissify directly PathObject.cp()
-            let f = function(destination, cb) {
+            let f = function(destination, cb) {// jshint ignore:line
                 frameworkPathObj.cp(destination, cb);
             };
             let err = false; 
             await promisify(f)(archiveVersionPath)  
-                .catch( function onCopyError(_err) {
+                .catch( function onCopyError(_err) {// jshint ignore:line
                     err = _err;
                 })
-                .then( function onCopy(_destination) {
+                .then( function onCopy(_destination) {// jshint ignore:line
                     console.info('Backup '+ dir +' to '+ _destination +' done !');
                 });
             

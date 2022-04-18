@@ -145,7 +145,6 @@ function Initialize(opt) {
                 process.exit(1)
             }
         }
-        //else {
         // update if needed : like the version number ...
         var mainConfig  = require(target);
         mainConfig      = whisper(dic, mainConfig);
@@ -211,8 +210,6 @@ function Initialize(opt) {
         setEnvVar('GINA_TIMEZONE', defTimezone);
         process.env.TZ = defTimezone;
         process.env.LOG_LEVEL = defLogLevel;
-            
-        //}
     }
 
     /**
@@ -512,6 +509,5 @@ function Initialize(opt) {
             e.emit('init#listen', false, run, opt)
         }
     }
-};
-
-module.exports = Initialize
+}
+module.exports = Initialize;

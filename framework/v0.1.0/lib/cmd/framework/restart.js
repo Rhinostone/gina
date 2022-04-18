@@ -2,10 +2,9 @@ var fs          = require('fs');
 const {spawn}       = require('child_process');
 const {execSync}    = require('child_process');
 const util = require('util');
-const exec = util.promisify(require('child_process').exec);
 
 var CmdHelper   = require('./../helper');
-const { start } = require('repl');
+// const { start } = require('repl');
 var console     = lib.logger;
 /**
  * Framework restart

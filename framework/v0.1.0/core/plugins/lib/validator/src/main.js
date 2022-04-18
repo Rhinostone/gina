@@ -5523,7 +5523,6 @@
             // getting fields & values
             var $fields         = {}
                 , fields        = { '_length': 0 }
-                , id            = $target.getAttribute('id')
                 , rules         = ( typeof(gina.validator.$forms[id]) != 'undefined' ) ? gina.validator.$forms[id].rules : null
                 , name          = null
                 , value         = 0
@@ -6650,7 +6649,7 @@
                         }
                         
                         
-                        for (var c = 0, cLen = conditions.length; c<cLen; ++c) {
+                        for (let c = 0, cLen = conditions.length; c<cLen; ++c) {
                             // by default
                             //caseValue = fields[field];
                             caseValue =  allFields[field];

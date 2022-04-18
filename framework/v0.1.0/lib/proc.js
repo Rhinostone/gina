@@ -107,7 +107,7 @@ function Proc(bundle, proc, usePidFile){
     var respawn = function(bundle, env, pid, callback) {
         //var loggerInstance = getContext('logger');
         //loggerInstance["trace"]('Fatal error !');
-        //console.debug('[ FRAMEWORK ][ PROC ] Exiting and re spawning : ', bundle, env);
+        //console.debug('[ PROC ] Exiting and re spawning : ', bundle, env);
         // TODO - Count the restarts and prevent unilimited loop
         // TODO - Send notification to admin or/and root to the Fatal Error Page.
 
@@ -116,9 +116,9 @@ function Proc(bundle, proc, usePidFile){
         } catch (err) {
             bundle = process.argv[3];
             //var port = self.getBundlePortByBundleName(bundle);
-            //console.debug('[ FRAMEWORK ][ PROC ] Bundle ', bundle,' already running or port[ '+port+' ] is taken by another process...');
+            //console.debug('[ PROC ] Bundle ', bundle,' already running or port[ '+port+' ] is taken by another process...');
             //loggerInstance["trace"]("Bundle [ "+ bundle +" ] already running or [ "+env+" ] port is use by another process...");
-            console.debug('[ FRAMEWORK ][ PROC ] Bundle [ '+ bundle +' ] already running or [ '+env+' ] port is use by another process');
+            console.debug('[ PROC ] Bundle [ '+ bundle +' ] already running or [ '+env+' ] port is use by another process');
             dismiss(process.pid);
         }
         
@@ -141,7 +141,8 @@ function Proc(bundle, proc, usePidFile){
 
 
         if ( typeof(PID) != 'undefined' && typeof(PID) == 'number' ) {
-            console.debug('[ FRAMEWORK ][ PROC ] Setting listeners for ', PID, ':', bundle);
+            
+            console.debug('[ PROC ] Setting listeners for ', PID, ':', bundle);
 
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
@@ -159,7 +160,7 @@ function Proc(bundle, proc, usePidFile){
                 if (code == undefined)
                     code = 0;
 
-                console.info('[ FRAMEWORK ][ PROC ] Got exit code. Now killing: ', code);
+                console.info('[ PROC ] Got exit code. Now killing: ', code);
                 // will handle `dismiss()`
                 proc.exit(code);
             });
@@ -179,7 +180,7 @@ function Proc(bundle, proc, usePidFile){
                 
                 console.emerg('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
 
-                //console.debug("[ FRAMEWORK ][ PROC ] @=>", self.args);
+                //console.debug("[ PROC ] @=>", self.args);
                 var bundle = self.bundle;
                 var pid = self.getPidByBundleName(bundle);
 
@@ -229,13 +230,12 @@ function Proc(bundle, proc, usePidFile){
         if (pid == undefined) {
             pid = self.PID;
         }
-
+        var index       = null
+            , mountPath = null
+        ;
         try {
-            //console.debug('[ FRAMEWORK ][ PROC ] => '+ JSON.stringify(process.list, null, 4));
-            var index       = null
-                , mountPath = null
-            ;
-
+            //console.debug('[ PROC ] => '+ JSON.stringify(process.list, null, 4));
+            
             for (let p in process.list) {
                 if ( typeof(process.list[p]) == 'undefined' || process.list[p] == null )
                     continue;
@@ -253,7 +253,7 @@ function Proc(bundle, proc, usePidFile){
                         // soft kill..
                         process.kill(pid, signal);
                     } catch (err) {                        
-                        console.warn('[ FRAMEWORK ][ PROC ] Could not unmount process file `'+process.list[p].name+'`\n'+ err.stack);
+                        console.warn('[ PROC ] Could not unmount process file `'+process.list[p].name+'`\n'+ err.stack);
                     }
                     
                     
@@ -265,7 +265,7 @@ function Proc(bundle, proc, usePidFile){
             }
         } catch (err) {
             //Means that it does not exists anymore.
-            console.debug('[ FRAMEWORK ][ PROC ] ', err.stack)
+            console.debug('[ PROC ] ', err.stack)
         }
 
         if (index != null)
@@ -276,7 +276,7 @@ function Proc(bundle, proc, usePidFile){
             removePidFileSync(pid);
         }
 
-        console.debug('[ FRAMEWORK ][ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
+        console.debug('[ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
     };
     
     var removePidFileSync = function(pid) {
@@ -306,6 +306,7 @@ function Proc(bundle, proc, usePidFile){
             , PID   = self.PID
             , proc  = self.proc
             , path  = self.path
+            , file  = null
         ;
 
         //Get PID path.
@@ -315,8 +316,14 @@ function Proc(bundle, proc, usePidFile){
             && typeof(proc) != "undefined" && proc != '' && proc != null
         ) {
             try {
-                //var fileStream = fs.createWriteStream(path + PID);
-                var fileStream = fs.createWriteStream(path + proc.title.replace(/^gina\:\s+/, '') +'.pid');
+                file = proc.title.replace(/^gina\:\s+/, '');
+                // if ( /^gina$/.test(file) ) {
+                //     file += '-v'+ GINA_VERSION;
+                // }
+                file += '.pid';
+                
+                console.debug('[ PROC ] Now saving `'+file+'` PID ');
+                var fileStream = fs.createWriteStream(path + file);
                 fileStream.once('open', function(fd) {
                     //fileStream.write(bundle);
                     fileStream.write(''+PID);
@@ -389,7 +396,7 @@ function Proc(bundle, proc, usePidFile){
         try{
             return self.PID;
         } catch (err) {
-            console.error('[ FRAMEWORK ][ PROC ] Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
+            console.error('[ PROC ] Could not get PID for bundle: '+ self.bundle + (err.stack||err.message));
             return null;
         }
     };
@@ -433,13 +440,13 @@ function Proc(bundle, proc, usePidFile){
         if (existingProcess) {
             process.list = processCollection.delete({ name: bundle, pid: pid }, 'pid').toRaw();
             dismiss(existingProcess.pid);
-            console.debug('[ FRAMEWORK ][ PROC ] Don\'t pannic ...');
+            console.debug('[ PROC ] Don\'t pannic ...');
             existingProcess = null;
         }
         
         
         if ( /^gina\-/.test(bundle) || !/^gina\-/.test(bundle) && self.bundles.indexOf(bundle) < 0 ) {
-            console.debug('[ FRAMEWORK ][ PROC ] Now registering `'+bundle+'` with PID `'+ pid +'`');
+            console.debug('[ PROC ] Now registering `'+bundle+'` with PID `'+ pid +'`');
             var list = {};
 
             var processRegistration = function () {
@@ -467,15 +474,14 @@ function Proc(bundle, proc, usePidFile){
             if ( self.usePidFile && !pathObj.existsSync() ) {
                 try {
                     pathObj.mkdirSync();
-                    console.debug('[ FRAMEWORK ][ PROC ] Path created ('+ path +')');
+                    console.debug('[ PROC ] Path created ('+ path +')');
                     isReplacementNeeded = true;
                 } catch (pathErr) {
                     throw pathErr
                 }
             }
 
-            if (self.usePidFile) {
-                console.debug('[ FRAMEWORK ][ PROC ] Now saving `'+bundle+'` PID ');
+            if (self.usePidFile) {                
                 // save file
                 if (!isReplacementNeeded) {
                     self.PID    = self.proc.pid;
@@ -501,13 +507,12 @@ function Proc(bundle, proc, usePidFile){
 
     //init
     if ( typeof(self.bundle) == "undefined" ) {
-        console.error('[ FRAMEWORK ][ PROC ] Invalid or undefined proc name . Proc naming Aborted');
+        console.error('[ PROC ] Invalid or undefined proc name . Proc naming Aborted');
         process.exit(1)
     } else {
         init()
     }
 
     return self
-};
-
+}
 module.exports = Proc;

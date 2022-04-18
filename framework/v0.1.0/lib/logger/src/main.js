@@ -7,15 +7,14 @@
  * file that was distributed with this source code.
  */
 // Imports
+var fs                  = require('fs');
 var util                = require('util');
 var promisify           = util.promisify;
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
-const { execSync }      = require('child_process');
 const { EventEmitter }  = require('events');
 
 // During initial pre-install & post-install, `colors` might not be installed !
 var colors          = null;
-var frameworkPath   = __dirname +'/../../../..';
+var frameworkPath   = __dirname +'/../../../../..';
 try {
     colors = require('colors') || require(frameworkPath +'/node_modules/colors');
 } catch (err) {   
@@ -24,12 +23,12 @@ try {
     throw err   
 }
 
-var e = new EventEmitter();
+var merge           = require('../../merge');
+var inherits        = require('../../inherits');
+var helpers         = require('../../../helpers');
 
-var merge           = require('../merge');
-var helpers         = require('../../helpers');
 if ( typeof(JSON.clone) == 'undefined' ) {
-    require(__dirname +'/../../helpers/prototypes')()
+    require(__dirname +'/../../../helpers/prototypes')()
 }
 
 /**
@@ -41,19 +40,40 @@ if ( typeof(JSON.clone) == 'undefined' ) {
  *
  * @api Public
  * */
-function Logger(opt) {
-
-    var self = {loggers: {}};
-
+function Logger(options) {
+    
+    
+    // retrieve context
+    var ctx             = getContext('loggerInstance') || { initialized: false }// jshint ignore:line
+        , self          = {}
+        , loggers       = {}
+        // `containers`, also meaning transports
+        , containers    = {}
+        // for `getInstance()`
+        , opt           = ctx._options || options
+    ;
+    
+    // only used for defaultOption init
+    var defaultLogLevel = null;
+    try {
+        var homedir = getUserHome() || process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];// jshint ignore:line
+        var shortVersion = requireJSON( _(frameworkPath +'/package.json', true) ).version;// jshint ignore:line
+        shortVersion = shortVersion.split('.').splice(0,2).join('.');
+        defaultLogLevel = requireJSON( _(homedir +'/.gina/'+ shortVersion +'/settings.json', true) ).log_level;// jshint ignore:line
+    } catch(logLevelError) {
+        // It is ok to fail  ... do not worry
+    } 
+       
+    
     var defaultOptions = {
         // Group name by default: it is usually the application or the service PROC.title
         name: 'gina',
         template: '%d [%s][%a] %m',
         
-        // Where the events flow will be dispatched - e.g.: event.on('logger#<container_name>', function(bundle, code, severityLevel, content){ ... })
-        // `flow` is binded to containers - `file` is the default
-        flow: 'default',
-        //containers: [],
+        // Where the events flow will be dispatched - e.g.: event.on('logger#<container_name>', function(appName, code, severityLevel, content){ ... })
+        // A `flow` is binded to related container - `default` is `process.stdout`
+        // A flow name is always the same as the container/transport name: checkout the `containers` folder for more
+        flows: ['default', 'mq'],
         //'format' : '',
         //'pipe' : [],
         
@@ -130,7 +150,17 @@ function Logger(opt) {
         },
         // logging hierarchy
         // Descriptions from https://sematext.com/blog/logging-levels/
-        hierarchy: process.env.LOG_LEVEL || 'info', // by default: info
+        // start with the app log_level, then gina log_level, and if nothing is found, set it by default to info
+        // eg.:
+        // [ From the CLI ] 
+        // $ gina set --log-level=trace
+        // This will apply for the framework, and will be inherited for all bundles unless you ovveride it in your application/bundle code
+        // ----
+        // [ Inside your code ]
+        // var utils       = require('gina').utils;
+        // var console     = utils.logger;
+        // console.setLevel('trace', bundleName) - Put that in the bundle bootstrap
+        hierarchy: process.env.LOG_LEVEL || defaultLogLevel || 'info', // by default: info
         hierarchies: {
             /**
              * TRACE
@@ -175,44 +205,53 @@ function Logger(opt) {
              * Simple enough. NO LOGGING !!
              */
             //off: [5]
-        }
+        },
+        isReporting: true
     };
 
-    
+    var getInstance = function() {        
+        self    = ctx.instance;
+        loggers = ctx._loggers;
+        // opt = ctx._options;
+        
+        return self;
+    }
 
     /**
      * init
      * @constructor
      * */
     var init = function(opt) {
-        // if ( typeof(Logger.initialized) != 'undefined' ) {
-        //     console.log("Logger instance already exists. Loading it.");
         
-        //     self = getInstance();
-        
-        //     return self        
-        // }
-        
-        Logger.initialized              = true;
-        Logger.instance                 = self;        
-        Logger.instance._eventHandler   = e;
-        
-        
+                
+        if ( typeof(ctx.initialized) != 'undefined' && ctx.initialized == true) {  
+            getInstance();
+            
+            if (opt.hierarchies[opt.hierarchy].indexOf( opt.levels['debug'].code) > -1) {
+                emit(opt, 'debug', 'Logger instance already exists: reusing it ;)');
+            }            
+            
+            return self;
+        }    
+        ctx.initialized = true;
         
         if (opt) {            
-            opt = merge(defaultOptions, opt, true)
+            opt = merge(JSON.clone(defaultOptions), opt, true)
         } else {
-            //opt = ( typeof(Logger.instance) != 'undefined' && typeof(Logger.instance._options) != 'undefined' ) ? Logger.instance._options : defaultOptions;
+            //opt = ( typeof(ctx.instance) != 'undefined' && typeof(ctx.instance._options) != 'undefined' ) ? ctx.instance._options : defaultOptions;
             opt = JSON.clone(defaultOptions)
         }
-        
-        if ( typeof(self.loggers[opt.name]) == 'undefined' ) {
-            // defining default prototypes
-            self.loggers[opt.name] = {}
+        if ( typeof(opt.group) == 'undefined' || /^gina\-/.test(opt.group) ) {
+            opt.group = 'gina'
         }
-        self.loggers[opt.name]._options = opt;        
-        Logger.instance.loggers[opt.name]._options = opt;
-                
+        
+        if ( typeof(loggers[opt.name]) == 'undefined' ) {
+            // defining default prototypes
+            loggers[opt.name] = {}
+        }
+        loggers[opt.name]._options = opt;
+        
+                        
         
         // setup default group, colors
         setupNewGroup(opt.name, opt);        
@@ -220,32 +259,59 @@ function Logger(opt) {
         for (let l in opt.levels) {
             // don't override here since it is generic
             if ( typeof(self[l]) == 'undefined' ) {
-                self[l] = function(){
+                self[l] = function(){// jshint ignore:line
                     
-                    var group = defaultOptions.name; // by default
+                    var group = opt.name || defaultOptions.name; // by default
                     if ( process.title != 'node' && !/(\\|\/)*node$/.test(process.title) ) {
                         group = process.title.replace(/^gina\:\s*/, '');
+                        if ( typeof(group) == 'undefined' || /^gina\-/.test(group) ) {
+                            group = 'gina'
+                        }
                     }
                     
                     //self.log('--> '+ group + ' '+ process.env.LOG_GROUP +' '+ process.title);
-                    if ( typeof(self.loggers[group]) == 'undefined' ) {
+                    if ( typeof(loggers[group]) == 'undefined' ) {
                         setupNewGroup(group)
                     }
-                    self.loggers[group][l].apply(self[l], arguments)
+                    loggers[group][l].apply(self[l], arguments)
                 }
             }
-        }        
-             
-        //console.debug('Logger instance ready.');
+        }
+        
         
         // TODO - load container/flow if !== `default`
+        try {
+            // only afer this, we can send logs to containers/transports
+            loadContainers(opt);
+        } catch (err) {
+            throw err;
+        }        
         
         
-        return Logger.instance
+        // backing up context
+        ctx.instance        = self;
+        ctx._options        = opt;
+        ctx._loggers        = loggers;
+        setContext('loggerInstance', ctx);// jshint ignore:line
+                
+        if (opt.hierarchies[opt.hierarchy].indexOf( opt.levels['debug'].code) > -1) {
+            emit(opt, 'debug', 'New Logger instance created');
+        }
+        
+        return self;
     }
 
-    var getInstance = function() {
-        return Logger.instance
+    
+    
+    var loadContainers = function(opt) {        
+        var containersPath = _(__dirname +'/containers', true);// jshint ignore:line
+        for (let i=0, len=opt.flows.length; i<len; i++) {
+            let flow = opt.flows[i];
+            if ( typeof(containers[flow]) == 'undefined' ) {                
+                containers[flow] = require( _(containersPath +'/'+ flow, true))(opt, loggers);// jshint ignore:line
+                //process.emit('logger#'+ flow +'-options', opt, loggers);
+            }
+        }
     }
     
     /**
@@ -255,18 +321,17 @@ function Logger(opt) {
      * @param {object} [opt] 
      */
     var setupNewGroup = function(group, opt) {
-        if ( typeof(self.loggers[group]) == 'undefined' ) {
-            self.loggers[group] = {};
+        if ( typeof(loggers[group]) == 'undefined' ) {
+            loggers[group] = {};
         }
         
-        if (!opt) {
-            //opt = ( typeof(Logger.instance) != 'undefined' && typeof(Logger.instance._options) != 'undefined' ) ? Logger.instance._options : defaultOptions;
-            opt = JSON.clone(defaultOptions)
+        if (!opt) {            
+            opt = ctx._options || JSON.clone(defaultOptions)
         }
-        self.loggers[group]._options = opt;
+        loggers[group]._options = opt;
         
         // lock group name
-        self.loggers[group]._options.name = group;
+        loggers[group]._options.name = group;
         
         // setup colors
         setColors(group);
@@ -285,7 +350,7 @@ function Logger(opt) {
                     _colors[k][i] = colors.styles[k][i]
                 }
             }
-            self.loggers[group].colors = JSON.clone(_colors);
+            loggers[group].colors = JSON.clone(_colors);
         }            
     }
 
@@ -293,50 +358,44 @@ function Logger(opt) {
 
     var setDefaultLevels = function(group) {
         
-        var opt = self.loggers[group]._options || JSON.clone(defaultOptions);
-        var logger = self.loggers[group];
+        var loggerOptions = loggers[group]._options || ctx._options || JSON.clone(defaultOptions);
+        var logger = loggers[group];
         try {
             
             //console.log('colors ----> ', colors);
             // setting default level string length
-            opt._maxLevelLen = opt._maxLevelLen || 0;
-            if (!opt._maxLevelLen) {
-                for (let l in opt.levels) {
-                    if (l.length > opt._maxLevelLen) {
-                        opt._maxLevelLen = l.length;
+            loggerOptions._maxLevelLen = loggerOptions._maxLevelLen || 0;
+            if (!loggerOptions._maxLevelLen) {
+                for (let l in loggerOptions.levels) {
+                    if (l.length > loggerOptions._maxLevelLen) {
+                        loggerOptions._maxLevelLen = l.length;
                     }
                 }
             }
-            logger._previousLevel = 'debug';
-            logger._hasChangedLevel = null;
-            
-            
-            for (let l in opt.levels) {
-                
-                logger._hasChangedLevel = (logger._previousLevel != l) ? true : false;
+                        
+            for (let l in loggerOptions.levels) {                
                 // override if existing
-                logger[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ JSON.stringify(logger.colors) +', '+ parse +', "'+ l +'", arguments, "'+ logger._previousLevel +'", "'+ logger._hasChangedLevel +'");');
-                
-                // logger[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ parse +', "'+ l +'", arguments);');
+                logger[l] = new Function('return '+ write +'('+ JSON.stringify(loggerOptions) +', '+ parse +', "'+ l +'", arguments, '+  emit +');');// jshint ignore:line
             }
             
         } catch (err) {
-            process.stdout.write(err.stack + '\n')
+            //process.stdout.write(err.stack + '\n')
+            emit(opt, 'error', err.stack);
         }
     }
-
     
     
-    //var write = function(opt, colors, parse, s, args, e) {
-    var write = function(opt, colors, parse, s, args, previousLevel, hasChangedLevel) {
+    
+    
+    var write = function(opt, parse, s, args, cb) {  
+        // caller is __stack[3]
+        //console.log("----->" + __stack.toString().replace(/\,/g, '\n') );        
+        // console.log("----->" + __stack[3] );
+        // if ( /tail\.js/.test(__stack[3]) ) {
+        //     return;
+        // }
         
-        //console.log('previousLevel: ', previousLevel, s, hasChangedLevel);        
-        if (hasChangedLevel) {
-            previousLevel = s;
-        }
-        
-        
-        var content = '', payload = null;
+        var content = '';
         // Ignore logs not in hierarchy
         if (opt.hierarchies[opt.hierarchy].indexOf( opt.levels[s].code) < 0) {
             return;
@@ -386,71 +445,29 @@ function Logger(opt) {
 
 
         if (content != '') {
-            var now = new Date().format('logger');
-            var sCount = s.length;
-            // if (sCount > opt._maxLevelLen ) {
-            //     opt._maxLevelLen = sCount;                
-            // }
-            //log(sCount, ' vs ', opt._maxLevelLen);
-            if ( sCount < opt._maxLevelLen ) {
-                for (; sCount < opt._maxLevelLen; ++sCount ) {
-                    s +=' ';
-                }
-            }
+            //process.stdout.write('FLOW: '+ opt.flows + '\n');
             
-            var repl = {
-                '%a': opt.name, // application or service name
-                '%s': s, // severity
-                '%d': now, // date
-                '%m': content // message
-                //'%container', //container
-            };
-
-            var patt = opt.template.match(/\%[a-z A-Z]/g);
-            
-            
-            var colorCode = opt.levels[s.replace(/\s+/, '')].color;
-            var _color = colors[colorCode];
-            //process.stdout.write('colors code '+ colorCode  +'\n');
-            //process.stdout.write('colors '+ JSON.stringify(colors[colorCode], null, 2)  +'\n');
-            
-            if ( typeof(_color) != 'undefined' && _color) {
-                //process.stdout.write('colors code '+ JSON.stringify(colors, null, 2)  +'\n');
-                content = _color.open + opt.template + _color.close;
-            } else { // system styles
-                content = opt.template;
-            }
-            
-            // Comment this part if you want to check raw output
-            for (let p=0; p<patt.length; ++p) {
-                content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
-            }
-
-            
-            //process.stdout.write('FLOW: '+ opt.flow + '\n');
-            if (opt.flow == 'default') {
-                //content = content.replace(/(\\[rn]|[\r\n])$/g, '');
-                // if (!hasChangedLevel) {
-                //     // if ( /(\\[rn]|[\r\n])$/.test(content) ) {
-                //     //     return process.stdout.write(content)
-                //     // }
-                //     return process.stdout.write( content )
-                // }
-                
-                // if (app == 'gina') {
-                    //   return process.stdout.write(content+'\n')
-                // }
-                
-                //process.stdout.write('\r'+content +'\n\r');
-                process.stdout.write(content+'\n');                
-                // We should be using this one: not possible because of weird console.*() stdout when we are on the CLI or Framework side
-                //return process.stdout.write(content+'\r')
-                
-            } else {
-                // Binded to containers
-                //process.emit('message', opt.flow, opt.levels[s].code, s, content);
-                process.emit('logger#'+opt.flow, opt.name, opt.levels[s].code, s, content);
-            }
+            // Forwarding flow to containers
+            cb(opt, s, content);
+        }
+    }
+    // Forwarding flow to containers
+    var emit = function(opt, severity, content) {
+        
+        // Sample of a payload
+        // process.emit('logger#default', JSON.stringify({
+        //     group   : group,
+        //     level   : severity,
+        //     content : content 
+        // }));
+        for (let i=0, len=opt.flows.length; i<len; i++) {
+            let container = opt.flows[i];
+            process.emit('logger#'+container, JSON.stringify({
+                group       : opt.name,
+                level       : severity,
+                // Raw content !
+                content     : content
+            }));
         }
     }
 
@@ -492,44 +509,27 @@ function Logger(opt) {
         str += (isArray) ? ' ]' : '}';
         return str + ' ';
     }
+    
+    self.getOptions = function() {
+        return ctx._options
+    }
+    
+    self.getLoggers = function() {
+        return ctx._loggers
+    }
 
 //    /**
 //     * Add or override existing level(s)
 //     * @param {object} levels
 //     * */
-//    this.addLevel = function(levels) {
+//    self.addLevel = function(levels) {
 //        for (var l in levels) {
 //            self[l] = new Function('return '+write+'('+JSON.stringify(opt)+', "'+l+'", arguments);');
 //        }
 //    }
-
-    // self.switchFlow = function (name) {
-    //     opt.flow = name;
-    //     Logger.instance._options = self._options = opt;
-
-    //     e.on('logger#' + name, function (flow, code, level, message) {
-
-    //         if ( typeof(message) != 'undefined' && message != '' ) {
-
-    //             console.log('logger['+ flow +'] -> ', code, level + '\n');
-    //             console.log(message);
-    //         }
-
-    //     });
-
-    //     process.on('message', function (flow, code, level, message) {
-    //         // filter logger by flow
-    //         if ( /^\[LOGGER\]/.test(message) ) {
-    //             e.emit( 'logger#' + flow, flow, code, level, message.replace('[LOGGER]', '') )
-    //         }
-    //     });
-
-    //     // updating functions options
-    //     setDefaultLevels(opt)
-    // }
     
     /**
-     * setLevel
+     * <console>.setLevel
      * Define a level for a given application
      * 
      * @param {string} level hierarchy
@@ -537,11 +537,11 @@ function Logger(opt) {
      * @returns 
      */
     self.setLevel = function(level, group) {
-        if ( typeof(group) != 'undefined' ) {
+        if ( typeof(group) == 'undefined' || /^gina\-/.test(group) ) {
             group = 'gina'
         }
         
-        var opt = self.loggers[group]._options;        
+        var opt = loggers[group]._options;        
         level = level.toLowerCase();
         if ( typeof(opt.hierarchies[level]) == 'undefined' ) {
             console.warn('`'+ level +'` is not a valid level: swithcing to `info`');
@@ -561,30 +561,24 @@ function Logger(opt) {
         
         return
     }
-
-    // self.setLevels = function(levels) {
-    //     try {
-    //         var opt = self._options;
-
-    //         //remove default.
-    //         for (var l in opt.levels) {
-    //             delete self[l]
-    //         }
-
-
-    //         for (var l in levels) {
-    //             self[l] = new Function('return '+ write +'('+ JSON.stringify(opt) +', '+ JSON.stringify(self.colors) +', ' + parse +', "'+ l +'", arguments);');                
-    //         }
-    //     } catch(e) {
-    //         setDefaultLevels(opt);
-    //         //console.error('Cannot set type: ' + e.stack || e.message);
-    //         process.stdout.write('Cannot set type: ' + e.stack || e.message + '\n');
-    //     }
-    // }
-
-    self.getLogger = function(group) {
-        console.debug('Getting `'+ group +'` logger');
+    
+    self.pauseReporting = function() {
+        loggers[ctx._options.name]._options.isReporting = false;
     }
+    self.resumeReporting = function() {
+        loggers[ctx._options.name]._options.isReporting = true;
+    }
+    
+    
+
+    // Might be overkill ...
+    // TODO - <console>.filterLoggerByGroup('myApp')
+    // => Should log `myApp` only
+    // TODO - <console>.filterLoggerByLevel('warn')
+    // Should only log
+    // self.filterLogger['ByGroup'] = function(group) {
+    //     console.debug('Getting `'+ group +'` logger');
+    // }
 
     self.log = function() {
         var args = arguments, content = '';
@@ -600,9 +594,17 @@ function Logger(opt) {
             }
         }
        
-        if (content != '')
+        if (content != '') {
             process.stdout.write(content + '\n');
+        }
+            
     };
+    
+    // var e = new EventEmitter();
+    // for (let prop in e) {
+    //     self[prop] = e[prop]
+    // }
+        
 
     return init(opt);
 }

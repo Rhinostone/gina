@@ -86,7 +86,6 @@ function runAsSubProcess() {
             // after bundle:start, and only God knows whatever shit is going to happen
             // Make a pause until the CLI tels otherwise (process.kill(cmd.pid, 'SIGCONT');)
             process.kill(process.pid, 'SIGSTOP');
-            // important to prevent unwanted outputs
             process.exit(0);
         }
         
@@ -104,7 +103,7 @@ function runAsSubProcess() {
             } else {
                 console.info('Gina server is already running');
             }
-            // important to prevent unwanted outputs
+            
             process.exit(0);
         }        
          
