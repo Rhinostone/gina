@@ -177,8 +177,11 @@ Object.defineProperty(global, '__file', {
     //If loaded several times, it can lead to an exception. That's why I put this.
     configurable: true,
     get: function() {
-        var filename = __stack[1].getFileName().split(/[\\/]/);
-        return filename[filename.length-1];
+        var filename = __stack[1].getFileName();
+        if (filename) {
+            return filename.split(/[\\/]/)[filename.length-1];
+        }
+        return filename
     }
 });
 

@@ -20,6 +20,7 @@ function Lib() {
 
 
     var _require = function(path) {
+        
         var cacheless = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
         if (cacheless) {
             delete require.cache[require.resolve(path)];
@@ -28,6 +29,7 @@ function Lib() {
             return require(path)
         }
     }
+    
 
 
     var self = {
@@ -68,7 +70,7 @@ function Lib() {
 
 
     return self
-};
+}
 // Making it global
 lib = new Lib();
 

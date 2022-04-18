@@ -24,6 +24,9 @@ function Set(opt){
 
     var set = function(k, v) {
         var err = null;
+        if ( /^-—/.test(k) ) {
+            k = k.replace(/-—/, '--');
+        }
         switch(k) {
             case '--log_level':
             case '--log-level':

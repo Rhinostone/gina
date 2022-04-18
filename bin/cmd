@@ -3,7 +3,8 @@
 
 var fs      = require('fs');
 var net     = require('net');
-var console = lib.logger;
+// `lib` is previously defiened as this file is required by another
+var console = lib.logger;// jshint ignore:line
 
 function Cmd(opt, runOffine) {
 
@@ -25,7 +26,7 @@ function Cmd(opt, runOffine) {
 
         checkIfSettings();
 
-        if ( typeof(runOffine) != 'undefined' ) {
+        if ( typeof(runOffine) != 'undefined' && /^true$/i.test(runOffine) ) {
             launchCmd()
         } else {
             launchFramework()
@@ -39,11 +40,13 @@ function Cmd(opt, runOffine) {
             //feedback.
             conn.once('end', function() {
                 console.debug('[ CLI ] task completed');
+                // required to allow regular CMD to exit properly
                 conn.end();
             });
             // force exit
             conn.once('exit', function() {
                 //console.info('[ CLI ] task forced to exit')
+                // required to allow regular CMD to exit properly
                 conn.end();
             });
 
@@ -52,7 +55,7 @@ function Cmd(opt, runOffine) {
 
                 var argv = JSON.parse( data.toString() );
 
-                console.debug( 'CMD received "'+ argv.join(' ') +'"' );
+                console.debug( '[ FRAMEWORK ] CMD received "'+ argv.join(' ') +'"' );
 
                 argv[0] = process.execPath;
                 argv[1] = argv[1] + '/bin/cli';
@@ -76,8 +79,8 @@ function Cmd(opt, runOffine) {
             if (err.code === 'EADDRINUSE') {
                 if (process.argv[2] == 'framework:start') {
                     var pid = null;
-                    var port  = err.port || getEnvVar('GINA_PORT');
-                    var runningProcs = requireJSON( _(getEnvVar('GINA_HOMEDIR') +'/procs.json', true) );
+                    var port  = err.port || getEnvVar('GINA_PORT');// jshint ignore:line
+                    var runningProcs = requireJSON( _(getEnvVar('GINA_HOMEDIR') +'/procs.json', true) );// jshint ignore:line
                     for (let i in runningProcs) {
                         if (runningProcs[i].port == port) {
                             pid = runningProcs[i].pid;
@@ -122,7 +125,8 @@ function Cmd(opt, runOffine) {
             , topic     = cmd[0]
             , action    = cmd[1]
         ;
-
+                        
+        
         lib.cmd.load({
             ginaPath : local.ginaPath,
             frameworkPath : local.frameworkPath,
@@ -142,15 +146,14 @@ function Cmd(opt, runOffine) {
 
     var checkIfSettings = function() {
 
-        var home        = getEnvVar('GINA_HOMEDIR')
+        var home        = getEnvVar('GINA_HOMEDIR');// jshint ignore:line
         var mainFile    = home + '/main.json';
         
         if ( !fs.existsSync(mainFile) ) {
 
-            var mainSrc = getEnvVar('GINA_DIR') + '/resources/home/main.json';
-            var version = getEnvVar('GINA_VERSION');
-
-            var release = getEnvVar('GINA_SHORT_VERSION');//version.split('.').splice(0,2).join(".");
+            var mainSrc = getEnvVar('GINA_DIR') + '/resources/home/main.json';// jshint ignore:line
+            var version = getEnvVar('GINA_VERSION');// jshint ignore:line
+            var release = getEnvVar('GINA_SHORT_VERSION');// jshint ignore:line
 
             try {
 
@@ -164,7 +167,7 @@ function Cmd(opt, runOffine) {
                     'version' : version
                 };
 
-                data = whisper(dic, data);
+                data = whisper(dic, data);// jshint ignore:line
 
                 lib.generator.createFileFromDataSync(data, mainFile)
 
@@ -177,6 +180,5 @@ function Cmd(opt, runOffine) {
     }
 
     init(opt, runOffine)
-};
-
-module.exports = Cmd
+}
+module.exports = Cmd;

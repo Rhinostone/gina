@@ -33,10 +33,30 @@ __NB.:__ This is a shortcut for `gina framework:version`
 
 
 ### Starting the framework
+Gina is at the same time a framework and a server.
+By starting the framework, you will also start the server.
+
 ``` tty
 gina start
 ```
-__NB.:__ This is an alias for `gina framework:start` 
+__NB.:__ This is an alias for `gina framework:start`
+
+### Get the logs
+You will also get logs related to your running bundles.
+``` tty
+gina tail
+```
+__NB.:__ This is an alias for `gina framework:tail`
+
+By default, Gina does not store logs. Logs are treated like any other envents here.
+This means that you need a logger container (or transport) to receive and output your logs.
+You are lucky, we have developped one that you just need to enable.
+You can edit `~/.gina/user/extensions/logger/main.json` to add `file` container to the `flows`.
+You might need to restart the gina :
+
+```tty
+gina restart
+```
 
 ### Initializing a project
 Let's create our first project and install Gina.
@@ -192,7 +212,7 @@ node node_modules/gina/script/post_install.js
 
 __Are you trying to restart after a crash ?__
 
-Before v0.1.0, Gina uses 2 processes for each bundle: one master, one slave.
+Before v0.1.0, Gina used 2 processes for each bundle: one master, one slave.
 Once an exception is thrown and the program crashes, one of the 2 processes can remain in the `tasks/processes` list.
 
 Gina only uses one process per bundle or one per project if you have decided to merge bundles execution.

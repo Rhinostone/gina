@@ -386,6 +386,5 @@ function Start(opt, cmd) {
     
 
     init(opt, cmd)
-};
-
-module.exports = Start
+}
+module.exports = Start;
