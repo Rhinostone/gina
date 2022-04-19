@@ -41,7 +41,7 @@ gina start
 ```
 __NB.:__ This is an alias for `gina framework:start`
 
-### Get the logs
+### Getting the logs
 You will also get logs related to your running bundles.
 ``` tty
 gina tail
@@ -59,6 +59,8 @@ gina restart
 ```
 
 ### Initializing a project
+A project is a collection of bundles (applicaitons or services). See it as a representation of your domain.
+
 Let's create our first project and install Gina.
 
 ``` tty

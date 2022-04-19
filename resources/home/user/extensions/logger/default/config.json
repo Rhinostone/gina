@@ -1,0 +1,76 @@
+{
+    "template": "%d [%s][%a] %m",
+    "flows": [],
+    "levels" : {
+        "emerg": {
+            "code": 0,
+            "label": "Emergency",
+            "description": "System is unusable.",
+            "color": "magenta"
+        },
+        "alert": {
+            "code": 1,
+            "label": "Alert",
+            "description": "Action must be taken immediately.",
+            "color":"red"
+        },
+        "crit": {
+            "code": 2,
+            "label": "Critical",
+            "description": "Critical conditions.",
+            "color": "magenta"
+        },
+        "error" : {
+            "code": 3,
+            "label": "Error",
+            "description": "Error conditions.",
+            "color" : "red",
+            "deprecated": "Use `console.err` instead"
+        },
+        "err" : {
+            "code": 3,
+            "label": "Error",
+            "description": "Error conditions.",
+            "color" : "red"
+        },
+        "warn" : {
+            "code": 4,
+            "label": "Warning",
+            "description": "Warning conditions.",
+            "color": "yellow",
+            "deprecated": "Use `console.warning` instead"
+        },
+        "warning" : {
+            "code": 4,
+            "label": "Warning",
+            "description": "Warning conditions.",
+            "color": "yellow"
+        },
+        "notice": {
+            "code": 5,
+            "label": "Notice",
+            "description": "Normal but significant condition.",
+            "color": "black"
+        },
+        "info" : {
+            "code": 6,
+            "label": "Informational",
+            "description": "Informational messages.",
+            "color": "cyan"
+        },
+        "debug" : {
+            "code": 7,
+            "label": "Debug",
+            "description": "Debug-level messages.",
+            "color": "gray"
+        }
+    },
+    "hierarchies": {
+        "trace": [0,1,2,3,4,5,6,7],
+        "debug": [0,1,2,3,4,5,6,7],
+        "info": [0,1,2,3,4,5,6],
+        "warn": [0,1,2,3,4,5],
+        "error": [0,1,2,3,5],
+        "fatal": [0,1,2,5]
+    }
+}

@@ -75,7 +75,9 @@ function PreInstall() {
         // to handle sync vs async to allow execution in order of declaration
         if (funct) {
             eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e); process.exit(-1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();');// jshint ignore:line
-        }          
+        } else {
+            process.exit(0);
+        }
     }
     
     self.checkRequirements = async function(done) {

@@ -7,7 +7,7 @@
  */
 
 //Imports
-var fs      = require('fs');
+var fs          = require('fs');
 var util        = require('util');
 var promisify   = util.promisify;
 const { execSync } = require('child_process');
@@ -83,8 +83,101 @@ function PostInstall() {
         // to handle sync vs async to allow execution in order of declaration
         if (funct) {
             eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e); process.exit(-1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();'); // jshint ignore:line           
-        }          
-    }    
+        } else {
+            process.exit(0);
+        }
+    }
+    
+    self.checkUserExtensions = async function(done) {
+        var userDir = _(getUserHome() + '/.gina/user', true);
+        // var userDirObj = new _(userDir);
+        // if ( ! userDirObj.existsSync() ) {
+        //     userDirObj.mkdirSync();
+        // }
+        // var extDir = _(userDir +'/extensions', true);
+        // var extDirObj = new _(extDir);
+        // if ( ! extDirObj.existsSync() ) {
+        //     extDirObj.mkdirSync();
+        // }
+        
+        // // logger
+        // var extLogger = _(extDir +'/logger', true);
+        
+        // reading default extensions
+        var ext = _(self.gina +'/resources/home/user/extensions', true);
+        var folders = [];
+        try {
+            folders = fs.readdirSync(ext)
+            
+        } catch(readErr) {
+            throw readErr
+        }
+        
+        for (let i = 0, len = folders.length; i < len; i++) {
+            let dir = folders[i];
+            // skip junk
+            if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {
+                continue;
+            }
+            
+            // skip symlinks
+            try {
+                if ( fs.lstatSync( _(ext +'/'+ dir, true) ).isSymbolicLink() ) {
+                    continue;
+                }
+            } catch (e) {
+                continue;
+            }
+            
+            let userExtPath = _(userDir +'/extensions/'+ dir, true);
+            let userExtPathObj = new _(userExtPath)
+            if ( !userExtPathObj.existsSync() ) {
+                userExtPathObj.mkdirSync()
+            }
+            
+            let files = []
+                , extDir = _(ext +'/'+ dir, true)
+                , extDirObj = new _(extDir)
+            ;
+            try {
+                
+                if ( !fs.lstatSync( extDir ).isDirectory() ) {
+                    continue;
+                }
+
+                console.debu('Reading: '+ extDir);
+                files = fs.readdirSync( extDir );
+                
+            } catch(fileReadErr) {}
+            
+            
+            
+            for (let f = 0, fLen = files.length; f < fLen; f++) {
+                
+               
+                if ( !new _(userExtPathObj + '/'+ files[f], true).existsSync() ) {                    
+                    let extensionPathObj =  _(extDir +'/'+ dir +'/'+ files[f]);
+                    let f = function(destination, cb) {// jshint ignore:line
+                        extensionPathObj.cp(destination, cb);
+                    };
+                    let err = false; 
+                    await promisify(f)( _(userExtPathObj + '/'+ files[f], true) )  
+                        .catch( function onCopyError(_err) {// jshint ignore:line
+                            err = _err;
+                        })
+                        .then( function onCopy(_destination) {// jshint ignore:line
+                            console.info('Copy '+ extentionPath +' to '+ _destination +' done !');
+                        });
+                    
+                    if (err) {
+                        throw err;
+                    }
+                }
+            }
+        }
+        
+        done()
+    }
     
 
     self.createVersionFile = function(done) {        
@@ -256,11 +349,11 @@ function PostInstall() {
             await keepGoing(filename)
         }
     }
-
+    
+    
     var hasNodeModulesSync = function() {
         return fs.existsSync( _(self.path + '/node_modules') )
     }
-
 
 
     var npmInstall = function(done) {
