@@ -1,9 +1,7 @@
 var fs          = require('fs');
 var util        = require('util');
 var net         = require('net');
-const { EventEmitter }  = require('events');
-// const {spawn}       = require('child_process');
-// const {execSync}    = require('child_process');
+
 var CmdHelper       = require('./../helper');
 var console         = lib.logger;
 var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js', true) );
@@ -74,12 +72,12 @@ function Tail(opt, cmd) {
         });
         client.on('error', (data) => {
             var err = data.toString();
-            console.error('[ MQTail ]  (error): ' + err);
+            console.error('[MQTail]  (error): ' + err);
         });
         
         var payloads = null, i = null;
         client.on('data', (data) => {
-            //console.log('[ tail ]  (data): ' + data.toString());
+            //console.log('[MQTail]  (data): ' + data.toString());
             payloads = data.toString();
                 
             // from speakers & tail
@@ -98,14 +96,14 @@ function Tail(opt, cmd) {
                         try {
                             pl = JSON.parse(payload);
                         } catch(plErr) {
-                            process.stdout.write( '[ MQTail ] (exception) '+ payload +'\n' );
+                            process.stdout.write( '[MQTail] (exception) '+ payload +'\n' );
                             continue;
                         }                
                             
                         
                         if (!pl.content) {                            
                             // only for debug
-                            // process.stdout.write( '[ tail ] (undefined content) '+ JSON.stringify(pl, null) +'\n' );
+                            // process.stdout.write( '[MQTail] (undefined content) '+ JSON.stringify(pl, null) +'\n' );
                             
                             // updating logger context since it can run on different processes
                             if ( pl.sessionId && !clientOptions.sessionId ) {
@@ -124,7 +122,7 @@ function Tail(opt, cmd) {
                         }
                         
                         // only for debug
-                        //process.stdout.write(  '[ tail ] '+ pl.content +'\n' );
+                        //process.stdout.write(  '[MQTail] '+ pl.content +'\n' );
                         
                         try {                            
                             process.stdout.write( format(pl.group, pl.level, pl.content) );
@@ -141,7 +139,7 @@ function Tail(opt, cmd) {
             
         });
         client.on('end', () => {
-            console.log('[ MQTail ] disconnected from server');
+            console.log('[MQTail] disconnected from server');
         });
         // setInterval(() => {}, 1 << 30);
     }

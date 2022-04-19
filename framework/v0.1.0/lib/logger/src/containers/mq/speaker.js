@@ -14,15 +14,23 @@ function MQSpeaker(opt, loggers, cb) {
     
     
     function init(opt, cb) {
-        return startMQSpeaker(opt.port, cb);
+        // var argv = process.argv;
+        // for (let i = 0, len = argv.length; i < len; i++) {
+        //     if (/(prepare|prepare_version|postgina\/\/bin\/\/gina)$/.test(process.argv[1])) {
+                
+        //         return;
+        //     }
+        // }            
+        return startMQSpeaker(opt, cb);
+        
     }
     
     
-    function startMQSpeaker(port, cb) {
+    function startMQSpeaker(opt, cb) {
         
         var clientOptions = {
-            port    : port,
-            request : 'report' 
+            port    : opt.port,
+            request : 'report'
         };
         var client = net.createConnection(clientOptions, () => {
             // 'connect' listener.            
@@ -40,12 +48,20 @@ function MQSpeaker(opt, loggers, cb) {
             if (cb) {
                 return cb(err)
             }
-            console.error('[ MQSpeaker ]  (error): ' + err);
+            console.debug(' => ', process.argv);
+            console.error('[MQSpeaker]  (error): ' + err);
+            
+            // process.emit('logger#'+self.name, JSON.stringify({
+            //     group       : opt.name,
+            //     level       : 'error',
+            //     // Raw content !
+            //     content     : '[MQSpeaker]  (error): ' + err
+            // }));
         });
         
         var payloads = null, i = null;
         client.on('data', (data) => {
-            //console.log('[ MQSpeaker ]  (data): ' + data.toString());
+            //console.log('[MQSpeaker]  (data): ' + data.toString());
             payloads = data.toString();
                 
             // from speakers & tail
@@ -64,7 +80,7 @@ function MQSpeaker(opt, loggers, cb) {
                         try {
                             pl = JSON.parse(payload);
                         } catch(plErr) {
-                            process.stdout.write(  '[ MQSpeaker ] (exception) '+ payload +'\n' );
+                            process.stdout.write(  '[MQSpeaker] (exception) '+ payload +'\n' );
                             continue;
                         }
                         
@@ -80,12 +96,12 @@ function MQSpeaker(opt, loggers, cb) {
                         
                         if (!pl.content) {
                             // debug only
-                            //process.stdout.write(  '[ MQSpeaker ] (undefined content) '+ JSON.stringify(pl, null) +'\n' );
+                            //process.stdout.write(  '[MQSpeaker] (undefined content) '+ JSON.stringify(pl, null) +'\n' );
                             continue;
                         }
                         
                         // debug only when starting the framework with: ./bin/cli start >/usr/local/tmp/gina-smaple.log 2>&1
-                        // process.stdout.write(  '[ MQSpeaker ] '+ pl.content +'\n' );
+                        // process.stdout.write(  '[MQSpeaker] '+ pl.content +'\n' );
                     }                        
                 }
                 
@@ -93,11 +109,11 @@ function MQSpeaker(opt, loggers, cb) {
             }
             
             // regular messages
-            process.stdout.write(  '[ MQSpeaker ] '+ payloads +'\n'  );
+            process.stdout.write(  '[MQSpeaker] '+ payloads +'\n'  );
             
         });
         client.on('end', () => {
-            console.log('[ MQSpeaker ] disconnected from server');
+            console.log('[MQSpeaker] disconnected from server');
         });
         
         return client;

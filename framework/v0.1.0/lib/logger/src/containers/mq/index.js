@@ -10,25 +10,11 @@ function MqContainer(opt, loggers) {
         // flow or container name/id
         name: 'mq' 
     };
-    var loggerHelper    = require(__dirname +'/../../helper.js')(opt, loggers);
-    var format          = loggerHelper.format;
+    
+    // TODO - get options like the `port` from: ~/.gina/user/extensions/logger/main.json
     
     var MQSpeaker       = require('./speaker.js'); 
-    var mqSpeaker       = new MQSpeaker({ name: opt.name, port: 8125 }, loggers);
-    // var MQSpeaker       = null; 
-    // await promisify(require('./speaker.js'))({ port: 8125 })
-    //     .catch( function onSpeakerError(err){
-    //         process.emit('logger#'+self.name, JSON.stringify({
-    //             group       : opt.name,
-    //             level       : 'error',
-    //             // Raw content !
-    //             content     : '`'+ self.name +'` logger MQSpeaker not loaded !\n' + err.stack +'\n'
-    //         }));
-    //     })
-    //     .then( function onSpeakerConnected(speaker){
-    //         MQSpeaker = speaker;
-    //     });
-    
+    var mqSpeaker       = new MQSpeaker({ name: opt.name, port: 8125 }, loggers);    
     
     function init() {
         onPayload()
@@ -47,26 +33,17 @@ function MqContainer(opt, loggers) {
         // ------------------------------------------------------------------------
     }
     
-    
-    
     function onPayload() {   
-        process.on('logger#'+self.name, function onPayload(payload) {
-            //payload = JSON.parse(payload);            
-            // process.stdout.write( format(payload.group, payload.level, payload.content) );
-            // MQSpeaker.write(format(payload.group, payload.level, payload.content));
-                        
+        process.on('logger#'+self.name, function onPayload(payload) {                        
             if ( !loggers[opt.name]._options.isReporting ) {
                 return;
-            }
-            
+            }            
             if (mqSpeaker.write) {
                 mqSpeaker.write( payload +'\r\n' );
             }
             
         });
     }
-    
-    
     
     init();
 }

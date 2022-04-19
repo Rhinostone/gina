@@ -88,9 +88,9 @@ async function onExec() {
             console.pauseReporting();
         }
         console.setLevel(settings['log_level'], 'gina');
-        
+                
         // Loading logger listner vs ~/.gina/user/extensions/logger/mq/config.json & ~/.gina/{shortVersion}/settings.json
-        if ( /(gina\/bin\/cli|gina\/\/bin\/\/cli)$/.test(process.argv[1]) ) {
+        if ( /(gina\/bin\/cli|gina\/\/bin\/\/gina)$/.test(process.argv[1]) ) {
             var MQListener = require(frameworkPath + '/lib/logger/src/containers/mq/listener.js');
             // await promisify(MQListener)({ port: 8125 })
             //     .catch( function onError(err){

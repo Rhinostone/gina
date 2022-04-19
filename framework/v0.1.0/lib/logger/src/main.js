@@ -445,8 +445,7 @@ function Logger(options) {
 
 
         if (content != '') {
-            //process.stdout.write('FLOW: '+ opt.flows + '\n');
-            
+            //process.stdout.write('FLOW: '+ opt.flows + '\n');            
             // Forwarding flow to containers
             cb(opt, s, content);
         }
