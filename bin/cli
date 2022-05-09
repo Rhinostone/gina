@@ -90,14 +90,21 @@ async function onExec() {
         console.setLevel(settings['log_level'], 'gina');
                 
         // Loading logger listner vs ~/.gina/user/extensions/logger/mq/config.json & ~/.gina/{shortVersion}/settings.json
-        if ( /(gina\/bin\/cli|gina\/\/bin\/\/gina)$/.test(process.argv[1]) ) {
+        if ( /(gina\/bin\/cli|gina\/\/bin\/gina)$/.test(process.argv[1]) ) {
+            
             var MQListener = require(frameworkPath + '/lib/logger/src/containers/mq/listener.js');
-            // await promisify(MQListener)({ port: 8125 })
-            //     .catch( function onError(err){
-            //         console.alert("MQListner is not starting.\n", err.stack);
-            //         process.exit(1)
-            //     })
-            await new MQListener({ port: 8125 });
+            
+            var mqPort = 8125;
+            var mqListener = await new MQListener({ port: 8125 });
+            // required for tail command
+            var mqPortFile = './tmp/mq-listener-v'+ version +'.port';
+            console.debug('Writting: '+ mqPortFile);
+            fs.writeFileSync( mqPortFile, ''+mqPort );
+            process.on('exit', function() {
+                fs.unlinkSync(mqPortFile);
+                mqListener.close();
+                mqListener.unref();
+            })
         }
         
         if ( !fs.existsSync(frameworkPath) ) {

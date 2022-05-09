@@ -317,12 +317,12 @@ function Proc(bundle, proc, usePidFile){
         ) {
             try {
                 file = proc.title.replace(/^gina\:\s+/, '');
-                // if ( /^gina$/.test(file) ) {
-                //     file += '-v'+ GINA_VERSION;
+                // if ( !/^gina-/.test(file) ) {
+                //     e.emit('proc#registered', file);
                 // }
                 file += '.pid';
                 
-                console.debug('[ PROC ] Now saving `'+file+'` PID ');
+                console.debug('[ PROC ] Now saving `'+file+'`');
                 var fileStream = fs.createWriteStream(path + file);
                 fileStream.once('open', function(fd) {
                     //fileStream.write(bundle);

@@ -16,7 +16,9 @@ var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js
  *
  * */
 function Tail(opt, cmd) {
-    var self    = {};
+    var self        = {};
+    var nIntervId   = null;
+    var mqPortFile  = _(GINA_DIR +'/tmp/mq-listener-v'+ GINA_VERSION +'.port', true);
 
     var init = function(opt, cmd) {
         
@@ -28,7 +30,14 @@ function Tail(opt, cmd) {
         // check CMD configuration
         //if (!isCmdConfigured()) return false;
         
-        
+        // handle server not started yet or server exited
+        process.on('gina#mqlistener-started', function onGinaStarted(mqPort) {
+            clearInterval(nIntervId);
+            nIntervId = null;
+            opt.port = mqPort;
+            tail(opt, cmd);
+        });
+                
         // if (!self.name) {
         //     status(opt, cmd, 0);
         // } else {
@@ -38,7 +47,8 @@ function Tail(opt, cmd) {
     
         
     var tail = function(opt, cmd) {
-        var port = 8125;
+        
+        var port = opt.port || 8125;
         var clientOptions = {
             port    : port,
             request : 'tail' 
@@ -62,9 +72,10 @@ function Tail(opt, cmd) {
         
         
         var client = net.createConnection(clientOptions, () => {
+            
             // 'connect' listener.
             console.resumeReporting();
-            console.info('MQTail connected to server :)');            
+            console.info('[MQTail] connected to server :)');            
             
             // send request
             client.write( JSON.stringify(clientOptions) +'\r\n');
@@ -72,7 +83,18 @@ function Tail(opt, cmd) {
         });
         client.on('error', (data) => {
             var err = data.toString();
-            console.error('[MQTail]  (error): ' + err);
+            console.error('[MQTail] ' + err + ' - Gina might not be running');
+            console.info('[MQTail] waitting for `MQListener` to be started ...');
+            
+            var mqPort = null;            
+            nIntervId = setInterval(() => {
+                try {
+                    mqPort = ~~(fs.readFileSync(mqPortFile).toString());
+                    if (mqPort) {
+                        process.emit('gina#mqlistener-started', mqPort);
+                    }
+                } catch (fileErr) {}
+            }, 100);
         });
         
         var payloads = null, i = null;
@@ -139,7 +161,17 @@ function Tail(opt, cmd) {
             
         });
         client.on('end', () => {
-            console.log('[MQTail] disconnected from server');
+            console.warn('[MQTail] disconnected from server');
+            console.info('[MQTail] waitting for `MQListener` to be started ...');
+            var mqPort = null;            
+            nIntervId = setInterval(() => {
+                try {
+                    mqPort = ~~(fs.readFileSync(mqPortFile).toString());
+                    if (mqPort) {
+                        process.emit('gina#mqlistener-started', mqPort);
+                    }
+                } catch (fileErr) {}
+            }, 100);
         });
         // setInterval(() => {}, 1 << 30);
     }

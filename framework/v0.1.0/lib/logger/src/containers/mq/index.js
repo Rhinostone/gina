@@ -4,6 +4,7 @@ var fs          = require('fs');
 var net         = require('net');
 var util        = require('util');
 var promisify   = util.promisify;
+var merge       = require(__dirname +'/../../../../merge');
 
 function MqContainer(opt, loggers) {
     var self = {
@@ -13,8 +14,9 @@ function MqContainer(opt, loggers) {
     
     // TODO - get options like the `port` from: ~/.gina/user/extensions/logger/main.json
     
-    var MQSpeaker       = require('./speaker.js'); 
-    var mqSpeaker       = new MQSpeaker({ name: opt.name, port: 8125 }, loggers);    
+    var MQSpeaker       = require('./speaker.js');
+    opt = merge(opt, { port: 8125 });
+    var mqSpeaker       = new MQSpeaker(opt, loggers);    
     
     function init() {
         onPayload()

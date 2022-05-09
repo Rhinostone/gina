@@ -88,97 +88,6 @@ function PostInstall() {
         }
     }
     
-    self.checkUserExtensions = async function(done) {
-        var userDir = _(getUserHome() + '/.gina/user', true);
-        // var userDirObj = new _(userDir);
-        // if ( ! userDirObj.existsSync() ) {
-        //     userDirObj.mkdirSync();
-        // }
-        // var extDir = _(userDir +'/extensions', true);
-        // var extDirObj = new _(extDir);
-        // if ( ! extDirObj.existsSync() ) {
-        //     extDirObj.mkdirSync();
-        // }
-        
-        // // logger
-        // var extLogger = _(extDir +'/logger', true);
-        
-        // reading default extensions
-        var ext = _(self.gina +'/resources/home/user/extensions', true);
-        var folders = [];
-        try {
-            folders = fs.readdirSync(ext)
-            
-        } catch(readErr) {
-            throw readErr
-        }
-        
-        for (let i = 0, len = folders.length; i < len; i++) {
-            let dir = folders[i];
-            // skip junk
-            if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {
-                continue;
-            }
-            
-            // skip symlinks
-            try {
-                if ( fs.lstatSync( _(ext +'/'+ dir, true) ).isSymbolicLink() ) {
-                    continue;
-                }
-            } catch (e) {
-                continue;
-            }
-            
-            let userExtPath = _(userDir +'/extensions/'+ dir, true);
-            let userExtPathObj = new _(userExtPath)
-            if ( !userExtPathObj.existsSync() ) {
-                userExtPathObj.mkdirSync()
-            }
-            
-            let files = []
-                , extDir = _(ext +'/'+ dir, true)
-                , extDirObj = new _(extDir)
-            ;
-            try {
-                
-                if ( !fs.lstatSync( extDir ).isDirectory() ) {
-                    continue;
-                }
-
-                console.debu('Reading: '+ extDir);
-                files = fs.readdirSync( extDir );
-                
-            } catch(fileReadErr) {}
-            
-            
-            
-            for (let f = 0, fLen = files.length; f < fLen; f++) {
-                
-               
-                if ( !new _(userExtPathObj + '/'+ files[f], true).existsSync() ) {                    
-                    let extensionPathObj =  _(extDir +'/'+ dir +'/'+ files[f]);
-                    let f = function(destination, cb) {// jshint ignore:line
-                        extensionPathObj.cp(destination, cb);
-                    };
-                    let err = false; 
-                    await promisify(f)( _(userExtPathObj + '/'+ files[f], true) )  
-                        .catch( function onCopyError(_err) {// jshint ignore:line
-                            err = _err;
-                        })
-                        .then( function onCopy(_destination) {// jshint ignore:line
-                            console.info('Copy '+ extentionPath +' to '+ _destination +' done !');
-                        });
-                    
-                    if (err) {
-                        throw err;
-                    }
-                }
-            }
-        }
-        
-        done()
-    }
-    
 
     self.createVersionFile = function(done) {        
         var version = require( _(self.gina + '/package.json') ).version;
@@ -392,6 +301,105 @@ function PostInstall() {
              
             process.chdir(initialDir);
         }
+        
+        done()
+    }
+    
+    self.checkUserExtensions = async function(done) {
+        
+        var userDir = _(getUserHome() + '/.gina/user', true);
+        // var userDirObj = new _(userDir);
+        // if ( ! userDirObj.existsSync() ) {
+        //     userDirObj.mkdirSync();
+        // }
+        // var extDir = _(userDir +'/extensions', true);
+        // var extDirObj = new _(extDir);
+        // if ( ! extDirObj.existsSync() ) {
+        //     extDirObj.mkdirSync();
+        // }
+        
+        // // logger
+        // var extLogger = _(extDir +'/logger', true);
+        
+        // reading default extensions
+        var ext = _(self.gina +'/resources/home/user/extensions', true);
+        var folders = [];
+        try {
+            console.debug('Reading : '+ ext + ' - isDirectory ? '+ fs.lstatSync( ext ).isDirectory() );
+            folders = fs.readdirSync(ext);
+            
+        } catch(readErr) {
+            throw readErr
+        }
+        
+        for (let i = 0, len = folders.length; i < len; i++) {
+            let dir = folders[i];
+            // skip junk
+            if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {
+                continue;
+            }
+            
+            // skip symlinks
+            try {
+                console.debug('Checking: '+ _(ext +'/'+ dir, true) + ' - isSymbolicLink ? '+ fs.lstatSync( _(ext +'/'+ dir, true) ).isSymbolicLink() );
+                if ( fs.lstatSync( _(ext +'/'+ dir, true) ).isSymbolicLink() ) {
+                    continue;
+                }
+            } catch (e) {
+                continue;
+            }
+            
+            let userExtPath = _(userDir +'/extensions/'+ dir, true);
+            let userExtPathObj = new _(userExtPath)
+            if ( !userExtPathObj.existsSync() ) {
+                userExtPathObj.mkdirSync()
+            }
+            
+            let files = []
+                , extDir = _(ext +'/'+ dir, true)
+                , extDirObj = new _(extDir)
+            ;
+            try {
+                
+                console.debug('Reading extDir: '+ extDir + ' - isDirectory ? '+ fs.lstatSync( extDir ).isDirectory() );
+                if ( !fs.lstatSync( extDir ).isDirectory() ) {
+                    continue;
+                }
+
+                
+                files = fs.readdirSync( extDir );
+                
+            } catch(fileReadErr) {}
+            
+            console.debug("What about files ? " + files);
+            
+            for (let n = 0, nLen = files.length; n < nLen; n++) {
+                let file = files[n];
+                console.debug('file --> ', file);
+                let extentionPath   = _(extDir +'/'+ file, true);
+                let extensionPathObj =  new _(extentionPath);
+                // redefined
+                let userExtPathObj = new _(userExtPath + '/'+ file, true);
+                if ( !userExtPathObj.existsSync() ) {
+                    let f = function(destination, cb) {// jshint ignore:line
+                        extensionPathObj.cp(destination, cb);
+                    };
+                    let err = false; 
+                    await promisify(f)( _(userExtPath + '/'+ file, true) )  
+                        .catch( function onCopyError(_err) {// jshint ignore:line
+                            err = _err;
+                        })
+                        .then( function onCopy(_destination) {// jshint ignore:line
+                            console.info('Copy '+ extentionPath +' to '+ _destination +' done !');
+                        });
+                    
+                    if (err) {
+                        throw err;
+                    }
+                }
+            }
+        }
+        
         
         done()
     }
