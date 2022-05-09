@@ -40,7 +40,7 @@ if ( typeof(JSON.clone) == 'undefined' ) {
  *
  * @api Public
  * */
-function Logger(options) {
+function Logger() {
     
     
     // retrieve context
@@ -48,31 +48,41 @@ function Logger(options) {
         , self          = {}
         , loggers       = {}
         // `containers`, also meaning transports
-        , containers    = {}
+        , containers    = {}        
         // for `getInstance()`
-        , opt           = ctx._options || options
+        , opt           = ctx._options || {}
     ;
     
     // only used for defaultOption init
-    var defaultLogLevel = null;
+    var homeDir             = null
+        // user options
+        , userOptions       = ctx._userOptions || null
+        , flowsOptions      = ctx._flowsOptions || {}
+        , shortVersion      = null
+        , defaultLogLevel   = null
+    ;
     try {
-        var homedir = getUserHome() || process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];// jshint ignore:line
-        var shortVersion = requireJSON( _(frameworkPath +'/package.json', true) ).version;// jshint ignore:line
+        homeDir = getUserHome() || process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];// jshint ignore:line
+        homeDir += '/.gina';
+        shortVersion = requireJSON( _(frameworkPath +'/package.json', true) ).version;// jshint ignore:line
         shortVersion = shortVersion.split('.').splice(0,2).join('.');
-        defaultLogLevel = requireJSON( _(homedir +'/.gina/'+ shortVersion +'/settings.json', true) ).log_level;// jshint ignore:line
+        defaultLogLevel = requireJSON( _(homeDir +'/'+ shortVersion +'/settings.json', true) ).log_level;// jshint ignore:line
     } catch(logLevelError) {
         // It is ok to fail  ... do not worry
     } 
        
     
-    var defaultOptions = {
+    var defaultOptions = ctx._defaultOptions || {
         // Group name by default: it is usually the application or the service PROC.title
         name: 'gina',
         template: '%d [%s][%a] %m',
         
         // Where the events flow will be dispatched - e.g.: event.on('logger#<container_name>', function(appName, code, severityLevel, content){ ... })
-        // A `flow` is binded to related container - `default` is `process.stdout`
+        // A `flow` is binded to related container
+        //      `default` is `process.stdout`
+        //      `mq` is for message dispatching: from speakers to the main listener
         // A flow name is always the same as the container/transport name: checkout the `containers` folder for more
+        // Don't touch this part!
         flows: ['default', 'mq'],
         //'format' : '',
         //'pipe' : [],
@@ -235,14 +245,57 @@ function Logger(options) {
         }    
         ctx.initialized = true;
         
-        if (opt) {            
-            opt = merge(JSON.clone(defaultOptions), opt, true)
-        } else {
-            //opt = ( typeof(ctx.instance) != 'undefined' && typeof(ctx.instance._options) != 'undefined' ) ? ctx.instance._options : defaultOptions;
-            opt = JSON.clone(defaultOptions)
+        // user main options & flows options
+        var extPath = _(homeDir +'/user/extensions/logger', true)
+        var optionsPath = _(extPath +'/default/config.json', true);
+        if ( new _(optionsPath).existsSync() ) {
+            userOptions = requireJSON(optionsPath);// jshint ignore:line
+            if (userOptions.flows && userOptions.flows.length > 0) {
+                if (userOptions.flows.indexOf('default') > -1) {
+                    userOptions.flows.splice(userOptions.flows.indexOf('default'), 1)
+                }
+                if (userOptions.flows.indexOf('mq') > -1) {
+                    userOptions.flows.splice(userOptions.flows.indexOf('mq'), 1)
+                }
+                if (userOptions.flows.length > 0) {
+                    for (let i = 0, len = userOptions.flows.length; i < len; i++) {
+                        let flowName = userOptions.flows[i];
+                        if ( new _(extPath +'/'+ flowName +'/config.json', true).existsSync() ) {
+                            let flowOpt = requireJSON(_(extPath +'/'+ flowName +'/config.json', true));// jshint ignore:line
+                            flowsOptions[flowName] = flowOpt;
+                        }                        
+                    }
+                }
+            }
         }
-        if ( typeof(opt.group) == 'undefined' || /^gina\-/.test(opt.group) ) {
-            opt.group = 'gina'
+        // setting up `opt`
+        // this is done to repespect arrays order
+        var newDefaultOptions = merge(JSON.clone(defaultOptions), userOptions);
+        defaultOptions = JSON.clone(newDefaultOptions);
+        newDefaultOptions = null;
+        if (userOptions && userOptions.flows) {
+            delete userOptions.flows;
+        }
+        
+        opt = merge(userOptions, defaultOptions);
+        // if ( new _(optionsPath).existsSync() ) {
+        //     if (userOptions.flows.indexOf('mq') < 0) {
+        //         userOptions.flows.splice(0, 0, 'mq')
+        //     }
+        //     if (userOptions.flows.indexOf('default') < 0) {
+        //         userOptions.flows.splice(0, 0, 'default')
+        //     }
+        // }
+        
+        // if (opt) {            
+        //     opt = merge(options, JSON.clone(defaultOptions), opt, true)
+        // } else {
+        //     //opt = ( typeof(ctx.instance) != 'undefined' && typeof(ctx.instance._options) != 'undefined' ) ? ctx.instance._options : defaultOptions;
+        //     opt = JSON.clone(defaultOptions)
+        // }
+        
+        if ( typeof(opt.name) == 'undefined' || /^gina\-/.test(opt.name) ) {
+            opt.name = 'gina'
         }
         
         if ( typeof(loggers[opt.name]) == 'undefined' ) {
@@ -261,7 +314,7 @@ function Logger(options) {
             if ( typeof(self[l]) == 'undefined' ) {
                 self[l] = function(){// jshint ignore:line
                     
-                    var group = opt.name || defaultOptions.name; // by default
+                    let group = opt.name || defaultOptions.name; // by default
                     if ( process.title != 'node' && !/(\\|\/)*node$/.test(process.title) ) {
                         group = process.title.replace(/^gina\:\s*/, '');
                         if ( typeof(group) == 'undefined' || /^gina\-/.test(group) ) {
@@ -282,7 +335,7 @@ function Logger(options) {
         // TODO - load container/flow if !== `default`
         try {
             // only afer this, we can send logs to containers/transports
-            loadContainers(opt);
+            loadContainers(opt, flowsOptions);
         } catch (err) {
             throw err;
         }        
@@ -291,6 +344,8 @@ function Logger(options) {
         // backing up context
         ctx.instance        = self;
         ctx._options        = opt;
+        ctx._defaultOptions = defaultOptions;
+        ctx._flowsOptions   = flowsOptions;
         ctx._loggers        = loggers;
         setContext('loggerInstance', ctx);// jshint ignore:line
                 
@@ -303,13 +358,16 @@ function Logger(options) {
 
     
     
-    var loadContainers = function(opt) {        
+    var loadContainers = function(opt, flowsOptions) {        
         var containersPath = _(__dirname +'/containers', true);// jshint ignore:line
         for (let i=0, len=opt.flows.length; i<len; i++) {
             let flow = opt.flows[i];
-            if ( typeof(containers[flow]) == 'undefined' ) {                
-                containers[flow] = require( _(containersPath +'/'+ flow, true))(opt, loggers);// jshint ignore:line
-                //process.emit('logger#'+ flow +'-options', opt, loggers);
+            let loggerOptions = JSON.clone(opt);
+            if ( typeof(containers[flow]) == 'undefined' ) {
+                if ( typeof(flowsOptions[flow]) != 'undefined' ) {
+                    loggerOptions = merge(loggerOptions, flowsOptions[flow], true);
+                }
+                containers[flow] = require( _(containersPath +'/'+ flow, true))(loggerOptions, loggers);// jshint ignore:line
             }
         }
     }
@@ -510,7 +568,15 @@ function Logger(options) {
     }
     
     self.getOptions = function() {
-        return ctx._options
+        var loggerOptions = null, opt = ctx._options;
+        for (let i=0, len=opt.flows.length; i<len; i++) {
+            let flow = opt.flows[i];
+            loggerOptions = JSON.clone(opt);
+            if ( typeof(ctx._flowsOptions[flow]) != 'undefined' ) {
+                loggerOptions = merge(loggerOptions, ctx._flowsOptions[flow], true);// jshint ignore:line
+            }
+        }
+        return loggerOptions
     }
     
     self.getLoggers = function() {

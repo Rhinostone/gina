@@ -3,6 +3,8 @@
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
 > This is a `preview release`. We are looking for people to help us test and improve `Windows` support.
+> Meanwhile, __Windows users__ can use Docker or an alternative to run Gina and their projects.
+> 
 > Some commands or features might not work since the framework is still under development & testing
 > 
 > We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience.
@@ -48,7 +50,7 @@ gina tail
 ```
 __NB.:__ This is an alias for `gina framework:tail`
 
-By default, Gina does not store logs. Logs are treated like any other envents here.
+By default, Gina does not store logs. Logs are treated like any other events.
 This means that you need a logger container (or transport) to receive and output your logs.
 You are lucky, we have developped one that you just need to enable.
 You can edit `~/.gina/user/extensions/logger/main.json` to add `file` container to the `flows`.

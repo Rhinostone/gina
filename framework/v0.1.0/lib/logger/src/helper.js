@@ -72,6 +72,41 @@
         // But it is not yet possible because of weird console.*() stdout when we are on the CLI or Framework side
         return content +'\n'
     };
+    
+    self.getProcessProperties = function() {
+        var processProperties = {bundles: []};
+        var argv = process.argv;
+        if ( /bundle\:(start|stop|restart)/.test(argv.join(',')) ) {
+            var foundBundle = false;
+            for (let i = 0, len = argv.length; i < len; i++) {                
+                if ( /bundle\:(start|stop|restart)/.test(argv[i]) ) {
+                    foundBundle = true;
+                    continue;
+                }
+                
+                if ( /^\@/.test(argv[i]) ) {
+                    foundBundle = false;
+                    processProperties.project = argv[i].replace(/\@/, '');
+                }
+                if (foundBundle) {
+                    processProperties.bundles.push(argv[i])
+                }
+            }
+            if (
+                processProperties.bundles 
+                && processProperties.bundles.length > 0
+            ) {
+                var b = -1, bLen = processProperties.bundles.length-1;
+                while (b < bLen) {
+                    b++;
+                    processProperties.bundles[b] = processProperties.bundles[b] +'@'+ processProperties.project;
+                }
+            }
+            return processProperties;
+        }
+        
+        return processProperties;
+    }
         
     return self
 }

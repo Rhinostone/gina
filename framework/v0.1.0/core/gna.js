@@ -1042,7 +1042,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                     processList = getContext('processList');
                     process.list = processList;
                     bundleProcess = new Proc(appName + '@' + projectName, process);
-                    bundleProcess.register(appName + '@' + projectName, process.pid)
+                    bundleProcess.register(appName + '@' + projectName, process.pid);
                 }
 
             } else {

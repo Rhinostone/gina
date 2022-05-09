@@ -8,21 +8,13 @@ function MQSpeaker(opt, loggers, cb) {
     var self = {
         name: 'MQSpeaker'
     };
-    //var loggerHelper    = require(__dirname +'/../../helper.js')(opt, loggers);
-    //var format          = loggerHelper.format;
+    var loggerHelper    = require(__dirname +'/../../helper.js')(opt, loggers);
+    var format          = loggerHelper.format;
     
     
     
-    function init(opt, cb) {
-        // var argv = process.argv;
-        // for (let i = 0, len = argv.length; i < len; i++) {
-        //     if (/(prepare|prepare_version|postgina\/\/bin\/\/gina)$/.test(process.argv[1])) {
-                
-        //         return;
-        //     }
-        // }            
-        return startMQSpeaker(opt, cb);
-        
+    function init(opt, cb) {          
+        return startMQSpeaker(opt, cb);        
     }
     
     
@@ -37,7 +29,7 @@ function MQSpeaker(opt, loggers, cb) {
             // send request            
             client.write( JSON.stringify(clientOptions) +'\r\n');
                         
-            console.info('MQSpeaker connected to server :) ');
+            console.info('[MQSpeaker] connected to server :) ');
             
             if (cb) {
                 cb(false, client)
@@ -47,16 +39,17 @@ function MQSpeaker(opt, loggers, cb) {
             var err = data.toString();            
             if (cb) {
                 return cb(err)
-            }
-            console.debug(' => ', process.argv);
-            console.error('[MQSpeaker]  (error): ' + err);
+            }           
             
-            // process.emit('logger#'+self.name, JSON.stringify({
-            //     group       : opt.name,
-            //     level       : 'error',
-            //     // Raw content !
-            //     content     : '[MQSpeaker]  (error): ' + err
-            // }));
+            //console.error('[MQSpeaker]  (error): ' + err);
+            // Identical to console.error
+            // But if have to use this one since it can be called from a 
+            // spawned commande line like `npm install` post_install script
+            // console.debug('=> ', process.argv);
+            if ( !/(\/bin\/cli|\/bin\/gina)$/.test(process.argv[1]) ) {
+                process.stdout.write( format(opt.name, 'warn', '[MQSpeaker] ' + err) );
+            }
+            
         });
         
         var payloads = null, i = null;
