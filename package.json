@@ -1,5 +1,6 @@
 {
   "name": "gina",
+  "version": "v0.1.1-alpha.1",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -13,8 +14,7 @@
     "gina I/O",
     "gina.io",
     "ginajs"
-  ],
-  "version": "0.1.0",
+  ],  
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"

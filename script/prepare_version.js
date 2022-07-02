@@ -91,10 +91,10 @@ function PrepareVersion() {
         var mainConfigPath = ginaHomeDir +'/main.json';
         var mainConfig = require(mainConfigPath);
         var package = require(pack);
-        var selectedVersion = mainConfig.def_framework;
+        var selectedVersion = mainConfig.def_framework.replace(/^v/, '');
         self.selectedVersion = selectedVersion;
-        var targetedVersion = package.version;
-        self. targetedVersion = targetedVersion;
+        var targetedVersion = package.version.replace(/^v/, '');
+        self.targetedVersion = targetedVersion;
         
         console.debug('selected version : ', selectedVersion);
         console.debug('targeted version : ', targetedVersion);

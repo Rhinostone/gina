@@ -15,14 +15,22 @@
  * */
 
  function LoggerHelper(opt, loggers) {
+    
+    // BO - publishing hack
+    if ( typeof(new Date().format) == 'undefined' ) {
+        // trying to load prototypes if not loaded
+        var dateFormatInstance = require(__dirname +'/../../../helpers/dateFormat')();
+        require(__dirname +'/../../../helpers/prototypes')({ dateFormat: dateFormatInstance });
+    }
+    // EO - publishing hack
+    var self = {};
      
-     var self = {};
      
     /**
      * @function format
      * @param {string} content - to be formated
      * */
-    self.format = function(group, s, content) {
+    self.format = function(group, s, content) {        
 
         if (content != '') {
             var colors = null;

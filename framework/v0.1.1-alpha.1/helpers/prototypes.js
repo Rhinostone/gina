@@ -56,6 +56,8 @@ function PrototypesHelper(instance) {
             
         }
     }
+    
+    
 
     if ( typeof(Array.clone) == 'undefined' ) {
         /**
