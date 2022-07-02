@@ -112,83 +112,76 @@ function PrepareVersion() {
         self.frameworkPath      = frameworkPath;        
         helpers     = require(frameworkPath +'/helpers');
         lib         = require(frameworkPath +'/lib');
+
+        // update selected version & requirements
+        shortVersion = targetedVersion.split('.');
+        shortVersion.splice(2);
+        shortVersion = shortVersion.join('.');
+        if ( typeof(mainConfig.frameworks[shortVersion]) == 'undefined' ) {
+            mainConfig.frameworks[shortVersion] = [];
+            // create settings.json for the new version
             
-            
-        // if ( 
-        //     selectedVersion !== targetedVersion
-        //     //&& selectedVersion < targetedVersion 
-        // ) {            
-            
-            // update selected version & requirements
-            shortVersion = targetedVersion.split('.');
-            shortVersion.splice(2);
-            shortVersion = shortVersion.join('.');
-            if ( typeof(mainConfig.frameworks[shortVersion]) == 'undefined' ) {
-                mainConfig.frameworks[shortVersion] = [];
-                // create settings.json for the new version
-                
-            }
-            if ( mainConfig.frameworks[shortVersion].indexOf(targetedVersion) < 0 ) {
-                mainConfig.frameworks[shortVersion].push(targetedVersion)
-            }
-            
-            
-            settingsConfigPath  = ginaHomeDir+'/'+shortVersion+'/settings.json';
-            settingsConfig      = require(settingsConfigPath);
-            
-            // setting def_framework
-            mainConfig.def_framework    = targetedVersion;            
-            settingsConfig.version      = targetedVersion;            
-            ginaPath                    = settingsConfig.dir;            
-            self.ginaPath = ginaPath;
-            // backup of folder version to archives
-            
-            
-            
-            // console.debug('mainConfig: ', JSON.stringify(mainConfig, null, 2));
-            // console.debug('settingsConfig: ', JSON.stringify(settingsConfig, null, 2));
-            
-            // saving local config
-            lib.generator.createFileFromDataSync(JSON.stringify(mainConfig, null, 2), mainConfigPath);
-            lib.generator.createFileFromDataSync(JSON.stringify(settingsConfig, null, 2), settingsConfigPath);
-            
-            
-            var frameworkPathObj    =  new _(frameworkPath, true);
-            console.debug('source path is: '+ frameworkPath);
-            
-            var destination = _(ginaHomeDir +'/archives/framework/v'+selectedVersion, true);
-            if ( new _(destination).existsSync() ) {
-                new _(destination).rmSync();
-            }
-            var err = false;
-            
-            // since we cannot yet promissify directly PathObject.cp()
-            var f = function(destination, cb) {
-                frameworkPathObj.cp(destination, cb);
-            };            
-            await promisify(f)(destination)  
-                .catch( function onCopyError(_err) {
-                    err = _err;
-                })
-                .then( function onCopy(_destination) {
-                    console.debug('Copy to '+ _destination +': done');
-                });
-            
-            if (err) {
-                throw err;
-            }
-            
-            // rename folder version
-            destination = _(ginaPath +'/framework/v'+targetedVersion, true);
-            frameworkPathObj.renameSync(destination);
-            
-            
-            // updating requirements
-            self.selectedVersion = targetedVersion;
-            self.frameworkPath = frameworkPath = ginaPath +'/framework/v'+targetedVersion;
-            helpers             = require(frameworkPath +'/helpers');
-            lib                 = require(frameworkPath +'/lib');            
-        //}
+        }
+        if ( mainConfig.frameworks[shortVersion].indexOf(targetedVersion) < 0 ) {
+            mainConfig.frameworks[shortVersion].push(targetedVersion)
+        }
+        
+        
+        settingsConfigPath  = ginaHomeDir+'/'+shortVersion+'/settings.json';
+        settingsConfig      = require(settingsConfigPath);
+        
+        // setting def_framework
+        mainConfig.def_framework    = targetedVersion;            
+        settingsConfig.version      = targetedVersion;            
+        ginaPath                    = settingsConfig.dir;            
+        self.ginaPath = ginaPath;
+        // backup of folder version to archives
+        
+        
+        
+        // console.debug('mainConfig: ', JSON.stringify(mainConfig, null, 2));
+        // console.debug('settingsConfig: ', JSON.stringify(settingsConfig, null, 2));
+        
+        // saving local config
+        lib.generator.createFileFromDataSync(JSON.stringify(mainConfig, null, 2), mainConfigPath);
+        lib.generator.createFileFromDataSync(JSON.stringify(settingsConfig, null, 2), settingsConfigPath);
+        
+        
+        var frameworkPathObj    =  new _(frameworkPath, true);
+        console.debug('source path is: '+ frameworkPath);
+        
+        var destination = _(ginaHomeDir +'/archives/framework/v'+selectedVersion, true);
+        if ( new _(destination).existsSync() ) {
+            new _(destination).rmSync();
+        }
+        var err = false;
+        
+        // since we cannot yet promissify directly PathObject.cp()
+        var f = function(destination, cb) {
+            frameworkPathObj.cp(destination, cb);
+        };            
+        await promisify(f)(destination)  
+            .catch( function onCopyError(_err) {
+                err = _err;
+            })
+            .then( function onCopy(_destination) {
+                console.debug('Copy to '+ _destination +': done');
+            });
+        
+        if (err) {
+            throw err;
+        }
+        
+        // rename folder version
+        destination = _(ginaPath +'/framework/v'+targetedVersion, true);
+        frameworkPathObj.renameSync(destination);
+        
+        
+        // updating requirements
+        self.selectedVersion = targetedVersion;
+        self.frameworkPath = frameworkPath = ginaPath +'/framework/v'+targetedVersion;
+        helpers             = require(frameworkPath +'/helpers');
+        lib                 = require(frameworkPath +'/lib');
         
         done()
     };
@@ -259,6 +252,12 @@ function PrepareVersion() {
         
         done();
     };
+    
+    self.removeAllSymlinks = function(done) {
+        
+        
+        done();
+    }
     
     
     self.pushChangesToGit = function(done) {
