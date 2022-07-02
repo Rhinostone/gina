@@ -210,7 +210,7 @@ function PreInstall() {
         // var mainConfig      = require(mainConfigPath);
         
         // if yes, && not symlink, cp to archives ... a symlink will be done back to the framework folder by `post_install` script
-        for ( let i = 0, len = versionsFolders.length; i < len; i++) {
+        for (let i = 0, len = versionsFolders.length; i < len; i++) {
             let dir = versionsFolders[i];
             // skip junk
             if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {

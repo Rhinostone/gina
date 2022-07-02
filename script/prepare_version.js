@@ -255,6 +255,35 @@ function PrepareVersion() {
     
     self.removeAllSymlinks = function(done) {
         
+        // remove existing symlinks
+        var versionsFolders = null, frameworkPath = null;        
+        try {
+            frameworkPath = _(self.ginaPath +'/framework', true);
+            console.info('frameworkPath: ', frameworkPath);
+            if ( !new _(frameworkPath).existsSync() ) {
+                return done();
+            }
+            versionsFolders = fs.readdirSync(frameworkPath);
+        } catch (err) {
+            // do nothing
+        }
+        
+        for (let i = 0, len = versionsFolders.length; i < len; i++) {
+            let dir = versionsFolders[i];
+            // skip junk
+            if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {
+                continue;
+            }
+            
+            // intercept & remove symlinks
+            try {
+                if ( fs.lstatSync( _(frameworkPath +'/'+ dir, true) ).isSymbolicLink() ) {
+                    new _(frameworkPath +'/'+ dir, true).rmSync()
+                }
+            } catch (e) {
+                continue;
+            }
+        }
         
         done();
     }
