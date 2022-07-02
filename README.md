@@ -43,22 +43,6 @@ gina start
 ```
 __NB.:__ This is an alias for `gina framework:start`
 
-### Getting the logs
-You will also get logs related to your running bundles.
-``` tty
-gina tail
-```
-__NB.:__ This is an alias for `gina framework:tail`
-
-By default, Gina does not store logs. Logs are treated like any other events.
-This means that you need a logger container (or transport) to receive and output your logs.
-You are lucky, we have developped one that you just need to enable.
-You can edit `~/.gina/user/extensions/logger/default/config.json` to add `"file"` container to the `flows`.
-You might need to restart the gina :
-
-```tty
-gina restart
-```
 
 ### Initializing a project
 A project is a collection of bundles (applicaitons or services). See it as a representation of your domain.
@@ -198,6 +182,29 @@ __Defining an existing environment as `development` (you can only have one like 
 gina env:link-dev <your new dev env>
 ```
 
+### Getting the logs
+You will also get logs related to your running bundles.
+``` tty
+gina tail
+```
+__NB.:__ This is an alias for `gina framework:tail`
+
+By default, Gina does not store logs. Logs are treated like any other events.
+This means that if you need Gina to handle logs storage, you need a logger container (or transport) to receive and output your logs.
+
+Note that this is optional since logs are output like for other frameworks: you can catch those while writing your daemon starting script on you production server.
+
+If you still want gina to handle logs storage, you are lucky, we have developped a file container/transport that you just need to enable.
+
+> This feature is still experimental.
+
+You can edit `~/.gina/user/extensions/logger/default/config.json` to add `"file"` container to the `flows`.
+
+You might need to restart the gina :
+
+```tty
+gina restart
+```
 
 ## Troubleshooting
 
@@ -231,7 +238,7 @@ After this, try again to start, it should run better.
 
 
 
-More documentation and tutorials are coming !
+More documentation and tutorials are coming soon !
 
 
 ## License (MIT)
