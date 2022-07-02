@@ -53,7 +53,7 @@ __NB.:__ This is an alias for `gina framework:tail`
 By default, Gina does not store logs. Logs are treated like any other events.
 This means that you need a logger container (or transport) to receive and output your logs.
 You are lucky, we have developped one that you just need to enable.
-You can edit `~/.gina/user/extensions/logger/main.json` to add `file` container to the `flows`.
+You can edit `~/.gina/user/extensions/logger/default/config.json` to add `"file"` container to the `flows`.
 You might need to restart the gina :
 
 ```tty

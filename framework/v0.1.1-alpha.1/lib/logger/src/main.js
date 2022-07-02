@@ -27,9 +27,21 @@ var merge           = require('../../merge');
 var inherits        = require('../../inherits');
 var helpers         = require('../../../helpers');
 
+// BO - publishing hack
 if ( typeof(JSON.clone) == 'undefined' ) {
     require(__dirname +'/../../../helpers/prototypes')()
 }
+if ( typeof(_) == 'undefined' ) {
+    require(__dirname +'/../../../helpers/path')()
+}
+if ( typeof(requireJSON) == 'undefined' ) {
+    require(__dirname +'/../../../helpers/json')()
+}
+if ( typeof(getContext) == 'undefined' ) {
+    require(__dirname +'/../../../helpers/context')()
+}
+// EO - publishing hack
+
 
 /**
  * @class Logger
@@ -44,8 +56,9 @@ function Logger() {
     
     
     // retrieve context
-    var ctx             = getContext('loggerInstance') || { initialized: false }// jshint ignore:line
-        , self          = {}
+    var ctx = getContext('loggerInstance') || { initialized: false }; // jshint ignore:line
+    
+    var self            = {}
         , loggers       = {}
         // `containers`, also meaning transports
         , containers    = {}        
@@ -65,7 +78,7 @@ function Logger() {
         homeDir = getUserHome() || process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];// jshint ignore:line
         homeDir += '/.gina';
         shortVersion = requireJSON( _(frameworkPath +'/package.json', true) ).version;// jshint ignore:line
-        shortVersion = shortVersion.split('.').splice(0,2).join('.');
+        shortVersion = shortVersion.split('.').splice(0,2).join('.').replace(/^v/, '');
         defaultLogLevel = requireJSON( _(homeDir +'/'+ shortVersion +'/settings.json', true) ).log_level;// jshint ignore:line
     } catch(logLevelError) {
         // It is ok to fail  ... do not worry
