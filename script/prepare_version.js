@@ -43,13 +43,6 @@ function PrepareVersion() {
 
     var init = function() {
         self.isWin32 = isWin32();
-        var args = process.argv, i = 0, len = args.length;
-        for (; i < len; ++i) {
-            if (args[i] == '--dry-run' ) {
-                self.isOnDryRun = true;
-                break;
-            }
-        }
         begin(0);
     };
 
@@ -394,12 +387,8 @@ function PrepareVersion() {
     }
 
     self.tagVersionIfNeeded = function(done) {
-
-
-        console.debug('Is on Dry Run'+ JSON.stringify(process.env, null, 2));
-        process.exit(-1)
-        if ( typeof(self.isOnDryRun) != 'undefined' ) {
-
+        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
+            console.debug('Is on Dry Run !!!');
             done()
         }
 
