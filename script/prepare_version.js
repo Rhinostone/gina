@@ -367,7 +367,7 @@ function PrepareVersion() {
         }
         // git commit -m'Packaging version v'+ version
         try {
-            var msg = (!branchExists) ? 'New version' : 'Prerelease update';
+            var msg = (!branchExists) ? 'New version' : 'Prerelease update - '+ new Date().format("isoDateTime");
             cmd = execSync("git commit -am'"+ msg +"'");
         } catch (err) {
             console.log("git commit -am'"+ msg +"' "+ (err.stack||err.message||err).toString());
