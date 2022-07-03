@@ -297,7 +297,7 @@ function PrepareVersion() {
 
 
     self.pushChangesToGit = function(done) {
-
+        console.log('Is on Dry Run', process.argv);
         var cmd = null;
         var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
 
@@ -394,7 +394,7 @@ function PrepareVersion() {
     }
 
     self.tagVersionIfNeeded = function(done) {
-        console.log('Is on Dry Run', process.argv);
+
         if ( typeof(self.isOnDryRun) != 'undefined' ) {
 
             done()
