@@ -439,7 +439,8 @@ function PostInstall() {
 
             // creating symlinks
             try {
-                new _(archivesPath +'/'+ dir, true).symlinkSync(_(frameworkPath +'/'+ dir, true) );
+                //new _(archivesPath +'/'+ dir, true).symlinkSync(_(frameworkPath +'/'+ dir, true) );
+                console.log( _(archivesPath +'/'+ dir, true) +' -> '+ _(frameworkPath +'/'+ dir, true));
             } catch (e) {
                 throw e
             }
