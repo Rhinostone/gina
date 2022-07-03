@@ -44,6 +44,7 @@ function PrepareVersion() {
     var init = function() {
         self.isWin32 = isWin32();
         var args = process.argv, i = 0, len = args.length;
+        console.log('argv ', args);
         for (; i < len; ++i) {
             if (args[i] == '--dry-run' ) {
                 self.isOnDryRun = true;
