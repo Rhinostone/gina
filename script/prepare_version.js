@@ -361,6 +361,7 @@ function PrepareVersion() {
         try {
             cmd = execSync("git add --all ");
         } catch (err) {
+            console.debug('`git add --all`failed ');
             console.error(err.stack||err.message||err);
             return done(err);
         }
