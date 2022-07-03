@@ -44,7 +44,6 @@ function PrepareVersion() {
     var init = function() {
         self.isWin32 = isWin32();
         var args = process.argv, i = 0, len = args.length;
-        console.log('argv ', args);
         for (; i < len; ++i) {
             if (args[i] == '--dry-run' ) {
                 self.isOnDryRun = true;
@@ -395,7 +394,7 @@ function PrepareVersion() {
     }
 
     self.tagVersionIfNeeded = function(done) {
-        console.log('Is on Dry Run', process.argv);
+        console.info('Is on Dry Run', process.argv);
         if ( typeof(self.isOnDryRun) != 'undefined' ) {
 
             done()
