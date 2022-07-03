@@ -42,6 +42,7 @@ function PrepareVersion() {
     var self    = {};
 
     var init = function() {
+        console.log('Is on Dry Run', process.argv);
         self.isWin32 = isWin32();
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
@@ -297,7 +298,7 @@ function PrepareVersion() {
 
 
     self.pushChangesToGit = function(done) {
-        console.log('Is on Dry Run', process.argv);
+
         var cmd = null;
         var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
 
