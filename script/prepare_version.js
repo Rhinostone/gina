@@ -43,6 +43,13 @@ function PrepareVersion() {
 
     var init = function() {
         self.isWin32 = isWin32();
+        var args = process.argv, i = 0, len = args.length;
+        for (; i < len; ++i) {
+            if (args[i] == '--dry-run' ) {
+                self.isOnDryRun = true;
+                break;
+            }
+        }
         begin(0);
     };
 
@@ -381,6 +388,15 @@ function PrepareVersion() {
         } catch (err) {
             console.error(err.stack||err.message||err);
             return done(err);
+        }
+
+        done()
+    }
+
+    self.tagVersionIfNeeded = function(done) {
+        if ( typeof(self.isOnDryRun) == 'undefined' ) {
+            console.debug('Is on Dry Run');
+            done()
         }
 
         done()
