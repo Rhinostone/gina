@@ -394,7 +394,7 @@ function PrepareVersion() {
     }
 
     self.tagVersionIfNeeded = function(done) {
-        if ( typeof(self.isOnDryRun) == 'undefined' ) {
+        if ( typeof(self.isOnDryRun) != 'undefined' ) {
             console.debug('Is on Dry Run');
             done()
         }
