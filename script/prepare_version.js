@@ -288,6 +288,15 @@ function PrepareVersion() {
         done();
     }
 
+    self.tagVersionIfNeeded = function(done) {
+        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
+            console.debug('Is on Dry Run !!!');
+            done()
+        }
+
+        done()
+    }
+
 
     self.pushChangesToGit = function(done) {
 
@@ -386,14 +395,7 @@ function PrepareVersion() {
         done()
     }
 
-    self.tagVersionIfNeeded = function(done) {
-        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
-            console.debug('Is on Dry Run !!!');
-            done()
-        }
 
-        done()
-    }
 
     init()
 }
