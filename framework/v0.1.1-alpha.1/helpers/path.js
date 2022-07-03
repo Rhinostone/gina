@@ -505,10 +505,37 @@ function PathHelper() {
      * @param {string} type - Only available from node v12.0.0 & only available on Windows and ignored on other platforms
      */
      var symlinkSync = function(source, destination, type) {
+        // About junstion for windows (only): 
+        // reminders: creating a symbolic link requires special privilege (by default, only available to elevated processes) whereas creating a junction only requires access to the file system.
+        // https://docs.microsoft.com/en-us/sysinternals/downloads/junction
+        // https://superuser.com/questions/343074/directory-junction-vs-directory-symbolic-link
         if ( !existsSync(source) ) {
             throw new Error('Cannot complete symlinkSync from `'+ source +'`: the path does not exist.');
         }
         var nodeVersion = process.version.replace(/v/, '').split(/\./g)[0];
+        
+        if (
+            process.platform == "win32" 
+            && ~~nodeVersion >= 12 
+            && typeof(type) == 'undefined'
+            ||
+            process.platform == "win32" 
+            && ~~nodeVersion >= 12 
+            && !type
+            ||
+            process.platform == "win32" 
+            && ~~nodeVersion >= 12 
+            && type == '' 
+        ) {
+            // check source type
+            if ( fs.lstatSync( source ).isDirectory() ) {
+                type = 'dir';
+            }
+            else {
+                type = 'file'
+            }
+        }
+        
         if ( 
             process.platform == "win32" 
             && ~~nodeVersion >= 12 
@@ -520,11 +547,9 @@ function PathHelper() {
             if ( ['dir', 'file', 'junction'].indexOf(type) < 0 ) {
                 throw new Error('Wrong symlink type: '+ type);
             }
-            
-            fs.symlinkSync(source, destination, type)
-        } else {
-            fs.symlinkSync(source, destination)
         }
+        
+        fs.symlinkSync(source, destination, type);
     }
     _.prototype.symlinkSync = function(destination, type) {
         var self = this;
@@ -533,8 +558,8 @@ function PathHelper() {
         // if ( !existsSync(source) ) {
         //     throw new Error('Cannot complete symlink from `'+ source +'`: the path does not exist.');
         // }
-        
         symlinkSync(source, destination, type);
+        
     }
     
     _.prototype.renameSync = function(destination) {
