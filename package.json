@@ -14,7 +14,7 @@
     "gina I/O",
     "gina.io",
     "ginajs"
-  ],  
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"
@@ -45,7 +45,7 @@
   ],
   "main": "./framework/v0.1.0/core/gna",
   "scripts": {
-    "prepare": "node ./script/prepare_version.js -g",
+    "prepare": "node ./script/prepare_version.js -g process.argv",
     "preisntall": "node ./script/pre_install.js -g",
     "postisntall": "node ./script/post_install.js -g"
   },
