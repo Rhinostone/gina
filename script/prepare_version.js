@@ -251,7 +251,7 @@ function PrepareVersion() {
         lib.generator.createFileFromDataSync(middleware, middlewareFilePath);
 
         done();
-    };
+    }
 
     self.removeAllSymlinks = function(done) {
 
@@ -288,16 +288,6 @@ function PrepareVersion() {
         done();
     }
 
-    self.tagVersionIfNeeded = function(done) {
-        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
-            console.debug('Is on Dry Run !!!');
-            done()
-        }
-
-        done()
-    }
-
-
     self.pushChangesToGit = function(done) {
 
         var cmd = null;
@@ -320,6 +310,7 @@ function PrepareVersion() {
         // create new branch if needed
         // e.g: 0.1.0-alpha.1 -> 010-alpha1
         var targetedBranch = version.replace(/\./g, '');
+        self.targetedBranch = targetedBranch;
 
         console.debug('[GIT] Current branch: '+ currentBranch);
         console.debug('[GIT] Targeted branch: '+ targetedBranch);
@@ -391,6 +382,24 @@ function PrepareVersion() {
             console.error(err.stack||err.message||err);
             return done(err);
         }
+
+        done()
+    }
+
+    self.tagVersionIfNeeded = function(done) {
+        // check if script is on Dry Run !!!
+        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
+            return done()
+        }
+
+        // merge master with targeted branch
+        console.debug('Merging master with targeted branch: '+ self.targetedBranch +' -> v'+ self.targetedVersion);
+
+        // tag version from master
+
+        // remove old branch
+
+        // checkout back to newly created tag or master ?
 
         done()
     }
