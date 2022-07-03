@@ -395,8 +395,8 @@ function PrepareVersion() {
 
     self.tagVersionIfNeeded = function(done) {
 
-        process.stdout.write('Is on Dry Run', process.argv);
-        console.debug('Is on Dry Run'+ process.argv);
+
+        console.debug('Is on Dry Run'+ process.env);
         process.exit(-1)
         if ( typeof(self.isOnDryRun) != 'undefined' ) {
 
