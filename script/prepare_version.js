@@ -370,6 +370,7 @@ function PrepareVersion() {
             var msg = (!branchExists) ? 'New version' : 'Prerelease update';
             cmd = execSync("git commit -am'"+ msg +"'");
         } catch (err) {
+            console.debug("git commit -am'"+ msg +"' "+ (err.stack||err.message||err).toString());
             if ( /nothing to commit, working tree clean/.test( (err.stack||err.message||err).toString()) ) {
                 console.info('nothing to commit !!');
             }
