@@ -371,7 +371,7 @@ function PrepareVersion() {
             cmd = execSync("git commit -am'"+ msg +"'");
             console.log("??? git commit -am'"+ msg +"' "+ cmd.toString());
         } catch (err) {
-            console.log("git commit -am'"+ msg +"' "+ (err.stack||err.message||err).toString());
+            console.log(" !!! git commit -am'"+ msg +"' "+ (err.stack||err.message||err).toString());
             if ( /nothing to commit, working tree clean/.test( (err.stack||err.message||err).toString()) ) {
                 console.info('nothing to commit !!');
             }
