@@ -72,7 +72,7 @@ function PostInstall() {
         var n = 0, funct = null, functName = null;
         for (let t in self) {
             if ( typeof(self[t]) == 'function') {
-                if (n == i){
+                if (n == i) {
                     //let func = 'self.' + t + '()';
                     let func = 'self.' + t;
                     console.debug('Running [ ' + func + '() ]');
@@ -92,6 +92,39 @@ function PostInstall() {
         }
     }
 
+    self.checkIfIsContributorEnv = function(done) {
+        var isContribEnv = false;
+        if ( new _(self.gina + '/.git', true).existsSync() ) {
+            isContribEnv = true;
+        }
+        var homeDir = getUserHome() || null;
+        if (!homeDir) {
+            return done(new Error('No $HOME path found !'))
+        }
+        var ginaHomeDir = homeDir.replace(/\n/g, '') + '/.gina';
+        setEnvVar('GINA_HOMEDIR', ginaHomeDir);
+
+        var npmGlobal = homeDir.replace(/\n/g, '') + '/.npm-global';
+        var IsNpmGlobalFound = false;
+        if ( new _(npmGlobal, true).existsSync() ) {
+            IsNpmGlobalFound = true;
+        }
+
+        console.debug(self.gina, ' | ', ginaHomeDir);
+        console.debug('Is contributor‘s env ? : '+ isContribEnv);
+
+        // Fixing `npm link` VS `.npm-global` issue on contributors env
+        /**
+         * Patch designed to use `npm link gina` in your project
+         * without taking the risk to get the wrong package version
+         * */
+        if (isContribEnv && IsNpmGlobalFound) {
+            console.debug('Contributor case detected ...');
+        }
+
+        process.exit(0);
+        done();
+    }
 
     self.createVersionFile = function(done) {
         var version = require( _(self.gina + '/package.json') ).version;
@@ -137,6 +170,8 @@ function PostInstall() {
                         console.error(err);
                         console.warn('try to run : sudo ' + cmd);
                     }
+
+                    // Caveat - `npm link` issue with `~/.npm-global`
                 });
             // To debug, you just need to run:
             //          gina <topic>:<task> --inspect-gina
