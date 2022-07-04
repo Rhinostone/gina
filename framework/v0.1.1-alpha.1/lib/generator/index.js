@@ -73,7 +73,7 @@ var Generator = {
         }
     },
     createFileFromDataSync : function(data, target){
-        var data = (typeof(data) == "object") ? JSON.stringify(data, null, 4) : data;
+        data = (typeof(data) == "object") ? JSON.stringify(data, null, 4) : data;
         fs.writeFileSync(target, data);
         fs.chmodSync(target, 0755)
     },

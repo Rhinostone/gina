@@ -146,11 +146,6 @@ function PrepareVersion() {
         lib.generator.createFileFromDataSync(JSON.stringify(mainConfig, null, 2), mainConfigPath);
         lib.generator.createFileFromDataSync(JSON.stringify(settingsConfig, null, 2), settingsConfigPath);
 
-        // keeping package.json up to date
-        //"main": "./framework/v{version}/core/gna",
-        package.main = './framework/v'+ targetedVersion +'/core/gna';
-        console.debug('package.main -> ', './framework/v'+ targetedVersion +'/core/gna', ' -> ', pack);
-        //lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
 
         var frameworkPathObj    =  new _(frameworkPath, true);
         console.debug('source path is: '+ frameworkPath);
@@ -187,6 +182,13 @@ function PrepareVersion() {
         self.frameworkPath = frameworkPath = ginaPath +'/framework/v'+targetedVersion;
         helpers             = require(frameworkPath +'/helpers');
         lib                 = require(frameworkPath +'/lib');
+
+        // keeping package.json up to date
+        //"main": "./framework/v{version}/core/gna",
+        package.main = './framework/v'+ targetedVersion +'/core/gna';
+        console.debug('package.main -> ', './framework/v'+ targetedVersion +'/core/gna', ' -> ', pack);
+        new _(pack, true).rmSync();
+        lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
 
         done()
     };
