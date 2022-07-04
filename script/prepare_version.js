@@ -298,7 +298,7 @@ function PrepareVersion() {
 
     self.checkIfIsContributorEnv = function(done) {
         var isContribEnv = false;
-        if ( new _(self.gina + '/.git', true).existsSync() ) {
+        if ( new _(self.ginaPath + '/.git', true).existsSync() ) {
             isContribEnv = true;
         }
         var homeDir = getUserHome() || null;
@@ -316,8 +316,8 @@ function PrepareVersion() {
             if ( ! new _(npmGlobal +'/bin', true).existsSync() ) {
                 new _(npmGlobal +'/bin', true).mkdirSync()
             }
-            if ( ! new _(npmGlobal +'/lib', true).existsSync() ) {
-                new _(npmGlobal +'/lib', true).mkdirSync()
+            if ( ! new _(npmGlobal +'/lib2/node_modules2', true).existsSync() ) {
+                new _(npmGlobal +'/lib2/node_modules2', true).mkdirSync()
             }
         }
 
