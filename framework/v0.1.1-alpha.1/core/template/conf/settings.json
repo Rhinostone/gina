@@ -3,8 +3,9 @@
     "engine": "isaac",
     "credentials": {
       "_comment": "Project ENV override: SSL Credentials: private key & certificate",
-      "privateKey": "{projectPath}/ssl/server.key",
-      "certificate": "{projectPath}/ssl/server.crt",
+      "privateKey": "{GINA_HOMEDIR}/certificates/{scope}/{host}/private.key",
+      "certificate": "{GINA_HOMEDIR}/certificates/{scope}/{host}/certificate.crt",
+      "ca": "{GINA_HOMEDIR}/certificates/{scope}/{host}/ca_bundle.crt",
       "allowHTTP1": true
     },
     // refers to server.js, lib.routing & controller.js
@@ -31,7 +32,7 @@
     // eg.: (int) 5000 for 5 sec
     // eg.: (string) 10m for 10 minutes
     // eg.: (int) 0 to disable autoTmpCleanupTimeout
-    // eg.: (boolean) false to disable autoTmpCleanupTimeout 
+    // eg.: (boolean) false to disable autoTmpCleanupTimeout
     "autoTmpCleanupTimeout": false,
     // You need to set groups in order to enable uploads
     "groups": {
