@@ -30,7 +30,13 @@ function Version(opt){
         } else {
             console.error(msg.basic[5])
         }
+
+        end();
     };
+
+    var end = function(err) {
+        process.exit( err ? -1:0 )
+    }
 
     init(opt)
 };
