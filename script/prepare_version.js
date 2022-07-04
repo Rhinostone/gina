@@ -386,23 +386,24 @@ function PrepareVersion() {
         done()
     }
 
-    self.tagVersionIfNeeded = function(done) {
-        // check if script is on Dry Run !!!
-        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
-            return done()
-        }
+    // self.tagVersionIfNeeded = function(done) {
+    //     // check if script is on Dry Run !!!
+    //     if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
+    //         // if on dry mode, we want to run post_install to reflect framework versions symlinks
+    //         return done()
+    //     }
 
-        // merge master with targeted branch
-        console.debug('Merging master with targeted branch: '+ self.targetedBranch +' -> v'+ self.targetedVersion);
+    //     // merge master with targeted branch
+    //     console.debug('Merging master with targeted branch: '+ self.targetedBranch +' -> v'+ self.targetedVersion);
 
-        // tag version from master
+    //     // tag version from master
 
-        // remove old branch
+    //     // remove old branch
 
-        // checkout back to newly created tag or master ?
+    //     // checkout back to newly created tag or master ?
 
-        done()
-    }
+    //     done()
+    // }
 
 
 
