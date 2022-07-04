@@ -36,9 +36,9 @@ desktop.ini
 src.old
 
 
-framework/v0.1.0/package-lock.json
+framework/v*/package-lock.json
 
-framework/v0.1.0/package.json
+framework/v*/package.json
 
 *.codekit3
 package-lock.json

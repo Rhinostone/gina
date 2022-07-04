@@ -1,5 +1,6 @@
 {
   "name": "gina",
+  "version": "0.1.1-alpha.1",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -14,7 +15,6 @@
     "gina.io",
     "ginajs"
   ],
-  "version": "{version}",
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"
@@ -43,8 +43,12 @@
     "./doc/man/gina-model.1",
     "./doc/man/gina-env.1"
   ],
-  "main": "./framework/v{version}/core/gna",
-  "scripts": {},
+  "main": "./framework/v0.1.0/core/gna",
+  "scripts": {
+    "prepare": "node ./script/prepare_version.js -g",
+    "preisntall": "node ./script/pre_install.js -g",
+    "postisntall": "node ./script/post_install.js -g"
+  },
   "license": "MIT",
   "readmeFilename": "README.md"
 }
