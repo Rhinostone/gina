@@ -1,9 +1,9 @@
-# The contributor guide
+# The contributor's guide
 > This is a document is a work in progress.
 > If you would like to contribute, you can contact us at `contact@gina.io` 
 
 ### Installing Gina
-You cannot just install the framework with the `NPM` CLI. You will need to fetch sources from the [github page](https://github.com/Rhinostone/gina) since all files are not published to `NPM`.
+You __cannot__ just install the framework with the `NPM` CLI. You will need to fetch/fork sources from the [github page](https://github.com/Rhinostone/gina) since all files are not published to `NPM`.
 
 Targeted folder should be: `/usr/local/lib/node_modules/gina`
 Make sure you have the appropriate permissions to write.
