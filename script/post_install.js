@@ -92,39 +92,7 @@ function PostInstall() {
         }
     }
 
-    self.checkIfIsContributorEnv = function(done) {
-        var isContribEnv = false;
-        if ( new _(self.gina + '/.git', true).existsSync() ) {
-            isContribEnv = true;
-        }
-        var homeDir = getUserHome() || null;
-        if (!homeDir) {
-            return done(new Error('No $HOME path found !'))
-        }
-        var ginaHomeDir = homeDir.replace(/\n/g, '') + '/.gina';
-        setEnvVar('GINA_HOMEDIR', ginaHomeDir);
 
-        var npmGlobal = homeDir.replace(/\n/g, '') + '/.npm-global';
-        var IsNpmGlobalFound = false;
-        if ( new _(npmGlobal, true).existsSync() ) {
-            IsNpmGlobalFound = true;
-        }
-
-        console.debug(self.gina, ' | ', ginaHomeDir);
-        console.debug('Is contributor‘s env ? : '+ isContribEnv);
-
-        // Fixing `npm link` VS `.npm-global` issue on contributors env
-        /**
-         * Patch designed to use `npm link gina` in your project
-         * without taking the risk to get the wrong package version
-         * */
-        if (isContribEnv && IsNpmGlobalFound) {
-            console.debug('Contributor case detected ...');
-        }
-
-        process.exit(0);
-        done();
-    }
 
     self.createVersionFile = function(done) {
         var version = require( _(self.gina + '/package.json') ).version;
