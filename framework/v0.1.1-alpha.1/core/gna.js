@@ -27,8 +27,11 @@ var gna         = {
 var Config      = require('./config');
 var config      = null;
 // helpers were previously loaded
+
 var lib         = require('./../lib');
+
 var console     = lib.logger;
+console.log('!!!!!!!!!! loading Lib #1');
 var Proc        = lib.Proc;
 var locales     = require('./locales');
 var plugins     = require('./../core/plugins');
@@ -58,26 +61,26 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
 
     var ctxObj = null;
     if ( /(child)\.js$/.test(tmp[1]) ) { // required under a worker
-        
+
         isLoadedThroughWorker = true;
         var ctxFilename = null;
-        
+
         for (var a = 0, aLen = tmp.length; a < aLen; ++a) {
-            
+
             if (/^--argv-filename=/.test(tmp[a])) {
-                ctxFilename = tmp[a].split(/=/)[1];                    
+                ctxFilename = tmp[a].split(/=/)[1];
                 console.debug('[ FRAMEWORK ] Found context file `' + ctxFilename +'`' );
                 break;
             }
         }
-        
+
 
         if (ctxFilename) {
 
             setContext('argvFilename', _(ctxFilename, true));
-            
+
             var importedContext = JSON.parse( fs.readFileSync(_(ctxFilename, true)) );
-            
+
             tmp[2] = {};
             tmp[2].paths = importedContext.paths;
             tmp[2].envVars = importedContext.envVars;
@@ -91,7 +94,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             setContext('env', importedContext.env);
             setContext('bundles', importedContext.bundles);
             setContext('debugPort', importedContext.debugPort);
-            
+
             ctxObj = tmp[2];
 
         } else {
@@ -104,11 +107,11 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
 
 
     try {
-        
+
         require(ctxObj.paths.gina.root + '/utils/helper');
-        
+
         setContext('paths', ctxObj.paths);//And so on if you need to.
-        
+
         setContext('processList', ctxObj.processList);
         setContext('ginaProcess', ctxObj.ginaProcess);
         setContext('debugPort', ctxObj.debugPort);
@@ -148,11 +151,11 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             defineDefault(obj)
         }
 
-        
+
         //Cleaning process argv.
         if (isLoadedThroughCLI )
             process.argv.splice(2);
-            
+
     } catch (error) {
         console.error('[ FRAMEWORK ][ configurationError ] ', error.stack || error.message || error);
     }
@@ -236,7 +239,7 @@ if (!isPath) {
 // Todo - load from env.json or locals  or manifest.json ??
 /**
  * abort
- * 
+ *
  * @param {string|object} err
  * @param {string} [bunlde]
  */
@@ -255,11 +258,11 @@ var abort = function(err, bundle) {
             console.emerg('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']' + '\n' + err.stack);
         } else {
             console.emerg('[ FRAMEWORK ] Gina could not determine which bundle to load: ' + err +' ['+env+']');
-        }        
+        }
     } else {
         console.emerg(err.stack||err);
     }
-    
+
     process.exit(1);
 };
 
@@ -275,7 +278,7 @@ var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
     ;
     // supported envs
     setContext('envs', project.envs);
-    
+
     // skip this step for workers
     if (isLoadedThroughWorker) {
         return cb(false)
@@ -283,19 +286,19 @@ var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
     try {
         manisfestPath   = _(project.path + '/manifest.json', true);
         manifest        = requireJSON(manisfestPath);
-        
+
         if ( !new _(manisfestPath).existsSync() ) {
             throw new Error('Manifest not found in your project `'+ projectName +'`')
         }
-        
+
         isMounted = new _( project.path +'/'+ manifest.bundles[bundle].link ).existsSync();
-        
-        
+
+
     } catch (err) {
         console.emerg(err);
         return cb(err);
     }
-    
+
     console.debug('Is `'+ bundle +'` mounted ?', isMounted);
     if (!gna.started && isMounted) {
         new _( project.path +'/'+ manifest.bundles[bundle].link ).rmSync();
@@ -309,17 +312,17 @@ var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
             console.debug('Mounting bundle `'+ bundle +'` to : ', linkPath);
         } catch (err) {
             return cb(err)
-        }            
-        
+        }
+
         gna.mount(bundlesPath, source, linkPath, cb)
     }
 }
 
 
 
-   
 
-    
+
+
 
 /**
  * Get project conf from manifest.json
@@ -333,7 +336,7 @@ gna.getProjectConfiguration = function (callback){
     var modulesPackage = _(root + '/manifest.json');
     var project     = {}
         , bundles   = [];
-    
+
     //console.debug('modulesPackage ', modulesPackage, fs.existsSync(modulesPackage));
     //Merging with existing;
     if ( fs.existsSync(modulesPackage) ) {
@@ -372,8 +375,8 @@ gna.getProjectConfiguration = function (callback){
             var bundle = getContext('bundle');
             var bundlePath = getPath('project') + '/';
             bundlePath += ( isDev ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].link;
-            
-            
+
+
             for (var b in project.bundles) {
                 bundles.push(b)
             }
@@ -413,8 +416,8 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
         callback = type;
         type = 'dir';
     }
-    
-    
+
+
     //creating folders.
     //use junction when using Win XP os.release == '5.1.2600'
     var mountingPath = getPath('project') + '/bundles';
@@ -427,7 +430,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
     if ( !fs.existsSync(tmpPath) ) {
         new _(tmpPath).mkdirSync();
     }
-    
+
     var isSourceFound   = fs.existsSync(source)
         , isTargetFound = fs.existsSync(target)
     ;
@@ -441,7 +444,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
             callback(err)
         }
     }
-    
+
     // hack to test none-dev env without building: in case you did not build your bundle, but you have the src available
     if (!isSourceFound && !isDev) {
         var srcPathObj = new _( root +'/'+ gna.project.bundles[gna.core.startingApp].src);
@@ -455,7 +458,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
             isSourceFound = true;
         }
     }
-    
+
     if ( isSourceFound ) {
         //will override existing each time you restart.
         gna.utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
@@ -469,10 +472,10 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
                         fs.symlinkSync(source, target, type)
                     else
                         fs.symlinkSync(source, target);
-                    
-                    // symlink created    
+
+                    // symlink created
                     callback(false);
-                    
+
                 } catch (err) {
                     if (err) {
                         console.emerg('[ FRAMEWORK ] '+ (err.stack||err.message));
@@ -544,14 +547,14 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.error('[ FRAMEWORK ] ', err.stack);
                                     return undefined
                                 }
-                            } else {                            
+                            } else {
                                 // tmp = JSON.stringify(conf);
                                 // return JSON.parse(tmp)
                                 return JSON.clone(conf)
                             }
                         };
                         try {
-                            //configureMiddleware(instance, express); // no, no and no...                        
+                            //configureMiddleware(instance, express); // no, no and no...
                             callback(e, instance, middleware)
                         } catch (err) {
                             // TODO Output this to the error logger.
@@ -574,14 +577,14 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
             gna.started = true;
             e.once('server#started', function(conf){
 
-                
+
                 // open default browser for dev env only
                 // if ( isDev) {
                 //     var payload = JSON.stringify({
                 //         code    : 200,
                 //         command  : "open"
                 //     });
-                
+
                 //     if (self.ioClient) { // if client has already made connexion
                 //         payload.command = "reload"
                 //     } else {
@@ -624,7 +627,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
         gna.onError = process.onError = function(callback) {
             gna.errorCatched = true;
             e.on('error', function(err, request, response, next) {
-                
+
                 callback(err, request, response, next)
             })
         }
@@ -729,7 +732,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
          * Start server
          *
          * @param {string} [executionPath]
-         * */    
+         * */
         gna.start = process.start = function() { //TODO - Add protocol in arguments
 
             var core    = gna.core;
@@ -742,7 +745,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                 projectName = getContext('projectName')
             }
 
-            
+
             core.projectName        = projectName;
             core.startingApp        = appName; // bundleName
             core.executionPath      = root;
@@ -798,51 +801,51 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                                     // setting default global middlewares
                                     if ( typeof(instance.use) == 'function' ) {
-                                        
+
                                         // catching unhandled errors
                                         instance.use( function cathUnhandledErrorMiddlewar(error, request, response, next){
-                                            
+
                                             if (arguments.length < 4) {
                                                 next        = response;
                                                 response    = request;
                                                 request     = error;
                                                 error       = false ;
                                             }
-                                            
+
                                             if (error) {
                                                 e.emit('error', error, request, response, next)
                                             } else {
                                                 next()
                                             }
                                         });
-                                        
-                                                                            
+
+
                                         instance.use( function composeHeadersMiddleware(error, request, response, next) {
-                                            
+
                                             if (arguments.length < 4) {
                                                 next        = response;
                                                 response    = request;
                                                 request     = error;
                                                 error       = false ;
                                             }
-                                            
+
                                             if (error) {
                                                 e.emit('error', error, request, response, next)
                                             } else {
-                                                
-                                                instance.completeHeaders(null, request, response);                                            
-                                                
-                                                if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {                                                
+
+                                                instance.completeHeaders(null, request, response);
+
+                                                if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {
                                                     var ext = 'html';
-                                                    var headers = {    
+                                                    var headers = {
                                                         // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7
                                                         //'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
                                                         'cache-control': 'no-cache',
                                                         'pragma': 'no-cache',
                                                         'expires': '0',
                                                         'content-type': conf.server.coreConfiguration.mime[ext]
-                                                    };             
-                                                    
+                                                    };
+
                                                     // if ( /http\/2/.test(conf.server.protocol) ) {
                                                     //     if (!response.stream.destroyed) {
                                                     //         headers[':status'] = 200;
@@ -850,24 +853,24 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                                     //         response.stream.respond(headers);
                                                     //         response.stream.end();
                                                     //         return;
-                                                    //     } 
+                                                    //     }
                                                     // } else {
-                                                        response.writeHead(200, headers);                                                
+                                                        response.writeHead(200, headers);
                                                         response.end();
                                                     //}
-                                                        
+
                                                 } else {
                                                     next(false, request, response)
                                                 }
-                                            }                                            
+                                            }
                                         })
-                                    }                                
-                                    
+                                    }
+
 
                                     e.emit('server#started', conf);
-                                    
+
                                     setTimeout( function onStarted() {
-                                        
+
                                         console.info('is now online V(-.o)V',
                                         '\nbundle: [ ' + conf.bundle +' ]',
                                         '\nenv: [ '+ conf.env +' ]',
@@ -888,7 +891,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                 // placing strat:flag to allow the CLI to retrieve bundl info from here
                                 console.notice('[ FRAMEWORK ][ '+ process.pid +' ] '+ conf.bundle +'@'+ core.projectName +' mounted !');
                                 server.start(instance);
-                                
+
                             });
 
 
@@ -929,7 +932,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                     var server = new Server(opt);
                     server.onConfigured(initialize);
-                    
+
 
                 })//EO config.
             //})//EO mount.
@@ -1027,11 +1030,11 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                     }
                     // else, not a bundle
                 } // EO for (let bundle in packs) {
-                
+
                 if ( /^true$/i.test(gna.isAborting) ) {
                     return;
                 }
-                
+
                 if (appName == undefined) {
                     setContext('bundle', undefined);
                     abort('No bundle found for path: ' + path)

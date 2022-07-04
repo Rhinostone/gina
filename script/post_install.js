@@ -15,7 +15,11 @@ const { execSync } = require('child_process');
 var lib         = require('./lib');
 var console     = lib.logger;
 
-
+var scriptPath = __dirname;
+var ginaPath = (scriptPath.replace(/\\/g, '/')).replace('/script', '');
+var help        = require(ginaPath + '/utils/helper.js');
+var pack        = ginaPath + '/package.json';
+pack =  (isWin32()) ? pack.replace(/\//g, '\\') : pack;
 
 
 /**
@@ -406,9 +410,14 @@ function PostInstall() {
     var restoreSymlinks = function() {
         var archivesPath = _(getUserHome() + '/.gina/archives/framework', true);
         var frameworkPath = _(self.gina +'/framework', true);
+
         if ( !new _(archivesPath).existsSync() ) {
             return;
         }
+        // get current framework version
+        var package = require(pack);
+        var currentVersion = 'v'+ package.version.replace(/^v/, '');
+
         // cleanup first
         var versionsFolders = fs.readdirSync(frameworkPath);
         for (let i = 0, len = versionsFolders.length; i < len; i++) {
@@ -418,9 +427,18 @@ function PostInstall() {
                 continue;
             }
 
-            // intercept & remove existing symlinks
+            // intercept & remove existing symlinks or old versions dir
             try {
                 if ( fs.lstatSync( _(frameworkPath +'/'+ dir, true) ).isSymbolicLink() ) {
+                    new _(frameworkPath +'/'+ dir, true).rmSync();
+                    console.debug('Removing Symlink: '+ dir);
+                    continue;
+                }
+                else if (
+                    dir != currentVersion
+                    && fs.lstatSync( _(frameworkPath +'/'+ dir, true) ).isDirectory()
+                ) {
+                    console.debug('Removing old version: '+ dir);
                     new _(frameworkPath +'/'+ dir, true).rmSync()
                 }
             } catch (e) {
