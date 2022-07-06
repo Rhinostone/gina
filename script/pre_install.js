@@ -33,6 +33,7 @@ function PreInstall() {
     var init = function() {
 
         self.isGlobalInstall = false;
+        self.prefix = execSync('npm config get prefix');
 
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
@@ -263,8 +264,6 @@ function PreInstall() {
         // It is not required to update `~/.gina/main.json` &&  `~/.gina/{shortVersion}/settings.json`
 
         self.checkRequiredFolders = function(done) {
-
-            // check for `/usr/local/var`
 
             // check for `/usr/local/tmp`
             var tmpDir = getTmpDir()

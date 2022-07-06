@@ -18,14 +18,14 @@ function MQListener(opt, cb) {
     var homedir         = getEnvVar('GINA_HOMEDIR');
     var isLoggedByFile  = false; // by default
     var fileLogsList    = {};
-    
-        
+
+
     function init(opt, cb) {
         setup();
         return startMQListener(opt.port, cb);
     }
-    
-    function setup() {        
+
+    function setup() {
         var mainConfigPath  = _(homedir +'/user/extensions/logger/default/config.json', true);
         if ( !new _(mainConfigPath, true).existsSync() ) {
             //throw new Error('Required file not found: '+ mainConfigPath);
@@ -36,34 +36,34 @@ function MQListener(opt, cb) {
             isLoggedByFile = true;
         }
     }
-    
+
     /**
      * startLogRotator
-     * 
+     *
      * @param {string} name - `project name` or `hostname`
-     * 
-     * @returns 
+     *
+     * @returns
      */
     function startLogRotator(name) {
-        
+
         if ( typeof(fileLogsList[name]) == 'undefined' ) {
-            
+
             fileLogsList[name] = {
                 started: false
             }
         }
-        
+
         if (fileLogsList[name].started) {
             return;
         }
-        
+
         //homedir
         var file = name; // by default, it should be hostname
         if ( !/^gina$/.test(name) && /\@/.test(name) ) {
             name     = opt.name.split(/\@/)[1];
-            file = name;        
+            file = name;
         }
-        file += '.log';        
+        file += '.log';
         var filename = _(GINA_LOGDIR +'/'+ file);
         var filenameObj = new _(filename);
         if ( !filenameObj.existsSync() ) {
@@ -81,16 +81,16 @@ function MQListener(opt, cb) {
             compress: true,
             count: 3
         };
-        var rotatorOptionsPath = _(homedir +'/user/extensions/logger/file.json', true);
+        var rotatorOptionsPath = _(homedir +'/user/extensions/logger/file/config.json', true);
         if ( new _(rotatorOptionsPath).existsSync() ) {
             try {
-                rotatorOptions = merge( requireJSON(rotatorOptionsPath), rotatorOptions );
+                rotatorOptions = merge( requireJSON(rotatorOptionsPath).logrotator, rotatorOptions );
             } catch (userConfigErr) {
                 throw userConfigErr
-            }            
+            }
         }
-        
-        
+
+
         var rotator = require(__dirname + './../lib/logrotator').rotator;
         // check file rotation every 5 minutes, and rotate the file if its size exceeds 10 mb.
         // keep only 3 rotated files and compress (gzip) them.
@@ -104,14 +104,14 @@ function MQListener(opt, cb) {
         rotator.on('rotate', function(file) {
             console.debug('[MQListener] file ' + file + ' was rotated!');
         });
-        
+
         fileLogsList[name].started = true;
     }
-    
+
     self.report = function(sessionId, payload) {
-        //process.stdout.write(  '[MQListener] sending MQSpeaker to `'+ sessionId +'` '+ JSON.stringify(payload) +'\n' );   
+        //process.stdout.write(  '[MQListener] sending MQSpeaker to `'+ sessionId +'` '+ JSON.stringify(payload) +'\n' );
         sessions[sessionId].write( JSON.stringify(payload) +'\r\n');
-        // 
+        //
         // dispatching to onctainsers/flows
         // var i = null , r = sessions[sessionId].request;
         // if ( typeof(forwardList[r]) == 'undefined' ) {
@@ -119,7 +119,7 @@ function MQListener(opt, cb) {
         // }
         if ( forwardList && forwardList.count() > 0 ) {
             for ( let r in forwardList) {
-                let i = -1;                                
+                let i = -1;
                 while ( i < forwardList[r].length-1) {
                     i++;
                     let forwardSessionId = forwardList[r][i];
@@ -129,36 +129,36 @@ function MQListener(opt, cb) {
                     }
                     if (sessions[forwardSessionId]) {
                         if (payload.loggers) {
-                            self.respond(forwardSessionId, sharedConfig);                   
+                            self.respond(forwardSessionId, sharedConfig);
                             continue;
                         }
                         self.respond(forwardSessionId, payload);
-                    }   
+                    }
                 }
             }
         }
     }
-    
+
     // self.tail = function(sessionId, payload) {
-    //     //process.stdout.write(  '[MQListener] sending tail to `'+ sessionId +'` '+ JSON.stringify(payload) +'\n' );        
+    //     //process.stdout.write(  '[MQListener] sending tail to `'+ sessionId +'` '+ JSON.stringify(payload) +'\n' );
     //     sessions[sessionId].write( JSON.stringify(payload) +'\r\n')
     // }
-    
+
     self.respond = function(sessionId, payload) {
-        //process.stdout.write(  '[MQListener] sending `'+ sessionId +'` '+ JSON.stringify(payload) +'\n' ); 
+        //process.stdout.write(  '[MQListener] sending `'+ sessionId +'` '+ JSON.stringify(payload) +'\n' );
         sessions[sessionId].write( JSON.stringify(payload) +'\r\n');
     }
-    
+
     function startMQListener(port, cb) {
         // AbortController is a global object
         const controller = new AbortController();// jshint ignore:line
         var server = net.createServer( function(conn) {//'connection' listener
-                                    
+
             conn.sessionId = uuid.v4();
             // conn.request = 'report'; // by default
-            sessions[conn.sessionId] = conn;            
+            sessions[conn.sessionId] = conn;
             conn.write(JSON.stringify({ sessionId: conn.sessionId }) +'\r\n' );
-            
+
             //feedback.
             var forwardId = null;
             conn.on('end', function() {
@@ -169,7 +169,7 @@ function MQListener(opt, cb) {
                         forwardList[this.request].splice(forwardId, 1);
                     }
                 }
-                console.debug('[MQListener] (end) client disconected');                
+                console.debug('[MQListener] (end) client disconected');
                 //process.stdout.write('[MQListener] (end) client disconected\n');
                 //conn.end();
             });
@@ -182,7 +182,7 @@ function MQListener(opt, cb) {
                         forwardList[this.request].splice(forwardId, 1);
                     }
                 }
-                    
+
                 console.info('[MQListener] (exit) client forced to exit');
                 //process.stdout.write('[MQListener] (exit) client forced to exit\n');
                 //conn.end();
@@ -193,28 +193,28 @@ function MQListener(opt, cb) {
             // do not use console to send data to clients
             conn.on('data', function(data) {
                 payloads = data.toString();
-                
+
                 // filter payloads
                 if ( /^(\{\"|\[\{\")/.test(payloads) ) {
                     payloads = payloads.split(/\r\n/g);
                     //console.log(payloads);
-                    i = -1; 
-                    while(i < payloads.length) { 
+                    i = -1;
+                    while(i < payloads.length) {
                         i++;
                         let payload = payloads[i];
                         if ( /^\{/.test(payload) && /\}$/.test(payload)) {
                             let pl = JSON.parse(payload);
-                            
-                                                        
+
+
                             // mostly after client that acknowledeged sessionId
                             if (!pl.content) {
                                 process.stdout.write(  '[MQListener] (undefined content) '+ JSON.stringify(pl, null) +'\n' );
                             }
-                            
+
                             if (pl.loggers) {
                                 sharedConfig.loggers = merge(sharedConfig.loggers, pl.loggers);// jshint ignore:line
                             }
-                            
+
                             if (pl.request && !this.request) {
                                 this.request = pl.request;
                                 // forward to all but `speakers`
@@ -231,11 +231,11 @@ function MQListener(opt, cb) {
                                 // by default
                                 this.request = 'report';
                             }
-                            
-                            
-                            
+
+
+
                             if ( this.request && this.sessionId ) {
-                                
+
                                 if ( typeof(self[this.request]) != 'undefined' ) {
                                     self[this.request](this.sessionId, pl);
                                     continue;
@@ -243,21 +243,21 @@ function MQListener(opt, cb) {
                                 self.respond(this.sessionId, pl);
                                 continue;
                             }
-                            
+
                             // uncatched sessionId - not supposed to get there
                             process.stdout.write(  '[MQListener] '+ pl.content +'\n' );
-                        }                        
+                        }
                     }
-                    
+
                     return
                 }
-                
+
                 // regular messages
                 process.stdout.write(  '[MQListener] '+ payloads +'\n'  );
-            });            
-            
+            });
+
             conn.on('connect', function(data) {
-                console.info( '[MQListener] connect received "'+ data.toString()  +'"' );                
+                console.info( '[MQListener] connect received "'+ data.toString()  +'"' );
             });
         });
 
@@ -268,20 +268,20 @@ function MQListener(opt, cb) {
             } else {
                 console.emerg('[MQListener] Could not start', err.stack)
             }
-            
+
             if (cb) {
                 cb(err);
             }
         });
-        
-        
+
+
         server.on('close', function() {
             for ( let i = 0, len = sessions.length; i < len; i++) {
                 //sessions[i].close();
                 sessions[i].destroy()
             }
         });
-        
+
         server.listen({
             host: '127.0.0.1',
             port: port,
@@ -293,10 +293,10 @@ function MQListener(opt, cb) {
                 cb(false);
             }
         });
-        
+
         return server;
     }
-    
+
     return init(opt, cb);
 }
 module.exports = MQListener;

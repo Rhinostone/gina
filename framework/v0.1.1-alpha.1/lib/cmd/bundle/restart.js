@@ -16,40 +16,40 @@ var console     = lib.logger;
  *
  * */
 function Restart(opt, cmd) {
-    
+
     var self    = {};
-    
+
     var init = function(opt, cmd) {
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
-        
+
         // check CMD configuration
         if (!isCmdConfigured()) return false;
-        
+
         self.cmdStr = process.argv.splice(0, 2).join(' ');
-        
+
         self.inheritedArgv = [];
         for (let i = 0, len = process.argv.length; i < len; i++) {
             if ( /^\-\-/.test(process.argv[i]) ) {
                 self.inheritedArgv.push(process.argv[i])
             }
         }
-        
-        // start all bundles   
-        opt.onlineCount = 0;   
-        opt.notStarted = [];  
+
+        // start all bundles
+        opt.onlineCount = 0;
+        opt.notStarted = [];
         if (!self.name) {
             restart(opt, cmd, 0);
         } else {
             restart(opt, cmd);
-        }        
+        }
     }
-    
+
     var restart = function(opt, cmd, bundleIndex) {
-             
+
         var isBulkRestart = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkRestart) ? self.bundles[bundleIndex] : self.name;
-                
+
         // console.debug('bundle -> ', bundle);
         var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
         // console.debug('env -> ', env);
@@ -57,25 +57,25 @@ function Restart(opt, cmd) {
         // console.debug('protocol -> ', protocol);
         var scheme = self.bundlesByProject[self.projectName][bundle].def_scheme;
         // console.debug('scheme -> ', scheme);
-        var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];        
+        var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];
         // console.debug('port -> ', bundlePort);
-                
+
         var msg = null;
         if (!isDefined('bundle', bundle)) {
-            
+
             msg = 'Bundle [ ' + bundle + ' ] is not registered inside `@' + self.projectName + '`';
             console.error(msg);
             opt.client.write(msg);
             end(opt, cmd, isBulkRestart, bundleIndex, true)
 
         } else {
-            
+
             isRealApp(bundle, function(err, appPath) {
                 if (err) {
                     console.error(err.stack || err.message)
                 }
-                               
-                
+
+
                 var error = null;
                 //console.debug(' OPTIONS => ', opt.debugPort, opt.debugBrkEnabled);
                 //console.info('running: gina bundle:restart '+ bundle + '@' + self.projectName);
@@ -91,23 +91,23 @@ function Restart(opt, cmd) {
                     cmd += '='+ opt.debugPort
                 }
                 cmd = cmd.replace(/\$(gina)/g, self.cmdStr);
-                
+
                 console.debug('Executing: '+cmd);
                 msg = 'Restarting, please wait ...';
                 opt.client.write('\n\r'+msg +'\n');
-                
+
                 // If it is stuck, the problem is not here ... cmd.start should be a good start
                 exec(cmd, function(err, stdout, stderr) {
-                      
+
                     if (err) {
                         error = err.toString();
                         console.error(error);
                         //opt.notStopped.push(bundle + '@' + self.projectName);
                         return setTimeout(() => {
                             end(opt, cmd, isBulkRestart, bundleIndex, true)
-                        }, 500);                        
+                        }, 500);
                     }
-                    
+
                     // retrieve messages from the parent stdout
                     if (stdout) {
                         console.log(stdout.replace(/\n\rTrying to.*/gm, ''));
@@ -120,34 +120,34 @@ function Restart(opt, cmd) {
             })//EO isRealApp
         }
     }
-    
+
     var end = function (opt, cmd, isBulkRestart, i, error) {
-        if (isBulkRestart) {            
-            ++i;            
+        if (isBulkRestart) {
+            ++i;
             if ( typeof(self.bundles[i]) != 'undefined' ) {
                 restart(opt, cmd, i)
             } else {
-                
+
                 if ( typeof(error) != 'undefined') {
                     return process.exit(1);
                 }
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
-                    
+
                 process.exit(0);
             }
         } else {
             if ( typeof(error) != 'undefined') {
                 return process.exit(1);
             }
-            
+
             if (!opt.client.destroyed)
-                opt.client.emit('end');        
-                
-            process.exit(0);               
-        }        
+                opt.client.emit('end');
+
+            process.exit(0);
+        }
     }
-    
+
     var isRealApp = function(bundle, callback) {
 
         var p               = null
@@ -222,11 +222,11 @@ function Restart(opt, cmd) {
             })
         }
         else {
-            console.debug('[ ' + d + ' ] does not exists');            
+            console.debug('[ ' + d + ' ] does not exists');
             callback(false)
         }
     }
-    
+
     init(opt, cmd)
 };
 

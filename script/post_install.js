@@ -37,6 +37,7 @@ function PostInstall() {
         self.gina = getEnvVar('GINA_DIR');
         self.root = self.gina; // by default
         self.isGlobalInstall = false;
+        self.prefix = execSync('npm config get prefix');
 
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
@@ -55,7 +56,7 @@ function PostInstall() {
             process.exit(1);
         }
 
-
+        console.debug('prefix path: ' + self.prefix);
         console.debug('framework path: ' + self.gina);
         console.debug('framework version path: ' + self.path);
         console.debug('cwd path: ' + self.root );
@@ -163,7 +164,7 @@ function PostInstall() {
     var configureGina = function(callback) {
         // link to ./bin/cli to binaries dir
         if (!self.isWin32) {
-            var binPath     = _('/usr/local/bin');
+            var binPath     = _(self.prefix+'/bin', true);
             var cli         = _(binPath +'/gina');
             // TODO - remove this part for the next version
             var cliDebug    = _(binPath +'/gina-debug');

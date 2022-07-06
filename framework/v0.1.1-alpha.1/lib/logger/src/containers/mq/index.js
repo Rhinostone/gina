@@ -9,18 +9,18 @@ var merge       = require(__dirname +'/../../../../merge');
 function MqContainer(opt, loggers) {
     var self = {
         // flow or container name/id
-        name: 'mq' 
+        name: 'mq'
     };
-    
-    // TODO - get options like the `port` from: ~/.gina/user/extensions/logger/main.json
-    
+
+    // TODO - get options like the `port` from: ~/.gina/user/extensions/logger/{container}/config.json
+
     var MQSpeaker       = require('./speaker.js');
     opt = merge(opt, { port: 8125 });
-    var mqSpeaker       = new MQSpeaker(opt, loggers);    
-    
+    var mqSpeaker       = new MQSpeaker(opt, loggers);
+
     function init() {
         onPayload()
-        
+
         // ------------------------------------------------------------------------
         var level = 'debug';
         // Init debugging - Logs not in hierarchy will just be ignored
@@ -34,19 +34,19 @@ function MqContainer(opt, loggers) {
         }
         // ------------------------------------------------------------------------
     }
-    
-    function onPayload() {   
-        process.on('logger#'+self.name, function onPayload(payload) {                        
+
+    function onPayload() {
+        process.on('logger#'+self.name, function onPayload(payload) {
             if ( !loggers[opt.name]._options.isReporting ) {
                 return;
-            }            
+            }
             if (mqSpeaker.write) {
                 mqSpeaker.write( payload +'\r\n' );
             }
-            
+
         });
     }
-    
+
     init();
 }
 module.exports = MqContainer;
