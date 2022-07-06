@@ -15,7 +15,7 @@
  * */
 
  function LoggerHelper(opt, loggers) {
-    
+
     // BO - publishing hack
     if ( typeof(new Date().format) == 'undefined' ) {
         // trying to load prototypes if not loaded
@@ -24,14 +24,23 @@
     }
     // EO - publishing hack
     var self = {};
-     
-     
+
+
     /**
      * @function format
+     *
+     * @param {string} group
+     * @param {string} s
      * @param {string} content - to be formated
+     * @param {boolean} skipFormating
      * */
-    self.format = function(group, s, content) {        
-
+    self.format = function(group, s, content, skipFormating) {
+        if (
+            s == 'catch'
+            || typeof(skipFormating) != 'undefined' && /true/i.test(skipFormating)
+        ) {
+            return content
+        }
         if (content != '') {
             var colors = null;
             try {
@@ -39,15 +48,15 @@
             } catch(colorsErr) {
                 throw new Error('Not able to define colors. Please check logger‘s group: `'+ group +'`\n')
             }
-            
+
             var now = new Date().format('logger');
-            var sCount = s.length;            
+            var sCount = s.length;
             if ( sCount < opt._maxLevelLen ) {
                 for (; sCount < opt._maxLevelLen; ++sCount ) {
                     s +=' ';
                 }
             }
-            
+
             var repl = {
                 '%a': group, // application or service name
                 '%s': s, // severity or level
@@ -56,42 +65,43 @@
             };
 
             var patt = opt.template.match(/\%[a-z A-Z]/g);
-            
-            
+
+
             var colorCode = opt.levels[s.replace(/\s+/, '')].color;
             var _color = colors[colorCode];
             //process.stdout.write('colors code '+ colorCode  +'\n');
             //process.stdout.write('colors '+ JSON.stringify(colors[colorCode], null, 2)  +'\n');
-            
+
+
             if ( typeof(_color) != 'undefined' && _color) {
                 //process.stdout.write('colors code '+ JSON.stringify(colors, null, 2)  +'\n');
                 content = _color.open + opt.template + _color.close;
             } else { // system styles
                 content = opt.template;
             }
-            
+
             // formating output
             for (let p=0; p<patt.length; ++p) {
                 content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
             }
         }
-        
+
         // We should be using `\r` instead of `\n`
         // But it is not yet possible because of weird console.*() stdout when we are on the CLI or Framework side
         return content +'\n'
     };
-    
+
     self.getProcessProperties = function() {
         var processProperties = {bundles: []};
         var argv = process.argv;
         if ( /bundle\:(start|stop|restart)/.test(argv.join(',')) ) {
             var foundBundle = false;
-            for (let i = 0, len = argv.length; i < len; i++) {                
+            for (let i = 0, len = argv.length; i < len; i++) {
                 if ( /bundle\:(start|stop|restart)/.test(argv[i]) ) {
                     foundBundle = true;
                     continue;
                 }
-                
+
                 if ( /^\@/.test(argv[i]) ) {
                     foundBundle = false;
                     processProperties.project = argv[i].replace(/\@/, '');
@@ -101,7 +111,7 @@
                 }
             }
             if (
-                processProperties.bundles 
+                processProperties.bundles
                 && processProperties.bundles.length > 0
             ) {
                 var b = -1, bLen = processProperties.bundles.length-1;
@@ -112,10 +122,10 @@
             }
             return processProperties;
         }
-        
+
         return processProperties;
     }
-        
+
     return self
 }
 module.exports = LoggerHelper;

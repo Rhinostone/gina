@@ -42,7 +42,9 @@ function PrepareVersion() {
     var self    = {};
 
     var init = function() {
-        self.isWin32 = isWin32();
+        self.isWin32    = isWin32();
+        self.prefix     = execSync('npm config get prefix');
+
         begin(0);
     };
 

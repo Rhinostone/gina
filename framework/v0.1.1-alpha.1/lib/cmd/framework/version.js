@@ -31,7 +31,7 @@ function Version(opt){
             console.error(msg.basic[5])
         }
 
-        end();
+        // end();
     };
 
     var end = function(err) {

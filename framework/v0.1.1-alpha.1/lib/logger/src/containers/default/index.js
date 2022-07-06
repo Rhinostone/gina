@@ -6,11 +6,11 @@
 function DefaultContainer(opt, loggers) {
     var self = {
         // flow or container name/id
-        name: 'default' 
+        name: 'default'
     };
     var loggerHelper    = require(__dirname +'/../../helper.js')(opt, loggers);
     var format          = loggerHelper.format;
-    
+
     function init() {
         onPayload();
         // ----------------------------Debug---------------------------------------
@@ -26,25 +26,30 @@ function DefaultContainer(opt, loggers) {
         }
         // ------------------------------------------------------------------------
     }
-    
-    function onPayload() {   
+
+    function onPayload() {
         process.on('logger#'+self.name, function onPayload(payload) {
-            
-            payload = JSON.parse(payload);
-            
-            // loggerServer.emit('logger#default', JSON.stringify({
-            //     group       : payload.group,
-            //     level       : payload.level,
-            //     // Raw content !
-            //     content     : payload.content
-            // }));
-            
-            process.stdout.write( format(payload.group, payload.level, payload.content) );
+
+            try {
+                var payloadObj = JSON.parse(payload);
+
+                // loggerServer.emit('logger#default', JSON.stringify({
+                //     group       : payload.group,
+                //     level       : payload.level,
+                //     // Raw content !
+                //     content     : payload.content
+                // }));
+
+                process.stdout.write( format(payloadObj.group, payloadObj.level, payloadObj.content, payloadObj.skipFormating) );
+            } catch (e) {
+                process.stdout.write( format('', '', payload, true) );
+            }
+
         });
     }
-    
-    
-    
+
+
+
     init();
 }
 module.exports = DefaultContainer;

@@ -8,9 +8,9 @@
 /**
  * Credits & thanks to Steven Levithan :)
  * http://blog.stevenlevithan.com/archives/date-time-format
- * 
- * 
- * 
+ *
+ *
+ *
  * Original Copyrights
  * Date Format 1.2.3
  * (c) 2007-2009 Steven Levithan <stevenlevithan.com>
@@ -28,15 +28,15 @@
  * @param {string} mask
  */
 function DateFormatHelper() {
-    
+
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
-    
-    
+
+
     // if ( typeof(define) === 'function' && define.amd ) {
     //     var Date = this.Date;
     // }
-    
+
     var self = {};
     // language-country
     self.culture = 'en-US'; // by default
@@ -52,7 +52,7 @@ function DateFormatHelper() {
         fullDate:       "dddd, mmmm d, yyyy",
         // common
         cookieDate:     "GMT:ddd, dd mmm yyyy HH:MM:ss",
-        logger:       "[yyyy mmm dd HH:MM:ss]",
+        logger:       "yyyy mmm dd HH:MM:ss",
         shortTime:      "h:MM TT",
         shortTime2:      "h:MM",
         mediumTime:     "h:MM:ss TT",
@@ -67,7 +67,7 @@ function DateFormatHelper() {
         isoDateTime:    "yyyy-mm-dd'T'HH:MM:ss",
         isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
     };
-    
+
     self.i18n = {
         'en': {
             dayNames: [
@@ -106,10 +106,10 @@ function DateFormatHelper() {
             }
         }
     };
-    
+
     /**
-     * 
-     * @param {string} culture (5 chars) | lang (2 chars) 
+     *
+     * @param {string} culture (5 chars) | lang (2 chars)
      */
     var setCulture = function(date, culture) {
         if (/\-/.test(culture) ) {
@@ -117,24 +117,24 @@ function DateFormatHelper() {
             self.lang = culture.split(/\-/)[0];
         } else {
             self.lang = culture
-        }      
-        
+        }
+
         return this
     }
 
     var format = function(date, mask, utc) {
-        
+
         // if ( typeof(merge) == 'undefined' || !merge ) {
         //     merge = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
-            
+
         // }
-        
+
         var dF          = self
             , i18n      = dF.i18n[dF.lang] || dF.i18n['en']
             //, masksList = merge(i18n.masks, dF.masks)
             , masksList = null
         ;
-        
+
         try {
             masksList = merge(i18n.masks, dF.masks);
         } catch( mergeErr) {
@@ -143,7 +143,7 @@ function DateFormatHelper() {
             merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
             masksList = merge(i18n.masks, dF.masks);
         }
-        
+
         if ( typeof(dF.i18n[dF.culture]) != 'undefined' ) {
             i18n  = dF.i18n[dF.culture];
             if ( typeof(dF.i18n[dF.culture].mask) != 'undefined' ) {
@@ -324,25 +324,25 @@ function DateFormatHelper() {
         }
         return days;
     }
-    
-    
+
+
     /**
      * getQuarter
      * Get quarter number
      * To test : https://planetcalc.com/1252/
      * Based on fiscal year- See.: https://en.wikipedia.org/wiki/Fiscal_year
-     * 
+     *
      * TODO - Complete fiscalCodes
-     * 
+     *
      * @param {object} [date] if not defined, will take today's value
      * @param {string} [code] - us|eu
-     * 
+     *
      * @returns {number} quarterNumber - 1 to 4
      */
     var fiscalCodes = ['us', 'eu', 'corporate'];
     var getQuarter = function(date, code) {
         if (
-            arguments.length == 1 
+            arguments.length == 1
             && typeof(arguments[0]) == 'string'
         ) {
             if ( fiscalCodes.indexOf(arguments[0].toLowerCase()) < 0 ) {
@@ -357,14 +357,14 @@ function DateFormatHelper() {
         if ( typeof(code) == 'undefined') {
             code = 'corporate';
         }
-        
+
         code = code.toLowerCase();
         var q = [1,2,3,4]; // EU & corporates by default
         switch (code) {
             case 'us':
                 q = [4,1,2,3];
                 break;
-            
+
             case 'corportate':
             case 'eu':
                 q = [1,2,3,4]
@@ -374,23 +374,23 @@ function DateFormatHelper() {
                 q = [1,2,3,4];
                 break;
         }
-        
+
         return q[Math.floor(date.getMonth() / 3)];
     }
-    
+
     /**
      * getHalfYear
-     * 
+     *
      * Based on fiscal year- See.: https://en.wikipedia.org/wiki/Fiscal_year
-     * 
-     * @param {object} date 
+     *
+     * @param {object} date
      * @param {string} code
-     * 
+     *
      * @returns halfYear number - 1 to 2
      */
     var getHalfYear = function(date, code) {
         if (
-            arguments.length == 1 
+            arguments.length == 1
             && typeof(arguments[0]) == 'string'
         ) {
             if ( fiscalCodes.indexOf(arguments[0].toLowerCase()) < 0 ) {
@@ -405,40 +405,40 @@ function DateFormatHelper() {
         if ( typeof(code) == 'undefined') {
             code = 'corporate';
         }
-        
+
         code = code.toLowerCase();
-        
+
         return (date.getQuarter(code) <=2 ) ? 1 : 2;
     }
-    
+
     /**
      * getWeekISO8601
      * Get week number
      * ISO 8601
      * To test : https://planetcalc.com/1252/
-     * 
+     *
      * @param {object} [date] if not defined, will take today's value
-     * 
+     *
      * @returns {number} weekNumber
      */
     var getWeekISO8601 = function(date) {
         // Copy date so don't modify original
-        d = new Date(date.getFullYear(), date.getMonth(), date.getDate());    
+        d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
         // Make Sunday's day number 7
         var dayNum = d.getDay() || 7;
         d.setDate(d.getDate() + 4 - dayNum);
         var yearStart = new Date(Date.parse(d.getFullYear(),0,1));
-        
+
         return Math.ceil((((d - yearStart) / 86400000) + 1)/7)
     }
-    
+
     /**
      * getWeek
      * Get week number
      * To test : https://planetcalc.com/1252/
-     * 
+     *
      * @param {object} [date] if not defined, will take today's value
-     * 
+     *
      * @returns {number} weekNumber - 1 to 53
      */
     var getWeek = function(date, standardMethod) {
@@ -448,14 +448,14 @@ function DateFormatHelper() {
         if ( typeof(standardMethod) == 'undefined') {
             standardMethod = 'ISO 8601';
         }
-        
+
         standardMethod = standardMethod.replace(/\s+/g, '').toLowerCase();
         switch (standardMethod) {
             case 'corporate':
             case 'eu':
             case 'iso8601':
                 return getWeekISO8601(date)
-        
+
             default:
                 return getWeekISO8601(date)
         }
@@ -514,7 +514,7 @@ function DateFormatHelper() {
         addDays         : addDays,
         addYears        : addYears
     };
-    
+
     return _proto
 
 };
