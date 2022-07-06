@@ -186,7 +186,6 @@ function PrepareVersion() {
         // keeping package.json up to date
         //"main": "./framework/v{version}/core/gna",
         package.main = './framework/v'+ targetedVersion +'/core/gna';
-        console.debug('package.main -> ', './framework/v'+ targetedVersion +'/core/gna', ' -> ', pack);
         new _(pack, true).rmSync();
         lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
 
@@ -292,55 +291,6 @@ function PrepareVersion() {
             }
         }
 
-        done();
-    }
-
-
-    self.checkIfIsContributorEnv = function(done) {
-        var isContribEnv = false;
-        if ( new _(self.ginaPath + '/.git', true).existsSync() ) {
-            isContribEnv = true;
-        }
-        var homeDir = getUserHome() || null;
-        if (!homeDir) {
-            return done(new Error('No $HOME path found !'))
-        }
-        var ginaHomeDir = homeDir.replace(/\n/g, '') + '/.gina';
-        setEnvVar('GINA_HOMEDIR', ginaHomeDir);
-
-        var npmGlobal = homeDir.replace(/\n/g, '') + '/.npm-global';
-        var IsNpmGlobalFound = false;
-        if ( new _(npmGlobal, true).existsSync() ) {
-            IsNpmGlobalFound = true;
-
-            if ( ! new _(npmGlobal +'/bin', true).existsSync() ) {
-                new _(npmGlobal +'/bin', true).mkdirSync()
-            }
-            if ( ! new _(npmGlobal +'/lib2/node_modules2', true).existsSync() ) {
-                new _(npmGlobal +'/lib2/node_modules2', true).mkdirSync()
-            }
-        }
-
-        console.debug(self.gina, ' | ', ginaHomeDir);
-        console.debug('Is contributor‘s env ? : '+ isContribEnv);
-
-        // Fixing `npm link` VS `.npm-global` issue on contributors env
-        /**
-         * Patch designed to use `npm link gina` in your project
-         * without taking the risk to get the wrong package version
-         *
-         * See.:
-         * 4 reasons to avoid using `npm link`  - https://hirok.io/posts/avoid-npm-link
-         * */
-        if (isContribEnv && IsNpmGlobalFound) {
-            console.debug('Contributor case detected ...\n', JSON.stringify(process.env, null, 2));
-            // symlink the lib
-            // ln -s /usr/local/lib/node_modules/gina ~/.npm-global/lib/node_modules/gina
-            // symlink the bin
-            // ln -s ~/.npm-global/lib/node_modules/gina/bin/gina ~/.npm-global/bin/gina
-        }
-
-        //process.exit(0);
         done();
     }
 

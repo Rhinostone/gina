@@ -9,9 +9,9 @@ var help            = require(ginaPath + '/utils/helper');
 var aliases = require( getPath('gina').lib + '/cmd/aliases.json' );
 
 function Initialize(opt) {
-    
+
     var self = {};
-    var init = function(opt) {        
+    var init = function(opt) {
         self.opt = opt;
         begin()
     }
@@ -53,7 +53,7 @@ function Initialize(opt) {
         return task
     }
 
-    var run = function(opt, cmd) {        
+    var run = function(opt, cmd) {
         opt.task = checkForAliases(opt.task);
         var filename ='/cmd/' + opt.task.topic + '/' + opt.task.action + '.js'
         var path = getPath('gina').lib + filename;
@@ -63,7 +63,8 @@ function Initialize(opt) {
                 delete require.cache[require.resolve(path)];
             require(path)(opt, cmd)
         } catch(err) {
-            console.crit('Gina has some troubles with command [ ', process.argv.join(' ') + ' ]\n' + err.stack)
+            console.crit('Gina has some troubles with command [ ', process.argv.join(' ') + ' ]\n' + err.stack);
+            process.exit(-1);
         }
     }
 
@@ -97,14 +98,14 @@ function Initialize(opt) {
         } else {
             version = getEnvVar('GINA_VERSION')
         }
-        
+
         if ( !getEnvVar('GINA_SHORT_VERSION') ) {
             var shortVersion = version.split('.');
             shortVersion.splice(2);
             shortVersion = shortVersion.join('.');
             setEnvVar('GINA_SHORT_VERSION', shortVersion);
         }
-        
+
 
         var release = version.split('.').splice(0,2).join(".");
         setEnvVar('GINA_RELEASE', release, true);
@@ -135,10 +136,10 @@ function Initialize(opt) {
             'version' : version
         };
         data = whisper(dic, data);
-        
-                
+
+
         if ( !fs.existsSync(target) ) {
-            try {                
+            try {
                 lib.generator.createFileFromDataSync(data, target)
             } catch (err) {
                 console.error(err.stack);
@@ -148,63 +149,63 @@ function Initialize(opt) {
         // update if needed : like the version number ...
         var mainConfig  = require(target);
         mainConfig      = whisper(dic, mainConfig);
-        
+
         // check if new definitions after update
         for (let k in data) {
             if ( typeof(mainConfig[k]) == 'undefined' ) {
                 mainConfig[k] = ( typeof(data[k]) == 'object' ) ? JSON.clone(data[k]) : data[k];
             }
         }
-        
-        
+
+
         // envs
         mainConfig.envs = merge(mainConfig.envs, data.envs, true);
         // scopes
         mainConfig.scopes = merge(mainConfig.scopes, data.scopes, true);
-        
+
         // updating protocols, schemes, cultures, log_levels
         mainConfig.protocols    = merge(mainConfig.protocols, data.protocols, true);
         mainConfig.schemes      = merge(mainConfig.schemes, data.schemes, true);
         mainConfig.cultures     = merge(mainConfig.cultures||{}, data.cultures, true);
         mainConfig.log_levels   = merge(mainConfig.log_levels||{}, data.log_levels, true);
-        
-        
+
+
         // don't remove def_protocol
         var defProtocol = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
         var defScheme   = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
         var defCulture  = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
         var defTimezone = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
         var defLogLevel = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
-        
-        
+
+
         if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
             mainConfig.protocols[self.release].push(defProtocol);
-        
+
         if ( mainConfig.schemes[self.release].indexOf(defScheme) < 0 )
             mainConfig.schemes[self.release].push(defScheme);
-            
+
         if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
             mainConfig.cultures[self.release].push(defCulture);
-        
+
         if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
             mainConfig.cultures[self.release].push(defCulture);
-            
+
         // Update only when needed
         if (!mainConfig.def_culture)
             mainConfig.def_culture = data.def_culture;
         if (!mainConfig.def_timezone)
             mainConfig.def_timezone = data.def_timezone;
-            
+
         if (!mainConfig.def_log_level)
             mainConfig.def_log_level = data.def_log_level;
-            
+
         mainConfig.protocols[self.release].sort();
         mainConfig.schemes[self.release].sort();
         mainConfig.cultures[self.release].sort();
-        
+
         // commit
         lib.generator.createFileFromDataSync(mainConfig, target);
-        
+
         setEnvVar('GINA_CULTURES', mainConfig.cultures[self.release]);
         setEnvVar('GINA_CULTURE', defCulture);
         setEnvVar('GINA_TIMEZONE', defTimezone);
@@ -217,22 +218,22 @@ function Initialize(opt) {
      *
      **/
     self.checkIfPorts = function() {
-        console.debug('Checking ports...');        
+        console.debug('Checking ports...');
         var mainConfig  = require(self.opt.homedir + '/main.json');
         var target = _(self.opt.homedir +'/ports.json');
 
         if ( !fs.existsSync(target) ) {
-            
+
             var protocols   = mainConfig.protocols[self.release]
                 , schemes   = mainConfig.schemes[self.release]
                 , ports     = {};
-            
+
             for (let p = 0, pLen = protocols.length; p < pLen; ++p) {
                 ports[protocols[p]] = {};
                 for (let s = 0, sLen = schemes.length; s < sLen; ++s) {
                     ports[protocols[p]][schemes[s]] = {}
                 }
-            }                
+            }
             lib.generator.createFileFromDataSync(
                 ports,
                 target
@@ -281,11 +282,11 @@ function Initialize(opt) {
         ) {
             console.error('the framework has no dev env linked to any' +
                 'environment to gina\'s.\nUse: $ gina env:link-dev <your_new_dev_env>');
-            
+
             process.exit(1)
         }
     }
-    
+
     /**
      * Check scope
      *
@@ -300,7 +301,7 @@ function Initialize(opt) {
             process.exit(1)
         }
 
-        
+
         // has local scope ?
         if (
             typeof(main['local_scope']) == 'undefined' ||
@@ -310,7 +311,7 @@ function Initialize(opt) {
         ) {
             console.error('the framework has no local scope linked to any ' +
                 'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
-            
+
             process.exit(1)
         }
     }
@@ -331,7 +332,7 @@ function Initialize(opt) {
             , userSettings  = {}
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
         ;
-        
+
         // case of port & debug_port updated
         var targetObj = new _(target);
         var localUserSettings = requireJSON(target);
@@ -340,12 +341,12 @@ function Initialize(opt) {
                 setEnvVar('GINA_PORT', ~~localUserSettings.port);
             }
         }
-        if ( !getEnvVar('GINA_DEBUG_PORT') && targetObj.existsSync() ) {            
+        if ( !getEnvVar('GINA_DEBUG_PORT') && targetObj.existsSync() ) {
             if ( typeof(localUserSettings.debug_port) != 'undefined' ) {
                 setEnvVar('GINA_DEBUG_PORT', ~~localUserSettings.debug_port);
             }
-        }        
-        
+        }
+
 
         // updated on framework start : you never know which user is going to start gina (root ? sudo ? regular user)
         // user settings override is passed through argv while using `gina framework:set` : —-logdir=value  —-tmpdir=value —-rundir=value —-homedir=value
@@ -354,7 +355,7 @@ function Initialize(opt) {
             , gid   = process.getgid();
 
         try {
-            
+
             /**
              * Before updateing here, if you have new settings,
              * make sure to complete : self.checkIfMain()
@@ -387,12 +388,12 @@ function Initialize(opt) {
             settings = whisper(dic, settings);
             settings = merge(userSettings, settings);
             self.settings = settings;
-            
+
             setEnvVar('GINA_PORT', settings['port']);
             setEnvVar('GINA_DEBUG_PORT', settings['debug_port']);
             setEnvVar('GINA_ENV_IS_DEV', settings['env_is_dev']);
             setEnvVar('GINA_SCOPE_IS_LOCAL', settings['scope_is_local']);
-            
+
             console.debug('Framework env is: ', env);
 
             lib.generator.createFileFromDataSync(
@@ -404,7 +405,7 @@ function Initialize(opt) {
             process.exit(1)
         }
     }
-    
+
     /**
      * Checking projects
      *
@@ -413,14 +414,14 @@ function Initialize(opt) {
         console.debug('Checking projects...');
         var main = requireJSON( self.opt.homedir + '/main.json' );
         var target = _(self.opt.homedir +'/projects.json', true);
-        
+
         if ( !fs.existsSync(target) ) {
             lib.generator.createFileFromDataSync(
                 {},
                 target
             )
         }
-        
+
         var projects = requireJSON(target);
         var newProjects = JSON.clone(projects);
         for (let name in projects) {
@@ -428,30 +429,30 @@ function Initialize(opt) {
             for (let prop in main) {
                 if ( typeof(project[prop]) != 'undefined' ) continue;
                 //if ( !Array.isArray(main[prop][self.release]) ) continue;
-                
+
                 if ( !newProjects[name][prop] /**&& Array.isArray(main[prop][self.release])*/ ) {
                     newProjects[name][prop] = null;
                 }
                 newProjects[name][prop] = JSON.clone(main[prop][self.release])
             }
         }
-        
+
         //console.debug('----> ', JSON.stringify(newProjects, null, 2));
         lib.generator.createFileFromDataSync(
             newProjects,
             target
         )
-        
+
     }
 
-    
-    
-    
+
+
+
     self.checkIfCertificatesDir = function() {
         var certsDir = new _( getEnvVar('GINA_HOMEDIR') + '/certificates', true);
         var theRSARootCertsDir = new _(certsDir.toString() + '/RSARootCerts', true);
         var scopesDir = new _(certsDir.toString() + '/scopes', true);
-        
+
         if ( !certsDir.existsSync() ) {
             certsDir.mkdirSync()
         }
@@ -461,16 +462,16 @@ function Initialize(opt) {
         if ( !scopesDir.existsSync() ) {
             scopesDir.mkdirSync()
         }
-        
+
         var mainConfig = require( _(self.opt.homedir + '/main.json', true) );
         var scopes = mainConfig.scopes[self.release];
-        
+
         for (let i = 0, len = scopes.length; i < len; i++) {
             let scopeDir = new _( scopesDir.toString() +'/'+ scopes[i], true);
             if ( !scopeDir.existsSync() ) {
                 scopeDir.mkdirSync()
-            } 
-            
+            }
+
         }
     }
 
@@ -482,7 +483,7 @@ function Initialize(opt) {
     // self.checkFrameworkLocals = function() {
 
     // }
-    
+
     self.readSettings = function() {
         for (let s in self.settings) {
             if (!/^\_/.test(s) && !getEnvVar('GINA_' + s.toUpperCase()) ) {
