@@ -1,5 +1,6 @@
 {
   "name": "gina",
+  "version": "{version}",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -14,7 +15,6 @@
     "gina.io",
     "ginajs"
   ],
-  "version": "{version}",
   "repository": {
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"

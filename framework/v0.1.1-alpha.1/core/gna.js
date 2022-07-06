@@ -31,7 +31,6 @@ var config      = null;
 var lib         = require('./../lib');
 
 var console     = lib.logger;
-console.log('!!!!!!!!!! loading Lib #1');
 var Proc        = lib.Proc;
 var locales     = require('./locales');
 var plugins     = require('./../core/plugins');

@@ -7,9 +7,10 @@
  */
 
 var fs          = require('fs');
+var os          = require("os");
 var util        = require('util');
 var promisify   = util.promisify;
-const { execSync } = require('child_process');
+var { execSync } = require('child_process');
 
 //var lib         = require('./lib');
 // var console     = lib.logger;
@@ -43,6 +44,7 @@ function PreInstall() {
 
         if ( !self.isGlobalInstall ) { //global install
             self.root = process.cwd(); // project path
+            self.tmpDir = os.tmpdir(); // default tmp path
             console.error('local installation is not supported for this version at the moment.');
             console.info('please use `npm install -g gina`');
             process.exit(1);
@@ -81,8 +83,12 @@ function PreInstall() {
     }
 
     self.checkRequirements = async function(done) {
+        // TODO - handle windows case
+        if ( /true/i.test(self.isWin32) ) {
+            return done( new Error('Windows in not yet fully supported. Thank you for your patience'));
+        }
 
-        // Let's install `colors` into `GINA_DIR` it will be removed by the `post_install.js` script
+        // Let's temporarily install `colors` into `GINA_DIR` it will be removed by the `post_install.js` script
         var initialDir = process.cwd();
         var frameworkPath   = __dirname +'/..';
         if ( !fs.existsSync(frameworkPath +'/node_modules/colors') ) {
@@ -109,74 +115,74 @@ function PreInstall() {
 
 
     /**
-     * setup permissions
+     * Setup global installation path
+     * Eg.: npm install -g gina --prefix=~/.npm-global
+     *
+     * Resolving EACCES permissions errors when installing packages globally
      * https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally
      */
-    self.setupPermissions = async function(done) {
-        // TODO - handle windows case
-        if ( /true/i.test(self.isWin32) ) {
-            return done();
-        }
-        // create a directory for global installations
-        var npmGlobalPath = getUserHome() + '/.npm-global';
+    // self.setupPermissions = async function(done) {
 
-        console.info('Setting npm global path: '+ npmGlobalPath +' '+ new _(npmGlobalPath).existsSync() );
-        var npmGlobalPathObj = new _(npmGlobalPath);
-        if ( !npmGlobalPathObj.existsSync() ) {
-            npmGlobalPathObj.mkdirSync()
-        }
-        // from `/usr/local` -> `~/.npm-global`
-        var cmd = 'npm config set prefix '+ getUserHome() +'/.npm-global';
-        await promisify(run)(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
-            .catch(function onError(err){
-                if (err) {
-                    console.warn('try to run: sudo ' + cmd);
-                    return done(err);
-                }
-            });
+    //     // create a directory for global installations
+    //     var npmGlobalPath = getUserHome() + '/.npm-global';
 
-        var profilePath = getUserHome() + '/.profile';
-        var profilePathObj = new _(profilePath);
-        if ( !profilePathObj.existsSync() ) {
-            cmd = 'touch '+ profilePath;
-            await promisify(run)(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
-                .catch(function onError(err){
-                    if (err) {
-                        console.warn('try to run: sudo ' + cmd);
-                        return done(err);
-                    }
-                });
-        }
+    //     console.info('Setting npm global path: '+ npmGlobalPath +' '+ new _(npmGlobalPath).existsSync() );
+    //     var npmGlobalPathObj = new _(npmGlobalPath);
+    //     if ( !npmGlobalPathObj.existsSync() ) {
+    //         npmGlobalPathObj.mkdirSync()
+    //     }
+    //     // from `/usr/local` -> `~/.npm-global`
+    //     var cmd = 'npm config set prefix '+ getUserHome() +'/.npm-global';
+    //     await promisify(run)(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+    //         .catch(function onError(err){
+    //             if (err) {
+    //                 console.warn('try to run: sudo ' + cmd);
+    //                 return done(err);
+    //             }
+    //         });
 
-        var inFile = null;
-        try {
-            inFile = execSync("cat ~/.profile | grep .npm-global/bin").toString();
-        } catch (err) {
-            // nothing to do
-        }
+    //     var profilePath = getUserHome() + '/.profile';
+    //     var profilePathObj = new _(profilePath);
+    //     if ( !profilePathObj.existsSync() ) {
+    //         cmd = 'touch '+ profilePath;
+    //         await promisify(run)(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+    //             .catch(function onError(err){
+    //                 if (err) {
+    //                     console.warn('try to run: sudo ' + cmd);
+    //                     return done(err);
+    //                 }
+    //             });
+    //     }
 
-        if (!inFile) {
-            inFile = "\n# set PATH so it includes user‘s private npm bin if exists"
-            inFile += '\nif [ -d "$HOME/.npm-global/bin" ]; then';
-            inFile += '\n    PATH="$HOME/.npm-global/bin:$PATH"';
-            inFile += '\nfi\n';
-            try {
-                fs.appendFileSync( getUserHome()+'/.profile', inFile );
-            } catch (err) {
-                return done(err);
-            }
-            inFile = null;
+    //     var inFile = null;
+    //     try {
+    //         inFile = execSync("cat ~/.profile | grep .npm-global/bin").toString();
+    //     } catch (err) {
+    //         // nothing to do
+    //     }
 
-            // we need to source/update ~/.profile
-            try {
-                execSync("source "+ profilePath);
-            } catch (err) {
-                return done(err)
-            }
-        }
+    //     if (!inFile) {
+    //         inFile = "\n# set PATH so it includes user‘s private npm bin if exists"
+    //         inFile += '\nif [ -d "$HOME/.npm-global/bin" ]; then';
+    //         inFile += '\n    PATH="$HOME/.npm-global/bin:$PATH"';
+    //         inFile += '\nfi\n';
+    //         try {
+    //             fs.appendFileSync( getUserHome()+'/.profile', inFile );
+    //         } catch (err) {
+    //             return done(err);
+    //         }
+    //         inFile = null;
 
-        done()
-    }
+    //         // we need to source/update ~/.profile
+    //         try {
+    //             execSync("source "+ profilePath);
+    //         } catch (err) {
+    //             return done(err)
+    //         }
+    //     }
+
+    //     done()
+    // }
 
     self.checkIfGinaIsAlreadyInstalled = async function(done) {
 

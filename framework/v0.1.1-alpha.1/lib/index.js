@@ -72,7 +72,6 @@ function Lib() {
     return self
 }
 // Making it global
-console.log('!!!!!!!!!! loading Lib');
 lib = new Lib();
 
 // Needed for by the daemon
