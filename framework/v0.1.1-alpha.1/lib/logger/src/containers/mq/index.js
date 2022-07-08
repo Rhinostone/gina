@@ -1,10 +1,10 @@
 'use strict';
 // Imports
-var fs          = require('fs');
-var net         = require('net');
-var util        = require('util');
-var promisify   = util.promisify;
-var merge       = require(__dirname +'/../../../../merge');
+const fs          = require('fs');
+const net         = require('net');
+const util        = require('util');
+const promisify   = util.promisify;
+const merge       = require(__dirname +'/../../../../merge');
 
 function MqContainer(opt, loggers) {
     var self = {

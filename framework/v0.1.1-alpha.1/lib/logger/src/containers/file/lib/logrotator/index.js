@@ -1,7 +1,7 @@
-var fs = require('fs');
-var util = require('util');
-var zlib = require('zlib');
-var events = require('events');
+const fs      = require('fs');
+const util    = require('util');
+const zlib    = require('zlib');
+const events  = require('events');
 
 /**
  * Performs scheduled and on demand log rotation on files

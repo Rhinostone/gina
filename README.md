@@ -1,4 +1,5 @@
 # Gina
+[![GitHub version](https://badge.fury.io/gh/Rhinostone%2Fgina.svg)](https://badge.fury.io/gh/Rhinostone%2Fgina) [![npm version](https://badge.fury.io/js/gina.svg)](https://badge.fury.io/js/gina)
 
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
@@ -132,7 +133,7 @@ Gina is shipped with [Swig](https://node-swig.github.io/swig-templates/) as the 
 
 Please, note that you have 2 types of environments : one for the framework, and one for your project & your bundles.
 
-> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. if you are contributing to the framework or prototyping your application or service, we advise using the `dev` environment.
+> By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. if you are [contributing](./README-4Contributors.md) to the framework or prototyping your application or service, we advise using the `dev` environment.
 > ```tty
 > gina framework:set --env=dev 
 > ```
@@ -189,10 +190,24 @@ gina tail
 ```
 __NB.:__ This is an alias for `gina framework:tail`
 
-By default, Gina does not store logs. Logs are treated like any other events.
+By default, Gina does not store logs. Logs are treated like any other events then printed out to the `process.stdout`.
+
 This means that if you need Gina to handle logs storage, you need a logger container (or transport) to receive and output your logs.
 
 Note that this is optional since logs are output like for other frameworks: you can catch those while writing your daemon starting script on you production server.
+
+So to handle log storage for your application, you have 2 options.
+__1) Old school way__
+```tty
+gina bundle:start frontend @myproject > /usr/local/var/log/gina/frontend.myproject.domain.log 2>&1
+```
+You can now check
+```tty
+tail - f /usr/local/var/log/gina/frontend.myproject.domain.log
+```
+
+__2) Create your own container/transport by extending gina default container__
+
 
 If you still want gina to handle logs storage, you are lucky, we have developped a file container/transport that you just need to enable.
 
@@ -206,6 +221,132 @@ You might need to restart the gina :
 gina restart
 ```
 
+__NB.: __For development purposes, using the CLI `gina tail` is still a better option because you will have a better overview of what is really going on for all your application at once & for the framework.
+
+## HTTPS, HTTP/2 and certificates
+
+### Installing a certificate
+You now want to install a certificate for your project in order to run your project with HTTPS scheme or with HTTP/2 protocol ?
+At this moment, Gina does not generate a cetificate for you, but you can use a service like [sslforfree](https://www.sslforfree.com) to genreate a free 90 days certificate, then install it into your Gina home directory depending on the scope of your host (targeted machine: local or production). 
+[SSL For Free](https://www.sslforfree.com) will provide you with a folder named with the domain you have used to setup your certificate. You just need to paste its content into the right location.
+
+The directory should be located @`~/.gina/certificates/scopes`.
+By default, `local` scope is set. But when you will go live, you should set the scope to production and paste your certificate into the right folder.
+__E.g:__ The `myproject.domain` folder should be placed into:
+- `~/.gina/certificates/scopes/local` for your dev host
+- `~/.gina/certificates/scopes/production` for you production host
+
+
+### Enable HTTPS scheme
+> __NB.:__ `certificate` is `required`.
+> By enabling HTTPS, you will do so for your entire poroject by default, but you can later set one per application.
+> And if you want to run your experimental HTTP2 implementation, you will need HTTS scheme.
+
+Check what is your actual scheme & protocol status
+```tty
+gina protocol:list @myproject
+```
+
+Setup HTTPS for the whole project
+```tty
+gina protocol:set @myproject
+```
+
+Setup HTTPS for a specific application
+```tty
+gina protocol:set frontend @myproject
+```
+
+Now, you just need to restart your bundle. You should tail your logs in order to get more details if an error is preventing you from starting.
+
+```tty
+gina tail
+```
+
+Open another terminal window
+```tty
+gina bundle:restart frontend @myproject
+```
+
+
+Depending on how you have managed to get your certificate for you dev environment, you might get this kind of mesaage preventing your application to start :
+
+```tty
+Error: unable to get issuer certificate
+    at TLSSocket.onConnectSecure (node:_tls_wrap:1530:34)
+    at TLSSocket.emit (node:events:390:28)
+    at TLSSocket._finishInit (node:_tls_wrap:944:8)
+    at TLSWrap.ssl.onhandshakedone (node:_tls_wrap:725:12) 
+```
+
+Do not panic, and follow the steps provided in the following section.
+
+### Local scope & certificate consideration
+Ignore the following instructions if you can start your application without any certificate errors.
+
+This is `important` and you will have to take additional steps to make your certificate fully valid __while developping on your `local/dev host`__.
+Since in most cases you will not have the `Root Certificate` included in your certificate, you need to generate a correct certificate including the Root Certificate. __For production, it will not be a problem__ since the Root certificate is provided by the client browser.
+
+Let say that you have downloded your certificates from __[Ssl For Free](https://sslforfree.com)__ which you have then placed under: `~/.gina/certificates/scopes/local/myproject.domain`.
+
+__Step 1__
+Go to the folder
+```tty
+cd ~/.gina/certificates/scopes/local/myproject.domain
+```
+
+List your files
+```tty
+ls
+```
+
+Output should look like
+```tty
+ca_bundle.crt	certificate.crt	private.key
+```
+
+
+```tty
+cat certificate.crt
+```
+Copy the content of `certificate.crt`
+
+Visit [https://whatsmychaincert.com](https://whatsmychaincert.com)
+Go to the `Generate the Correct Chain` tool.
+Paste the content you have just copied out of your `certificate.crt` into the field, then __do not forget to check the option__ `Include Root Certificate`.
+
+__It will download a chained certificate__.
+Rename it to `certificate.chained+root.crt` and copy/paste the file to your certificates location (~/.gina/certificates/scopes/local/myproject.domain)
+
+__Step 2__
+You now need to combine your private key with your new certificate
+Still @ `~/.gina/certificates/scopes/local/myproject.domain` ?
+
+```tty
+cat private.key certificate.chained+root.crt > certificate.combined.pem
+```
+
+__Final step__
+
+Go to your project src to add or edit your bundle config the following file : `/path/to/myproject/src/frontend/config/settings.server.credentials.dev.json`
+Where `frontend` is you bundle/application
+
+We just need to override Gina default certificate paths
+```tty
+{
+    // "privateKey": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/private.key",
+    "certificate": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.chained+root.crt",
+    "ca": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.combined.pem"
+}
+```
+
+Do this for all of you `myproject`'s bundles, then restart your bundles
+```tty
+gina bundle:restart @myproject
+```
+
+
+
 ## Troubleshooting
 
 ### I can't start my bundle
@@ -216,6 +357,11 @@ __Are you starting for the first time ?__
 
 
 - If you have just cloned Gina from GitHub, don't forget to run from the project root :
+
+```tty
+node node_modules/gina/script/pre_install.js
+```
+
 ```tty
 node node_modules/gina/script/post_install.js
 ```

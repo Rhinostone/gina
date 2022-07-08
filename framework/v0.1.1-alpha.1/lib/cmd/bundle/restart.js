@@ -79,6 +79,7 @@ function Restart(opt, cmd) {
                 var error = null;
                 //console.debug(' OPTIONS => ', opt.debugPort, opt.debugBrkEnabled);
                 //console.info('running: gina bundle:restart '+ bundle + '@' + self.projectName);
+                msg = 'Restarting, please wait ...';
                 cmd = '$gina bundle:stop ' + bundle + ' @' + self.projectName + ' && $gina bundle:start ' + bundle + ' @' + self.projectName;
                 if (self.inheritedArgv != '') {
                     cmd += ' '+ self.inheritedArgv;
@@ -88,12 +89,13 @@ function Restart(opt, cmd) {
                     if (opt.debugBrkEnabled) {
                         cmd += '-brk'
                     }
-                    cmd += '='+ opt.debugPort
+                    cmd += '='+ opt.debugPort;
+                    msg = 'You should now start your debug session on port #'+opt.debugPort;
                 }
                 cmd = cmd.replace(/\$(gina)/g, self.cmdStr);
 
                 console.debug('Executing: '+cmd);
-                msg = 'Restarting, please wait ...';
+
                 opt.client.write('\n\r'+msg +'\n');
 
                 // If it is stuck, the problem is not here ... cmd.start should be a good start

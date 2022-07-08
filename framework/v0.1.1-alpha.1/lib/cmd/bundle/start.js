@@ -172,10 +172,11 @@ function Start(opt, cmd) {
                     ;
                     var port = '', errorFound = false;
                     child.stdout.on('data', function(data) {
-                        console.log(data);
+                        // console.log(data);
 
                         // handle errors
                         if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
+                            console.log(data);
                             // kill the bundle starting process first
                             child.kill('SIGKILL');
 
@@ -193,11 +194,13 @@ function Start(opt, cmd) {
                             ++opt.onlineCount;
                             end(opt, cmd, isBulkStart, bundleIndex);
                             clearInterval(timerId);
+
                             return;
                         }
 
                         // catch fatal errors to exit
                         if ( /(\[|\[\s+)emerg/.test(data) ) {
+                            console.log(data);
 
                             // kill the bundle starting process first
                             child.kill('SIGKILL');
