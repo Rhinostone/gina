@@ -3,9 +3,9 @@
     "engine": "isaac",
     "credentials": {
       "_comment": "Project ENV override: SSL Credentials: private key & certificate",
-      "privateKey": "{GINA_HOMEDIR}/certificates/{scope}/{host}/private.key",
-      "certificate": "{GINA_HOMEDIR}/certificates/{scope}/{host}/certificate.crt",
-      "ca": "{GINA_HOMEDIR}/certificates/{scope}/{host}/ca_bundle.crt",
+      "privateKey": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/private.key",
+      "certificate": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.crt",
+      "ca": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/ca_bundle.crt",
       "allowHTTP1": true
     },
     // refers to server.js, lib.routing & controller.js

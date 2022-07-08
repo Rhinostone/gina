@@ -18,12 +18,12 @@ var os      = require('os');
  * @api public
  * */
 function ContextHelper(contexts) {
-    
+
     var merge   = require('./../lib/merge');
     var console = require('./../lib/logger');
-    
+
     var self = {};
-        
+
 
     /**
      * ContextHelper Constructor
@@ -54,12 +54,12 @@ function ContextHelper(contexts) {
         joinContext(contexts)
     }
 
-    joinContext = function(context) {        
+    joinContext = function(context) {
         merge(self.contexts, context, true)
     }
 
     var parseCtxObject = function (o, obj) {
-        
+
         for (var i in o) {
             if (o[i] !== null && typeof(o[i]) == 'object') {
                 parseCtxObject(o[i], obj);
@@ -74,7 +74,7 @@ function ContextHelper(contexts) {
     setContext = function(name, obj, force) {
         // redefinition needed for none-dev env: cache issue
         var merge = require('./../lib/merge');
-        
+
         if (arguments.length > 1) {
             //console.log("Globla setter active ", name, obj);
             if ( typeof(name) == 'undefined' || name == '' ) {
@@ -187,7 +187,7 @@ function ContextHelper(contexts) {
 
     /**
      * getConfig
-     * 
+     *
      * Get bundle JSON configuration
      *
      *
@@ -196,7 +196,7 @@ function ContextHelper(contexts) {
      *
      * */
     getConfig = function(bundle, confName) {
-        var merge = require('./../lib/merge');        
+        var merge = require('./../lib/merge');
         var ctx             = null
             , ctxFilename   = getContext('argvFilename') // for workers ctx
             , confPath      = null
@@ -208,19 +208,19 @@ function ContextHelper(contexts) {
                 ctx.gina = {
                     Config : require('./../core/config')
                 };
-                
+
                 ctx.gina.config = merge(ctx.config, ctx.gina.Config);
             }
             for (var name in ctx) {
                 setContext(name, ctx[name], false)
             }
-                
+
         } else {
             ctx = self.contexts
         }
 
         if (arguments.length == 1 || !bundle) {
-            
+
             confName = (arguments.length == 1) ? bundle : confName;
             var file = null
                 , stackFileName = null;
@@ -271,7 +271,7 @@ function ContextHelper(contexts) {
                 ginaPath: getPath('gina').core
             }).getInstance(bundle);
         }
-        
+
 
         if ( typeof(confName) != 'undefined') {
 
@@ -288,11 +288,11 @@ function ContextHelper(contexts) {
                 conf.bundlesConfiguration.conf.env = env;
                 conf.bundlesConfiguration.conf.projectName = getContext('projectName');
                 conf.bundlesConfiguration.conf.bundles = getContext('bundles');
-                
+
                 if ( typeof(ctxFilename) != 'undefined' ) {
-                    //process.stdout.write('TYPEOF ' + typeof( conf.getRouting ) ) 
+                    //process.stdout.write('TYPEOF ' + typeof( conf.getRouting ) )
                     setContext('gina.config', conf, true);
-                    //process.stdout.write('TYPEOF ' + typeof( getContext('gina').config.getRouting ) ) 
+                    //process.stdout.write('TYPEOF ' + typeof( getContext('gina').config.getRouting ) )
                 }
 
                 return conf.bundlesConfiguration.conf
@@ -407,7 +407,7 @@ function ContextHelper(contexts) {
                         libPath     : libPath
                     })
 
-                } catch(err) {                    
+                } catch(err) {
                     throwError(500, err, true)
                 }
 
@@ -434,7 +434,7 @@ function ContextHelper(contexts) {
      * @returns {object} revealed
      * */
     whisper = function(dictionary, replaceable, rule) {
-        
+
         if ( typeof(rule) != 'undefined') {
             return replaceable
                 // inline rule
@@ -445,7 +445,7 @@ function ContextHelper(contexts) {
                 // .replace(/\"\{(\w+)\}\"/g, function(s, key) {
                 //     if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
                 //         return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] :  s
-                //     }                                    
+                //     }
                 //     return '"'+ (dictionary[key] || s) +'"';
                 // })
                 // .replace(/\{(\w+)\}/g, function(s, key) {
@@ -462,7 +462,7 @@ function ContextHelper(contexts) {
                                 .replace(/\"\{(\w+)\}\"/g, function(s, key) {
                                     if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
                                         return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
-                                    }                                    
+                                    }
                                     return '"'+ (dictionary[key] || s) +'"';
                                 })
                                 .replace(/\{(\w+)\}/g, function(s, key) {
@@ -477,9 +477,14 @@ function ContextHelper(contexts) {
 
                 return JSON.parse(
                     replaceable
-                        .replace(/\"\{(\w+)\}\"/g, function(s, key) {                        
+                        .replace(/\"\{(\w+)\}\"/g, function(s, key) {
                             if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
                                 return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
+                            }
+                            // When "{single}" and not "{sigle}/something"
+                            if ( /^\"\{(\w+)\}\"$/i.test(s) && !dictionary[key]) {
+                                //return ('"'+ dictionary[key] +'"' || s);
+                                return '"'+ (dictionary[key] || s.replace(/\"/g, '')) +'"';
                             }
                             return '"'+ (dictionary[key] || s) +'"';
                         })

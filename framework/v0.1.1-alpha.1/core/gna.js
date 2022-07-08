@@ -204,6 +204,7 @@ gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
+process.env.NODE_SCOPE = projects[projectName]['def_scope'];
 process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
 
 
@@ -868,7 +869,11 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                                     e.emit('server#started', conf);
 
-                                    setTimeout( function onStarted() {
+                                    setTimeout( async function onStarted() {
+
+                                        if ( conf.server.scheme == 'https' && /true/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) {
+                                            await server.verifyCertificate(conf.host, conf.server.port);
+                                        }
 
                                         console.info('is now online V(-.o)V',
                                         '\nbundle: [ ' + conf.bundle +' ]',

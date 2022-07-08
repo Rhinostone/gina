@@ -97,9 +97,6 @@ function Logger() {
         // A flow name is always the same as the container/transport name: checkout the `containers` folder for more
         // Don't touch this part!
         flows: ['default', 'mq'],
-        //'format' : '',
-        //'pipe' : [],
-
         // Levels are based on Syslog: https://en.wikipedia.org/wiki/Syslog
         levels : {
             // will also kill the process
@@ -170,6 +167,7 @@ function Logger() {
                 description: 'Debug-level messages.',
                 color: 'gray'
             },
+            // hidden level
             catch : {
                 code: -1,
                 label: 'Catch',
@@ -255,7 +253,7 @@ function Logger() {
 
         if ( typeof(ctx.initialized) != 'undefined' && ctx.initialized == true) {
             getInstance();
-
+            // process.env.NODE_ENV
             if (opt.hierarchies[opt.hierarchy].indexOf( opt.levels['debug'].code) > -1) {
                 emit(opt, 'debug', 'Logger instance already exists: reusing it ;)');
             }
@@ -722,12 +720,6 @@ function Logger() {
         }
 
     };
-
-    // var e = new EventEmitter();
-    // for (let prop in e) {
-    //     self[prop] = e[prop]
-    // }
-
 
     return init(opt);
 }

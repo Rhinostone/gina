@@ -1,6 +1,6 @@
 'use strict';
 // Imports
-var net = require('net');
+const net = require('net');
 // var fs                  = require('fs');
 // var util                = require('util');
 

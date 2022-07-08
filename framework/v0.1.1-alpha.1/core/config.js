@@ -52,7 +52,7 @@ function Config(opt) {
      * @constructor
      * */
     var init =  function(opt) {
-                
+
         if ( !Config.initialized) {
             var env = opt.env;
 
@@ -91,7 +91,7 @@ function Config(opt) {
     }
 
     var getConf = function(env) {
-        
+
         self.env = env;
         console.debug('[ config ] Loading conf...');
 
@@ -119,9 +119,9 @@ function Config(opt) {
         self.Env.load( function(err, envConf) {
 
             if ( typeof(self.Env.loaded) == 'undefined') {
-                // Need to globalize some of them.                
+                // Need to globalize some of them.
                 self.envConf = envConf;
-                
+
                 // getting server core config
                 var statusCodes     = null
                     , mime          = null
@@ -150,12 +150,12 @@ function Config(opt) {
                     console.error(err.stack||err.message);
                     process.exit(1)
                 }
-                
+
                 loadBundlesConfiguration( function(err, file, routing) {
-                    
+
                     if (err) {
                         console.error(err.stack||err.message);
-                        
+
                         setTimeout(() => {
                             process.exit(1);
                         }, 0);
@@ -213,7 +213,7 @@ function Config(opt) {
             }
         });
     }
-        
+
 
     /**
      * Get Instance
@@ -296,7 +296,7 @@ function Config(opt) {
                 self.envConf            = envConf;
                 envConf.env             = self.env;
                 envConf.isStandalone    = self.isStandalone;
-                
+
                 callback(false, envConf);
             });
         },
@@ -327,10 +327,10 @@ function Config(opt) {
                 if ( !bundle && typeof(self.bundle) != 'undefined' ) {
                     bundle = self.bundle
                 }
-                
-                                
+
+
                 return ( typeof(self.envConf) != 'undefined' ) ? self.envConf[bundle][env]  : null;
-                
+
             } else {
 
                 if (!bundle) { // if getContext().bundle is lost .. eg.: worker context
@@ -352,10 +352,10 @@ function Config(opt) {
 
 
                 if ( typeof(self.envConf) != 'undefined' ) {
-                    
+
                     var protocol    = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
                     var scheme      = self.envConf[self.startingApp][env].content.settings.server.scheme || self.envConf[self.startingApp][env].server.scheme;
-                    
+
                     self.envConf[self.startingApp][env].hostname = scheme + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
 
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
@@ -411,9 +411,9 @@ function Config(opt) {
             return this.standaloneMode
         }
     }
-    
+
     var mergeConfig = function(confObject, section, content, i) {
-        
+
         if (!Array.isArray(section)) {
             if (section != '') {
                 section = section.split(/\./g);
@@ -421,11 +421,11 @@ function Config(opt) {
                 section = []
             }
         }
-                
+
         if ( typeof(i) == 'undefined' ) {
             i = 0
         }
-        
+
         if (!section.length) { // nothing to do here
             confObject = merge(content, confObject);
             return
@@ -434,17 +434,17 @@ function Config(opt) {
         if (i == section.length) {
             return
         }
-        
+
         if ( typeof(confObject[ section[i] ]) == 'undefined' ) {
-            confObject[ section[i] ] = {};            
+            confObject[ section[i] ] = {};
         }
-        
+
         if (i == section.length-1) {
             confObject[ section[i] ] =  merge(content, confObject[ section[i] ])
         }
-        
+
         mergeConfig(confObject[ section[i] ], section, content, i+1)
-        
+
     }
 
 
@@ -472,17 +472,17 @@ function Config(opt) {
             portsReverse    = ctx.portsReverse
         ;
 
-        if (!self.projectName) {            
+        if (!self.projectName) {
             self.projectName = ctx.config.projectName
         }
-        
-        //Pushing default app first.        
+
+        //Pushing default app first.
         self.bundles.push(self.startingApp);//This is a JSON.push.
         var root = new _(self.executionPath).toUnixStyle();
         var pkg  = null;
         try {
             pkg = require(_(root + '/manifest.json')).bundles;
-            // by default but may be overriden           
+            // by default but may be overriden
             masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
         } catch (err) {
             console.error(err.stack);
@@ -500,19 +500,19 @@ function Config(opt) {
             , scheme            = null
             , p                 = null
         ;
-        
+
         // getting bundle config files
-         
+
         var configFiles     = null
-            , appPath       = null                       
+            , appPath       = null
             , jsonFile      = null
             , e             = null
             , tmpSettings   = null
             , filesList     = {}
             , files         = {}
         ;
-        
-        
+
+
         var version = null, middleware = null;
         try {
             self.version    = version = require(_(getPath('gina').root +'/package.json' )).version;
@@ -524,24 +524,24 @@ function Config(opt) {
         } catch (err) {
             console.debug(err.stack)
         }
-        
+
         for (let app in content) {
             //Checking if genuine app.
             console.debug('Checking if application [ '+ app +' ] is registered ');
-            
+
             appPath = _(bundlesPath + '/' + app);
-            
-                        
-                
+
+
+
             // if ( self.task == 'run' && !self.isCacheless() ) {
             //     appPath = _(newContent[app][env].bundlesPath + '/' + app)
             // } else { //getting src path instead
             //     appPath = _(newContent[app][env].sources + '/' + app);
             //     newContent[app][env].bundlesPath = newContent[app][env].sources;
             // }
-            tmpSettings = {};                        
+            tmpSettings = {};
             newContent[app][env].bundlesPath = bundlesPath;
-             
+
             if ( typeof(content[app][env]) != "undefined" ) {
                 try {
                     configFiles = fs.readdirSync(_(appPath + '/config'));
@@ -549,14 +549,14 @@ function Config(opt) {
                     //console.emerg('Dependency bundle config not found for `'+ app +'/'+ env +'`: trying to load on the fly from src');
                     console.warn('Dependency bundle config not found for `'+ app +'/'+ env +'`: trying to load on the fly from src');
                     let appSrcPath = _(root +'/'+ pkg[app].src, true);
-                    configFiles = fs.readdirSync(_(appSrcPath + '/config'));                    
+                    configFiles = fs.readdirSync(_(appSrcPath + '/config'));
                     setPath('bundles', _(appSrcPath, true));
                     appPath = appSrcPath;
                     newContent[app][env].bundlesPath = bundlesPath = appSrcPath.replace( new RegExp('/'+ app), '' );
                     console.warn('Dependency bundle config loaded from '+ appSrcPath);
                 }
-                
-                
+
+
                 appsPath    = (typeof(content[app][env]['bundlesPath']) != 'undefined')
                         ? content[app][env].bundlesPath
                         : template["{bundle}"]["{env}"].bundlesPath
@@ -569,42 +569,50 @@ function Config(opt) {
                     if ( !/^settings\./.test(fName) ) {
                         continue;
                     }
-                    
-                    
-                    if (/^\./.test(fName) || new RegExp('\.'+ env +'\.json$').test(fName) || !/\.json$/.test(fName)  )
+
+
+                    if (
+                        /^\./.test(fName)
+                        // || new RegExp('\.'+ env +'\.json$').test(fName)
+                        || !/\.json$/.test(fName)
+                    ) {
                         continue;
-                    
-                    let name            = fName.replace(/\.json$/, '');
-                    let fNameWithNoExt  = fName.replace(/.json/, '');
-                    let section = fNameWithNoExt.replace(/(^settings\.|^settings$)/, '');
-                                        
+                    }
+
+
+                    let name            = fName.replace(new RegExp('\.'+ env +'\.json$'), '').replace(new RegExp('\.json$'), '');
+                    let fNameWithNoExt  = fName.replace(/.json$/, '');
+                    let section = fNameWithNoExt.replace(/(^settings\.|^settings$)/, '').replace(new RegExp('\.'+ env +'$'), '').replace(new RegExp('\.json$'), '');
+
                     if (/\-/.test(name)) {
                         name = name.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
                     }
                     filesList[name] = fName;
                     // handle registered config files
                     let main = fName;
-                    let tmp = fName.replace(/.json/, '.' + env + '.json'); // env version
-                    files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
+                    // let tmp = fName.replace(/.json/, '.' + env + '.json'); // env version
+                    files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
                     let fileContent = files[name];
-                    let filename = _(appPath + '/config/' + tmp);
+                    // let filename = _(appPath + '/config/' + tmp);
+                    let filename = _(appPath + '/config/' + main);
+
                     exists = fs.existsSync(_(filename, true));
                     // loading env if exists
-                    if ( self.isCacheless() ) {   
+                    if ( self.isCacheless() ) {
                         if (exists) {
                             delete require.cache[require.resolve(_(filename, true))];
                         }
                     }
-                    if (new RegExp('\.'+ env +'\.json$').test(fName)) {
-                        foundEnvVersion = true;
-                    }
+                    // if (new RegExp('\.'+ env +'\.json$').test(fName)) {
+                    //     foundEnvVersion = true;
+                    // }
                     try {
-                        if (exists) {                            
+                        if (exists) {
                             jsonFile = requireJSON(_(filename, true));
                             if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                                 fileContent = []
                             }
-                            // Fixed priority to env version and/or extended.description if found 
+                            // Fixed priority to env version and/or extended.description if found
                             fileContent = merge(jsonFile, fileContent);
                         }
                     } catch (_err) {
@@ -623,11 +631,11 @@ function Config(opt) {
                             delete require.cache[require.resolve(_(filename, true))];
                         }
 
-                        if (exists) {      
+                        if (exists) {
                             jsonFile = requireJSON(_(filename, true));
                             if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                                 fileContent = []
-                            }             
+                            }
                             //fileContent = merge(fileContent, jsonFile);
                             // Fixed priority to env version and/or extended.description if found
                             fileContent = merge(jsonFile, fileContent);
@@ -644,27 +652,29 @@ function Config(opt) {
                             fileContent = undefined
                         }
                     }
-                    
+
                     // tmp settings - because we need it now
                     if (section != '' ) {
                         if (/\-/.test(section)) {
                             section = section.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
                         }
-                        mergeConfig(tmpSettings, section, fileContent );  
+                        mergeConfig(tmpSettings, section, fileContent );
                     } else {
                         tmpSettings = merge(tmpSettings, fileContent);
                     }
-                                      
-                    
+
+
                 } //EO for (let c = 0, cLen = configFiles.length; c < cLen; ++c) {
-                
+
                 bundleSettings = tmpSettings;
                 // reused and deleted in `loadBundleConfig()`
                 bundleSettings.tmpSettingFileContent = JSON.clone(bundleSettings);
                 newContent[app][env] = merge(bundleSettings, newContent[app][env]);
-                               
-                
-                
+                // completing with missing props
+                var defaultSettings = requireJSON(GINA_FRAMEWORK_DIR +'/core/template/conf/settings.json');
+                newContent[app][env] = merge(newContent[app][env], defaultSettings);
+
+
                 // setting protocol & port
                 if ( typeof(portsReverse[app+'@'+self.projectName]) == 'undefined' )
                     continue;
@@ -688,16 +698,16 @@ function Config(opt) {
                 modelsPath = (typeof(content[app][env]['modelsPath']) != 'undefined')
                     ?  content[app][env].modelsPath
                     :  template["{bundle}"]["{env}"].modelsPath;
-                    
+
                 projectPath = (typeof(content[app][env]['projectPath']) != 'undefined')
                     ?  content[app][env].projectPath
                     :  template["{bundle}"]["{env}"].projectPath;
-           
-                
+
+
                 // TODO - remove this after the tests
                 // if ( typeof(content[app][env].server ) != 'undefined' ) {
                 //     newContent[app][env].server = content[app][env].server;
-                    
+
                 // }
                 // else if ( bundHasSettings && typeof(bundleSettings.server) != 'undefined') {
                 //     newContent[app][env].server = bundleSettings.server;
@@ -709,41 +719,45 @@ function Config(opt) {
                 // if ( typeof(newContent[app][env].server ) != 'undefined' ) {
                 //     newContent[app][env].server = template["{bundle}"]["{env}"].server
                 // }
-                
+
                 // just in case someone removes the settings.server.json
                 if ( typeof(newContent[app][env].server ) == 'undefined' ) {
                     newContent[app][env].server = {}
                 }
-                
+
                 // getting server protocol: bundle settings first, if not available ->W project's config
                 // If the users has set a different protocol in its /config/settings.json, it will override the project protocol
-                // at server init (see server.js) 
-                
+                // at server init (see server.js)
+
                 // by default
+                if ( typeof(newContent[app][env].server.scope) == 'undefined' ) {
+                    newContent[app][env].server.scope = projectConf.def_scope; // from ~/.gina/projects.json
+                    newContent[app][env].server.scopeIsLocal = (projectConf.def_scope == projectConf.local_scope) ? true : false; // from ~/.gina/projects.json
+                }
                 if ( typeof(newContent[app][env].server.protocol) == 'undefined' ) {
                     //newContent[app][env].server.protocol = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.protocol) != 'undefined' ) ? bundleSettings.server.protocol : projectConf.def_protocol; // from ~/.gina/projects.json
-                    newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json                    
+                    newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json
                 }
                 newContent[app][env].server.protocolShort = newContent[app][env].server.protocol.split(/\./)[0];
-                
+
                 if ( typeof(newContent[app][env].server.scheme) == 'undefined' ) {
                     //newContent[app][env].server.scheme = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.scheme) != 'undefined' ) ? bundleSettings.server.scheme : projectConf.def_scheme; // from ~/.gina/projects.json
                     newContent[app][env].server.scheme = projectConf.def_scheme; // from ~/.gina/projects.json
                 }
-                
+
                 // getting server port
                 if ( typeof (newContent[app][env].port) == 'undefined' ) {
                     newContent[app][env].port = {}
                 }
-                
+
                 if ( typeof (newContent[app][env].port[ newContent[app][env].server.protocol ]) == 'undefined' ) {
                     newContent[app][env].port[ newContent[app][env].server.protocol ] = {}
                 }
-                
+
                 if ( typeof (newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ]) == 'undefined' ) {
                     newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ] = {}
                 }
-                
+
                 newContent[app][env].server.port = portsReverse[ app +'@'+ self.projectName ][env][projectConf.def_protocol][projectConf.def_scheme];
                 try {
                     appPort = portsReverse[app+'@'+self.projectName][env][ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ];
@@ -753,7 +767,7 @@ function Config(opt) {
                 }
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
-                
+
                 //console.log("My env ", env, self.executionPath, JSON.stringify(template, null, '\t') );
                 //Existing app and port sharing => != isStandalone.
                 if ( !fs.existsSync(appsPath) ) {
@@ -762,8 +776,8 @@ function Config(opt) {
 
 
                 newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ] = appPort;
-                
-                
+
+
 
                 //Check if isStandalone or shared instance
                 if (appPort != masterPort) {
@@ -780,11 +794,11 @@ function Config(opt) {
                     JSON.parse( JSON.stringify(template["{bundle}"]["{env}"]))//only copy of it.
                 );
 
-               
+
                 if (!newContent[app][env].executionPath) {
                     newContent[app][env].executionPath = root
                 }
-                
+
                 //Constants to be exposed in configuration files.
                 //Variables replace. Compare with gina/core/template/conf/env.json.
                 let reps = {
@@ -793,14 +807,26 @@ function Config(opt) {
                     "projectPath"   : projectPath,
                     "bundlesPath" : appsPath,
                     "modelsPath" : modelsPath,
+                    "tmpPath" : newContent[app][env].tmpPath,
+                    "scope"     : newContent[app][env].server.scope,
+                    "host"     : newContent[app][env].host,
                     "env" : env,
                     "bundle" : app,
                     "version" : version
                 };
-                
+
+                for (let _contant in process.gina) {
+                    reps[_contant] = process.gina[_contant];
+                }
+
                 bundleSettings = null;
                 //console.error("reps ", reps);
-                newContent = whisper(reps, newContent);
+                try {
+                    newContent = whisper(reps, newContent);
+                } catch(contentErr) {
+                    console.emerg(contentErr.stack)
+                }
+
             }
             //Else not in the scenario.
 
@@ -842,7 +868,7 @@ function Config(opt) {
         //Registered apps only.
         return self.allBundles
     }
-    
+
     this.getAllEnvs = function() {
         //Registered apps only.
         return self.allEnvs
@@ -872,20 +898,20 @@ function Config(opt) {
         }
         return undefined
     }
-    
-    
+
+
     var deepFreeze = function (obj) {
 
         // On récupère les noms des propriétés définies sur obj
         var propNames = Object.getOwnPropertyNames(obj);
-        
+
         // On gèle les propriétés avant de geler l'objet
         for(let name of propNames){
             let value = obj[name];
             obj[name] = value && typeof value === "object" ?
             deepFreeze(value) : value;
         }
-        
+
         // On gèle l'objet initial
         return Object.freeze(obj);
     }
@@ -897,7 +923,7 @@ function Config(opt) {
         if (/\-/.test(key)) {
             key = key.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
         }
-        
+
         if ( i == 0 && Array.isArray(content)) {
             var _key = '';
             for (let _i = 0; _i < len; _i++) {
@@ -907,15 +933,15 @@ function Config(opt) {
             }
             pathname = _key;
         }
-        
-        if (i == len - 1) { // end            
+
+        if (i == len - 1) { // end
             if ( typeof(global._jsonConfig) == 'undefined' ) {
                 global._jsonConfig = {}
             }
             if ( typeof(global._jsonConfig[pathname]) == 'undefined' ) {
                 global._jsonConfig[pathname] = {}
             }
-            // getConfig('app.key') should equal getConfig('app').key            
+            // getConfig('app.key') should equal getConfig('app').key
             if (root.hasOwnProperty(pathname)) {
                 //
                 if (!obj.hasOwnProperty(key)) {
@@ -937,7 +963,7 @@ function Config(opt) {
                     return root[pathname]
                     //return global._jsonConfig[pathname]
                 });
-                deepFreeze(obj[key]);             
+                deepFreeze(obj[key]);
             } else {
                 // getConfig('app').key
                 if (!obj.hasOwnProperty(key)) {
@@ -968,7 +994,7 @@ function Config(opt) {
     }
 
     var loadBundleConfig = function(bundles, b, callback, reload, collectedRules) {
-        
+
         // current bundle
         var bundle = null;
         if ( typeof(bundles[b]) == 'undefined' ) {
@@ -976,7 +1002,7 @@ function Config(opt) {
         } else {
             bundle = bundles[b]
         }
-        
+
         // environment
         var cacheless       = self.isCacheless()
             , isStandalone  = self.Host.isStandalone()
@@ -984,10 +1010,10 @@ function Config(opt) {
             , conf          = self.envConf // env conf
         ;
         console.debug('[ CONFIG ] loading `'+ bundle +'/'+ env +'` configuration, please wait ...');
-                      
-        
+
+
         self.setServerCoreConf(bundle, env, conf.core);
-        
+
         // bundle paths, ports, protocols
         var appPath         = ''
             , appPort       = null
@@ -997,24 +1023,24 @@ function Config(opt) {
             , protocol      = null
             , scheme        = null
         ;
-        
+
 
         conf[bundle][env].projectName   = getContext('projectName');
         conf[bundle][env].allBundles    = bundles;
         conf[bundle][env].cacheless     = cacheless;
         conf[bundle][env].isStandalone  = isStandalone;
         conf[bundle][env].executionPath = getContext('paths').root;
-                       
+
         if ( self.task == 'run' && !self.isCacheless() ) {
             appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
         } else { //getting src path instead
             appPath = _(conf[bundle][env].sources + '/' + bundle);
             conf[bundle][env].bundlesPath = conf[bundle][env].sources;
-        }        
-        
-            
+        }
+
+
         // bundle web root
-        var wroot                   = ( !conf[bundle][env].server.webroot || conf[bundle][env].server.webroot == '' ) ? '/' : conf[bundle][env].server.webroot            
+        var wroot                   = ( !conf[bundle][env].server.webroot || conf[bundle][env].server.webroot == '' ) ? '/' : conf[bundle][env].server.webroot
             // default `webrootAutoredirect` is true
             , webrootAutoredirect   = conf[bundle][env].server.webrootAutoredirect
             , localWroot            = null
@@ -1029,11 +1055,11 @@ function Config(opt) {
         }
         // standalone setup
         if ( isStandalone && bundle != self.startingApp && wroot == '/') {
-            wroot += bundle + '/';            
+            wroot += bundle + '/';
         }
         conf[bundle][env].server.webroot = wroot;
         var hasWebRoot = (wroot.length >1) ? true : false;
-        
+
         // bundle routing
         if ( !collectedRules || typeof(collectedRules) == 'undefined' ) {
             collectedRules = {}
@@ -1045,45 +1071,45 @@ function Config(opt) {
             , reverseRouting    = {}
             , allowPreflight
         ;
-        
-        
+
+
         var tmp                     = ''
             , err                   = false
             // template file
             , file                  = null
             , filename              = null
             // files to be ignored while parsing config dir
-            , defaultConfigFiles    = (conf[bundle][env].files.join(".json,") + '.json').split(',')            
+            , defaultConfigFiles    = (conf[bundle][env].files.join(".json,") + '.json').split(',')
         ;
-  
-        
+
+
         var fName       = null, fNameWithNoExt = null;
         var files       = { "routing": {} }, filesList = {};
         var main        = '';
         var name        = null;
-        
+
         var fileContent         = null
             , allEnvs           = self.getAllEnvs()
             , foundEnvVersion   = null
         ;
-            
-        // getting bundle config files    
+
+        // getting bundle config files
         var configFiles = fs.readdirSync(_(appPath + '/config'))
             , c         = 0
             , cLen      = configFiles.length
             , jsonFile  = null
             , e         = null
         ;
-        for (; c < cLen; ++c) {            
+        for (; c < cLen; ++c) {
             foundEnvVersion = false;
             fName = configFiles[c];
             fNameWithNoExt  = fName.replace(/.json/, '');
-            
+
             // do we need it ?
             // if (conf[bundle][env].files.indexOf(fNameWithNoExt) < 0) {
             //     conf[bundle][env].files.push(fNameWithNoExt)
             // }
-            
+
             // e.g: if env == `dev` and we have app.prod.json, we should skip it
             let skipIt = false;
             for (let e = 0, eLen = allEnvs.length; e < eLen; e++) {
@@ -1095,12 +1121,12 @@ function Config(opt) {
                 }
             }
             if (skipIt) continue;
-            
+
             if ( /^settings\./.test(fName) ) {
                 // already defined before by `loadWithTemplate()`
-                continue;               
+                continue;
             }
-            
+
             if (/^\./.test(fName) || new RegExp('\.'+ env +'\.json$').test(fName) || !/\.json$/.test(fName)  )
                 continue;
 
@@ -1110,7 +1136,7 @@ function Config(opt) {
             }
             //name            = fName.replace(/\.json$/, '');
             // we just want the main name .. not the extended description fullname
-            name            = fName.replace(/\..*/g, '');            
+            name            = fName.replace(/\..*/g, '');
             let section     = fNameWithNoExt
                             .replace(/^\w+\./g, '')
                             .replace(new RegExp('\.'+ env +'\.json$'), '');
@@ -1126,25 +1152,25 @@ function Config(opt) {
             // handle registered config files
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
-            
-            files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};            
+
+            files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
             fileContent = files[name];
             filename = _(appPath + '/config/' + tmp);
             exists = fs.existsSync(_(filename, true));
             // loading dev if exists
-            if ( self.isCacheless() ) {  
+            if ( self.isCacheless() ) {
                 if (exists) {
                     delete require.cache[require.resolve(_(filename, true))];
                 }
             }
-            
+
             try {
                 if (exists) {
                     jsonFile = requireJSON(_(filename, true));
                     if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                         fileContent = []
                     }
-                    // Fixed priority to env version and/or extended.description if found 
+                    // Fixed priority to env version and/or extended.description if found
                     fileContent = merge(jsonFile, fileContent);
                 }
             } catch (_err) {
@@ -1163,11 +1189,11 @@ function Config(opt) {
                     delete require.cache[require.resolve(_(filename, true))];
                 }
 
-                if (exists) {      
+                if (exists) {
                     jsonFile = requireJSON(_(filename, true));
                     if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                         fileContent = []
-                    }             
+                    }
                     //fileContent = merge(fileContent, jsonFile);
                     // Fixed priority to env version and/or extended.description if found
                     fileContent = merge(jsonFile, fileContent);
@@ -1189,7 +1215,7 @@ function Config(opt) {
             //     let nameArr = fNameWithNoExt.split(/\./g);
             //     if ( typeof(files[nameArr[0]]) == 'undefined')
             //         files[nameArr[0]] = {};
-                
+
             //     try {
             //         files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
             //         continue;
@@ -1198,28 +1224,28 @@ function Config(opt) {
             //         console.error(e);
             //         callback(new Error(e))
             //     }
-                
-                
+
+
             // } else {
             //     files[name] = fileContent;
             // }
-            
+
             if (section != '' ) {
                 if (/\-/.test(section)) {
                     section = section.replace(/-([a-z])/g, function(g) { return g[1].toUpperCase(); })
                 }
-                mergeConfig(files[name], section, fileContent );  
+                mergeConfig(files[name], section, fileContent );
             } else {
                 files[name] = merge(files[name], fileContent);
             }
-            
+
 
         } // EO for (var c = 0, cLen = configFiles.length; c < cLen; ++c)
         conf[bundle][env] = merge(files, conf[bundle][env]);
 
         // building file list
         conf[bundle][env].configFiles = filesList;
-        
+
         var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['_common']) != 'undefined') ? true : false;
 
         // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
@@ -1228,11 +1254,11 @@ function Config(opt) {
         } else if (hasViews) {
             conf[bundle][env].template = true;
         }
-        
+
 
         name = 'routing';
         routing = files[name];
-        var r = null, rLen = null;                      
+        var r = null, rLen = null;
         //setting app param
         var urls = null;
         // bundle status
@@ -1243,7 +1269,7 @@ function Config(opt) {
                 control: 'getBundleStatus'
             }
         };
-        
+
         // custom error page
         routing['custom-error-page'] = {
             // url will be modified on error
@@ -1256,13 +1282,13 @@ function Config(opt) {
                 error: {}
             }
         };
-        
-        // creating default rule for auto redirect: / => /webroot            
+
+        // creating default rule for auto redirect: / => /webroot
         if (
-            hasWebRoot 
+            hasWebRoot
             && wroot != '/'
             && typeof(routing['webroot@'+ bundle]) == 'undefined'
-        ) {   
+        ) {
             routing['webroot@'+ bundle] = {
                 method: 'GET, POST, PUT, DELETE, HEAD',
                 // by default
@@ -1280,13 +1306,13 @@ function Config(opt) {
                 webroot: wroot
             };
             // default hostname
-            if ( /^true$/i.test(webrootAutoredirect) ) {    
+            if ( /^true$/i.test(webrootAutoredirect) ) {
                 routing['webroot@'+ bundle].url = '/,'+ wroot.substring(0, wroot.length-1);
             }
         }
-        
+
         // upload routes
-        if ( 
+        if (
             typeof(conf[bundle][env].upload) != 'undefined'
             && typeof(conf[bundle][env].upload.groups) != 'undefined'
             && conf[bundle][env].upload.groups.count() > 0
@@ -1302,7 +1328,7 @@ function Config(opt) {
                     }
                 }
             }
-            
+
             if ( typeof(routing['upload-delete-from-tmp-xml@'+ bundle]) == 'undefined' ) {
                 routing['upload-delete-from-tmp-xml'] = {
                     "_comment": "Will remove file from the project tmp dir",
@@ -1315,15 +1341,15 @@ function Config(opt) {
                 }
             }
         }
-        
-        
+
+
         for (let rule in routing) {
-            
+
             // checking requirements syntax
             if ( typeof(routing[rule].requirements) != 'undefined' && routing[rule].requirements.count() > 0 ) {
                 for ( let r in routing[rule].requirements) {
-                    if ( 
-                        !/^\//.test(routing[rule].requirements[r]) 
+                    if (
+                        !/^\//.test(routing[rule].requirements[r])
                         && !/^validator\:\:/.test(routing[rule].requirements[r])
                     ) {
                         let ruleName = ( !/\@/.test(rule) ) ? rule +'@'+ bundle : rule;
@@ -1333,33 +1359,33 @@ function Config(opt) {
                     }
                 }
             }
-            
-            
+
+
             if (rule == 'webroot@'+ bundle) continue;
-                            
-            localWroot  = wroot; // by default   
-                    
+
+            localWroot  = wroot; // by default
+
             if ( typeof(routing[rule].bundle) != 'undefined' && routing[rule].bundle != bundle ) {
                 localWroot  = conf[routing[rule].bundle][env].server.webroot;//conf[bundle][env].server.webroot
                 // formating localWroot to have /mywebroot/
                 localWroot  = ( !/^\//.test(localWroot) ) ? '/' + localWroot : localWroot;
-                localWroot  = ( !/\/$/.test(localWroot) ) ? localWroot + '/' : localWroot;  
-                    
+                localWroot  = ( !/\/$/.test(localWroot) ) ? localWroot + '/' : localWroot;
+
                 // standalone setup
                 if ( isStandalone && bundle != self.startingApp && localWroot == '/') {
-                    localWroot += bundle + '/';            
+                    localWroot += bundle + '/';
                 }
-                    
-                conf[routing[rule].bundle][env].server.webroot = localWroot               
+
+                conf[routing[rule].bundle][env].server.webroot = localWroot
             } else {
                 routing[rule].bundle =  bundle;
             }
-            localHasWebRoot = (localWroot.length >1) ? true : false;     
-            
-            
+            localHasWebRoot = (localWroot.length >1) ? true : false;
+
+
             // default hostname
-            if ( 
-                typeof(routing[rule].hostname) == 'undefined' && !/^redirect$/.test(routing[rule].param.control)  
+            if (
+                typeof(routing[rule].hostname) == 'undefined' && !/^redirect$/.test(routing[rule].param.control)
                 || !routing[rule].hostname && !/^redirect$/.test(routing[rule].param.control)
             ) {
                 routing[rule].host      = conf[routing[rule].bundle][env].host
@@ -1367,31 +1393,31 @@ function Config(opt) {
                 // default webroot
                 routing[rule].webroot   = localWroot;
             }
-                
-            
+
+
             // default method
             if ( typeof(routing[rule].method) == 'undefined' || !routing[rule].method )
                 routing[rule].method = 'GET';
-            
+
             if ( /\,/.test(routing[rule].method) )
-                routing[rule].method = routing[rule].method.replace(/\s+/g, '');     
-                
+                routing[rule].method = routing[rule].method.replace(/\s+/g, '');
+
             // default middleware
             if ( typeof(routing[rule].middleware) == 'undefined' || !routing[rule].middleware )
                 routing[rule].middleware = [];
-            
+
             // default url
             if ( typeof(routing[rule].url) == 'undefined' || !routing[rule].url )
                 routing[rule].url = '/'+ rule;
-                
+
             try {
                 if ( /\,/.test(routing[rule].url) )
                     routing[rule].url = routing[rule].url.replace(/\s+/g, '');
-                
+
             } catch (err) {
-                throw new Error('[ ROUTING ] Error found in your route description: \nbundle: `'+ routing[rule].bundle +'`\nroute: `'+ rule +'`\nurl: `'+ routing[rule].url +'`.\nPlease check your routing configuration: `'+ routing[rule].bundle +'/config/'+ name+'.json` or `'+ routing[rule].bundle +'/config/'+ name+'.'+ env +'.json`');    
-            }                   
-                                            
+                throw new Error('[ ROUTING ] Error found in your route description: \nbundle: `'+ routing[rule].bundle +'`\nroute: `'+ rule +'`\nurl: `'+ routing[rule].url +'`.\nPlease check your routing configuration: `'+ routing[rule].bundle +'/config/'+ name+'.json` or `'+ routing[rule].bundle +'/config/'+ name+'.'+ env +'.json`');
+            }
+
             // link route & template if hasViews - inly for GET methods
             if ( hasViews && /get/i.test(routing[rule].method) && typeof(files['templates'][rule.toLowerCase()]) == 'undefined' ) {
                 files['templates'][rule.toLowerCase()] = {}
@@ -1399,11 +1425,11 @@ function Config(opt) {
 
             routing[rule.toLowerCase() +'@'+ bundle] = routing[rule];
             delete routing[rule];
-            
+
             // default file name
             file        = rule.toLowerCase();
-            rule        = rule.toLowerCase() +'@'+ bundle;                
-                
+            rule        = rule.toLowerCase() +'@'+ bundle;
+
 
             routing[rule].bundle = (routing[rule].bundle) ? routing[rule].bundle : bundle; // for reverse lookup
             // route file
@@ -1422,33 +1448,33 @@ function Config(opt) {
             ) {
                 routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
             }
-            
-               
-            
+
+
+
             // ignoreWebRoot test to rewrite url webroot
             if ( typeof(routing[rule].param.ignoreWebRoot) == 'undefined' || !routing[rule].param.ignoreWebRoot ) {
                 //routing[rule].url = (routing[rule].url.length > 1) ? localWroot + routing[rule].url : routing[rule].url;
                 if ( /\,/.test(routing[rule].url) ) {
-                    urls = routing[rule].url.split(/\,/g);                    
+                    urls = routing[rule].url.split(/\,/g);
                     r = 0; rLen = urls.length;
-                    for (; r < rLen; ++r) {                        
+                    for (; r < rLen; ++r) {
                         urls[r] = ( localHasWebRoot && urls[r].length > 1) ? localWroot + urls[r].substr(1) : ((localHasWebRoot && urls[r].length == 1) ? localWroot : urls[r]);
                     }
-                    routing[rule].url = urls.join(',');                            
-                } else {                 
+                    routing[rule].url = urls.join(',');
+                } else {
                     routing[rule].url = ( localHasWebRoot && routing[rule].url.length > 1) ? localWroot + routing[rule].url.substr(1) : ((localHasWebRoot && routing[rule].url.length == 1) ? localWroot : routing[rule].url);
                 }
-            }            
+            }
         }
-        
+
         self.setRouting(bundle, env, routing);
         // reverse routing
         for (let rule in routing) {
-                            
-            if ( /\,/.test(routing[rule].url) ) { 
-                urls = routing[rule].url.split(/\,/g);                    
+
+            if ( /\,/.test(routing[rule].url) ) {
+                urls = routing[rule].url.split(/\,/g);
                 r = 0; rLen = urls.length;
-                for (; r < rLen; ++r) {                        
+                for (; r < rLen; ++r) {
                     reverseRouting[ urls[r] ] = rule
                 }
             } else {
@@ -1459,14 +1485,16 @@ function Config(opt) {
 
         if (!conf[bundle][env].executionPath) {
             conf[bundle][env].executionPath = self.executionPath
-        }       
+        }
 
         //Constants to be exposed in configuration files.
         var reps = {
             "gina"              : getPath('gina').root,
             "frameworkDir"      : GINA_FRAMEWORK_DIR,
-            "bundle"            : bundle,
+            "scope"             : conf[bundle][env].server.scope,
+            "host"             : conf[bundle][env].host,
             "env"               : env,
+            "bundle"            : bundle,
             // "server.engine"     : conf[bundle][env].engine,
             // "server.protocol"   : conf[bundle][env].protocol,
             // "server.scheme"     : conf[bundle][env].scheme,
@@ -1485,20 +1513,24 @@ function Config(opt) {
             "handlersPath"      : conf[bundle][env].handlersPath,
             "sharedPath"        : conf[bundle][env].sharedPath,
             "logsPath"          : conf[bundle][env].logsPath,
-            "tmpPath"           : conf[bundle][env].tmpPath,            
+            "tmpPath"           : conf[bundle][env].tmpPath,
             "version"           : getContext('gina').version
         };
-        
-        var corePath = getPath('gina').core;            
+
+        for (let _contant in process.gina) {
+            reps[_contant] = process.gina[_contant];
+        }
+
+        var corePath = getPath('gina').core;
         var settingsPath = _(corePath +'/template/conf/settings.json', true);
         var staticsPath = _(corePath +'/template/conf/statics.json', true);
         var viewsPath = _(corePath +'/template/conf/templates.json', true);
-        
+
         var defaultViews = requireJSON(viewsPath);
         if (hasViews && typeof(files['templates']._common) != 'undefined') {
-            reps['templates']   = files['templates']._common.templates || defaultViews._common.templates;            
+            reps['templates']   = files['templates']._common.templates || defaultViews._common.templates;
             reps['html']        = files['templates']._common.html || defaultViews._common.html;
-            reps['theme']       = files['templates']._common.theme || defaultViews._common.theme;            
+            reps['theme']       = files['templates']._common.theme || defaultViews._common.theme;
         }
 
         var ports = conf[bundle][env].port;
@@ -1518,16 +1550,16 @@ function Config(opt) {
         }
 
 
-        try {                        
-            
+        try {
+
             // we only need to retrieve the tmpFiles (files[settings])
             files['settings'] = JSON.clone(conf[bundle][env].tmpSettingFileContent) || {};
             delete conf[bundle][env].tmpSettingFileContent;
-            
+
             if ( files['settings'].count() == 0 ) {
                 files['settings'] = requireJSON(settingsPath)
             } else {
-                var defaultSettings = requireJSON(settingsPath);    
+                var defaultSettings = requireJSON(settingsPath);
                 files['settings'] = merge( JSON.clone(files['settings']), defaultSettings)
             }
 
@@ -1541,17 +1573,17 @@ function Config(opt) {
                 var defaultAliases = requireJSON(staticsPath);
                 files['statics'] = merge(defaultAliases, files['statics'], true)
             }
-           
-            
+
+
             // public resources ref
             if ( typeof(conf[bundle][env].publicResources) == 'undefined') {
                 conf[bundle][env].publicResources = []
             }
-            // static resources 
+            // static resources
             if ( typeof(conf[bundle][env].staticResources) == 'undefined') {
                 conf[bundle][env].staticResources = []
             }
-            
+
             // templates root directories
             var d           = 0
                 , dirs      = null
@@ -1562,12 +1594,12 @@ function Config(opt) {
                 var publicResources = []
                     , lStat = null
                 ;
-                
+
                 d = 0;
                 dirs = fs.readdirSync(conf[bundle][env].publicPath);
                 // ignoring html (template files) directory
                 //dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
-                
+
                 // making statics allowed directories
                 while ( d < dirs.length) {
                     lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirs[d], true));
@@ -1588,20 +1620,20 @@ function Config(opt) {
                     }
                     ++d
                 }
-                
+
                 if (hasWebRoot) {
                     var staticToPublicPath = null;
                     for (let p in files['statics']) {
                         staticToPublicPath =  wroot + p.replace( new RegExp('^'+ wroot), '/');
-                        
+
                         if ( !/\./.test(staticToPublicPath.substr(staticToPublicPath.lastIndexOf('/') )) && !/\/$/.test(staticToPublicPath) )
                             staticToPublicPath += '/';
-                        
+
                         if ( publicResources.indexOf(staticToPublicPath) < 0 )
                             publicResources.push( staticToPublicPath )
                     }
                 }
-                
+
                 conf[bundle][env].publicResources = publicResources
             } else if (hasViews) {
                 console.warn('['+bundle+'] No public dir to scan...')
@@ -1611,10 +1643,10 @@ function Config(opt) {
             if (hasViews && typeof(files['templates']) == 'undefined') {
                 files['templates'] = JSON.clone(defaultViews)
             }
-            
-            
+
+
             if ( typeof(files['templates']) != 'undefined' ) {
-                
+
                 var css     = {
                         name    : '',
                         media   : 'all',
@@ -1630,7 +1662,7 @@ function Config(opt) {
                         isCommon : false
                     }
                 ;
-                
+
                 var excluded            = {}
                     , excludedType      = null
                     , excludedStr       = null
@@ -1644,54 +1676,54 @@ function Config(opt) {
                     , tLen  = null
                     , tTmp  = null
                     , url   = null
-                ;  
-                
+                ;
+
                 // formating _common def for javascripts & stylesheets
                 for (let section in files['templates']) {
                     if (!/^_common$/.test(section) ) continue;
-                    
+
                     // inheriting from defaultViews - gina _common
                     files['templates'][section] = merge(files['templates'][section], defaultViews[section]);
                     // updating javascripts & css order
-                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];                   
+                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];
                     noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];
-                    
+
                     if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 /**&& typeof(noneDefaultJs[0].url) == 'undefined'*/ ) {
                         tTmp    = JSON.clone(noneDefaultJs);
                         t       = 0;
                         tLen    = tTmp.length;
                         noneDefaultJs = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultJs[t]        = JSON.clone(js);                            
+                            noneDefaultJs[t]        = JSON.clone(js);
                             url                     = tTmp[t];
                             if ( typeof(url) == 'string') {
-                                noneDefaultJs[t].url    = url;                                
-                                noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');    
+                                noneDefaultJs[t].url    = url;
+                                noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                                 noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
                             } else {
                                 noneDefaultJs[t] = merge(url, noneDefaultJs[t]);
-                            }  
+                            }
                         }
                     }
-                    
+
                     if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 /**&& typeof(noneDefaultCss[0].url) == 'undefined'*/ ) {
                         tTmp    = JSON.clone(noneDefaultCss);
                         t       = 0;
                         tLen    = tTmp.length;
                         noneDefaultCss = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultCss[t]           = JSON.clone(css);                            
+                            noneDefaultCss[t]           = JSON.clone(css);
                             url                         = tTmp[t];
                             if ( typeof(url) == 'string') {
-                                noneDefaultCss[t].url       = url;                                
+                                noneDefaultCss[t].url       = url;
                                 noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                                 noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
                             } else {
                                 noneDefaultCss[t] = merge(url, noneDefaultCss[t]);
-                            } 
-                        }                
+                            }
+                        }
                     }
-                    
+
                     files['templates'][section].javascripts = JSON.clone(noneDefaultJs);
                     files['templates'][section].stylesheets = JSON.clone(noneDefaultCss);
                 }
@@ -1699,50 +1731,50 @@ function Config(opt) {
                 for (let section in files['templates']) {
                     // skip _common section
                     if (/^_common$/.test(section) ) continue;
-                                                                                                      
+
                     // updating javascripts & css order
-                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];                   
+                    noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];
                     noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];
-                    
+
                     if ( Array.isArray(noneDefaultJs) && noneDefaultJs.length > 0 /**&& typeof(noneDefaultJs[0].url) == 'undefined'*/ ) {
                         tTmp    = JSON.clone(noneDefaultJs);
                         t       = 0;
                         tLen    = tTmp.length;
                         noneDefaultJs = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultJs[t]        = JSON.clone(js);                            
+                            noneDefaultJs[t]        = JSON.clone(js);
                             url                     = tTmp[t];
                             if ( typeof(url) == 'string') {
-                                noneDefaultJs[t].url    = url;                                
-                                noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');    
+                                noneDefaultJs[t].url    = url;
+                                noneDefaultJs[t].name   = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                                 noneDefaultJs[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
                             } else {
                                 noneDefaultJs[t] = merge(url, noneDefaultJs[t]);
                             }
                         }
                     }
-                    
+
                     if ( Array.isArray(noneDefaultCss) && noneDefaultCss.length > 0 /**&& typeof(noneDefaultCss[0].url) == 'undefined'*/ ) {
                         tTmp    = JSON.clone(noneDefaultCss);
                         t       = 0;
                         tLen    = tTmp.length;
                         noneDefaultCss = [];
                         for (; t < tLen; ++t) {
-                            noneDefaultCss[t]           = JSON.clone(css);                            
+                            noneDefaultCss[t]           = JSON.clone(css);
                             url                         = tTmp[t];
                             if ( typeof(url) == 'string') {
-                                noneDefaultCss[t].url       = url;                                
+                                noneDefaultCss[t].url       = url;
                                 noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                                 noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
                             } else {
                                 noneDefaultCss[t] = merge(url, noneDefaultCss[t]);
-                            } 
-                        }                
-                    } 
-                                        
-                    
-                                      
-                    
+                            }
+                        }
+                    }
+
+
+
+
                     if (!files['templates'][section].javascriptsExcluded) {
                         // merging with common javascript def
                         noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
@@ -1751,84 +1783,84 @@ function Config(opt) {
                     if ( !files['templates'][section].javascriptsExcluded || files['templates'][section].javascriptsExcluded != '**' ) {
                         noneDefaultJs   = merge.setKeyComparison('url')(defaultViews._common.javascripts, noneDefaultJs);
                     }
-                    
-                      
+
+
                     if (!files['templates'][section].stylesheetsExcluded) {
                         // merging with common stylesheets def
                         noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
                     }
                     // adding gina def
                     if ( !files['templates'][section].stylesheetsExcluded || files['templates'][section].stylesheetsExcluded != '**' ) {
-                        noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss); 
+                        noneDefaultCss  = merge.setKeyComparison('url')(defaultViews._common.stylesheets, noneDefaultCss);
                     }
-                                       
-                    
+
+
                     // force js rechecking on `name` & `url`
                     t = 0;
                     tLen = noneDefaultJs.length;
-                    
+
                     for (; t < tLen; ++t) {
-                        
+
                         if (!noneDefaultJs[t].url) continue;
-                       
-                        url = noneDefaultJs[t].url;                        
-                        if ( typeof(noneDefaultJs[t].name) == 'undefined' || noneDefaultJs[t].name == '' ) {                                
-                            noneDefaultJs[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                                
+
+                        url = noneDefaultJs[t].url;
+                        if ( typeof(noneDefaultJs[t].name) == 'undefined' || noneDefaultJs[t].name == '' ) {
+                            noneDefaultJs[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                         }
-                        
+
                         noneDefaultJs[t].type  = ( typeof(noneDefaultJs[t].type) != 'undefined' ) ? noneDefaultJs[t].type : js.type;
-                        noneDefaultJs[t].isCommon  = ( typeof(noneDefaultJs[t].isCommon) != 'undefined' ) ? noneDefaultJs[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );                        
+                        noneDefaultJs[t].isCommon  = ( typeof(noneDefaultJs[t].isCommon) != 'undefined' ) ? noneDefaultJs[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
                     }
                     // force css rechecking on `name` & `url`
                     t = 0;
                     tLen = noneDefaultCss.length;
                     for (; t < tLen; ++t) {
                         if (!noneDefaultCss[t].url) continue;
-                        
+
                         url = noneDefaultCss[t].url;
-                        if ( typeof(noneDefaultCss[t].name) == 'undefined' || noneDefaultCss[t].name == '' ) {                                
-                            noneDefaultCss[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');                                
+                        if ( typeof(noneDefaultCss[t].name) == 'undefined' || noneDefaultCss[t].name == '' ) {
+                            noneDefaultCss[t].name = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                         }
-                        
-                        
+
+
                         noneDefaultCss[t].rel       = ( typeof(noneDefaultCss[t].rel) != 'undefined' ) ? noneDefaultCss[t].rel : css.rel;
                         noneDefaultCss[t].type      = ( typeof(noneDefaultCss[t].type) != 'undefined' ) ? noneDefaultCss[t].type : css.type;
                         noneDefaultCss[t].isCommon  = ( typeof(noneDefaultCss[t].isCommon) != 'undefined' ) ? noneDefaultCss[t].isCommon : ( ( /^_common$/.test(section) ) ? true : false );
                     }
-                                      
-                    
+
+
                     files['templates'][section].javascripts = noneDefaultJs;
                     files['templates'][section].stylesheets = noneDefaultCss;
-                    
-                                            
+
+
                     excludedType = [];
                     for (let ref in files['templates'][section]) {
-                        if ( /^(javascriptsExcluded|stylesheetsExcluded)$/.test(ref) ) {                                
+                        if ( /^(javascriptsExcluded|stylesheetsExcluded)$/.test(ref) ) {
                             excludedType.push(ref);
                         }
                     }
                     // merging other common properties
                     for (let ref in files['templates']._common) {
-                        if ( /^(javascripts|stylesheets)$/.test(ref) ) { 
+                        if ( /^(javascripts|stylesheets)$/.test(ref) ) {
                             continue;
                         }
-                        
+
                         if ( typeof(files['templates'][section][ref]) == 'undefined' ) {
                             files['templates'][section][ref] = files['templates']._common[ref];
                         } else {
                             files['templates'][section][ref] = merge(files['templates'][section][ref], files['templates']._common[ref]);
-                        }                             
+                        }
                     }
-                    
+
                     // removes common definitions from the common definitions of the current section
                     r = 0;
                     rLen = excludedType.length;
                     if (rLen > 0) {
-                        for (; r < rLen; ++r) {                                
+                        for (; r < rLen; ++r) {
                             //excludedStr = excludedType[r] +'Excluded';
                             excludedStr = excludedType[r];
                             if ( typeof(files['templates'][section][excludedStr]) != 'undefined' ) {
-                                
+
                                 let allFilesCollection = new Collection(files['templates'][section][excludedStr.replace(/Excluded$/, '')]);
                                 let currentCollectionRaw = allFilesCollection.toRaw();
                                 // must be `url` list
@@ -1837,11 +1869,11 @@ function Config(opt) {
                                     // '/path/to.file' -> ['/path/to.file']
                                     excluded = [excluded];
                                 }
-                                
+
                                 if (/^(\*|\*\*|all)$/i.test(files['templates'][section][excludedStr])) {
-                                    //currentCollection = allFilesCollection.notIn({ name: 'gina'}, 'name').toRaw();  
-                                    currentCollection = allFilesCollection.toRaw();  
-                                    
+                                    //currentCollection = allFilesCollection.notIn({ name: 'gina'}, 'name').toRaw();
+                                    currentCollection = allFilesCollection.toRaw();
+
                                     excluded = [];
                                     for (let e = 0, eLen = currentCollectionRaw.length; e < eLen; e++) {
                                         if (currentCollectionRaw[e].name == 'gina' ) continue;
@@ -1851,9 +1883,9 @@ function Config(opt) {
                                     // must be `url` list
                                     currentCollection = new Collection(excluded);
                                 }
-                                
-                                
-                                
+
+
+
                                 t = 0; tLen = excluded.length;
                                 for (; t < tLen; ++t) {
                                     excludedUrl = excluded[t].trim();
@@ -1861,14 +1893,14 @@ function Config(opt) {
                                         if (currentCollectionRaw[e].url != excludedUrl[t]) continue;
                                         currentCollection = currentCollection.delete({ 'url': excludedUrl }, 'url');
                                     }
-                                }       
-                                files['templates'][section][excludedStr.replace(/Excluded$/, '')] = currentCollection.toRaw();                  
+                                }
+                                files['templates'][section][excludedStr.replace(/Excluded$/, '')] = currentCollection.toRaw();
                             }
                         }
-                    }                        
-                     
-                } // EO for section                
-                
+                    }
+
+                } // EO for section
+
             }
 
         } catch (err) {
@@ -1877,55 +1909,55 @@ function Config(opt) {
             return;
         }
 
-       
-        
-        
-        if ( typeof(files['statics']) != 'undefined' ) {   
+
+
+
+        if ( typeof(files['statics']) != 'undefined' ) {
             pCount = conf[bundle][env].publicResources.length || 0;
             sCount = conf[bundle][env].staticResources.length || 0;
-            
+
             for (var i in files['statics']) {
-                if (!/^\//.test(i) ) {                    
+                if (!/^\//.test(i) ) {
                     files['statics'][ '/'+ i ] = files['statics'][i];
                     delete files['statics'][i];
                     i = '/'+ i
                 }
-                
+
                 if ( !/\.(.*)$/.test(i) && !/\/$/.test(i) ) {
                     files['statics'][ i + '/' ] = files['statics'][i];
                     delete files['statics'][i];
-                    i += '/' 
+                    i += '/'
                 }
-                
+
                 // adding to public resources
                 if ( conf[bundle][env].publicResources.indexOf(i) < 0 ) {
-                    conf[bundle][env].publicResources[pCount] = i;                    
+                    conf[bundle][env].publicResources[pCount] = i;
                     ++pCount;
                 }
-                
+
                 // adding to static resources
                 if ( conf[bundle][env].staticResources.indexOf(i) < 0 ) {
-                    conf[bundle][env].staticResources[sCount] = i;                    
+                    conf[bundle][env].staticResources[sCount] = i;
                     ++sCount;
-                }               
-                
+                }
+
             }
         }
-        
+
 
         files = whisper(reps, files);
-        
+
         // favicons rewrite - Not needed anymore
         // var faviconsPath = files['statics'][  ( (_wroot) ? _wroot +'/' : '' ) + 'favicons'];
         // if ( hasViews && typeof(files['statics']) != 'undefiened' && fs.existsSync( faviconsPath ) ) {
         //     var favFiles = fs.readdirSync(faviconsPath);
         //     for (var f = 0, fLen = favFiles.length; f < fLen; ++f) {
         //         if ( !/^\./.test(favFiles[f]) )
-        //             files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];                
+        //             files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];
         //     }
         // }
-        
-        
+
+
         if (hasViews) {
             // loading forms rules
             if (typeof(files['templates']._common.forms) != 'undefined') {
@@ -1935,7 +1967,7 @@ function Config(opt) {
                     callback(err)
                 }
             }
-            
+
             // get error pages
             if (typeof(files['templates']._common.html) != 'undefined') {
                 var htmlErrorsFromPath = function(htmlErrorsPath) {
@@ -1944,14 +1976,14 @@ function Config(opt) {
                         var errorFiles = fs.readdirSync( htmlErrorsObj.toUnixStyle() );
                         for (let f = 0, fLen = errorFiles.length; f < fLen; f++) {
                             let errorFilename = _(htmlErrorsPath +'/'+errorFiles[f], true);
-                            if ( 
+                            if (
                                 /^\./.test(errorFiles[f])
                                 ||
-                                fs.statSync(errorFilename).isDirectory() 
+                                fs.statSync(errorFilename).isDirectory()
                             ) {
                                 continue;
-                            } 
-                            
+                            }
+
                             let eCode = errorFiles[f].replace(/\.(.*)$/, '');
                             if ( typeof(files['templates']._common.errorFiles) == 'undefined' ) {
                                 files['templates']._common.errorFiles = {};
@@ -1969,7 +2001,7 @@ function Config(opt) {
                 htmlErrorsFromPath(files['templates']._common.html+ '/errors');
                 // Then, look into shared without overriding existing
                 htmlErrorsFromPath(conf[bundle][env].sharedPath + '/errors');
-                
+
             }
         }
 
@@ -1984,58 +2016,58 @@ function Config(opt) {
                 }
                 // Attention - ginaLoader cannot be deferred !
                 scriptTag = '\n\t\t<script type="text/javascript">'
-                scriptTag = scriptTag 
+                scriptTag = scriptTag
                     + '\n\t\t<!--'
                     + '\n\t\t' + fs.readFileSync( _(loaderSrcPath, true)).toString()
                     + '\n\t\t//-->'
                     + '\n\t\t</script>';
-                                           
+
                 files['templates']._common.ginaLoader = scriptTag;
-                
+
             } catch (err) {
                 callback(err)
             }
         }
 
-        conf[bundle][env].content   = files;    
+        conf[bundle][env].content   = files;
         if ( typeof(conf[bundle][env].content) == 'undefined') {
             conf[bundle][env].content = {}
         }
-           
-        
+
+
         conf[bundle][env].bundle    = bundle;
         if (bundle == self.startingApp)
             conf[bundle][env].bundles   = self.getBundles();
 
         conf[bundle][env].env       = env;
-        
+
         // this setting is replace on http requests by the value extracted form the request header
-        if ( 
-            typeof(conf[bundle][env].content.settings) != 'undefined' 
-            && typeof(conf[bundle][env].content.settings.server) != 'undefined' 
+        if (
+            typeof(conf[bundle][env].content.settings) != 'undefined'
+            && typeof(conf[bundle][env].content.settings.server) != 'undefined'
             && typeof(conf[bundle][env].content.settings.server.protocol) != 'undefined'
-            && typeof(conf[bundle][env].content.settings.server.scheme) != 'undefined' 
+            && typeof(conf[bundle][env].content.settings.server.scheme) != 'undefined'
         ) {
             protocol    = conf[bundle][env].server.protocol = conf[bundle][env].content.settings.server.protocol; // from user's bundle/config/settings.json
-            scheme      = conf[bundle][env].server.scheme = conf[bundle][env].content.settings.server.scheme; // from user's bundle/config/settings.json     
-            
+            scheme      = conf[bundle][env].server.scheme = conf[bundle][env].content.settings.server.scheme; // from user's bundle/config/settings.json
+
             // getting server port
             conf[bundle][env].server.port = portsReverse[ bundle +'@'+ self.projectName ][env][protocol][scheme];
-            appPort = portsReverse[bundle+'@'+self.projectName][env][protocol][scheme];    
-            conf[bundle][env].port[ protocol ][ scheme ] = appPort;  
-      
-            
+            appPort = portsReverse[bundle+'@'+self.projectName][env][protocol][scheme];
+            conf[bundle][env].port[ protocol ][ scheme ] = appPort;
+
+
         } else {
             protocol    = conf[bundle][env].server.protocol;
             scheme      = conf[bundle][env].server.scheme;
         }
-        
+
         conf[bundle][env].server.supportedRequestMethods = conf[bundle][env].content.settings.server.supportedRequestMethods;
         conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
-        
+
         self.envConf[bundle][env] = conf[bundle][env];
-        
+
         ++b;
         if (b < bundles.length) {
             loadBundleConfig(bundles, b, callback, reload, collectedRules)
@@ -2043,14 +2075,14 @@ function Config(opt) {
             callback(err, files, collectedRules)
         }
     }
-    
+
     // Todo - browseDirectory -> returns a collection of files & folders paths, unless it is handled by http/2
     // Will be useful to generate cache
     // var browseDirectory = function(filename, list, i, len) {
-        
+
     //     var name = filename.substring(filename.lastIndexOf('/') +1)
     //         , location = filename.replace( new RegExp(name+'$'))
-    //         , obj = { 
+    //         , obj = {
     //             name: name,
     //             location: location,
     //             isDir: fs.statSync(filename).isDirectory()
@@ -2059,12 +2091,12 @@ function Config(opt) {
     //         , i = (typeof(i) != 'undefined') ? i : 0
     //         , len = (typeof(len) != 'undefined') ? len : 0
     //     ;
-        
+
     //     if (i == 0 && obj.isDir) { //root
     //         var files = fs.readdirSync(filename);
-    //         len = files.length;            
+    //         len = files.length;
     //     }
-        
+
     // }
 
     var loadForms = function(formsDir) {
@@ -2198,10 +2230,10 @@ function Config(opt) {
      * @param {object} routing
      * */
     this.setRouting = function(bundle, env, routing) {
-        
+
         if (!self.envConf.routing)
             self.envConf.routing = {};
-        
+
         if (!self.envConf[bundle][env].content)
             self.envConf[bundle][env].content = {};
 
@@ -2211,17 +2243,17 @@ function Config(opt) {
 
     /**
      * Get routing
-     * 
+     *
      * @param {string} [bundle]
      * @param {string} [env]
-     * 
+     *
      */
-    this.getRouting = function(bundle, env) {         
-        
+    this.getRouting = function(bundle, env) {
+
         if (typeof(env) == 'undefined') {
-            env = self.env || self.Env.get() 
+            env = self.env || self.Env.get()
         }
-        
+
         if ( typeof(bundle) != 'undefined' ) {
             return self.envConf[bundle][env].content.routing
         }
@@ -2230,10 +2262,10 @@ function Config(opt) {
     }
 
     this.setReverseRouting = function(bundle, env, reverseRouting) {
-        
+
         if (!self.envConf.reverseRouting)
             self.envConf.reverseRouting = {};
-        
+
         if (!self.envConf[bundle][env].content)
             self.envConf[bundle][env].content = {};
 
