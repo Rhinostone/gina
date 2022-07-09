@@ -378,8 +378,10 @@ function PrepareVersion() {
             var msg = (!branchExists) ? 'New version' : 'Prerelease update - '+ new Date().format("isoDateTime");
             cmd = execSync("git commit -am'"+ msg +"'");
         } catch (err) {
-            console.error(err.stack||err.message||err);
-            return done(err);
+            if (!/Your branch is up to date/i.test(err.output.toString())) {
+                console.error(err.stack||err.message||err);
+                return done(err);
+            }
         }
 
         console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
