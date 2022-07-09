@@ -330,7 +330,7 @@ function PostInstall() {
         console.info('now installing modules: please, wait ...');
         console.info('Prefix ('+ self.isCustomPrefix +'): '+ self.prefix);
         var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
-
+        cmd = self.prefix +'/'+ cmd
         run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
             .onData(function onData(data){
                 console.info(data)
@@ -353,6 +353,7 @@ function PostInstall() {
             var initialDir = process.cwd();
             process.chdir(frameworkPath);
             var cmd = ( isWin32() ) ? 'npm.cmd rm colors' : 'npm rm colors';
+            cmd = self.prefix +'/'+ cmd
             try {
                 execSync(cmd);
                 console.debug('Removed default `colors` module from `GINA_DIR`... This is normal ;)');
