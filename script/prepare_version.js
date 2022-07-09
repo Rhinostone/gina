@@ -378,7 +378,7 @@ function PrepareVersion() {
             var msg = (!branchExists) ? 'New version' : 'Prerelease update - '+ new Date().format("isoDateTime");
             cmd = execSync("git commit -am'"+ msg +"'");
         } catch (err) {
-            if (!/Your branch is up to date/i.test(err.output.toString())) {
+            if (!/Your branch is up to date/i.test( err.output.toString() )) {
                 console.error(err.stack||err.message||err);
                 return done(err);
             }
@@ -389,8 +389,10 @@ function PrepareVersion() {
         try {
             cmd = execSync("git push origin "+ targetedBranch );
         } catch (err) {
-            console.error(err.stack||err.message||err);
-            return done(err);
+            if (!/Everything up-to-date/i.test( err.output.toString() )) {
+                console.error(err.stack||err.message||err);
+                return done(err);
+            }
         }
 
         done()
