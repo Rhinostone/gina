@@ -98,13 +98,15 @@ function PreInstall() {
             execSync(cmd);
             process.chdir(initialDir);
         }
-        lib = require('./lib');
-        console = lib.logger;
+
 
         self.isWin32 = isWin32();//getEnvVar('GINA_IS_WIN32');
         self.path = getEnvVar('GINA_FRAMEWORK');
         self.gina = getEnvVar('GINA_DIR');
         self.root = self.gina; // by default
+
+        // lib = require('./lib');
+        // console = lib.logger;
 
         console.debug('framework path: ' + self.gina);
         console.debug('framework version path: ' + self.path);
