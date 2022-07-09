@@ -161,7 +161,7 @@ function PostInstall() {
         done();
     }
 
-    var configureGina = function(callback) {
+    var configureGina = function() {
         // link to ./bin/cli to binaries dir
         if (!self.isWin32) {
             var binPath     = _(self.prefix+'/bin', true);
@@ -229,16 +229,16 @@ function PostInstall() {
                 })
             } else {
 
-                configureGina();
+                // configureGina();
                 callback(false)
             }
         } else {
             if ( !self.isGlobalInstall ) {
                 lib.generator.createFileFromTemplate(source, target)
-            } else {
-
-                configureGina();
             }
+            // else {
+            //     configureGina();
+            // }
         }
     }
 
