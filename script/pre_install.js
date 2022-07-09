@@ -19,7 +19,7 @@ var isWin32 = function() {
     return (process.platform === 'win32') ? true : false;
 };
 
-var helpers = require('./../utils/helpers');
+var helpers = null;
 
 /**
  * Pre install constructor
@@ -52,6 +52,8 @@ function PreInstall() {
             console.info('please use `npm install -g gina`');
             process.exit(1);
         }
+
+        helpers = require('./../utils/helpers');
 
         begin(0);
         // TODO check old framework version to be archived
