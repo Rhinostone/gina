@@ -79,7 +79,12 @@ function Logger() {
         homeDir += '/.gina';
         shortVersion = requireJSON( _(frameworkPath +'/package.json', true) ).version;// jshint ignore:line
         shortVersion = shortVersion.split('.').splice(0,2).join('.').replace(/^v/, '');
-        defaultLogLevel = requireJSON( _(homeDir +'/'+ shortVersion +'/settings.json', true) ).log_level;// jshint ignore:line
+        if ( new _(homeDir +'/'+ shortVersion +'/settings.json', true).existsSync() ) {
+            defaultLogLevel = requireJSON( _(homeDir +'/'+ shortVersion +'/settings.json', true) ).log_level;// jshint ignore:line
+        } else {
+            defaultLogLevel = 'info'
+        }
+
     } catch(logLevelError) {
         // It is ok to fail  ... do not worry
     }

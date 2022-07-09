@@ -105,8 +105,8 @@ function PreInstall() {
         self.gina = getEnvVar('GINA_DIR');
         self.root = self.gina; // by default
 
-        // lib = require('./lib');
-        // console = lib.logger;
+        lib = require('./lib');
+        console = lib.logger;
 
         console.debug('framework path: ' + self.gina);
         console.debug('framework version path: ' + self.path);
