@@ -53,7 +53,7 @@ function PreInstall() {
             process.exit(1);
         }
 
-        helpers = require('./../utils/helpers');
+        helpers = require(__dirname + '/../utils/helpers.js');
 
         begin(0);
         // TODO check old framework version to be archived
