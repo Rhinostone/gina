@@ -38,12 +38,18 @@ function PostInstall() {
         self.root = self.gina; // by default
         self.isGlobalInstall = false;
         self.prefix = execSync('npm config get prefix');
+        self.isCustomPrefix = false;
 
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
             if (args[i] == '-g' ) {
                 self.isGlobalInstall = true;
-                break;
+                continue;
+            }
+            if (args[i] == '--prefix' ) {
+                self.isCustomPrefix = true;
+                self.prefix = args[i].split(/\=/)[1];
+                continue;
             }
         }
 
@@ -322,6 +328,7 @@ function PostInstall() {
 
     var npmInstall = function(done) {
         console.info('now installing modules: please, wait ...');
+        console.info('Prefix ('+ self.isCustomPrefix +'): '+ self.prefix);
         var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
 
         run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
