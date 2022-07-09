@@ -389,8 +389,8 @@ function PrepareVersion() {
         try {
             cmd = execSync("git push origin "+ targetedBranch );
         } catch (err) {
-            //console.error(err.stack||err.message||err);
-            //return done(err);
+            console.error(err.stack||err.message||err);
+            return done(err);
         }
 
         done()
