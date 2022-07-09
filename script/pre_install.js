@@ -36,6 +36,7 @@ function PreInstall() {
 
         self.isGlobalInstall = false;
         self.prefix = execSync('npm config get prefix');
+        self.isGinaInstall = false;
 
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
@@ -101,6 +102,11 @@ function PreInstall() {
             execSync(cmd);
             process.chdir(initialDir);
         }
+
+        if ( !fs.existsSync(frameworkPath +'/node_modules/gina') ) {
+            return done();
+        }
+        self.isGinaInstall = true;
 
         helpers = require(frameworkPath+ '/utils/helpers');
 
@@ -194,6 +200,9 @@ function PreInstall() {
     self.checkIfGinaIsAlreadyInstalled = async function(done) {
 
         console.debug('Checking if Gina is already installed');
+        if (!self.isGinaInstall) {
+            return done();
+        }
 
         // Backup current version
 
