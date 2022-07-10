@@ -53,7 +53,7 @@ function PostInstall() {
             }
         }
 
-        self.prefix = self.prefix.replace(/\n/g, '');
+        self.prefix = self.prefix.toString().replace(/\n/g, '');
 
         console.debug('Is this for Windows ? ' +  self.isWin32);
 
@@ -331,7 +331,7 @@ function PostInstall() {
     var npmInstall = function(done) {
         console.info('now installing modules: please, wait ...');
         console.info('Prefix ('+ self.isCustomPrefix +'): '+ self.prefix);
-        var cmd = self.prefix.replace(/\n/g, '') +'/bin/';
+        var cmd = self.prefix +'/bin/';
         cmd += ( isWin32() ) ? 'npm.cmd install' : 'npm install';
         console.info('running: '+ cmd +' from '+ _(self.path) );
         run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
