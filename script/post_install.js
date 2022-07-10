@@ -53,6 +53,8 @@ function PostInstall() {
             }
         }
 
+        self.prefix = self.prefix.replace(/\n/g, '');
+
         console.debug('Is this for Windows ? ' +  self.isWin32);
 
         if ( !self.isGlobalInstall ) { //global install
