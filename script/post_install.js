@@ -330,7 +330,8 @@ function PostInstall() {
         console.info('now installing modules: please, wait ...');
         console.info('Prefix ('+ self.isCustomPrefix +'): '+ self.prefix);
         var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
-        cmd = self.prefix +'/'+ cmd
+        cmd = self.prefix +'/'+ cmd;
+        console.info('running: '+ cmd +' from '+ _(self.path) );
         run(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
             .onData(function onData(data){
                 console.info(data)
