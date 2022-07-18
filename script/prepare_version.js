@@ -62,7 +62,7 @@ function PrepareVersion() {
                 var tag = args[i].split(/\=/)[1];
                 if ( tag != self.git.tag) {
                     self.git.tag = tag;
-                    self.isGitPushNeeded = true
+                    self.isGitPushNeeded = ( typeof(process.env.npm_config_dry_run) != 'undefined' ) ? false : true
                 }
                 continue;
             }
@@ -76,6 +76,8 @@ function PrepareVersion() {
                 continue;
             }
         }
+
+        self.gina = __dirname +'/..';
     }
 
     var init = function() {
@@ -463,6 +465,80 @@ function PrepareVersion() {
 
     //     done()
     // }
+
+
+    var restoreSymlinks = function(done) {
+        var archivesPath = _(getUserHome() + '/.gina/archives/framework', true);
+        var frameworkPath = _(self.gina +'/framework', true);
+
+        if ( !new _(archivesPath).existsSync() ) {
+            return;
+        }
+        // get current framework version
+        var package = require(pack);
+        var currentVersion = 'v'+ package.version.replace(/^v/, '');
+
+        // cleanup first
+        var versionsFolders = fs.readdirSync(frameworkPath);
+        for (let i = 0, len = versionsFolders.length; i < len; i++) {
+            let dir = versionsFolders[i];
+            // skip junk
+            if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {
+                continue;
+            }
+
+            // intercept & remove existing symlinks or old versions dir
+            try {
+                if ( fs.lstatSync( _(frameworkPath +'/'+ dir, true) ).isSymbolicLink() ) {
+                    console.debug('Removing Symlink: '+ _(frameworkPath +'/'+ dir, true) );
+                    // new _(frameworkPath +'/'+ dir, true).rmSync();
+                    fs.unlinkSync(_(frameworkPath +'/'+ dir, true));
+                    continue;
+                }
+
+                if (
+                    dir != currentVersion
+                    && fs.lstatSync( _(frameworkPath +'/'+ dir, true) ).isDirectory()
+                ) {
+                    console.debug('Removing old version: '+ _(frameworkPath +'/'+ dir, true));
+                    new _(frameworkPath +'/'+ dir, true).rmSync()
+                }
+            } catch (e) {
+                continue;
+            }
+        }
+
+        // restoring symlinks from archives
+        versionsFolders = fs.readdirSync(archivesPath);
+        for (let i = 0, len = versionsFolders.length; i < len; i++) {
+            let dir = versionsFolders[i];
+            // skip junk
+            if ( /^\./i.test(dir) || /(\s+copy|\.old)$/i.test(dir) ) {
+                continue;
+            }
+
+            // skip selected - for dev team only
+            if ( new _(frameworkPath +'/'+ dir, true).existsSync() ) {
+                continue;
+            }
+
+            // creating symlinks
+            try {
+                console.debug( 'Creating symlink: '+ _(archivesPath +'/'+ dir, true) +' -> '+ _(frameworkPath +'/'+ dir, true));
+                new _(archivesPath +'/'+ dir, true).symlinkSync(_(frameworkPath +'/'+ dir, true) );
+            } catch (e) {
+                return done(e)
+            }
+        }
+    }
+
+    self.end = function(done) {
+        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
+            restoreSymlinks(done);
+        }
+
+        done()
+    }
 
 
 

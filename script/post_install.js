@@ -17,25 +17,25 @@ var isWin32 = function() {
     return (process.platform === 'win32') ? true : false;
 };
 var isWritableSync = function(path) {
-        var canWrite = false;
-        if ( fs.accessSync && typeof(fs.accessSync) != 'undefined' ) {
-            try {
-                fs.accessSync(path, fs.constants.W_OK);
-                canWrite = true;
-            } catch (err) {
-                canWrite = false;
-            }
-        } else { // support for old version of nodejs
-
-            try {
-                canWrite = (fs.statSync(path).mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH));
-            } catch (err) {
-                canWrite = false
-            }
+    var canWrite = false;
+    if ( fs.accessSync && typeof(fs.accessSync) != 'undefined' ) {
+        try {
+            fs.accessSync(path, fs.constants.W_OK);
+            canWrite = true;
+        } catch (err) {
+            canWrite = false;
         }
+    } else { // support for old version of nodejs
 
-        return canWrite
-    };
+        try {
+            canWrite = (fs.statSync(path).mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH));
+        } catch (err) {
+            canWrite = false
+        }
+    }
+
+    return canWrite
+};
 var getUserHome = function() {
     var home = os.homedir ? os.homedir : function() {
         var homeDir = process.env[(isWin32()) ? 'USERPROFILE' : 'HOME'];
