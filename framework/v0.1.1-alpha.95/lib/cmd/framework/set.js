@@ -1,7 +1,7 @@
 var console = lib.logger;
 
 function Set(opt){
-    
+
     var mainConfPath        = _(GINA_HOMEDIR + '/main.json')
         , mainConf          = require(mainConfPath)
         , mainSettingsPath  = _(GINA_HOMEDIR +'/'+ GINA_SHORT_VERSION + '/settings.json')
@@ -9,7 +9,7 @@ function Set(opt){
     ;
 
     var init = function(opt){
-        
+
         var a = [], k = null, v = null;
         for (let i=3; i<process.argv.length; ++i) {
             a = process.argv[i].split(/=/);
@@ -28,41 +28,64 @@ function Set(opt){
             k = k.replace(/-—/, '--');
         }
         switch(k) {
+            case '--prefix':
+                setPrefix(v);
+            break;
+
             case '--log_level':
             case '--log-level':
                 setLogLevel(v);
             break;
-            
+
             case '--env':
                 setEnv(v);
             break;
-            
+
             case '--scope':
                 setScope(v)
             break;
-            
+
             case '--culture':
                 setCulture(v);
             break;
-            
+
             case '--port':
                 setPort(v);
-            break;  
-            
+            break;
+
             case '--debug_port':
             case '--debug-port':
                 setDebugPort(v);
-            break;            
-            
+            break;
+
             case '--timezone':
                 setTimezone(v);
             break;
-            
+
             default:
                 err = new Error('Setting environment variable `'+ k +'` is not supported');
                 console.error(err.message);
-                
+
         }
+    }
+
+    var setPrefix = function(prefix) {
+        var err = null;
+        if ( !prefix || typeof(prefix) == 'undefined' || prefix == '' ) {
+            err = new Error('Prefix cannot be left empty or undefined');
+            console.error(err.message);
+            return
+        }
+        // save to ~/.gina/main.json
+        if ( typeof(mainConf['def_prefix']) == 'undefined' ) {
+            mainConf['def_prefix'] = {}
+        }
+        mainConf['def_prefix'][GINA_SHORT_VERSION] = prefix;
+        lib.generator.createFileFromDataSync(mainConf, mainConfPath);
+        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+        process['gina']['prefix'] = prefix;
+        mainSettingsConf['prefix'] = prefix;
+        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
 
     var setLogLevel = function(level) {
@@ -75,14 +98,14 @@ function Set(opt){
             return;
         }
         // save to ~/.gina/main.json
-        mainConf['def_log_level'][GINA_SHORT_VERSION] = level;        
+        mainConf['def_log_level'][GINA_SHORT_VERSION] = level;
         lib.generator.createFileFromDataSync(mainConf, mainConfPath);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
         process['gina']['log_level'] = level;
         mainSettingsConf['log_level'] = level;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
-        
+
     var setEnv = function(env) {
         var supported   = mainConf['envs'][GINA_SHORT_VERSION]
             , err       = null
@@ -96,7 +119,7 @@ function Set(opt){
         // save to ~/.gina/main.json
         lib.generator.createFileFromDataSync(mainConf, mainConfPath);
     }
-    
+
     var setScope = function(scope) {
         var supported   = mainConf['scopes'][GINA_SHORT_VERSION]
             , err       = null
@@ -110,8 +133,8 @@ function Set(opt){
         // save to ~/.gina/main.json
         lib.generator.createFileFromDataSync(mainConf, mainConfPath);
     }
-    
-    var setCulture = function(culture) {        
+
+    var setCulture = function(culture) {
         var supported   = mainConf['cultures'][GINA_SHORT_VERSION]
             , err       = null
         ;
@@ -121,14 +144,14 @@ function Set(opt){
             return;
         }
         // save to ~/.gina/main.json
-        mainConf['def_culture'][GINA_SHORT_VERSION] = culture;        
+        mainConf['def_culture'][GINA_SHORT_VERSION] = culture;
         lib.generator.createFileFromDataSync(mainConf, mainConfPath);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
         process['gina']['culture'] = culture;
         mainSettingsConf['culture'] = culture;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
-    
+
     var setPort = function(port) {
         console.debug('Setting `port` to #'+ port);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
@@ -136,7 +159,7 @@ function Set(opt){
         mainSettingsConf['port'] = ~~port;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
-    
+
     var setDebugPort = function(port) {
         console.debug('Setting `debug port` to #'+ port);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
@@ -144,10 +167,10 @@ function Set(opt){
         mainSettingsConf['debug_port'] = ~~port;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
-    
+
     var setTimezone = function(timezone) {
         // save to ~/.gina/main.json
-        mainConf['def_timezone'][GINA_SHORT_VERSION] = timezone;        
+        mainConf['def_timezone'][GINA_SHORT_VERSION] = timezone;
         lib.generator.createFileFromDataSync(mainConf, mainConfPath);
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
         process['gina']['timezone'] = timezone;

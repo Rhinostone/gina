@@ -8,6 +8,7 @@ support
 test
 examples
 *.sock
+doc
 script/prepare.js
 test/workspace
 framework/v*/node_modules

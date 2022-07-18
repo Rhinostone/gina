@@ -1,5 +1,6 @@
 var fs = require('fs');
 var os = require('os');
+const { execSync } = require('child_process');
 
 var lib         = null;
 var console     = null;
@@ -25,18 +26,31 @@ function MainHelper(opt) {
         var packObj = require(pack);
         var version =  getEnvVar('GINA_VERSION') || packObj.version;
         var frameworkPath = ginaPath + '/framework/v' + version;
-        
+        var pkg = null;
         try {
             lib         = require(frameworkPath + '/lib');
             console     = lib.logger;
             merge       = lib.merge;
+
+            try {
+                pkg = packObj;
+                self.defaultPrefix = pkg.config.prefix.replace(/^\~/, getUserHome());
+                self.optionalPrefix = pkg.config.optionalPrefix.replace(/^\~/, getUserHome());
+            } catch(err) {
+                try {
+                    self.defaultPrefix = execSync('npm config get prefix').toString().replace(/\n$/g, '');
+                    pkg = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
+                    self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+                } catch (_err) {
+                    throw new Error(_err.stack +'\n'+ err.stack)
+                }
+            }
+
         } catch (err) {
             // this can happen in certain conditions
             // like scripts running out of the framework context
             // we'll just ignore it
         }
-        
-        
     }
 
     /**
@@ -199,7 +213,7 @@ function MainHelper(opt) {
         }
 
         var newArgv = {};
-        for (var a in process.argv) {            
+        for (var a in process.argv) {
             if ( /\-\-/.test(process.argv[a]) && process.argv[a].indexOf('=') > -1 ) {
                 evar = ( (process.argv[a].replace(/--/, ''))
                     .replace(/-/, '_') )
@@ -254,6 +268,12 @@ function MainHelper(opt) {
         setContext('envVars', process['gina']);
     }
 
+    /**
+     * getEnvVar
+     * Will read from `process.gina` which is set mostly in `cli.js`
+     *
+     * @param {string} key
+     */
     getEnvVar = function(key) {
         if (
             typeof(process['gina']) != 'undefined' &&
@@ -269,6 +289,10 @@ function MainHelper(opt) {
         return process.gina
     }
 
+    getProtected = function() {
+        return self.protectedVars
+    }
+
     /**
      * Get log path - %SystemRoot%\system32\winevt\logs or /
      *
@@ -277,37 +301,74 @@ function MainHelper(opt) {
     getLogDir = function() {
         // Trying to retrieve original value if already defined
         var logDir = getEnvVar('GINA_LOGDIR') || null;
+        var logDirObj = null;
         if ( logDir ) {
-            if ( !/gina$/.test(logDir) ) {
-                logDir += ( isWin32() ) ? '\\gina' : '/gina'
+            logDirObj = new _(logDir, true);
+            if ( !logDirObj.existsSync() ) {
+                logDirObj.mkdirSync()
             }
             return logDir
         }
+
+        var prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+
         if ( isWin32() ) {
             logDir = process.env.LOG ||
                 process.env.LOGS ||
                 (process.env.SystemRoot || process.env.windir) + '\\System32\\Winevt\\Logs'
             ;
+
+            if ( !logDir || logDir == '' ) {
+                throw new Error('Log directory not defined or not found !');
+            }
+
+            logDirObj = new _(logDir);
+            if ( !logDirObj.isWritableSync() ) {
+                throw new Error('Log directory found but not writable: need permissions for `'+ logDir +'`');
+            }
+
             if ( !/gina$/.test(logDir) ) {
-                logDir += '\\gina'
+                logDir += '\\gina';
+                logDirObj = new _(logDir);
             }
         } else {
             logDir = process.env.LOGDIR ||
                 process.env.LOG ||
                 process.env.LOGS ||
-                '/usr/local/var/log'
+                prefix+'/var/log'
             ;
-            if ( !/gina$/.test(logDir) ) {
-                logDir += '/gina'
+            logDirObj = new _(logDir);
+            if ( new RegExp('^'+ prefix).test(logDir) && !new _(prefix).isWritableSync() ) {
+                logDir = getUserHome() +'/.gina/log';
+                logDirObj = new _(logDir);
+                if ( !logDirObj.existsSync() ) {
+                    logDirObj.mkdirSync()
+                }
+
+                return logDir
+            }
+
+            if ( new RegExp('^'+ prefix +'/var').test(logDir) && !new _(prefix +'/var').existsSync() ) {
+                fs.mkdirSync(prefix +'/var');
+            }
+
+            if ( !logDirObj.existsSync() ) {
+                logDirObj.mkdirSync();
+            }
+
+            if ( !/gina$/.test(logDir) && self.optionalPrefix != prefix ) {
+                logDir += '/gina';
+                logDirObj = new _(logDir);
             }
         }
-        
+
+        if ( !logDirObj.existsSync() ) {
+            logDirObj.mkdirSync()
+        }
+
         return logDir;
     }
 
-    getProtected = function() {
-        return self.protectedVars
-    }
 
     /**
      * Get run\lock path
@@ -316,46 +377,157 @@ function MainHelper(opt) {
     getRunDir = function() {
         // Trying to retrieve original value if already defined
         var runDir = getEnvVar('GINA_RUNDIR') || null;
+        var runDirObj = null;
         if ( runDir ) {
-            if ( !/gina$/.test(runDir) ) {
-                runDir += ( isWin32() ) ? '\\gina' : '/gina'
+            runDirObj = new _(runDir, true);
+            if ( !runDirObj.existsSync() ) {
+                runDirObj.mkdirSync()
             }
             return runDir
         }
-        
-        if ( isWin32() ) {
-            console.debug('check /gina/utils/helper.js around on getRunDir()')
-        } else {                        
-            // Means `/usr/local/var/lock` or `/usr/local/var/run` by default.
-            runDirObj = new _('/usr/local/var/lock', true);
-            if ( runDirObj.existsSync() ) {
-                return _( runDirObj.toUnixStyle() +'/gina', true );
+
+        var prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+
+        runDir = (isWin32()) ? getUserHome() + '\\.gina\\run' : prefix + '/var/lock';
+
+        if ( !isWin32() && new RegExp('^'+ prefix).test(runDir) && !new _(prefix).isWritableSync() ) {
+            runDir = getUserHome() +'/.gina/run';
+            runDirObj = new _( runDir, true );
+            if ( !runDirObj.existsSync() ) {
+                runDirObj.mkdirSync()
             }
-            // by default
-            return _('/usr/local/var/run/gina', true)//by default.
+
+            return runDir
         }
+
+
+        runDirObj = new _( runDir, true );
+        if ( runDirObj.existsSync() ) {
+            if ( !runDirObj.isWritableSync() ) {
+                throw new Error('location `'+ runDir +'` found but not writable !' )
+            }
+
+            runDir += ( isWin32() ) ? '' : '/gina';
+            runDirObj = new _( runDir, true );
+            if ( !runDirObj.existsSync() ) {
+                runDirObj.mkdirSync()
+            }
+
+            return runDir;
+        }
+
+        try {
+            if ( new RegExp('^'+ prefix +'/var').test(runDir) && !new _(prefix + '/var').existsSync() ) {
+                fs.mkdirSync(prefix +'/var');
+            }
+
+            runDir = prefix +'/var/run';//by default.
+            if ( !existsSync(runDir) ) {
+                fs.mkdirSync(runDir)
+            }
+        } catch (err) {
+            throw new Error('location error: `'+ runDir+'`\n'+ err.stack);
+        }
+
+        if (self.optionalPrefix != prefix) {
+            runDir += ( isWin32() ) ? '\\gina' : '/gina';
+            runDirObj = new _( runDir, true );
+            if ( !runDirObj.existsSync() ) {
+                fs.mkdirSync(runDir)
+            }
+        }
+
+        return runDir;
     }
 
     getTmpDir = function() {
+
+        var dir = getEnvVar('GINA_TMPDIR') || null;
+        if (dir) {
+            dirObj = new _(dir, true);
+            if ( !dirObj.existsSync() ) {
+                dirObj.mkdirSync()
+            }
+            return dir
+        }
+
+        var prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+
         // support for node 0.10.x & 0.11.x
-        var tmp = os.tmpdir || function() {
+        var tmp = (os.tmpdir) ? os.tmpdir : function() {
+            var tmpDir = null;
             if ( isWin32() ) {
-                return process.env.TEMP ||
+                tmpDir = process.env.TEMP ||
                     process.env.TMP ||
                     (process.env.SystemRoot || process.env.windir) + '\\Temp'
             } else {
-                return process.env.TMPDIR ||
+                tmpDir = process.env.TMPDIR ||
                     process.env.TMP ||
                     process.env.TEMP ||
-                    '/usr/local/var/tmp'
+                    prefix+'/var/tmp'
+                ;
+
+                if ( new RegExp('^'+ prefix).test(tmpDir) && !isWritableSync(prefix) ) {
+                    tmpDir = getUserHome() +'/.gina/tmp';
+                    if ( !existsSync(tmpDir) ) {
+                        fs.mkdirSync(tmpDir)
+                    }
+                }
+
+                if ( new RegExp('^'+ prefix +'/var').test(tmpDir) && !existsSync(prefix +'/var') ) {
+                    fs.mkdirSync(prefix +'/var');
+                }
+            }
+
+            var tmpDirObj = new _(tmpDir);
+            if ( !tmpDirObj.existsSync() ) {
+                tmpDirObj.mkdirSync();
             }
         };
 
-        return ( typeof(tmp) == 'function') ?  tmp() : tmp
+        return tmp()
     }
 
+    /**
+     * isWritableSync
+     * Only used for `getUserHome()`
+     *
+     * @param {string} path
+     */
+    var isWritableSync = function(path) {
+        var canWrite = false;
+        if ( typeof(fs.accessSync) != 'undefined' ) {
+            try {
+                fs.accessSync(path, fs.constants.W_OK);
+                canWrite = true;
+            } catch (err) {
+                canWrite = false;
+            }
+        } else { // support for old version of nodejs
+
+            try {
+                canWrite = (fs.statSync(path).mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH));
+            } catch (err) {
+                canWrite = false
+            }
+        }
+
+        return canWrite
+    };
+
     getUserHome = function() {
-        return process.env[(isWin32()) ? 'USERPROFILE' : 'HOME']
+        var homeDir = process.env[(isWin32()) ? 'USERPROFILE' : 'HOME'];
+
+        if ( !homeDir || homeDir == '' ) {
+            throw new Error('Home directory not defined or not found !');
+        }
+
+
+        if ( !isWritableSync(homeDir) ) {
+            throw new Error('Home directory found but not writable: need permissions for `'+ homeDir +'`');
+        }
+
+        return homeDir
     }
 
     getVendorsConfig = function(vendor) {
@@ -387,14 +559,14 @@ function MainHelper(opt) {
         }
     }
 
-    setEnvVar = function(key, val, isProtected) {        
+    setEnvVar = function(key, val, isProtected) {
         key = key.toUpperCase();
         var err                     = null
-            // related task `framework:set` & framework/v.xxx/lib/cmd/framework/init.js 
+            // related task `framework:set` & framework/v.xxx/lib/cmd/framework/init.js
             , specialCases          = ['GINA_PORT', 'GINA_DEBUG_PORT', 'GINA_CULTURE', 'GINA_TIMEZONE']
             , isOverrrideAllowed    = (specialCases.indexOf(key) > -1) ? true : false
         ;
-        
+
         if (
             key.substr(0, 5) !== 'GINA_' &&
             key.substr(0, 7) !== 'VENDOR_' &&
@@ -418,10 +590,10 @@ function MainHelper(opt) {
                 process['gina'] = {}
             }
             process['gina'][key] = val;
-            if ( typeof(isProtected) != 'undefined' && isProtected == true) {                
+            if ( typeof(isProtected) != 'undefined' && isProtected == true) {
                 self.protectedVars.push(key)
-            }            
-        }        
+            }
+        }
     }
 
     defineDefault = function(obj) {

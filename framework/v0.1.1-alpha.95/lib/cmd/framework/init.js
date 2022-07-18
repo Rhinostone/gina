@@ -1,6 +1,8 @@
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var e               = new EventEmitter();
+const { execSync }  = require('child_process');
+
 var console         = lib.logger;
 var ginaPath        = getPath('gina').root;
 var help            = require(ginaPath + '/utils/helper');
@@ -129,11 +131,13 @@ function Initialize(opt) {
         var source  = getPath('gina').root + '/resources/home/main.json';
         var target  = self.opt.homedir + '/main.json';
         var version = 'v' + getEnvVar('GINA_VERSION');
+        var prefix  = getEnvVar('GINA_PREFIX') || execSync('npm config get prefix').toString().replace(/\n$/g, '');
 
         var data = require(source);
         var dic = {
             'release' : self.release,
-            'version' : version
+            'version' : version,
+            'prefix' : prefix
         };
         data = whisper(dic, data);
 
@@ -157,7 +161,6 @@ function Initialize(opt) {
             }
         }
 
-
         // envs
         mainConfig.envs = merge(mainConfig.envs, data.envs, true);
         // scopes
@@ -176,6 +179,7 @@ function Initialize(opt) {
         var defCulture  = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
         var defTimezone = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
         var defLogLevel = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
+        var defPrefix   = (mainConfig['def_prefix']) ? mainConfig['def_prefix'][self.release] : data.def_prefix[self.release];
 
 
         if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
@@ -187,17 +191,19 @@ function Initialize(opt) {
         if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
             mainConfig.cultures[self.release].push(defCulture);
 
-        if ( mainConfig.cultures[self.release].indexOf(defCulture) < 0 )
-            mainConfig.cultures[self.release].push(defCulture);
 
         // Update only when needed
         if (!mainConfig.def_culture)
             mainConfig.def_culture = data.def_culture;
+
         if (!mainConfig.def_timezone)
             mainConfig.def_timezone = data.def_timezone;
 
         if (!mainConfig.def_log_level)
             mainConfig.def_log_level = data.def_log_level;
+
+        if (!mainConfig.def_prefix)
+            mainConfig.def_prefix = data.def_prefix;
 
         mainConfig.protocols[self.release].sort();
         mainConfig.schemes[self.release].sort();
@@ -256,6 +262,7 @@ function Initialize(opt) {
             )
         }
     }
+
 
     /**
      * Check env
@@ -326,6 +333,7 @@ function Initialize(opt) {
         console.debug('Checking framework settings...');
         var main            = require( _(self.opt.homedir + '/main.json', true) )
             , version       = getEnvVar('GINA_VERSION')
+            , prefix        = getEnvVar('GINA_PREFIX') || main['def_prefix'][self.release]
             , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
             , scope         = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release]
             , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
@@ -335,7 +343,13 @@ function Initialize(opt) {
 
         // case of port & debug_port updated
         var targetObj = new _(target);
-        var localUserSettings = requireJSON(target);
+        var localUserSettings = null;
+        if ( targetObj.existsSync() ) {
+            localUserSettings = requireJSON(target);
+        } else {
+            localUserSettings = JSON.clone(settings);
+        }
+
         if ( !getEnvVar('GINA_PORT') && targetObj.existsSync() ) {
             if ( typeof(localUserSettings.port) != 'undefined' ) {
                 setEnvVar('GINA_PORT', ~~localUserSettings.port);
@@ -362,6 +376,7 @@ function Initialize(opt) {
              */
 
             var dic = {
+                'prefix' : prefix,
                 'version' : version,
                 'env' : env,
                 'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,
