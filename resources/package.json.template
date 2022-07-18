@@ -19,6 +19,10 @@
     "type": "git",
     "url": "https://github.com/rhinostone/gina.git"
   },
+  "bugs": {
+    "url" : "https://github.com/rhinostone/gina/issues",
+    "email" : "bugs@gina.io"
+  },
   "author": {
     "name": "Rhinostone",
     "email": "contact@gina.io"
@@ -32,8 +36,7 @@
   ],
   "preferGlobal": true,
   "bin": {
-    "gina": "./bin/cli",
-    "gina-debug": "./bin/cli-debug"
+    "gina": "./bin/gina"
   },
   "man": [
     "./doc/man/gina.1",
@@ -43,8 +46,12 @@
     "./doc/man/gina-model.1",
     "./doc/man/gina-env.1"
   ],
-  "main": "./framework/v{version}/core/gna",
-  "scripts": {},
+  "main": "./framework/v0.1.1-alpha.70/core/gna",
+  "scripts": {
+    "prepare": "node ./script/prepare_version.js -g",
+    "preinstall": "node ./script/pre_install.js -g",
+    "postinstall": "node ./script/post_install.js -g"
+  },
   "license": "MIT",
   "readmeFilename": "README.md"
 }

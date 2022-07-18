@@ -3,6 +3,21 @@
         "{release}": [ "{version}" ]
     },
     "def_framework": "{version}",
+    "def_prefix": {
+        "{release}": "{prefix}"
+    },
+    "scopes": {
+        "{release}": [
+            "local",
+            "production"
+        ]
+    },
+    "local_scope": {
+        "{release}": "local"
+    },
+    "def_scope": {
+        "{release}": "local"
+    },
     "envs": {
         "{release}": [ "dev", "prod" ]
     },
@@ -12,7 +27,7 @@
     "dev_env": {
         "{release}": "dev"
     },
-    
+
     "protocols": {
         "_comment": "e.g.:  http/1.1, http/2.0, net",
         "{release}": [  "http/1.1", "http/2.0" ]

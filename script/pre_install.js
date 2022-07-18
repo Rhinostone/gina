@@ -1,5 +1,5 @@
 /**
- * This file is part of the gina package.
+ * This file is part of the gina pkg.
  * Copyright (c) 2017 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
@@ -15,10 +15,6 @@ var { execSync } = require('child_process');
 //var lib         = require('./lib');
 // var console     = lib.logger;
 var lib     = null;
-var isWin32 = function() {
-    return (process.platform === 'win32') ? true : false;
-};
-
 var helpers = null;
 
 /**
@@ -27,43 +23,136 @@ var helpers = null;
  * if you need to test, go to gina main folder
  * $ node --inspect-brk=5858 ./script/pre_install.js -g
  *
+ * NB.: At this stage, Gina is not yet installed and no lib or helper cannot be used here
+ *      excepted if Gina has been previously installed
+ *
  * @constructor
  * */
 function PreInstall() {
-    var self = {}, _this = this;
+    var self = {};
 
-    var init = function() {
+    var configure = function() {
 
-        self.isGlobalInstall = false;
-        self.prefix = execSync('npm config get prefix');
-        self.isGinaInstall = false;
+        // TODO - handle windows case
+        if ( /^true$/i.test(isWin32()) ) {
+            throw new Error('Windows in not yet fully supported. Thank you for your patience');
+        }
 
+        self.isWin32            = isWin32();
+        self.isGlobalInstall    = process.env.npm_config_global || false;
+        self.isResetNeeded      = process.env.npm_config_reset || false;
+        self.defaultPrefix      = execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var pkg = null;
+        try {
+            pkg = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
+        } catch(err) {
+            throw err
+        }
+        self.optionalPrefix     = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+        // self.optionalPrefix     = getUserHome()+'/.npm-global';
+
+        // `process.env.npm_config_prefix` is only retrieved on `npm install gina`
+        // and it should always be equal to `self.defaultPrefix`
+        self.prefix             = process.env.npm_config_prefix || self.defaultPrefix;
+        self.isCustomPrefix     = false;
+        self.isGinaInstalled    = false;
+
+        // Overriding thru passed arguments
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
-            if (args[i] == '-g' ) {
+            if ( /^(\-g|\-\-global)$/.test(args[i]) ) {
                 self.isGlobalInstall = true;
-                break;
+                continue;
+            }
+
+            if ( /^\-\-reset$/.test(args[i]) ) {
+                self.isResetNeeded = true;
+                continue;
+            }
+
+            if ( /^\-\-prefix\=/.test(args[i] ) ) {
+                self.isCustomPrefix = true;
+                self.prefix = args[i].split(/\=/)[1];
+                self.prefix = self.prefix.replace(/^\~/, getUserHome());
+                continue;
             }
         }
 
-        if ( !self.isGlobalInstall ) { //global install
-            self.root = process.cwd(); // project path
-            self.tmpDir = os.tmpdir(); // default tmp path
-            console.error('local installation is not supported for this version at the moment.');
-            console.info('please use `npm install -g gina`');
-            process.exit(1);
+        // For local install
+        console.debug('self.isGlobalInstall => '+ self.isGlobalInstall);
+        if ( !self.isGlobalInstall ) {
+            console.warn('Local installation is not fully supported at the moment.');
+            console.warn('You are encouraged to use `npm install -g gina`\nor, if you are trying to link gina to your project, use `npm link gina` if Gina has already been installed globally\n');
+            // Just in case someone is trying to run pre_install from the `gina` module
+            if (!/node\_modules(\\\\|\/)gina$/.test(process.cwd())) {
+                self.prefix = process.cwd();
+            }
         }
 
+        // checking permission
+        var hasPermissionsForBin = isWritableSync(self.prefix + ( isWin32() ? '\\' : '/' ) + 'bin');
+        var hasPermissionsForLib = isWritableSync(self.prefix + ( isWin32() ? '\\' : '/' ) + 'lib');
+        var hasPermissionsForVar = isWritableSync(self.prefix + ( isWin32() ? '\\' : '/' ) + 'var');
+        if ( !hasPermissionsForBin || !hasPermissionsForLib || !hasPermissionsForVar) {
+            if (!hasPermissionsForBin) {
+                console.warn('Path not accessible or missing: '+ self.prefix + ( isWin32() ? '\\' : '/' ) + 'bin')
+            }
+            if (!hasPermissionsForLib) {
+                console.warn('Path not accessible or missing: '+ self.prefix + ( isWin32() ? '\\' : '/' ) + 'lib')
+            }
+            if (!hasPermissionsForVar) {
+                console.warn('Path not accessible or missing: '+ self.prefix + ( isWin32() ? '\\' : '/' ) + 'var')
+            }
+
+            // console.warn('You do not have sufficient permissions. Switching to `--prefix='+ self.optionalPrefix +'`');
+            // process.env.npm_config_prefix = self.prefix = self.optionalPrefix;
+        }
+
+        if ( self.prefix != self.defaultPrefix ) {
+            self.isCustomPrefix = true;
+        }
+
+        self.gina = __dirname +'/..';
+        // tying to figure out if gina is already install the given prefix
+        // var hasFoundGina = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
+        var hasFoundGina = pkg;
+        try {
+            hasFoundGina = JSON.parse(hasFoundGina);
+            if ( hasFoundGina.dependencies && typeof(hasFoundGina.dependencies.gina) != 'undefined' ) {
+                self.isGinaInstalled = true;
+                self.versionPath = self.gina;
+                self.versionPath += (isWin32()) ? '\\framework\\' : '/framework/';
+                self.versionPath += 'v'+ hasFoundGina.dependencies.gina.version;
+
+                console.debug('Install path => '+ hasFoundGina.dependencies.gina.path);
+
+                // OK ... found installed gina but on a different prefix
+                // In this case, let's assume that it is not really installed
+                if ( !new RegExp('^'+ self.prefix).test(hasFoundGina.dependencies.gina.path) ) {
+                    self.isGinaInstalled = false;
+                }
+            }
+        } catch (err) {}
+
+        console.debug('self.defaultPrefix => '+ self.defaultPrefix);
+        console.debug('self.optionalPrefix  => '+ self.optionalPrefix );
+        console.debug('self.prefix => '+ self.prefix);
+        console.debug('self.isCustomPrefix => ', self.isCustomPrefix);
+        // only available when running the script with NPM
+        console.debug('process.env.npm_config_prefix => '+ process.env.npm_config_prefix);
+    }
+
+    var init = function() {
+
+        configure();
 
         begin(0);
-        // TODO check old framework version to be archived
     }
 
     /**
      * Bebin - Will run checking tasks in order of declaration
      * */
      var begin = async function(i) {
-        //console.debug('i is ', i);
         var n = 0, funct = null, functName = null;
         for (let t in self) {
             if ( typeof(self[t]) == 'function') {
@@ -87,43 +176,75 @@ function PreInstall() {
         }
     }
 
+
+
     self.checkRequirements = async function(done) {
-        // TODO - handle windows case
-        if ( /true/i.test(self.isWin32) ) {
-            return done( new Error('Windows in not yet fully supported. Thank you for your patience'));
+
+        var ginaHome = getUserHome() + ( isWin32() ? '\\.gina' : '/.gina' );
+        if ( self.isResetNeeded && existsSync(ginaHome) ) {
+            console.debug('`.gina` reset requested ...');
+            fs.rmSync(ginaHome, { recursive: true, force: true });
         }
 
         // Let's temporarily install `colors` into `GINA_DIR` it will be removed by the `post_install.js` script
         var initialDir = process.cwd();
-        var frameworkPath   = __dirname +'/..';
-        if ( !fs.existsSync(frameworkPath +'/node_modules/colors') ) {
-            process.chdir(frameworkPath);
+
+        if ( !fs.existsSync(self.gina +'/node_modules/colors') ) {
+            process.chdir(self.gina);
+
+            var oldConfigGlobal = process.env.npm_config_global;
+            process.env.npm_config_global=false;
             var cmd = ( isWin32() ) ? 'npm.cmd install colors@1.4.0' : 'npm install colors@1.4.0';
             execSync(cmd);
+            process.env.npm_config_global=oldConfigGlobal;
+
             process.chdir(initialDir);
         }
 
-        if ( !fs.existsSync(frameworkPath +'/node_modules/gina') ) {
-            return done();
-        }
-        self.isGinaInstall = true;
 
-        helpers = require(frameworkPath+ '/utils/helpers');
-
-        lib = require('./lib');
-        console = lib.logger;
-
-        self.isWin32 = isWin32();//getEnvVar('GINA_IS_WIN32');
-        self.path = getEnvVar('GINA_FRAMEWORK');
-        self.gina = getEnvVar('GINA_DIR');
-        self.root = self.gina; // by default
 
         console.debug('framework path: ' + self.gina);
-        console.debug('framework version path: ' + self.path);
-        console.debug('cwd path: ' + self.root );
-        console.debug('this is a global install ...');
+        console.debug('framework version path: ' + self.versionPath);
+        console.debug('Is this a global install: '+ self.isGlobalInstall);
 
         done();
+    }
+
+    self.checkRequiredFolders = function(done) {
+
+        var ginaHomeDir = getUserHome() + ((isWin32()) ? '\\.gina': '/.gina');
+        if (!existsSync(ginaHomeDir) ) {
+            fs.mkdirSync(ginaHomeDir)
+        }
+
+        // check for `/usr/local/tmp` or `/tmp`
+        var tmpDir = getTmpDir(self.prefix);
+        console.info('`tmp` dir -> '+ tmpDir);
+        if ( !existsSync(tmpDir) ) {
+            fs.mkdirSync(tmpDir)
+        }
+
+
+        // check for `/usr/local/run`
+        var runDir = getRunDir(self.prefix);
+        console.info('`run` dir -> '+ runDir);
+
+        // check for `/usr/local/log`
+        var logDir = getLogDir(self.prefix);
+        console.info('`log` dir -> '+ logDir);
+
+        // var settingsBackupPath = tmpDir +  ((isWin32()) ? '\\': '/') + 'gina-install-settings.json';
+        // console.info('tmp folder backup -> '+ settingsBackupPath);
+        // var data =  JSON.stringify({
+        //     prefix: self.prefix,
+        //     rundir: runDir,
+        //     logdir: logDir,
+        //     tmpdir: tmpDir
+        // }, null, 4);
+        // fs.writeFileSync(settingsBackupPath, data);
+        // fs.chmodSync(settingsBackupPath, 0755);
+
+        done()
     }
 
 
@@ -146,7 +267,7 @@ function PreInstall() {
     //     }
     //     // from `/usr/local` -> `~/.npm-global`
     //     var cmd = 'npm config set prefix '+ getUserHome() +'/.npm-global';
-    //     await promisify(run)(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+    //     await promisify(run)(cmd, { cwd: _(self.path), tmp: getTmpDir(self.prefix);, outToProcessSTD: true })
     //         .catch(function onError(err){
     //             if (err) {
     //                 console.warn('try to run: sudo ' + cmd);
@@ -158,7 +279,7 @@ function PreInstall() {
     //     var profilePathObj = new _(profilePath);
     //     if ( !profilePathObj.existsSync() ) {
     //         cmd = 'touch '+ profilePath;
-    //         await promisify(run)(cmd, { cwd: _(self.path), tmp: _(self.root +'/tmp'), outToProcessSTD: true })
+    //         await promisify(run)(cmd, { cwd: _(self.path), tmp: getTmpDir(self.prefix);, outToProcessSTD: true })
     //             .catch(function onError(err){
     //                 if (err) {
     //                     console.warn('try to run: sudo ' + cmd);
@@ -199,29 +320,45 @@ function PreInstall() {
 
     self.checkIfGinaIsAlreadyInstalled = async function(done) {
 
-        console.debug('Checking if Gina is already installed');
-        if (!self.isGinaInstall) {
+        console.debug('Checking if Gina is already installed for prefix `'+ self.prefix+'`: '+ self.isGinaInstalled);
+        if (!self.isGinaInstalled) {
             return done();
         }
+
 
         // Backup current version
 
         // check for ~/.gina
-        var ginaHomeDir = _(getUserHome() + '/.gina', true);
+        var ginaHomeDir = getUserHome() + ((isWin32()) ? '\\.gina': '/.gina');
         // if not found -> skip because it means that gina might not be installed or configured yet
-        if ( !new _(ginaHomeDir).existsSync() ) {
+        if (!existsSync(ginaHomeDir) ) {
             return done();
         }
 
-        // check if framework version folder is found
-        var versionsFolders = null, frameworkPath = null;
+        var frameworkPath   = self.versionPath;
         try {
-            frameworkPath = _(self.root +'/framework', true);
-            console.info('frameworkPath: ', frameworkPath);
-            if ( !new _(frameworkPath).existsSync() ) {
+            helpers = require(self.gina+ '/utils/helper');
+            lib     = require('./lib');
+            console = lib.logger;
+        } catch (err) {
+            return done(err)
+        }
+
+
+
+        // root
+        // self.gina           = getEnvVar('GINA_DIR');
+        // self.versionPath    = getEnvVar('GINA_FRAMEWORK');
+
+        // check if framework version folder is found
+        var versionsFolders = null, frameworkFolder = null;
+        try {
+            frameworkFolder = _(self.gina +'/framework', true);
+            console.debug('frameworkFolder: ', frameworkFolder);
+            if ( !existsSync(frameworkFolder) ) {
                 return done();
             }
-            versionsFolders = fs.readdirSync(frameworkPath);
+            versionsFolders = fs.readdirSync(frameworkFolder);
         } catch (err) {
             // do nothing
         }
@@ -273,43 +410,233 @@ function PreInstall() {
                 });
 
             if (err) {
-                throw err;
+                return done(err);
             }
         }
         // It is not required to update `~/.gina/main.json` &&  `~/.gina/{shortVersion}/settings.json`
-
-        self.checkRequiredFolders = function(done) {
-
-            // check for `/usr/local/tmp`
-            var tmpDir = getTmpDir()
-            console.info('`tmp` dir -> '+ tmpDir);
-            var tmpDirObj = new _(tmpDir, true);
-            if ( !tmpDirObj.existsSync() ) {
-                tmpDirObj.mkdirSync()
-            }
-
-            // check for `/usr/local/run`
-            var runDir = getRunDir();
-            console.info('`run` dir -> '+ runDir);
-            var runDirObj = new _(runDir, true);
-            if ( !runDirObj.existsSync() ) {
-                runDirObj.mkdirSync()
-            }
-
-            // check for `/usr/local/log`
-            var logDir = getLogDir();
-            console.info('`log` dir -> '+ logDir);
-            var logDirObj = new _(logDir, true);
-            if ( !logDirObj.existsSync() ) {
-                logDirObj.mkdirSync()
-            }
-
-            done()
-        }
-
-
         done()
     }
+
+    var isWin32 = function() {
+        return (process.platform === 'win32') ? true : false;
+    };
+
+    var existsSync = function(path) {
+        if ( fs.accessSync && typeof(fs.accessSync) != 'undefined' ) {
+            try {
+                fs.accessSync(path, fs.constants.F_OK);
+                return true;
+            } catch (err) {
+                return false;
+            }
+        } else { // support for old version of nodejs
+            return fs.existsSync(path);
+        }
+    }
+
+    var isWritableSync = function(path) {
+        var canWrite = false;
+        if ( fs.accessSync && typeof(fs.accessSync) != 'undefined' ) {
+            try {
+                fs.accessSync(path, fs.constants.W_OK);
+                canWrite = true;
+            } catch (err) {
+                canWrite = false;
+            }
+        } else { // support for old version of nodejs
+
+            try {
+                canWrite = (fs.statSync(path).mode & (fs.constants.S_IRUSR | fs.constants.S_IRGRP | fs.constants.S_IROTH));
+            } catch (err) {
+                canWrite = false
+            }
+        }
+
+        return canWrite
+    };
+
+    /**
+     * Get run\lock path
+     * @returns {string} rundir
+     * */
+    var getRunDir = function(prefix) {
+        if ( !prefix || typeof(prefix) == 'undefined' || prefix == '' ) {
+            prefix = self.defaultPrefix;
+        }
+
+        // Trying to retrieve original value if already defined
+        // Means `/usr/local/var/lock` or `/usr/local/var/run` by default.
+        var runDir = (isWin32()) ? getUserHome() + '\\.gina\\run' : prefix+'/var/lock';
+
+        if ( !isWin32() && new RegExp('^'+ prefix).test(runDir) && !isWritableSync(prefix) ) {
+            runDir = getUserHome() +'/.gina/run';
+            if ( !existsSync(runDir) ) {
+                fs.mkdirSync(runDir)
+            }
+
+            return runDir
+        }
+
+        if ( existsSync(runDir) ) {
+            if ( !isWritableSync(runDir) ) {
+                throw new Error('location `'+ runDir +'` found but not writable !' )
+            }
+
+            runDir += ( isWin32() ) ? '' : '/gina'
+            if ( !existsSync(runDir) ) {
+                fs.mkdirSync(runDir)
+            }
+
+            return runDir;
+        }
+
+        try {
+            //by default.
+            runDir = prefix+'/var';
+            if ( !existsSync(runDir) ) {
+                fs.mkdirSync(runDir)
+            }
+            runDir += '/run';
+            if ( !existsSync(runDir) ) {
+                fs.mkdirSync(runDir)
+            }
+        } catch (err) {
+            throw new Error('location error: `'+ runDir+'`\n'+ err.stack);
+        }
+
+        if (self.optionalPrefix != prefix) {
+            runDir += ( isWin32() ) ? '\\gina' : '/gina'
+            if ( !existsSync(runDir) ) {
+                fs.mkdirSync(runDir)
+            }
+        }
+
+        return runDir;
+    };
+
+    var getTmpDir = function(prefix) {
+        if ( !prefix || typeof(prefix) == 'undefined' || prefix == '' ) {
+            prefix = self.defaultPrefix;
+        }
+        // support for node 0.10.x & 0.11.x
+        var tmp = (os.tmpdir) ? os.tmpdir : function() {
+            var tmpDir = null;
+            if ( isWin32() ) {
+                tmpDir = process.env.TEMP ||
+                    process.env.TMP ||
+                    (process.env.SystemRoot || process.env.windir) + '\\Temp'
+                ;
+            } else {
+                tmpDir = process.env.TMPDIR ||
+                    process.env.TMP ||
+                    process.env.TEMP ||
+                    prefix+'/var/tmp'
+                ;
+
+                if ( new RegExp('^'+ prefix).test(tmpDir) && !isWritableSync(prefix) ) {
+                    tmpDir = getUserHome() +'/.gina/tmp';
+                    if ( !existsSync(tmpDir) ) {
+                        fs.mkdirSync(tmpDir)
+                    }
+                }
+
+                if ( new RegExp('^'+ prefix +'/var').test(tmpDir) && !existsSync(prefix+'/var') ) {
+                    fs.mkdirSync(prefix+'/var');
+                }
+            }
+
+            if ( !existsSync(tmpDir) ) {
+                fs.mkdirSync(tmpDir);
+            }
+
+            return tmpDir
+        };
+
+        return tmp()
+    };
+
+    /**
+     * Get log path - %SystemRoot%\system32\winevt\logs or /
+     *
+     * @returns {string} logPath
+     * */
+    var getLogDir = function(prefix) {
+        if ( !prefix || typeof(prefix) == 'undefined' || prefix == '' ) {
+            prefix = self.defaultPrefix;
+        }
+        // Trying to retrieve original value if already defined
+        var logDir = null;
+
+        if ( isWin32() ) {
+            logDir = process.env.LOG ||
+                process.env.LOGS ||
+                (process.env.SystemRoot || process.env.windir) + '\\System32\\Winevt\\Logs'
+            ;
+
+            if ( !logDir || logDir == '' ) {
+                throw new Error('Log directory not defined or not found !');
+            }
+
+            if ( !isWritableSync(logDir) ) {
+                throw new Error('Log directory found but not writable: need permissions for `'+ logDir +'`');
+            }
+
+            if ( !/gina$/.test(logDir) ) {
+                logDir += '\\gina'
+            }
+        } else {
+            logDir = process.env.LOGDIR ||
+                process.env.LOG ||
+                process.env.LOGS ||
+                prefix+'/var/log'
+            ;
+
+            if ( new RegExp('^'+ prefix).test(logDir) && !isWritableSync(prefix) ) {
+                logDir = getUserHome() +'/.gina/log';
+                if ( !existsSync(logDir) ) {
+                    fs.mkdirSync(logDir)
+                }
+
+                return logDir
+            }
+
+            if ( new RegExp('^'+ prefix +'/var').test(logDir) && !existsSync(prefix+'/var') ) {
+                fs.mkdirSync(prefix+'/var');
+            }
+
+            if ( !existsSync(logDir) ) {
+                fs.mkdirSync(logDir);
+            }
+
+            if ( !/gina$/.test(logDir) && self.optionalPrefix != prefix ) {
+                logDir += '/gina'
+            }
+        }
+
+        if ( !existsSync(logDir) ) {
+            fs.mkdirSync(logDir)
+        }
+
+        return logDir;
+    };
+
+    var getUserHome = function() {
+        var home = os.homedir ? os.homedir : function() {
+            var homeDir = process.env[(isWin32()) ? 'USERPROFILE' : 'HOME'];
+
+            if ( !homeDir || homeDir == '' ) {
+                throw new Error('Home directory not defined or not found !');
+            }
+
+            if ( !isWritableSync(homeDir) ) {
+                throw new Error('Home directory found but not writable: need permissions for `'+ homeDir +'`');
+            }
+
+            return homeDir;
+        };
+
+        return home()
+    };
 
     init()
 }

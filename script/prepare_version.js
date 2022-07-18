@@ -39,11 +39,47 @@ var lib         = null;
  * @constructor
  * */
 function PrepareVersion() {
-    var self    = {};
+    var self    = {
+        isWin32: isWin32(),
+        git : {
+            tag: 'latest',
+            msg: null
+        },
+        isGitPushNeeded : false
+
+    };
+
+    var configure = function() {
+        // TODO - handle windows case
+        if ( /^true$/i.test(isWin32()) ) {
+            throw new Error('Windows in not yet fully supported. Thank you for your patience');
+        }
+
+        // Overriding thru passed arguments
+        var args = process.argv, i = 0, len = args.length;
+        for (; i < len; ++i) {
+            if ( /^\-\-tag/.test(args[i]) ) {
+                var tag = args[i].split(/\=/)[1];
+                if ( tag != self.git.tag) {
+                    self.git.tag = tag;
+                    self.isGitPushNeeded = true
+                }
+                continue;
+            }
+
+            if ( /^(\-m|\-\-message)$/.test(args[i]) ) {
+                var m = args[i];
+                if (/^(.*)\=/.test(m)) {
+                    m = m.split(/\=/)[1]
+                }
+                self.git.msg = m.replace(/^(\-m|\-\-message)/g, '').replace(/(\"|\')/g, '');
+                continue;
+            }
+        }
+    }
 
     var init = function() {
-        self.isWin32    = isWin32();
-        self.prefix     = execSync('npm config get prefix');
+        configure();
 
         begin(0);
     };
@@ -267,7 +303,7 @@ function PrepareVersion() {
         var versionsFolders = null, frameworkPath = null;
         try {
             frameworkPath = _(self.ginaPath +'/framework', true);
-            console.info('frameworkPath: ', frameworkPath);
+            console.debug('frameworkPath: ', frameworkPath);
             if ( !new _(frameworkPath).existsSync() ) {
                 return done();
             }
@@ -296,7 +332,8 @@ function PrepareVersion() {
         done();
     }
 
-    self.pushChangesToGit = function(done) {
+
+    self.pushChangesToGitIfNeeded = function(done) {
 
         var cmd = null;
         var version = self.selectedVersion.replace(/^[a-z]+/ig, '');
@@ -335,13 +372,16 @@ function PrepareVersion() {
             // nothing to do
         }
 
+
         if (!branchExists) {
             console.debug('No existing branch found, creating a new one !');
             try {
                 execSync("git checkout -b "+ targetedBranch);
-                // pushing to new branch
-                console.debug('setting up remote branch `'+ targetedBranch +'` to git ...');
-                execSync("git push --set-upstream origin "+ targetedBranch);
+                if (self.isGitPushNeeded) {
+                    // pushing to new branch
+                    console.debug('setting up remote branch `'+ targetedBranch +'` to git ...');
+                    execSync("git push --set-upstream origin "+ targetedBranch);
+                }
             } catch (err) {
                 console.error(err.stack||err.message||err);
                 return done(err);
@@ -364,8 +404,7 @@ function PrepareVersion() {
             }
         }
 
-
-        // git add --all
+        // commit changes
         try {
             cmd = execSync("git add --all ");
         } catch (err) {
@@ -375,7 +414,10 @@ function PrepareVersion() {
         }
         // git commit -m'Packaging version v'+ version
         try {
-            var msg = (!branchExists) ? 'New version' : 'Prerelease update - '+ new Date().format("isoDateTime");
+            var msg = (!branchExists) ? 'New version' : 'Prerelease update'; //+ new Date().format("isoDateTime");
+            if (self.git.msg) {
+                msg += ' - '+ self.git.msg
+            }
             cmd = execSync("git commit -am'"+ msg +"'");
         } catch (err) {
             if (!/Your branch is up to date/i.test( err.output.toString() )) {
@@ -384,19 +426,24 @@ function PrepareVersion() {
             }
         }
 
-        console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
-        // git push origin 010
-        try {
-            cmd = execSync("git push origin "+ targetedBranch );
-        } catch (err) {
-            if (!/Everything up-to-date/i.test( err.output.toString() )) {
-                console.error(err.stack||err.message||err);
-                return done(err);
+        if (self.isGitPushNeeded) {
+            console.debug('Pushing changes made on branch `'+ targetedBranch +'` to git `origin/'+ targetedBranch +'`');
+            // git push origin 010
+            try {
+                cmd = execSync("git push origin "+ targetedBranch );
+            } catch (err) {
+                if (!/Everything up-to-date/i.test( err.output.toString() )) {
+                    console.error(err.stack||err.message||err);
+                    return done(err);
+                }
             }
         }
 
         done()
     }
+
+
+
 
     // self.tagVersionIfNeeded = function(done) {
     //     // check if script is on Dry Run !!!

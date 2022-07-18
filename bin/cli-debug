@@ -3,7 +3,7 @@
 /**
  * Mainly used to debug framework CMD lib - default port should be #5858 by default
  * To modify the debug port :
- * 
+ *
  * $ gina framework:set --debug-port=<your new debug port>
  */
 const fs    = require('fs');
@@ -34,16 +34,16 @@ var params = argv.split(/\s+/g);
 if ( params.length > 0 ) {
     for (var p = 0, len = params.length; p < len; ++p) {
         if ( /^\-\-port/.test(params[p]) ) {
-            setEnvVar('GINA_PORT', ~~params[p].split(/\=/)[1]);
+            setEnvVar('GINA_PORT', ~~params[p].split(/\=/)[1]);// jshint ignore:line
             continue;
         }
         if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
-            setEnvVar('GINA_DEBUG_PORT', ~~params[p].split(/\=/)[1]);
+            setEnvVar('GINA_DEBUG_PORT', ~~params[p].split(/\=/)[1]);// jshint ignore:line
             continue;
         }
         if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
             debugPort = ~~params[p].split(/\=/)[1];
-            process.argv.splice(p,1);   
+            process.argv.splice(p,1);
         }
     }
 }

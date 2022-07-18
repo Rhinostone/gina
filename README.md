@@ -23,16 +23,65 @@ Note that Gina does not rely on Connect or ExpressJS, still, you can use all plu
 ### Installing Gina
 Gina aims to be at the same time a framework, a deployment and monitoring environment for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
 > For Microsoft Windows, you might have to run the command line with Administrator privileges.
+> For Linux & Mac OS X, __the use of `sudo` is discouraged.__
+
+#### 1st method (prefered)
 
 ```  tty
 npm install -g gina@latest
 ```
 
-You can check if Gina is properly installed
+__A few words about this method__
+Gina will try to install itself using the default $NPM_PREFIX. If the target is not writable, the prefix used will be updated for the time of the install process to `~/.npm-global` and restored back to your default $NPM_PREFIX after installation.
+This is why you should not get errors on installation.
+
+Still, __if you are not enterely satisfyied with this method__, you can setup permissions for your user in order to be able to write to : `$NPM_PREFIX/lib/node_modules`.
+
+If you don't already have done it, you should start with :
+
+```tty
+sudo chown -R $USER $(npm config get prefix)/lib/node_modules
+```
+
+
+> __NB. :__ If you choose to use `sudo npm install -g gina`, you have to make sure that everytime you need to use the gina CLI, or if you use a specific command like `npm link gina`, you will have to do it with `sudo`.
+
+Then
+
+```  tty
+npm install -g gina@latest
+```
+
+
+#### 2nd method - Custom PREFIX
+
+This will install Gina in the user's home directory avoiding at the same time the need to use `sudo`.
+By adding at the end the `--reset` argument, you will ensure a factory reset for the `~/.gina` preferences folder: all preferences will be lost, but your existing projects will not be erased.
+
+```tty
+npm install -g gina@latest --prefix=~/.npm-global
+```
+
+
+
+#### 3rd method - local to your project
+
+If you feel like you do not need to install globally Gina for some reasons like only using the framework for a single project, you can install Gina without the `-g` argument.
+Go to your project's root and tap:
+```tty
+npm instal gina@latest
+```
+
+__Attention: __ to use gina CLI, you will need to run it from your project location since the CLI was not installed with the global argument `-g`.
+
+#### You can now check if Gina is properly installed
+
 ```  tty
 gina version
 ```
 __NB.:__ This is a shortcut for `gina framework:version`
+
+
 
 
 ### Starting the framework
@@ -49,6 +98,11 @@ __NB.:__ This is an alias for `gina framework:start`
 A project is a collection of bundles (applicaitons or services). See it as a representation of your domain.
 
 Let's create our first project and install Gina.
+
+```tty
+cd ~/.Sites
+```
+
 
 ``` tty
 mkdir myproject && cd myproject
@@ -82,7 +136,7 @@ Ok ! Let's do it !
 ``` tty
 gina bundle:add frontend @myproject
 ```
-__NB.:__ If you are launching the command from the project directory, you don't need `@myproject`. The same goes for all bundles commands.
+__NB.:__ If you are launching the command from the project directory, you don't need to add `@myproject`. The same goes for all bundles commands.
 
 We have just created a frontend application that will host our homepage.
 You will find all bundle sources under `myproject/src`.
@@ -183,8 +237,12 @@ __Defining an existing environment as `development` (you can only have one like 
 gina env:link-dev <your new dev env>
 ```
 
-### Getting the logs
-You will also get logs related to your running bundles.
+### Logs
+
+#### Getting the logs
+You will get logs for the framework and related to your running bundles.
+
+__1st Method - The default one__
 ``` tty
 gina tail
 ```
@@ -196,8 +254,9 @@ This means that if you need Gina to handle logs storage, you need a logger conta
 
 Note that this is optional since logs are output like for other frameworks: you can catch those while writing your daemon starting script on you production server.
 
-So to handle log storage for your application, you have 2 options.
-__1) Old school way__
+So to handle log storage for your application, you have 2 options: see 2nd & 3rd Methods.
+
+__2nd Method - Old school way__
 ```tty
 gina bundle:start frontend @myproject > /usr/local/var/log/gina/frontend.myproject.domain.log 2>&1
 ```
@@ -206,7 +265,7 @@ You can now check
 tail - f /usr/local/var/log/gina/frontend.myproject.domain.log
 ```
 
-__2) Create your own container/transport by extending gina default container__
+__3rd Method - Create your own container/transport by extending gina default container__
 
 
 If you still want gina to handle logs storage, you are lucky, we have developped a file container/transport that you just need to enable.
@@ -222,6 +281,24 @@ gina restart
 ```
 
 __NB.: __For development purposes, using the CLI `gina tail` is still a better option because you will have a better overview of what is really going on for all your application at once & for the framework.
+
+#### Setting default log level
+
+By default Gina is set to `info`. Here is the list of available log level hierarchies
+
+| levels | Included messages |
+|--------|--------|
+| trace  | Emergency, Alert, Critical, Error, Warning, Notice, Informational, Debug        |
+| debug  | Emergency, Alert, Critical, Error, Warning, Notice, Informational, Debug       |
+| info   | Emergency, Alert, Critical, Error, Warning, Notice, Informational       |
+| warn   | Emergency, Alert, Critical, Error, Warning, Notice       |
+| error  | Emergency, Alert, Critical, Error, Notice     |
+| fatal  | Emergency, Alert, Critical, Notice       |
+
+If you are at the developpemnt stage of your project, you might want to get all debug messages.
+```tty
+gina framework:set --log-level=debug
+```
 
 ## HTTPS, HTTP/2 and certificates
 
@@ -240,7 +317,7 @@ __E.g:__ The `myproject.domain` folder should be placed into:
 ### Enable HTTPS scheme
 > __NB.:__ `certificate` is `required`.
 > By enabling HTTPS, you will do so for your entire poroject by default, but you can later set one per application.
-> And if you want to run your experimental HTTP2 implementation, you will need HTTS scheme.
+> And if you want to run our experimental HTTP2 implementation, you will need HTTPS scheme.
 
 Check what is your actual scheme & protocol status
 ```tty
@@ -282,12 +359,12 @@ Error: unable to get issuer certificate
 Do not panic, and follow the steps provided in the following section.
 
 ### Local scope & certificate consideration
-Ignore the following instructions if you can start your application without any certificate errors.
+> __Ignore__ the following instructions __if you can start your application__ without any certificate errors.
 
-This is `important` and you will have to take additional steps to make your certificate fully valid __while developping on your `local/dev host`__.
+This is __important__ and you will have to take additional steps to make your certificate fully valid __while developping on your `local/dev host`__.
 Since in most cases you will not have the `Root Certificate` included in your certificate, you need to generate a correct certificate including the Root Certificate. __For production, it will not be a problem__ since the Root certificate is provided by the client browser.
 
-Let say that you have downloded your certificates from __[Ssl For Free](https://sslforfree.com)__ which you have then placed under: `~/.gina/certificates/scopes/local/myproject.domain`.
+Let say that you have downloaded your certificates from __[Ssl For Free](https://sslforfree.com)__ which you have then placed under: `~/.gina/certificates/scopes/local/myproject.domain`.
 
 __Step 1__
 Go to the folder
@@ -305,11 +382,11 @@ Output should look like
 ca_bundle.crt	certificate.crt	private.key
 ```
 
-
+Now, copy the content of `certificate.crt`
 ```tty
 cat certificate.crt
 ```
-Copy the content of `certificate.crt`
+
 
 Visit [https://whatsmychaincert.com](https://whatsmychaincert.com)
 Go to the `Generate the Correct Chain` tool.
@@ -335,7 +412,7 @@ We just need to override Gina default certificate paths
 ```tty
 {
     // "privateKey": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/private.key",
-    "certificate": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.chained+root.crt",
+    // "certificate": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.crt",
     "ca": "{GINA_HOMEDIR}/certificates/scopes/{scope}/{host}/certificate.combined.pem"
 }
 ```
@@ -346,8 +423,32 @@ gina bundle:restart @myproject
 ```
 
 
+### Uninstalling Gina
+
+> For Microsoft Windows, you might have to run the command line with Administrator privileges.
+
+__Wihtout prefix__
+```  tty
+npm uninstall -g gina
+```
+
+Or if you have an Error like `EACCESS: permission denied, mkdir '/usr/local/lib/node_modules/gina'`
+
+__With prefix - If Gina was installed with a prefix__
+```tty
+npm uninstall -g gina --prefix=~/.npm-global
+```
+
+
+
 
 ## Troubleshooting
+
+### My settings are broken, I need a fresh install with the default settings
+```tty
+npm install -g gina@latest --reset
+```
+
 
 ### I can't start my bundle
 
@@ -356,14 +457,14 @@ __Are you starting for the first time ?__
 - If you are a __Windows user__, make sure you are running your command line with sufficient permission; like __"launching your terminal as administrator"__.
 
 
-- If you have just cloned Gina from GitHub, don't forget to run from the project root :
+- If you have just cloned Gina from GitHub, don't forget to run from the framework root :
 
 ```tty
-node node_modules/gina/script/pre_install.js
+node node_modules/gina/script/pre_install.js -g
 ```
 
 ```tty
-node node_modules/gina/script/post_install.js
+node node_modules/gina/script/post_install.js -g
 ```
 
 
