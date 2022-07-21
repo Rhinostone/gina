@@ -416,6 +416,9 @@ function PostInstall() {
         if ( callback && typeof(callback) != 'undefined') {
             console.info('linking to binaries dir: '+ source +' -> '+ target);
             try {
+                if ( fs.existsSync(target) ) {
+                    fs.unlinkSync(target)
+                }
                 new _(source).symlinkSync(target)
             } catch (err) {
                 return callback(err)
