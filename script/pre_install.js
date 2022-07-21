@@ -77,7 +77,8 @@ function PreInstall() {
             console.warn('Local installation is not fully supported at the moment.');
             console.warn('You are encouraged to use `npm install -g gina`\nor, if you are trying to link gina to your project, use `npm link gina` if Gina has already been installed globally\n');
             // Just in case someone is trying to run pre_install from the `gina` module
-            if (!/node\_modules(\\\\|\/)gina$/.test(process.cwd())) {
+            console.info('process.env.INIT_CWD: ', process.env.INIT_CWD);
+            if (!/node\_modules(\\\\|\/)gina$/.test(process.env.INIT_CWD)) {
                 self.prefix = process.env.INIT_CWD;//process.cwd();
             }
         }
