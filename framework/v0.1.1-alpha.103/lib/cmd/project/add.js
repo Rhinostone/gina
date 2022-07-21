@@ -71,11 +71,10 @@ function Add(opt, cmd) {
         // creating package file
         file = new _(self.projectLocation + '/package.json', true);
         if ( !file.existsSync() ) {
-            createPackageFile( file.toString() )
+            createPackageFile( file )
         } else {
-            console.warn('[ package.json ] already exists in this location: '+ file);
-
-            end()
+            console.warn('[ package.json ] already exists in this location: '+ file + '\Updating package.json...');
+            createPackageFile( file, true )
         }
     }
 
@@ -162,7 +161,7 @@ function Add(opt, cmd) {
     }
 
 
-    var createPackageFile = function(target) {
+    var createPackageFile = function(target, isCreatedFromExistingPackage) {
 
         loadAssets();
 
@@ -175,6 +174,17 @@ function Add(opt, cmd) {
         };
 
         contentFile = whisper(dic, contentFile);//data
+
+        // Updating package.json if needed
+        if (
+            typeof(isCreatedFromExistingPackage) != 'undefined'
+            && /^true$/i.test(isCreatedFromExistingPackage)
+        ) {
+            var existingPack = require(target);
+            contentFile = merge(contentFile, existingPack);
+            new _(target, true).rmSync()
+        }
+
         lib.generator.createFileFromDataSync(
             contentFile,
             target
@@ -204,7 +214,7 @@ function Add(opt, cmd) {
         };
 
         // create/update ports, protocols & schemes
-        if ( /^true$/.test(local.imported) ) {
+        if ( /^true$/.test(local.imported) || /^false$/.test(local.imported) && typeof(self.projects[self.projectName]) == 'undefined' ) {
             addBundlePorts(0);
         }
 

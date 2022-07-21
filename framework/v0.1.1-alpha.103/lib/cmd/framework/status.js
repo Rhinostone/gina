@@ -16,26 +16,18 @@ var console     = lib.logger;
  * */
 function Status(opt, cmd) {
     var self    = {};
-    
+
 
     var init = function(opt, cmd) {
-        
+
         console.debug('Getting framework status');
-        
+
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
-                        
-        // check CMD configuration
-        //if (!isCmdConfigured()) return false;
-        
-        
-        // if (!self.name) {
-        //     status(opt, cmd, 0);
-        // } else {
-            status(opt, cmd);
-        // }        
+
+        status(opt, cmd);
     }
-    
+
     var status = function(opt, cmd) {
         var pidFiles = null;
         try {
@@ -43,7 +35,7 @@ function Status(opt, cmd) {
         } catch (fileError) {
             throw fileError
         }
-        
+
         var runningVersions = [];
         for (let i=0, len=pidFiles.length; i<len; i++) {
             let file = pidFiles[i];
@@ -56,15 +48,15 @@ function Status(opt, cmd) {
                 pid     : ~~pid
             });
         }
-        
+
         if ( runningVersions.length > 0 ) {
             console.log('Gina is running');
             return
         }
-        
+
         console.log('Gina is not running');
     }
-    
+
 
     init(opt, cmd)
 }

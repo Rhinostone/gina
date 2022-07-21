@@ -8,7 +8,7 @@ var console = lib.logger;
  *
  * e.g.
  *  gina bundle:stop <bundle_name> @<project_name>
- * 
+ *
  *  // stop all bundles within the project
  *  gina bundle:stop @<project_name>
  *
@@ -17,26 +17,26 @@ function Stop(opt, cmd) {
     var self = {};
 
     var init = function(opt, cmd) {
-        
+
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
         if (!isCmdConfigured()) return false;
-        
-        // start all bundles   
-        opt.offlineCount = 0;   
-        opt.notStopped = [];  
-        
+
+        // start all bundles
+        opt.offlineCount = 0;
+        opt.notStopped = [];
+
         if (!self.name) {
             stop(opt, cmd, 0);
         } else {
             stop(opt, cmd);
-        }  
+        }
     }
-    
+
     var stop = function(opt, cmd, bundleIndex) {
-        
+
         var isBulkStop = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkStop) ? self.bundles[bundleIndex] : self.name;
 
@@ -56,28 +56,39 @@ function Stop(opt, cmd) {
 
                 //console.info('Trying to stop bundle [ ' + bundle + '@' + self.projectName + ' ]');
                 var error = null;
-                exec('ps -Af|grep "gina: ' + bundle + '@' + self.projectName + '"', function(err, data) {
+                var proc = null;
+                try {
+                    proc = fs.readFileSync(_(GINA_RUNDIR+'/'+bundle + '@' + self.projectName +'.pid')).toString().replace(/\n/g, '');
+                    proc = parseInt(proc);
 
-                    if (err) {
-                        error = err.toString();
-                        console.error(error);
-                        opt.notStopped.push(bundle + '@' + self.projectName);
-                        end(opt, cmd, isBulkStop, bundleIndex, true)
-                        //process.exit(1)
-                    }
+                } catch(err) {
+                    error = err.toString();
+                    console.debug(error);
+                }
+                // exec('ps -Af|grep "gina: ' + bundle + '@' + self.projectName + '"', function(err, data) {
 
-                    var row = data.split(/\n/g)
-                        , r = 0
-                        , len = row.length
-                        , arr = row[0].replace(/(?:\\[rn]|[\r\n])/g, '').split(/\s+/g)
-                        , proc = (arr[2] != '') ? arr[2] : arr[3]; // arr[4] is for minions;
+                //     if (err) {
+                //         error = err.toString();
+                //         console.error(error);
+                //         opt.notStopped.push(bundle + '@' + self.projectName);
+                //         end(opt, cmd, isBulkStop, bundleIndex, true)
+                //         //process.exit(1)
+                //     }
 
-                    // matching `grep` CMD PID to be excluded in the next test    
-                    var re = new RegExp('(\\bgrep\\W+)(gina: '+ bundle+'@'+ self.projectName+')');
+                    // var row = data.split(/\n/g)
+                    //     , r = 0
+                    //     , len = row.length
+                    //     , arr = row[0].replace(/(?:\\[rn]|[\r\n])/g, '').split(/\s+/g)
+                    //     , proc = (arr[2] != '') ? arr[2] : arr[3]; // arr[4] is for minions;
+
+                    // // matching `grep` CMD PID to be excluded in the next test
+                    // var re = new RegExp('(\\bgrep\\W+)(gina: '+ bundle+'@'+ self.projectName+')');
+
                     msg = 'Trying to stop bundle [ ' + bundle + '@' + self.projectName + ' ]\n\r';
                     opt.client.write('\n\r'+msg);
-                    
-                    if ( !re.test(row[0]) ) {
+
+                    // if ( !re.test(row[0]) ) {
+                    if (proc) {
                         //console.debug('\n'+ row.join('\n'));
                         //console.debug('kill -TERM ', proc, arr);
 
@@ -86,7 +97,7 @@ function Stop(opt, cmd) {
                                 ++opt.offlineCount;
                                 //console.info('Bundle [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !');
                                 opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !\n');
-                                
+
                                 end(opt, cmd, isBulkStop, bundleIndex)
                             } else {
                                 console.error( err.toString())
@@ -95,19 +106,19 @@ function Stop(opt, cmd) {
                     } else { // not running
                         //console.info('Bundle `' + bundle + '@' + self.projectName + '` is not running');
                         opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] is not running\n');
-                        
+
                         ++opt.offlineCount;
                         opt.notStopped.push(bundle + '@' + self.projectName);
                         end(opt, cmd, isBulkStop, bundleIndex)
                     }
-                });
+                // });
             })//EO isRealApp
         }
     }
-    
+
     var end = function (opt, cmd, isBulkStop, i, error) {
-        if (isBulkStop) {            
-            ++i;            
+        if (isBulkStop) {
+            ++i;
             if ( typeof(self.bundles[i]) != 'undefined' ) {
                 stop(opt, cmd, i)
             } else {
@@ -117,26 +128,26 @@ function Stop(opt, cmd) {
                     notStoppedMsg = '\nThe following bundles could not be stopped or were not running: \n - '+ opt.notStopped.join('\n - ') + '\n\r';
                     opt.client.write(notStoppedMsg);
                 }
-                
-                
+
+
                 if ( typeof(error) != 'undefined') {
                     process.exit(1);
                 }
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
-                    
+
                 process.exit(0);
             }
         } else {
             if ( typeof(error) != 'undefined') {
                 process.exit(1);
             }
-            
+
             if (!opt.client.destroyed)
-                opt.client.emit('end');        
-                
+                opt.client.emit('end');
+
             process.exit(0);
-        }        
+        }
     }
 
 
@@ -195,7 +206,7 @@ function Stop(opt, cmd) {
             d = _(root + '/' + bundleDir + '/' + bundle + '/index.js');
             bundleInit = d;
         }
-        
+
         // removing mounting point
         var coreEnv = getCoreEnv(bundle);
         new _(coreEnv.mountPath +'/'+ bundle, true).rmSync();
@@ -219,7 +230,7 @@ function Stop(opt, cmd) {
             })
         } else {
             //callback(new Error('[ ' + d + ' ] does not exists'))
-            console.debug('[ ' + d + ' ] does not exists'); 
+            console.debug('[ ' + d + ' ] does not exists');
             callback(false)
         }
     }

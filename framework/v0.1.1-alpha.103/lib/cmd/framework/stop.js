@@ -13,12 +13,12 @@ var console     = lib.logger;
  *  or
  *  gina stop
  *  or
- *  gina stop @1.0.0 
+ *  gina stop @1.0.0
  *
  * */
 function Stop(opt, cmd) {
     var self    = {
-        // Current version of the framework by default 
+        // Current version of the framework by default
         // But can be overriden with argument: @{version_number}
         // eg.: gina stop @1.0.0
         version: GINA_VERSION,
@@ -26,21 +26,21 @@ function Stop(opt, cmd) {
         // This is required if you don't use gina (gina/bin/cli) as a daemon
         fakeDeamonPid: false
     };
-    
 
-    var init = function(opt, cmd) {        
+
+    var init = function(opt, cmd) {
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
-        
+
         // check CMD configuration
         //if (!isCmdConfigured()) return false;
-        
+
         var err = null;
         var argv = opt.argv;
-        for (let i = 0, len = argv.length; i < len; i++) {            
+        for (let i = 0, len = argv.length; i < len; i++) {
             // checkcking version number
             if ( /^\@/.test(argv[i]) ) {
-                let version = argv[i].replace(/\@/, '');            
+                let version = argv[i].replace(/\@/, '');
                 let shortVersion = version.split('.').splice(0,2).join('.');
                 if ( !/^\d\.\d/.test(shortVersion) ) {
                     err = new Error('Wrong version: '+ version);
@@ -53,24 +53,24 @@ function Stop(opt, cmd) {
                     console.log(err.message);
                     break;
                 }
-                
+
                 self.version = version;
                 continue;
             }
         }
-        
+
         if ( err ) {
             return;
         }
         console.debug('Stopping framework v'+ self.version);
-        
+
         // if (!self.name) {
         //     stop(opt, cmd, 0);
         // } else {
             stop(opt, cmd);
-        // }        
+        // }
     }
-    
+
     var stop = function(opt, cmd) {
         var pidFiles = null, err = null;
         try {
@@ -78,7 +78,7 @@ function Stop(opt, cmd) {
         } catch (fileError) {
             throw fileError
         }
-        
+
         var runningVersions = [];
         for (let i=0, len=pidFiles.length; i<len; i++) {
             let file = pidFiles[i];
@@ -94,7 +94,7 @@ function Stop(opt, cmd) {
         var pid = null, fakeDaemonPid = null;
         if ( runningVersions.length > 0 ) {
             // retrieve running pid vs running version
-            var runningProcs = requireJSON(_(GINA_HOMEDIR +'/procs.json', true));            
+            var runningProcs = requireJSON(_(GINA_HOMEDIR +'/procs.json', true));
             for (let name in runningProcs) {
                 if (runningProcs[name].version == self.version) {
                     pid = runningProcs[name].pid;
@@ -112,7 +112,7 @@ function Stop(opt, cmd) {
                 } catch (fakeDaemonErr) {
                     // this only means that it does not exists or has already been killed
                 }
-                
+
             }
             if (pid) {
                 for (let i=0, len=runningVersions.length; i<len; i++) {
@@ -122,12 +122,12 @@ function Stop(opt, cmd) {
                         break;
                     }
                 }
-                
+
                 console.log('Gina v'+ self.version + ' has been stopped');
                 return
-            }   
+            }
         }
-        
+
         // Double check in case of a bug ...
         if ( !isWin32() ) {
             var out  = null;
@@ -138,20 +138,20 @@ function Stop(opt, cmd) {
                 if ( out && typeof(out) == 'string' && out.trim().length > 0) {
                     pid = out.trim();
                     console.debug('Found unlinked process ['+ pid +']\nNow trying to kill it ...');
-                    
+
                     process.kill(pid, 'SIGTERM');
                     console.log('Gina v'+ self.version + ' has been stopped');
-                    return   
+                    return
                 }
             } catch(execErr) {
                 // Silence is golden ...
                 throw execErr
-            }            
+            }
         }
-        
-        console.log('Gina v'+ self.version + ' is not running');        
+
+        console.log('Gina v'+ self.version + ' is not running');
     }
-    
+
 
     init(opt, cmd)
 }

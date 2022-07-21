@@ -320,7 +320,7 @@ function MainHelper(opt) {
             return logDir
         }
 
-        var prefix = getEnvVar('GINA_PREFIX') || slef.prefix || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var prefix = getEnvVar('GINA_PREFIX') || self.prefix || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
 
         if ( isWin32() ) {
             logDir = process.env.LOG ||
@@ -461,7 +461,7 @@ function MainHelper(opt) {
             return dir
         }
 
-        var prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var prefix = getEnvVar('GINA_PREFIX') || self.prefix  || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
 
         // support for node 0.10.x & 0.11.x
         var tmp = (os.tmpdir) ? os.tmpdir : function() {
