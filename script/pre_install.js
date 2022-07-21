@@ -486,12 +486,16 @@ function PreInstall() {
             return runDir
         }
 
+        if (!self.isGlobalInstall) {
+            runDir = runDir.replace(/\/var\//, '/')
+        }
+
         if ( existsSync(runDir) ) {
             if ( !isWritableSync(runDir) ) {
                 throw new Error('location `'+ runDir +'` found but not writable !' )
             }
 
-            runDir += ( isWin32() ) ? '' : '/gina'
+            runDir += ( isWin32() || !self.isGlobalInstall ) ? '' : '/gina'
             if ( !existsSync(runDir) ) {
                 fs.mkdirSync(runDir)
             }
@@ -501,7 +505,11 @@ function PreInstall() {
 
         try {
             //by default.
-            runDir = prefix+'/var';
+            runDir = prefix;
+            if (!self.isGlobalInstall) {
+                runDir += '/var';
+            }
+
             if ( !existsSync(runDir) ) {
                 fs.mkdirSync(runDir)
             }
@@ -513,7 +521,7 @@ function PreInstall() {
             throw new Error('location error: `'+ runDir+'`\n'+ err.stack);
         }
 
-        if (self.optionalPrefix != prefix) {
+        if (self.optionalPrefix != prefix && self.isGlobalInstall) {
             runDir += ( isWin32() ) ? '\\gina' : '/gina'
             if ( !existsSync(runDir) ) {
                 fs.mkdirSync(runDir)
