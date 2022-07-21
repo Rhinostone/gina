@@ -393,7 +393,7 @@ function PostInstall() {
 
     //Creating framework command line file for nix.
     var createGinaFile = function(win32Name, callback) {
-        // Created by NPM for global installations
+        // local install only
         if (self.isGlobalInstall) {
             return callback(false);
         }
@@ -404,34 +404,26 @@ function PostInstall() {
         var name = require( _(self.gina + '/package.json', true) ).name;
         console.info('Package name: '+ name );
         console.info('Creating framework command line:');
-        var appPath = process.cwd();
-        // _( self.gina.substring(0, (self.gina.length - ("node_modules/" + name + '/').length)) );
-
-
+        var appPath = process.env.INIT_CWD;//process.cwd();
         console.debug('App path: '+ appPath);
-        var source = _(self.versionPath + '/core/template/command/gina.tpl', true);
+        // var source = _(self.versionPath + '/core/template/command/gina.tpl', true);
+        var source = _(appPath + '/node_modules/.bin/gina', true);
         console.debug('Source: '+ source);
         var target = _(appPath +'/'+ name, true);
+        if ( win32Name && typeof(win32Name) != 'undefined') {
+            target = _(appPath +'/'+ win32Name, true)
+        }
         console.debug('Target: '+ target);
 
-        if ( win32Name && typeof(win32Name) != 'undefined') {
-            target = _(appPath +'/'+ win32Name)
-        }
-        //Will override.
-        console.info('linking to binaries dir: '+ source +' -> '+ target);
         if ( callback && typeof(callback) != 'undefined') {
-            if ( !self.isGlobalInstall ) { // local install only
-                lib.generator.createFileFromTemplate(source, target, function onGinaFileCreated(err) {
-                    return callback(err)
-                })
-            } else {
-                // configureGina();
-                return callback(false)
+            console.info('linking to binaries dir: '+ source +' -> '+ target);
+            try {
+                new _(source).symlinkSync(target)
+            } catch (err) {
+                return callback(err)
             }
-        } else {
-            if ( !self.isGlobalInstall ) {
-                lib.generator.createFileFromTemplate(source, target)
-            }
+
+            return callback(false);
         }
     }
 
