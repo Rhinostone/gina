@@ -34,7 +34,7 @@ function Remove(opt, cmd) {
             console.error('project path not defined in ~/.gina/projects.json for [ '+ self.projectName + ' ]');
             process.exit(1)
         }
-        
+
         if (isDefined('project', self.projectName)) {
             removeBundle(0)
         } else {
@@ -52,8 +52,8 @@ function Remove(opt, cmd) {
 
         //var Proc = require( getPath('gina').lib + '/proc');
 
-        
-        
+
+
     }
 
     var removeBundle = function (b) {
@@ -69,7 +69,7 @@ function Remove(opt, cmd) {
 
 
         if (local.force) {
-            // remove without checking            
+            // remove without checking
             remove(local.bundle)
         } else {
             check()
@@ -80,7 +80,7 @@ function Remove(opt, cmd) {
     var check = function() {
 
 
-        rl.setPrompt('['+ local.bundle +'@'+ self.projectName +'] Also remove bundle files ? (Y/n):');
+        rl.setPrompt('['+ local.bundle +'@'+ self.projectName +'] Also remove bundle files ? (Y/n):\n');
 
         rl.prompt();
 
@@ -113,26 +113,26 @@ function Remove(opt, cmd) {
                 process.exit(0)
             })
     }
-    
+
     var remove = function (bundle) {
-        
+
         // reload assets context with changes
         loadAssets();
-                
+
         var hasFolder = true, folderPath = null, folder = null;
         console.debug('Removing bundle: ', bundle);
         try {
             folderPath = _(self.projects[self.projectName].path + '/' + self.projectData.bundles[bundle].src, true);
             folder = new _(folderPath);
-            
+
             if ( !folder.isValidPath() ) {
                 console.warn('`'+ folder.toString() +'` is not a valid path')
             } else {
-    
+
                 // removing mounting point: just in case
                 var coreEnv = getCoreEnv(bundle);
                 new _(coreEnv.mountPath +'/'+ bundle, true).rmSync();
-                
+
                 // removing folder
                 folder = folder.rmSync();
                 if (folder instanceof Error) {
@@ -143,8 +143,8 @@ function Remove(opt, cmd) {
         } catch(folderException) {
             hasFolder = false;
         }
-        
-        
+
+
 
         // updating project env
         if ( typeof(self.envData) != 'undefined' && typeof(self.envData[bundle]) != 'undefined' ) (
@@ -162,8 +162,8 @@ function Remove(opt, cmd) {
             , re                = null
         ;
 
-        for (let protocol in ports) {                
-            for (let scheme in ports[protocol]) {                    
+        for (let protocol in ports) {
+            for (let scheme in ports[protocol]) {
                 for (let port in ports[protocol][scheme]) {
                     re = new RegExp(bundle +"\@"+ self.projectName +"\/");
                     if ( re.test(ports[protocol][scheme][port]) ) {
@@ -172,7 +172,7 @@ function Remove(opt, cmd) {
                 }
             }
         }
-        
+
         for (let bundleAddress in portsReverse) {
             re = new RegExp(bundle +"\@"+ self.projectName);
             if ( re.test(bundleAddress) ) {
@@ -183,7 +183,7 @@ function Remove(opt, cmd) {
         // now writing
         lib.generator.createFileFromDataSync(ports, self.portsPath);
         lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
-        
+
         // env
         // var envData = JSON.clone(self.envData);
         // if ( typeof(envData[bundle]) != 'undefined' ) {
@@ -192,8 +192,8 @@ function Remove(opt, cmd) {
                 self.envData,
                 self.envPath
             );
-        // }            
-        
+        // }
+
         // manifest
         // var projectData = JSON.clone(self.projectData);
         // if ( typeof(projectData.bundles) != 'undefined' && typeof(projectData.bundles[bundle]) != 'undefined' ) {
@@ -206,10 +206,10 @@ function Remove(opt, cmd) {
                 self.projectPath
             );
         // }
-        
+
 
         console.log('Bundle [ '+ bundle+'@'+self.projectName+' ] removed');
-                
+
 
         ++local.b;
         removeBundle(local.b);
@@ -218,7 +218,7 @@ function Remove(opt, cmd) {
 
     var end = function() {
 
-        
+
 
         process.exit(0)
     };
