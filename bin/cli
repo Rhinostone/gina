@@ -89,6 +89,15 @@ async function onExec() {
         setEnvVar('GINA_LOGDIR', settings['logdir']);// jshint ignore:line
         setEnvVar('GINA_TMPDIR', settings['tmpdir']);// jshint ignore:line
 
+        if ( typeof(packObj.config) != 'undefined' ) {
+            if (typeof(packObj.config.prefix) != 'undefined' ) {
+                setEnvVar('GINA_PREFIX', packObj.config.prefix);// jshint ignore:line
+            }
+            if ( typeof(packObj.config.globalMode) != 'undefined' ) {
+                setEnvVar('GINA_GLOBAL_MODE', packObj.config.globalMode);// jshint ignore:line
+            }
+        }
+
         // Loading logger.
         console = lib.logger;// jshint ignore:line
         // reporting exception

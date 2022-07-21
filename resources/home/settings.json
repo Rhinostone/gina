@@ -1,6 +1,7 @@
 {
     "_comment": "To update these values, go through the command line arguments: --tmpdir=/some/path/tmp --logdir=/some/path/logs",
     "prefix": "{prefix}",
+    "global_mode": "{global_mode}",
     "version": "{version}",
     "env": "{env}",
     "env_is_dev": "{env_is_dev}",

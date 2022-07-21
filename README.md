@@ -72,7 +72,7 @@ Go to your project's root and tap:
 npm instal gina@latest
 ```
 
-__Attention: __ to use gina CLI, you will need to run it from your project location since the CLI was not installed with the global argument `-g`.
+__Attention:__  to use gina CLI, you will need to run it from your project location since the CLI was not installed with the global argument `-g`.
 
 #### You can now check if Gina is properly installed
 
@@ -191,6 +191,9 @@ Please, note that you have 2 types of environments : one for the framework, and 
 > ```tty
 > gina framework:set --env=dev 
 > ```
+> ```tty
+> gina framework:set --log-level=debug 
+> ```
 
 You can check which are the environments set for your projects
 ```tty
@@ -284,7 +287,7 @@ __NB.: __For development purposes, using the CLI `gina tail` is still a better o
 
 #### Setting default log level
 
-By default Gina is set to `info`. Here is the list of available log level hierarchies
+By default Gina is set to `info`. Here is the list of available log level hierarchies.
 
 | levels | Included messages |
 |--------|--------|

@@ -26,7 +26,8 @@ function MainHelper(opt) {
         var packObj = require(pack);
         var version =  getEnvVar('GINA_VERSION') || packObj.version;
         var frameworkPath = ginaPath + '/framework/v' + version;
-        var pkg = null;
+        var pkg = null, cmd = null, prefix = null;
+        self.isGlobalInstall = getEnvVar('GINA_GLOBAL_MODE') || ( typeof(packObj.config) != 'undefined' && typeof(packObj.config.globalMode) != 'undefined' ) ? packObj.config.globalMode : true;
         try {
             lib         = require(frameworkPath + '/lib');
             console     = lib.logger;
@@ -34,12 +35,21 @@ function MainHelper(opt) {
 
             try {
                 pkg = packObj;
-                self.defaultPrefix = pkg.config.prefix.replace(/^\~/, getUserHome());
+                self.defaultPrefix = ( typeof(packObj.config) != 'undefined' && typeof(packObj.config.prefix) != 'undefined' ) ? packObj.config.prefix : execSync('npm config get prefix').toString().replace(/\n$/g, '');
+                self.defaultPrefix = self.defaultPrefix.replace(/^\~/, getUserHome());
+                prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix;
                 self.optionalPrefix = pkg.config.optionalPrefix.replace(/^\~/, getUserHome());
             } catch(err) {
+                console.warn('MainHelper::Init() Execption: '+ err.stack);
+                console.debug('Trying alternative config');
                 try {
                     self.defaultPrefix = execSync('npm config get prefix').toString().replace(/\n$/g, '');
-                    pkg = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
+                    prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix;
+                    cmd = 'npm list gina --long --json --prefix='+ prefix;
+                    if (self.isGlobalInstall) {
+                        cmd += ' -g';
+                    }
+                    pkg = execSync(cmd).toString().replace(/\n$/g, '');
                     self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
                 } catch (_err) {
                     throw new Error(_err.stack +'\n'+ err.stack)

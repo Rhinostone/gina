@@ -1,6 +1,6 @@
 /**
  * This file is part of the gina package.
- * Copyright (c) 2017 Rhinostone <contact@gina.io>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -99,13 +99,17 @@ function PostInstall() {
         self.isGlobalInstall    = process.env.npm_config_global || false;
         self.isResetNeeded      = process.env.npm_config_reset || false;
         self.defaultPrefix      = execSync('npm config get prefix').toString().replace(/\n$/g, '');
-        var pkg = null;
-        try {
-            pkg = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
-        } catch(err) {
-            throw err
-        }
-        self.optionalPrefix     = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+        // var pkg = null;
+        // try {
+        //     if (self.isGlobalInstall) {
+        //         pkg = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
+        //     } else {
+        //         pkg = execSync('npm list gina --long --json').toString().replace(/\n$/g, '');
+        //     }
+        // } catch(err) {
+        //     throw err
+        // }
+        // self.optionalPrefix     = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
 
         // `process.env.npm_config_prefix` is only retrieved on `npm install gina`
         // and it should always be equal to `self.defaultPrefix`
@@ -163,6 +167,22 @@ function PostInstall() {
             // console.warn('You do not have sufficient permissions. Switching to `--prefix='+ self.optionalPrefix +'`');
             // process.env.npm_config_prefix = self.prefix = self.optionalPrefix;
         }
+
+        var pkg = null, pkgObj = null, cmd = null;
+        try {
+            cmd = 'npm list gina --long --json --prefix='+ self.prefix;
+            if (self.isGlobalInstall) {
+                cmd += ' -g';
+            }
+            pkg = execSync(cmd).toString().replace(/\n$/g, '');
+            self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+
+        } catch(err) {
+            throw err
+        }
+        pkgObj = JSON.parse(pkg);
+        self.optionalPrefix     = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+
 
         if ( self.prefix != self.defaultPrefix ) {
             self.isCustomPrefix = true;
@@ -769,11 +789,20 @@ function PostInstall() {
         }
     }
 
+
     self.end = function(done) {
 
         restoreSymlinks();
-        // set settings prefix
+        // update package.json
+        var pkgObj = require(pack);
+        pkgObj.config.prefix = self.prefix;
+        pkgObj.config.globalMode = self.isGlobalInstall;
+        new _(pack, true).rmSync();
+        lib.generator.createFileFromDataSync(JSON.stringify(pkgObj, null, 2), pack);
+
+        // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
+        execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
         execSync(ginaBinanry + ' framework:set --prefix='+ self.prefix);
 
         // Update middleware file
