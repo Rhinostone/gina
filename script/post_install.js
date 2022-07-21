@@ -401,8 +401,7 @@ function PostInstall() {
         console.info('Current prefix: '+ self.prefix );
         console.info('Current package.json: '+  _(self.gina + '/package.json', true) );
 
-        var name = require( _(self.gina + '/package.json', true) ).name;
-        console.info('Package name: '+ name );
+        var name = 'gina';
         console.info('Creating framework command line:');
         var appPath = process.env.INIT_CWD;//process.cwd();
         console.debug('App path: '+ appPath);
