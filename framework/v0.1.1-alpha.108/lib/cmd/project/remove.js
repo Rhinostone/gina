@@ -31,7 +31,7 @@ function Remove(opt, cmd) {
 
         if ( typeof(self.projects[self.projectName]) == 'undefined' ) {
             console.error('project [ '+ self.projectName + ' ] not found in `~/.gina/projects.json`');
-            
+
             process.exit(1)
         }
 
@@ -52,15 +52,15 @@ function Remove(opt, cmd) {
                     process.exit(1)
                 }
             }
-           
+
             end(true)
         })
     }
-    
+
 
     var prompt = function(force, cb) {
         if (!force) {
-            rl.setPrompt('Also remove project sources ? (Y/n):');
+            rl.setPrompt('Also remove project sources ? (Y/n):\n');
             rl.prompt();
         } else {
             cb(true)
@@ -89,7 +89,7 @@ function Remove(opt, cmd) {
 
 
     var end = function(removed) {
-        
+
         // removing ports
         var ports               = JSON.clone(self.portsData)
             , portsReverse      = JSON.clone(self.portsReverseData)
@@ -98,39 +98,39 @@ function Remove(opt, cmd) {
         ;
 
         for (var protocol in ports) {
-            
+
             for (var scheme in ports[protocol]) {
-                
+
                 for (var port in ports[protocol][scheme]) {
 
                     re = new RegExp("\@"+ self.projectName +"\/");
-                    
-                    if ( re.test(ports[protocol][scheme][port]) ) { 
+
+                    if ( re.test(ports[protocol][scheme][port]) ) {
                         // reverse ports
                         reversePortValue = ports[protocol][scheme][port].split('/')[0];
                         if ( typeof(portsReverse[reversePortValue]) != 'undefined' ) {
                             delete portsReverse[reversePortValue];
-                        } 
-                        
-                        // ports                                           
+                        }
+
+                        // ports
                         delete ports[protocol][scheme][port];
-                    }                    
+                    }
                 }
-            }                    
+            }
         }
 
         // now writing
         lib.generator.createFileFromDataSync(ports, self.portsPath);
         lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
-        
-        
+
+
         var target = _(GINA_HOMEDIR + '/projects.json');
         delete self.projects[self.projectName];
         lib.generator.createFileFromDataSync(
             self.projects,
             target
         )
-        
+
 
         if (removed)
             console.log('Project [ '+ self.projectName +' ] removed');

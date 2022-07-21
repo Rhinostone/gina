@@ -18,13 +18,13 @@ function Add(opt, cmd) {
     ;
 
     var init = function() {
-        
+
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
-        
+
         if ( isDefined('project', self.projectName) && self.bundles.length > 0) {
 
             addViews(0)
@@ -159,7 +159,7 @@ function Add(opt, cmd) {
             local.root      = self.projects[self.projectName].path;
 
             console.info('Adding view folder for: '+ local.bundle +'@'+ self.projectName);
-            
+
             local.src = _(self.bundlesLocation +'/'+ bundle, true);
             addConfFile()
 
@@ -182,7 +182,7 @@ function Add(opt, cmd) {
         var folder  = _(local.src + '/templates');
 
         if ( fs.existsSync(target) || fs.existsSync(folder) ) {
-            rl.setPrompt('Found templates for [ '+ local.bundle +'@'+ self.projectName +' ]. Do you want to override ? (yes|no) > ');
+            rl.setPrompt('Found templates for [ '+ local.bundle +'@'+ self.projectName +' ]. Do you want to override ? (yes|no) > \n');
             rl.prompt();
 
             rl.on('line', function(line) {
@@ -245,7 +245,7 @@ function Add(opt, cmd) {
             local.source        = _(targetPath +'/handlers', true);
             local.isInstalled   = false;
             browse(local.source);
-            
+
             console.log('['+ local.bundle +'@'+ self.projectName +'] templates installed with success !');
             folderPublic.cp(target + '/public', function(err, targetPath){
                 if (err) {
@@ -256,7 +256,7 @@ function Add(opt, cmd) {
                 ++local.b;
                 addViews(local.b)
             });
-            
+
         });
     }
 

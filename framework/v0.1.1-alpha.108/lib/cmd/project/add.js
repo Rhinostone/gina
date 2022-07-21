@@ -99,7 +99,7 @@ function Add(opt, cmd) {
                     self.projects[self.projectName ].path = self.projectLocation;
 
                     var target = _(GINA_HOMEDIR + '/projects.json')
-                        , projects = self.projects;
+                        , projects = JSON.clone(self.projects);
 
                     lib.generator.createFileFromDataSync(
                         projects,
@@ -190,6 +190,13 @@ function Add(opt, cmd) {
             target
         );
 
+        if (
+            typeof(isCreatedFromExistingPackage) != 'undefined'
+            && /^true$/i.test(isCreatedFromExistingPackage)
+        ) {
+            return end()
+        }
+
         end(true)
     }
 
@@ -197,7 +204,7 @@ function Add(opt, cmd) {
 
 
         var target = _(GINA_HOMEDIR + '/projects.json')
-            , projects = self.projects
+            , projects = JSON.clone(self.projects)
             , error = false;
 
 
