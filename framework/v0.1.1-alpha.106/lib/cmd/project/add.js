@@ -71,10 +71,10 @@ function Add(opt, cmd) {
         // creating package file
         file = new _(self.projectLocation + '/package.json', true);
         if ( !file.existsSync() ) {
-            createPackageFile( file )
+            createPackageFile( file.toString() )
         } else {
-            console.warn('[ package.json ] already exists in this location: '+ file + '\Updating package.json...');
-            createPackageFile( file, true )
+            console.warn('[ package.json ] already exists in this location: '+ file + '\nUpdating package.json...');
+            createPackageFile( file.toString(), true )
         }
     }
 
