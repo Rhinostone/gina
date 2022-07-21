@@ -320,7 +320,7 @@ function MainHelper(opt) {
             return logDir
         }
 
-        var prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var prefix = getEnvVar('GINA_PREFIX') || slef.prefix || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
 
         if ( isWin32() ) {
             logDir = process.env.LOG ||
@@ -396,7 +396,7 @@ function MainHelper(opt) {
             return runDir
         }
 
-        var prefix = getEnvVar('GINA_PREFIX') || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var prefix = getEnvVar('GINA_PREFIX') || self.prefix || self.defaultPrefix || execSync('npm config get prefix').toString().replace(/\n$/g, '');
 
         runDir = (isWin32()) ? getUserHome() + '\\.gina\\run' : prefix + '/var/lock';
 

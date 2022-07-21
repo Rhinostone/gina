@@ -237,7 +237,7 @@ function Add(opt, cmd) {
 
         if ( !ginaModule.existsSync() ) {
             linkGina(onError, onSuccess)
-        } else if ( /^false$/i.test(GINA_GLOBAL_MODE) ) {
+        } else if ( /^true$/i.test(GINA_GLOBAL_MODE) ) {
 
             error = ginaModule.rmSync();
 
