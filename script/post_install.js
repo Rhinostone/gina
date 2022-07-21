@@ -794,11 +794,11 @@ function PostInstall() {
 
         restoreSymlinks();
         // update package.json
-        var pkgObj = require(pack);
-        pkgObj.config.prefix = self.prefix;
-        pkgObj.config.globalMode = self.isGlobalInstall;
-        new _(pack, true).rmSync();
-        lib.generator.createFileFromDataSync(JSON.stringify(pkgObj, null, 2), pack);
+        // var pkgObj = require(pack);
+        // pkgObj.config.prefix = self.prefix;
+        // pkgObj.config.globalMode = self.isGlobalInstall;
+        // new _(pack, true).rmSync();
+        // lib.generator.createFileFromDataSync(JSON.stringify(pkgObj, null, 2), pack);
 
         // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
