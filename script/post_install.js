@@ -392,7 +392,7 @@ function PostInstall() {
     }
 
     //Creating framework command line file for nix.
-    var createGinaFile = function(win32Name, callback) {
+    var createGinaFile = function(callback) {
         // local install only
         if (self.isGlobalInstall) {
             return callback(false);
@@ -401,17 +401,16 @@ function PostInstall() {
         console.info('Current prefix: '+ self.prefix );
         console.info('Current package.json: '+  _(self.gina + '/package.json', true) );
 
-        var name = 'gina';
         console.info('Creating framework command line:');
-        var appPath = process.env.INIT_CWD;//process.cwd();
+        var appPath = process.env.INIT_CWD;
         console.debug('App path: '+ appPath);
-        // var source = _(self.versionPath + '/core/template/command/gina.tpl', true);
         var source = _(appPath + '/node_modules/.bin/gina', true);
-        console.debug('Source: '+ source);
-        var target = _(appPath +'/'+ name, true);
-        if ( win32Name && typeof(win32Name) != 'undefined') {
-            target = _(appPath +'/'+ win32Name, true)
+        var target = _(appPath +'/gina', true);
+        if ( isWin32() ) {
+            source = _(appPath + '/node_modules/.bin/gina.bat', true)
+            target = _(appPath +'/gina.bat', true)
         }
+        console.debug('Source: '+ source);
         console.debug('Target: '+ target);
 
         if ( callback && typeof(callback) != 'undefined') {
@@ -428,13 +427,13 @@ function PostInstall() {
 
     self.createGinaFileForPlatform = async function(done) {
         console.info('Creating platform file');
-        var name = require( _(self.versionPath + '/package.json') ).name;
+        // var name = require( _(self.versionPath + '/package.json') ).name;
 
-        var filename = ( (self.isWin32) ? '.' : '' ) + name;
+        // var filename = ( (self.isWin32) ? '.' : '' ) + name;
 
-        var keepGoing = function(filename) {
+        var keepGoing = function() {
 
-            createGinaFile(filename, function onFileCreated(err) {
+            createGinaFile(function onFileCreated(err) {
                 if (err) {
                     return done(err)
                 }
@@ -477,26 +476,26 @@ function PostInstall() {
             })
         }
 
-        if (self.isWin32) {
-            // var appPath = _( self.versionPath.substring(0, (self.versionPath.length - ("node_modules/" + name + '/').length)) );
-            var appPath = process.cwd()
-            var source = _(self.versionPath + '/core/template/command/gina.bat.tpl');
-            var target = _(appPath +'/'+ name + '.bat');
-            if ( fs.existsSync(target) ) {
-                fs.unlinkSync(target);
-                // have to wait for windows to complete this
-                setTimeout( async function(){
-                    lib.generator.createFileFromTemplate(source, target);
-                    await keepGoing(filename)
-                }, 1000)
-            } else {
-                lib.generator.createFileFromTemplate(source, target);
-                await keepGoing(filename)
-            }
+        // if (self.isWin32) {
+        //     // var appPath = _( self.versionPath.substring(0, (self.versionPath.length - ("node_modules/" + name + '/').length)) );
+        //     var appPath = process.cwd()
+        //     var source = _(self.versionPath + '/core/template/command/gina.bat.tpl');
+        //     var target = _(appPath +'/'+ name + '.bat');
+        //     if ( fs.existsSync(target) ) {
+        //         fs.unlinkSync(target);
+        //         // have to wait for windows to complete this
+        //         setTimeout( async function(){
+        //             lib.generator.createFileFromTemplate(source, target);
+        //             await keepGoing(filename)
+        //         }, 1000)
+        //     } else {
+        //         lib.generator.createFileFromTemplate(source, target);
+        //         await keepGoing(filename)
+        //     }
 
-        } else {
-            await keepGoing(filename)
-        }
+        // } else {
+            await keepGoing()
+        // }
     }
 
 
