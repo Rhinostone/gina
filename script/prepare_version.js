@@ -422,7 +422,7 @@ function PrepareVersion() {
             }
             cmd = execSync("git commit -am'"+ msg +"'");
         } catch (err) {
-            if (!/Your branch is up to date/i.test( err.output.toString() )) {
+            if (!/Your branch is up to date|nothing to commit, working tree clean/i.test( err.output.toString() )) {
                 console.error(err.stack||err.message||err);
                 return done(err);
             }
