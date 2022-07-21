@@ -6,6 +6,9 @@
     "def_prefix": {
         "{release}": "{prefix}"
     },
+    "def_global_mode": {
+        "{release}": "{global_mode}"
+    },
     "scopes": {
         "{release}": [
             "local",

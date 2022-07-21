@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.1.1-alpha.96",
+  "version": "0.1.1-alpha.97",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -15,7 +15,6 @@
     "gina.io",
     "ginajs"
   ],
-  "install": "npm install -g gina@latest",
   "homepage": "https://gina.io",
   "repository": {
     "type": "git",
@@ -45,14 +44,17 @@
     "node >=0.10.25"
   ],
   "config": {
-    "optionalPrefix": "~/.npm-global"
+    "optionalPrefix": "~/.npm-global",
+    "prefix": "/usr/local",
+    "globalMode": true
   },
   "bin": {
     "gina": "./bin/gina"
   },
-  "main": "./framework/v0.1.1-alpha.96/core/gna",
+  "main": "./framework/v0.1.1-alpha.97/core/gna",
   "scripts": {
     "prepare": "node ./script/prepare_version.js",
+    "postpublish": "node ./script/post_publish.js",
     "preinstall": "node ./script/pre_install.js",
     "postinstall": "node ./script/post_install.js"
   },

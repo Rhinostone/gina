@@ -1,6 +1,6 @@
 /**
  * This file is part of the gina pkg.
- * Copyright (c) 2017 Rhinostone <contact@gina.io>
+ * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -42,14 +42,7 @@ function PreInstall() {
         self.isGlobalInstall    = process.env.npm_config_global || false;
         self.isResetNeeded      = process.env.npm_config_reset || false;
         self.defaultPrefix      = execSync('npm config get prefix').toString().replace(/\n$/g, '');
-        var pkg = null;
-        try {
-            pkg = execSync('npm list -g gina --long --json').toString().replace(/\n$/g, '');
-        } catch(err) {
-            throw err
-        }
-        self.optionalPrefix     = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
-        // self.optionalPrefix     = getUserHome()+'/.npm-global';
+
 
         // `process.env.npm_config_prefix` is only retrieved on `npm install gina`
         // and it should always be equal to `self.defaultPrefix`
@@ -107,6 +100,21 @@ function PreInstall() {
             // console.warn('You do not have sufficient permissions. Switching to `--prefix='+ self.optionalPrefix +'`');
             // process.env.npm_config_prefix = self.prefix = self.optionalPrefix;
         }
+
+        var pkg = null, pkgObj = null, cmd = null;
+        try {
+            cmd = 'npm list gina --long --json --prefix='+ self.prefix;
+            if (self.isGlobalInstall) {
+                cmd += ' -g';
+            }
+            pkg = execSync(cmd).toString().replace(/\n$/g, '');
+            self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+
+        } catch(err) {
+            throw err
+        }
+        pkgObj = JSON.parse(pkg);
+        self.optionalPrefix     = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
 
         if ( self.prefix != self.defaultPrefix ) {
             self.isCustomPrefix = true;

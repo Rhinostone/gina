@@ -128,16 +128,18 @@ function Initialize(opt) {
 
     self.checkIfMain = function() {
         console.debug('Checking main...');
-        var source  = getPath('gina').root + '/resources/home/main.json';
-        var target  = self.opt.homedir + '/main.json';
-        var version = 'v' + getEnvVar('GINA_VERSION');
-        var prefix  = getEnvVar('GINA_PREFIX') || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var source      = getPath('gina').root + '/resources/home/main.json';
+        var target      = self.opt.homedir + '/main.json';
+        var version     = 'v' + getEnvVar('GINA_VERSION');
+        var prefix      = getEnvVar('GINA_PREFIX') || execSync('npm config get prefix').toString().replace(/\n$/g, '');
+        var globalMode  = getEnvVar('GINA_GLOBAL_MODE');
 
         var data = require(source);
         var dic = {
             'release' : self.release,
             'version' : version,
-            'prefix' : prefix
+            'prefix' : prefix,
+            'global_mode': globalMode
         };
         data = whisper(dic, data);
 
@@ -174,12 +176,13 @@ function Initialize(opt) {
 
 
         // don't remove def_protocol
-        var defProtocol = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
-        var defScheme   = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
-        var defCulture  = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
-        var defTimezone = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
-        var defLogLevel = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
-        var defPrefix   = (mainConfig['def_prefix']) ? mainConfig['def_prefix'][self.release] : data.def_prefix[self.release];
+        var defProtocol     = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
+        var defScheme       = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
+        var defCulture      = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
+        var defTimezone     = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
+        var defLogLevel     = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
+        var defPrefix       = (mainConfig['def_prefix']) ? mainConfig['def_prefix'][self.release] : data.def_prefix[self.release];
+        var defGlobalMode   = (mainConfig['def_global_mode']) ? mainConfig['def_global_mode'][self.release] : data.def_global_mode[self.release];
 
 
         if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
@@ -205,6 +208,9 @@ function Initialize(opt) {
         if (!mainConfig.def_prefix)
             mainConfig.def_prefix = data.def_prefix;
 
+        if (!mainConfig.def_global_mode)
+            mainConfig.def_global_mode = data.def_global_mode;
+
         mainConfig.protocols[self.release].sort();
         mainConfig.schemes[self.release].sort();
         mainConfig.cultures[self.release].sort();
@@ -212,11 +218,15 @@ function Initialize(opt) {
         // commit
         lib.generator.createFileFromDataSync(mainConfig, target);
 
+        process.env.TZ = defTimezone;
+        process.env.LOG_LEVEL = defLogLevel;
+
         setEnvVar('GINA_CULTURES', mainConfig.cultures[self.release]);
         setEnvVar('GINA_CULTURE', defCulture);
         setEnvVar('GINA_TIMEZONE', defTimezone);
-        process.env.TZ = defTimezone;
-        process.env.LOG_LEVEL = defLogLevel;
+        // Attenion: remove this part in case of troubles
+        setEnvVar('GINA_PREFIX', defPrefix);
+        setEnvVar('GINA_GLOBAL_MODE', defGlobalMode);
     }
 
     /**
@@ -334,6 +344,7 @@ function Initialize(opt) {
         var main            = require( _(self.opt.homedir + '/main.json', true) )
             , version       = getEnvVar('GINA_VERSION')
             , prefix        = getEnvVar('GINA_PREFIX') || main['def_prefix'][self.release]
+            , globalMode    = getEnvVar('GINA_GLOBAL_MODE') || main['def_global_mode'][self.release]
             , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
             , scope         = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release]
             , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
@@ -377,6 +388,7 @@ function Initialize(opt) {
 
             var dic = {
                 'prefix' : prefix,
+                'global_mode': globalMode,
                 'version' : version,
                 'env' : env,
                 'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,

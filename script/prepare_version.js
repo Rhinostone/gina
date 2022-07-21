@@ -468,6 +468,11 @@ function PrepareVersion() {
 
 
     var restoreSymlinks = function(done) {
+
+        if ( typeof(process.env.npm_config_dry_run) == 'undefined' || !process.env.npm_config_dry_run ) {
+            // ignoring for now, after publishing completion
+            return
+        }
         var archivesPath = _(getUserHome() + '/.gina/archives/framework', true);
         var frameworkPath = _(self.gina +'/framework', true);
 
@@ -533,9 +538,8 @@ function PrepareVersion() {
     }
 
     self.end = function(done) {
-        if ( typeof(process.env.npm_config_dry_run) != 'undefined' ) {
-            restoreSymlinks(done);
-        }
+
+        // restoreSymlinks(done);
 
         done()
     }

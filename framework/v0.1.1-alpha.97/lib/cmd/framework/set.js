@@ -2,10 +2,11 @@ var console = lib.logger;
 
 function Set(opt){
 
-    var mainConfPath        = _(GINA_HOMEDIR + '/main.json')
+    var mainConfPath        = _(GINA_HOMEDIR + '/main.json', true)
         , mainConf          = require(mainConfPath)
-        , mainSettingsPath  = _(GINA_HOMEDIR +'/'+ GINA_SHORT_VERSION + '/settings.json')
+        , mainSettingsPath  = _(GINA_HOMEDIR +'/'+ GINA_SHORT_VERSION + '/settings.json', true)
         , mainSettingsConf  = require(mainSettingsPath)
+        , pack              = require(_(GINA_DIR +'/package.json', true ))
     ;
 
     var init = function(opt){
@@ -30,6 +31,11 @@ function Set(opt){
         switch(k) {
             case '--prefix':
                 setPrefix(v);
+            break;
+
+            case '--global_mode':
+            case '--global-mode':
+                setGlobalMode(v);
             break;
 
             case '--log_level':
@@ -86,6 +92,32 @@ function Set(opt){
         process['gina']['prefix'] = prefix;
         mainSettingsConf['prefix'] = prefix;
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
+        // update package.json
+        pack.config.prefix = prefix;
+        lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
+    }
+
+    var setGlobalMode = function(globalMode) {
+        var err = null;
+        if ( !globalMode || typeof(globalMode) == 'undefined' || globalMode == '' ) {
+            err = new Error('Global Mode cannot be left empty or undefined');
+            console.error(err.message);
+            return
+        }
+        globalMode = /^true$/i.test(globalMode) ? true : false;
+        // save to ~/.gina/main.json
+        if ( typeof(mainConf['def_global_mode']) == 'undefined' ) {
+            mainConf['def_global_mode'] = {}
+        }
+        mainConf['def_global_mode'][GINA_SHORT_VERSION] = globalMode;
+        lib.generator.createFileFromDataSync(mainConf, mainConfPath);
+        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+        process['gina']['global_mode'] = globalMode;
+        mainSettingsConf['global_mode'] = globalMode;
+        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
+        // update package.json
+        pack.config.globalMode = globalMode;
+        lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
     }
 
     var setLogLevel = function(level) {
