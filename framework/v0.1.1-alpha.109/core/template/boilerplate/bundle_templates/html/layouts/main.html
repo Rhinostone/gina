@@ -9,10 +9,17 @@
         <meta name="robots" content="index, follow, noarchive">
         <meta name="distribution" content="global">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        {{ page.view.stylesheets }}
-        {{ page.view.scripts }}
     </head>
     <body>
-        {{ page.content }}
+        <div class="outer-wrap">
+            <div class="content wrap">
+                {% include "./html/includes/error-msg-outdated-browser.html" %}
+                {% include "./html/includes/error-msg-noscript.html" %}
+
+                {% block content %}
+                    <p>If you view this message you didn’t define a <strong>content</strong> block in your template.</p>
+                {% endblock %}
+            </div>
+        </div>
     </body>
 </html>

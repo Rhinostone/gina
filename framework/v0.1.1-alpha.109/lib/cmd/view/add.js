@@ -57,8 +57,8 @@ function Add(opt, cmd) {
             , f = 0;
 
         if (source == local.source && typeof(list) == 'undefined') {//root
-            var list = [];// root list
-            for (var l=0; l<files.length; ++l) {
+            list = [];// root list
+            for (let l=0; l<files.length; ++l) {
                 list[l] = _(local.source +'/'+ files[l])
             }
         }
@@ -132,6 +132,28 @@ function Add(opt, cmd) {
         }
     }
 
+    // var checkForNamespaces = function(src) {
+    //     var routingObj = null
+    //         , namespaces = {}
+    //     ;
+    //     try {
+    //         routingObj = require(_(src + '/config/routing.json', true));
+    //         // Looking for namespaces
+    //         for (let r in routing) {
+    //             if ( typeof(routing[r].namespace) != 'undefined' ) {
+    //                 namespaces[r] = {
+    //                     namespace : routing[r].namespace
+    //                 }
+    //             }
+    //         }
+    //     } catch (err) {
+    //         console.error(err.stack);
+    //         process.exit(1);
+    //     }
+
+    //     return (namespaces.count() > 0) ? namespaces : null
+    // }
+
     /**
      * Add bundles
      *
@@ -157,10 +179,13 @@ function Add(opt, cmd) {
             local.b         = b;
             local.env       = self.projects[self.projectName]['def_env'];
             local.root      = self.projects[self.projectName].path;
+            local.src       = _(self.bundlesLocation +'/'+ bundle, true);
 
             console.info('Adding view folder for: '+ local.bundle +'@'+ self.projectName);
 
-            local.src = _(self.bundlesLocation +'/'+ bundle, true);
+            // local.namespaces = checkForNamespaces(local.src);
+
+
             addConfFile()
 
         } else {

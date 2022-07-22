@@ -44,13 +44,17 @@ sudo chown -R $USER $(npm config get prefix)/lib/node_modules
 ```
 
 
-> __NB. :__ If you choose to use `sudo npm install -g gina`, you have to make sure that everytime you need to use the gina CLI, or if you use a specific command like `npm link gina`, you will have to do it with `sudo`.
+> __NB. :__ If you choose to use `sudo npm install -g gina`, you will also o use the `sudo` for specific commands like `npm link gina`.
+> Again, the use of `sudo` is discouraged.
 
-Then
+
+
+You can now check if Gina is properly installed.
 
 ```  tty
-npm install -g gina@latest
+gina version
 ```
+__NB.:__ This is a shortcut for `gina framework:version`
 
 
 #### 2nd method - Custom PREFIX
@@ -62,6 +66,12 @@ By adding at the end the `--reset` argument, you will ensure a factory reset for
 npm install -g gina@latest --prefix=~/.npm-global
 ```
 
+You can now check if Gina is properly installed.
+
+```  tty
+gina version
+```
+__NB.:__ This is a shortcut for `gina framework:version`
 
 
 #### 3rd method - local to your project
@@ -74,10 +84,10 @@ npm instal gina@latest
 
 __Attention:__  to use gina CLI, you will need to run it from your project location since the CLI was not installed with the global argument `-g`.
 
-#### You can now check if Gina is properly installed
+You can now check if Gina is properly installed.
 
 ```  tty
-gina version
+./gina version
 ```
 __NB.:__ This is a shortcut for `gina framework:version`
 
@@ -175,7 +185,8 @@ Then restart your bundle
 gina bundle:restart frontend @myproject
 ```
 
-Now edit the `home` control in `src/frontend/controllers/controller.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
+Now edit the `home` control in `src/frontend/controllers/controller.content.js` so that you can have `self.render(...)` instead of `self.renderJSON(...)`
+
 
 Once it's done, you just need to refresh your browser.
 
@@ -225,6 +236,7 @@ gina env:use prod @myproject
 __NB.:__ If you need to change it for a particular bundle, you still can do it at runtime using `--env=<your env>` to override the default settings. This will not set `<your env>`as the default environment for the whole project.
 
 
+
 #### Other operations you can apply to your environment:
 __Adding a new environment for your project__
 ```tty
@@ -239,6 +251,12 @@ __Defining an existing environment as `development` (you can only have one like 
 ```tty
 gina env:link-dev <your new dev env>
 ```
+
+__Benefits from using a `development` environment__
+You will not have to restart your bundle anytime you modify files inside directories like :
+- /controllers
+- /piblic
+- /templates
 
 ### Logs
 

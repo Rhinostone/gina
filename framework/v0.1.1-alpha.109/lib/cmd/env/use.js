@@ -63,15 +63,35 @@ function Use(opt, cmd) {
     }
 
     var useEnv = function(env, projects, target) {
-        //console.log('proj.: ', self.name, projects[self.name]);
+        // console.debug('proj.: ', self.name, projects[self.name] , '\nEnv:' + env);
         if (env !== projects[self.name]['def_env']) {
+            console.log('Project [ '+ self.name+' ] env `'+ projects[self.name]['def_env'] +'` set to '+ env);
             projects[self.name]['def_env'] = env;
             lib.generator.createFileFromDataSync(
                 projects,
                 target
             )
         }
+
+
+        end();
     };
+
+    var end = function(err) {
+        if (err) {
+            if (GINA_ENV_IS_DEV) {
+                console.error(err.stack);
+            } else {
+                console.error(err.message);
+            }
+
+            return process.exit(1);
+        }
+
+
+
+        return process.exit(0)
+    }
 
     init()
 };
