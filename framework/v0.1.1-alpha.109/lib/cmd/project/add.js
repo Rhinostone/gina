@@ -190,13 +190,6 @@ function Add(opt, cmd) {
             target
         );
 
-        if (
-            typeof(isCreatedFromExistingPackage) != 'undefined'
-            && /^true$/i.test(isCreatedFromExistingPackage)
-        ) {
-            return end()
-        }
-
         end(true)
     }
 
@@ -221,7 +214,7 @@ function Add(opt, cmd) {
         };
 
         // create/update ports, protocols & schemes
-        if ( /^true$/.test(local.imported) || /^false$/.test(local.imported) && typeof(self.projects[self.projectName]) == 'undefined' ) {
+        if ( /^true$/.test(local.imported) ) {
             addBundlePorts(0);
         }
 
@@ -265,6 +258,8 @@ function Add(opt, cmd) {
                 linkGina(onError, onSuccess)
             }
 
+        } else {
+            onSuccess()
         }
     }
 
