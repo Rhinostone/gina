@@ -84,7 +84,7 @@ function Status(opt, cmd) {
             });
 
             let version = file.replace(/^gina\-/, '').replace(/\.pid$/, '');
-            runningLog +=  'Running: '+ version;
+            runningLog +=  '['+ ~~pid+'] Running: '+ version;
             if (version == 'v'+GINA_VERSION ) {
                 runningLog += ' (default)'
             }
