@@ -12,9 +12,9 @@ doc
 script/prepare.js
 test/workspace
 framework/v*/node_modules
-framework/v*/core/asset/js/plugin/lib
-framework/v*/core/asset/js/plugin/src
-framework/v*/core/asset/js/plugin/build*
+framework/v*/core/asset/plugin/lib
+framework/v*/core/asset/plugin/src
+framework/v*/core/asset/plugin/build*
 framework/v*/SUCCESS
 framework/v*/MIDDLEWARE
 node_modules

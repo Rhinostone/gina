@@ -1,44 +1,44 @@
 /**
  * JSON.clone
  * Clone JSON object
- * 
- * Changes made here must be reflected in: 
+ *
+ * Changes made here must be reflected in:
  *  - gina/utils/prototypes.js
  *  - gina/framework/version/helpers/prototypes.js
- *  - gina/framework/version/core/asset/js/plugin/src/gina/utils/polyfill.js
- * 
+ *  - gina/framework/version/core/asset/plugin/src/gina/utils/polyfill.js
+ *
  * @param {object} source
  * @param {object} [target]
- * 
+ *
  * @returns {object} cloned JSON object
  **/
 function JSONClone(source, target) {
     if (source == null || typeof source != 'object') return source;
     if (source.constructor != Object && source.constructor != Array) return source;
-    
+
     if (
-        source.constructor == Date 
-        || source.constructor == RegExp 
-        || source.constructor == Function 
-        || source.constructor == String 
-        || source.constructor == Number 
+        source.constructor == Date
+        || source.constructor == RegExp
+        || source.constructor == Function
+        || source.constructor == String
+        || source.constructor == Number
         || source.constructor == Boolean
     ) {
         return new source.constructor(source);
     }
-        
+
 
     try {
         target = target || new source.constructor();
-    } catch (err) {                
+    } catch (err) {
         throw err;
     }
-    
+
     var i       = 0
         , len   = Object.getOwnPropertyNames(source).length || 0
         , keys  = Object.keys(source)
     ;
-    
+
     while (i<len) {
         let key = Object.getOwnPropertyNames(source)[i];
         if (key == 'undefined') {
@@ -56,7 +56,7 @@ function JSONClone(source, target) {
         } else {
             target[key] = (typeof target[key] == 'undefined' ) ? JSONClone(source[key], null) : target[key];
         }
-        
+
         i++;
     }
     i = null; len = null; keys = null;
@@ -72,16 +72,16 @@ function JSONClone(source, target) {
 //     if (source == null || source == undefined || typeof source != 'object') return source;
 //     if (source.constructor.name != 'Object' && source.constructor.name != 'Array') return source;
 //     // if (
-//     //     source.constructor == Date 
-//     //     || source.constructor == RegExp 
-//     //     || source.constructor == Function 
-//     //     || source.constructor == String 
-//     //     || source.constructor == Number 
+//     //     source.constructor == Date
+//     //     || source.constructor == RegExp
+//     //     || source.constructor == Function
+//     //     || source.constructor == String
+//     //     || source.constructor == Number
 //     //     || source.constructor == Boolean
 //     // ) {
 //     //     return new source.constructor(source)
 //     // }
-    
+
 //     //target = target || new source.constructor();
 //     target = ( typeof(target) != 'undefined' && target) ? target : new source.constructor();
 //     var i       = 0
@@ -89,7 +89,7 @@ function JSONClone(source, target) {
 //         , keys  = Object.keys(source)
 //         , error = null
 //     ;
-    
+
 //     while (i<len) {
 //         try {
 //             //target[keys[i]] = (typeof target[keys[i]] == 'undefined') ? JSONClone(source[keys[i]], null) : target[keys[i]];
@@ -101,7 +101,7 @@ function JSONClone(source, target) {
 //                 let _source = source[keys[i]];
 //                 if (/^null|undefined$/i.test(_source)) {
 //                     target[keys[i]] = _source
-//                 }                        
+//                 }
 //                 else if (
 //                     _source.constructor.name == 'Date'
 //                     || _source.constructor.name == 'RegExp'
@@ -111,7 +111,7 @@ function JSONClone(source, target) {
 //                     || _source.constructor.name == 'Boolean'
 //                 ) {
 //                     target[keys[i]] =  _source
-//                 } 
+//                 }
 //                 else if (
 //                     // _source.constructor.name == 'Date'
 //                     // || _source.constructor.name == 'RegExp'
@@ -119,7 +119,7 @@ function JSONClone(source, target) {
 //                     // || _source.constructor.name == 'String'
 //                     // || _source.constructor.name == 'Number'
 //                     // || _source.constructor.name == 'Boolean'
-//                     //|| 
+//                     //||
 //                     _source.constructor.name == 'Array'
 //                     //|| _source.constructor.name == 'Object'
 //                 ) {
@@ -138,17 +138,17 @@ function JSONClone(source, target) {
 //             console.error(errString);
 //             error = new Error(errString);
 //             break;
-//         }  
+//         }
 //     }
-    
+
 //     if (error) {
 //         throw error;
 //     }
-    
+
 //     i = null; len = null; keys = null;
 
 //     return target;
-                    
+
 // };
 
 
@@ -170,6 +170,6 @@ if ((typeof (module) !== 'undefined') && module.exports) {
     // Publish as node.js module
     module.exports = JSONClone
 } else if (typeof (define) === 'function' && define.amd) {
-    // Publish as AMD module    
+    // Publish as AMD module
     return JSONClone
 }
