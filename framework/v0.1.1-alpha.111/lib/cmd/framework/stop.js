@@ -94,7 +94,7 @@ function Stop(opt, cmd) {
             });
         }
         var pid = null, fakeDaemonPid = null;
-        if ( runningVersions.length > 0 ) {
+        if ( runningVersions.length > 0 && new _(GINA_HOMEDIR +'/procs.json', true).existsSync() ) {
             // retrieve running pid vs running version
             var runningProcs = requireJSON(_(GINA_HOMEDIR +'/procs.json', true));
             for (let name in runningProcs) {
