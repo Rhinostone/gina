@@ -797,7 +797,7 @@ function PostInstall() {
 
         // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
-        if (!self.isCustomPrefix) {
+        if (!self.isCustomPrefix && self.isGlobalInstall) {
             ginaBinanry = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina')
         }
         execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
