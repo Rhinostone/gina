@@ -71,6 +71,10 @@ function PreInstall() {
             }
         }
 
+        if (self.prefix != self.defaultPrefix) {
+            self.isCustomPrefix = true;
+        }
+
         // For local install
         console.debug('self.isGlobalInstall => '+ self.isGlobalInstall);
         if ( !self.isGlobalInstall ) {
