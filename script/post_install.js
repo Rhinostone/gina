@@ -138,6 +138,10 @@ function PostInstall() {
             }
         }
 
+        if (self.prefix != self.defaultPrefix) {
+            self.isCustomPrefix = true;
+        }
+
         // For local install
         console.debug('self.isGlobalInstall => '+ self.isGlobalInstall);
         if ( !self.isGlobalInstall ) {
@@ -511,6 +515,7 @@ function PostInstall() {
 
         console.info('Now installing modules: please, wait ...');
         console.info('Prefix ('+ self.isCustomPrefix +'): '+ self.prefix);
+        console.info('Default prefix: '+ self.defaultPrefix);
         var initialDir = process.cwd();
 
 
@@ -579,6 +584,9 @@ function PostInstall() {
 
         // reading default extensions
         var ext = _(self.gina +'/resources/home/user/extensions', true);
+        // if (!self.isCustomPrefix) {
+        //     ext = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina')
+        // }
         var folders = [];
         try {
             console.debug('Reading : '+ ext + ' - isDirectory ? '+ fs.lstatSync( ext ).isDirectory() );
@@ -789,6 +797,9 @@ function PostInstall() {
 
         // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
+        if (!self.isCustomPrefix) {
+            ginaBinanry = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina')
+        }
         execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
         execSync(ginaBinanry + ' framework:set --prefix='+ self.prefix);
 
