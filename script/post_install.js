@@ -685,7 +685,7 @@ function PostInstall() {
         var profilePathObj = new _(profilePath);
         if ( !profilePathObj.existsSync() ) {
             cmd = 'touch '+ profilePath;
-            await promisify(run)(cmd, { cwd: _(self.versionPath), tmp: _(getTmpDir(), true), outToProcessSTD: true })
+            await promisify(run)(cmd, { cwd: _(self.versionPath), tmp: _(getTmpDir(), true), outToProcessSTD: true, shell: "/bin/bash"})
                 .catch(function onError(err){
                     if (err) {
                         console.warn('try to run: sudo ' + cmd);
