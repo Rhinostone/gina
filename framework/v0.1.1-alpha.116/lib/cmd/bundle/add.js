@@ -33,7 +33,7 @@ function Add(opt, cmd) {
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
-        
+
         // var i = 3, envs = [];
         // for (; i<process.argv.length; ++i) {
         //     if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
@@ -62,8 +62,8 @@ function Add(opt, cmd) {
             process.exit(1)
         }
     }
-    
-    
+
+
 
     /**
      * Add bundles
@@ -90,7 +90,7 @@ function Add(opt, cmd) {
 
             local.b             = b;
             local.bundle        = bundle;
-            
+
             local.envFileSaved  = false;
 
             // find available port
@@ -111,7 +111,7 @@ function Add(opt, cmd) {
                     self.portsList.push(ports[p])
                 }
                 self.portsList.sort();
-                                
+
                 console.debug('available ports '+ JSON.stringify(ports, null, 2));
                 self.portsAvailable = ports;
                 try {
@@ -130,6 +130,34 @@ function Add(opt, cmd) {
     var check = function() {
 
         if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined' ) {
+
+            if ( /\-\-(import|replace)/.test(opt.argv.join(',')) ) {
+                console.debug('Special case detected '+ opt.argv);
+                var pArr                = null
+                    , importModeEnabled = false
+                    , replaceModeEnabled = false
+                ;
+                for (let i = 0, len = opt.argv.length; i<len; i++) {
+                    if (  !/\-\-(import|replace)/.test(opt.argv[i]) )
+                        continue;
+
+                    pArr = opt.argv[i].replace(/\s+/g, '').split(/=/);
+                    importModeEnabled   = /\-import/.test(pArr[0]) ? true : false;
+                    replaceModeEnabled  = /\-replace/.test(pArr[0]) ? true : false;
+                    // only allowing one argument
+                    break;
+                }
+                if (importModeEnabled) {
+                    local.envFileSaved = true;
+                    makeBundle(local.bundle, false);
+                    return;
+                }
+
+                if (replaceModeEnabled) {
+                    makeBundle(local.bundle, true);
+                    return;
+                }
+            }
 
             rl.setPrompt('Bundle [ '+ local.bundle +' ] already exists !\n(r) Replace - All existing files will be lost !\n(c) Cancel\n(i) Import\n> ');
 
@@ -193,7 +221,7 @@ function Add(opt, cmd) {
     var makeBundle = async function(bundle, rewrite) {
 
         loadAssets();
-        
+
         // if ( /^true$/i.test(rewrite) ) {
         //     fixPorts
         //     return
@@ -204,7 +232,7 @@ function Add(opt, cmd) {
                 rollback(err);
                 return;
             }
-            
+
             if (!local.envFileSaved) {
                 saveEnvFile(function doneSavingEnv(err){
 
@@ -344,19 +372,19 @@ function Add(opt, cmd) {
                 rollback(err);
                 return;
             }
-            
+
             // Browse, parse and replace keys
             local.source        = target;
             local.isInstalled   = false;
-            
+
             // check installed bundle
-            browse(local.source);            
+            browse(local.source);
 
             if (local.isInstalled) {
-                
+
                 // remove files we don't want yet
                 new _(destination + '/config/templates.json', true).rmSync();
-                
+
                 // if first bundle of th project, modify webroot
                 if (self.bundlesByProject[self.projectName].count() == 1) {
                     var settingsServerPath = _(destination + '/config/settings.server.json', true);
@@ -364,15 +392,15 @@ function Add(opt, cmd) {
                     serverSettings = serverSettings.replace('"webroot": "/{bundle}"', '"webroot": "/"');
                     lib.generator.createFileFromDataSync(serverSettings, settingsServerPath);
                 }
-                    
-                
-                
+
+
+
                 console.log('Bundle [ '+ local.bundle +' ] has been added to your project with success ;)');
                 rl.clearLine();
                 ++local.b;
                 addBundles(local.b)
             }
-            
+
         })
     }
 
@@ -471,7 +499,7 @@ function Add(opt, cmd) {
         var writeFiles = function() {
             //restore env.json
             lib.generator.createFileFromDataSync(self.envData, self.envPath);
-            
+
             //restore project.json
             if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
                 delete self.projectData.bundles[local.bundle]

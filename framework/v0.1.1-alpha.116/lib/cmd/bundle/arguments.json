@@ -1,4 +1,6 @@
 [
   "--env",
-  "--force"
+  "--force",
+  "--import",
+  "--replace"
 ]
