@@ -697,7 +697,7 @@ function PostInstall() {
         var inFile = null;
         var patt = _(self.prefix.replace( new RegExp( '^' +getUserHome() ), '(.*)[$]HOME') + '/bin', true);
         try {
-            inFile = execSync("cat ~/.profile | grep -Eo '" + patt +"'").toString();
+            inFile = execSync("cat ~/.profile | grep -Eo '" + patt +"'", {shell: "/bin/bash"}).toString();
         } catch (err) {
             // nothing to do
         }
@@ -716,7 +716,7 @@ function PostInstall() {
 
             // we need to source/update ~/.profile
             try {
-                execSync("source "+ profilePath);
+                execSync("source "+ profilePath, {shell: "/bin/bash"});
             } catch (err) {
                 return done(err)
             }
