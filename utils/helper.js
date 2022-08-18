@@ -611,10 +611,10 @@ function MainHelper(opt) {
             define(c, obj[c])
         }
         delete  obj
-    }
+    }// jshint ignore:line
 
     init(opt)
 
-};
+}
 
-module.exports = MainHelper()
+module.exports = MainHelper();

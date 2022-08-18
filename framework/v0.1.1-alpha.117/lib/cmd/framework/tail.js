@@ -35,7 +35,7 @@ function Tail(opt, cmd) {
         process.on('gina#mqlistener-started', function onGinaStarted(mqPort) {
             clearInterval(nIntervId);
             nIntervId = null;
-            opt.port = mqPort;
+            opt.mqPort = mqPort;
             tail(opt, cmd);
         });
 
@@ -49,8 +49,10 @@ function Tail(opt, cmd) {
 
     var tail = function(opt, cmd) {
 
-        var port = opt.port || 8125;
+        var port = opt.mqPort || GINA_MQ_PORT || 8125;
+        var host = opt.hostV4 || GINA_HOST_V4 || '127.0.0.1';
         var clientOptions = {
+            host    : host,
             port    : port,
             request : 'tail'
         }
@@ -76,7 +78,8 @@ function Tail(opt, cmd) {
 
             // 'connect' listener.
             console.resumeReporting();
-            console.info('[MQTail] connected to server :)');
+            // console.debug('[MQTail] connected with opt `'+ JSON.stringify(opt, null, 2) +'` :)');
+            console.info('[MQTail] connected to server `'+ host +'` on port `'+ port +'` :)');
 
             // send request
             client.write( JSON.stringify(clientOptions) +'\r\n');

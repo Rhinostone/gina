@@ -75,22 +75,24 @@ function FileContainer(opt, loggers) {
         var projectName = bfnArr[1];
         var homeDir = getUserHome() || process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];// jshint ignore:line
         homeDir += '/.gina';
-        var project = requireJSON(_(homeDir +'/projects.json', true))[projectName];
+        var project = requireJSON(_(homeDir +'/projects.json', true))[projectName];// jshint ignore:line
         var projectPath = project.path;
-        console.info('write env: ', bundleName, process.env.NODE_ENV || getEnvVar('GINA_ENV'));
-        var envObj      = requireJSON(_(projectPath +'/env.json', true))[bundleName][process.env.NODE_ENV || getEnvVar('GINA_ENV')]
+        console.info('write env: ', bundleName, process.env.NODE_ENV || getEnvVar('GINA_ENV'));// jshint ignore:line
+        var envObj      = requireJSON(_(projectPath +'/env.json', true))[bundleName][process.env.NODE_ENV || getEnvVar('GINA_ENV')];// jshint ignore:line
         var webroot     = ( !/\s+|\//.test(envObj.server && envObj.server.webroot) ) ? envObj.server.webroot +'.' : '';
         var hostname    = envObj.host;
-        var logDir      = getLogDir() || getEnvVar('GINA_LOGDIR');
+        var logDir      = getLogDir() || getEnvVar('GINA_LOGDIR');// jshint ignore:line
 
-        filenames[group].filename = _(logDir +'/'+ webroot + hostname +'.log', true);
+        filenames[group].filename = _(logDir +'/'+ webroot + hostname +'.log', true);// jshint ignore:line
         console.debug('Log group `'+ group +'` filename set to: ' + filenames[group].filename);
         process.stdout.write( format(opt.name, 'info', 'Log group `'+ group +'` filename set to: ' + filenames[group].filename) );
     }
 
     function onPayload() {
-        var port = 8125;
+        var port = opt.mqPort || getEnvVar('GINA_MQ_PORT') || 8125;// jshint ignore:line
+        var host = opt.hostV4 || getEnvVar('GINA_HOST_V4') || '127.0.0.1';// jshint ignore:line
         var clientOptions = {
+            host    : host,
             port    : port,
             request : 'writeToFile'
         }

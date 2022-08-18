@@ -1,7 +1,5 @@
 'use strict';
 // Imports
-// const fs                  = require('fs');
-// const util                = require('util');
 
 function DefaultContainer(opt, loggers) {
     var self = {

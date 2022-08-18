@@ -29,7 +29,7 @@ function Initialize(opt) {
             if( typeof(self[t]) == 'function') {
                 var func = 'self.' + t + '()';
                 console.debug('Running [ ' + func + ' ]');
-                eval(func);
+                eval(func);// jshint ignore:line
                 ++i
             }
 
@@ -371,6 +371,21 @@ function Initialize(opt) {
                 setEnvVar('GINA_DEBUG_PORT', ~~localUserSettings.debug_port);
             }
         }
+        if ( !getEnvVar('GINA_MQ_PORT') && targetObj.existsSync() ) {
+            if ( typeof(localUserSettings.mq_port) != 'undefined' ) {
+                setEnvVar('GINA_MQ_PORT', ~~localUserSettings.mq_port);
+            }
+        }
+        if ( !getEnvVar('GINA_HOST_V4') && targetObj.existsSync() ) {
+            if ( typeof(localUserSettings.host_v4) != 'undefined' ) {
+                setEnvVar('GINA_HOST_V4', localUserSettings.host_v4);
+            }
+        }
+        if ( !getEnvVar('GINA_HOSTNAME') && targetObj.existsSync() ) {
+            if ( typeof(localUserSettings.hostname) != 'undefined' ) {
+                setEnvVar('GINA_HOSTNAME', localUserSettings.hostname);
+            }
+        }
 
 
         // updated on framework start : you never know which user is going to start gina (root ? sudo ? regular user)
@@ -401,6 +416,9 @@ function Initialize(opt) {
                 'node_version': process.version,
                 'port' : getEnvVar('GINA_PORT') || 8124, // TODO - scan for the next available port
                 'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 5757,
+                'host_v4' : getEnvVar('GINA_HOST_V4') || '127.0.0.1',
+                'mq_port' : getEnvVar('GINA_MQ_PORT') || 8125,
+                'hostname' : getEnvVar('GINA_HOSTNAME') || 'localhost',
                 'user' : process.env.USER,
                 'uid' : uid,
                 'gid' : gid,
@@ -418,6 +436,9 @@ function Initialize(opt) {
 
             setEnvVar('GINA_PORT', settings['port']);
             setEnvVar('GINA_DEBUG_PORT', settings['debug_port']);
+            // setEnvVar('GINA_MQ_PORT', settings['mq_port']);
+            // setEnvVar('GINA_HOST_V4', settings['host_v4']);
+            // setEnvVar('GINA_HOSTNAME', settings['hostname']);
             setEnvVar('GINA_ENV_IS_DEV', settings['env_is_dev']);
             setEnvVar('GINA_SCOPE_IS_LOCAL', settings['scope_is_local']);
 
