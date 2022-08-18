@@ -19,9 +19,11 @@ function MQSpeaker(opt, loggers, cb) {
 
 
     function startMQSpeaker(opt, cb) {
-
+        var port = opt.mqPort || getEnvVar('GINA_MQ_PORT') || 8125;// jshint ignore:line
+        var host = opt.hostV4 || getEnvVar('GINA_HOST_V4') || '127.0.0.1';// jshint ignore:line
         var clientOptions = {
-            port    : opt.port,
+            host    : host,
+            port    : port,
             request : 'report'
         };
         var client = net.createConnection(clientOptions, () => {

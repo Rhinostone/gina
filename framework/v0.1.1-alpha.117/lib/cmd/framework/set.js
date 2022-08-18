@@ -57,12 +57,26 @@ function Set(opt){
             break;
 
             case '--port':
-                setPort(v);
+                setKeyVal('port', ~~v);
             break;
 
             case '--debug_port':
             case '--debug-port':
-                setDebugPort(v);
+                setKeyVal('debug_port', ~~v);
+            break;
+
+            case '--mq_port':
+            case '--mq-port':
+                setKeyVal('mq_port', ~~v);
+            break;
+
+            case '--host_v4':
+            case '--host-v4':
+                setKeyVal('host_v4', v);
+            break;
+
+            case '--hostname':
+                setKeyVal('hostname', v);
             break;
 
             case '--timezone':
@@ -75,6 +89,24 @@ function Set(opt){
                 // console.error(err.message);
 
         }
+    }
+
+    /**
+     * setKeyVal
+     * Generic method
+     * @param {string} key
+     * @param {string|number|boolean} value
+     */
+     var setKeyVal = function(key, value) {
+        console.debug('Setting `'+key+'` to '+ value);
+        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+        if ( /^(true|false)$/i.test(value) ) {
+            value = ( /^true$/i.test(value) ) ? true : false;
+        }
+
+        process['gina'][key] = value;
+        mainSettingsConf[key] = value;
+        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
 
     var setPrefix = function(prefix) {
@@ -98,6 +130,7 @@ function Set(opt){
         pack.config.prefix = prefix;
         lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
     }
+
 
     var setGlobalMode = function(globalMode) {
         var err = null;
@@ -186,21 +219,22 @@ function Set(opt){
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
     }
 
-    var setPort = function(port) {
-        console.debug('Setting `port` to #'+ port);
-        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
-        process['gina']['port'] = ~~port;
-        mainSettingsConf['port'] = ~~port;
-        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
-    }
+    // var setPort = function(key, port) {
+    //     console.debug('Setting `'+ key +'` to #'+ port);
+    //     // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+    //     process['gina'][key] = ~~port;
+    //     mainSettingsConf[key] = ~~port;
+    //     lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
+    // }
 
-    var setDebugPort = function(port) {
-        console.debug('Setting `debug port` to #'+ port);
-        // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
-        process['gina']['debug_port'] = ~~port;
-        mainSettingsConf['debug_port'] = ~~port;
-        lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
-    }
+
+    // var setDebugPort = function(port) {
+    //     console.debug('Setting `debug port` to #'+ port);
+    //     // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
+    //     process['gina']['debug_port'] = ~~port;
+    //     mainSettingsConf['debug_port'] = ~~port;
+    //     lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
+    // }
 
     var setTimezone = function(timezone) {
         // save to ~/.gina/main.json
@@ -226,6 +260,5 @@ function Set(opt){
     }
 
     init(opt)
-};
-
-module.exports = Set
+}
+module.exports = Set;

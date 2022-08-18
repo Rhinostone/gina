@@ -37,7 +37,7 @@ cmd.setOption = function(option) {
             cmd.option[option[i].name] = option[i].content
         }
     } else {
-        cmd.option[options.name] = option.content
+        cmd.option[options.name] = option.content// jshint ignore:line
     }
 }
 
@@ -46,8 +46,8 @@ cmd.getString = function() {
         .toString()
         .replace(/,/g,' ')
         .replace(/node\s/g, 'gina ');
-        //.replace(/node/g, 'gina');    
-    
+        //.replace(/node/g, 'gina');
+
     var cmdArr = cmd.split('/');
     cmd = cmdArr[cmdArr.length-1];
     return cmd
@@ -71,14 +71,14 @@ cmd.getOptions = function() {
 
 
 cmd.onExec = function(client, isFromFramework, opt) {
-    
-    var console = lib.logger;
+
+    var console = lib.logger;// jshint ignore:line
     cmd.option = opt;
-        
-    var Proc = require( getPath('gina').lib + '/proc');
+
+    var Proc = require( getPath('gina').lib + '/proc');// jshint ignore:line
     var self = {};
 
-    cmd.msg = require( _(__dirname + '/framework/msg.json') );
+    cmd.msg = require( _(__dirname + '/framework/msg.json') );// jshint ignore:line
     self.isFromFramework = opt.isFromFramework || isFromFramework || false;
     self.isOnlineCommand = opt.isOnlineCommand || false;
 
@@ -93,38 +93,38 @@ cmd.onExec = function(client, isFromFramework, opt) {
 
     var init = null;
     if (self.isFromFramework) {
-        
+
         init = require('./framework/init')(opt);
         //Framework CMD.
         if (opt.task.action == 'start') {
-            // Current version of the framework by default 
+            // Current version of the framework by default
             // But can be overriden with argument: @{version_number}
             // eg.: gina stop @1.0.0
-            self.version = getEnvVar('GINA_VERSION');
+            self.version = getEnvVar('GINA_VERSION');// jshint ignore:line
             // checkcking version number
             if ( typeof(opt.argv[3]) != 'undefined' && /^@/.test(opt.argv[3]) ) {
                 var err = null;
-                var version = opt.argv[3].replace(/\@/, '');            
+                var version = opt.argv[3].replace(/\@/, '');
                 var shortVersion = version.split('.').splice(0,2).join('.');
                 if ( !/^\d\.\d/.test(shortVersion) ) {
                     err = new Error('Wrong version: '+ version);
                     console.log(err.message);
                     return;
                 }
-                var availableVersions = requireJSON(_(getEnvVar('GINA_HOMEDIR') +'/main.json', true)).frameworks[shortVersion];
+                var availableVersions = requireJSON(_(getEnvVar('GINA_HOMEDIR') +'/main.json', true)).frameworks[shortVersion];// jshint ignore:line
                 if ( availableVersions.indexOf(version) < 0 ) {
                     err = new Error('Version not installed: '+ version);
                     console.log(err.message);
                     return;
                 }
-                
+
                 self.version = version;
             }
-            
+
             init.onComplete( function done(err, run){
                 console.debug('loading task `',  opt.task.topic +':'+ opt.task.action, '`');
-                
-                //Setting master process with its own PID file.                
+
+                //Setting master process with its own PID file.
                 cmd.proc = new Proc('gina-v' + self.version, process);
                 cmd.proc.setMaster(process.pid);
 
@@ -142,7 +142,7 @@ cmd.onExec = function(client, isFromFramework, opt) {
                 })
             })
         } else { // Offline CMD
-            init.onComplete( function done(err, run, opt){                
+            init.onComplete( function done(err, run, opt){
                 run(opt)
             })
         }
@@ -154,11 +154,11 @@ cmd.onExec = function(client, isFromFramework, opt) {
         }
         opt.task.topic  = arr[0];
         opt.task.action = arr[1];
-        
+
         console.debug('[ FRAMEWORK ] is starting online CLI '+ arr[0] +':'+arr[1]);
-        
+
         init = require('./framework/init')(opt);
-        init.onListen( function done(err, run, opt){            
+        init.onListen( function done(err, run, opt){
             run(opt, cmd)
         })
 

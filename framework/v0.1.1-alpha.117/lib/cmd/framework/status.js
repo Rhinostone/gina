@@ -36,6 +36,7 @@ function Status(opt, cmd) {
         if (!list.length || list[0] == "") {
             return;
         }
+
         // console.debug('pids list ', list);
         for (let p=0, len=list.length; p<len; p++) {
             if ( !/^\d+\s+gina\-/.test(list[p]) ) {
@@ -59,6 +60,7 @@ function Status(opt, cmd) {
                 pidFiles.push(title +'.pid');
             }
         }
+
     }
 
     var status = function(opt, cmd) {
@@ -69,7 +71,7 @@ function Status(opt, cmd) {
             throw fileError
         }
         checkUnregistered(pidFiles);
-        console.debug('pidFiles ',pidFiles);
+        console.debug('Reading `'+ GINA_RUNDIR +'` ',pidFiles);
 
         var runningVersions = [], runningLog = '';
         for (let i=0, len=pidFiles.length; i<len; i++) {

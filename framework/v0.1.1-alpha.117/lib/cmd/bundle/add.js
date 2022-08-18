@@ -132,7 +132,6 @@ function Add(opt, cmd) {
         if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined' ) {
 
             if ( /\-\-(import|replace)/.test(opt.argv.join(',')) ) {
-                console.debug('Special case detected '+ opt.argv);
                 var pArr                = null
                     , importModeEnabled = false
                     , replaceModeEnabled = false
@@ -150,13 +149,12 @@ function Add(opt, cmd) {
                 if (importModeEnabled) {
                     local.envFileSaved = true;
                     makeBundle(local.bundle, false);
-                    return;
                 }
 
                 if (replaceModeEnabled) {
                     makeBundle(local.bundle, true);
-                    return;
                 }
+                return;
             }
 
             rl.setPrompt('Bundle [ '+ local.bundle +' ] already exists !\n(r) Replace - All existing files will be lost !\n(c) Cancel\n(i) Import\n> ');

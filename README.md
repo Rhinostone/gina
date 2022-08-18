@@ -25,41 +25,9 @@ Gina aims to be at the same time a framework, a deployment and monitoring enviro
 > For Microsoft Windows, you might have to run the command line with Administrator privileges.
 > For Linux & Mac OS X, __the use of `sudo` is discouraged.__
 
-#### 1st method (prefered)
+#### 1st method (prefered) - Custom PREFIX
 
-```  tty
-npm install -g gina@latest
-```
-
-__A few words about this method__
-Gina will try to install itself using the default $NPM_PREFIX. If the target is not writable, the prefix used will be updated for the time of the install process to `~/.npm-global` and restored back to your default $NPM_PREFIX after installation.
-This is why you should not get errors on installation.
-
-Still, __if you are not enterely satisfyied with this method__, you can setup permissions for your user in order to be able to write to : `$NPM_PREFIX/lib/node_modules`.
-
-If you don't already have done it, you should start with :
-
-```tty
-sudo chown -R $USER $(npm config get prefix)/lib/node_modules
-```
-
-
-> __NB. :__ If you choose to use `sudo npm install -g gina`, you will also o use the `sudo` for specific commands like `npm link gina`.
-> Again, the use of `sudo` is discouraged.
-
-
-
-You can now check if Gina is properly installed.
-
-```  tty
-gina version
-```
-__NB.:__ This is a shortcut for `gina framework:version`
-
-
-#### 2nd method - Custom PREFIX
-
-This will install Gina in the user's home directory avoiding at the same time the need to use `sudo`.
+This will install Gina in the user's home directory avoiding at the same time the need to use `sudo` or the `root` user.
 By adding at the end the `--reset` argument, you will ensure a factory reset for the `~/.gina` preferences folder: all preferences will be lost, but your existing projects will not be erased.
 
 ```tty
@@ -72,6 +40,42 @@ You can now check if Gina is properly installed.
 gina version
 ```
 __NB.:__ This is a shortcut for `gina framework:version`
+
+#### 2nd method - Classical
+
+```  tty
+npm install -g gina@latest
+```
+
+__A few words about this method__
+This method is mainly used if you wish to install gina with the `root` user.
+Gina will try to install itself using the default $NPM_PREFIX (`/usr/local`). If the target is not writable you will get permission errors.
+
+__Note that for this method__, if the user is not `root`, you can setup permissions for your user in order to be able to write to : `$NPM_PREFIX/lib/node_modules`.
+
+If you don't already have done it, you should start with :
+
+```tty
+sudo chown -R $USER $(npm config get prefix)/lib/node_modules
+```
+
+
+> __Important :__ If you choose to use `sudo npm install -g gina`, you will also have to use the `sudo` for specific commands like `npm link gina`.
+> Again, the use of `sudo` is discouraged.
+
+
+
+You can now check if Gina is properly installed.
+
+```  tty
+gina version
+```
+or
+```  tty
+sudo gina version
+```
+__NB.:__ This is a shortcut for `gina framework:version`
+
 
 
 #### 3rd method - local to your project
@@ -89,7 +93,7 @@ You can now check if Gina is properly installed.
 ```  tty
 ./gina version
 ```
-__NB.:__ This is a shortcut for `gina framework:version`
+__NB.:__ This is a shortcut for `./gina framework:version`
 
 
 

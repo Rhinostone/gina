@@ -15,23 +15,23 @@ function MQListener(opt, cb) {
     // will be in memory until the framework is stopped
     // TODO - remove specific `bundle` or `CLI` config when the process is terminated
     var sharedConfig    = { loggers: {}};
-    var homedir         = getEnvVar('GINA_HOMEDIR');
+    var homedir         = getEnvVar('GINA_HOMEDIR');// jshint ignore:line
     var isLoggedByFile  = false; // by default
     var fileLogsList    = {};
 
 
     function init(opt, cb) {
         setup();
-        return startMQListener(opt.port, cb);
+        return startMQListener(opt, cb);
     }
 
     function setup() {
-        var mainConfigPath  = _(homedir +'/user/extensions/logger/default/config.json', true);
-        if ( !new _(mainConfigPath, true).existsSync() ) {
+        var mainConfigPath  = _(homedir +'/user/extensions/logger/default/config.json', true);// jshint ignore:line
+        if ( !new _(mainConfigPath, true).existsSync() ) {// jshint ignore:line
             //throw new Error('Required file not found: '+ mainConfigPath);
             return;
         }
-        var mainConfig = requireJSON(mainConfigPath);
+        var mainConfig = requireJSON(mainConfigPath);// jshint ignore:line
         if ( mainConfig.flows.indexOf('file') > -1 ) {
             isLoggedByFile = true;
         }
@@ -64,8 +64,8 @@ function MQListener(opt, cb) {
             file = name;
         }
         file += '.log';
-        var filename = _(GINA_LOGDIR +'/'+ file);
-        var filenameObj = new _(filename);
+        var filename = _(GINA_LOGDIR +'/'+ file);// jshint ignore:line
+        var filenameObj = new _(filename);// jshint ignore:line
         if ( !filenameObj.existsSync() ) {
             // create an empty file
             try {
@@ -81,10 +81,10 @@ function MQListener(opt, cb) {
             compress: true,
             count: 3
         };
-        var rotatorOptionsPath = _(homedir +'/user/extensions/logger/file/config.json', true);
-        if ( new _(rotatorOptionsPath).existsSync() ) {
+        var rotatorOptionsPath = _(homedir +'/user/extensions/logger/file/config.json', true);// jshint ignore:line
+        if ( new _(rotatorOptionsPath).existsSync() ) {// jshint ignore:line
             try {
-                rotatorOptions = merge( requireJSON(rotatorOptionsPath).logrotator, rotatorOptions );
+                rotatorOptions = merge( requireJSON(rotatorOptionsPath).logrotator, rotatorOptions );// jshint ignore:line
             } catch (userConfigErr) {
                 throw userConfigErr
             }
@@ -149,7 +149,9 @@ function MQListener(opt, cb) {
         sessions[sessionId].write( JSON.stringify(payload) +'\r\n');
     }
 
-    function startMQListener(port, cb) {
+    function startMQListener(opt, cb) {
+        var port = opt.port;
+        var host = opt.hostV4;
         // AbortController is a global object
         const controller = new AbortController();// jshint ignore:line
         var server = net.createServer( function(conn) {//'connection' listener
@@ -264,7 +266,7 @@ function MQListener(opt, cb) {
 
         server.on('error', function(err) {
             if (err.code === 'EADDRINUSE') {
-                console.warn('[MQListener] is already running on port [ '+ (err.port || port) +' ]');
+                console.warn('[MQListener] `'+ host +'` is already running on port [ '+ (err.port || port) +' ]');// jshint ignore:line
             } else {
                 console.emerg('[MQListener] Could not start', err.stack)
             }
@@ -283,12 +285,12 @@ function MQListener(opt, cb) {
         });
 
         server.listen({
-            host: '127.0.0.1',
+            host: host,
             port: port,
             signal: controller.signal
           }, function() {
             // Server started.
-            console.info('[MQListener] is waitting for speakers on port `'+ port +'`');
+            console.info('[MQListener] `'+ host +'`is waitting for speakers on port `'+ port +'`');
             if (cb) {
                 cb(false);
             }

@@ -26,6 +26,10 @@ async function onExec() {
         , debugBrkEnabled   = false
         , isUpdateRequired  = false
         , params            = process.argv
+        , settings          = null
+        , hostname          = os.hostname() // by default
+        , hostV4            = null
+        , mqPort            = null
     ;
     try {
         var packObj         = require(pack);
@@ -48,6 +52,27 @@ async function onExec() {
                     continue;
                 }
 
+                if ( /^\-\-mq\-port/.test(params[p]) ) {
+                    let mqPort = params[p].split(/\=/)[1];
+                    setEnvVar('GINA_MQ_PORT', ~~mqPort);// jshint ignore:line
+                    isUpdateRequired = true;
+                    continue;
+                }
+
+                if ( /^\-\-host\-v4/.test(params[p]) ) {
+                    let host = params[p].split(/\=/)[1];
+                    setEnvVar('GINA_HOST_V4', host);// jshint ignore:line
+                    isUpdateRequired = true;
+                    continue;
+                }
+
+                if ( /^\-\-hostname/.test(params[p]) ) {
+                    hostname = params[p].split(/\=/)[1];
+                    setEnvVar('GINA_HOSTNAME', hostname);// jshint ignore:line
+                    isUpdateRequired = true;
+                    continue;
+                }
+
                 if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
                     let port = params[p].split(/\=/)[1];
                     setEnvVar('GINA_DEBUG_PORT', ~~port);// jshint ignore:line
@@ -65,6 +90,7 @@ async function onExec() {
         }
 
 
+
         var shortVersion = version.split('.');
         shortVersion.splice(2);
         shortVersion = shortVersion.join('.');
@@ -76,8 +102,8 @@ async function onExec() {
         }
         home = getEnvVar('GINA_HOMEDIR');// jshint ignore:line
 
-        var settings = { 'log_level': 'info'}; // First time launch or reset
-        if ( new _( home +'/'+ shortVersion +'/settings.json', true ).existsSync() ) {
+        settings = { 'log_level': 'info'}; // First time launch or reset
+        if ( new _( home +'/'+ shortVersion +'/settings.json', true ).existsSync() ) {// jshint ignore:line
             var settingsPath =  _( home +'/'+ shortVersion +'/settings.json', true );// jshint ignore:line
             settings = requireJSON(settingsPath);// jshint ignore:line
         }
@@ -88,6 +114,14 @@ async function onExec() {
         setEnvVar('GINA_RUNDIR', settings['rundir']);// jshint ignore:line
         setEnvVar('GINA_LOGDIR', settings['logdir']);// jshint ignore:line
         setEnvVar('GINA_TMPDIR', settings['tmpdir']);// jshint ignore:line
+
+        // prior to what settings says
+        if (hostname != settings['hostname'] && !isUpdateRequired) {
+            setEnvVar('GINA_TMPDIR', settings['hostname']);// jshint ignore:line
+            hostname = settings['hostname'];
+        }
+        hostV4 = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || '127.0.0.1';// jshint ignore:line
+        mqPort = getEnvVar('GINA_MQ_PORT')|| settings['mq_port'] || 8125;// jshint ignore:line
 
         if ( typeof(packObj.config) != 'undefined' ) {
             if (typeof(packObj.config.prefix) != 'undefined' ) {
@@ -111,10 +145,9 @@ async function onExec() {
 
             var MQListener = require(frameworkPath + '/lib/logger/src/containers/mq/listener.js');
 
-            var mqPort = 8125;
-            var mqListener = await new MQListener({ port: 8125 });
+            var mqListener = await new MQListener({ port: mqPort, host: hostV4 });
             // required for tail command
-            var mqPortFile = getTmpDir() + '/mq-listener-v'+ version +'.port';
+            var mqPortFile = getTmpDir() + '/mq-listener-v'+ version +'.port';// jshint ignore:line
             console.debug('Writting: '+ mqPortFile);
             fs.writeFileSync( mqPortFile, ''+mqPort );
             process.on('exit', function() {
@@ -154,19 +187,27 @@ async function onExec() {
     }
     setEnvVar('GINA_IS_WIN32', isWin32, true);// jshint ignore:line
 
+    if (!settings) {
+        settings = requireJSON(settingsPath);// jshint ignore:line
+    }
     if (isUpdateRequired) {
-        settings['port'] = getEnvVar('GINA_PORT') || null;// jshint ignore:line
-        settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT') || null;// jshint ignore:line
-        console.debug('Updating debug settings: #'+  getEnvVar('GINA_DEBUG_PORT'));// jshint ignore:line
+        console.debug('Updating debug settings ...');// jshint ignore:line
+        settings['port'] = getEnvVar('GINA_PORT') || settings['port'] || null;// jshint ignore:line
+        settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT') || settings['debug_port'] || null;// jshint ignore:line
+
+        settings['mq_port'] = getEnvVar('GINA_MQ_PORT') || settings['mq_port'] || null;// jshint ignore:line
+        settings['host_v4'] = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || null;// jshint ignore:line
+        settings['hostname'] = getEnvVar('GINA_HOSTNAME') || settings['hostname'] || null;// jshint ignore:line
         generator.createFileFromDataSync(settings, settingsPath);// jshint ignore:line
     }
 
 
     /**
      * Framework port
+     * To change it: gina framework:set --port=<port_number>
      * TODO - Add a port scanner & compare with ~/.gina/{shortVersion}/settings.json on `post_install`
      * */
-    var port = 8124;
+    var port = settings['port'] || 8124;
 
     // |-> framework/{version}/lib/cmd
     var allowedOffline = [
@@ -212,6 +253,9 @@ async function onExec() {
             frameworkPath   : frameworkPath,
             homedir         : home,
             port            : port,
+            hostV4          : hostV4,
+            mqPort          : mqPort,
+            hostname        : hostname,
             debugPort       : debugPort,
             debugBrkEnabled : debugBrkEnabled,
             pack            : pack
@@ -232,6 +276,9 @@ async function onExec() {
             frameworkPath   : frameworkPath,
             homedir         : home,
             port            : port,
+            hostV4          : hostV4,
+            mqPort          : mqPort,
+            hostname        : hostname,
             debugPort       : debugPort,
             debugBrkEnabled : debugBrkEnabled,
             pack            : pack
@@ -246,7 +293,7 @@ async function onExec() {
     } else {
 
         //Connect to framework.
-        var client = net.connect({port: port},
+        var client = net.connect({port: port, host: hostV4},
             function() {
                 //Forwarding cmd.
                 // retieving debug infos
