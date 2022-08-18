@@ -15,7 +15,7 @@ function MqContainer(opt, loggers) {
     // TODO - get options like the `port` from: ~/.gina/user/extensions/logger/{container}/config.json
 
     var MQSpeaker       = require('./speaker.js');
-    opt = merge(opt, { port: 8125, host: '127.0.0.1' });
+    opt = merge(opt, { mqPort: 8125, hostV4: '127.0.0.1' });
     var mqSpeaker       = new MQSpeaker(opt, loggers);
 
     function init() {
