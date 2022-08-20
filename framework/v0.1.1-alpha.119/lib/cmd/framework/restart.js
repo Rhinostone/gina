@@ -78,7 +78,7 @@ function Restart(opt, cmd) {
      * start
      *
      * We need to spawn this one as detached
-     * because of the `process.kill(..., 'SIGSTOP')` used inside the orginal `start` script
+     * because of the `process.kill(..., 'SIGABRT')` used inside the orginal `start` script
      * or else, the restart script will be pending forever.
      */
     var start = async function() {
