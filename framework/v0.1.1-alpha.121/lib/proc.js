@@ -279,12 +279,16 @@ function Proc(bundle, proc, usePidFile){
         if (index != null)
             delete process.list[index];
 
+        console.debug('[ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
         // handles only signals that cannot be cannot be caught or ignored
         if ( /(SIGKILL|SIGSTOP)/i.test(signal) ) {
             removePidFileSync(pid);
+            // should now exit for real
+            // if ( /^gina\-/.test(process.list[p].name) || self.bundles.indexOf(process.list[p].name) < 0 ) {
+                process.kill(pid, 'SIGTERM');
+                // process.exit(0)
+            // }
         }
-
-        console.debug('[ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
     };
 
     var removePidFileSync = function(pid) {
