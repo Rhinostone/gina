@@ -357,7 +357,7 @@ function PrepareVersion() {
         // create new branch if needed
         // e.g: 0.1.0-alpha.1 -> 010-alpha1
         var targetedBranch = version.replace(/\./g, ''); // by default
-        if (self.isGitPushNeeded) {
+        if (!self.isGitPushNeeded) {
             targetedBranch = 'develop'; // for none production versions
         }
         self.targetedBranch = targetedBranch;
