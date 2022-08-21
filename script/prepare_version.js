@@ -356,7 +356,10 @@ function PrepareVersion() {
 
         // create new branch if needed
         // e.g: 0.1.0-alpha.1 -> 010-alpha1
-        var targetedBranch = version.replace(/\./g, '');
+        var targetedBranch = version.replace(/\./g, ''); // by default
+        if (self.isGitPushNeeded) {
+            targetedBranch = 'develop'; // for none production versions
+        }
         self.targetedBranch = targetedBranch;
 
         console.debug('[GIT] Current branch: '+ currentBranch);
@@ -433,6 +436,7 @@ function PrepareVersion() {
             // git push origin 010
             try {
                 cmd = execSync("git push origin "+ targetedBranch );
+                // set tag version & tag
             } catch (err) {
                 if (!/Everything up-to-date/i.test( err.output.toString() )) {
                     console.error(err.stack||err.message||err);
