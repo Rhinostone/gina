@@ -191,6 +191,10 @@ function Proc(bundle, proc, usePidFile){
                 var pid = self.getPidByBundleName(bundle);
                 // Do not dissmis the framework
                 if ( /^gina\-v/.test(bundle) ) {
+                    if ( err.code == 'EPIPE' ) {
+                        proc.stdout.write(err.stack);
+                        return;
+                    }
                     console.warn('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
                     return;
                 }
