@@ -155,14 +155,12 @@ function Proc(bundle, proc, usePidFile){
                 proc.exit(code);
             });
 
-            // proc.on('SIGABRT', function(code){
-            //     if ( typeof(code) == 'undefined')
-            //         code = 0;
-            //     // will handle `dismiss()`
-            //     // proc.exit(code);
-            //     // console.info('[ PROC ] Got SIGABRT signal. Now killing: ', code);
-            //     proc.dismiss(this.pid, "SIGSTOP");
-            // });
+            proc.on('SIGABRT', function(code){
+                if ( typeof(code) == 'undefined')
+                    code = 0;
+                // will handle `dismiss()`
+                proc.exit(code);
+            });
 
 
             proc.on('SIGINT', function(code){
@@ -292,13 +290,8 @@ function Proc(bundle, proc, usePidFile){
 
         console.debug('[ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
         // handles only signals that cannot be cannot be caught or ignored
-        if ( /^(SIGKILL|SIGSTOP)$/i.test(signal) ) {
+        if ( /^(SIGKILL|SIGSTOP|SIGABRT)$/i.test(signal) ) {
             removePidFileSync(pid);
-            // console.debug('Killing process ['+ pid +']');
-            // should now exit for real
-            // if ( /^gina\-/.test(process.list[p].name) || self.bundles.indexOf(process.list[p].name) < 0 ) {
-                //process.kill(pid, 'SIGTERM');
-            // }
         }
     };
 

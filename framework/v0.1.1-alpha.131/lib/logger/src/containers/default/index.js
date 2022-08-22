@@ -26,6 +26,7 @@ function DefaultContainer(opt, loggers) {
     }
 
     function onPayload() {
+
         process.on('logger#'+self.name, function onPayload(payload) {
 
             try {
