@@ -89,10 +89,9 @@ function runAsSubProcess() {
             // Ref.: https://medium.com/@gchudnov/trapping-signals-in-docker-containers-7a57fdda7d86
 
             console.log('closing CLI');
-            process.kill(process.pid, 'SIGSTOP');
-            console.log('CLI closed');
+            // process.kill(process.pid, 'SIGSTOP');
             // Docker fix - 2022-08-20
-            // process.kill(process.pid, 'SIGABRT');
+            process.kill(process.pid, 'SIGABRT');
             // process.exit(0);
             return;
         }
