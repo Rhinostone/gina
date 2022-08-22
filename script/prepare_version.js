@@ -46,7 +46,6 @@ function PrepareVersion() {
             msg: null
         },
         isGitPushNeeded : false
-
     };
 
     var configure = function() {
@@ -436,7 +435,7 @@ function PrepareVersion() {
             // git push origin 010
             try {
                 cmd = execSync("git push origin "+ targetedBranch );
-                // set tag version & tag
+                // set tag version & tag ?
             } catch (err) {
                 if (!/Everything up-to-date/i.test( err.output.toString() )) {
                     console.error(err.stack||err.message||err);

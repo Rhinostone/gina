@@ -285,8 +285,8 @@ function Proc(bundle, proc, usePidFile){
             removePidFileSync(pid);
             // should now exit for real
             // if ( /^gina\-/.test(process.list[p].name) || self.bundles.indexOf(process.list[p].name) < 0 ) {
-                process.kill(pid, 'SIGTERM');
-                // process.exit(0)
+                //process.kill(pid, 'SIGTERM');
+                process.exit(0)
             // }
         }
     };
