@@ -282,8 +282,11 @@ Note that this is optional since logs are output like for other frameworks: you 
 So to handle log storage for your application, you have 2 options: see 2nd & 3rd Methods.
 
 __2nd Method - Old school way__
+
+> __Attention: __ You will have to handle yourself [log rotation](https://linux.die.net/man/8/logrotate)
+
 ```tty
-gina bundle:start frontend @myproject > /usr/local/var/log/gina/frontend.myproject.domain.log 2>&1
+gina bundle:start frontend @myproject --log > /usr/local/var/log/gina/frontend.myproject.domain.log 2>&1
 ```
 You can now check
 ```tty
