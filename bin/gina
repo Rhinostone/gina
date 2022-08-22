@@ -93,7 +93,6 @@ function runAsSubProcess() {
             // Docker fix - 2022-08-20
             // process.kill(process.pid, 'SIGABRT');
             // process.exit(0);
-            process.stdout.write('[ quit ]\n');
             return;
         }
 
