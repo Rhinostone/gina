@@ -88,8 +88,9 @@ function runAsSubProcess() {
             // Docker considerations: All signals except for SIGKILL and SIGSTOP can be intercepted by the process.
             // Ref.: https://medium.com/@gchudnov/trapping-signals-in-docker-containers-7a57fdda7d86
 
-
+            console.log('closing CLI');
             process.kill(process.pid, 'SIGSTOP');
+            console.log('CLI closed');
             // Docker fix - 2022-08-20
             // process.kill(process.pid, 'SIGABRT');
             // process.exit(0);
