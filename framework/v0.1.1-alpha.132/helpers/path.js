@@ -139,10 +139,12 @@ function PathHelper() {
      * myPathObj.toString()
      * */
     _.prototype.toString = function() {
-        var self = this;
-        var path = self.value;
-        var i = _this.paths.indexOf(path);
-        return ( i > -1 ) ? _this.paths[i] : path
+        // var self = this;
+        // var path = self.value;
+        // var i = _this.paths.indexOf(path);
+        // return ( i > -1 ) ? _this.paths[i] : path
+
+        return (process.platform != "win32") ? toUnixStyle(this) : toWin32Style(this)
     }
 
     /**
@@ -232,8 +234,13 @@ function PathHelper() {
                 fs.accessSync(value, fs.constants.F_OK);
                 return true;
             } catch (err) {
+                // to handle symlinks
+                if ( fs.lstatSync(value).isSymbolicLink() ) {
+                    return true
+                }
                 return false;
             }
+
         } else { // support for old version of nodejs
             return fs.existsSync(value);
         }
@@ -245,6 +252,10 @@ function PathHelper() {
     var exists = function(value, callback) {
         if ( typeof(fs.access) != 'undefined' ) {
             fs.access(value, fs.constants.F_OK, (err) => {
+                // to handle symlinks
+                if ( fs.lstatSync(value).isSymbolicLink() ) {
+                    return callback(true)
+                }
                 callback( (err) ? false: true )
             });
         } else { // support for old version of nodejs
@@ -1149,7 +1160,7 @@ function PathHelper() {
         cleanSlashes(this);
 
         try {
-
+            // console.debug('rmSync() of ['+ this.value +'] : symlink ? '+ fs.lstatSync(this.value).isSymbolicLink());
             if ( fs.lstatSync(this.value).isSymbolicLink() ) {
                 fs.unlinkSync(this.value);
                 return this;
@@ -1466,16 +1477,26 @@ function PathHelper() {
         })
     }
 
-    _.prototype.toUnixStyle = function() {
-        var self = this;
+    var toUnixStyle = function(self) {
         var i = _this.paths.indexOf(self.value);
         return ( i > -1 ) ? _this.paths[i].replace(/\\/g, "/") : self.value;
     }
+    _.prototype.toUnixStyle = function() {
+        // var self = this;
+        // var i = _this.paths.indexOf(self.value);
+        // return ( i > -1 ) ? _this.paths[i].replace(/\\/g, "/") : self.value;
+        return toUnixStyle(this)
+    }
 
-    _.prototype.toWin32Style = function() {
-        var self = this;
+    var toWin32Style = function(self) {
         var i = _this.paths.indexOf(self.value);
         return ( i > -1 ) ? _this.paths[i].replace(/\//g, "\\") : self.value;
+    }
+    _.prototype.toWin32Style = function() {
+        // var self = this;
+        // var i = _this.paths.indexOf(self.value);
+        // return ( i > -1 ) ? _this.paths[i].replace(/\//g, "\\") : self.value;
+        return toWin32Style(this)
     }
 
     /**

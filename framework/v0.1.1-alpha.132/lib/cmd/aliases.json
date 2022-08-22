@@ -8,6 +8,8 @@
         "-r" : "restart",
         "--restart" : "restart",
         "-v" : "version",
-        "--version" : "version"
+        "--version" : "version",
+        "-ln" : "link",
+        "--link" : "link"
     }
 }
