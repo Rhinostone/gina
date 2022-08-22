@@ -54,6 +54,8 @@ function runAsSubProcess() {
     Array.prototype.splice.call(process.argv, 0, 0, cliBin);
     Array.prototype.splice.call(process.argv, process.argv.length, 0, fakeDaemonPid);
 
+
+
     var child = spawn(nodeBin, argv,
         {
             detached: true
@@ -88,7 +90,6 @@ function runAsSubProcess() {
             // Docker considerations: All signals except for SIGKILL and SIGSTOP can be intercepted by the process.
             // Ref.: https://medium.com/@gchudnov/trapping-signals-in-docker-containers-7a57fdda7d86
 
-            console.log('closing CLI ;)');
             // process.kill(process.pid, 'SIGSTOP');
             // Docker fix - 2022-08-20
             process.exit(0);
