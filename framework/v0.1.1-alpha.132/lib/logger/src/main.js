@@ -266,7 +266,10 @@ function Logger() {
             return self;
         }
         ctx.initialized = true;
-
+        if (!homeDir) {
+            homeDir =  ( typeof(getUserHome) != 'undefined' ) ? getUserHome() : process.env[(process.platform == 'win32') ? 'USERPROFILE' : 'HOME'];// jshint ignore:line
+            homeDir += '/.gina';
+        }
         // user main options & flows options
         var extPath = _(homeDir +'/user/extensions/logger', true)
         var optionsPath = _(extPath +'/default/config.json', true);

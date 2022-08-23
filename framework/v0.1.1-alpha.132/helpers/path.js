@@ -235,9 +235,12 @@ function PathHelper() {
                 return true;
             } catch (err) {
                 // to handle symlinks
-                if ( fs.lstatSync(value).isSymbolicLink() ) {
-                    return true
-                }
+                try {
+                    if ( fs.lstatSync(value).isSymbolicLink() ) {
+                        return true
+                    }
+                } catch (linkErr) {}
+
                 return false;
             }
 
@@ -253,9 +256,12 @@ function PathHelper() {
         if ( typeof(fs.access) != 'undefined' ) {
             fs.access(value, fs.constants.F_OK, (err) => {
                 // to handle symlinks
-                if ( fs.lstatSync(value).isSymbolicLink() ) {
-                    return callback(true)
-                }
+                try {
+                    if ( fs.lstatSync(value).isSymbolicLink() ) {
+                        return callback(true)
+                    }
+                } catch (linkErr) {}
+
                 callback( (err) ? false: true )
             });
         } else { // support for old version of nodejs
