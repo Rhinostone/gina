@@ -32,7 +32,11 @@ function MQSpeaker(opt, loggers, cb) {
         shortVersion.splice(2);
         shortVersion = shortVersion.join('.');
 
-        var settings = require( getUserHome() + '/.gina/' + shortVersion + '/settings.json');
+        var settings = { mq_port: 8125, host_v4: '127.0.0.1' };
+        try {
+            settings = require( getUserHome() + '/.gina/' + shortVersion + '/settings.json');
+        } catch (err) {}
+
         opt.mqPort = settings.mq_port;
         opt.hostV4 = settings.host_v4;
         // ---------- EO - hack for early calls
