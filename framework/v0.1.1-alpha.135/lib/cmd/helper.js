@@ -375,8 +375,8 @@ function CmdHelper(cmd, client, debug) {
                 cmd.projectName != null
                 && /^true$/i.test(GINA_GLOBAL_MODE)
                 && !/\:(link)$/.test(cmd.task)
+                && new _( GINA_HOMEDIR +'/'+ GINA_SHORT_VERSION +'/settings.json', true ).existsSync()
             ) {
-
                 var err = execSync('gina link @'+cmd.projectName);
                 if (err instanceof Error) {
                     console.error(err.message || err.stack);
