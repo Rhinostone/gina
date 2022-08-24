@@ -175,13 +175,11 @@ function Tail(opt, cmd) {
                         // process.stdout.write(  '[MQTail] '+ pl.content +'\n' );
 
                         try {
-
-                            if ( /exiting(.*)SIGKILL/.test(pl.content) ) {
+                            process.stdout.write( format(pl.group, pl.level, pl.content) );
+                            if ( /(exiting|Got exit code)(.*)(SIGKILL|SIGTERM|SIGINT)/.test(pl.content) ) {
                                 client.destroy();
                                 return end()
                             }
-
-                            process.stdout.write( format(pl.group, pl.level, pl.content) );
                         } catch (writeErr) {
                             // means that the related MQSpeaker is not connected yet
                             // this can happen during `bundle:start` configuration
@@ -220,7 +218,7 @@ function Tail(opt, cmd) {
             }
         }
 
-        process.exit( err ? 1:0 )
+        process.kill(process.pid, 'SIGINT')
     }
 
 
