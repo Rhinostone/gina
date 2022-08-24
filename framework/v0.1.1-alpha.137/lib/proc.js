@@ -202,7 +202,7 @@ function Proc(bundle, proc, usePidFile){
                 console.emerg('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
 
 
-                dismiss(pid, 'SIGKILL');
+                dismiss(pid, 'SIGTERM');
 
 
                 // TODO - Wake up buddy !.
@@ -230,7 +230,7 @@ function Proc(bundle, proc, usePidFile){
                 //     dismiss(currentProcess.pid, "SIGKILL")
                 // }
 
-                dismiss(this.pid, "SIGKILL")
+                dismiss(this.pid, "SIGTERM")
             });
 
             proc.on('SIGHUP', function(code){
