@@ -1,3 +1,4 @@
+const { execSync } = require('child_process');
 var fs          = require('fs');
 var console     = lib.logger;
 var merge       = lib.merge;
@@ -340,7 +341,7 @@ function CmdHelper(cmd, client, debug) {
                 }
             }
 
-            // only when adding a project
+            // Additional project checking & actions
             if (cmd.projectName != null) {
                 // valid name but not in projects and task != :add, :remove or :import
                 if ( typeof(cmd.projects[cmd.projectName]) == 'undefined' && !/\:(add|import|remove)$/.test(cmd.task) ) {
@@ -368,6 +369,20 @@ function CmdHelper(cmd, client, debug) {
 
             loadAssets();
             cmd.configured = true;
+
+            // linking gina
+            if (
+                cmd.projectName != null
+                && /^true$/i.test(GINA_GLOBAL_MODE)
+                && !/\:(link)$/.test(cmd.task)
+            ) {
+
+                var err = execSync('gina link @'+cmd.projectName);
+                if (err instanceof Error) {
+                    console.error(err.message || err.stack);
+                    return exit(errMsg);
+                }
+            }
 
             return true; // completed configuration
 

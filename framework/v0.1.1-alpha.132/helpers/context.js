@@ -141,6 +141,92 @@ function ContextHelper(contexts) {
         }
     }
 
+    /**
+     * resetContext
+     *
+     * Mostly used by logger container definitions orout of context threads (workers ?)
+     *
+     * TODO - Check if it can be called in `gna.js` & remove at the same time useless calls of setPath() & setContext()
+     */
+    resetContext = function() {
+        setPath('gina.root', getEnvVar('GINA_DIR'));
+        var frameworkPath = getEnvVar('GINA_FRAMEWORK_DIR');
+        setPath('framework', frameworkPath);
+        setPath('gina.core', getEnvVar('GINA_CORE'));
+        setPath('gina.lib', _(frameworkPath +'/lib'));
+        setPath('gina.helpers', _(frameworkPath +'/helpers'));
+        setPath( 'node', _(process.argv[0]), true);
+        var projects    = require( _(getEnvVar('GINA_HOMEDIR') + '/projects.json', true) );
+        var projectName = getContext('projectName');
+        var root        = projects[projectName].path;
+        setPath('project', root);
+        var env         = getContext('env');
+        var isDev       = (env === projects[projectName]['dev_env']) ? true: false;
+        var bundlesPath = projects[projectName]['path'] + '/bundles'; // by default
+        var isProductionScope = ('production' === projects[projectName]['def_scope']) ? true: false;
+        if (isDev) {
+            bundlesPath = projects[projectName]['path'] + '/src'
+        } else if (isProductionScope) {
+            bundlesPath = projects[projectName]['path'] + '/releases'
+        }
+        setPath('bundles', _(bundlesPath, true));
+        var bundle = getContext('bundle');
+        var bundlePath = getPath('project') + '/';
+
+        var modulesPackage = _(root + '/manifest.json');
+        var project     = {}
+            , bundles   = []
+        ;
+
+        if ( fs.existsSync(modulesPackage) ) {
+            try {
+                var dep = require(modulesPackage);
+                if ( typeof(dep['bundles']) == "undefined") {
+                    dep['bundles'] = {};
+                }
+
+                if (
+                    typeof(dep['bundles']) != "undefined"
+                    && typeof(project['bundles']) != "undefined"
+                ) {
+
+                    for (let d in dep) {
+                        if (d == 'bundles') {
+                            for (var p in dep[d]) {
+                                project['bundles'][p] = dep['bundles'][p];
+                            }
+                        } else {
+                            project[d] = dep[d];
+                        }
+
+                    }
+                } else {
+                    project = dep;
+                }
+
+                for (let b in project.bundles) {
+                    bundles.push(b)
+                }
+            } catch (err) {
+                throw err
+            }
+        }
+
+        bundlePath += ( isDev ) ? project.bundles[ bundle ].src : project.bundles[ bundle ].link;
+        setPath('bundle', _(bundlePath, true));
+        setPath('helpers', _(bundlePath+'/helpers', true));
+        setPath('lib', _(bundlePath+'/lib', true));
+        setPath('models', _(bundlePath+'/models', true));
+        setPath('controllers', _(bundlePath+'/controllers', true));
+
+        setContext('envs', projects[projectName].envs);
+        setContext('bundles', bundles);
+        // setContext('gina.utils', lib);
+        // setContext('gina.Config', Config);
+        // setContext('gina.locales', locales);
+        // setContext('gina.plugins', plugins);
+    }
+
 
     var throwError = function(code, err, isFatal) {
         var router      = getContext('router');
@@ -255,7 +341,7 @@ function ContextHelper(contexts) {
             }
         }
 
-        var env = ctx.env || GINA_ENV;
+        var env = ctx.env || getEnvVar('GINA_ENV');
         var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
         var Config = ctx.gina.Config;
         var conf = null;

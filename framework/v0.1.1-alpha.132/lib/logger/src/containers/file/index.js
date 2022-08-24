@@ -8,26 +8,70 @@ const net                 = require('net');
 // const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 // const { execSync }      = require('child_process');
 
+var helpers = null;
 
-const merge = require(__dirname + '/../../../../merge');
+const merge     = require(__dirname + '/../../../../merge');
 
 function FileContainer(opt, loggers) {
     var self = {
         // flow or container name/id
         name: 'file'
     };
+
     var mqId = 'MQ'+ self.name.substring(0,1).toLocaleUpperCase() + self.name.substring(1);
 
-    //var defaultOptions = ;
+    helpers         = require(__dirname +'/../../../../../helpers');
+
 
     var loggerHelper    = require(__dirname +'/../../helper.js')(opt, loggers);
     var format          = loggerHelper.format;
     var processProperties = null;
     var filenames   = {};
 
-    function init() {
+    function init(opt) {
 
-        onPayload();
+        // ---------- BO - hack for early calls
+        var isWin32         = (process.platform === 'win32') ? true : false;
+        var binPath         = __dirname +'/../../../../../../../';
+        var ginaPath        = (binPath.replace(/\\/g, '/')).replace('/bin', '');
+        ginaPath = (isWin32) ? ginaPath.replace(/\//g, '\\') : ginaPath;
+        // loading pack
+        var pack            = ginaPath + '/package.json';
+        pack = (isWin32) ? pack.replace(/\//g, '\\') : pack;
+        var packObj         = require(pack);
+        var version         = packObj.version;// jshint ignore:line
+        // var frameworkPath   = ginaPath + '/framework/v' + version;
+
+
+        var shortVersion = version.split('.');
+        shortVersion.splice(2);
+        shortVersion = shortVersion.join('.');
+
+        var settings = require( getUserHome() + '/.gina/' + shortVersion + '/settings.json');
+        opt.mqPort = settings.mq_port;
+        opt.hostV4 = settings.host_v4;
+        // ---------- EO - hack for early calls
+
+        // handle server not started yet or server exited
+        // process.on('gina#mqlistener-started', function onGinaStarted(mqPort, hostV4, group) {
+        //     if (group) {
+        //         console.info('[MQFile] Group `'+group+'` connected `'+ hostV4 +'` on port `'+ mqPort +'` :)');
+        //     }
+        //     clearInterval(nIntervId);
+        //     nIntervId = null;
+        //     onPayload({mqPort: mqPort, hostV4: hostV4});
+        // });
+
+        process.on('gina#bundle-logging', function onBundleStarted(mqPort, hostV4, group) {
+            console.debug('[MQFile] resuming ...')
+            if (group) {
+                console.info('[MQFile] Group `'+group+'` connected `'+ hostV4 +'` on port `'+ mqPort +'` :)');
+            }
+            // only if tail not already running !! Or you will get duplicate logs
+            onPayload({mqPort: mqPort, hostV4: hostV4}, true);
+        });
+
+        onPayload(opt);
 
         // ----------------------------Debug---------------------------------------
         var level = 'debug';
@@ -77,8 +121,19 @@ function FileContainer(opt, loggers) {
         homeDir += '/.gina';
         var project = requireJSON(_(homeDir +'/projects.json', true))[projectName];// jshint ignore:line
         var projectPath = project.path;
-        console.info('write env: ', bundleName, process.env.NODE_ENV || getEnvVar('GINA_ENV'));// jshint ignore:line
-        var envObj      = requireJSON(_(projectPath +'/env.json', true))[bundleName][process.env.NODE_ENV || getEnvVar('GINA_ENV')];// jshint ignore:line
+        // console.debug('logger::file write env: ', bundleName, process.env.NODE_ENV, getEnvVar('GINA_ENV'), JSON.stringify(process.gina, null, 2) );// jshint ignore:line
+
+        var env         = process.env.NODE_ENV || getEnvVar('GINA_ENV');// jshint ignore:line
+        var Config      = require(getEnvVar('GINA_CORE') + '/config');
+        var conf = new Config({
+            env: env,
+            projectName: projectName,
+            executionPath: projectPath,
+            startingApp: bundleName,
+            ginaPath: getEnvVar('GINA_CORE')
+        }, true).getInstance(bundleName);
+
+        var envObj      = conf.envConf[bundleName][env];// jshint ignore:line
         var webroot     = ( !/\s+|\//.test(envObj.server && envObj.server.webroot) ) ? envObj.server.webroot +'.' : '';
         var hostname    = envObj.host;
         var logDir      = getLogDir() || getEnvVar('GINA_LOGDIR');// jshint ignore:line
@@ -88,7 +143,8 @@ function FileContainer(opt, loggers) {
         process.stdout.write( format(opt.name, 'info', 'Log group `'+ group +'` filename set to: ' + filenames[group].filename) );
     }
 
-    function onPayload() {
+    function onPayload(opt, isResuming) {
+        // console.debug('mqFile options: ', JSON.stringify(opt, null, 2));
         var port = opt.mqPort || getEnvVar('GINA_MQ_PORT') || 8125;// jshint ignore:line
         var host = opt.hostV4 || getEnvVar('GINA_HOST_V4') || '127.0.0.1';// jshint ignore:line
         var clientOptions = {
@@ -106,7 +162,7 @@ function FileContainer(opt, loggers) {
 
         var delayedMessages = [];
         var resume = function(payload) {
-            process.stdout.write('['+ mqId +'] Resuming with group: '+ payload.group);
+            // process.stdout.write('['+ mqId +'] Resuming with group: '+ payload.group);
             var i = 0;
             while (i < delayedMessages.length) {
                 let pl = delayedMessages[i];
@@ -120,22 +176,45 @@ function FileContainer(opt, loggers) {
         }
 
 
+
+
         var client = net.createConnection(clientOptions, () => {
             // 'connect' listener.
-            console.info('['+ mqId +'] connected to server :) ', process.argv);
+            console.info('['+ mqId +'] connected to server :) on host: '+ host + ' & port: '+ port, process.argv);
             processProperties = loggerHelper.getProcessProperties();
             console.info('['+ mqId +'] process properties ', processProperties);
+
+            process.emit('gina#container-writting', host, port);
+
             // send request
             client.write( JSON.stringify(clientOptions) +'\r\n');
 
         });
+
+
         client.on('error', (data) => {
             var err = data.toString();
             process.stdout.write( format(opt.name, 'warn', '['+ mqId +'] ' + err) );
+
+            // allowing the framework to quit properly
+            if ( /write EPIPE|read ECONNRESET|connect ECONNREFUSED/i.test(err) ) {
+                process.exit(0)
+            }
+
+            // var mqPort = null;
+            // nIntervId = setInterval(() => {
+            //     try {
+            //         mqPort = ~~(fs.readFileSync(mqPortFile).toString());
+            //         if (mqPort) {
+            //             process.emit('gina#mqlistener-started', mqPort, host);
+            //         }
+            //     } catch (fileErr) {}
+            // }, 100);
         });
 
         var payloads = null, i = null;
         client.on('data', (data) => {
+
             //console.log('['+ mqId +']  (data): ' + data.toString());
             payloads = data.toString();
 
@@ -185,6 +264,12 @@ function FileContainer(opt, loggers) {
                                 }
                             }
                             continue;
+                        }
+
+                        // resuming logging from another process
+                        // we do not want to print twice in this case since another logger server is already running
+                        if (isResuming) {
+                            return
                         }
 
                         // only for debug
@@ -248,6 +333,6 @@ function FileContainer(opt, loggers) {
 
 
 
-    init();
+    init(opt);
 }
 module.exports = FileContainer;

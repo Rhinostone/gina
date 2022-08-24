@@ -10,6 +10,18 @@ function DefaultContainer(opt, loggers) {
     var format          = loggerHelper.format;
 
     function init() {
+
+        // process.on('gina#bundle-started', function onBundleStarted(mqPort, hostV4, group) {
+        //     onPayload(true);
+        // });
+        // process.on('gina#container-writting', function onBundleStarted(mqPort, hostV4, group) {
+        //     console.debug('[MQDefault] resuming ...');
+        //     if (group) {
+        //         console.info('[MQTail] Group `'+group+'` connected `'+ hostV4 +'` on port `'+ mqPort +'` :)');
+        //     }
+        //     onPayload(true);
+        // });
+
         onPayload();
         // ----------------------------Debug---------------------------------------
         var level = 'debug';

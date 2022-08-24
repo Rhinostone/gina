@@ -3,6 +3,9 @@ var os          = require("os");
 var util        = require('util');
 var net         = require('net');
 
+var EventEmitter    = require('events').EventEmitter;
+var e               = new EventEmitter();
+
 var CmdHelper       = require('./../helper');
 var console         = lib.logger;
 var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js', true) );
@@ -39,6 +42,16 @@ function Tail(opt, cmd) {
             tail(opt, cmd);
         });
 
+        // process.on('gina#container-writting', function onGinaStarted(hostV4, mqPort, type) {
+        //     console.info('[MQTail] Container resumed writting on  `'+ hostV4 +'` on port `'+ mqPort +'` :)');
+        //     opt.mqPort = mqPort;
+        //     console.resumeReporting()
+        //     tail(opt, cmd);
+        // });
+
+
+
+
         // if (!self.name) {
         //     status(opt, cmd, 0);
         // } else {
@@ -47,7 +60,7 @@ function Tail(opt, cmd) {
     }
 
 
-    var tail = function(opt, cmd) {
+    var tail = function(opt, cmd, isResuming) {
 
         var port = opt.mqPort || GINA_MQ_PORT || 8125;
         var host = opt.hostV4 || GINA_HOST_V4 || '127.0.0.1';
@@ -74,12 +87,17 @@ function Tail(opt, cmd) {
         }
 
 
+
+
+
         var client = net.createConnection(clientOptions, () => {
+
+            e.emit('gina#mqtail-started', true);
 
             // 'connect' listener.
             console.resumeReporting();
             // console.debug('[MQTail] connected with opt `'+ JSON.stringify(opt, null, 2) +'` :)');
-            console.info('[MQTail] connected to server `'+ host +'` on port `'+ port +'` :)');
+            console.info('[MQTail] Connected to server `'+ host +'` on port `'+ port +'` :)');
 
             // send request
             client.write( JSON.stringify(clientOptions) +'\r\n');
@@ -88,22 +106,22 @@ function Tail(opt, cmd) {
         client.on('error', (data) => {
             var err = data.toString();
             console.error('[MQTail] ' + err + ' - Gina might not be running');
-            console.info('[MQTail] waitting for `MQListener` to be started ...');
+            console.info('[MQTail] Waitting for `MQListener` to be started ...');
 
-            var mqPort = null;
-            nIntervId = setInterval(() => {
-                try {
-                    mqPort = ~~(fs.readFileSync(mqPortFile).toString());
-                    if (mqPort) {
-                        process.emit('gina#mqlistener-started', mqPort);
-                    }
-                } catch (fileErr) {}
-            }, 100);
+            // var mqPort = null;
+            // nIntervId = setInterval(() => {
+            //     try {
+            //         mqPort = ~~(fs.readFileSync(mqPortFile).toString());
+            //         if (mqPort) {
+            //             process.emit('gina#mqlistener-started', mqPort, host);
+            //         }
+            //     } catch (fileErr) {}
+            // }, 100);
         });
 
         var payloads = null, i = null;
         client.on('data', (data) => {
-            //console.log('[MQTail]  (data): ' + data.toString());
+            // console.log('[MQTail]  (data): ' + data.toString());
             payloads = data.toString();
 
             // from speakers & tail
@@ -122,7 +140,7 @@ function Tail(opt, cmd) {
                         try {
                             pl = JSON.parse(payload);
                         } catch(plErr) {
-                            process.stdout.write( '[MQTail] (exception) '+ payload +'\n' );
+                            process.stdout.write( '[MQTail] (Exception) '+ payload +'\n' );
                             continue;
                         }
 
@@ -147,10 +165,22 @@ function Tail(opt, cmd) {
                             continue;
                         }
 
+                        // resuming logging from another process
+                        // we do not want to print twice in this case since another logger server is already running
+                        // if (isResuming) {
+                        //     return
+                        // }
+
                         // only for debug
-                        //process.stdout.write(  '[MQTail] '+ pl.content +'\n' );
+                        // process.stdout.write(  '[MQTail] '+ pl.content +'\n' );
 
                         try {
+
+                            if ( /exiting(.*)SIGKILL/.test(pl.content) ) {
+                                client.destroy();
+                                return end()
+                            }
+
                             process.stdout.write( format(pl.group, pl.level, pl.content) );
                         } catch (writeErr) {
                             // means that the related MQSpeaker is not connected yet
@@ -165,8 +195,8 @@ function Tail(opt, cmd) {
 
         });
         client.on('end', () => {
-            console.warn('[MQTail] disconnected from server');
-            console.info('[MQTail] waitting for `MQListener` to be started ...');
+            console.warn('[MQTail] Disconnected from server');
+            console.info('[MQTail] Waitting for `MQListener` to be started ...');
             var mqPort = null;
             nIntervId = setInterval(() => {
                 try {
@@ -178,6 +208,19 @@ function Tail(opt, cmd) {
             }, 100);
         });
         // setInterval(() => {}, 1 << 30);
+    }
+
+    var end = function (err, type, messageOnly) {
+        if ( typeof(err) != 'undefined') {
+            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+            if ( typeof(type) != 'undefined' ) {
+                console[type](out)
+            } else {
+                console.error(out);
+            }
+        }
+
+        process.exit( err ? 1:0 )
     }
 
 

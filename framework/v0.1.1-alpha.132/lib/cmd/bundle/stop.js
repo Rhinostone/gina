@@ -91,6 +91,10 @@ function Stop(opt, cmd) {
                     }
                     if (!err) {
                         ++opt.offlineCount;
+
+                        // resume logging
+                        process.emit('gina#bundle-logging', GINA_MQ_PORT, GINA_HOST_V4, bundle + '@' + self.projectName);
+
                         //console.info('Bundle [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !');
                         opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] with PID [ ' + proc + ' ] stopped !\n');
 

@@ -19,6 +19,7 @@ function MqContainer(opt, loggers) {
     var mqSpeaker       = new MQSpeaker(opt, loggers);
 
     function init() {
+
         onPayload()
 
         // ------------------------------------------------------------------------
