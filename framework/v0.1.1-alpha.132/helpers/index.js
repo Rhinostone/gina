@@ -43,7 +43,7 @@ var helpers         = {}
 
 var PrototypesHelper = null, PluginsHelper = null;
 // loading main helpers
-for (; f < len; ++f) {            
+for (; f < len; ++f) {
     if ( ! /^\./.test(files[f]) && files[f] != 'index.js') {
         helper          = files[f].replace(/.js/, '');
         if (/prototypes/i.test(helper)) {
@@ -63,16 +63,21 @@ new PrototypesHelper({
 });
 
 // loading plugins helpers
-if ( 
+if (
     typeof(getContext) != 'undefined'
-    && typeof(getContext().gina) != 'undefined' 
+    && typeof(getContext().gina) != 'undefined'
 ) {
-    new PluginsHelper(getContext('gina').plugins);    
+    new PluginsHelper(getContext('gina').plugins);
 }
 // adding ApiError to helper in case Validator plugin is not loaded
 if ( typeof(getContext) != 'undefined' && typeof(ApiError) == 'undefined' /*&& typeof(helpers.ApiError) == 'undefined'*/ ) {
     //helpers.ApiError = require('./plugins/src/api-error');
     ApiError = require('./plugins/src/api-error');
+}
+
+// loading `gina/utils/helper` if not yet loaded
+if ( typeof(getTmpDir) == 'undefined' ) {
+    _require(__dirname + '/../../../utils/helper')
 }
 
 // Publish as node.js module

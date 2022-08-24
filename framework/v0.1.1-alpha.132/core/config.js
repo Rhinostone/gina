@@ -33,14 +33,28 @@ var modelUtil       = new lib.Model();
  * TODO - split Config.Env & Config.Host
  */
 
-function Config(opt) {
+function Config(opt, contextResetNeeded) {
 
     var self = this;
+    if (
+        !Config.initialized
+        && typeof(contextResetNeeded) != 'undefined'
+        && /^true$/i.test(contextResetNeeded)
+    ) {
+        // requirements
+        setContext('env', opt.env);
+        setContext('projectName', opt.projectName || getContext('projectName'));
+        setContext('bundle', opt.startingApp);
+        // reset context
+        resetContext()
+    }
+
     // framework settings from homedir
+    var homedir = getEnvVar('GINA_HOMEDIR');
     var framework = {
-        ports : _( GINA_HOMEDIR +'/ports.json', true),
-        portsReverse : _( GINA_HOMEDIR +'/ports.reverse.json', true),
-        project : _( GINA_HOMEDIR +'/projects.json', true)
+        ports : _( homedir +'/ports.json', true),
+        portsReverse : _( homedir +'/ports.reverse.json', true),
+        project : _( homedir +'/projects.json', true)
     };
 
     this.bundles = [];
@@ -51,12 +65,12 @@ function Config(opt) {
      * Config Constructor
      * @constructor
      * */
-    var init =  function(opt) {
+    var init =  function(opt, contextResetNeeded) {
 
         if ( !Config.initialized) {
             var env = opt.env;
-
             self.projectName    = opt.projectName || getContext('projectName');
+
             self.startingApp    = opt.startingApp;
             self.executionPath  = opt.executionPath; // project path
 
@@ -66,7 +80,6 @@ function Config(opt) {
             var path = _(self.executionPath + '/env.json');
 
             if ( fs.existsSync(path) ) {
-
                 self.userConf = requireJSON(path);
                 console.debug('Application config file loaded [' + path + ']');
             }
@@ -80,6 +93,7 @@ function Config(opt) {
             //if yes, join in case of standalone.. or create a new thread.
             self.Host.setMaster(opt.startingApp);
 
+
             getConf(env)
         } else {
             if (!opt) {
@@ -89,6 +103,7 @@ function Config(opt) {
             }
         }
     }
+
 
     var getConf = function(env) {
 
@@ -290,7 +305,7 @@ function Config(opt) {
      * @author      Rhinostone <contact@gina.io>
      */
     this.Env = {
-        template : requireJSON(GINA_FRAMEWORK_DIR +'/core/template/conf/env.json'),
+        template : requireJSON( getEnvVar('GINA_FRAMEWORK_DIR') +'/core/template/conf/env.json'),
         load : function(callback) {
             loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                 self.envConf            = envConf;
@@ -516,7 +531,7 @@ function Config(opt) {
         var version = null, middleware = null;
         try {
             self.version    = version = require(_(getPath('gina').root +'/package.json' )).version;
-            self.middleware = middleware = fs.readFileSync(_(GINA_FRAMEWORK_DIR + '/MIDDLEWARE')).toString() || 'none';
+            self.middleware = middleware = fs.readFileSync(_( getEnvVar('GINA_FRAMEWORK_DIR') + '/MIDDLEWARE')).toString() || 'none';
 
             setContext('gina.version', version);
             setContext('gina.middleware', middleware);
@@ -671,7 +686,7 @@ function Config(opt) {
                 bundleSettings.tmpSettingFileContent = JSON.clone(bundleSettings);
                 newContent[app][env] = merge(bundleSettings, newContent[app][env]);
                 // completing with missing props
-                var defaultSettings = requireJSON(GINA_FRAMEWORK_DIR +'/core/template/conf/settings.json');
+                var defaultSettings = requireJSON( getEnvVar('GINA_FRAMEWORK_DIR') +'/core/template/conf/settings.json');
                 newContent[app][env] = merge(newContent[app][env], defaultSettings);
 
 
@@ -802,7 +817,7 @@ function Config(opt) {
                 //Constants to be exposed in configuration files.
                 //Variables replace. Compare with gina/core/template/conf/env.json.
                 let reps = {
-                    "frameworkDir"  : GINA_FRAMEWORK_DIR,
+                    "frameworkDir"  : getEnvVar('GINA_FRAMEWORK_DIR'),
                     "executionPath" : root,
                     "projectPath"   : projectPath,
                     "bundlesPath" : appsPath,
@@ -1490,7 +1505,7 @@ function Config(opt) {
         //Constants to be exposed in configuration files.
         var reps = {
             "gina"              : getPath('gina').root,
-            "frameworkDir"      : GINA_FRAMEWORK_DIR,
+            "frameworkDir"      : getEnvVar('GINA_FRAMEWORK_DIR'),
             "scope"             : conf[bundle][env].server.scope,
             "host"             : conf[bundle][env].host,
             "env"               : env,
@@ -2298,7 +2313,7 @@ function Config(opt) {
             return self
         };
 
-        init(opt)
+        init(opt, contextResetNeeded)
     }
 
     return this

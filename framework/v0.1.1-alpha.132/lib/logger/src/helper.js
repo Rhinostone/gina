@@ -35,17 +35,27 @@
      * @param {boolean} skipFormating
      * */
     self.format = function(group, s, content, skipFormating) {
+
         if (
             s == 'catch'
             || typeof(skipFormating) != 'undefined' && /true/i.test(skipFormating)
         ) {
             return content
         }
+
         if (content != '') {
             var colors = null;
             try {
+                // hack for loggers['bundle@project'] not found in this context
+                // so we just clone gina's
+                if ( typeof(loggers[ group ]) == 'undefined' ) {
+                    loggers[ group ] = JSON.clone(loggers.gina);
+                }
                 colors = loggers[ group ].colors
             } catch(colorsErr) {
+                // Leave it just in case we need to detect bugs right from the log output
+                content += '\nNot able to define colors. Please check logger‘s group: `'+ group +'`\n';
+                process.stdout.write('--['+ s +'/'+ skipFormating +']-> '+content +'\n');
                 throw new Error('Not able to define colors. Please check logger‘s group: `'+ group +'`\n')
             }
 
@@ -73,6 +83,7 @@
             //process.stdout.write('colors '+ JSON.stringify(colors[colorCode], null, 2)  +'\n');
 
 
+
             if ( typeof(_color) != 'undefined' && _color) {
                 //process.stdout.write('colors code '+ JSON.stringify(colors, null, 2)  +'\n');
                 content = _color.open + opt.template + _color.close;
@@ -80,11 +91,19 @@
                 content = opt.template;
             }
 
+
+
             // formating output
             for (let p=0; p<patt.length; ++p) {
                 content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
             }
+
+
         }
+
+        // test only
+        // process.stdout.write('--['+ s +'/'+ skipFormating +']->'+content +'\n');
+
 
         // We should be using `\r` instead of `\n`
         // But it is not yet possible because of weird console.*() stdout when we are on the CLI or Framework side

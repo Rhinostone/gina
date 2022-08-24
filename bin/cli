@@ -114,6 +114,7 @@ async function onExec() {
         setEnvVar('GINA_RUNDIR', settings['rundir']);// jshint ignore:line
         setEnvVar('GINA_LOGDIR', settings['logdir']);// jshint ignore:line
         setEnvVar('GINA_TMPDIR', settings['tmpdir']);// jshint ignore:line
+        setEnvVar('GINA_ENV', settings['env']);// jshint ignore:line
 
         // prior to what settings says
         if (hostname != settings['hostname'] && !isUpdateRequired) {
@@ -122,6 +123,12 @@ async function onExec() {
         }
         hostV4 = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || '127.0.0.1';// jshint ignore:line
         mqPort = getEnvVar('GINA_MQ_PORT')|| settings['mq_port'] || 8125;// jshint ignore:line
+
+        if (!isUpdateRequired) {
+            setEnvVar('GINA_HOST_V4', settings['host_v4']);// jshint ignore:line
+            setEnvVar('GINA_MQ_PORT', settings['mq_port']);// jshint ignore:line
+            setEnvVar('GINA_HOSTNAME', settings['hostname']);// jshint ignore:line
+        }
 
         if ( typeof(packObj.config) != 'undefined' ) {
             if (typeof(packObj.config.prefix) != 'undefined' ) {
@@ -144,7 +151,6 @@ async function onExec() {
         if ( /(gina\/bin\/cli|gina\/\/bin\/gina)$/.test(process.argv[1]) ) {
 
             var MQListener = require(frameworkPath + '/lib/logger/src/containers/mq/listener.js');
-
             var mqListener = await new MQListener({ port: mqPort, host: hostV4 });
             // required for tail command
             var mqPortFile = getTmpDir() + '/mq-listener-v'+ version +'.port';// jshint ignore:line
@@ -179,12 +185,12 @@ async function onExec() {
     if (!home) {
         console.error('No ' + ((isWin32) ? 'USERPROFILE' : 'HOME') + ' path found.');
         process.exit(1);
-    } else {
-        setEnvVar('GINA_HOMEDIR', home);// jshint ignore:line
-        setEnvVar('GINA_DIR', ginaPath);// jshint ignore:line
-        setEnvVar('GINA_FRAMEWORK_DIR', frameworkPath);// jshint ignore:line
-        setEnvVar('GINA_CORE', frameworkPath + '/core');// jshint ignore:line
     }
+
+    // setEnvVar('GINA_HOMEDIR', home);// jshint ignore:line
+    setEnvVar('GINA_DIR', ginaPath);// jshint ignore:line
+    setEnvVar('GINA_FRAMEWORK_DIR', frameworkPath);// jshint ignore:line
+    setEnvVar('GINA_CORE', frameworkPath + '/core');// jshint ignore:line
     setEnvVar('GINA_IS_WIN32', isWin32, true);// jshint ignore:line
 
     if (!settings) {

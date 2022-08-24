@@ -163,7 +163,7 @@ function Cmd(opt, runOffine) {
                 topic : topic,
                 action : action
             }
-        })
+        });
     };
 
     var checkIfSettings = function() {

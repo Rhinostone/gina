@@ -228,6 +228,26 @@ function PathHelper() {
         return self
     }
 
+    var isSymlinkSync = function(value) {
+        try {
+            if ( fs.lstatSync(value).isSymbolicLink() ) {
+                return true
+            }
+        } catch (linkErr) {}
+
+        return false;
+    }
+    _.prototype.isSymlinkSync = function() {
+        return isSymlinkSync(this.value)
+    }
+
+    _.prototype.getSymlinkSourceSync = function() {
+        if ( !isSymlinkSync(this.value) ) {
+            throw new Error('Path `'+ this.value +'` is not a symbolic link !')
+        }
+        return fs.readlinkSync(this.value)
+    }
+
     var existsSync = function(value) {
         if ( typeof(fs.accessSync) != 'undefined' ) {
             try {
@@ -251,6 +271,7 @@ function PathHelper() {
     _.prototype.existsSync = function() {
         return existsSync(this.value);
     }
+
 
     var exists = function(value, callback) {
         if ( typeof(fs.access) != 'undefined' ) {

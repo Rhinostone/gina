@@ -241,7 +241,15 @@ function Start(opt, cmd) {
                         if (!debuggerOn) {
                             debuggerOn = ''
                         }
+
+                        // resume logging
+                        process.emit('gina#bundle-logging', GINA_MQ_PORT, GINA_HOST_V4, bundle + '@' + self.projectName);
+                        console.debug('Sent:  gina#bundle-logging');
+
+
                         opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
+
+
 
 
                         end(opt, cmd, isBulkStart, bundleIndex);
