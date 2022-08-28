@@ -168,7 +168,7 @@ function Proc(bundle, proc, usePidFile){
                 if (code == undefined)
                     code = 0;
 
-                console.info('[ PROC ] Got exit code. Now killing: ', code);
+                console.warn('[ PROC ] Got exit code. Now killing: ', code);
                 // will handle `dismiss()`
                 proc.exit(code);
             });

@@ -262,6 +262,15 @@ You will not have to restart your bundle anytime you modify files inside directo
 - /piblic
 - /templates
 
+### Timezone
+> __Attention :__ Thiw will impact the logs output
+
+The default timezone is set to `Africa/Douala`.
+You can change it to your local timezone. For example, if you live in London:
+```tty
+gina set --timezone=Europe/London
+```
+
 ### Logs
 
 #### Getting the logs

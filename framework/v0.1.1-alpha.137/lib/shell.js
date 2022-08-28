@@ -17,12 +17,12 @@ function Shell () {
     };
 
     this.setOptions = function(opt) {
-        
+
         for (let name in opt) {
             if ( Object.keys(local).indexOf(name) < 0 ) {
                 throw new Error('Option `'+ name +'` not supported !')
             }
-            console.log('Settings options for ', name);
+            console.debug('Setting up ['+ name +'] option');
             local[name] = opt[name]
         }
     }
@@ -53,7 +53,7 @@ function Shell () {
             , error         = false
             , hasCalledBack = false
         ;
-        
+
         var _console = ( typeof(local.console) != 'undefined' ) ? local.console : console;
 
         var e = new EventEmitter();
