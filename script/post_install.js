@@ -36,6 +36,7 @@ var isWritableSync = function(path) {
 
     return canWrite
 };
+
 var getUserHome = function() {
     var home = os.homedir ? os.homedir : function() {
         var homeDir = process.env[(isWin32()) ? 'USERPROFILE' : 'HOME'];
