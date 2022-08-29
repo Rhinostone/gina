@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
-var fs          = require('fs');
-var net         = require('net');
-var util        = require('util');
-var os          = require("os");
-var promisify   = util.promisify;
+var fs              = require('fs');
+var net             = require('net');
+var util            = require('util');
+var os              = require('os');
+var promisify       = util.promisify;
 
 async function onExec() {
 

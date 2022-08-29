@@ -5,8 +5,9 @@
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
  */
-var fs      = require('fs');
-var os      = require('os');
+var fs              = require('fs');
+var os              = require('os');
+const {execSync}    = require('child_process');
 //var merge   = require('./../lib/merge');
 //var console = require('./../lib/logger');
 
@@ -41,6 +42,24 @@ function ContextHelper(contexts) {
         if ( typeof(ContextHelper.initialized) != 'undefined' && ContextHelper.instance) {
             self = ContextHelper.instance;
         } else {
+            // Get system environment variable
+            self.contexts['sysEnvVars'] = { '~/': getUserHome() +'/' };
+            var sysEnvVars = null;
+            try {
+                sysEnvVars = execSync('printenv').toString();
+                sysEnvVars = sysEnvVars.replace(/\n$/, '').split(/\n/g);
+                var len = sysEnvVars.length, i = 0;
+                while ( Array.isArray(sysEnvVars) && i < len ) {
+                    let arr = sysEnvVars[i].split(/\=/);
+                    self.contexts['sysEnvVars']['$'+arr[0]] = arr[1];
+                    i++
+                }
+                sysEnvVars = null;
+            } catch (err) {
+                return throwError(500, err, true)
+            }
+
+
             ContextHelper.initialized = true;
             ContextHelper.instance = self
         }
@@ -49,6 +68,24 @@ function ContextHelper(contexts) {
 
         return self
     }
+
+    var getUserHome = function() {
+        var home = os.homedir ? os.homedir : function() {
+            var homeDir = process.env[(isWin32()) ? 'USERPROFILE' : 'HOME'];
+
+            if ( !homeDir || homeDir == '' ) {
+                throw new Error('Home directory not defined or not found !');
+            }
+
+            if ( !isWritableSync(homeDir) ) {
+                throw new Error('Home directory found but not writable: need permissions for `'+ homeDir +'`');
+            }
+
+            return homeDir;
+        };
+
+        return home()
+    };
 
     self.configure = function(contexts) {
         joinContext(contexts)
@@ -510,6 +547,7 @@ function ContextHelper(contexts) {
 
     }
 
+
     /**
      * Whisper
      * Convert replace constant names dictionary by its value
@@ -520,7 +558,6 @@ function ContextHelper(contexts) {
      * @returns {object} revealed
      * */
     whisper = function(dictionary, replaceable, rule) {
-
         if ( typeof(rule) != 'undefined') {
             return replaceable
                 // inline rule
@@ -576,6 +613,23 @@ function ContextHelper(contexts) {
                         })
                         .replace(/\{(\w+)\}/g, function(s, key) {
                             return dictionary[key] || s;
+                        })
+                        // OS Environment Variables
+                        .replace(/\"\~\/\"|\"\$([_A-Z0-9]+)\"/g, function(s, key) {
+                            if ( /^(true|false|null)$/i.test(self.contexts['sysEnvVars'][s]) ) {
+                                return (/^(true|false|null)$/i.test(self.contexts['sysEnvVars'][s])) ? self.contexts['sysEnvVars'][s] : null
+                            }
+                            // When "$SINGLE" and not "$SINGLE/something"
+                            if ( /^\"\$([_A-Z0-9]+)\"$/i.test(s) && !self.contexts['sysEnvVars'][s]) {
+                                return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
+                            }
+                            if ( /^\"\~\/\"$/i.test(s) && !self.contexts['sysEnvVars'][s]) {
+                                return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
+                            }
+                            return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
+                        })
+                        .replace(/\~\/|\$([_A-Z0-9]+)/g, function(s, key) {
+                            return self.contexts['sysEnvVars'][s] || null;
                         })
                 )
             }
