@@ -16,37 +16,40 @@
  *   isProxyHost : isProxyHost,
  *   throwError  : self.throwError, // use ctx.throwError
  *   req         : local.req,
- *   res         : local.res 
+ *   res         : local.res
  * });
  * -----
  * Call
- * ----- 
+ * -----
  * swig.setFilter('getUrl', filters.getUrl);
  *
- * 
+ *
  * @package     Gina.Lib
  * @namespace   Gina.Lib.SwigFilters
  * @author      Rhinostone <contact@gina.io>
  * */
 function SwigFilters(conf) {
-    
+
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
-    
-    var self = { options: conf };  
+    if ( !merge || typeof(merge) != 'function' ) {
+        merge = require(_(GINA_FRAMEWORK_DIR+"/lib/merge", true));
+    }
+
+    var self = { options: conf };
     var init = function() {
 
         if ( typeof(SwigFilters.initialized) != 'undefined' ) {
             return getInstance()
         } else {
-            
+
             SwigFilters.instance = self;
-            
+
             if (self.options) {
                 SwigFilters.instance._options = self.options;
             }
-            
-            SwigFilters.initialized = true;    
-            
+
+            SwigFilters.initialized = true;
+
             return SwigFilters.instance
         }
     }
@@ -55,14 +58,14 @@ function SwigFilters(conf) {
         if (conf) {
             self.options = SwigFilters.instance._options = JSON.clone(conf);
         }
-            
+
         return SwigFilters.instance
     }
-    
+
     self.getConfig = function() {
         return JSON.clone(self.options)
     }
-    
+
     // Allows you to get a bundle web root
     self.getWebroot = function (input, obj) {
         var url = null, prop = self.options.envObj.getConf(obj, options.conf.env);
@@ -71,13 +74,13 @@ function SwigFilters(conf) {
         } else {
             url = prop.server.scheme + '://'+ prop.host +':'+ prop.port[prop.server.protocol][prop.server.scheme];
         }
-            
+
         if ( typeof(prop.server['webroot']) != 'undefined') {
             url += prop.server['webroot']
         }
         return url
     }
-    
+
     // var getRouteDefinition = function(routing, rule, method) {
     //     var routeObject = null;
     //     for (r in routing) {
@@ -86,10 +89,10 @@ function SwigFilters(conf) {
     //             break;
     //         }
     //     }
-        
+
     //     return routeObject;
     // }
-    
+
     /**
      * getUrl filter
      *
@@ -112,15 +115,15 @@ function SwigFilters(conf) {
      *
      * @returns {string} relativeUrl|absoluteUrl - /sample/url.html or http://domain.com/sample/url.html
      * */
-    self.getUrl = function (route, params, base) {                        
-        
+    self.getUrl = function (route, params, base) {
+
         //var ctx = SwigFilters().getConfig();
         //var ctx = self.options;
         if (typeof(params) == 'undefined') {
             params = {}
-        } 
+        }
         var ctx  = SwigFilters.instance._options || self.options;
-                
+
         var config              = null
             , hostname          = null
             , wroot             = null
@@ -128,22 +131,22 @@ function SwigFilters(conf) {
             , isStandalone      = null
             , isMaster          = null
             , isProxyHost       = ctx.isProxyHost
-            , routing           = null                        
+            , routing           = null
             , rule              = null
             , url               = NaN
             , urlStr            = null
             , method            = 'GET'
         ;
-        
+
         if (ctx.options.method != 'undefined') {
             method = ctx.options.method
         }
-            
+
         // if no route, returns current route
         if ( !route || typeof(route) == 'undefined') {
             route = ctx.options.rule
         }
-        
+
         config = {};
         if (/\@/.test(route) && typeof(base) == 'undefined') {
             var r = route.split(/\@/);
@@ -168,7 +171,7 @@ function SwigFilters(conf) {
         isStandalone    = (config.bundles.length > 1) ? true : false;
         isMaster        = (config.bundles[0] === config.bundle) ? true : false;
         routing         = config.routing;
-      
+
 
         if ( typeof(base) != 'undefined' ) {
 
@@ -179,7 +182,7 @@ function SwigFilters(conf) {
                 if ( mainConf.allBundles.indexOf(base) > -1 ) {
                     // config override
                     config          = mainConf.Env.getConf(base, mainConf.env);
-                    
+
                     // retrieve hostname, webroot & routing
                     hostname        = config.hostname + config.server.webroot;
                     // rewrite hostname vs ctx.req.headers.host
@@ -196,18 +199,18 @@ function SwigFilters(conf) {
                 }
             }
         }
-        
+
         wrootRe = new RegExp('^'+ config.server.webroot);
 
         // is path ?
         if (/^\//.test(route)) {
-            
+
             if ( !wrootRe.test(route) ) {
                 route = config.server.webroot + route.substr(1);
                 hostname = hostname.replace(new RegExp( config.server.webroot +'$'), '')
             } else {
                 route = route.substr(1)
-            }                          
+            }
 
             return hostname + route;
         }
@@ -217,18 +220,18 @@ function SwigFilters(conf) {
         //var ruleObj = getRouteDefinition(routing, rule, method);
         var ruleObj = routing[rule];
         if ( typeof(ruleObj) != 'undefined' && ruleObj != null ) { //found
-                        
+
             url = ruleObj.url;
-            
+
             if ( typeof(ruleObj.requirements) != 'undefined' ) {
                 var urls    = null
                     , i     = 0
                     , len   = null
                     , p     = null
                 ;
-                
+
                 for (p in ruleObj.requirements) {
-                    
+
                     if ( /\,/.test(url) ) {
                         urls = url.split(/\,/g);
                         i = 0; len = urls.length;
@@ -256,43 +259,43 @@ function SwigFilters(conf) {
                     }
                 }
             }
-            
-            
+
+
             if (hostname.length > 0) {
                 url = url.replace(wrootRe, '');
-            }   
-            
+            }
+
             // fix url in case of empty param value allowed by the routing rule
             // to prevent having a folder.
             // eg.: {..., id: '/^\\s*$/'} => {..., id: ''} => /path/to/ becoming /path/to
             if ( /\/$/.test(url) && url != '/' )
                 url = url.substr(0, url.length-1);
-                
+
             url = hostname + url;
 
         } else {
-            
-            if ( typeof(routing['404@'+ config.bundle]) != 'undefined' && typeof(routing['404@'+ config.bundle].url) != 'undefined' ) {                              
+
+            if ( typeof(routing['404@'+ config.bundle]) != 'undefined' && typeof(routing['404@'+ config.bundle].url) != 'undefined' ) {
                 //url = ( /^\//.test(routing['404@'+ config.bundle].url) ) ? hostname + routing['404@'+ config.bundle].url.substr(1) : hostname + routing['404@'+ config.bundle].url;
                 url = routing['404@'+ config.bundle].url.replace(wrootRe, '');
                 if (hostname.length > 0) {
                     url = url.replace(wrootRe, '');
-                }  
+                }
                 url = hostname + url;
             } else {
                 url = route;
                 if (hostname.length > 0) {
                     url = url.substr(1);
-                } 
+                }
                 url = hostname + url
             }
-            
-            return '404:['+ ctx.req.method +']'+rule                            
+
+            return '404:['+ ctx.req.method +']'+rule
         }
 
         return url
     }
-    
+
     // Extends default `length` filter
     self.length = function (input, obj) {
 
@@ -302,15 +305,15 @@ function SwigFilters(conf) {
             return input.length
         }
     }
-    
+
     self.nl2br = function(text, replacement) {
         replacement = ( typeof( replacement ) != 'undefined' ) ? replacement : '<br/>';
         return text.replace(/(\n|\r)/g, replacement);
     }
-    
-    
+
+
     return init()
-    
+
 }
 
 if ((typeof (module) !== 'undefined') && module.exports) {

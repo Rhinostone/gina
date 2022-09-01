@@ -29,9 +29,13 @@ function MainHelper(opt) {
         var pkg = null, cmd = null, prefix = null;
         self.isGlobalInstall = getEnvVar('GINA_GLOBAL_MODE') || ( typeof(packObj.config) != 'undefined' && typeof(packObj.config.globalMode) != 'undefined' ) ? packObj.config.globalMode : true;
         try {
-            lib         = require(frameworkPath + '/lib');
-            console     = lib.logger;
-            merge       = lib.merge;
+            // TODO - remove this code: it is creating a circular dependency
+            // lib         = require(frameworkPath + '/lib');
+            // console     = lib.logger;
+            // merge       = lib.merge;
+
+            console = require(frameworkPath + '/lib/logger');
+            merge   = require(frameworkPath + '/lib/merge');
 
             try {
                 pkg = packObj;
