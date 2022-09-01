@@ -377,7 +377,7 @@ function CmdHelper(cmd, client, debug) {
                 && !/\:(link|link-node-modules)$/.test(cmd.task)
                 && !/(project\:add)$/.test(cmd.task)
             ) {
-                console.debug(' OK 1 ??? gina link-node-modules @'+cmd.projectName);
+                console.debug('Running: gina link-node-modules @'+cmd.projectName);
                 err = execSync('gina link-node-modules @'+cmd.projectName);
                 console.debug(err.toString());
                 if (err instanceof Error) {
@@ -393,7 +393,7 @@ function CmdHelper(cmd, client, debug) {
                 && !/\:(link|link-node-modules)$/.test(cmd.task)
                 && !/(project\:add)$/.test(cmd.task)
             ) {
-                console.debug(' OK 2 ???');
+                console.debug('Running: gina link @'+cmd.projectName);
                 err = execSync('gina link @'+cmd.projectName);
                 if (err instanceof Error) {
                     console.error(err.message || err.stack);
