@@ -369,18 +369,35 @@ function CmdHelper(cmd, client, debug) {
 
             loadAssets();
             cmd.configured = true;
+            var err = null;
+            // detect node_modules vs platform
+            if (
+                cmd.projectName != null
+                && /^true$/i.test(GINA_GLOBAL_MODE)
+                && !/\:(link|link-node-modules)$/.test(cmd.task)
+                && !/(project\:add)$/.test(cmd.task)
+            ) {
+                console.debug(' OK 1 ??? gina link-node-modules @'+cmd.projectName);
+                err = execSync('gina link-node-modules @'+cmd.projectName);
+                console.debug(err.toString());
+                if (err instanceof Error) {
+                    console.error(err.message || err.stack);
+                    return exit(err.message || err.stack);
+                }
+            }
 
             // linking gina
             if (
                 cmd.projectName != null
                 && /^true$/i.test(GINA_GLOBAL_MODE)
-                && !/\:(link)$/.test(cmd.task)
+                && !/\:(link|link-node-modules)$/.test(cmd.task)
                 && !/(project\:add)$/.test(cmd.task)
             ) {
-                var err = execSync('gina link @'+cmd.projectName);
+                console.debug(' OK 2 ???');
+                err = execSync('gina link @'+cmd.projectName);
                 if (err instanceof Error) {
                     console.error(err.message || err.stack);
-                    return exit(errMsg);
+                    return exit(err.message || err.stack);
                 }
             }
 

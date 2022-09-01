@@ -10,6 +10,7 @@
         "-v" : "version",
         "--version" : "version",
         "-ln" : "link",
-        "--link" : "link"
+        "--link" : "link",
+        "--link-node-modules": "link-node-modules"
     }
 }
