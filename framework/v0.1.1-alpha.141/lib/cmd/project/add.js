@@ -199,12 +199,11 @@ function Add(opt, cmd) {
     }
 
     var end = function(created) {
-        loadAssets();
 
         var target = _(GINA_HOMEDIR + '/projects.json')
             , projects = JSON.clone(self.projects)
-            , error = false;
-
+            , error = false
+        ;
 
         projects[self.projectName] = {
             "path": self.projectLocation,
