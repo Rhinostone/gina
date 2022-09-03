@@ -2,6 +2,7 @@ const { execSync } = require('child_process');
 var fs          = require('fs');
 var console     = lib.logger;
 var merge       = lib.merge;
+var Collection  = lib.Collection;
 var helpers     = require( getPath('gina').helpers);
 /**
  * CmdHelper
@@ -45,6 +46,7 @@ function CmdHelper(cmd, client, debug) {
         // global projects collection {collection}
         projects : null, // defined by filterArgs()
         projectsPath : _(GINA_HOMEDIR + '/projects.json'), // ~/.gina/project.json
+        projectsList : [], // Array of project names, asc sorted
         // current project path
         projectPath : null, // local project/manifest.json - defined by filterArgs()
         projectConfigPath: null, // path to .gina/project.json
@@ -149,7 +151,7 @@ function CmdHelper(cmd, client, debug) {
             }
         }
 
-        //console.log('nodeParams ', cmd.nodeParams)
+        // console.debug('nodeParams ', cmd.nodeParams)
     }
 
     /**
@@ -188,6 +190,14 @@ function CmdHelper(cmd, client, debug) {
             }
 
             cmd.projects    = requireJSON( cmd.projectConfigPath );
+            var pIndex      = 0;
+            for (let p in cmd.projects) {
+                if ( new _(cmd.projects[p].path).existsSync() ) {
+                    cmd.projectsList[pIndex] = p;
+                    pIndex++
+                }
+            }
+            cmd.projectsList.sort();
 
             // bundles passed to the CMD
             cmd.bundles = ( typeof(cmd.bundles) == 'undefined' ) ? [] : cmd.bundles;
@@ -331,7 +341,7 @@ function CmdHelper(cmd, client, debug) {
 
                         cmd.projectName = folder;
                         cmd.projectLocation = _(process.cwd(), true);
-                    } else if (!/\:help$/.test(cmd.task)) {
+                    } else if (!/\:help$/.test(cmd.task) && !/port\:reset$/.test(cmd.task) ) {
 
                         errMsg = 'No project name found: make sure it starts with `@` as `@<project_name>`';
                         console.error(errMsg);
@@ -368,38 +378,8 @@ function CmdHelper(cmd, client, debug) {
 
 
             loadAssets();
-            cmd.configured = true;
+            // cmd.configured = true;
             var err = null;
-            // detect node_modules vs platform
-            if (
-                cmd.projectName != null
-                && /^true$/i.test(GINA_GLOBAL_MODE)
-                && !/\:(link|link-node-modules)$/.test(cmd.task)
-                && !/(project\:add)$/.test(cmd.task)
-            ) {
-                console.debug('Running: gina link-node-modules @'+cmd.projectName);
-                err = execSync('gina link-node-modules @'+cmd.projectName);
-                console.debug(err.toString());
-                if (err instanceof Error) {
-                    console.error(err.message || err.stack);
-                    return exit(err.message || err.stack);
-                }
-            }
-
-            // linking gina
-            if (
-                cmd.projectName != null
-                && /^true$/i.test(GINA_GLOBAL_MODE)
-                && !/\:(link|link-node-modules)$/.test(cmd.task)
-                && !/(project\:add)$/.test(cmd.task)
-            ) {
-                console.debug('Running: gina link @'+cmd.projectName);
-                err = execSync('gina link @'+cmd.projectName);
-                if (err instanceof Error) {
-                    console.error(err.message || err.stack);
-                    return exit(err.message || err.stack);
-                }
-            }
 
             return true; // completed configuration
 
@@ -455,6 +435,10 @@ function CmdHelper(cmd, client, debug) {
             //&& !cmd.params['force']
         ) { // ignore when adding project
 
+            if (!cmd.projectPath) {
+                cmd.projectPath =  _(cmd.projects[cmd.projectName].path + '/manifest.json', true);
+
+            }
 
             if ( typeof(require.cache[cmd.projectPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectPath)]
@@ -570,6 +554,39 @@ function CmdHelper(cmd, client, debug) {
                             cmd.portsData[protocol][scheme][port] = ports[protocol][scheme][port]
                         }
                     }
+                }
+            }
+
+            cmd.configured = true;
+
+            // detect node_modules vs platform
+            if (
+                cmd.projectName != null
+                && /^true$/i.test(GINA_GLOBAL_MODE)
+                && !/\:(link|link-node-modules)$/.test(cmd.task)
+                && !/(project\:add)$/.test(cmd.task)
+            ) {
+                console.debug('Running: gina link-node-modules @'+cmd.projectName);
+                err = execSync('gina link-node-modules @'+cmd.projectName); // +' --inspect-gina'
+                console.debug(err.toString());
+                if (err instanceof Error) {
+                    console.error(err.message || err.stack);
+                    return exit(err.message || err.stack);
+                }
+            }
+
+            // linking gina
+            if (
+                cmd.projectName != null
+                && /^true$/i.test(GINA_GLOBAL_MODE)
+                && !/\:(link|link-node-modules)$/.test(cmd.task)
+                && !/(project\:add)$/.test(cmd.task)
+            ) {
+                console.debug('Running: gina link @'+cmd.projectName);
+                err = execSync('gina link @'+cmd.projectName);// +' --inspect-gina'
+                if (err instanceof Error) {
+                    console.error(err.message || err.stack);
+                    return exit(err.message || err.stack);
                 }
             }
         }
@@ -1159,6 +1176,26 @@ function CmdHelper(cmd, client, debug) {
         } catch (err) {
             cb(err)
         }
+    }
+
+    orderBundles = function(bundles) {
+        var bList = [], i = 0;
+        for (let b in bundles) {
+            bList[i] = bundles[b];
+            bList[i].name = b;
+            i++;
+        }
+
+        bList = new Collection(bList)
+            .orderBy({name: 'asc'})
+            .toRaw();
+
+        var newBundles = {}
+        for (let i = 0, len = bList.length; i < len; i++) {
+            newBundles[ bList[i].name ] = bList[i]
+        }
+
+        return newBundles;
     }
 
 

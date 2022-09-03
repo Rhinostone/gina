@@ -17,8 +17,8 @@ var console     = lib.logger;
  function LinkNodeModules(opt, cmd) {
 
     var self    = {};
-
     var init = function(opt, cmd) {
+
         var err = false;
         if ( !/^true$/i.test(GINA_GLOBAL_MODE) ) {
             err = new Error('Gina is not installed globally: cannot proceed with linking.');
@@ -31,6 +31,7 @@ var console     = lib.logger;
         // check CMD configuration
         if (!isCmdConfigured()) return false;
 
+
         linkNodeModules(opt, cmd);
     }
 
@@ -38,13 +39,11 @@ var console     = lib.logger;
         console.debug('Linking link node_modules');
 
         var err = null, folder = new _(self.projectLocation);
-
         if ( folder.isValidPath() && isValidName(self.projectName) ) {
-
             // destination = new _(destination.toString() +'/gina');
             var source = new _(self.projectLocation +'/node_modules.'+ os.platform(), true);
             if ( !source.existsSync() ) {
-                source.mkdir()
+                source.mkdirSync()
             }
 
             var destination = new _(self.projectLocation + '/node_modules');
@@ -68,6 +67,7 @@ var console     = lib.logger;
     }
 
     var end = function (err, type, messageOnly) {
+
         if ( typeof(err) != 'undefined') {
             var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
             if ( typeof(type) != 'undefined' ) {
