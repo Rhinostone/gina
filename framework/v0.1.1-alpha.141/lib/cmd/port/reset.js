@@ -47,6 +47,7 @@ function Reset(opt, cmd) {
         }
 
         if ( self.projectName && isDefined('project', self.projectName) ) {
+            loadAssets();
             reset()
         }
         // if (self.projectName && isDefined(self.projectName) && !self.name) {
