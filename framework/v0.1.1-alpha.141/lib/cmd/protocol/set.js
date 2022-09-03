@@ -37,7 +37,7 @@ function Set(opt, cmd) {
         options = {
             ignore  : merge(self.portsGlobalList, local.ports),
             // get for each bundle ports for available protocol, scheme & env
-            len   : ( self.protocolsAvailable.length * self.schemesAvailable.length * self.envs.length * self.bundles.length )
+            limit   : ( self.protocolsAvailable.length * self.schemesAvailable.length * self.envs.length * self.bundles.length )
         };
 
         scan(options, function(err, ports){

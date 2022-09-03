@@ -15,8 +15,11 @@ module.exports = function Scanner(opt, cb){
         // default binding for localhost
         // remote scan can be added later if needed (e.g: for remote setup)
         host: 'localhost',
+        startFrom: null,
         start: 3100,
-        end: 3999,// max 65535,
+        // max 65535, but user assigned == 49151 - see [RFC6335](https://www.rfc-editor.org/rfc/rfc6335.html)
+        end: null,
+        maxEnd: 49151,
         timeout: 2000,
         ignore: [],
         limit: 1
@@ -29,6 +32,17 @@ module.exports = function Scanner(opt, cb){
     } else {
         opt = merge(opt, defaultOptions)
     }
+    if (opt.startFrom) {
+        opt.startFrom = ~~opt.startFrom;
+        if (opt.start < opt.startFrom ) {
+            opt.start = opt.startFrom;
+        }
+    }
+    opt.end = (~~(opt.start)+899) // shouldn't it be opt.limit+1 ?
+
+    // just in caes
+    opt.end = ~~(opt.end);
+    opt.ignore.sort();
 
     console.debug('scan init with options: ', opt);
 
@@ -46,20 +60,19 @@ module.exports = function Scanner(opt, cb){
             cb(err);
             return;
         }
-        
+
         // skip port present in the `ignore list`
-        if ( opt.ignore.length > 0 && opt.ignore.indexOf( ''+port ) > -1 ) {
+        if ( opt.ignore.length > 0 && opt.ignore.indexOf( port ) > -1 ) {
             port++;
-            find(port);
-            return;
+            return find(port);
         }
-        
+
         // creating socket
-        var s = new net.Socket();        
+        var s = new net.Socket();
 
         // starting connection
         s.connect(port, self.host);
-        
+
         // just in case
         s.setTimeout(opt.timeout);
         s.on('timeout', function() {
@@ -67,15 +80,17 @@ module.exports = function Scanner(opt, cb){
             s.destroy(err);
             cb(err)
         });
-        
+
 
         // No one is listening ... port is available
         s.on('error', function(err) {
-            s.destroy();   
+            s.destroy();
             // silently catch all errors - assume the port is closed => available for use
-            if ( /ECONNREFUSED/i.test(err.message) ) {                
-                if ( !opt.ignore.length || opt.ignore.length > 0 && opt.ignore.indexOf( ''+port ) == -1 ) {
-                    ports.push(''+port);
+            if ( /ECONNREFUSED/i.test(err.message) ) {
+                if ( !opt.ignore.length || opt.ignore.length > 0 && opt.ignore.indexOf( port ) == -1 ) {
+                    // ports.push(''+port);
+                    ports.push(port);
+                    ports.sort();
                     console.debug('available port found '+ port +' ['+ ports.length +'/'+ total +']');
                     opt.limit--;
                 }
@@ -92,15 +107,15 @@ module.exports = function Scanner(opt, cb){
                 console.warn('exeption not handled: '+ err);
                 cb(err);
                 return;
-            } 
+            }
         });
-        
+
         // if connection is made, this only means that service is using it
         s.on('connect', function() {
             s.destroy();
-            
+
             port++;
-            find(port);           
+            find(port);
         })
     };
 

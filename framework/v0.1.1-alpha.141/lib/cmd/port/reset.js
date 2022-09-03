@@ -1,18 +1,24 @@
-var fs          = require('fs');
+const fs            = require('fs');
+const { execSync }  = require('child_process');
 
-var CmdHelper   = require('./../helper');
-var Shell       = lib.Shell;
 var console     = lib.logger;
+var CmdHelper   = require('./../helper');
 var scan        = require('../port/inc/scan');
+const { setFips } = require('crypto');
 
 /**
- * Add new project or register old one to `~/.gina/projects.json`.
- * NB.: If project exists, it won't be replaced. You'll only get warnings.
+ * Reset ports for a given project
+ *
+ * e.g.:
+ *  gina port:reset @<project_name>
+ *  gina port:reset @<project_name> --start-from=4100
+ *
  * */
-function Add(opt, cmd) {
+function Reset(opt, cmd) {
 
-    var self        = {}
-        , local     = {
+    // self will be pre filled if you call `new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled })`
+    var self = { forAllProjects: false }
+        , local = {
             // bundle index while searching or browsing
             b : 0,
             bundle : null,
@@ -27,245 +33,93 @@ function Add(opt, cmd) {
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
         // check CMD configuration
-        if ( !isCmdConfigured() ) return false;
+        if (!isCmdConfigured()) return false;
+
         for (let i=3, len=process.argv.length; i<len; i++) {
             if ( /^\-\-start\-from\=/.test(process.argv[i]) ) {
                 self.startFrom = process.argv[i].split(/\=/)[1]
             }
         }
 
-        local.imported = false;
-        if ( checkImportMode() ) {
-            return;
+        if (!self.projectName) { // reset for all projects
+            self.forAllProjects = true;
+            self.projectName = self.projectsList[0];
         }
 
-        var err         = false
-            , folder    = null
-            , file      = null
-        ;
-
-        folder = new _(self.projectLocation);
-
-        if ( folder.isValidPath() && isValidName(self.projectName) ) {
-
-            err = folder.mkdirSync();
-
-            if (err instanceof Error) {
-                console.error(err.stack);
-                process.exit(1)
-            }
+        if ( self.projectName && isDefined('project', self.projectName) ) {
+            reset()
         }
-
-
-        // creating project file
-        file = new _(self.projectLocation + '/manifest.json', true);
-        if ( !file.existsSync() ) {
-            createProjectFile( file.toString() )
-        } else {
-            console.warn('[ manifest.json ] already exists in this location: '+ file);
-        }
-
-        // creating env file
-        file = new _(self.projectLocation + '/env.json', true);
-        if ( !file.existsSync() ) {
-            createEnvFile( file.toString() )
-        } else {
-            console.warn('[ env.json ] already exists in this location: '+ file);
-        }
-
-        // creating package file
-        file = new _(self.projectLocation + '/package.json', true);
-        if ( !file.existsSync() ) {
-            createPackageFile( file.toString() )
-        } else {
-            console.warn('[ package.json ] already exists in this location: '+ file + '\nUpdating package.json...');
-            createPackageFile( file.toString(), true )
-        }
+        // if (self.projectName && isDefined(self.projectName) && !self.name) {
+        //     listProjectOnly()
+        // } else if (typeof (self.name) != 'undefined' && isValidName(self.name)) {
+        //     listBundleOnly()
+        // } else {
+        //     console.error('[ ' + self.name + ' ] is not a valid project name.');
+        //     process.exit(1)
+        // }
     }
 
-    var checkImportMode = function() {
+    //  check if bundle is defined
+    // var isDefined = function(name) {
+    //     if (typeof (self.projects[name]) != 'undefined') {
+    //         return true
+    //     }
+    //     return false
+    // }
 
-        if ( self.task != 'project:import')
-            return;
+    // var isValidName = function(name) {
+    //     if (name == undefined) return false;
 
-        console.debug('Starting import mode @'+ self.projectName );
-        if (!self.projects[self.projectName ]) {
-            console.error('[ '+ self.projectName  +' ] is not an existing project. Instead, use gina projet:add @'+ self.projectName +' --path=/your/project_location');
-            process.exit(1)
-        }
+    //     self.name = name.replace(/\@/, '');
+    //     var patt = /^[a-z0-9_.]/;
+    //     return patt.test(self.name)
+    // }
 
-        if ( typeof(self.projects[self.projectName ]) != 'undefined' ) {
-            // import if exists but path just changed
-            if ( typeof(self.projects[self.projectName ].path) != 'undefined') {
-                var old = new _(self.projects[self.projectName ].path, true).toArray().last();
-                var current = new _(self.projectLocation, true).toArray().last();
+    var reset = function() {
+        // get bundles list
+        var bundlesCollection = null, out = null;
+        try {
+            out = execSync('gina bundle:list @'+ self.projectName +' --format=json').toString().replace(/(\n|\r)$/, '').split(/(\n|\r)/g);
+            out = out[out.length-1];
+            bundlesCollection = JSON.parse(out);
+        } catch (err) {}// silently ...
 
-                if (old === self.projectName) {
-                    self.projects[self.projectName ].path = self.projectLocation;
+        // remove definitions from port.reverse.json & port.json
+        var i       = 0
+            , ports = JSON.clone(self.portsData) // cloning
+        ;
+        while (i < bundlesCollection.length) {
+            let bundleObj = bundlesCollection[i];
+            let bundle = bundleObj.bundle;
+            let project = bundleObj.project;
 
-                    var target = _(GINA_HOMEDIR + '/projects.json')
-                        , projects = JSON.clone(self.projects);
+            delete self.portsReverseData[ bundle +'@'+ project ];
 
-                    lib.generator.createFileFromDataSync(
-                        projects,
-                        target
-                    );
-
-
-                    var ginaModule = _( self.projectLocation +'/node_modules/gina',true );
-
-                    if ( !fs.existsSync(ginaModule) ) {
-                        linkGina(
-                            function onError(err) {
-                                console.error(err.stack);
-                                process.exit(1)
-                            },
-                            function onSuccess() {
-                                local.imported = true;
-                                end();
-                                return true;
-                            })
-
-                    } else {
-                        local.imported = true;
-                        end();
-                        return true;
+            for (let protocol in ports) {
+                for (let scheme in ports[protocol]) {
+                    for (let p in ports[protocol][scheme]) {
+                        let re = new RegExp('^'+ bundle +'@'+ project);
+                        if ( re.test( ports[protocol][scheme][p]) ) {
+                            delete self.portsData[protocol][scheme][p]
+                        }
                     }
                 }
-            } else {
-                console.error('[ '+ self.projectLocation  +' ] is an existing project. Please choose another name for your project or remove this one.');
-                process.exit(1)
-            }
-        }
-    }
-
-    var createProjectFile = function(target) {
-
-        loadAssets();
-
-        var conf        = _(getPath('gina').core +'/template/conf/manifest.json', true);
-        var contentFile = require(conf);
-        var dic = {
-            "project"   : self.projectName,
-            "version"   : "1.0.0"
-        };
-
-        contentFile = whisper(dic, contentFile); //data
-        lib.generator.createFileFromDataSync(
-            contentFile,
-            target
-        )
-    }
-
-    var createEnvFile = function(target) {
-
-        lib.generator.createFileFromDataSync(
-            {},
-            target
-        )
-    }
-
-
-    var createPackageFile = function(target, isCreatedFromExistingPackage) {
-
-        loadAssets();
-
-        var conf = _(getPath('gina').core +'/template/conf/package.json', true);
-        var contentFile = require(conf);
-        var dic = {
-            'project' : self.projectName,
-            'node_version' : GINA_NODE_VERSION.match(/\d+/g).join('.'),
-            'gina_version' : GINA_VERSION
-        };
-
-        contentFile = whisper(dic, contentFile);//data
-
-        // Updating package.json if needed
-        if (
-            typeof(isCreatedFromExistingPackage) != 'undefined'
-            && /^true$/i.test(isCreatedFromExistingPackage)
-        ) {
-            var existingPack = require(target);
-            contentFile = merge(contentFile, existingPack);
-            new _(target, true).rmSync()
-        }
-
-        lib.generator.createFileFromDataSync(
-            contentFile,
-            target
-        );
-
-        end(true)
-    }
-
-    var end = function(created) {
-
-
-        var target = _(GINA_HOMEDIR + '/projects.json')
-            , projects = JSON.clone(self.projects)
-            , error = false;
-
-
-        projects[self.projectName] = {
-            "path": self.projectLocation,
-            "framework": "v" + GINA_VERSION,
-            "envs": self.envs,
-            "def_env": self.defaultEnv,
-            "dev_env": self.devEnv,
-            "protocols": (created) ? self.protocolsAvailable : self.protocols,
-            "def_protocol": self.defaultProtocol,
-            "schemes": (created) ? self.schemesAvailable : self.schemes,
-            "def_scheme": self.defaultScheme
-        };
-
-        // create/update ports, protocols & schemes
-        if ( /^true$/.test(local.imported) ) {
-            addBundlePorts(0);
-        }
-
-
-        // writing file
-        lib.generator.createFileFromDataSync(
-            projects,
-            target
-        );
-
-        var onSuccess = function () {
-            if ( self.task == 'project:add' ) {
-                console.log('Project [ '+ self.projectName +' ] has been added');
-            } else {
-                console.log('Project [ '+ self.projectName +' ] has been imported');
             }
 
-            process.exit(0)
+            i++;
         }
 
-        var onError = function (err) {
-            console.error('Could not finalize [ '+ self.projectName +' ] install\n'+ err.stack);
-            process.exit(1)
-        }
+        // save to ~/.gina/ports.json
+        //console.debug('data \n'+ JSON.stringify(self.portsData, null, 4) +'\n\rcurrent \n'+ JSON.stringify(ports, null, 4));
+        lib.generator.createFileFromDataSync( self.portsData, self.portsPath);
 
+        // save to ~/.gina/ports.reverse.json
+        lib.generator.createFileFromDataSync( self.portsReverseData, self.portsReversePath);
 
+        self.bundles.sort();
+        // for each bundle,re assign ports
+        addBundlePorts(0);
 
-
-        var ginaModule = new _( self.projectLocation +'/node_modules/gina',true );
-
-        if ( !ginaModule.existsSync() ) {
-            linkGina(onError, onSuccess)
-        } else if ( /^true$/i.test(GINA_GLOBAL_MODE) ) {
-
-            error = ginaModule.rmSync();
-
-            if (error instanceof Error) {
-                console.error(err.stack);
-                process.exit(1);
-            } else {
-                linkGina(onError, onSuccess)
-            }
-
-        } else {
-            onSuccess()
-        }
     }
 
     var hasPastProtocolAndSchemeCheck = function (protocol, scheme, exitOnError) {
@@ -288,9 +142,10 @@ function Add(opt, cmd) {
      * addBundlePorts
      * Add / update project default protocol, scheme & ports
      *
-     * NB.: also used in `port:reset` task
+     * NB.: also used in `project:add` task
      *
-     * @param {number} b - Bundle index
+     * @param {number} b - bundle index
+     *
      */
     var addBundlePorts = function(b) {
         loadAssets();
@@ -363,10 +218,15 @@ function Add(opt, cmd) {
                             local.bundle = self.bundles[b];
 
                             // bundle settings inconsistency check @ fix
-                            bundleName              = local.bundle;
-                            bundleConfig            = self.bundlesByProject[self.projectName][bundleName];
-                            settingsPath            = _(bundleConfig.configPaths.settings, true);
-                            bundleSettingsUpdate    = false;
+                            try {
+                                bundleName              = local.bundle;
+                                bundleConfig            = self.bundlesByProject[self.projectName][bundleName];
+                                settingsPath            = _(bundleConfig.configPaths.settings, true);
+                                bundleSettingsUpdate    = false;
+                            } catch (err) {
+                                return end(new Error('[port:reset error] project `'+ self.projectName+'` bundleConfig might be broken !') )
+                            }
+
 
                             if ( fs.existsSync(settingsPath) ) {
 
@@ -404,9 +264,11 @@ function Add(opt, cmd) {
                             for (let port in ports[protocol][scheme]) {
 
 
-                                    for (let e = 0, envsLen = envs.length; e < envsLen; ++e ) {
+                                    for (let e=0, envsLen = envs.length; e < envsLen; ++e ) {
 
-                                        if (!portsList[i]) break;
+                                        if (!portsList[i]) {
+                                            break;
+                                        }
 
                                         // ports
                                         portValue = local.bundle +'@'+ self.projectName +'/'+ envs[e];
@@ -442,8 +304,7 @@ function Add(opt, cmd) {
 
                                                 // erasing in order to keep consistency
                                                 portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ][ scheme ] = ~~portsList[i];
-
-                                                ++i;
+                                                ++i
                                             }
 
                                             // ++i;
@@ -457,17 +318,35 @@ function Add(opt, cmd) {
             }
 
             // save to ~/.gina/projects.json
-            lib.generator.createFileFromDataSync(projectConfig, self.projectConfigPath);
+            // lib.generator.createFileFromDataSync(projectConfig, self.projectConfigPath);
 
             // save to ~/.gina/ports.json
-            //console.debug('data \n'+ JSON.stringify(self.portsData, null, 4) +'\n\rcurrent \n'+ JSON.stringify(ports, null, 4));
             lib.generator.createFileFromDataSync( merge(self.portsData, ports), self.portsPath);
 
             // save to ~/.gina/ports.reverse.json
             lib.generator.createFileFromDataSync( merge(self.portsReverseData, portsReverse), self.portsReversePath);
 
-
-            return;
+            if ( /^true$/.test(self.forAllProjects) ) {
+                // reload project assets
+                self.projectName = self.projectsList[self.projectsList.indexOf(self.projectName)+1];
+                if (!self.projectName) {
+                    return end();
+                }
+                self.bundles = [];
+                loadAssets();
+                // reset context
+                local = {
+                    // bundle index while searching or browsing
+                    b : 0,
+                    bundle : null,
+                    bundlePath : null,
+                    ports : []
+                };
+                b = 0;
+                reset()
+            } else {
+                return end();
+            }
         }
 
         //console.debug('Bundles list on project import [ '+ b +' ]', self.bundles.length, self.bundles);
@@ -488,6 +367,7 @@ function Add(opt, cmd) {
                 limit   : ( self.protocolsAvailable.length * self.schemesAvailable.length * self.envs.length * self.bundles.length )
             };
 
+
             // defining range startFrom depending of the project index (self.projectsList - OK only)...
             if (self.startFrom) {
                 options.startFrom = self.startFrom;
@@ -507,11 +387,10 @@ function Add(opt, cmd) {
                     local.ports.push(ports[p])
                 }
 
-                local.ports.sort();
+                // local.ports.sort();
 
                 ++local.b;
                 addBundlePorts(local.b);
-
             });
 
 
@@ -521,30 +400,22 @@ function Add(opt, cmd) {
             console.error('[ '+ bundle+' ] is not a valid bundle name')
             process.exit(1)
         }
-    }
+    } // EO addBundlePorts(bundleIndex)
 
-    var linkGina = function ( onError, onSuccess ) {
+    var end = function (err, type, messageOnly) {
+        if ( typeof(err) != 'undefined') {
+            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+            if ( typeof(type) != 'undefined' ) {
+                console[type](out)
+            } else {
+                console.error(out);
+            }
+        }
 
-        var npm = new Shell();
-
-        npm.setOptions({ chdir: self.projectLocation });
-        npm
-            .run('npm link gina', true)
-            .onComplete(function (err, data) {
-                if (err) {
-                    if ( typeof(onSuccess) != 'undefined' ) {
-                        onSuccess(err);
-                    } else {
-                        console.error(err.stack);
-                    }
-
-                } else {
-                    if ( typeof(onSuccess) != 'undefined' )
-                        onSuccess()
-                }
-            })
+        process.exit( err ? 1:0 )
     }
 
     init()
-}
-module.exports = Add;
+};
+
+module.exports = Reset
