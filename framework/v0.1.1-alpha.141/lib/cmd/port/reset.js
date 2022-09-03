@@ -318,7 +318,7 @@ function Reset(opt, cmd) {
             }
 
             // save to ~/.gina/projects.json
-            // lib.generator.createFileFromDataSync(projectConfig, self.projectConfigPath);
+            lib.generator.createFileFromDataSync(projectConfig, self.projectConfigPath);
 
             // save to ~/.gina/ports.json
             lib.generator.createFileFromDataSync( merge(self.portsData, ports), self.portsPath);
