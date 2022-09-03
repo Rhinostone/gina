@@ -231,6 +231,8 @@ function Add(opt, cmd) {
             target
         );
 
+        loadAssets();
+
         var onSuccess = function () {
             if ( self.task == 'project:add' ) {
                 console.log('Project [ '+ self.projectName +' ] has been added');
