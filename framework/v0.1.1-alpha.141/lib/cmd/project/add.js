@@ -199,7 +199,7 @@ function Add(opt, cmd) {
     }
 
     var end = function(created) {
-
+        loadAssets();
 
         var target = _(GINA_HOMEDIR + '/projects.json')
             , projects = JSON.clone(self.projects)
@@ -231,7 +231,7 @@ function Add(opt, cmd) {
             target
         );
 
-        loadAssets();
+
 
         var onSuccess = function () {
             if ( self.task == 'project:add' ) {
