@@ -2,6 +2,7 @@ var fs = require('fs');
 
 var CmdHelper = require('./../helper');
 var console = lib.logger;
+var Collection = lib.Collection;
 
 /**
  * List ports for a given bundle, a given project & a given env
@@ -11,11 +12,23 @@ var console = lib.logger;
  *  gina port:list @<project_name>
  *  gina port:list <bundle> @<project_name>
  *
+ * You can also filter
+ *  gina port:list @<project_name> --format=json,null,2 --protocol=http/2.0 --scheme=https --bundle=frontend,backend
+ *
  * */
 function List(opt, cmd) {
 
     // self will be pre filled if you call `new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled })`
-    var self = {}, local = {};
+    var self    = {
+            format: null
+            , formatOutReplacement: null
+            , formatOutSpacing: 0
+            , selectedProtocoles: null // array if assigned
+            , selectedSchemes: null // array if assigned
+            , selectedBundles: null // array if assigned
+        }
+        , local = {}
+    ;
 
     var init = function() {
 
@@ -25,8 +38,49 @@ function List(opt, cmd) {
         // check CMD configuration
         if (!isCmdConfigured()) return false;
 
+        var isListingAll = false;
 
-        if (!self.name && !self.projectName) {
+        for (let i=3, len=process.argv.length; i<len; i++) {
+            if ( /^\-\-format\=/.test(process.argv[i]) ) {
+                // e.g:
+                // --format=json
+                // --format=json,null,2
+                let format  = process.argv[i].split(/\=/);
+                self.format = format[1]; // by default;
+                if ( /\,/.test(format[1]) ) {
+                    let formating = format[1].split(/\,/g);
+                    self.format = formating[0];
+                    self.formatOutReplacement = /^null$/i.test(formating[1]) ? null : formating[1] || null;
+                    self.formatOutSpacing = ~~formating[2] || 0;
+                }
+
+            }
+
+            if ( /^\-\-protocol\=/.test(process.argv[i]) ) {
+                // e.g:
+                // --protocol=http/2.0,ftp
+                self.selectedProtocoles = process.argv[i].split(/\=/)[1].split(/\,/);
+            }
+
+            if ( /^\-\-scheme\=/.test(process.argv[i]) ) {
+                // e.g:
+                // --scheme=https
+                self.selectedSchemes = process.argv[i].split(/\=/)[1].split(/\,/);
+            }
+
+            if ( /^\-\-bundle\=/.test(process.argv[i]) ) {
+                // e.g:
+                // --bundle=frontend,backend
+                self.selectedBundles = process.argv[i].split(/\=/)[1].split(/\,/);
+            }
+
+            if ( /^\-\-all\=/.test(process.argv[i]) || !self.projectName ) {
+                isListingAll = true;
+            }
+        }
+
+
+        if (!self.name && !self.projectName || isListingAll) {
             listAll()
         } else if (self.projectName && isDefined(self.projectName) && !self.name) {
             listProjectOnly()
@@ -56,56 +110,98 @@ function List(opt, cmd) {
 
 
     var listAll = function() {
-        
-        var protocols   = self.protocols
-            , schemes   = self.schemes
-            , projects  = self.projects
+
+        var projects  = self.projects
             , list      = []
-            , p         = ''
+            , p         = null
             , re        = null
             , found     = false
             , strTmp    = ''
-            , str       = '';
+            , str       = ''
+            , json      = []
+        ;
 
         for (p in projects) {
             list.push(p)
         }
         list.sort();
 
+        var jsonCollection =  new Collection(json);
         p = 0;
         for (; p < list.length; ++p) {
-            
-            re = new RegExp('\@' + list[p] + '\/', '');// searching by projectName
+            let projectName = list[p];
+            let project     = projects[projectName];
+            let protocols   = project.protocols;
+            let schemes     = project.schemes;
+
+            re = new RegExp('\@' + projectName + '\/', '');// searching by projectName
             str += '------------------------------------\n\r';
-            if (!projects[list[p]].exists || projects[list[p]].exists && protocols.length == 0) {
+            if (!project.exists || project.exists && protocols.length == 0) {
                 str += '?! '
             }
-            str += list[p] + '\n\r';
+            str += projectName + '\n\r';
             str += '------------------------------------\n\r';
             strTmp = '';
             found = false;
-            for (var i = 0, len = protocols.length; i < len; ++i) {
-                
-                strTmp += '[ '+ protocols[i]+' ]\n\r';
-                for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
-                    strTmp += '  [ '+ schemes[s]+' ]\n\r';
-                    
-                    for (var port in self.portsData[ protocols[i] ][ schemes[s] ]) {
-                        if (re.test(self.portsData[protocols[i]][schemes[s]][port]) ) {
-                            found = true;
-                            strTmp += '\n\r    - ' + port + '  ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, ' (') + ')'
+            for (let i = 0, len = protocols.length; i < len; ++i) {
+                let protocol = protocols[i];
+                if (
+                    self.selectedProtocoles
+                    && self.selectedProtocoles.indexOf(protocol) < 0
+                ) {
+                    continue;
+                }
+
+                strTmp += '[ '+ protocol +' ]\n\r';
+                for (let s = 0, sLen = schemes.length; s < sLen; ++s) {
+                    let scheme = schemes[s];
+                    if (
+                        self.selectedSchemes
+                        && self.selectedSchemes.indexOf(scheme) < 0
+                    ) {
+                        continue;
+                    }
+                    strTmp += '  [ '+ scheme +' ]\n\r';
+
+                    for (let port in self.portsData[ protocol ][ scheme ]) {
+                        let bundleEnv = self.portsData[protocols[i]][scheme][port].replace(re, ':').split(/\:/);
+                        let _bundle = bundleEnv[0];
+                        let _env = bundleEnv[1];
+                        if (_bundle && self.selectedBundles && self.selectedBundles.indexOf(_bundle.split(/\@/)[0]) < 0) {
+                            continue;
                         }
-                    }                    
+
+                        let re2 = new RegExp(_bundle +'\@' + projectName + '\/'+ _env, '');// searching by projectName
+                        // if (re.test(self.portsData[protocol][scheme][port]) ) {
+                        if (re2.test(self.portsData[protocol][scheme][port])) {
+                            found = true;
+                            strTmp += '\n\r    - ' + port + '  ' + self.portsData[protocol][scheme][port].replace(re, ' (') + ')';
+
+                            let jsonPort  = {protocol: protocol, project: projectName};
+                            jsonPort.scheme = scheme;
+                            jsonPort.port = ~~port;
+                            jsonPort.bundle = _bundle;
+                            jsonPort.env = _env;
+                            if ( !jsonCollection.findOne({ "port": ~~port }) ) {
+                                jsonCollection = jsonCollection.insert(jsonPort);
+                            }
+                        }
+                    }
                     strTmp += '\n\r'
-                }                
+                }
                 strTmp += '\n\r'
             }
-            
+
             if (found) {
                 str += strTmp
-            } 
-            
+            }
+
             str += '\n\r'
+        }
+
+        json = jsonCollection.toRaw();
+        if ( /^json?/.test(self.format) ) {
+            return process.stdout.write(JSON.stringify(json, self.formatOutReplacement, self.formatOutSpacing));
         }
 
         console.log(str)
@@ -113,25 +209,64 @@ function List(opt, cmd) {
 
     var listProjectOnly = function() {
 
-        var protocols = self.protocols
-            , schemes = self.schemes
-            , str = ''
-            , re = null;
+        var protocols   = self.protocols
+            , schemes   = self.schemes
+            , str       = ''
+            , json      = []
+            , re        = null
+        ;
 
-        for (var i = 0, len = protocols.length; i < len; ++i) {
-            str += '[ ' + protocols[i] + ' ]\n\r';
-            for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
-                str += '  [ ' + schemes[s] + ' ]\n\r';
-                
+        var jsonCollection =  new Collection(json);
+        for (let i = 0, len = protocols.length; i < len; ++i) {
+            let protocol = protocols[i];
+            if (
+                self.selectedProtocoles
+                && self.selectedProtocoles.indexOf(protocol) < 0
+            ) {
+                continue;
+            }
+            str += '[ ' + protocol + ' ]\n\r';
+            for (let s = 0, sLen = schemes.length; s < sLen; ++s) {
+                let scheme = schemes[s];
+                if (
+                    self.selectedSchemes
+                    && self.selectedSchemes.indexOf(scheme) < 0
+                ) {
+                    continue;
+                }
+                str += '  [ ' + scheme + ' ]\n\r';
                 re = new RegExp('\@' + self.projectName + '\/', '');// searching by projectName
-                for (var port in self.portsData[protocols[i]][schemes[s]]) {
-                    if (re.test(self.portsData[protocols[i]][schemes[s]][port])) {
-                        str += '\n\r    - ' + port + '  ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, ' (') + ')'
+                for (let port in self.portsData[protocol][scheme]) {
+                    let bundleEnv = self.portsData[protocol][scheme][port].replace(re, ':').split(/\:/);
+                    let _bundle = bundleEnv[0];
+                    let _env = bundleEnv[1];
+                    let re2 = new RegExp(_bundle +'\@' + self.projectName + '\/'+ _env, '');// searching by projectName
+                    if (_bundle && self.selectedBundles && self.selectedBundles.indexOf(_bundle.split(/\@/)[0]) < 0) {
+                        continue;
+                    }
+                    if (re2.test(self.portsData[protocol][scheme][port])) {
+
+                        str += '\n\r    - ' + port + '  ' + self.portsData[protocol][scheme][port].replace(re, ' (') + ')';
+
+                        let jsonPort  = {protocol: protocol, project: self.projectName};
+                        jsonPort.scheme = scheme;
+                        jsonPort.port = ~~port;
+                        jsonPort.bundle = _bundle;
+                        jsonPort.env = _env;
+                        if ( !jsonCollection.findOne({ "port": ~~port }) ) {
+                            jsonCollection = jsonCollection.insert(jsonPort);
+                        }
                     }
                 }
-                str += '\n\r'
-            }            
-            str += '\n\r'
+                str += '\n\r';
+            }
+            str += '\n\r';
+
+        }
+        json = jsonCollection.toRaw();
+
+        if ( /^json?/.test(self.format) ) {
+            return process.stdout.write(JSON.stringify(json, self.formatOutReplacement, self.formatOutSpacing));
         }
 
         console.log(str)
@@ -146,24 +281,24 @@ function List(opt, cmd) {
             , str       = ''
             , re        = null;
 
-        for (var i = 0, len = protocols.length; i < len; ++i) {
+        for (let i = 0, len = protocols.length; i < len; ++i) {
             str += '[ '+ protocols[i] +' ]\n\r';
-            for (var s = 0, sLen = schemes.length; s < sLen; ++s) {
+            for (let s = 0, sLen = schemes.length; s < sLen; ++s) {
                 found = false;
                 re = new RegExp('^' + self.name + '\@', '');// searching by bundle name
-                for (var port in self.portsData[protocols[i]][schemes[s]]) {
+                for (let port in self.portsData[protocols[i]][schemes[s]]) {
                     if (re.test(self.portsData[protocols[i]][schemes[s]][port])) {
                         str +=  '    ' +schemes[s]+ ' ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')';
                         found = true;
                         break;
                     }
                 }
-                
+
                 if (found) {
                     str += '\n\r'
                 }
-                    
-            }            
+
+            }
         }
 
 
