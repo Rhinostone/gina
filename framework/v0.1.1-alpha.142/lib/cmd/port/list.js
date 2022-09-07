@@ -15,6 +15,8 @@ var Collection = lib.Collection;
  * You can also filter
  *  gina port:list @<project_name> --format=json,null,2 --protocol=http/2.0 --scheme=https --bundle=frontend,backend
  *
+ * You can also export the output to a file with: `--filename`
+ *  gina port:list @<project_name> --format=conf --protocol=http/2.0 --scheme=https --filename=$HOME/my_ports.conf
  * */
 function List(opt, cmd) {
 
@@ -26,6 +28,7 @@ function List(opt, cmd) {
             , selectedProtocoles: null // array if assigned
             , selectedSchemes: null // array if assigned
             , selectedBundles: null // array if assigned
+            , filename: null
         }
         , local = {}
     ;
@@ -45,6 +48,7 @@ function List(opt, cmd) {
                 // e.g:
                 // --format=json
                 // --format=json,null,2
+                // --format=conf
                 let format  = process.argv[i].split(/\=/);
                 self.format = format[1]; // by default;
                 if ( /\,/.test(format[1]) ) {
@@ -56,23 +60,33 @@ function List(opt, cmd) {
 
             }
 
+            if ( /^\-\-filename\=/.test(process.argv[i]) ) {
+                // e.g:
+                // --format=json --filename=$HOME/sample.json
+                self.filename = process.argv[i].split(/\=/)[1];
+            }
+
             if ( /^\-\-protocol\=/.test(process.argv[i]) ) {
                 // e.g:
                 // --protocol=http/2.0,ftp
                 self.selectedProtocoles = process.argv[i].split(/\=/)[1].split(/\,/);
+                self.selectedProtocoles.sort();
             }
 
             if ( /^\-\-scheme\=/.test(process.argv[i]) ) {
                 // e.g:
                 // --scheme=https
                 self.selectedSchemes = process.argv[i].split(/\=/)[1].split(/\,/);
+                self.selectedSchemes.sort();
             }
 
             if ( /^\-\-bundle\=/.test(process.argv[i]) ) {
                 // e.g:
                 // --bundle=frontend,backend
                 self.selectedBundles = process.argv[i].split(/\=/)[1].split(/\,/);
+                self.selectedBundles.sort();
             }
+
 
             if ( /^\-\-all\=/.test(process.argv[i]) || !self.projectName ) {
                 isListingAll = true;
@@ -108,6 +122,57 @@ function List(opt, cmd) {
         return patt.test(self.name)
     }
 
+    var outputTo = function(data) {
+
+        var targetObj = null;
+        if (self.filename) {
+            targetObj = new _(self.filename);
+            if ( targetObj.existsSync() ) {
+                targetObj.rmSync()
+            }
+        }
+        if ( /^conf$/.test(self.format) ) {
+            if (typeof(data) != 'string' ) {
+                var str = '', i = 0, len = data.length;
+                while (i<len) {
+                    let d = data[i];
+                    str += d.env +'_'+ d.bundle +'_'+ d.protocol +'_'+ d.scheme +'='+ d.port +':'+ d.port +'\n';
+                    i++;
+                }
+
+                data = str.replace(/\n$/, '');
+            }
+
+            if (self.filename) {
+                var filename = targetObj.toString();
+                // save to ~/.gina/ports.reverse.json
+                lib.generator.createFileFromDataSync( data, filename );
+                console.log('Saved to `'+ filename +'`');
+                return;
+            }
+
+            return process.stdout.write(data);
+        }
+
+        if ( /^json$/.test(self.format) ) {
+            data = JSON.stringify(data, self.formatOutReplacement, self.formatOutSpacing);
+
+            if (self.filename) {
+                var filename = targetObj.toString();
+                // save to ~/.gina/ports.reverse.json
+                lib.generator.createFileFromDataSync( data, filename );
+                console.log('Saved to `'+ filename +'`');
+                return;
+            }
+
+            return process.stdout.write(data);
+        }
+
+
+
+        console.log(data)
+    }
+
 
     var listAll = function() {
 
@@ -118,7 +183,6 @@ function List(opt, cmd) {
             , found     = false
             , strTmp    = ''
             , str       = ''
-            , json      = []
         ;
 
         for (p in projects) {
@@ -126,7 +190,7 @@ function List(opt, cmd) {
         }
         list.sort();
 
-        var jsonCollection =  new Collection(json);
+        var jsonCollection =  new Collection([]);
         p = 0;
         for (; p < list.length; ++p) {
             let projectName = list[p];
@@ -199,12 +263,11 @@ function List(opt, cmd) {
             str += '\n\r'
         }
 
-        json = jsonCollection.toRaw();
-        if ( /^json?/.test(self.format) ) {
-            return process.stdout.write(JSON.stringify(json, self.formatOutReplacement, self.formatOutSpacing));
+        if ( /^(conf|json)$/.test(self.format) ) {
+            str = jsonCollection.orderBy({env: 'asc'}, {bundle: 'asc'}).toRaw();
         }
 
-        console.log(str)
+        outputTo(str);
     }
 
     var listProjectOnly = function() {
@@ -212,11 +275,10 @@ function List(opt, cmd) {
         var protocols   = self.protocols
             , schemes   = self.schemes
             , str       = ''
-            , json      = []
             , re        = null
         ;
 
-        var jsonCollection =  new Collection(json);
+        var jsonCollection =  new Collection([]);
         for (let i = 0, len = protocols.length; i < len; ++i) {
             let protocol = protocols[i];
             if (
@@ -240,10 +302,11 @@ function List(opt, cmd) {
                     let bundleEnv = self.portsData[protocol][scheme][port].replace(re, ':').split(/\:/);
                     let _bundle = bundleEnv[0];
                     let _env = bundleEnv[1];
-                    let re2 = new RegExp(_bundle +'\@' + self.projectName + '\/'+ _env, '');// searching by projectName
                     if (_bundle && self.selectedBundles && self.selectedBundles.indexOf(_bundle.split(/\@/)[0]) < 0) {
                         continue;
                     }
+
+                    let re2 = new RegExp(_bundle +'\@' + self.projectName + '\/'+ _env, '');// searching by projectName
                     if (re2.test(self.portsData[protocol][scheme][port])) {
 
                         str += '\n\r    - ' + port + '  ' + self.portsData[protocol][scheme][port].replace(re, ' (') + ')';
@@ -263,33 +326,53 @@ function List(opt, cmd) {
             str += '\n\r';
 
         }
-        json = jsonCollection.toRaw();
 
-        if ( /^json?/.test(self.format) ) {
-            return process.stdout.write(JSON.stringify(json, self.formatOutReplacement, self.formatOutSpacing));
+        if ( /^(conf|json)$/.test(self.format) ) {
+            str = jsonCollection.orderBy({env: 'asc'}, {bundle: 'asc'}).toRaw();
         }
 
-        console.log(str)
+        outputTo(str);
     };
 
     var listBundleOnly = function() {
 
         var protocols   = self.protocols
             , schemes   = self.schemes
-            , scheme    = null
             , found     = false
             , str       = ''
-            , re        = null;
+            , re        = null
+        ;
 
+        var jsonCollection =  new Collection([]);
         for (let i = 0, len = protocols.length; i < len; ++i) {
-            str += '[ '+ protocols[i] +' ]\n\r';
+            let protocol = protocols[i];
+            str += '[ '+ protocol +' ]\n\r';
             for (let s = 0, sLen = schemes.length; s < sLen; ++s) {
+                let scheme = schemes[s];
+                let bundle = self.name;
                 found = false;
-                re = new RegExp('^' + self.name + '\@', '');// searching by bundle name
-                for (let port in self.portsData[protocols[i]][schemes[s]]) {
-                    if (re.test(self.portsData[protocols[i]][schemes[s]][port])) {
-                        str +=  '    ' +schemes[s]+ ' ' + port + '  ' + self.name + ' ' + self.portsData[protocols[i]][schemes[s]][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')';
+                // re = new RegExp('^' + bundle + '\@', '');// searching by bundle name
+                re = new RegExp('^' + bundle + '\@' + self.projectName + '\/', '');// searching by projectName
+                for (let port in self.portsData[protocol][scheme]) {
+
+                    let bundleEnv = self.portsData[protocol][scheme][port].replace(re, '\:').split(/\:/);
+                    let _bundle = bundleEnv[0] || bundle;
+                    let _env = bundleEnv[1];
+
+                    let re2 = new RegExp(_bundle +'\@' + self.projectName + '\/'+ _env, '');// searching by <bundle>@<projectName>
+                    if (re2.test(self.portsData[protocol][scheme][port])) {
+                        str +=  '    ' +scheme+ ' ' + port + '  ' + bundle + ' ' + self.portsData[protocol][scheme][port].replace(re, '').replace(/[-_a-z 0-9]+\//i, '(') + ')';
                         found = true;
+
+                        let jsonPort  = {protocol: protocol, project: self.projectName};
+                        jsonPort.scheme = scheme;
+                        jsonPort.port = ~~port;
+                        jsonPort.bundle = _bundle;
+                        jsonPort.env = _env;
+                        if ( !jsonCollection.findOne({ "port": ~~port }) ) {
+                            jsonCollection = jsonCollection.insert(jsonPort);
+                        }
+
                         break;
                     }
                 }
@@ -301,8 +384,11 @@ function List(opt, cmd) {
             }
         }
 
+        if ( /^(conf|json)$/.test(self.format) ) {
+            str = jsonCollection.orderBy({env: 'asc'}, {bundle: 'asc'}).toRaw();
+        }
 
-        console.log(str)
+        outputTo(str);
     };
 
     init()
