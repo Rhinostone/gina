@@ -209,6 +209,11 @@ function Reset(opt, cmd) {
                     }
 
                     for (let scheme in ports[protocol]) {
+                        // skipping none `https` schemes for `http/2`
+                        if ( /^http\/2/.test(protocol) && scheme != 'https' ) {
+                            console.debug('skipping none `https` schemes for `http/2`');
+                            continue;
+                        }
 
                         if ( !ports[protocol][scheme].count() ) {
                             ports[protocol][scheme][ portsList[i] ] = null;
@@ -305,10 +310,9 @@ function Reset(opt, cmd) {
 
                                                 // erasing in order to keep consistency
                                                 portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ][ scheme ] = ~~portsList[i];
+
                                                 ++i
                                             }
-
-                                            // ++i;
                                         }
                                     }
 

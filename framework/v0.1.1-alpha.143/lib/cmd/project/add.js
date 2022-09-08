@@ -445,10 +445,9 @@ function Add(opt, cmd) {
                                                 // erasing in order to keep consistency
                                                 portsReverse[ local.bundle +'@'+ self.projectName ][ envs[e] ][ protocol ][ scheme ] = ~~portsList[i];
 
+
                                                 ++i;
                                             }
-
-                                            // ++i;
                                         }
                                     }
 
@@ -531,7 +530,8 @@ function Add(opt, cmd) {
 
         npm.setOptions({ chdir: self.projectLocation });
         npm
-            .run('npm link gina', true)
+            // .run('npm link gina', true)
+            .run('gina link @'+ self.projectName, true)
             .onComplete(function (err, data) {
                 if (err) {
                     if ( typeof(onSuccess) != 'undefined' ) {
