@@ -2423,6 +2423,8 @@ function SuperController(options) {
         protocol    = protocol.match(/[.a-z 0-9]+/ig)[0];
         scheme      = options.scheme || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.scheme;// bundle servers's scheme by default
         scheme      = scheme.match(/[a-z 0-9]+/ig)[0];
+        // retrieve credentials
+        options.ca  = ctx.gina.config.envConf[ctx.bundle][ctx.env].server.credentials.ca;
 
         //retrieving dynamic host, hostname & port
         if ( /\@/.test(options.hostname) ) {
@@ -2436,6 +2438,11 @@ function SuperController(options) {
 
             options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
             options.scheme      = ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
+
+            // retrieve credentials
+            // options.ca = self.getConfig('settings').server.credentials.ca;
+            options.ca = ctx.gina.config.envConf[bundle][ctx.env].server.credentials.ca;
+
             // might be != from the bundle requesting
             //options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
             //options.scheme    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.scheme || ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
@@ -2447,6 +2454,8 @@ function SuperController(options) {
         if ( typeof(options.scheme) == 'undefined' ) {
             options.scheme = scheme
         }
+
+
 
 
         // reformating scheme

@@ -1083,7 +1083,7 @@ function CmdHelper(cmd, client, debug) {
                     let scheme = allProjectSchemes[s];
                     // skipping none `https` schemes for `http/2`
                     if ( /^http\/2/.test(protocol) && scheme != 'https' ) {
-                        console.debug('skipping none `https` schemes for `http/2`');
+                        // console.debug('skipping none `https` schemes for `http/2`');
                         continue;
                     }
                     if ( typeof(ports[protocol][scheme]) == 'undefined' ) {
