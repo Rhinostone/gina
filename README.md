@@ -401,6 +401,8 @@ Do not panic, and follow the steps provided in the following section.
 This is __important__ and you will have to take additional steps to make your certificate fully valid __while developping on your `local/dev host`__.
 Since in most cases you will not have the `Root Certificate` included in your certificate, you need to generate a correct certificate including the Root Certificate. __For production, it will not be a problem__ since the Root certificate is provided by the client browser.
 
+__Attention:__ We are assuming that for the following example, you have a wildcard certificate. If this is not possible, you will have to generate a certificate for each bundle and treat each bundle like a subdomain.
+
 Let say that you have downloaded your certificates from __[Ssl For Free](https://sslforfree.com)__ which you have then placed under: `~/.gina/certificates/scopes/local/myproject.domain`.
 
 __Step 1__
