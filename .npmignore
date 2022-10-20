@@ -1,6 +1,7 @@
 # IDE
 .jshintrc
 .idea
+.lh
 nbproject
 .vscode
 .history
