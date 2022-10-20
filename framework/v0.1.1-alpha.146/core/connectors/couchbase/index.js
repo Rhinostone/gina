@@ -22,7 +22,7 @@ var console         = lib.logger;
 function Couchbase(conn, infos) {
     var EntitySuperClass = null, EntityN1qlClass = null;
     var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
-    
+
     /**
      * Init
      * @constructor
@@ -101,33 +101,36 @@ function Couchbase(conn, infos) {
                 if ( /^\./.test(files[f]) ) {
                     continue;
                 }
-                
+
                 filename    = _(dir +'/'+ files[f]);
                 loadN1QL(entities, filename)
             }
         }
-        
+
         return entities
     };
 
     var loadN1QL = function(entities, filename) {
+        var arr = null
+            , entityName = null
+        ;
 
         if ( fs.statSync(filename).isDirectory() ) {
             var files           = fs.readdirSync(filename)
                 , f             = 0
-                , arr           = filename.split(/\//g)
-                , entityName    = arr[arr.length-1];
-
-            entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1);
+            ;
+            arr         = filename.split(/\//g);
+            entityName  = arr[arr.length-1];
+            entityName  = entityName.charAt(0).toUpperCase() + entityName.slice(1);
 
             for (; f < files.length; ++f) {
                 // ignoring filename starting with . & sub folders
-                if ( 
+                if (
                     /^\./.test(files[f])
                     ||
-                    !/\.sql$/i.test(files[f]) 
+                    !/\.sql$/i.test(files[f])
                     ||
-                    fs.statSync( _(filename + '/' + files[f], true) ).isDirectory() 
+                    fs.statSync( _(filename + '/' + files[f], true) ).isDirectory()
                 ) {
                     continue;
                 }
@@ -135,11 +138,10 @@ function Couchbase(conn, infos) {
             }
 
         } else {
-            var arr             = filename.split(/\//g)
-                , entityName    =  arr[arr.length-1].replace(/\.sql/, '').split(/\_/)[0];
+            arr         = filename.split(/\//g);
+            entityName  =  arr[arr.length-1].replace(/\.sql/, '').split(/\_/)[0];
+            entityName  = entityName.charAt(0).toUpperCase() + entityName.slice(1);
 
-            entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1);
-                     nbbnnb
             readSource(entities, entityName, filename)
         }
     }
@@ -166,28 +168,28 @@ function Couchbase(conn, infos) {
             if ( includes && includes.length > 0 ) {
                 for (let i = 0, len = includes.length; i < len; i++) {
                     let filename = includes[i].replace(/\"|\'|\;|(\@include\s+|\@include)/g, '');
-                    if ( 
+                    if (
                         /^\./.test(filename)
                         ||
                         // windows style location
-                        /^[a-z]:(\\|\/\/)/i.test(filename) 
+                        /^[a-z]:(\\|\/\/)/i.test(filename)
                         ||
                         // not unix absolut
                         !/^\//.test(filename)
                         && !/^[a-z]:(\\|\/\/)/i.test(filename)
-                        
+
                     ) {
                         let dir = new _(source).toUnixStyle();
                         dir = dir.substr(0, dir.lastIndexOf('/')) + '/'
                         filename = _(dir + filename.replace(/^\.\//, ''), true);
                     }
-                    // remove @include calls 
+                    // remove @include calls
                     //console.debug('including .....'+ filename);
                     queryString = queryString.replace(includes[i], fs.readFileSync( filename ).toString() );
                 }
             }
             queryString = queryString.replace(/\n/g, ' ');
-            
+
             // extract comments
             comments    = queryString.match(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)|(\/\/.*)/g);
             // extract return type
@@ -200,9 +202,9 @@ function Couchbase(conn, infos) {
                 params = comments[0].match(/\$\w+/g); // param list from comments
                 queryString = queryString.replace(comments[0], '');
             }
-            
+
             inlineParams    = queryString.match(/\$\w+/g);
-            
+
             // getting rid of duplicated
             if ( typeof(Set) == 'function' ) { // ES6
                 inlineParams = Array.from(new Set(inlineParams))
@@ -222,8 +224,8 @@ function Couchbase(conn, infos) {
                     entities[entityName].prototype._collection    = entityName;
                     entities[entityName].prototype._filename      = _( __dirname + '/lib/n1ql.js', true );
                 }
-                
-                    
+
+
                 entities[entityName].prototype[name] = function() {
                     var self = this;
                     var key     = null
@@ -241,8 +243,8 @@ function Couchbase(conn, infos) {
                     }
 
                     var sdkVersion = conn.sdk.version || 2;
-                    var queryParams = [];                                        
-                    queryStatement = queryString.slice(0);                    
+                    var queryParams = [];
+                    queryStatement = queryString.slice(0);
                     if (params) {
                         // BO - patch prepared statement case when placeholder is used as a cursor
                         var p                       = []
@@ -254,7 +256,7 @@ function Couchbase(conn, infos) {
                             // rightCase already handled by default
                             //, foundSpecialRightCase = /(\$|\%)\d+\.\w+/.test(qStr)
                         ;
-                            
+
                         // e.g.: c.documentNextId.$2 = $3
                         // e.g.: n.alertedOn.$1 = true
                         if (foundSpecialLeftCase) {
@@ -263,33 +265,33 @@ function Couchbase(conn, infos) {
                                 key = inl.indexOf(params[i]);
                                 if (key > -1) {
                                     p[key] = args[key];
-                                    
-                                    re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));                                
+
+                                    re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));
                                     if ( re.test(qStr) ) {
                                         p[key] = args[key];
                                         qStr = qStr.replace( new RegExp('(.*)\\.'+ params[i].replace(/([$%]+)/, '\\$1')), '$1\.'+args[i]);
                                         inl.splice(key, 1);
                                     }
-                                }                                    
+                                }
                             }
 
-                            queryStatement = qStr;                                
+                            queryStatement = qStr;
                             if ( sdkVersion > 2 ) { // starting from SDK v3
                                 queryParams = {};
-                                index = 0; i = 0; len = inlineParams.length;                            
+                                index = 0; i = 0; len = inlineParams.length;
                                 var matched = null;
-                                for (; i < len; ++i) {  
+                                for (; i < len; ++i) {
                                     //matched = params.indexOf( inlineParams[i] );
                                     matched = params.indexOf( inl[i] );
-                                    if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {                                                                          
-                                        // e.g.: queryParams[ $3 ] = 1                                    
+                                    if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {
+                                        // e.g.: queryParams[ $3 ] = 1
                                         queryParams[ inl[i] ] = p[matched]
                                     }
                                 }
                             } else {
                                 // Novemeber 2020 patch
                                 index = 0; i = 0; len = params.length;
-                                for (; i < len; ++i) {  
+                                for (; i < len; ++i) {
                                     if ( typeof(p[i]) != 'undefined' )  {
                                         queryParams[i] = p[i];
                                     } else { // means that placeholder has been replaced
@@ -298,54 +300,57 @@ function Couchbase(conn, infos) {
                                     }
                                 }
                             }
-                                
+
                         }
-                        
+
                         // e.g.: c.id = $1.id
                         // if (foundSpecialRightCase) {
                         //     console.debug('foundSpecialRightCase...')
                         // }
-                        
+
                         // normal case
                         if (
                             !foundSpecialLeftCase /**&& !foundSpecialRightCase*/
-                            || Array.isArray(queryParams) && queryParams.length == 0 
-                        ) { 
-                            queryParams = args;
+                            || Array.isArray(queryParams) && queryParams.length == 0
+                        ) {
+                            queryParams = JSON.clone(args);
+                            // starting from SDK v3
+                            if ( typeof(queryParams[queryParams.length-1]) == 'function' ) {
+                                queryParams.splice(queryParams.length-1, 1)
+                            }
                         }
                         // EO - patch
                     }
-                    
+
                     var query = null, execQuery = null, _collection = null;
                     // values by default
                     var queryOptions = {
-                        // Do not turn off the adhoc flag for each query since 
+                        // Do not turn off the adhoc flag for each query since
                         // only a finite number of query plans (currently 5000) can be stored in the SDK
                         adhoc: false, // false to use plan optimization, but need a statement `name param` or `num param`
                         consistency: 1 // NOT_BOUNDED, but STATEMENT_PLUS is set by default for insert & update
                     };
                     if ( sdkVersion > 2 ) { // starting from SDK v3
-                        _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
-                        if (_collection.length > 0) {
-                            _collection = _collection[0];
-                            if ( /\_collection/.test(_collection) ) {
-                                _collection = _collection.replace(/\_collection|\W+/ig, '');
-                            } else {
-                                _collection = null
-                            }
-                        }
-                        
-                        //var bucket = conn._cluster.bucket(conn._name);
+                        // _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
+                        // if (_collection.length > 0) {
+                        //     _collection = _collection[0];
+                        //     if ( /\_collection/.test(_collection) ) {
+                        //         _collection = _collection.replace(/\_collection|\W+/ig, '');
+                        //     } else {
+                        //         _collection = null
+                        //     }
+                        // }
+
                         //var scope = conn.scope(conn._name);
                         //var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();
                         //execQuery = conn._cluster.query;
                         execQuery = inherits(conn, conn._cluster.query);
-                        
+
                         query = queryStatement;
                         queryOptions.parameters = queryParams;
-                        
+
                     } else { // version 2
-                        // prepared statement                        
+                        // prepared statement
                         query = N1qlQuery.fromString(queryStatement.replace(/^\s+/, ''));
                         // query options
                         // @param {object} options
@@ -392,30 +397,33 @@ function Couchbase(conn, infos) {
                                 continue;
                             }
                             query[ qOpt ]( queryOptions[ qOpt ] );
-                        }    
-                                          
+                        }
+
                     }
 
-                    
+
 
 
                     // trick to set event on the fly
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
                     var statement = (sdkVersion <= 2) ? query.options.statement : query;
-                    
+
                     if (envIsDev) {
                         //var statement = (sdkVersion <= 2) ? query.options.statement : query;
                         console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
+                        if (queryParams.length > 0) {
+                            console.debug('[ ' + trigger +' ] Found query params: '+ queryParams);
+                        }
                     }
-                    
-                    
-                    
+
+
+
                     var onQueryCallback = function(err, data, meta) {
                         // if (/^company#getDocumentNextId$/.test(trigger)) {
                         //     console.log('[ ' + trigger + '] onQueryCallback => ', err, data, meta);
                         // }
-                                               
+
                         if (!data || data.length == 0) {
                             data = null
                         }
@@ -428,26 +436,26 @@ function Couchbase(conn, infos) {
                             err.message = '[ '+source+' ]\n'+ err.message;
                             err.stack   = '[ '+source+' ]\n'+ err.stack;
                         }
-                        
+
                         // handle return type
-                        if ( returnType && returnType == 'boolean' ) {  
+                        if ( returnType && returnType == 'boolean' ) {
                             // CASE #1
                             // SELECT COUNT(a) AS someField <- means that keyword `COUNT(` is found in queryString
-                            // [ { someField: 1 }] <- a collection with only one object which has prop: <number>    
-                            if ( 
+                            // [ { someField: 1 }] <- a collection with only one object which has prop: <number>
+                            if (
                                 /count\(|count\s+\(/i.test(queryString)
-                                && Array.isArray(data) 
+                                && Array.isArray(data)
                                 && /object/i.test(typeof(data[0]))
                                 && Object.keys(data[0]).length == 1
                                 && /number/i.test( typeof(data[0][Object.keys(data[0])]) )
                             ) {
                                 data = ( data[0][Object.keys(data[0])] > 0 ) ? true : false
-                            } 
+                            }
                             // CASE #2
                             // regular query, just counting result
                             else {
                                 data = ( typeof(data.length) != 'undefined' && data.length > 0 ) ? true : false
-                            }                            
+                            }
                         } else if ( returnType && returnType == 'object' ) {
 
                             data = (data) ? data[0] : data
@@ -472,30 +480,30 @@ function Couchbase(conn, infos) {
                                     } else { // Promise case
                                         throw err
                                     }
-                                    
+
                                 } else {
                                     if ( typeof(self.emit) != 'undefined' ) {
                                         self.emit(trigger, err, data, meta);
                                     } else { // Promise case
                                         return data
-                                    }                                    
+                                    }
                                 }
-                                return                                
+                                return
                             }
-                            
-                        } catch (_err) { 
+
+                        } catch (_err) {
                             if ( _mainCallback != null ) {
                                 _mainCallback(err, data, meta)
                             } else {
                                 if ( typeof(self.emit) != 'undefined' ) {
                                     self.emit(trigger, _err);
                                 } else {
-                                    throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)    
-                                }                                
-                            }                            
+                                    throw new Error('[ Couchbase ][ Core Entity Exception] '+ trigger + '\n'+ _err.stack)
+                                }
+                            }
                         }
                     }; // EO onQueryCallback
-                    
+
                     self._isRegisteredFromProto = false;
                     var register = function (trigger, queryParams, onQueryCallback, cb) {
                         // JUNE 2021 patch
@@ -517,7 +525,7 @@ function Couchbase(conn, infos) {
                             originalFtsClauses = null;
                         }
                         ftsClause = null;
-                        
+
                         if ( typeof(self.once) != 'undefined' && typeof(cb) != 'undefined' ) {
                             self._isRegisteredFromProto = true;
                             //console.debug('registered trigger: ', trigger, self._isRegisteredFromProto);
@@ -525,17 +533,17 @@ function Couchbase(conn, infos) {
                                 //console.debug('received ', trigger, meta, err);
                                 try {
                                     cb(err, data, meta)
-                                } catch (onCompleteError) {                                        
+                                } catch (onCompleteError) {
                                     cb(onCompleteError)
-                                }                                    
+                                }
                             });
                             // if (/triggerToDebug/.test(trigger)) {
                             //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
                             // }
                             conn.query(query, queryParams, onQueryCallback);
-                        } // else  promise case                                              
-                            
-                        
+                        } // else  promise case
+
+
                         if (!self._isRegisteredFromProto) {
                             //console.debug('regular trigger: ', trigger, self._isRegisteredFromProto);
                             // if (/triggerToDebug/.test(trigger)) {
@@ -544,31 +552,31 @@ function Couchbase(conn, infos) {
                             conn.query(query, queryParams, onQueryCallback);
                         }
                     }
-                    
+
                     var _proto = {
-                        onComplete : function(cb) {                            
-                            //console.debug('onComplete trigger: ', trigger, self._isRegisteredFromProto);                            
+                        onComplete : function(cb) {
+                            //console.debug('onComplete trigger: ', trigger, self._isRegisteredFromProto);
                             register(trigger, queryParams, onQueryCallback, cb)
                         }
                     };
-                                        
-                    
-                    if ( sdkVersion > 2 ) { 
+
+
+                    if ( sdkVersion > 2 ) {
                         var qErr = false, qData = null, qMeta = null;
-                                                
-                        if ( _mainCallback == null ) {  
+
+                        if ( _mainCallback == null ) {
                             return {
                                 onComplete : function(cb) {
                                     //console.debug('registered trigger: ', trigger);
                                     self.once(trigger, function onComplete(err, data, meta){
-                                        //console.debug('received ', trigger);                                        
+                                        //console.debug('received ', trigger);
                                         try {
                                             cb(err, data, meta)
-                                        } catch (onCompleteError) {                                        
+                                        } catch (onCompleteError) {
                                             cb(onCompleteError)
-                                        }                                    
+                                        }
                                     });
-                                    
+
                                     conn._cluster.query(query, queryOptions)
                                         .catch( function onError(err) {
                                             qErr = err;
@@ -577,13 +585,13 @@ function Couchbase(conn, infos) {
                                             qData = data;
                                             qMeta = meta;
                                         });
-                                                            
+
                                     try {
                                         if ( qErr ) {
                                             onQueryCallback(qErr);
                                         } else {
                                             onQueryCallback(false, qData, qMeta);
-                                        } 
+                                        }
                                     } catch (_err) {
                                         console.error(_err.stack);
                                     }
@@ -598,33 +606,33 @@ function Couchbase(conn, infos) {
                                     qData = data;
                                     qMeta = meta;
                                 });
-                                                    
+
                             try {
                                 if ( qErr ) {
                                     onQueryCallback(qErr);
                                 } else {
                                     onQueryCallback(false, qData, qMeta);
-                                } 
+                                }
                             } catch (_err) {
                                 console.error(_err.stack);
                             }
-                        }   
-                                                   
-                        
-                    } else {                             
-                        
-                        if ( _mainCallback == null ) {      
+                        }
+
+
+                    } else {
+
+                        if ( _mainCallback == null ) {
                             setTimeout((trigger, queryParams, onQueryCallback) => {
-                                if (!self._isRegisteredFromProto) {                 
-                                    // needed when used as a synchrone method                    
+                                if (!self._isRegisteredFromProto) {
+                                    // needed when used as a synchrone method
                                     register(trigger, queryParams, onQueryCallback);
                                 }
-                            }, 0, trigger, queryParams, onQueryCallback);             
-                            return _proto 
-                           
+                            }, 0, trigger, queryParams, onQueryCallback);
+                            return _proto
+
                         } else {
                             register(trigger, queryParams, onQueryCallback, _mainCallback)
-                        }                        
+                        }
                     }
                 }
 
@@ -637,27 +645,27 @@ function Couchbase(conn, infos) {
 
     /**
      * bulkInsert
-     * 
+     *
      * Supported options
      *  - adhoc : [ true | false ]
      *  // scan consistency level - default is 1
      *  - consistency : [ 1 | 2 | 3 ] where 1 = NOT_BOUNDED, 2 = REQUEST_PLUS, 3 = STATEMENT_PLUS
-     * 
+     *
      * @param {array} rec collection
      * @param {object} [options] e.g: { consistency: 3 }
-     * 
+     *
      */
     var bulkInsert = function(rec, options) {
 
-        try {    
-            var conn        = this.getConnection();                    
+        try {
+            var conn        = this.getConnection();
             var sdkVersion = conn.sdk.version || 2;
             // by default
-            var queryOptions = { 
+            var queryOptions = {
                 adhoc: true,
                 consistency: 3
             };
-            
+
             if ( typeof(options) != 'undefined' ) {
                 queryOptions = merge(options, queryOptions)
             }
@@ -685,11 +693,11 @@ function Couchbase(conn, infos) {
             queryString = queryString.substr(0, queryString.length-1);
             queryString += '\nRETURNING '+ this.database +'.*;';
 
-            
+
             var query = null;
             if ( sdkVersion > 2) { // starting SDK v3
                 var scope = conn.scope(conn._name);
-                var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();                
+                var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();
                 query = merge(queryString, queryOptions);
             } else {
                 // prepared statement
@@ -703,13 +711,13 @@ function Couchbase(conn, infos) {
                     query[ qOpt ]( queryOptions[ qOpt ] )
                 }
             }
-                
+
 
             // trick to set event on the fly
             var trigger = 'N1QL:'+ this.name.toLowerCase()+ '#'+ name;
             // trick to set event on the fly
             var statement = (sdkVersion <= 2) ? query.options.statement : query;
-            
+
             if (envIsDev) {
                 console.debug('[ ' + trigger +' ] '+statement);
             }
@@ -752,6 +760,6 @@ function Couchbase(conn, infos) {
     }
 
     return init(conn, infos)
-};
+}
 
-module.exports = Couchbase
+module.exports = Couchbase;

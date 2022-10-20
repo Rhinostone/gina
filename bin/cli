@@ -157,7 +157,10 @@ async function onExec() {
             console.debug('Writting: '+ mqPortFile);
             fs.writeFileSync( mqPortFile, ''+mqPort );
             process.on('exit', function() {
-                fs.unlinkSync(mqPortFile);
+                if ( new _(mqPortFile).existsSync() ) {
+                    fs.unlinkSync(mqPortFile);
+                }
+
                 mqListener.close();
                 mqListener.unref();
             })

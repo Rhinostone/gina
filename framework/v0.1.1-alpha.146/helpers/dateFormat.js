@@ -65,6 +65,7 @@ function DateFormatHelper() {
         shortIsoTime:        "HH:MM",
         longIsoTime:        "HH:MM:ss TT",
         isoDateTime:    "yyyy-mm-dd'T'HH:MM:ss",
+        longIsoDateTime:    "yyyy-mm-dd'T'HH:MM:ss.L",
         isoUtcDateTime: "UTC:yyyy-mm-dd'T'HH:MM:ss'Z'"
     };
 
@@ -209,7 +210,8 @@ function DateFormatHelper() {
                 s:    s,
                 ss:   pad(s),
                 l:    pad(L, 3),
-                L:    pad(L > 99 ? Math.round(L / 10) : L),
+                // L:    pad(L > 99 ? Math.round(L / 10) : L),
+                L:    pad(L),
                 t:    H < 12 ? "a"  : "p",
                 tt:   H < 12 ? "am" : "pm",
                 T:    H < 12 ? "A"  : "P",
