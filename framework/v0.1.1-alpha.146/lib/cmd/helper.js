@@ -560,20 +560,20 @@ function CmdHelper(cmd, client, debug) {
             cmd.configured = true;
 
             // detect node_modules vs platform
-            if (
-                cmd.projectName != null
-                && /^true$/i.test(GINA_GLOBAL_MODE)
-                && !/\:(link|link-node-modules)$/.test(cmd.task)
-                && !/(project\:add)$/.test(cmd.task)
-            ) {
-                console.debug('Running: gina link-node-modules @'+cmd.projectName);
-                err = execSync('gina link-node-modules @'+cmd.projectName); // +' --inspect-gina'
-                console.debug(err.toString());
-                if (err instanceof Error) {
-                    console.error(err.message || err.stack);
-                    return exit(err.message || err.stack);
-                }
-            }
+            // if (
+            //     cmd.projectName != null
+            //     && /^true$/i.test(GINA_GLOBAL_MODE)
+            //     && !/\:(link|link-node-modules)$/.test(cmd.task)
+            //     && !/(project\:add)$/.test(cmd.task)
+            // ) {
+            //     console.debug('Running: gina link-node-modules @'+cmd.projectName);
+            //     err = execSync('gina link-node-modules @'+cmd.projectName); // +' --inspect-gina'
+            //     console.debug(err.toString());
+            //     if (err instanceof Error) {
+            //         console.error(err.message || err.stack);
+            //         return exit(err.message || err.stack);
+            //     }
+            // }
 
             // linking gina
             if (

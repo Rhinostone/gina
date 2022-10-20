@@ -65,7 +65,7 @@ Then you need to optimize with closure compiler
 - `ADVANCED_OPTIMIZATIONS` - The best if we can make it work :'(
 
 ```tty
-java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level WHITESPACE_ONLY --jscomp_warning=es5Strict --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
+java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level SIMPLE_OPTIMIZATIONS --jscomp_warning=es5Strict --js ./dist/gina.js --create_source_map ./dist/gina.min.js.map --js_output_file ./dist/gina.min.js
 ```
 
 **Attention:** look into `dist/gina.min.js.map` to modify `./dist/gina.js` to `./gina.js`

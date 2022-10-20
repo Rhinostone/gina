@@ -80,6 +80,21 @@ function Status(opt, cmd) {
                 continue;
             }
             let pid = fs.readFileSync(_(GINA_RUNDIR +'/'+ file)).toString().trim() || null;
+            if (!pid) {
+                continue;
+            }
+
+            if ( !isWin32() ) {
+                try {
+                    let found = execSync("ps -a "+ pid).toString().replace(/\n$/, '').split(/\n/g);
+                } catch (err) {
+                    console.debug('file to remove: '+ _(GINA_RUNDIR +'/'+ file));
+                    fs.unlinkSync(_(GINA_RUNDIR +'/'+ file));
+                    continue;
+                }
+            }
+
+
             runningVersions.push({
                 title   : file.replace(/\.pid$/, ''),
                 pid     : ~~pid

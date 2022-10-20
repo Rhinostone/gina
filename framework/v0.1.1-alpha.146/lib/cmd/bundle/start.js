@@ -219,9 +219,11 @@ function Start(opt, cmd) {
                     }
 
                     // Expecting 2 flags (checkCaseCount) to free the child stdout !!
+                    // console.debug('EO case count '+ checkCaseCount);
                     if ( checkCaseRe.test(data) ) {
                         --checkCaseCount;
                     }
+                    // console.debug('BO case count '+ checkCaseCount);
 
                     // cache bundle state info given by the server while starting
                     if ( !debuggerOn && new RegExp('Debugger listening on','gmi').test(data)) {
