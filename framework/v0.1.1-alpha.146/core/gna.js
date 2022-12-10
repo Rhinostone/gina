@@ -797,7 +797,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                             //On user conf complete.
                             e.on('complete', function(instance){
 
-                                server.on('started', function (conf) {
+                                server.on('started', async function (conf) {
 
                                     // setting default global middlewares
                                     if ( typeof(instance.use) == 'function' ) {
@@ -888,8 +888,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         );
                                         // placing end:flag to allow the CLI to retrieve bundl info from here
                                         console.notice('[ FRAMEWORK ] Bundle started !');
-                                    }, 1000);
-
+                                    }, 500); // 1000 - Wait to make sure that the bundle is mounted on the file system
                                 });
 
                                 // placing strat:flag to allow the CLI to retrieve bundl info from here

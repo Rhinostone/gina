@@ -10,13 +10,13 @@
 
 //Imports.
 var fs                = require('fs')
-    
+
     , lib               = require('./../lib')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
     , routing           = lib.routing
-    
+
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -33,7 +33,7 @@ var fs                = require('fs')
 function Router(env) {
 
     this.name = 'Router';
-    
+
     var self = this
         , local = {}
     ;
@@ -43,19 +43,19 @@ function Router(env) {
      * @constructor
      * */
     var init = function() {
-        
+
         if ( typeof(Router.initialized) != "undefined" ) {
             return self.getInstance()
         } else {
             self.initialized = true;
-            self.hasCompletedControlllerSetup = false; 
+            self.hasCompletedControlllerSetup = false;
         }
     }
-    
+
     var isSetupRequired = function(control) {
-        
+
         if (local.isXMLRequest) return false;
-        
+
         return ([
             'redirect',
             'query',
@@ -64,7 +64,7 @@ function Router(env) {
             'downloadFromURL'
         ].indexOf(control) < 0 ) ? true : false;
     }
-    
+
     this.getInstance = function() {
         return self
     }
@@ -74,28 +74,28 @@ function Router(env) {
      *  - {core}/controller/controller.js
      */
     var refreshCoreDependencies= function() {
-        
+
         var corePath    = getPath('gina').core;
-        
+
         // Super controller
         delete require.cache[require.resolve(_(corePath +'/controller/controller.js', true))];
         delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
         require.cache[_(corePath +'/controller/controller.js', true)] = require( _(corePath +'/controller/controller.js', true) );
         require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
-        
+
         SuperController = require.cache[_(corePath +'/controller/index.js', true)];
     }
-    
+
     this.setServerInstance = function(serverInstance) {
         serverInstance._http2streamEventInitalized = false;
         self.serverInstance = serverInstance;
     }
-    
+
     this.getServerInstance = function () {
         return self.serverInstance;
     }
 
-   
+
     /**
      * Route on the fly
      *
@@ -106,7 +106,20 @@ function Router(env) {
      * @callback next
      * */
     this.route = function(request, response, next, params) {
-        
+
+        /**
+        * BO e
+        * ExpressJS modules + HTTP2 fix
+        * Hack required until `express-<plugin>` get support for http2 (express-session)
+        */
+        if (!response._implicitHeader) {
+            response._implicitHeader = function(){ return; }; // we need to force it
+        }
+        /**
+        * EO Passport JS HTTP2 fix
+        */
+
+
         /**
         * BO Passport JS HTTP2 fix : taken from passport/request.js
         */
@@ -123,7 +136,7 @@ function Router(env) {
                 return isAuthenticated;
             };
         }
-        
+
         if ( typeof(request._passport) != 'undefined' && (typeof(request.logIn) == 'undefined' || typeof(request.login) == 'undefined') ) {
             request.login =
             request.logIn = function(user, options, done) {
@@ -132,23 +145,23 @@ function Router(env) {
                     options = {};
                 }
                 options = options || {};
-                
+
                 var property = 'user';
                 if (this._passport && this._passport.instance) {
                     property = this._passport.instance._userProperty || 'user';
                 }
                 var session = (options.session === undefined) ? true : options.session;
-                
+
                 this[property] = user;
                 if (session) {
                     if (!this._passport) { throw new Error('passport.initialize() middleware not in use'); }
                     if (typeof done != 'function') { throw new Error('req#login requires a callback function'); }
-                    
+
                     var self = this;
                     this._passport.instance._sm.logIn(this, user, function(err) {
-                    if (err) { 
+                    if (err) {
                         self[property] = null;
-                        return done(err); 
+                        return done(err);
                     }
                     done();
                     });
@@ -157,7 +170,7 @@ function Router(env) {
                 }
             };
         }
-        
+
         if ( typeof(request._passport) != 'undefined' && (typeof(request.logOut) == 'undefined' ||  typeof(request.logout) == 'undefined') ) {
             request.logout =
             request.logOut = function() {
@@ -165,14 +178,14 @@ function Router(env) {
                 if (this._passport && this._passport.instance) {
                     property = this._passport.instance._userProperty || 'user';
                 }
-                
+
                 this[property] = null;
                 if (this._passport) {
                     this._passport.instance._sm.logOut(this);
                 }
             };
         }
-        
+
         // for redirect with `hidden inheritedData`
         if ( /get/i.test(request.method) && typeof(request.session) != 'undefined' ) {
             var userSession = request.session.user || request.session;
@@ -181,16 +194,16 @@ function Router(env) {
                     request.get = {};
                 }
                 request.get = merge(request.get, userSession.inheritedData);
-                
+
                 // if not persisted ... means that if you refresh the current page, `inheritedData` will be lost
                 delete userSession.inheritedData;
             }
         }
-        
+
         /**
         * EO Passport JS HTTP2 fix
         */
-       
+
        var serverInstance   = self.getServerInstance();
        var config               = null
             , conf              = null
@@ -214,37 +227,37 @@ function Router(env) {
             }
             bundle      = local.bundle = params.bundle;
             env         = config.env;
-            conf        = config[bundle][env];            
-        } catch (configErr) {            
+            conf        = config[bundle][env];
+        } catch (configErr) {
             serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
             return;
-        }  
-        
+        }
+
         local.cacheless     = cacheless;
         local.request       = request;
         local.next          = next;
         local.conf          = conf;
-        local.isStandalone  = conf.isStandalone;     
-        
+        local.isStandalone  = conf.isStandalone;
+
         if (cacheless) {
             refreshCoreDependencies();
         }
-                       
+
 
         var action          = request.control = params.param.control;
         // more can be added ... but it will always start by `on`Something.
         var reservedActions = [
             'onReady',
             'setup'
-        ];        
-        
-        
+        ];
+
+
         if (reservedActions.indexOf(action) > -1) {
             serverInstance.throwError(response, 500, '[ this.'+action+' ] is reserved for the framework');
             return;
         }
-            
-        
+
+
         // Routing object
         var routerObj = {
             response                    : response,
@@ -256,21 +269,21 @@ function Router(env) {
         };
 
         setContext('router', routerObj);
-        
+
         var middleware      = params.middleware || [];
         var actionFile      = params.param.file || null; // matches rule name
         var namespace       = params.namespace;
         var routeHasViews   = routerObj.hasViews;
         var isUsingTemplate = conf.template;
-        var hasSetup        = false;        
-        
-        
+        var hasSetup        = false;
+
+
         local.isXMLRequest      = params.isXMLRequest;
         local.isWithCredentials = params.isWithCredentials;
         local.routeHasViews     = routeHasViews;
         local.isUsingTemplate   = isUsingTemplate;
-        
-            
+
+
         //Getting superCleasses & extending it with super Models.
         var mainControllerFile          = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js'
             , controllerFile            = null
@@ -286,9 +299,9 @@ function Router(env) {
         var filename = '';
         if (hasControllerNamespace) {
             filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
-            if ( !fs.existsSync(filename) ) {                
+            if ( !fs.existsSync(filename) ) {
                 hasControllerNamespace = false;
-                console.warn('Namespace `'+ namespace +'` found, but no related controller file found at `'+filename+'` to load: just ignore this message if this is ok with you');                
+                console.warn('Namespace `'+ namespace +'` found, but no related controller file found at `'+filename+'` to load: just ignore this message if this is ok with you');
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
                 console.info('Switching to default controller: '+ mainControllerFile);
             }
@@ -296,7 +309,7 @@ function Router(env) {
             filename = mainControllerFile;
         }
         controllerFile = filename;
-        
+
         /**
          * BO routing configuration
          * Attention: this portion of code is replicated in `form-validator.js`
@@ -307,7 +320,7 @@ function Router(env) {
             params.rule = params.name;
         }
         var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
-             
+
         var options = {
             // view namespace first
             namespace       : (/controller\.js$/i.test(controllerFile)) ? null : params.param.namespace || namespace,
@@ -325,7 +338,7 @@ function Router(env) {
             path: params.param.path || null, // user custom path : namespace should be ignored or left blank
             assets: {}
         };
-               
+
         if (routeHasViews) {
             options.template = (routeHasViews) ? conf.content.templates[templateName] || conf.content.templates._common : undefined;
         }
@@ -340,7 +353,7 @@ function Router(env) {
             && typeof(options.template.ginaLoader) == 'undefined'
         ) {
             options.template.ginaLoader = options.conf.content.templates._common.ginaLoader;
-        }            
+        }
         options.conf.content.routing[options.rule].param = params.param;
         delete options.middleware;
         delete options.param;
@@ -375,8 +388,8 @@ function Router(env) {
             serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
             return;
         }
-        
-        
+
+
         // about to contact Controller ...
         try {
             if (hasControllerNamespace) {
@@ -385,13 +398,13 @@ function Router(env) {
             } else {
                 Controller      = inherits(Controller, SuperController);
             }
-            
-            
-            var controller  = new Controller(options);                        
-            controller.name = options.control;            
+
+
+            var controller  = new Controller(options);
+            controller.name = options.control;
             controller.serverInstance = serverInstance;
             controller.setOptions(request, response, next, options);
-            
+
             /**
              * requireController
              * Allowing another controller (public methods) to be required inside the current controller
@@ -400,7 +413,7 @@ function Router(env) {
              * @param {object} [options] - Controller options
              *
              * @returns {object} controllerInstance
-             * */            
+             * */
             var requireController = function (namespace, options) {
 
                 var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
@@ -431,46 +444,46 @@ function Router(env) {
                     //}
 
                     var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
-                                        
-                    
+
+
                     var RequiredController  = require(filename);
 
                     RequiredController      = inherits(RequiredController, SuperController);
-                    
+
                     var controller = null;
                     if ( typeof(options) != 'undefined' ) {
 
                         controller = new RequiredController( options );
                         controller.name = namespace;
-                        
+
                         controller.setOptions(request, response, next, options);
 
                     } else {
                         controller = new RequiredController();
                     }
-                    
-                    controller.serverInstance = serverInstance;       
-                    
+
+                    controller.serverInstance = serverInstance;
+
                     controller.requireController = requireController;
-                                        
+
                     return controller;
                 } catch (err) {
                     return serverInstance.throwError(response, 500, err );
                 }
             };
-            
+
             controller.requireController = requireController;
 
             if (hasSetup && isSetupRequired(params.param.control) || hasSetup && !self.hasCompletedControlllerSetup ) { // adding setup
-                
+
                 controller.setup = function(request, response, next) {
                     if (!this._setupDone) {
                         this._setupDone = true;
                         return function (request, response, next) { // getting rid of the controller context
                             var Setup = require(_(setupFile, true));
 
-                            
-                            // Inheriting SuperController functions & objects                            
+
+                            // Inheriting SuperController functions & objects
                             // Exporting config & common methods
                             Setup.engine                = controller.engine;
                             // This is working, but too heavy
@@ -495,15 +508,15 @@ function Router(env) {
                             Setup.isWithCredentials     = controller.isWithCredentials,
                             Setup.isCacheless           = controller.isCacheless;
                             Setup.requireController     = controller.requireController;
-                            
+
 
                             Setup.apply(Setup, arguments);
 
                             return Setup;
                         }(request, response, next)
                     }
-                }    
-                
+                }
+
                 if ( !self.hasCompletedControlllerSetup )
                     self.hasCompletedControlllerSetup = true;
             } else {
@@ -553,7 +566,7 @@ function Router(env) {
                         serverInstance.throwError(response, 500, err.stack);
                     }
                     return;
-                }                
+                }
             }
 
         } catch (err) {
@@ -590,13 +603,13 @@ function Router(env) {
                     serverInstance.throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                     return;
                 }
-                
+
                 if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
 
                 var MiddlewareClass = function(req, res, next) {
 
                     return function () { // getting rid of the middleware context
-                        
+
                         var Middleware = require(_(filename, true));
                         // TODO - loop on a defined SuperController property like SuperController._allowedForExport
 

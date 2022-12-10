@@ -1,6 +1,7 @@
 //"use strict";
 // Imports.
 var fs              = require('fs');
+const { version } = require('os');
 //var util            = require('util');
 //var promisify       = require('util').promisify;
 // Use couchbase module from the user's project dependencies if not found
@@ -275,8 +276,8 @@ function Couchbase(conn, infos) {
                                 }
                             }
 
-                            queryStatement = qStr;
-                            if ( sdkVersion > 2 ) { // starting from SDK v3
+
+                            if ( sdkVersion == 3 ) { // SDK v3 only
                                 queryParams = {};
                                 index = 0; i = 0; len = inlineParams.length;
                                 var matched = null;
@@ -285,7 +286,8 @@ function Couchbase(conn, infos) {
                                     matched = params.indexOf( inl[i] );
                                     if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {
                                         // e.g.: queryParams[ $3 ] = 1
-                                        queryParams[ inl[i] ] = p[matched]
+                                        queryParams[ inl[i] ] = p[matched];
+                                        // qStr = qStr.replace( new RegExp('\\'+ inl[i], 'g'), '"' + p[matched] + '"')
                                     }
                                 }
                             } else {
@@ -300,6 +302,8 @@ function Couchbase(conn, infos) {
                                     }
                                 }
                             }
+
+                            queryStatement = qStr;
 
                         }
 
@@ -400,6 +404,39 @@ function Couchbase(conn, infos) {
                         }
 
                     }
+
+                    // JUNE 2021 patch
+                    // Adding support for FTS since it is not implemented in sdkVersion 2:
+                    // variables not replaced by value
+                    // looking for FTS (Full Text Search)
+                    var ftsClause = ( sdkVersion > 2 ) ? query.match(/(search\(|search\s+\().*\)/i) : query.options.statement.match(/(search\(|search\s+\().*\)/i);
+                    if (ftsClause && Array.isArray(queryParams) ) {
+                        var originalFtsClauses = JSON.clone(ftsClause), _queryParams = null;
+
+                        if ( sdkVersion > 2 && Array.isArray(queryOptions.parameters) ) {
+                            _queryParams = queryOptions.parameters;
+                        } else if (sdkVersion <=2 && Array.isArray(queryParams) ) {
+                            _queryParams = queryParams;
+                        }
+
+                        for (let s = 0, sLen = ftsClause.length; s < sLen; s++) {
+                            if ( !/\)$/.test(ftsClause[s]) ) continue;
+                            for (let p = 0, pLen = _queryParams.length; p < pLen; p++) {
+                                if ( typeof(_queryParams[p]) == 'function' ) continue;
+                                let searchValue = ( /^(true|false)$/i.test(_queryParams[p]) ) ? _queryParams[p] : '"'+_queryParams[p]+'"';
+                                ftsClause[s] = ftsClause[s].replace( new RegExp('\\$'+ (p+1),'g'), searchValue)
+                            }
+
+                            if ( sdkVersion > 2 ) {
+                                query = query.replace(originalFtsClauses[s], ftsClause[s]);
+                            } else {
+                                query.options.statement = query.options.statement.replace(originalFtsClauses[s], ftsClause[s]);
+                            }
+                        }
+
+                        originalFtsClauses = null;
+                    }
+                    ftsClause = null;
 
 
 
@@ -505,26 +542,28 @@ function Couchbase(conn, infos) {
                     }; // EO onQueryCallback
 
                     self._isRegisteredFromProto = false;
+                    // `register()` is only used for v2
                     var register = function (trigger, queryParams, onQueryCallback, cb) {
-                        // JUNE 2021 patch
-                        // Adding support for FTS since it is not implemented in sdkVersion 2:
-                        // variables not replaced by value
-                        // looking for FTS (Full Text Search)
-                        var ftsClause = query.options.statement.match(/(search\(|search\s+\().*\)/i);
-                        if (ftsClause && Array.isArray(queryParams) ) {
-                            var originalFtsClauses = JSON.clone(ftsClause);
-                            for (let s = 0, sLen = ftsClause.length; s < sLen; s++) {
-                                if ( !/\)$/.test(ftsClause[s]) ) continue;
-                                for (let p = 0, pLen = queryParams.length; p < pLen; p++) {
-                                    if ( typeof(queryParams[p]) == 'function' ) continue;
-                                    let searchValue = ( /^(true|false)$/i.test(queryParams[p]) ) ? queryParams[p] : '"'+queryParams[p]+'"';
-                                    ftsClause[s] = ftsClause[s].replace( new RegExp('\\$'+ (p+1),'g'), searchValue)
-                                }
-                                query.options.statement = query.options.statement.replace(originalFtsClauses[s], ftsClause[s]);
-                            }
-                            originalFtsClauses = null;
-                        }
-                        ftsClause = null;
+                        // // JUNE 2021 patch
+                        // // Adding support for FTS since it is not implemented in sdkVersion 2:
+                        // // variables not replaced by value
+                        // // looking for FTS (Full Text Search)
+                        // var ftsClause = query.options.statement.match(/(search\(|search\s+\().*\)/i);
+                        // if (ftsClause && Array.isArray(queryParams) ) {
+                        //     var originalFtsClauses = JSON.clone(ftsClause);
+                        //     for (let s = 0, sLen = ftsClause.length; s < sLen; s++) {
+                        //         if ( !/\)$/.test(ftsClause[s]) ) continue;
+                        //         for (let p = 0, pLen = queryParams.length; p < pLen; p++) {
+                        //             if ( typeof(queryParams[p]) == 'function' ) continue;
+                        //             let searchValue = ( /^(true|false)$/i.test(queryParams[p]) ) ? queryParams[p] : '"'+queryParams[p]+'"';
+                        //             ftsClause[s] = ftsClause[s].replace( new RegExp('\\$'+ (p+1),'g'), searchValue)
+                        //         }
+                        //         query.options.statement = query.options.statement.replace(originalFtsClauses[s], ftsClause[s]);
+                        //     }
+                        //     originalFtsClauses = null;
+                        // }
+                        // ftsClause = null;
+
 
                         if ( typeof(self.once) != 'undefined' && typeof(cb) != 'undefined' ) {
                             self._isRegisteredFromProto = true;
@@ -540,7 +579,30 @@ function Couchbase(conn, infos) {
                             // if (/triggerToDebug/.test(trigger)) {
                             //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
                             // }
-                            conn.query(query, queryParams, onQueryCallback);
+
+                            if (sdkVersion > 2) {
+                                conn._cluster.query(query, queryParams)
+                                    .catch( function onError(err) {
+                                        try {
+                                            var error = new Error(err.cause.first_error_message);
+                                            error.stack = trigger +'\n'+ err.cause.http_body;
+                                            onQueryCallback(error);
+                                        } catch (_err) {
+                                            console.error(_err.stack);
+                                        }
+                                    })
+                                    .then( function onResult(data, meta) {
+                                        try {
+                                            onQueryCallback(false, data.rows, data.meta);
+                                        } catch (_err) {
+                                            console.error(_err.stack);
+                                        }
+                                    });
+                            } else {
+                                conn.query(query, queryParams, onQueryCallback);
+                            }
+
+
                         } // else  promise case
 
 
@@ -549,76 +611,56 @@ function Couchbase(conn, infos) {
                             // if (/triggerToDebug/.test(trigger)) {
                             //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
                             // }
-                            conn.query(query, queryParams, onQueryCallback);
+
+                            if (sdkVersion > 2) {
+                                conn._cluster.query(query, queryParams)
+                                    .catch( function onError(err) {
+                                        try {
+                                            var error = new Error(err.cause.first_error_message);
+                                            error.stack = trigger +'\n'+ err.cause.http_body;
+                                            onQueryCallback(error);
+                                        } catch (_err) {
+                                            console.error(_err.stack);
+                                        }
+                                    })
+                                    .then( function onResult(data) {
+                                        try {
+                                            onQueryCallback(false, data.rows, data.meta);
+                                        } catch (_err) {
+                                            console.error(_err.stack);
+                                        }
+                                    });
+                            } else {
+                                conn.query(query, queryParams, onQueryCallback);
+                            }
                         }
-                    }
+                    } //EO register
 
                     var _proto = {
                         onComplete : function(cb) {
-                            //console.debug('onComplete trigger: ', trigger, self._isRegisteredFromProto);
-                            register(trigger, queryParams, onQueryCallback, cb)
+                            // console.warn('onComplete trigger: ', trigger, self._isRegisteredFromProto);
+                            if ( sdkVersion > 2 ) {
+                                register(trigger, queryOptions, onQueryCallback, cb)
+                            } else {
+                                register(trigger, queryParams, onQueryCallback, cb)
+                            }
                         }
                     };
 
 
                     if ( sdkVersion > 2 ) {
-                        var qErr = false, qData = null, qMeta = null;
-
                         if ( _mainCallback == null ) {
-                            return {
-                                onComplete : function(cb) {
-                                    //console.debug('registered trigger: ', trigger);
-                                    self.once(trigger, function onComplete(err, data, meta){
-                                        //console.debug('received ', trigger);
-                                        try {
-                                            cb(err, data, meta)
-                                        } catch (onCompleteError) {
-                                            cb(onCompleteError)
-                                        }
-                                    });
-
-                                    conn._cluster.query(query, queryOptions)
-                                        .catch( function onError(err) {
-                                            qErr = err;
-                                        })
-                                        .then( function onResult(data, meta) {
-                                            qData = data;
-                                            qMeta = meta;
-                                        });
-
-                                    try {
-                                        if ( qErr ) {
-                                            onQueryCallback(qErr);
-                                        } else {
-                                            onQueryCallback(false, qData, qMeta);
-                                        }
-                                    } catch (_err) {
-                                        console.error(_err.stack);
-                                    }
+                            setTimeout((trigger, queryOptions, onQueryCallback) => {
+                                if (!self._isRegisteredFromProto) {
+                                    // needed when used as a synchrone method
+                                    register(trigger, queryOptions, onQueryCallback);
                                 }
-                            }
+                            }, 0, trigger, queryOptions, onQueryCallback);
+                            return _proto
+
                         } else {
-                            conn._cluster.query(query, queryOptions)
-                                .catch( function onError(err) {
-                                    qErr = err;
-                                })
-                                .then( function onResult(data, meta) {
-                                    qData = data;
-                                    qMeta = meta;
-                                });
-
-                            try {
-                                if ( qErr ) {
-                                    onQueryCallback(qErr);
-                                } else {
-                                    onQueryCallback(false, qData, qMeta);
-                                }
-                            } catch (_err) {
-                                console.error(_err.stack);
-                            }
+                            register(trigger, queryOptions, onQueryCallback, _mainCallback)
                         }
-
-
                     } else {
 
                         if ( _mainCallback == null ) {
@@ -659,7 +701,13 @@ function Couchbase(conn, infos) {
 
         try {
             var conn        = this.getConnection();
-            var sdkVersion = conn.sdk.version || 2;
+            // retrieve & return the collection
+            // if ( typeof(conn._scope) == 'undefined' && typeof(conn.scope) != 'undefined' ) {
+            //     var newConn = conn.scope(scope).collection(currentCollection);
+            //     newConn.sdk = conn.sdk;
+            //     conn = newConn;
+            // }
+            var sdkVersion  = conn.sdk.version || 2;
             // by default
             var queryOptions = {
                 adhoc: true,
@@ -696,9 +744,8 @@ function Couchbase(conn, infos) {
 
             var query = null;
             if ( sdkVersion > 2) { // starting SDK v3
-                var scope = conn.scope(conn._name);
-                var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();
-                query = merge(queryString, queryOptions);
+                query = queryString;
+                // queryOptions.parameters = queryParams;
             } else {
                 // prepared statement
                 query = N1qlQuery.fromString(queryString);
@@ -723,25 +770,65 @@ function Couchbase(conn, infos) {
             }
 
             var self = this;
-            conn.query(query, rec, function(err, data, meta) {
-                if (!data || data.length == 0) {
-                    data = null
-                }
 
-                if (!err && meta && typeof(meta.errors) != 'undefined' ) {
-                    err = new Error('`GenericN1QLError::bulkInsert`\n'+meta.errors[0].msg);
-                    err.status = 403;
-                } else if (err) {
-                    err.status  = 500;
-                    err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
-                    err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
-                }
-                if (envIsDev) {
-                    console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(meta) +'\n data :\n'+ JSON.stringify(data) );
-                }
+            if (sdkVersion > 2) {
+                var err = false;
+                conn._scope._bucket._cluster.query(query, queryOptions)
+                    .catch( function onError(err) {
+                        try {
+                            var error = new Error(err.cause.first_error_message);
+                            error.stack = trigger +'\n'+ err.cause.http_body;
+                            self.emit(trigger, error);
+                        } catch (_err) {
+                            console.error(_err.stack);
+                        }
+                    })
+                    .then( function onResult(data) {
+                        try {
+                            var _data = data.rows, _meta = data.meta;
+                            if (!_data || _data.length == 0) {
+                                _data = null
+                            }
 
-                self.emit(trigger, err, data, meta);
-            });
+                            if (!err && _meta && typeof(_meta.errors) != 'undefined' ) {
+                                err = new Error('`GenericN1QLError::bulkInsert`\n'+_meta.errors[0].msg);
+                                err.status = 403;
+                            } else if (err) {
+                                err.status  = 500;
+                                err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
+                                err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
+                            }
+                            if (envIsDev) {
+                                console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(_meta) +'\n data :\n'+ JSON.stringify(_data) );
+                            }
+
+                            self.emit(trigger, err, data.rows, data.meta);
+                        } catch (_err) {
+                            console.error(_err.stack);
+                        }
+                    });
+            } else {
+                conn.query(query, rec, function(err, data, meta) {
+                    if (!data || data.length == 0) {
+                        data = null
+                    }
+
+                    if (!err && meta && typeof(meta.errors) != 'undefined' ) {
+                        err = new Error('`GenericN1QLError::bulkInsert`\n'+meta.errors[0].msg);
+                        err.status = 403;
+                    } else if (err) {
+                        err.status  = 500;
+                        err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
+                        err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
+                    }
+                    if (envIsDev) {
+                        console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(meta) +'\n data :\n'+ JSON.stringify(data) );
+                    }
+
+                    self.emit(trigger, err, data, meta);
+                });
+            }
+
 
             return {
                 onComplete : function(cb) {

@@ -270,6 +270,8 @@ function SuperController(options) {
                 "middleware"    : ctx.middleware
             };
 
+            set('page.environment.allocated memory', (require('v8').getHeapStatistics().heap_size_limit / (1024 * 1024 * 1024)).toFixed(2) +' GB');
+
             set('page.environment.gina', version.number);
             set('page.environment.gina pid', GINA_PID);
             set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
@@ -1054,6 +1056,7 @@ function SuperController(options) {
                     if ( local.options.isRenderingCustomError ) {
                         local.options.isRenderingCustomError = false;
                     }
+
                     local.res.end(layout);
                 }
 
@@ -1814,10 +1817,13 @@ function SuperController(options) {
                 var ext = 'html';
                 res.setHeader('content-type', local.options.conf.server.coreConfiguration.mime[ext]);
 
+                var resHeaderACAM = res.getHeader('access-control-allow-methods');
                 if (
-                    typeof(local.res._headers) != 'undefined'
-                    && typeof(local.res._headers['access-control-allow-methods']) != 'undefined'
-                    && local.res._headers['access-control-allow-methods'] != req.method
+                    // typeof(local.res._headers) != 'undefined'
+                    // && typeof(local.res._headers['access-control-allow-methods']) != 'undefined'
+                    // && local.res._headers['access-control-allow-methods'] != req.method
+                    typeof(resHeaderACAM) != 'undefined'
+                    && resHeaderACAM != req.method
                     ||
                     !new RegExp(req.method, 'i').test( res.getHeader('access-control-allow-methods') )
                 ) {
@@ -1841,11 +1847,13 @@ function SuperController(options) {
                 }
                 // in case of query from another bundle waiting for a response
                 var redirectObject = JSON.stringify({ status: code, headers: headInfos });
-                res.end(redirectObject);
+
                 try {
+                    res.end(redirectObject);
                     local.res.headersSent = true;// done for the render() method
                 } catch(err){
                     // ignoring the warning
+                    // console.warn(err.stack);
                 }
 
                 console.info(local.req.method.toUpperCase() +' ['+code+'] '+ path);
@@ -3775,7 +3783,7 @@ function SuperController(options) {
             } else {
 
 
-                console.error(req.method +' ['+ errorObject.status +'] '+ req.url);
+                console.error(req.method +' ['+ errorObject.status +'] '+ req.url + '\n'+ (errorObject.stack||errorObject.message));
 
 
                  // intercept none HTML mime types

@@ -21,7 +21,7 @@
  * $ gina stop
  *
  * Start a bundle
- * $ gina bundle:start demo @myproject
+ * $ gina bundle:start demo @myproject --max-old-space-size=2048
  *
  * For zsh, if we want to hide all outputs
  * $ gina start  >&/dev/null &!

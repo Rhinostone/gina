@@ -274,19 +274,18 @@ module.exports = function(session, bundle){
 
             console.debug('SETEX "%s" ttl:%s %s', sid, ttl, sess);
             var err = false, result = null;
-            this.client
-                .upsert(sid, sess, {expiry:ttl})
-                    .then(function onResult(_result){
-                        result = _result;
-                        //fn && fn.apply(this, arguments);
-                    })
-                    .catch(function onError(_err) {
-                        err = _err
-                        // if(err)
-                        //     debug('Session Set complete', err.stack || err.message || err);
+            this.client.upsert(sid, sess, {expiry:ttl})
+                .then(function onResult(_result){
+                    result = _result;
+                    //fn && fn.apply(this, arguments);
+                })
+                .catch(function onError(_err) {
+                    err = _err
+                    // if(err)
+                    //     debug('Session Set complete', err.stack || err.message || err);
 
-                       //fn && fn.apply(this, arguments);
-                    })
+                    //fn && fn.apply(this, arguments);
+                })
             if (err) {
                  fn && fn(err);
             }
@@ -348,8 +347,7 @@ module.exports = function(session, bundle){
         }
 
         sess = JSON.stringify(sess);
-        this.client
-            .upsert(sid, sess, {expiry:ttl})
+        this.client.upsert(sid, sess, {expiry:ttl})
             .then(function onResult() {
                 fn && fn.apply(this, arguments);
             })

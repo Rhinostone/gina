@@ -157,7 +157,7 @@ function Model(namespace, _config) {
                 self.emit('model#ready', new Error('[ MODEL ][ '+ model +' ] No connector found'), self.bundle, self.name, conn)
             }
 
-        } else {
+        } else {
             console.warn('[ MODEL ][ ' + model +' ] no configuration found...');
             self.emit('model#ready', new Error('[ MODEL ][ ' + model +' ] no configuration found for your model: ' + model), self.bundle, self.name, null)
         }
@@ -175,7 +175,7 @@ function Model(namespace, _config) {
             connector.onReady( function(err, conn){
                 self.connectors[_connector].err = err;
                 self.connectors[_connector].conn = conn;
-                
+
                 callback(err, conn);
             });
 
@@ -215,9 +215,9 @@ function Model(namespace, _config) {
             env = configuration.Env.current;
             conf = configuration.Env.getConf(bundle, env);
         }
-        console.debug('[ MODEL ][ ' + _connector + ' ] env ', conf.env);         
+        console.debug('[ MODEL ][ ' + _connector + ' ] env ', conf.env);
         console.debug('[ MODEL ][ ' + _connector + ' ] configuration modelsPath ', conf.modelsPath);
-        console.debug('[ MODEL ][ ' + _connector + ' ] connectors ', connectors); 
+        console.debug('[ MODEL ][ ' + _connector + ' ] connectors ', connectors);
 
         // try {
 

@@ -12,6 +12,8 @@ var console     = lib.logger;
  *
  * // start all bundles within the project
  *  gina bundle:start @<project_name>
+ * or
+ *  gina bundle:start @<project_name> --max-old-space-size=4096 --inspect=5858
  *
  * */
 function Start(opt, cmd) {
@@ -169,7 +171,7 @@ function Start(opt, cmd) {
                 var checkCaseCount = 2
                     // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
                     // NB.: you can place flag by using console.notice
-                    , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'i')
+                    , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'g')
                     , url = null
                     , debuggerOn = null
                 ;
@@ -219,11 +221,13 @@ function Start(opt, cmd) {
                     }
 
                     // Expecting 2 flags (checkCaseCount) to free the child stdout !!
-                    // console.debug('EO case count '+ checkCaseCount);
-                    if ( checkCaseRe.test(data) ) {
-                        --checkCaseCount;
-                    }
                     // console.debug('BO case count '+ checkCaseCount);
+                    var _matched =  data.match(checkCaseRe);
+                    if ( _matched ) {
+                        // console.warn('case count: '+ checkCaseCount +'\nMatched: '+ _matched.length + '\n'+ checkCaseRe +'\n-> '+ data + '<-\n');
+                        checkCaseCount -= _matched.length;
+                    }
+                    // console.debug('EO case count: '+ checkCaseCount + ' -> '+ data);
 
                     // cache bundle state info given by the server while starting
                     if ( !debuggerOn && new RegExp('Debugger listening on','gmi').test(data)) {
@@ -250,8 +254,6 @@ function Start(opt, cmd) {
 
 
                         opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
-
-
 
 
                         end(opt, cmd, isBulkStart, bundleIndex);
@@ -284,7 +286,7 @@ function Start(opt, cmd) {
                     // handles only signals that cannot be cannot be caught or ignored
                     // ref.: `framework/<version>/lib/proc.js`
                     if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
-                        console.emerg('[' + this.pid + '] exiting with signal: ', signal);
+                        console.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
                         cmd.proc.dismiss(this.pid, signal);
                     }
                 });
