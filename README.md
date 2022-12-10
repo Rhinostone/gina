@@ -161,6 +161,13 @@ You can start the bundle with the following command:
 gina bundle:start frontend @myproject
 ```
 
+> __Attention__
+> Default memory is 4 GB (4096 MB)
+> If you feel like you are going to need more [memory](https://blog.appsignal.com/2021/12/08/nodejs-memory-limits-what-you-should-know.html) for this particular bundle, let's say 8 GB:
+> ```tty
+> gina bundle:start frontend @myproject --max-old-space-size=8192
+> ```
+
 
 Now, visit http://127.0.0.1:3100/  to check your homepage.
 Isn't it sexy !?
@@ -280,7 +287,11 @@ __1st Method - The default one__
 ``` tty
 gina tail
 ```
+
 __NB.:__ This is an alias for `gina framework:tail`
+> __Attention__
+> Everytime a bundle exits, the tail process will be closed. To prevent tail from exiting, you can use the `--keep-alive` argument.
+> E.g.: `gina tail --keep-alive` 
 
 By default, Gina does not store logs. Logs are treated like any other events then printed out to the `process.stdout`.
 

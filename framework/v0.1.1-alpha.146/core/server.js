@@ -2532,13 +2532,13 @@ function Server(options) {
         }
 
         expressMiddlewares[nextMiddleware._index](nextMiddleware._request, nextMiddleware._response, function onNextMiddleware(err, request, response) {
-            ++nextMiddleware._index;
 
             if (err) {
                 throwError(nextMiddleware._response, 500, (err.stack||err.message||err), nextMiddleware._next, nextMiddleware._nextAction);
                 return;
             }
 
+            ++nextMiddleware._index;
             if (request)
                 nextMiddleware._request  = request;
 

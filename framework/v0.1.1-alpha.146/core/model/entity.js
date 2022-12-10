@@ -42,7 +42,7 @@ function EntitySuper(conn, caller) {
         if (!EntitySuper[self.name]) {
             EntitySuper[self.name] = {}
         }
-        
+
         if ( !EntitySuper[self.name]._conn ) {
             EntitySuper[self.name]._conn = conn;
         }
@@ -53,7 +53,7 @@ function EntitySuper(conn, caller) {
             return EntitySuper[self.name].instance
         }
     }
-    
+
 
     /**
      * Set all main listenners at once
@@ -102,7 +102,7 @@ function EntitySuper(conn, caller) {
                 typeof(entity[methods[m]]) == 'function'
                 && m != 'onComplete'
             ) {
-                
+
                 if ( triggers.indexOf(shortName + '#' + methods[m]) < 0 ) {
                     events[i] = {
                         index: i,
@@ -111,13 +111,11 @@ function EntitySuper(conn, caller) {
                         entityName: entityName
                     };
 
-                    
+
                     triggers.push(shortName + '#' + methods[m]);
-                    
+
                     ++i;
                 }
-
-                    
             }
         }
 
@@ -157,49 +155,49 @@ function EntitySuper(conn, caller) {
                     return function () {
 
                         // retrieving local arguments, & binding it to the event callback
-                        
+
                         /**
                          * handle promises with async/await
-                         * 
+                         *
                          * NB.: Always use the prefix `db` inside an entity file
                          *      instead of using `this.getRelation(entityName)`
-                         * 
-                         * e.g.: 
+                         *
+                         * e.g.:
                          *  var recordJob   = promisify(db.jobEntity.insert);
                          *  await recordJob(jobObj)
-                         *      .then( function onJob(_jobObj) {                        
+                         *      .then( function onJob(_jobObj) {
                          *          jobObj = _jobObj;
                          *      })
                          *      .catch( function onJobErr(_err) {
                          *          jobErr = _err;
                          *      });
-                         * 
+                         *
                          */
                         if ( typeof(this[m]) == 'undefined' && typeof(arguments[arguments.length-1]) == 'function' ) {
-                            
+
                             var promise = function() {
                                 var cb = arguments[arguments.length-1];
-                                
+
                                 if (entity._triggers.indexOf(events[i].shortName) > -1) {
-                                    console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
-                                    
+                                    console.debug('[ MODEL ][ ENTITY ] Setting promise listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
+
                                     if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
-                                        
+
                                         if (entity.listenerCount(events[i].shortName) > 0) {
                                             entity.removeAllListeners([events[i].shortName])
                                         }
-                                            
+
                                         entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                                            // check if not already fired                                        
+                                            // check if not already fired
                                             if (entity._callbacks[events[i].shortName]) {
-                                                
+
                                                 entity.removeAllListeners([events[i].shortName]);
-                                                console.log('\nFIRING #1 - promise ' + events[i].shortName +'('+ events[i].index  +')');                                                
+                                                console.log('\nFIRING #1 - promise ' + events[i].shortName +'('+ events[i].index  +')');
                                                 cb.apply(this, arguments);
-                                            }                                                
+                                            }
                                         });
-                                            
-    
+
+
                                         // backing up callback
                                         entity._callbacks[events[i].shortName] = cb;
                                     } else { // in case the event is not ready yet
@@ -208,38 +206,38 @@ function EntitySuper(conn, caller) {
                                     }
                                 }
                             }
-                                                                                   
-                            promise.apply(null, arguments);                            
-                            cached.apply(promise, arguments); 
-                            return promise;    
+
+                            promise.apply(null, arguments);
+                            cached.apply(promise, arguments);
+                            return promise;
                         } //else is normal case
-                        
-                        cached.apply(this[m], arguments);                        
-                        
+
+                        cached.apply(this[m], arguments);
+
                         this[m].onComplete = function (cb) {
 
-                            //Setting local listener : normal case                            
+                            //Setting local listener : normal case
                             if (entity._triggers.indexOf(events[i].shortName) > -1) {
                                 console.debug('[ MODEL ][ ENTITY ] Setting listener for: [ ' + self.model + '/' + events[i].entityName + '::' + events[i].shortName + ' ]');
-                                
+
                                 if (typeof(entity._arguments) == 'undefined' || typeof(entity._arguments) != 'undefined' && typeof(entity._arguments[events[i].shortName]) == 'undefined') {
-                                    
+
                                     if (entity.listenerCount(events[i].shortName) > 0) {
                                         entity.removeAllListeners([events[i].shortName])
                                     }
-                                        
+
                                     entity.once(events[i].shortName, function () { // cannot be `entity.on` for prod/stage
-                                        // check if not already fired                                        
+                                        // check if not already fired
                                         if (entity._callbacks[events[i].shortName]) {
-                                            
+
                                             entity.removeAllListeners([events[i].shortName]);
                                             console.log('\nFIRING #1 ' + events[i].shortName +'('+ events[i].index  +')');
                                             cb.apply(this[m], arguments);
                                             //cb.apply(this, arguments);
                                         }
-                                            
+
                                     });
-                                        
+
 
                                     // backing up callback
                                     entity._callbacks[events[i].shortName] = cb;
@@ -249,8 +247,8 @@ function EntitySuper(conn, caller) {
                                 }
                             }
                         }
-                        
-                            
+
+
 
                         return this[m] // chaining event & method
                     };
@@ -303,7 +301,7 @@ function EntitySuper(conn, caller) {
 
         var args = Array.prototype.slice.call(arguments);
         var trigger = args.splice(0, 1)[0];
-        
+
         if ( !/\#/.test(trigger) ) {
             throw new Error('trigger name not properly set: use `#` between the entity name and the method reference');
             process.exit(1)
@@ -336,7 +334,7 @@ function EntitySuper(conn, caller) {
                         .on(events[i].shortName, function () {
                             console.log('\nFIRING #3 ' + trigger);
                             this._callbacks[trigger.replace(/[0-9]/g, '')].apply(this[method], arguments);
-                            delete self._callbacks[trigger];                     
+                            delete self._callbacks[trigger];
                         })
                 }
 
@@ -351,7 +349,7 @@ function EntitySuper(conn, caller) {
                         //     if (!this._arguments) {
                         //         this._arguments = {}
                         //     }
-                            
+
                         //     if ( typeof(this._arguments[trigger]) != 'undefined' ) {
                         //         delete this._arguments[trigger];
                         //     }
@@ -360,14 +358,14 @@ function EntitySuper(conn, caller) {
                             if (!this._arguments) {
                                 this._arguments = {}
                             }
-                            
+
                             // retrieving local arguments, & binding it to the event callback
                             if ( typeof(this._arguments[trigger]) == 'undefined' ) {
                                 console.log('\nFIRING #5 ' + trigger);
-                                
+
                                 this._arguments[trigger] = arguments;
                             }
-                            
+
                         })
                 }
             }
@@ -516,9 +514,31 @@ function EntitySuper(conn, caller) {
     /**
      * Get connection from entity
      * */
-    this.getConnection = function() {
-        var conn =  local.conn || self._conn;
-        return ( typeof(conn) != 'undefined' ) ? conn : null;
+    this.getConnection = function(scope, collection) {
+        var conn =  local.conn || self._conn || null;
+
+        if ( typeof(conn) == 'undefined' || !conn) {
+            return null;
+        }
+
+        if ( typeof(scope) == 'undefined' ) {
+            scope = '_default';
+        }
+        var currentCollection = '_default';
+        if ( typeof(collection) != 'undefined' ) {
+            currentCollection = collection;
+        }
+
+
+        // retrieve & return the collection
+        if ( typeof(conn.scope) != 'undefined' && typeof(conn._scope) == 'undefined' && typeof(conn.scope) != 'undefined' ) {
+            var newConn = conn.scope(scope).collection(currentCollection);
+            newConn.sdk = conn.sdk;
+            return newConn;
+        }
+
+        // return the cached collection
+        return conn;
     }
 
     this.getEntity = function(entity) {
@@ -526,7 +546,7 @@ function EntitySuper(conn, caller) {
         var ntt = entity;
         entity = entity.substr(0,1).toUpperCase() + entity.substr(1);
         var nttName = entity;
-        
+
         if ( !/Entity$/.test(entity) ) {
             entity = entity + 'Entity'
         }
@@ -551,20 +571,20 @@ function EntitySuper(conn, caller) {
                     if ( typeof(modelUtil.entities[self.bundle][self.model][entity]) != 'function' ) {
                         throw new Error('Model entity not found: `'+ entity + '` while trying to call '+ callerName +'Entity.getEntity('+ entity +')');
                     }
-                    
+
                     // fixed on May 2019, 21st : need for `this.getEntity(...)` inside the model
                     if (  typeof(EntitySuper[callerName].instance._relations[entityName]) == 'undefined' ) {
-                        
+
                         if ( typeof(EntitySuper[entityName]) != 'undefined' && typeof(EntitySuper[entityName].instance) != 'undefined' ) {
-                            
+
                             EntitySuper[callerName].instance._relations[entityName] = new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName)
                         } else { // regular case
-                            new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);    
-                        }                        
+                            new modelUtil.entities[self.bundle][self.model][entity](self.getConnection(), callerName);
+                        }
                     }
-                    
-                     
-                    return EntitySuper[callerName].instance._relations[entityName]                   
+
+
+                    return EntitySuper[callerName].instance._relations[entityName]
                 }
             }
 

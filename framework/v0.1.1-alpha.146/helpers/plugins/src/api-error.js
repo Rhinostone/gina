@@ -3,46 +3,46 @@ var merge = require('./../../../lib/merge');
 var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
 //var statusCodes = requireJSON( _( getPath('gina').core + '/status.codes') );
 /**
- * 
+ *
  * Usage:
  *  var e = null;
  *  // Server errors
  *  e = new ApiError('This is a generic server error.'); // default error.status -> 500
  *  e = new ApiError('This a server specific server error.', 501);
- * 
+ *
  *  // Client errors
  *  e = new ApiError('This is client error.', 498);
  *  e = new ApiError('This is client error.', 'token', 498); // where `token` is the frontend field: <input type="hiden" name="token">
  *  or
  *  e = new ApiError('This is client error.', 'token');
  *  e.status = 498;
- * 
+ *
  *  // Client bundled error
  *  e = new ApiError(['This is preconditioned #1 client error.', 'This is preconditioned #2 client error.'], ['firstName', 'lastName']);
- * 
+ *
  * @param {string|array} errorMessage
  * @param {string} [fieldName]
  * @param {number} [errorStatus] - 500 by default for the server and 412 for the client
- * 
+ *
  * @returns {object} errorObject
  */
 function ApiError(errorMessage, fieldName, errorStatus) {
     var e = null;
-    
+
     if ( typeof(merge) != 'function' ) {
         merge = require('./../../../lib/merge');
-    }    
-    if ( typeof(statusCodes) == 'undefined' ) {
-        var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
     }
-    
+    // if ( typeof(statusCodes) == 'undefined' ) {
+        var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
+    // }
+
     if ( typeof(errorMessage) == 'object' && errorMessage instanceof Error ) {
         e = JSON.clone(errorMessage);
         errorMessage = e.message || e.stack;
     } else {
-        e = new Error(errorMessage);   
+        e = new Error(errorMessage);
     }
-     
+
     var isClientError = (arguments.length == 3) ? true : false;
     if ( arguments.length == 2 ) {
         // server error
@@ -53,7 +53,7 @@ function ApiError(errorMessage, fieldName, errorStatus) {
             }
             fieldName = null;
         }
-        // client error 
+        // client error
         else if ( Array.isArray(arguments[1]) || typeof(arguments[1]) == 'string' ) {
             isClientError = true;
             errorStatus = 412; // by default
@@ -70,7 +70,7 @@ function ApiError(errorMessage, fieldName, errorStatus) {
         // TODO - Reformat stack to remove the first lines
         if (!e.status)
             e.status    = errorStatus || 500;
-            
+
         if ( typeof(statusCodes[e.status]) != 'undefined' ) {
             e.error = statusCodes[e.status];
         } else {
@@ -78,7 +78,7 @@ function ApiError(errorMessage, fieldName, errorStatus) {
         }
         if (!e.message)
             e.message   = errorMessage;
-        
+
         return e;
     }
     // Client Error
@@ -98,8 +98,8 @@ function ApiError(errorMessage, fieldName, errorStatus) {
         fields  : {},
         path    : ''
     }, e);
-    
-    
+
+
     var formatClientError = function(ctx, error, errorMessage, fieldName) {
         error.fields[fieldName] = errorMessage;
         var bundleName      = ctx.bundle
@@ -117,7 +117,7 @@ function ApiError(errorMessage, fieldName, errorStatus) {
                         path = paths.models.substr(paths.models.lastIndexOf(bundleName)) +'/'+ filename.substr(filename.lastIndexOf(bundleName+'\/models'));
                         error.tag += 'model:'
                     }
-                    // controller 
+                    // controller
                     else {
                         path = paths.controllers.substr(paths.controllers.lastIndexOf(bundleName)) +'/'+ filename.substr(filename.lastIndexOf(bundleName+'\/controllers'));
                         error.tag += 'controller:';
@@ -132,15 +132,15 @@ function ApiError(errorMessage, fieldName, errorStatus) {
             } catch (err) {
                 error.tag   = 'N/A';
                 error.stack = err.stack;
-            }        
+            }
         } else {
             //error.fields[fieldName]['isApiError'] = errorMessage;
             error.tag   = 'N/A';
-        }     
-         
+        }
+
         return error;
     }
-    
+
     if ( Array.isArray(fieldName) ) {
         for (let i = 0, len = errorMessage.length; i < len; i++) {
             clientError = formatClientError(ctx, clientError, errorMessage[i], fieldName[i]);
@@ -148,7 +148,7 @@ function ApiError(errorMessage, fieldName, errorStatus) {
     } else {
         clientError = formatClientError(ctx, clientError, errorMessage, fieldName);
     }
-    
+
     return clientError;
 }
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {

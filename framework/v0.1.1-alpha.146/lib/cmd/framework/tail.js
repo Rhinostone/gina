@@ -12,11 +12,15 @@ var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js
 
 /**
  * Framework tail
+ * By default, tail will exit when a bundle is exiting. If you want to prevent
+ * tail from exiting, you should use `--keep-alive`
  *
  * e.g.
  *  gina framework:tail
  *  or
  *  gina tail
+ *  or
+ *  gina tail --keep-alive
  *
  * */
 function Tail(opt, cmd) {
@@ -176,7 +180,10 @@ function Tail(opt, cmd) {
 
                         try {
                             process.stdout.write( format(pl.group, pl.level, pl.content) );
-                            if ( /(exiting|Got exit code)(.*)(SIGKILL|SIGTERM|SIGINT)/.test(pl.content) ) {
+                            if (
+                                /(exiting|Got exit code)(.*)(SIGKILL|SIGTERM|SIGINT)/.test(pl.content)
+                                && opt.argv.indexOf('--keep-alive') < 0
+                            ) {
                                 client.destroy();
                                 return end()
                             }

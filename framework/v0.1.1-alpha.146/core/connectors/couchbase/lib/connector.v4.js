@@ -1,7 +1,8 @@
-"use strict";
+// "use strict";
 var fs              = require('fs');
 var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
+uuid                = require('uuid');
 var couchbase       = require(getPath('project') +'/node_modules/couchbase');// jshint ignore:line
 var gina            = require('../../../../core/gna');
 var utils           = gina.utils;
@@ -13,18 +14,20 @@ var modelUtil       = new utils.Model();
 // N1qlQuery           = couchbase.N1qlQuery || null;// jshint ignore:line
 // N1qlStringQuery     = couchbase.N1qlStringQuery || null;// jshint ignore:line
 // ViewQuery           = couchbase.ViewQuery || null;// jshint ignore:line
-
 // uuid                = require('uuid');// jshint ignore:line
+
+// uuid                = require('../../../../node_modules/uuid');
+
 
 
 /**
  * Connector for couchbase module v4
  *
  * Options :
- *  - keepAlive
+ *  - keepAlive (default: true)
  *      if set to `true`, will ping based on `pingInterval`
  *      if set to `false`, will not ping the database server
- *  - pingInterval
+ *  - pingInterval (default: 2m)
  *      `30s` will set the ping interval to 30 seconds
  *      `1m` will set the ping interval to 1 minute
  *      `1h` will set the ping interval to 1 hour
@@ -38,6 +41,7 @@ function Connector(dbString) {
             bundle: null,
             env: null,
             options: {
+                useScopeAndCollections: true,
                 scope: '_default', // by default
                 collection: '_default', // by default
                 keepAlive: true,
@@ -215,6 +219,7 @@ function Connector(dbString) {
                         return self.emit('ready', bErr, null);
                     }
                     conn.sdk        = sdk;
+
                     // open bucket
                     var bucketConn = conn.bucket(dbString.bucketName);
                     bucketConn.sdk = sdk;
