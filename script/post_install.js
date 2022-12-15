@@ -806,6 +806,10 @@ function PostInstall() {
             ginaBinanry = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina')
         }
 
+        if ( !fs.existsSync(ginaBinanry) ) {
+            console.error('`'+ ginaBinanry +'` not found !');
+        }
+
         try {
             execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
             execSync(ginaBinanry + ' framework:set --prefix='+ self.prefix);
