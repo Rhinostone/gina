@@ -139,7 +139,9 @@ function PostInstall() {
             }
 
             if ( /^\-\-log-level\=/.test(args[i]) ) {
-                console.setLevel(args[i].split(/\=/)[1], 'gina');
+                var logLevel = args[i].split(/\=/)[1];
+                console.setLevel(logLevel, 'gina');
+                process.env.LOG_LEVEL=logLevel;
             }
         }
 
