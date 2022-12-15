@@ -238,8 +238,8 @@ function Initialize(opt) {
         var mainConfig  = require(self.opt.homedir + '/main.json');
         var target = _(self.opt.homedir +'/ports.json');
 
-        if ( !fs.existsSync(mainConfig) ) {
-            console.error('It looks like `'+ mainConfig +'` where not found !');
+        if ( !fs.existsSync(_(self.opt.homedir + '/main.json', true)) ) {
+            console.error('It looks like `'+ _(self.opt.homedir + '/main.json', true) +'` was not found !');
 
             process.exit(1)
         }
