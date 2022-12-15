@@ -57,7 +57,12 @@ var console     = lib.logger;
                     console.debug('Skipping symlink: same source, not overriding.');
                     return end();
                 }
-                destination.rmSync()
+                destination.rmSync();
+                var ginaFileObj = new _(self.projectLocation + '/gina');
+                if ( ginaFileObj.existsSync() ) {
+                    ginaFileObj.rmSync()
+                }
+
             }
 
             err = source.symlinkSync(destination.toString());

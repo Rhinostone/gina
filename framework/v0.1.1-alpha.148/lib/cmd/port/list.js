@@ -15,6 +15,7 @@ var Collection = lib.Collection;
  * You can also filter
  *  gina port:list @<project_name> --format=json,null,2 --protocol=http/2.0 --scheme=https --bundle=frontend,backend
  *
+ *
  * You can also export the output to a file with: `--filename`
  *  gina port:list @<project_name> --format=conf --protocol=http/2.0 --scheme=https --filename=$HOME/my_ports.conf
  * */
@@ -84,8 +85,27 @@ function List(opt, cmd) {
                 // e.g:
                 // --bundle=frontend,backend
                 self.selectedBundles = process.argv[i].split(/\=/)[1].split(/\,/);
-                self.selectedBundles.sort();
+
+                if ( /\-\-debug\-ports\=/.test(process.argv.join(',')) ) {
+                    // e.g:
+                    // --debug-ports=5656,5858
+                    self.selectedDebugPorts = {};
+                    var selectedDebugPorts = process.argv.join(';');
+                    var found = selectedDebugPorts.match(/\-\-debug-ports\=[,0-9]+/);
+                    selectedDebugPorts = null;
+                    if (found) {
+                        selectedDebugPorts = found[0].split('\=')[1].split(',')
+                    }
+                    // console.log(selectedDebugPorts)
+                    for (let i = 0, len = self.selectedBundles.length; i<len; i++) {
+                        if ( typeof(selectedDebugPorts[i]) == 'undefined' ) {
+                            continue;
+                        }
+                        self.selectedDebugPorts[self.selectedBundles[i]] = ~~(selectedDebugPorts[i]);
+                    }
+                }
             }
+
 
 
             if ( /^\-\-all\=/.test(process.argv[i]) || !self.projectName ) {
@@ -137,6 +157,13 @@ function List(opt, cmd) {
                 while (i<len) {
                     let d = data[i];
                     str += d.env +'_'+ d.bundle +'_'+ d.protocol +'_'+ d.scheme +'='+ d.port +':'+ d.port +'\n';
+                    // Adding debug port
+                    if (
+                        typeof(self.selectedDebugPorts) != 'undefined'
+                        && typeof(self.selectedDebugPorts[d.bundle]) != 'undefined'
+                    ) {
+                        str += d.env +'_'+ d.bundle +'_debug_port='+ d.debug_port +':'+ d.debug_port +'\n';
+                    }
                     i++;
                 }
 
@@ -246,6 +273,14 @@ function List(opt, cmd) {
                             jsonPort.port = ~~port;
                             jsonPort.bundle = _bundle;
                             jsonPort.env = _env;
+                            // Adding debug port
+                            if (
+                                typeof(self.selectedDebugPorts) != 'undefined'
+                                && typeof(self.selectedDebugPorts[_bundle]) != 'undefined'
+                            ) {
+                                jsonPort.debug_port = self.selectedDebugPorts[_bundle];
+                            }
+
                             if ( !jsonCollection.findOne({ "port": ~~port }) ) {
                                 jsonCollection = jsonCollection.insert(jsonPort);
                             }
@@ -316,6 +351,13 @@ function List(opt, cmd) {
                         jsonPort.port = ~~port;
                         jsonPort.bundle = _bundle;
                         jsonPort.env = _env;
+                        // Adding debug port
+                        if (
+                            typeof(self.selectedDebugPorts) != 'undefined'
+                            && typeof(self.selectedDebugPorts[_bundle]) != 'undefined'
+                        ) {
+                            jsonPort.debug_port = self.selectedDebugPorts[_bundle];
+                        }
                         if ( !jsonCollection.findOne({ "port": ~~port }) ) {
                             jsonCollection = jsonCollection.insert(jsonPort);
                         }
@@ -369,6 +411,13 @@ function List(opt, cmd) {
                         jsonPort.port = ~~port;
                         jsonPort.bundle = _bundle;
                         jsonPort.env = _env;
+                        // Adding debug port
+                        if (
+                            typeof(self.selectedDebugPorts) != 'undefined'
+                            && typeof(self.selectedDebugPorts[_bundle]) != 'undefined'
+                        ) {
+                            jsonPort.debug_port = self.selectedDebugPorts[_bundle];
+                        }
                         if ( !jsonCollection.findOne({ "port": ~~port }) ) {
                             jsonCollection = jsonCollection.insert(jsonPort);
                         }
