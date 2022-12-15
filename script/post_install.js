@@ -137,6 +137,10 @@ function PostInstall() {
                 self.prefix = self.prefix.replace(/^\~/, getUserHome());
                 continue;
             }
+
+            if ( /^\-\-log-level\=/.test(args[i] ) {
+                console.setLevel(args[i].split(/\=/)[1], 'gina');
+            }
         }
 
         if (self.prefix != self.defaultPrefix) {
