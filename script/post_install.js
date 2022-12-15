@@ -138,7 +138,7 @@ function PostInstall() {
                 continue;
             }
 
-            if ( /^\-\-log-level\=/.test(args[i] ) {
+            if ( /^\-\-log-level\=/.test(args[i]) ) {
                 console.setLevel(args[i].split(/\=/)[1], 'gina');
             }
         }
