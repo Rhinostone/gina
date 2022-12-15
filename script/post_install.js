@@ -805,8 +805,14 @@ function PostInstall() {
         if (!self.isCustomPrefix && self.isGlobalInstall) {
             ginaBinanry = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina')
         }
-        execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
-        execSync(ginaBinanry + ' framework:set --prefix='+ self.prefix);
+
+        try {
+            execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
+            execSync(ginaBinanry + ' framework:set --prefix='+ self.prefix);
+        } catch (err) {
+            return done(err)
+        }
+
 
         // Update middleware file
         var filename = _(self.versionPath) + '/MIDDLEWARE';
