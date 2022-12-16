@@ -243,8 +243,8 @@ function Initialize(opt) {
 
             process.exit(1)
         }
-        console.info( 'Debug: ', JSON.stringify(mainConfig, null, 2));
-        if ( !fs.existsSync(target) ) {
+
+        if ( !fs.existsSync(target) && mainConfig.protocols[self.release]) {
 
             var protocols   = mainConfig.protocols[self.release]
                 , schemes   = mainConfig.schemes[self.release]
