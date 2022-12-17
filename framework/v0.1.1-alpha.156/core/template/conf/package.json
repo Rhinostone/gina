@@ -3,7 +3,7 @@
   "version": "0.0.1",
   "description": "{project} is a nice project !",
   "dependencies": {
-    "gina" : "{gina_version}"
+    // "gina" : "{gina_version}"
   },
   "engine": [
     "node >={node_version}"

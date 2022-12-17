@@ -238,13 +238,7 @@ function Initialize(opt) {
         var mainConfig  = require(self.opt.homedir + '/main.json');
         var target = _(self.opt.homedir +'/ports.json');
 
-        if ( !fs.existsSync(_(self.opt.homedir + '/main.json', true)) ) {
-            console.error('It looks like `'+ _(self.opt.homedir + '/main.json', true) +'` was not found !');
-
-            process.exit(1)
-        }
-
-        if ( !fs.existsSync(target) && mainConfig.protocols[self.release]) {
+        if ( !fs.existsSync(target)) {
 
             var protocols   = mainConfig.protocols[self.release]
                 , schemes   = mainConfig.schemes[self.release]
