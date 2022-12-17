@@ -171,7 +171,7 @@ function Add(opt, cmd) {
         loadAssets();
 
         var conf = _(getPath('gina').core +'/template/conf/package.json', true);
-        var contentFile = require(conf);
+        var contentFile = requireJSON(conf);
         var dic = {
             'project' : self.projectName,
             'node_version' : GINA_NODE_VERSION.match(/\d+/g).join('.'),
