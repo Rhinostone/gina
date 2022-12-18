@@ -234,6 +234,47 @@ function Server(options) {
 
         const failed  = !sslDetails.valid;
         const humanView = JSON.stringify(sslDetails, null, '  ');
+
+        // Wildcard exception - See https://github.com/dyaa/ssl-checker/issues/381
+        // Date of the test: 2022-12-18T00:00:00.000Z
+        // container-87546.dev.sample.app -> not valid when it should return true.
+        // {
+        //     "daysRemaining": 290,
+        //     "valid": false,
+        //     "validFrom": "2022-10-03T00:00:00.000Z",
+        //     "validTo": "2023-10-03T23:59:59.000Z",
+        //     "validFor": [
+        //         "*.sample.app",
+        //         "sample.app"
+        //     ]
+        // }
+        const isHandleByWildcardCert = function(endpoint, hv) {
+            var isAllowed = false;
+            const start = new Date(hv.validFrom).format('longIsoDateTime');
+            const end = new Date(hv.validTo).format('longIsoDateTime');
+            const today = new Date().format('longIsoDateTime');
+            const allowed = hv.validFor;
+
+            for (let i=0, len=allowed.length; i<len; ++i ) {
+                // skip if not a wildcard
+                if ( ! /^[*]\./.test(allowed[i]) ) continue;
+
+                let re = new RegExp( allowed[i].replace(/^[*]/, '')+'$' );
+                if ( ! re.test(endpoint) ) continue;
+
+                if ( today >= start && today < end) {
+                    isAllowed = true;
+                    break
+                }
+            }
+            return isAllowed;
+        }
+
+        if ( failed && Array.isArray(sslDetails.validFor) && isHandleByWildcardCert(endpoint, sslDetails) ) {
+            return;
+        }
+
+
         if (failed) {
             if (sslDetails.daysRemaining > -1) {
                 console.emerg(`[Certificate] ${endpoint} : It is like there is a problem with your CA certificate${'\n'} ${humanView}`);
