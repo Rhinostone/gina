@@ -248,31 +248,32 @@ function Server(options) {
         //         "sample.app"
         //     ]
         // }
-        const isHandleByWildcardCert = function(endpoint, hv) {
-            var isAllowed = false;
-            const start = new Date(hv.validFrom).format('longIsoDateTime');
-            const end = new Date(hv.validTo).format('longIsoDateTime');
-            const today = new Date().format('longIsoDateTime');
-            const allowed = hv.validFor;
 
-            for (let i=0, len=allowed.length; i<len; ++i ) {
-                // skip if not a wildcard
-                if ( ! /^[*]\./.test(allowed[i]) ) continue;
+        // const isHandleByWildcardCert = function(endpoint, hv) {
+        //     var isAllowed = false;
+        //     const start = new Date(hv.validFrom).format('longIsoDateTime');
+        //     const end = new Date(hv.validTo).format('longIsoDateTime');
+        //     const today = new Date().format('longIsoDateTime');
+        //     const allowed = hv.validFor;
 
-                let re = new RegExp( allowed[i].replace(/^[*]/, '')+'$' );
-                if ( ! re.test(endpoint) ) continue;
+        //     for (let i=0, len=allowed.length; i<len; ++i ) {
+        //         // skip if not a wildcard
+        //         if ( ! /^[*]\./.test(allowed[i]) ) continue;
 
-                if ( today >= start && today < end) {
-                    isAllowed = true;
-                    break
-                }
-            }
-            return isAllowed;
-        }
+        //         let re = new RegExp( allowed[i].replace(/^[*]/, '')+'$' );
+        //         if ( ! re.test(endpoint) ) continue;
 
-        if ( failed && Array.isArray(sslDetails.validFor) && isHandleByWildcardCert(endpoint, sslDetails) ) {
-            return;
-        }
+        //         if ( today >= start && today < end) {
+        //             isAllowed = true;
+        //             break
+        //         }
+        //     }
+        //     return isAllowed;
+        // }
+
+        // if ( failed && Array.isArray(sslDetails.validFor) && isHandleByWildcardCert(endpoint, sslDetails) ) {
+        //     return;
+        // }
 
 
         if (failed) {
