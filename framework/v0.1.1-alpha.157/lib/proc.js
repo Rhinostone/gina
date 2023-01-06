@@ -173,7 +173,11 @@ function Proc(bundle, proc, usePidFile){
                 proc.exit(code);
             });
 
-            //Will prevent the server from stopping.
+            // proc.on('heapOutOfMemory', function(err) {
+            //     console.emerg('[ FRAMEWORK ][ caughtException ][ '+err.code+' ] ', err.stack);
+            // });
+
+            //Will prevent the server from stopping, exepted for `heap out of memory`.
             proc.on('uncaughtException', function(err) {
 
                 if ( /ERR\_HTTP\_HEADERS\_SENT/.test(err.stack) ) {
@@ -199,7 +203,7 @@ function Proc(bundle, proc, usePidFile){
                     return;
                 }
 
-                console.emerg('[ FRAMEWORK ][ uncaughtException ] ', err.stack);
+                console.emerg('[ FRAMEWORK ][ uncaughtException ][ '+err.code+' ] ', err.stack);
 
 
                 dismiss(pid, 'SIGTERM');

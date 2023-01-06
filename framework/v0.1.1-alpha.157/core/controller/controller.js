@@ -1590,7 +1590,7 @@ function SuperController(options) {
             //     // nothing to do
             //     ignoreWebRoot = false
             // } else
-            if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
+            if (typeof(res) === 'string' || typeof(res) === 'number' || typeof(res) === 'boolean') {
                 if ( /true|1/.test(res) ) {
                     ignoreWebRoot = true
                 } else if ( /false|0/.test(res) ) {

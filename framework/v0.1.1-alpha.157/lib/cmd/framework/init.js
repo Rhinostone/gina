@@ -493,9 +493,6 @@ function Initialize(opt) {
 
     }
 
-
-
-
     self.checkIfCertificatesDir = function() {
         var certsDir = new _( getEnvVar('GINA_HOMEDIR') + '/certificates', true);
         var theRSARootCertsDir = new _(certsDir.toString() + '/RSARootCerts', true);
@@ -537,6 +534,55 @@ function Initialize(opt) {
             if (!/^\_/.test(s) && !getEnvVar('GINA_' + s.toUpperCase()) ) {
                 setEnvVar('GINA_' + s.toUpperCase(), self.settings[s])
             }
+        }
+    }
+
+    /**
+     * Checking PIDs for cleanup
+     *
+     **/
+    self.checkRunningPids = function() {
+        console.debug('Checking PIDs for cleanup...');
+        if ( /true/.test(getEnvVar('GINA_IS_WIN32')) ) {
+            console.debug(' Skipping for windows...');
+        }
+        var runDirObj = new _( getEnvVar('GINA_RUNDIR'), true );
+        var runDir = runDirObj.toString();
+
+        if ( runDirObj.existsSync() ) {
+            console.debug('Run dir: ', runDir );
+            var files = fs.readdirSync(runDir);
+            for (let f in files) {
+                if ( /^\./.test(files[f]) ) {
+                    continue;
+                }
+                let filenameObj = new _( runDir +'/'+ files[f], true );
+                let filename = filenameObj.toString();
+                let pid = fs.readFileSync(filename).toString();
+                if (!pid) {
+                    filenameObj.rmSync();
+                    continue;
+                }
+                let isRunnung = true;
+                try {
+                    let found = execSync("ps -p "+ pid +" -o pid="); //.replace(/\n$/g, '') || null;
+                    if (!found) {
+                        isRunnung = false;
+                    }
+                } catch (err) {
+                    isRunnung = false;
+                }
+
+                if (!isRunnung) {
+                    filenameObj.rmSync();
+                    continue;
+                }
+
+
+                console.debug('->'+ filename+ ' - ['+ pid +'] - '+ isRunnung);
+            } // EO for (let f in files) {
+        } else {
+            console.warn('Run directory `'+ runDir +'` not found !')
         }
     }
 
