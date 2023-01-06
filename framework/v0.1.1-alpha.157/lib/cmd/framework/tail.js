@@ -14,6 +14,7 @@ var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js
  * Framework tail
  * By default, tail will exit when a bundle is exiting. If you want to prevent
  * tail from exiting, you should use `--keep-alive`
+ * This will also will restart bundle in case of crach
  *
  * e.g.
  *  gina framework:tail
@@ -182,10 +183,40 @@ function Tail(opt, cmd) {
                             process.stdout.write( format(pl.group, pl.level, pl.content) );
                             if (
                                 /(exiting|Got exit code)(.*)(SIGKILL|SIGTERM|SIGINT)/.test(pl.content)
-                                && opt.argv.indexOf('--keep-alive') < 0
+                                ||
+                                // killed by terminal signal or activity monitor
+                                // Received SIGTERM or Received SIGINT)
+                                /(SIGTERM|SIGINT)/.test(pl.content)
+                                ||
+                                /JavaScript heap out of memory/.test(pl.content)
                             ) {
-                                client.destroy();
-                                return end()
+
+                                let bundleDesc = pl.content.match(/\`(.*)\@(.*\`)/);
+                                let bundle = null;
+                                let project = null;
+                                if ( Array.isArray(bundleDesc) && bundleDesc.length > 0) {
+                                    bundle = bundleDesc[1];
+                                    project= bundleDesc[2];
+                                } // else, must be `gina` (the framework)
+
+                                if (opt.argv.indexOf('--keep-alive') < 0) {
+                                    // TODO - exits only if no other bundle is runing in the project
+                                    // let projectStatus = execSync("gina project:status @"+project);
+                                    // if ( /is\ running/.test(projectStatus) ) {
+                                    //     return;
+                                    // }
+
+                                    client.destroy();
+                                    return end()
+                                }
+                                // TODO - restart bundle if not starting or restarting
+                                else if (
+                                    opt.argv.indexOf('--keep-alive') > -1
+                                    && ! /(SIGKILL|SIGTERM|SIGINT)/.test(pl.content)
+                                ) {
+                                    // only for debug
+                                    process.stdout.write('[MQTail] '+ JSON.stringify(payloads, null, 2) +'\n' );
+                                }
                             }
                         } catch (writeErr) {
                             // means that the related MQSpeaker is not connected yet
