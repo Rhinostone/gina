@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
+ * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -106,6 +106,7 @@ function Model(namespace, _config) {
         var bundle          = self.bundle;
         var model           = self.model;
         var modelDirName    = self.modelDirName;
+        var connectorPath   = null;
 
         // this is supposed to happen on load or for dev env; on reload, with a checksum
         var conf        = getConfigSync(bundle);
@@ -119,7 +120,7 @@ function Model(namespace, _config) {
             //TODO - More controls...
 
             //For now, I just need the F..ing entity name.
-            var connectorPath   = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/core/connectors/'+ self.connector);
+            connectorPath       = local.connectorPath = _(GINA_FRAMEWORK_DIR +'/core/connectors/'+ self.connector);
             var modelPath       = local.modelPath = _(conf.path + '/' + modelDirName);
             var entitiesPath    = local.entitiesPath = _(modelPath + '/entities');
             console.debug('[ MODEL ][ ' + model +' ] Scanning model entities: ', entitiesPath +' - Existing path ? '+ fs.existsSync(entitiesPath) );
@@ -128,7 +129,7 @@ function Model(namespace, _config) {
                 new _(entitiesPath).mkdirSync();
             }
 
-            var connectorPath   = _(connectorPath + '/lib/connector.js');
+            connectorPath   = _(connectorPath + '/lib/connector.js');
             console.debug('[ MODEL ][ ' + model +' ] Loading connector: ' + connectorPath);
             //Getting Entities Manager.
             var exists = fs.existsSync(connectorPath);

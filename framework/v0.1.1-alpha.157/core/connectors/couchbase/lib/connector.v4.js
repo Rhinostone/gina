@@ -209,18 +209,25 @@ function Connector(dbString) {
         dbString.bucketName = dbString.database;
 
         try {
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] Trying to connect to bucket `'+ dbString.bucketName +'`');
             // if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
                 // conn = await self.cluster.openBucket(dbString.database, dbString.password, function onBucketOpened(bErr) {
                 conn = await couchbase.connect(dbString.protocol + dbString.host, dbString, function onBucketOpened(bErr, conn) {
                     if (bErr) {
+                        // console.emerg('[ CONNECTOR ][ ' + local.bundle +' ] Could not connect to couchbase @`'+ dbString.protocol + dbString.host +'`\n'+ (bErr.stack || bErr.message || bErr) + '\nCheck:\n - if couchbabse is running\n - if bucket `'+dbString.bucketName+'` exists\n - if you have permission to access couchabase' );
+                        var cErr = new Error('Could not connect to couchbase @`'+ dbString.protocol + dbString.host +'`\n'+ (bErr.stack || bErr.message || bErr) + '\nCheck:\n - if couchbabse is running\n - if bucket `'+dbString.bucketName+'` exists\n - if you have permission to access couchabase');
+
                         if ( typeof(cb) != 'undefined' ) {
-                            return cb(bErr)
+                            return cb(cErr)
                         }
-                        return self.emit('ready', bErr, null);
+                        // return self.emit('ready', bErr, null);
+                        self.instance   = {}
+                        return onError(cErr, cb)
                     }
                     conn.sdk        = sdk;
 
                     // open bucket
+                    console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] Connecting to bucket `'+ dbString.bucketName +'`');
                     var bucketConn = conn.bucket(dbString.bucketName);
                     bucketConn.sdk = sdk;
                     // Get a reference to the default collection, required only for older Couchbase server versions

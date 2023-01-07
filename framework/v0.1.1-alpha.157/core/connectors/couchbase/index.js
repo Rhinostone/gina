@@ -690,11 +690,17 @@ function Couchbase(conn, infos) {
      *
      * Supported options
      *  - adhoc : [ true | false ]
-     *  // scan consistency level - default is 1
+     *  // scan consistency level - here, default is 3
      *  - consistency : [ 1 | 2 | 3 ] where 1 = NOT_BOUNDED, 2 = REQUEST_PLUS, 3 = STATEMENT_PLUS
+     *      not_bounded:
+     *          Executes the query immediately, without requiring any consistency for the query. If index-maintenance is running behind, out-of-date results may be returned.
+     *      at_plus:
+     *          Executes the query, requiring indexes first to be updated to the timestamp of the last update. If index-maintenance is running behind, the query waits for it to catch up.
+     *      request_plus:
+     *          Executes the query, requiring the indexes first to be updated to the timestamp of the current query-request. If index-maintenance is running behind, the query waits for it to catch up.
      *
      * @param {array} rec collection
-     * @param {object} [options] e.g: { consistency: 3 }
+     * @param {object} [options] e.g: { consistency: 2 }
      *
      */
     var bulkInsert = function(rec, options) {
@@ -726,7 +732,8 @@ function Couchbase(conn, infos) {
 
 
             var queryString = 'INSERT INTO '+ this.database +' (KEY, VALUE)';
-            for (var id in rec) {
+            var recCount = 0;
+            for (let id in rec) {
                 if ( typeof(rec[id].values) == 'undefined' )
                     throw new Error('rec["'+ id +'"].values not found ! Please inspect your record root: type must be an Array.');
 
@@ -736,6 +743,7 @@ function Couchbase(conn, infos) {
                 rec[id].values._collection  = this._collection;
 
                 queryString += '\t\nVALUES ("'+ id +'", '+ JSON.stringify(rec[id].values) +'),';
+                recCount++;
             }
 
             queryString = queryString.substr(0, queryString.length-1);
@@ -803,6 +811,11 @@ function Couchbase(conn, infos) {
                             }
 
                             self.emit(trigger, err, data.rows, data.meta);
+                            // Tempory fix
+                            // setTimeout(() => {
+                            //     self.emit(trigger, err, data.rows, data.meta);
+                            // }, (9+recCount) );
+
                         } catch (_err) {
                             console.error(_err.stack);
                         }
@@ -834,8 +847,9 @@ function Couchbase(conn, infos) {
                 onComplete : function(cb) {
                     self.once(trigger, function(err, data, meta){
                         if (envIsDev) {
-                            console.debug('[ bulkInsert triggerd ] '+ trigger);
+                            console.debug('[ bulkInsert triggerd ] '+ trigger + ' - Rec count: '+ recCount);
                         }
+
                         cb(err, data, meta)
                     })
                 }

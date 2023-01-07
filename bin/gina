@@ -129,7 +129,7 @@ function runAsSubProcess() {
 
     //  TODO - Remove this, we should be able to check the logs in case of troubles
     child.on('exit', function(code, signal) {
-        // handles only signals that cannot be cannot be caught or ignored
+        // handles only signals that cannot be caught or ignored
         // ref.: `framework/<version>/lib/proc.js`
         if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
             console.emerg('[' + this.pid + '] exiting with signal: ', signal);
