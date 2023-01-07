@@ -1,6 +1,6 @@
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
+ * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -102,7 +102,7 @@ function ModelUtil() {
     * */
     this.setModelEntity = function(bundle, model, name, module) {
         var cacheless   = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
-        
+
         if (arguments.length > 1) {
             if (!self.entities) {
                 self.entities = {}
@@ -209,7 +209,7 @@ function ModelUtil() {
     this.loadAllModels = function(bundles, configuration, env, cb) {
 
         var loadModel = function(b, bundles, configuration, env, cb) {
-            
+
             var modelObject     = getContext('modelUtil').entities[bundles[b]] // to check if already laoded
                 , bundle        = bundles[b]
                 , len           = bundles.length
@@ -223,7 +223,7 @@ function ModelUtil() {
                 var mObj = {};
 
                 var models = connectors;
-                
+
                 if ( !models || typeof(models) == 'undefined' ) {
                     console.warn('no models attached to connector '+ connector);
                 }
@@ -383,7 +383,7 @@ function ModelUtil() {
             for (var bundle in self.models) {
 
                 for (var name in self.models[bundle]) { //name as connector name
-                    
+
                     self.models[bundle][name] = {};
 
                     if ( typeof(self.models[bundle][name]['_connection']) == 'undefined' ) {
@@ -451,7 +451,7 @@ function ModelUtil() {
      * @returns {object} model - Model entities
      * */
     getModel = function(bundle, model) {
-        
+
         var ctx       = getContext();
 
         if (arguments.length == 1 || !bundle) {
@@ -528,13 +528,13 @@ function ModelUtil() {
             }
         }
 
-        // if ( 
-        //     typeof(ctx.modelUtil.models) != 'undefined' 
+        // if (
+        //     typeof(ctx.modelUtil.models) != 'undefined'
         //     && typeof(ctx.modelUtil.models) != 'undefined'
         //     && typeof(ctx.modelUtil.models[bundle]) != 'undefined'
         //     && typeof(ctx.modelUtil.models[bundle][model]) != 'undefined'
         // ) {
-            
+
         // } else {
             self.models = ModelUtil.instance.models
         // }

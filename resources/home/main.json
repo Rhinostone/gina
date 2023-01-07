@@ -9,6 +9,17 @@
     "def_global_mode": {
         "{release}": "{global_mode}"
     },
+    "archs": {
+        "{release}": [
+            "arm",
+            "arm64",
+            "x64",
+            "amd64"
+        ]
+    },
+    "local_arch": {
+        "{release}": "x64"
+    },
     "scopes": {
         "{release}": [
             "local",

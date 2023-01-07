@@ -1,7 +1,7 @@
 //'use strict';
 /*
  * This file is part of the gina package.
- * Copyright (c) 2009-2022 Rhinostone <contact@gina.io>
+ * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
  *
  * For the full copyright and license information, please view the LICENSE
  * file that was distributed with this source code.
@@ -88,7 +88,7 @@ function MathHelper() {
     self.checkSum = async function(filename, algorithm, encoding, isCheckingFromData, cb) {
         var err = false, sum = null;
         isCheckingFromData = ( typeof(isCheckingFromData) != 'undefined' ) ? isCheckingFromData : false;
-        
+
         if ( !isCheckingFromData && /\./.test(filename) ) {
             fs.readFile(filename, async function (err, data) {
                 sum = await checkSum(data, algorithm, encoding);
@@ -124,10 +124,10 @@ function MathHelper() {
             }
             str = arr.sort().join(',');
         }
-        
+
         return str;
     };
-    
+
     /**
      * Check sum from file or form data
      *
@@ -140,11 +140,11 @@ function MathHelper() {
     self.checkSumSync = function(filename, algorithm, encoding) {
         var sum = null;
         try {
-            
+
             if ( typeof(filename) == 'object' ) {
-                filename = objectToString(filename);                
+                filename = objectToString(filename);
             }
-            
+
             if ( /(\.[a-z]{3})$/.test(filename) ) { // must be a string
                 // from filename
                 sum = checkSum( fs.readFileSync(filename), algorithm, encoding )
