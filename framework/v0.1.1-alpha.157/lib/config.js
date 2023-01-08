@@ -201,6 +201,7 @@ function ConfigUtil() {
             utils : content.paths.utils
         };
         var gnaFolder = content.paths.root + '/.gna';
+        console.debug('Checking for `'+ gnaFolder +'` ...');
 
         // !! Not the project name
         self.project = content.project;

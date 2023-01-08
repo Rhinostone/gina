@@ -1,13 +1,14 @@
 # Gina
-[![GitHub version](https://badge.fury.io/gh/Rhinostone%2Fgina.svg)](https://badge.fury.io/gh/Rhinostone%2Fgina) [![npm version](https://badge.fury.io/js/gina.svg)](https://badge.fury.io/js/gina)
+
+[![GitHub version](https://badge.fury.io/gh/Rhinostone%2Fgina.svg)](https://badge.fury.io/gh/Rhinostone%2Fgina) [![npm version](https://badge.fury.io/js/gina.svg)](https://badge.fury.io/js/gina) [![node version](https://badge.fury.io/node/v/gina.svg)](https://badge.fury.io/node/v/gina)
 
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
 > This is a `preview release`. We are looking for people to help us test and improve `Windows` support.
 > Meanwhile, __Windows users__ can use Docker or an alternative to run Gina and their projects.
-> 
+>
 > Some commands or features might not work since the framework is still under development & testing
-> 
+>
 > We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience.
 
 ## Philosophy behind
@@ -24,6 +25,13 @@ Note that Gina does not rely on Connect or ExpressJS, still, you can use all plu
 Gina aims to be at the same time a framework, a deployment and monitoring environment for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
 > For Microsoft Windows, you might have to run the command line with Administrator privileges.
 > For Linux & Mac OS X, __the use of `sudo` is discouraged.__
+
+#### Versions
+
+| versions | description |
+|--------|--------|
+| alpha       | Preview release: ==not recomanded for production==      |
+| latest       | Latest stable relase        |
 
 #### 1st method (prefered) - Custom PREFIX
 
@@ -211,10 +219,10 @@ Please, note that you have 2 types of environments : one for the framework, and 
 
 > By default, Gina (the framework) comes with 2 environments : `dev` and `prod`. The default is `prod`. if you are [contributing](./README-4Contributors.md) to the framework or prototyping your application or service, we advise using the `dev` environment.
 > ```tty
-> gina framework:set --env=dev 
+> gina framework:set --env=dev
 > ```
 > ```tty
-> gina framework:set --log-level=debug 
+> gina framework:set --log-level=debug
 > ```
 
 You can check which are the environments set for your projects
@@ -291,7 +299,7 @@ gina tail
 __NB.:__ This is an alias for `gina framework:tail`
 > __Attention__
 > Everytime a bundle exits, the tail process will be closed. To prevent tail from exiting, you can use the `--keep-alive` argument.
-> E.g.: `gina tail --keep-alive` 
+> E.g.: `gina tail --keep-alive`
 
 By default, Gina does not store logs. Logs are treated like any other events then printed out to the `process.stdout`.
 
@@ -306,11 +314,11 @@ __2nd Method - Old school way__
 > __Attention: __ You will have to handle yourself [log rotation](https://linux.die.net/man/8/logrotate)
 
 ```tty
-gina bundle:start frontend @myproject --log > /usr/local/var/log/gina/frontend.myproject.domain.log 2>&1
+gina bundle:start frontend @myproject --log > /usr/local/var/log/gina/frontend.myproject.app.log 2>&1
 ```
 You can now check
 ```tty
-tail - f /usr/local/var/log/gina/frontend.myproject.domain.log
+tail - f /usr/local/var/log/gina/frontend.myproject.app.log
 ```
 
 __3rd Method - Create your own container/transport by extending gina default container__
@@ -351,13 +359,17 @@ gina framework:set --log-level=debug
 ## HTTPS, HTTP/2 and certificates
 
 ### Installing a certificate
+
+> __Attention__
+> ==One certificate per bundle/service==
+
 You now want to install a certificate for your project in order to run your project with HTTPS scheme or with HTTP/2 protocol ?
-At this moment, Gina does not generate a cetificate for you, but you can use a service like [sslforfree](https://www.sslforfree.com) to genreate a free 90 days certificate, then install it into your Gina home directory depending on the scope of your host (targeted machine: local or production). 
+At this moment, Gina does not generate a cetificate for you, but you can use a service like [sslforfree](https://www.sslforfree.com) to genreate a free 90 days certificate, then install it into your Gina home directory depending on the scope of your host (targeted machine: local or production).
 [SSL For Free](https://www.sslforfree.com) will provide you with a folder named with the domain you have used to setup your certificate. You just need to paste its content into the right location.
 
 The directory should be located @`~/.gina/certificates/scopes`.
 By default, `local` scope is set. But when you will go live, you should set the scope to production and paste your certificate into the right folder.
-__E.g:__ The `myproject.domain` folder should be placed into:
+__E.g:__ The `frontend.myproject.app` folder should be placed into:
 - `~/.gina/certificates/scopes/local` for your dev host
 - `~/.gina/certificates/scopes/production` for you production host
 
@@ -401,10 +413,10 @@ Error: unable to get issuer certificate
     at TLSSocket.onConnectSecure (node:_tls_wrap:1530:34)
     at TLSSocket.emit (node:events:390:28)
     at TLSSocket._finishInit (node:_tls_wrap:944:8)
-    at TLSWrap.ssl.onhandshakedone (node:_tls_wrap:725:12) 
+    at TLSWrap.ssl.onhandshakedone (node:_tls_wrap:725:12)
 ```
 
-Do not panic, and follow the steps provided in the following section.
+Do not panic, and follow the steps to solve this issue are provided in the following section.
 
 ### Local scope & certificate consideration
 > __Ignore__ the following instructions __if you can start your application__ without any certificate errors.
@@ -414,12 +426,12 @@ Since in most cases you will not have the `Root Certificate` included in your ce
 
 __Attention:__ We are assuming that for the following example, you have a wildcard certificate. If this is not possible, you will have to generate a certificate for each bundle and treat each bundle like a subdomain.
 
-Let say that you have downloaded your certificates from __[Ssl For Free](https://sslforfree.com)__ which you have then placed under: `~/.gina/certificates/scopes/local/myproject.domain`.
+Let say that you have downloaded your certificates from __[Ssl For Free](https://sslforfree.com)__ which you have then placed under: `~/.gina/certificates/scopes/local/frontend.myproject.app`.
 
 __Step 1__
 Go to the folder
 ```tty
-cd ~/.gina/certificates/scopes/local/myproject.domain
+cd ~/.gina/certificates/scopes/local/frontend.myproject.app
 ```
 
 List your files
@@ -443,11 +455,11 @@ Go to the `Generate the Correct Chain` tool.
 Paste the content you have just copied out of your `certificate.crt` into the field, then __do not forget to check the option__ `Include Root Certificate`.
 
 __It will download a chained certificate__.
-Rename it to `certificate.chained+root.crt` and copy/paste the file to your certificates location (~/.gina/certificates/scopes/local/myproject.domain)
+Rename it to `certificate.chained+root.crt` and copy/paste the file to your certificates location (~/.gina/certificates/scopes/local/frontend.myproject.app)
 
 __Step 2__
 You now need to combine your private key with your new certificate
-Still @ `~/.gina/certificates/scopes/local/myproject.domain` ?
+Still @ `~/.gina/certificates/scopes/local/frontend.myproject.app` ?
 
 ```tty
 cat private.key certificate.chained+root.crt > certificate.combined.pem
@@ -472,6 +484,13 @@ Do this for all of you `myproject`'s bundles, then restart your bundles
 gina bundle:restart @myproject
 ```
 
+__Remember__
+You will need a certificate for each bundle/service, unless you get a `wildcard certificates`.
+If you have a  `wildcard certificates`, you only need to follow the folling steps once, then create a symling for each bundle/service to the main certificate.
+
+```tty
+ln -s ~/.gina/certificates/scopes/local/myproject.app ~/.gina/certificates/scopes/local/frontend.myproject.app
+```
 
 ### Uninstalling Gina
 
@@ -540,7 +559,7 @@ More documentation and tutorials are coming soon !
 
 ## License (MIT)
 
-Copyright © 2009-2022 [Rhinostone](http://www.rhinostone.com/)
+Copyright © 2009-2023 [Rhinostone](http://www.rhinostone.com/)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

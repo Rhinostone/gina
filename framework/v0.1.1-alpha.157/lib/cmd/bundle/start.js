@@ -1,11 +1,60 @@
-const { debug } = require('console');
-var fs          = require('fs');
-const { spawn } = require('child_process');
+const fs            = require('fs');
+const { debug }     = require('console');
+const { EventEmitter }  = require('events');
+const { spawn }     = require('child_process');
+const { execSync }  = require('child_process');
+const util = require('util');
+const promisify = require('util').promisify;
 
 var CmdHelper   = require('./../helper');
+// `lib` is previously defiened as this file is required by anoth
 var console     = lib.logger;
+
+// function resolveAfter2Seconds(opt) {
+
+//     var e = new EventEmitter();
+//     var trigger = 'internal_start#node-modules-installed';
+
+//     var nIntervId = null;
+//     var i = 0;
+
+//     var play = function(opt) {
+//         var done = function(nIntervId, resolve) {
+//             clearInterval(nIntervId);
+//             nIntervId = null;
+//             opt.client.write('\n['+ i +'] Done ...');
+//             e.emit(trigger, 'resolved');
+//         }
+
+//         nIntervId = setInterval(() => {
+//             i++;
+
+//             // TODO - check for file availability
+//             if ( i > 2 ) {
+//                 clearInterval(nIntervId);
+//                 return done()
+//             }
+
+//             opt.client.write('\n['+ i +'] Please wait ...');
+//             opt.client.write('\n['+ nIntervId +']');
+
+//         }, 500);
+//     }
+
+//     return function onDone(opt) {
+//         e.once(trigger, function onComplete(result) {
+//             opt.client.write('\n['+ i +'] Man !!!');
+//             return result
+//         });
+
+//         play(opt)
+//     }(opt)
+
+// }
+
 /**
  * Start a given bundle or start all bundles at once
+ *
  *
  * e.g.
  *  gina bundle:start <bundle_name> @<project_name>
@@ -14,6 +63,12 @@ var console     = lib.logger;
  *  gina bundle:start @<project_name>
  * or
  *  gina bundle:start @<project_name> --max-old-space-size=4096 --inspect=5858
+ *
+ *
+ * If you want to inspect/debug here, you first need to restart gina with `--inspect-gina`
+ *   gina start --inspect-gina
+ * then
+ *   gina bundle:start <bundle_name> @<project_name> --max-old-space-size=4096 --inspect=5858
  *
  * */
 function Start(opt, cmd) {
@@ -40,7 +95,129 @@ function Start(opt, cmd) {
         }
     }
 
+    var checkArchAgainstNodeModules = function(opt, cb) {
+
+        var currentArch         = GINA_ARCH
+            , projectObj        = self.projects[ self.projectName ]
+            , packagePathObj    = new _(projectObj.path +'/package.json', true)
+            , packagePath       = packagePathObj.toString()
+        ;
+
+        if ( !packagePathObj.existsSync() ) {
+            console.warn('[checkArchAgainstNodeModules] File`'+packagePath +'` not found');
+            return cb(false);
+        }
+
+        var isNodeModulesReinstallNeeded = false;
+        var nodeModulesPathObj = new _(projectObj.path +'/node_modules', true);
+
+        var projectArchFileObj = new _(projectObj.path +'/.gna/arch', true);
+        var projectArchFile = projectArchFileObj.toString();
+        var nodeModulesContentArr = ( nodeModulesPathObj.existsSync() ) ? fs.readdirSync(nodeModulesPathObj.toString()) : [];
+
+        if (
+            !projectArchFileObj.existsSync()
+            ||
+            projectArchFileObj.existsSync() && fs.readFileSync(projectArchFile).toString() != currentArch
+            ||
+            !nodeModulesPathObj.existsSync()
+            ||
+            nodeModulesPathObj.existsSync()
+            && !nodeModulesContentArr.length
+            ||
+            nodeModulesPathObj.existsSync()
+            && nodeModulesContentArr.length == 1
+            && nodeModulesContentArr[0] == 'gina'
+        ) {
+            isNodeModulesReinstallNeeded = true;
+        }
+
+        opt.client.write('\narch: '+ currentArch);
+        opt.client.write('\nprojectArchFile: '+ projectArchFile);
+        opt.client.write('\nisNodeModulesReinstallNeeded: '+ isNodeModulesReinstallNeeded);
+
+
+        if (isNodeModulesReinstallNeeded) {
+            // remove node_modules
+            if ( nodeModulesPathObj.existsSync() ) {
+                nodeModulesPathObj.rmSync();
+            }
+        }
+
+        // reinstall node_modules if needed
+        if ( isNodeModulesReinstallNeeded ) {
+            var initialDir = process.cwd();
+            var npmCmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
+            process.chdir( _(projectObj.path, true) );
+
+            opt.client.write('\nRe-installing node_modules to match arch');
+            opt.client.write('\nrunning: `'+ npmCmd +'` from '+ process.cwd() );
+            opt.client.write('\nrunning using TMPDIR: '+  _(getTmpDir(), true) );
+            var oldConfigGlobal = process.env.npm_config_global;
+            process.env.npm_config_global = false;
+            var result = null; resultError = false;
+            try {
+                result = execSync(npmCmd).toString();
+                var ginaBin = execSync('which gina').toString().trim();
+                execSync(ginaBin +' framework:link @'+ self.projectName);
+            } catch (err) {
+                resultError = err;
+            }
+
+            process.chdir(initialDir);
+            process.env.npm_config_global = oldConfigGlobal;
+
+            if (resultError) {
+                opt.msg = resultError.stack || resultError.message || resultError;
+                return cb(resultError);
+                // return end(opt, cmd)
+            }
+
+            opt.client.write('\n'+result);
+            // lib.generator.createFileFromDataSync(GINA_ARCH, projectArchFile);
+
+            opt.client.write('\r\nPlease wait...');
+
+            // handle node_modules installed
+            var e = new EventEmitter();
+            var trigger = self.projectName +'_'+ self.name +'#node-modules-installed';
+            var nIntervId = null;
+
+            e.once(trigger, function onBundleStarted(done) {
+                clearInterval(nIntervId);
+                nIntervId = null;
+
+                opt.client.write('\nOk, I am ready :)');
+                lib.generator.createFileFromDataSync(GINA_ARCH, projectArchFile);
+                setTimeout(() => {
+                    done(false)
+                }, 1000);
+
+            });
+
+            var nodeModulesPath = nodeModulesPathObj.toString();
+            var found = false;
+            nIntervId = setInterval(() => {
+                // Check for modules availability
+                found = new _(nodeModulesPath +'/gina', true).existsSync();
+
+                if ( found ) {
+                    clearInterval(nIntervId);
+                    e.emit(trigger, cb)
+                }
+            }, 200);
+
+            return;
+
+        }
+
+        cb(false);
+    }
+
+
+
     var start = function(opt, cmd, bundleIndex) {
+
         // getting the debug port
         var debugStr = null;
         if ( /\-\-(inspect|debug)/.test(opt.argv.join(',')) ) {
@@ -96,213 +273,237 @@ function Start(opt, cmd) {
                 if (isStarting)
                     return;
 
-                msg = 'Trying to start bundle [ ' + bundle + '@' + self.projectName + ' ]';
-                if (opt.debugPort) {
-                    msg += ' (debug port: '+ opt.debugPort +')'
-                }
-                // To gina log
-                console.info(msg);
-                // to the terminal stdout
-                opt.client.write('\n\r'+msg);
 
-                process.list = (process.list == undefined) ? [] : process.list;
-                setContext('processList', process.list);
-                setContext('ginaProcess', process.pid);
-                setContext('debugPort', opt.debugPort);
-                setContext('debugBrkEnabled', opt.debugBrkEnabled);
+                var proceedToStart = function(nodeModulesErr) {
+                    if (nodeModulesErr) {
+                        opt.msg = nodeModulesErr.stack;
+                        return end(opt, cmd, isBulkStart, bundleIndex, true)
+                    }
 
-                params = [
-                    // node arguments will be passed by gina
-                    appPath,
-                    JSON.stringify(getContext()), //Passing context to child.
-                    self.projectName, // project name
-                    bundle// bundle name
-                ];
 
-                // injecting node arguments
-                index = 0; i = 0; len = self.nodeParams.length;
-                if (len > 0) {
+                    msg = 'Trying to start bundle [ ' + bundle + '@' + self.projectName + ' ]';
+                    if (opt.debugPort) {
+                        msg += ' (debug port: '+ opt.debugPort +')'
+                    }
+                    // To gina log
+                    console.info(msg);
+                    // to the terminal stdout
+                    opt.client.write('\n\r'+msg);
+
+
+
+                    process.list = (process.list == undefined) ? [] : process.list;
+                    setContext('processList', process.list);
+                    setContext('ginaProcess', process.pid);
+                    setContext('debugPort', opt.debugPort);
+                    setContext('debugBrkEnabled', opt.debugBrkEnabled);
+
+                    params = [
+                        // node arguments will be passed by gina
+                        appPath,
+                        JSON.stringify(getContext()), //Passing context to child.
+                        self.projectName, // project name
+                        bundle// bundle name
+                    ];
+
+                    // injecting node arguments
+                    index = 0; i = 0; len = self.nodeParams.length;
+                    if (len > 0) {
+                        for (; i < len; ++i) {
+                            params.splice(index, 0, self.nodeParams[i]);
+                            ++index
+                        }
+                    }
+
+                    i = 0; len = params.length;
                     for (; i < len; ++i) {
-                        params.splice(index, 0, self.nodeParams[i]);
-                        ++index
-                    }
-                }
-
-                i = 0; len = params.length;
-                for (; i < len; ++i) {
-                    if (params[i] == '') {
-                        params.splice(i, 1);
-                    }
-                }
-
-
-                var child = spawn(opt.argv[0], params,
-                    {
-                        detached: true
-                    }
-                );
-
-                child.stdout.setEncoding('utf8');//Set encoding.
-
-                // CMD Auto Exit
-                var retry = 0, maxRetry = 15, maxTimeout = (self.debugBrkEnabled) ? 1200000 : 4000;
-                var timerId = setInterval(function() {
-                    if (!isStarting ) {
-                        ++retry;
-                        //opt.client.write('what is wrong ? '+ retry);
-                    } else {
-                        clearInterval(timerId);
+                        if (params[i] == '') {
+                            params.splice(i, 1);
+                        }
                     }
 
-                    if (retry > maxRetry) {
-                        clearInterval(timerId);
-                        opt.client.write('Sorry my friend, this is taking too long ! Terminating. Check your logs.');
-                        child.kill('SIGKILL');
-                        if (!opt.client.destroyed) {
-                            opt.client.emit('exit');
-                            opt.client.emit('end');
+
+                    var child = spawn(opt.argv[0], params,
+                        {
+                            detached: true
+                        }
+                    );
+
+                    child.stdout.setEncoding('utf8');//Set encoding.
+
+                    // CMD Auto Exit
+                    var retry = 0, maxRetry = 15, maxTimeout = (self.debugBrkEnabled) ? 1200000 : 4000;
+                    var timerId = setInterval(function() {
+                        if (!isStarting ) {
+                            ++retry;
+                            //opt.client.write('what is wrong ? '+ retry);
+                        } else {
+                            clearInterval(timerId);
+                        }
+
+                        if (retry > maxRetry) {
+                            clearInterval(timerId);
+                            opt.client.write('Sorry my friend, this is taking too long ! Terminating. Check your logs.');
+                            child.kill('SIGKILL');
+                            if (!opt.client.destroyed) {
+                                opt.client.emit('exit');
+                                opt.client.emit('end');
+                            }
+
+
+                            //end(opt, cmd, isBulkStart, bundleIndex);
+                        }
+                    }, maxTimeout);
+
+                    var checkCaseCount = 2
+                        // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
+                        // NB.: you can place flag by using console.notice
+                        , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'g')
+                        , url = null
+                        , debuggerOn = null
+                    ;
+                    var port = '', errorFound = false;
+                    child.stdout.on('data', function(data) {
+                        // console.log(data);
+
+                        // handle errors
+                        if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
+                            console.log(data);
+                            // kill the bundle starting process first
+                            child.kill('SIGKILL');
+
+                            errorFound = true;
+                            //opt.client.write(data);
+                            try {
+                                port = ' #'+ data.match(/port\":\s+\d+/)[0].split(/\:/)[1].trim() +' ';
+                                opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy');
+
+                            } catch(_err) {
+                                opt.client.write(_err);
+                            }
+
+
+                            ++opt.onlineCount;
+                            end(opt, cmd, isBulkStart, bundleIndex);
+                            clearInterval(timerId);
+
+                            return;
+                        }
+
+                        // catch fatal errors to exit
+                        if ( /(\[|\[\s+)emerg/.test(data) ) {
+                            console.log(data);
+
+                            // kill the bundle starting process first
+                            child.kill('SIGKILL');
+
+                            opt.notStarted.push(bundle + '@' + self.projectName);
+                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
+
+                            ++opt.onlineCount;
+                            end(opt, cmd, isBulkStart, bundleIndex);
+                            clearInterval(timerId);
+
+                            return;
+                        }
+
+                        // Expecting 2 flags (checkCaseCount) to free the child stdout !!
+                        // console.debug('BO case count '+ checkCaseCount);
+                        var _matched =  data.match(checkCaseRe);
+                        if ( _matched ) {
+                            // console.warn('case count: '+ checkCaseCount +'\nMatched: '+ _matched.length + '\n'+ checkCaseRe +'\n-> '+ data + '<-\n');
+                            checkCaseCount -= _matched.length;
+                        }
+                        // console.debug('EO case count: '+ checkCaseCount + ' -> '+ data);
+
+                        // cache bundle state info given by the server while starting
+                        if ( !debuggerOn && new RegExp('Debugger listening on','gmi').test(data)) {
+                            debuggerOn = '\n   ' + data.match(new RegExp('Debugger listening on .*','gmi'));
+                        }
+                        if ( !url && new RegExp('This way please','gmi').test(data)) {
+                            url = '\n   ' + data.match(new RegExp('This way please -> .*','gmi'));
                         }
 
 
-                        //end(opt, cmd, isBulkStart, bundleIndex);
-                    }
-                }, maxTimeout);
 
-                var checkCaseCount = 2
-                    // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
-                    // NB.: you can place flag by using console.notice
-                    , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'g')
-                    , url = null
-                    , debuggerOn = null
-                ;
-                var port = '', errorFound = false;
-                child.stdout.on('data', function(data) {
-                    // console.log(data);
+                        if (!opt.client.destroyed && !isStarting && !checkCaseCount) {
+                            isStarting = true;
+                            clearInterval(timerId);
+                            ++opt.onlineCount;
 
-                    // handle errors
-                    if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
-                        console.log(data);
-                        // kill the bundle starting process first
-                        child.kill('SIGKILL');
+                            if (!debuggerOn) {
+                                debuggerOn = ''
+                            }
 
-                        errorFound = true;
-                        //opt.client.write(data);
-                        try {
-                            port = ' #'+ data.match(/port\":\s+\d+/)[0].split(/\:/)[1].trim() +' ';
-                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] has already been started, or port'+ port+'might be busy');
+                            // resume logging
+                            process.emit('gina#bundle-logging', GINA_MQ_PORT, GINA_HOST_V4, bundle + '@' + self.projectName);
+                            console.debug('Sent:  gina#bundle-logging');
 
-                        } catch(_err) {
-                            opt.client.write(_err);
+
+                            opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
+
+
+                            end(opt, cmd, isBulkStart, bundleIndex);
+                            return;
                         }
-
-
-                        ++opt.onlineCount;
-                        end(opt, cmd, isBulkStart, bundleIndex);
-                        clearInterval(timerId);
 
                         return;
-                    }
 
-                    // catch fatal errors to exit
-                    if ( /(\[|\[\s+)emerg/.test(data) ) {
-                        console.log(data);
+                    });
 
-                        // kill the bundle starting process first
-                        child.kill('SIGKILL');
+                    //when an exception is thrown, it is sent to the client
+                    child.stderr.setEncoding('utf8');
+                    var error = null, onException = false;
+                    child.stderr.on('data', function(err) {
+                        error = err.toString();
 
-                        opt.notStarted.push(bundle + '@' + self.projectName);
-                        opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] aborted :( \n  => Check your logs to see why.');
-
-                        ++opt.onlineCount;
-                        end(opt, cmd, isBulkStart, bundleIndex);
-                        clearInterval(timerId);
-
-                        return;
-                    }
-
-                    // Expecting 2 flags (checkCaseCount) to free the child stdout !!
-                    // console.debug('BO case count '+ checkCaseCount);
-                    var _matched =  data.match(checkCaseRe);
-                    if ( _matched ) {
-                        // console.warn('case count: '+ checkCaseCount +'\nMatched: '+ _matched.length + '\n'+ checkCaseRe +'\n-> '+ data + '<-\n');
-                        checkCaseCount -= _matched.length;
-                    }
-                    // console.debug('EO case count: '+ checkCaseCount + ' -> '+ data);
-
-                    // cache bundle state info given by the server while starting
-                    if ( !debuggerOn && new RegExp('Debugger listening on','gmi').test(data)) {
-                        debuggerOn = '\n   ' + data.match(new RegExp('Debugger listening on .*','gmi'));
-                    }
-                    if ( !url && new RegExp('This way please','gmi').test(data)) {
-                        url = '\n   ' + data.match(new RegExp('This way please -> .*','gmi'));
-                    }
-
-
-
-                    if (!opt.client.destroyed && !isStarting && !checkCaseCount) {
-                        isStarting = true;
-                        clearInterval(timerId);
-                        ++opt.onlineCount;
-
-                        if (!debuggerOn) {
-                            debuggerOn = ''
+                        if (/Waiting for the debugger to disconnect.../.test(error) ) { // dual debug --inspect-gina && --inspect
+                            onException = true;
                         }
 
-                        // resume logging
-                        process.emit('gina#bundle-logging', GINA_MQ_PORT, GINA_HOST_V4, bundle + '@' + self.projectName);
-                        console.debug('Sent:  gina#bundle-logging');
+                        if (/Debugger listening|Debugger attached|Warning|address already in use/i.test(error)) {
 
-
-                        opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
-
-
-                        end(opt, cmd, isBulkStart, bundleIndex);
-                        return;
-                    }
-
-                    return;
-
-                });
-
-                //when an exception is thrown, it is sent to the client
-                child.stderr.setEncoding('utf8');
-                var error = null;
-                child.stderr.on('data', function(err) {
-                    error = err.toString();
-
-                    if (/Debugger listening|Debugger attached|Warning|address already in use/i.test(error)) {
-                        console.warn(error);
-
-                        if (!opt.client.destroyed) {
-                            opt.client.write(error);
+                            if (!opt.client.destroyed) {
+                                opt.client.write(error);
+                            }
                         }
 
-                    } else {
                         console.error(error);
-                    }
-                });
+                    });
 
-                child.on('exit', function(code, signal) {
-                    // handles only signals that cannot be cannot be caught or ignored
-                    // ref.: `framework/<version>/lib/proc.js`
-                    if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
-                        console.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
-                        cmd.proc.dismiss(this.pid, signal);
-                    }
-                });
+                    child.on('exit', function(code, signal) {
+                        // handles only signals that cannot be cannot be caught or ignored
+                        // ref.: `framework/<version>/lib/proc.js`
+                        if (onException) { // dual debug --inspect-gina && --inspect
+                            return end(opt, cmd, isBulkStart, bundleIndex);
+                        }
+                        if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
+                            console.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
+                            cmd.proc.dismiss(this.pid, signal);
+                            return;
+                        }
 
+                    });
 
-            }
+                } // EO proceedToStart
+
+                checkArchAgainstNodeModules(opt, proceedToStart);
+
+            } // EO Else
 
         });//EO isRealApp
 
-    }
+    } //EO start
+
+
 
 
     var end = function (opt, cmd, isBulkStart, i, error) {
         if ( typeof(opt.msg) != 'undefined' ) {
             opt.client.write('\n\r'+ opt.msg);
         }
+
+        isBulkStart = ( typeof(isBulkStart) == 'undefined' ) ? false : isBulkStart;
         if (isBulkStart) {
             ++i;
             if ( typeof(self.bundles[i]) != 'undefined' ) {
@@ -312,9 +513,10 @@ function Start(opt, cmd) {
                 var notStartedMsg = '\nCould not start: \n  - '+ opt.notStarted.join('\n');
                 opt.client.write(notStartedMsg);
 
-                if ( typeof(error) != 'undefined') {
-                    process.exit(1);
-                }
+                // TODO - 2023-01-08 Remove this if not needed
+                // if ( typeof(error) != 'undefined' && !new RegExp('gina-v').test(process.title) ) { // will also stop the framework !!!
+                //     process.exit(1);
+                // }
 
                 if (!opt.client.destroyed)
                     opt.client.emit('end');
@@ -322,9 +524,10 @@ function Start(opt, cmd) {
             return;
         }
 
-        if ( typeof(error) != 'undefined') {
-            process.exit(1);
-        }
+        // TODO - 2023-01-08 Remove this if not needed
+        // if ( typeof(error) != 'undefined' && !new RegExp('gina-v').test(process.title) ) { // will also stop the framework !!!
+        //     process.exit(1);
+        // }
 
         if (!opt.client.destroyed)
             opt.client.emit('end');

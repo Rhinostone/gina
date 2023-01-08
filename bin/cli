@@ -12,6 +12,7 @@ async function onExec() {
     // process.stdout.write('GINA CLI LOADED !! ' + JSON.stringify(process.argv, null, 2) + '\n');
 
     var isWin32         = (process.platform === 'win32') ? true : false;
+    var arch            = process.arch;
     var binPath         = __dirname;
     var ginaPath        = (binPath.replace(/\\/g, '/')).replace('/bin', '');
     ginaPath = (isWin32) ? ginaPath.replace(/\//g, '\\') : ginaPath;
@@ -42,6 +43,7 @@ async function onExec() {
 
         // catching debug|inspect arg
         //process.stdout.write('params '+ params.join(', ') + '\n');
+
         if ( params.length > 0 ) {
             for (var p = 0, len = params.length; p < len; ++p) {
 
@@ -80,7 +82,7 @@ async function onExec() {
                     continue;
                 }
 
-                if ( /^\-\-(inspect|debug)/.test(params[p]) ) {
+                if ( /^\-\-(inspect|debug)/.test(params[p]) && !/^\-\-(inspect|debug)-gina/.test(params[p]) ) {
                     debugBrkEnabled = ( /\-brk/.test(params[p]) ) ? true : false;
                     debugPort       = params[p].split(/\=/)[1];
                     params.splice(p,1);
@@ -117,9 +119,15 @@ async function onExec() {
         setEnvVar('GINA_ENV', settings['env']);// jshint ignore:line
 
         // prior to what settings says
-        if (hostname != settings['hostname'] && !isUpdateRequired) {
-            setEnvVar('GINA_TMPDIR', settings['hostname']);// jshint ignore:line
+        if ( !settings['arch'] ) {
+            settings['arch'] = arch;
+            setEnvVar('GINA_ARCH', settings['arch']);// jshint ignore:line
+            isUpdateRequired = true;
+        }
+        if (hostname != settings['hostname'] /**&& !isUpdateRequired*/) {
+            setEnvVar('GINA_HOSTNAME', settings['hostname']);// jshint ignore:line
             hostname = settings['hostname'];
+            isUpdateRequired = true;
         }
         hostV4 = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || '127.0.0.1';// jshint ignore:line
         mqPort = getEnvVar('GINA_MQ_PORT')|| settings['mq_port'] || 8125;// jshint ignore:line
@@ -201,6 +209,7 @@ async function onExec() {
     }
     if (isUpdateRequired) {
         console.debug('Updating debug settings ...');// jshint ignore:line
+        settings['arch'] = getEnvVar('GINA_ARCH') || settings['arch'] || null;// jshint ignore:line
         settings['port'] = getEnvVar('GINA_PORT') || settings['port'] || null;// jshint ignore:line
         settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT') || settings['debug_port'] || null;// jshint ignore:line
 
@@ -255,20 +264,25 @@ async function onExec() {
             && process.argv[2] === 'framework:start'
     ) {
 
-        //Start framework || launch online CMD.
-        require(binPath + '/cmd')({
-            binPath         : binPath,
-            ginaPath        : ginaPath,
-            frameworkPath   : frameworkPath,
-            homedir         : home,
-            port            : port,
-            hostV4          : hostV4,
-            mqPort          : mqPort,
-            hostname        : hostname,
-            debugPort       : debugPort,
-            debugBrkEnabled : debugBrkEnabled,
-            pack            : pack
-        });
+        try {
+            //Start framework || launch online CMD.
+            require(binPath + '/cmd')({
+                binPath         : binPath,
+                ginaPath        : ginaPath,
+                frameworkPath   : frameworkPath,
+                homedir         : home,
+                port            : port,
+                hostV4          : hostV4,
+                mqPort          : mqPort,
+                hostname        : hostname,
+                debugPort       : debugPort,
+                debugBrkEnabled : debugBrkEnabled,
+                pack            : pack
+            });
+        } catch (err) {
+            console.err(err)
+        }
+
 
 
     } else if (

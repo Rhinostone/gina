@@ -40,6 +40,7 @@ function runAsSubProcess() {
     var fakeDaemonPid   = '--fake-daemon-pid='+ process.pid;
 
     if ( argv.indexOf('--inspect-gina') > -1 ) {
+
         cliBin  = __dirname + '/cli-debug';
         argv.splice(argv.indexOf('--inspect-gina'), 1);
         // removing `--inspect-gina`
@@ -113,6 +114,8 @@ function runAsSubProcess() {
             process.exit(0);
         }
 
+        // console.debug('[gina][runAsSubProcess]', data);
+
     });
 
     //when an exception is thrown, it is sent to the client
@@ -177,8 +180,10 @@ function runCMD() {
     var cliBin  = __dirname + '/cli';
     if ( argv.indexOf('--inspect-gina') > -1 ) {
         cliBin  = __dirname + '/cli-debug';
-        argv.splice(argv.indexOf('--inspect-gina'), 1);
-        Array.prototype.splice.call(process.argv, argv.indexOf('--inspect-gina'), 1);
+
+        // TODO - Remove this, not needed anymore since 2023-01-07 debug fix
+        // argv.splice(argv.indexOf('--inspect-gina'), 1);
+        // Array.prototype.splice.call(process.argv, argv.indexOf('--inspect-gina'), 1);
     }
     require(cliBin);
 }

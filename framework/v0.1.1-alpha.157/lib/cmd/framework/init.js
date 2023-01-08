@@ -2,6 +2,7 @@ var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var e               = new EventEmitter();
 const { execSync }  = require('child_process');
+const { arch } = require('os');
 
 var console         = lib.logger;
 var ginaPath        = getPath('gina').root;
@@ -66,6 +67,9 @@ function Initialize(opt) {
             require(path)(opt, cmd)
         } catch(err) {
             console.crit('Gina has some troubles with command [ ', process.argv.join(' ') + ' ]\n' + err.stack);
+            if (opt.client) {
+                opt.client.write('Gina has some troubles with command [ ', process.argv.join(' ') + ' ]\n' + err.stack);
+            }
             process.exit(-1);
         }
     }
@@ -162,7 +166,8 @@ function Initialize(opt) {
                 mainConfig[k] = ( typeof(data[k]) == 'object' ) ? JSON.clone(data[k]) : data[k];
             }
         }
-
+        // arch
+        mainConfig.archs = merge(mainConfig.archs, data.archs, true);
         // envs
         mainConfig.envs = merge(mainConfig.envs, data.envs, true);
         // scopes
@@ -235,29 +240,48 @@ function Initialize(opt) {
      * */
     self.checkArch = function() {
 
-        var systemArch = process.arch;
+        var procArch = process.arch;
         // ignored for framework:set
-        var main = require( self.opt.homedir + '/main.json' );
+        var mainConfig = require( self.opt.homedir + '/main.json' );
         //has registered arch ?
-        var arch   = getEnvVar('GINA_ARCH') || main['local_arch'][self.release] || null; // arch by default
-        if ( main.archs[self.release].indexOf(arch) < 0 ) {
-            console.error('Arch [ ' + arch + ' ] not registered. See [ man gina-arch ].');
-            process.exit(1)
+        var arch   = getEnvVar('GINA_ARCH') || mainConfig['def_arch'][self.release] || null; // arch by default
+        if ( mainConfig.archs[self.release].indexOf(arch) < 0 ) {
+            console.error('Arch [ ' + arch + ' ] not registered. Gina is not support your `architecture` at this moment.');
+            process.exit(1);
+        }
+
+        var isUpdateNeeded = false;
+        if (arch != procArch) {
+            // updating arch
+            arch = procArch;
+            if ( mainConfig.archs[self.release].indexOf(arch) < 0 ) {
+                console.error('Arch [ ' + arch + ' ] not registered. Gina is not support your `architecture` at this moment.');
+                process.exit(1);
+            }
+
+            isUpdateNeeded = true;
+            mainConfig['def_arch'][self.release] = arch;
         }
 
 
         // has local scope ?
         if (
-            typeof(main['local_arch']) == 'undefined' ||
-            typeof(main['local_arch']) != 'undefined' &&
-            typeof(main['local_arch'][self.release]) != 'undefined' &&
-            main.archs[self.release].indexOf(main['local_arch'][self.release]) < 0
+            isUpdateNeeded
+            ||
+            typeof(mainConfig['def_arch']) == 'undefined'
+            ||
+            typeof(mainConfig['def_arch']) != 'undefined'
+            && typeof(mainConfig['def_arch'][self.release]) != 'undefined'
+            && mainConfig.archs[self.release].indexOf(mainConfig['def_arch'][self.release]) < 0
         ) {
-            // console.error('the framework has no local arch linked to any ' +
-            //     'arch to gina\'s.\nUse: $ gina arch:link-local <your_new_local_arch>');
-
-            // process.exit(1)
+            var target = _(self.opt.homedir +'/main.json');
+            lib.generator.createFileFromDataSync(
+                mainConfig,
+                target
+            )
         }
+
+        // scanning project
     }
 
     /**
@@ -358,7 +382,7 @@ function Initialize(opt) {
             main.scopes[self.release].indexOf(main['local_scope'][self.release]) < 0
         ) {
             console.error('the framework has no local scope linked to any ' +
-                'scope to gina\'s.\nUse: $ gina framework:set --scope=<your_new_local_scope>');
+                'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
 
             process.exit(1)
         }
@@ -377,6 +401,7 @@ function Initialize(opt) {
             , version       = getEnvVar('GINA_VERSION')
             , prefix        = getEnvVar('GINA_PREFIX') || main['def_prefix'][self.release]
             , globalMode    = getEnvVar('GINA_GLOBAL_MODE') || main['def_global_mode'][self.release]
+            , arch          = getEnvVar('GINA_ARCH') || main['def_arch'][self.release]
             , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
             , scope         = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release]
             , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
@@ -437,6 +462,7 @@ function Initialize(opt) {
                 'prefix' : prefix,
                 'global_mode': globalMode,
                 'version' : version,
+                'arch' : arch,
                 'env' : env,
                 'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,
                 'dev_env' : main['dev_env'][self.release],

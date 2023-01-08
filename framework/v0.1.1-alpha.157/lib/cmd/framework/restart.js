@@ -61,7 +61,11 @@ function Restart(opt, cmd) {
 
     var restart = function(opt, cmd) {
         stop();
-        start();
+        // if previous debug session
+        setTimeout(() => {
+            start(opt);
+        }, 100);
+
     }
 
     var stop = function() {
@@ -81,7 +85,7 @@ function Restart(opt, cmd) {
      * because of the `process.kill(..., 'SIGABRT')` used inside the orginal `start` script
      * or else, the restart script will be pending forever.
      */
-    var start = async function() {
+    var start = async function(opt) {
         console.debug('continue with start now');
         try {
             // var child = spawn('gina', ['start', '@'+self.version],

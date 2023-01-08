@@ -25,6 +25,8 @@ var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js
  *
  * */
 function Tail(opt, cmd) {
+
+    process.title = 'gina-tail';
     var self        = {};
     var nIntervId   = null;
     var mqPortFile  = _(getTmpDir() +'/mq-listener-v'+ GINA_VERSION +'.port', true);
