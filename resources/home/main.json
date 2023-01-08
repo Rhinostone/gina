@@ -17,7 +17,7 @@
             "amd64"
         ]
     },
-    "local_arch": {
+    "def_arch": {
         "{release}": "x64"
     },
     "scopes": {

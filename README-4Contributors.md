@@ -88,6 +88,23 @@ This only means that if you omit the env in the command line while trying to sta
 > __NB:__ Unlike for the projects `envs`, the framework env list cannot be changed; it is `dev` or `prod`.
 
 
+### Debugging
+
+#### Framework
+```tty
+gina start --inspect-gina
+```
+
+#### Bundles
+
+> gina bundle:restart {bundle_name} @${project_name} --inspect=<port_number>
+
+```tty
+gina bundle:restart <bundle_name> @<project_name> --inspect=<port_number>
+```
+
+
+
 ### Publishing
 ---
 

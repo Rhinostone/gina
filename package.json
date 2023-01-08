@@ -40,9 +40,9 @@
     }
   ],
   "copyright": "Copyright (c) 2009-2023 Rhinostone <contact@gina.io>",
-  "engine": [
-    "node >=0.10.25"
-  ],
+  "engine": {
+    "node": ">= 0.10.0 <18"
+  },
   "config": {
     "optionalPrefix": "~/.npm-global",
     "prefix": "/usr/local",

@@ -28,12 +28,12 @@ function List(opt, cmd){
             , str = ''
             , more = (process.argv[3] && /^(?:\-\-more$)/.test(process.argv[3])) ? true : false ;
 
-        for (var p in projects) {
+        for (let p in projects) {
             list.push(p)
         }
         list.sort();
 
-        for(var l=0; l<list.length; ++l) {
+        for(let l=0; l<list.length; ++l) {
             if ( fs.existsSync(projects[ list[l]].path) ) {
                 str += '[ ok ] '+ list[l];
                 if (more)
@@ -47,6 +47,20 @@ function List(opt, cmd){
             }
         }
         console.log(str.substr(0, str.length-2))
+        end();
+    }
+
+    var end = function (err, type, messageOnly) {
+        if ( typeof(err) != 'undefined') {
+            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+            if ( typeof(type) != 'undefined' ) {
+                console[type](out)
+            } else {
+                console.error(out);
+            }
+        }
+
+        process.exit( err ? 1:0 )
     }
 
     init()
