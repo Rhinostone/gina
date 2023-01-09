@@ -108,12 +108,24 @@ function Start(opt, cmd) {
             return cb(false);
         }
 
+
         var isNodeModulesReinstallNeeded = false;
         var nodeModulesPathObj = new _(projectObj.path +'/node_modules', true);
 
         var projectArchFileObj = new _(projectObj.path +'/.gna/arch', true);
         var projectArchFile = projectArchFileObj.toString();
         var nodeModulesContentArr = ( nodeModulesPathObj.existsSync() ) ? fs.readdirSync(nodeModulesPathObj.toString()) : [];
+        var newNodeModulesContentArr = [], n = 0;
+        for (let f in nodeModulesContentArr) {
+            if (/^\./.test(nodeModulesContentArr[f]) ) {
+               continue
+            }
+            newNodeModulesContentArr[n] = nodeModulesContentArr[f];
+        }
+        nodeModulesContentArr = newNodeModulesContentArr.slice();
+        newNodeModulesContentArr = null;
+
+        var pack = requireJSON(packagePath);
 
         if (
             !projectArchFileObj.existsSync()
@@ -128,6 +140,8 @@ function Start(opt, cmd) {
             nodeModulesPathObj.existsSync()
             && nodeModulesContentArr.length == 1
             && nodeModulesContentArr[0] == 'gina'
+            && typeof(pack.dependencies) != 'undefined'
+            && pack.dependencies.count() > 0
         ) {
             isNodeModulesReinstallNeeded = true;
         }
@@ -136,7 +150,7 @@ function Start(opt, cmd) {
         opt.client.write('\nprojectArchFile: '+ projectArchFile);
         opt.client.write('\nisNodeModulesReinstallNeeded: '+ isNodeModulesReinstallNeeded);
 
-
+        // TODO - Do we want this for production ?
         if (isNodeModulesReinstallNeeded) {
             // remove node_modules
             if ( nodeModulesPathObj.existsSync() ) {
