@@ -897,6 +897,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 //options.headers['Origin']   = '*';
                 //options.headers['Host']     = 'https://domain.local:3154';
                 var isSameDomain = ( new RegExp(window.location.hostname).test(url) ) ? true : false;
+                if (gina.config.envIsDev) {
+                    console.debug('Checking CORS from Popin plugin...\TODO - local CORS Proxy');
+                }
                 if (!isSameDomain) {
                     // proxy external urls
                     // TODO - instead of using `cors.io` or similar services, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/

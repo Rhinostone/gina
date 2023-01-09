@@ -1,9 +1,9 @@
 define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
-    
-    
+
+
     var eventsHandler   = require('utils/events'); // events handler
     var merge           = require('utils/merge');
-    var dateFormat      = require('helpers/dateFormat')();    
+    var dateFormat      = require('helpers/dateFormat')();
     var prototypes      = require('helpers/prototypes')({ dateFormat: dateFormat });
     var uuid            = require('vendor/uuid');
 
@@ -89,16 +89,16 @@ define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpe
 
             'setOptions'        : setOptions
         };
-        
+
         // iframe case
         if ( typeof(parent.window['gina']) != 'undefined' ) {
             // inheriting from parent frame instance
-            window['gina'] = merge((window['gina'] || {}), parent.window['gina']);
+            window['gina'] = merge((window['gina'] || {}), parent.window['gina']);
         }
-        $instance = merge( (window['gina'] || {}), $instance);
+        $instance = merge( (window['gina'] || {}), $instance);
 
         registerEvents(this.plugin, events);
-        
+
         triggerEvent(gina, proto.target, 'ginaloaded', $instance)
     }
 
