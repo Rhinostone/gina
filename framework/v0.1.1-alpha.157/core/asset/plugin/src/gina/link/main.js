@@ -6,7 +6,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
     var merge   = require('utils/merge');
 
     require('utils/events'); // events
-    
+
     /**
      * Gina Link Handler
      *
@@ -56,7 +56,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
 
         // XML Request
         var xhr = null;
-        
+
         /**
          * XML Request options
          * */
@@ -74,7 +74,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
 
         var registeredLinks = [];
 
-        
+
 
         var proxyClick = function($childNode, $el, evt) {
 
@@ -84,25 +84,25 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 triggerEvent(gina, $el, evt);
             });
         }
-        
-        var getLinkById = function(id) {            
+
+        var getLinkById = function(id) {
             return ( typeof(instance.$links[id]) != 'undefined' ) ? instance.$links[id] : null;
         }
-        
+
         var getLinkByUrl = function(url) {
             var $link = null;
-            
+
             for (var p in gina.link.$links) {
                 if ( typeof(gina.link.$links[p].url) != 'undefined' && gina.link.$links[p].url == url ) {
                     $link = gina.link.$links[p];
                     break;
                 }
             }
-            
+
             return $link;
         }
-        
-                  
+
+
 
         /**
          * linkRequest
@@ -115,12 +115,12 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
             // link object
             var $link      = getLinkByUrl(url);
             var id         = $link.id;
-            
-            
+
+
             // link element
             var $el         = document.getElementById(id) || null;
-            
-            var hLinkIsRequired = null;        
+
+            var hLinkIsRequired = null;
             // forward callback to HTML data event attribute through `hform` status
             hLinkIsRequired = ( $el.getAttribute('data-gina-link-event-on-success') || $el.getAttribute('data-gina-link-event-on-error') ) ? true : false;
             // success -> data-gina-form-event-on-submit-success
@@ -142,20 +142,23 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
             } else {
                 options = merge(options, xhrOptions);
             }
-            
+
             if ( /^(http|https)\:/.test(url) && !new RegExp('^' + window.location.protocol + '//'+ window.location.host).test(url) ) {
                 // is request from same domain ?
                 //options.headers['Origin']   = window.protocol+'//'+window.location.host;
                 //options.headers['Origin']   = '*';
                 //options.headers['Host']     = 'https://freelancer-app.fr.local:3154';
                 var isSameDomain = ( new RegExp(window.location.hostname).test(url) ) ? true : false;
+                if (gina.config.envIsDev) {
+                    console.debug('Checking CORS from Link plugin...\TODO - local CORS Proxy');
+                }
                 if (!isSameDomain) {
                     // proxy external urls
                     // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
                     //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
                     url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
                     //delete options.headers['X-Requested-With']
-                }   
+                }
             }
             options.url     = url;
             // updating link options
@@ -163,7 +166,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 options  = merge($link.options, options);
 
 
-            if ( options.withCredentials ) { // Preflighted requests               
+            if ( options.withCredentials ) { // Preflighted requests
                 if ('withCredentials' in xhr) {
                     // XHR for Chrome/Firefox/Opera/Safari.
                     if (options.isSynchrone) {
@@ -182,7 +185,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                     triggerEvent(gina, $el, 'error.' + id, result)
                 }
             } else { // simple requests
-                
+
                 if (options.isSynchrone) {
                     xhr.open(options.method, options.url, options.isSynchrone)
                 } else {
@@ -190,12 +193,12 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 }
             }
 
-            
+
 
             if (!xhr)
                 throw new Error('No `xhr` object initiated');
-            
-            
+
+
             options.$link = $link;
             //xhr = handleXhr(xhr, $el, options);
             handleXhr(xhr, $el, options, require);
@@ -204,18 +207,18 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
         }
 
         // var listenToXhrEvents = function($link) {
-            
+
         //     //data-gina-link-event-on-success
         //     var htmlSuccesEventCallback =  $link.target.getAttribute('data-gina-link-event-on-success') || null;
         //     if (htmlSuccesEventCallback != null) {
-    
+
         //         if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
         //             eval(htmlSuccesEventCallback)
         //         } else {
         //             $link.on('success.hlink',  window[htmlSuccesEventCallback])
         //         }
         //     }
-    
+
         //     //data-gina-link-event-on-error
         //     var htmlErrorEventCallback =  $link.target.getAttribute('data-gina-link-event-on-error') || null;
         //     if (htmlErrorEventCallback != null) {
@@ -226,53 +229,53 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
         //         }
         //     }
         // }
-        
-        
 
-        
+
+
+
         function registerLink($link, options) {
-            
+
             if ( typeof(options) != 'object' ) {
                 throw new Error('`options` must be an object')
             }
-            
-            $link.options = merge(options, self.options);         
-            
+
+            $link.options = merge(options, self.options);
+
             // link element
             var id  = $link.id;
             var $el = document.getElementById(id) || null;
-            
-            if ( typeof(instance.$links[$link.id]) == 'undefined' ) {               
 
-                
+            if ( typeof(instance.$links[$link.id]) == 'undefined' ) {
+
+
 
                 if ( registeredLinks.indexOf($link.id) > -1 ) {
                     throw new Error('`link '+$link.id+'` already exists !')
                 }
-                
-                
+
+
                 if (!gina.events[evt]) {
-                    
-                    
-                
+
+
+
                     // attach click events
                     addListener(gina, $el, evt, function(e) {
                         cancelEvent(e);
 
                         var $localLink = getLinkById(e.target.id)
-                        // loading & binding link     
+                        // loading & binding link
                         var localUrl = $localLink.url;
 
-                        // Non-Preflighted requests                        
+                        // Non-Preflighted requests
                         if ( typeof($localLink.options.isSynchrone) == 'undefined' ) {
                             $localLink.options.isSynchrone = false;
                         }
                         if ( typeof($localLink.options.withCredentials) == 'undefined' ) {
                             $localLink.options.withCredentials = false
                         }
-                                              
-                        linkRequest(localUrl, $localLink.options);                                 
-                        
+
+                        linkRequest(localUrl, $localLink.options);
+
                         //delete gina.events[ $localLink.id ];
                         //removeListener(gina, event.target, event.type)
                     });
@@ -290,21 +293,21 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                         }
                     }
                 }
-                
-                
 
-                                        
+
+
+
                 $link.request       = linkRequest;
                 $link.getLinkById   = getLinkById;
                 $link.getLinkByUrl  = getLinkByUrl;
-                
+
                 instance.$links[$link.id] = $link;
-                
-                
-                             
+
+
+
             }
         }
-        
+
         /**
          * bindLinks
          *
@@ -312,13 +315,13 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
          * @param {object} [options]
          * */
         var bindLinks = function($target, options) {
-            
+
             var id = null;
             if ( typeof($target) == 'undefined' ) {
                 $target = instance.target;
                 id = instance.id;
             }
-            
+
             // binding form elements
             var found               = null
                 , $el               = null
@@ -333,45 +336,45 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 // buttons
                 //, $button   = $target.getElementsByTagName('button')
             ;
-            
-            var i = 0, len = $a.length;            
+
+            var i = 0, len = $a.length;
             for (; i < len; ++i) {
                 found = $a[i].getAttribute('data-gina-link');
-                
+
                 if (!found) continue;
-                
+
                 $el     = $a[i];
                 props   = {
                     type: 'a',
                     method: 'GET'
                 };
-                
-                
+
+
                 url = $el.getAttribute('data-gina-link-url');
                 if ( typeof(url) != 'undefined' && url != null ) {
                     props.url = url
                 } else {
                     props.url = $el.getAttribute('href')
                 }
-                
-                               
-                                
-                
+
+
+
+
                 elId = $el.getAttribute('id');
                 if ( typeof(elId) == 'undefined' || elId == null || elId == '' || /popin\.link/.test(elId) ) {
-                    
+
                     // unbind popin link
                     // if ( /popin\.link/.test(elId) ) {
-                        
+
                     // }
-                    
+
                     elId = 'link.click.'+ 'gina-link-' + instance.id +'-'+ uuid.v4();
-                }                
+                }
                 $el['id']   = elId;
                 props.id    = elId;
                 evt         = elId;
                 $el.setAttribute('id', evt);
-                
+
                 if ($el.tagName == 'A') {
                     onclickAttribute = $el.getAttribute('onclick');
                 }
@@ -386,25 +389,25 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                     }
                     $el.setAttribute('onclick', onclickAttribute);
                 }
-                
+
                 $newLink = null;
-                
-                if ( typeof(instance.$links[props.id]) == 'undefined' ) {            
-                    props.target = $el;   
-                    $newLink = merge(props, $link);  
+
+                if ( typeof(instance.$links[props.id]) == 'undefined' ) {
+                    props.target = $el;
+                    $newLink = merge(props, $link);
                     registerLink($newLink, options);
                 }
-                
-                
+
+
             }
-            
+
         }
 
         var init = function(options) {
-            
+
             setupInstanceProto();
             instance.on('init', function(event) {
-                
+
                 // setting up AJAX
                 if (window.XMLHttpRequest) { // Mozilla, Safari, ...
                     xhr = new XMLHttpRequest();
@@ -417,8 +420,8 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                         }
                         catch (e) {}
                     }
-                } 
-                
+                }
+
                 // proxies
                 // click on main document
                 evt = 'click';// click proxy
@@ -430,7 +433,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                         event.target.id = event.target.getAttribute('id')
                     }
 
-                    
+
 
                     if ( /^link\.click\./.test(event.target.id) ) {
                         cancelEvent(event);
@@ -441,12 +444,12 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
 
                     }
                 });
-                
+
                 if ( typeof(options) == 'undefined' ) {
                     options = {}
                 }
                 instance.options = options;
-                
+
                 bindLinks(instance.target, options);
                 gina.linkIsBinded = true;
 
@@ -457,14 +460,14 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
                 triggerEvent(gina, instance.target, 'ready.' + instance.id, instance);
             });
 
-            
-                
+
+
 
             instance.initialized = true;
 
             return instance
         }
-        
+
         var setupInstanceProto = function() {
 
             instance.bindLinks      = bindLinks;
@@ -472,7 +475,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/e
             instance.getLinkById    = getLinkById;
             instance.getLinkByUrl   = getLinkByUrl;
         }
-        
+
         return init(options)
     };
 

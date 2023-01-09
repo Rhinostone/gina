@@ -1,0 +1,65 @@
+#!/bin/bash
+# ./build
+# or
+# ./build --env=dev
+#
+# NB.: chmod +x build
+SCRIPT_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+
+
+
+echo -e "Stating build."
+# Checking RequireJS
+rjs_bin=$(which r.js);
+if [ ! "${rjs_bin}" ]; then
+    echo -e "Dependency ``RequireJS`` not installed: npm install -g requirejs\nNB.: If installed somewhere, you can also link your path with --requirejs=/your/path";
+    exit 1
+fi
+
+# Checking JAVA
+java_bin=$(which java);
+if [ ! "${java_bin}" ]; then
+    echo "Dependency ``JAVA`` not installed: https://www.java.com/en/download/help/windows_manual_download.html\nNB.: If installed somewhere, you can also link your path with --java=/your/path";
+    exit 1
+fi
+
+rjs_env=
+
+# filter passed arguments
+for i in $*; do
+    value=${i#*=}
+	if [ ${value} == ${i%%=*}  ];then
+		value="true"
+	fi
+	# echo ${i%%=*} ${value}
+	case ${i%%=*} in
+        --env)
+            rjs_env=${value};
+		;;
+	esac
+
+done
+
+
+# Packaging gina
+echo -e "\n[ Packaging gina ]"
+filename="build.json"
+if [ "${rjs_env}" == "dev" ]; then
+    filename="build.${rjs_env}.json"
+fi
+cmd="$rjs_bin -o $SCRIPT_PATH/$filename"
+echo -e "Running: ${cmd}"
+eval $cmd
+
+# Skip for dev
+if [ ! "${rjs_env}" == "dev" ]; then
+    # Compiling & minifying frontent pluging
+    echo -e "\n[ Compiling & minifying frontent pluging ]"
+    echo -e "\nPlease, wait ..."
+    cmd="$java_bin -jar $SCRIPT_PATH/lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level SIMPLE_OPTIMIZATIONS --jscomp_warning=es5Strict --js $SCRIPT_PATH/dist/gina.js --create_source_map $SCRIPT_PATH/dist/gina.min.js.map --js_output_file $SCRIPT_PATH/dist/gina.min.js"
+    echo -e "Running: ${cmd}"
+    eval $cmd
+fi
+
+
+echo -e "\r\nCompleted build.\nAttention, you might need to refresh your page twice to clear the cache."
