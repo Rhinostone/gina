@@ -211,9 +211,19 @@ function PrepareVersion() {
             throw err;
         }
 
+
+
+        // rename folder version
+        destination = _(ginaPath +'/framework/v'+targetedVersion, true);
+        destinationObj = new _(destination);
+        if ( destinationObj.existsSync() && fs.lstatSync( destination ).isSymbolicLink() ) {
+            destinationObj.rmSync();
+        }
+        frameworkPathObj.renameSync(destination);
+
         if (selectedVersion != targetedVersion) {
             console.debug('Stopping gina');
-            var ginaBin = execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
+            var ginaBin = _(ginaPath+'/bin/gina', true);//execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
             if (ginaBin) {
                 try {
                     cmd = execSync(ginaBin +' stop @'+selectedVersion);
@@ -224,16 +234,6 @@ function PrepareVersion() {
                 }
             }
         }
-
-        // rename folder version
-        destination = _(ginaPath +'/framework/v'+targetedVersion, true);
-        destinationObj = new _(destination);
-        if ( destinationObj.existsSync() && fs.lstatSync( destination ).isSymbolicLink() ) {
-            destinationObj.rmSync();
-        }
-        frameworkPathObj.renameSync(destination);
-
-
 
         // updating requirements
         self.selectedVersion = targetedVersion;
