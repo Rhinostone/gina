@@ -676,7 +676,7 @@ function Initialize(opt) {
                 }
 
 
-                console.debug(' Running: '+ filename +' ['+ pid +'] ['+ isRunnung +']');
+                console.debug('Process file location: '+ filename +' ['+ pid +'] ['+ isRunnung +']');
             } // EO for (let f in files) {
         } else {
             console.warn('Run directory `'+ runDir +'` not found !')
