@@ -5819,14 +5819,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
     // if (isGFFCtx && !$fields )
     //     throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
-        
+
     var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
     var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
-    
+
     var hasUserValidators = function() {
-        
+
         var _hasUserValidators = false, formsContext = null;
         // backend validation check
         if (!isGFFCtx) {
@@ -5839,7 +5839,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             _hasUserValidators = true
         }
         return _hasUserValidators;
-    } 
+    }
     /**@js_externs local*/
     var local = {
         'errors': {},
@@ -5888,12 +5888,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         self  = merge( JSON.clone(data), self );
         local.data = merge( JSON.clone(data), local.data);
     }
-    
+
     var getElementByName = function($form, name) { // frontend only
         var $foundElement   = null;
         for (let f in fieldsSet) {
             if (fieldsSet[f].name !== name) continue;
-            
+
             $foundElement = new DOMParser()
                 .parseFromString($form.innerHTML , 'text/html')
                 .getElementById( fieldsSet[f].id );
@@ -5901,16 +5901,16 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         if ($foundElement)
             return $foundElement;
-        
+
         throw new Error('Field `'+ name +'` not found in fieldsSet');
     }
-    
+
     /**
      * bufferToString - Convert Buffer to String
      * Will apply `Utf8Array` to `String`
-     * @param {array} arrayBuffer 
+     * @param {array} arrayBuffer
      */
-    var bufferToString = function(arrayBuffer) {        
+    var bufferToString = function(arrayBuffer) {
         var out     = null
             , i     = null
             , len   = null
@@ -5923,7 +5923,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         i   = 0;
         while(i < len) {
             c = arrayBuffer[i++];
-            switch (c >> 4) { 
+            switch (c >> 4) {
                 case 0: case 1: case 2: case 3: case 4: case 5: case 6: case 7:
                     // 0xxxxxxx
                     out += String.fromCharCode(c);
@@ -5946,22 +5946,40 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
         return out;
     };
-    
+
+    var compileError = function(error, data) {
+        var varArr = error.match(/\{\{([^{{}}]+)\}\}/g );
+        for (let v=0, vLen=varArr.length; v<vLen; v++) {
+            let localValue = varArr[v]
+                                .replace(/\[/g, '["')
+                                .replace(/\]/g, '"]')
+                                .replace(/\{|\}/g, '')
+                                .trim();
+
+            try {
+                localValue = eval('data.'+ localValue).replace(/^\"|\"$/g, '');
+                error = error.replace( new RegExp( varArr[v].replace(/\{|\[|\]|\}/g, '\\$&') , 'g'), localValue);
+            } catch(e) {}
+        }
+
+        return error
+    };
+
     // TODO - One method for the front, and one for the server
     var queryFromFrontend = function(options, errorMessage) {
-        var errors      = self[this['name']]['errors'] || {}; 
+        var errors      = self[this['name']]['errors'] || {};
         var id          = this.target.id || this.target.getAttribute('id');
-        
-        
-        // stop if 
-        //  - previous error detected      
-        if ( !self.isValid() ) {            
+
+
+        // stop if
+        //  - previous error detected
+        if ( !self.isValid() ) {
             console.debug('stopping on errors ...');
             triggerEvent(gina, this.target, 'asyncCompleted.' + id, self[this['name']]);
             //return self[this.name];
             return;
         }
-        
+
         var testedValue = this.target.dataset.ginaFormValidatorTestedValue;
         console.debug('[ '+ this['name'] +' ]', 'TESTED VALUE -> ' + this.value +' vs '+ testedValue);
         var _evt = 'asyncCompleted.' + id;
@@ -5971,53 +5989,54 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             && typeof(gina.validator.$forms[currentFormId]) != 'undefined'
                             && typeof(gina.validator.$forms[currentFormId].cachedErrors) != 'undefined'
                         )
-                        ? gina.validator.$forms[currentFormId].cachedErrors 
+                        ? gina.validator.$forms[currentFormId].cachedErrors
                         : null;
         if ( !testedValue || typeof(testedValue) == 'undefined' || testedValue !== this.value ) {
             this.target.dataset.ginaFormValidatorTestedValue = this.value;
             // remove cachedErrors
-            if ( 
-                cachedErrors 
+            if (
+                cachedErrors
                 && typeof(cachedErrors[this.name]) != 'undefined'
                 && typeof(cachedErrors[this.name].query) != 'undefined'
             ) {
                 delete cachedErrors[this.name].query;
-                if ( 
+                if (
                     typeof(gina.validator.$forms[currentFormId]) != 'undefined'
                     &&
                     typeof(gina.validator.$forms[currentFormId].errors) != 'undefined'
                 ) {
                     delete gina.validator.$forms[currentFormId].errors.query;
                 }
-                
+
             }
         } else if (testedValue === this.value) {
             // not resending to backend, but in case of cached errors, re display same error message
-            var hasCachedErrors = false;            
-            if ( 
-                cachedErrors 
+            var hasCachedErrors = false;
+            if (
+                cachedErrors
                 && typeof(cachedErrors[this.name]) != 'undefined'
-                && typeof(cachedErrors[this.name].query) != 'undefined' 
-                && typeof(cachedErrors[this.name].query[this.value]) != 'undefined' 
+                && typeof(cachedErrors[this.name].query) != 'undefined'
+                && typeof(cachedErrors[this.name].query[this.value]) != 'undefined'
             ) {
                 this.error = errorMessage = cachedErrors[this.name].query[this.value].slice(0);
                 hasCachedErrors = true;
             }
             errors['query'] = replace( this.error || errorMessage || local.errorLabels['query'], this);
-            
+            console.debug('[2] potential cached error detected !! ', hasCachedErrors, cachedErrors, ' vs ', errors['query']);
+
             if (hasCachedErrors) {
                 this['errors'] = errors;
                 this.valid = false;
             }
-            // Do not remove this test            
+            // Do not remove this test
             if ( typeof( gina.events[_evt]) != 'undefined' ) {
                 triggerEvent(gina, this.target, _evt, self[this['name']]);
-            }           
-            
+            }
+
             return self[this.name];
         }
         //console.debug('Did not return !!!');
-                            
+
         var xhr = null, _this = this;
         // setting up AJAX
         if (window.XMLHttpRequest) { // Mozilla, Safari, ...
@@ -6032,17 +6051,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 catch (e) {}
             }
         }
-        
+
         // forcing to sync mode
-        var queryOptions = { isSynchrone: false, headers: {} };       
+        var queryOptions = { isSynchrone: false, headers: {} };
         var queryData = options.data || null, strData = null;
         var isInlineValidation = (/^true$/i.test(this.target.form.dataset.ginaFormLiveCheckEnabled)) ? true : false; // TRUE if liveCheckEnabled
-                
+
         // replace placeholders by field values
         strData = JSON.stringify(queryData);
         if ( /\$/.test(strData) ) {
             var variables = strData.match(/\$[-_\[\]a-z 0-9]+/g) || [];
-            var value = null, key = null;            
+            var value = null, key = null;
             for (let i = 0, len = variables.length; i < len; i++) {
                 key = variables[i].replace(/\$/g, '');
                 re = new RegExp("\\"+ variables[i].replace(/\[|\]/g, '\\$&'), "g");
@@ -6051,26 +6070,26 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     // Retrieving live value instead of using fieldsSet.value
                     value = getElementByName(this.target.form, key).value;
                 }
-                
+
                 strData = strData.replace( re, value );
             }
         }
         // cleanup before sending
-        queryData = strData.replace(/\\"/g, '');           
+        queryData = strData.replace(/\\"/g, '');
         // TODO - support regexp for validIf
         var validIf = ( typeof(options.validIf) == 'undefined' ) ? true : options.validIf;
-               
+
         queryOptions = merge(queryOptions, options, xhrOptions);
         delete queryOptions.data;
         delete queryOptions.validIf;
-        
+
         var enctype = queryOptions.headers['Content-Type'];
         var result      = null
             , $target   = this.target
             //, id        = $target.getAttribute('id')
         ;
         id = $target.getAttribute('id')
-               
+
         // checking url
         if (!/^http/.test(queryOptions.url) && /\@/.test(queryOptions.url) ) {
             try {
@@ -6080,7 +6099,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 throw routingError;
             }
         }
-        
+
         if ( queryOptions.withCredentials ) {
             if ('withCredentials' in xhr) {
                 // XHR for Chrome/Firefox/Opera/Safari.
@@ -6096,7 +6115,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 //     xhr.open(queryOptions.method, queryOptions.url, queryOptions.isSynchrone);
                 // } else {
                     xhr.open(queryOptions.method, queryOptions.url);
-                // }                
+                // }
             } else {
                 // CORS not supported.
                 xhr = null;
@@ -6104,10 +6123,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 //triggerEvent(gina, $target, 'error.' + id, result);
                 throw new Error(result);
             }
-            
+
             if ( typeof(queryOptions.responseType) != 'undefined' ) {
                 /**
-                 * Note: We expect to remove support for synchronous use of XMLHTTPRequest() during page unloads in Chrome in version 88, 
+                 * Note: We expect to remove support for synchronous use of XMLHTTPRequest() during page unloads in Chrome in version 88,
                  * scheduled to ship in January 2021.
                  * The XMLHttpRequest2 spec was recently changed to prohibit sending a synchronous request when XMLHttpRequest.responseType
                  */
@@ -6124,132 +6143,212 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 xhr.open(queryOptions.method, queryOptions.url)
             }
         }
-        
+
         // setting up headers -    all but Content-Type ; it will be set right before .send() is called
         for (var hearder in queryOptions.headers) {
             if (hearder == 'Content-Type' && typeof (enctype) != 'undefined' && enctype != null && enctype != '')
                 continue;
 
             xhr.setRequestHeader(hearder, queryOptions.headers[hearder]);
-        }        
+        }
         if (typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
             xhr.setRequestHeader('Content-Type', enctype);
         }
-        
-        if (xhr) {
-            
-            xhr.onload = function () {                
-                
-                var onResult = function(result) {
-            
-                    _this.value      = local['data'][_this.name] = (_this.value) ? _this.value.toLowerCase() : _this.value;
-        
-                    var isValid     = result.isValid || false;
-                    if (validIf != isValid) {
-                        isValid = false;                        
-                    } else {
-                        isValid = true;
+
+        var onResult = function(result) {
+
+            _this.value      = local['data'][_this.name] = (_this.value) ? _this.value.toLowerCase() : _this.value;
+
+            var isValid     = result.isValid || false;
+            if (validIf != isValid) {
+                isValid = false;
+            } else {
+                isValid = true;
+            }
+            self[_this['name']].valid = isValid;
+            var errors      = self[_this['name']]['errors'] || {};
+
+            var errorFields = ( typeof(result.error) != 'undefined' && typeof(result.fields) != 'undefined' ) ? result.fields : {};
+
+            if (errorFields.count() > 0 && !isValid || !isValid) {
+
+                if (!isValid) {
+                    var systemError = null;
+                    if ( typeof(errorFields[_this.name]) != 'undefined') {
+
+                        // compiling against rules[field].query.data
+                        local.errorLabels['query'] = compileError(errorFields[_this.name], options.data);
+
+
+                    } else if ( typeof(result.error) != 'undefined' && /^5/.test(result.status) ) {
+                        // system error
+                        systemError = result.error;
                     }
-                    self[_this['name']].valid = isValid;
-                    var errors      = self[_this['name']]['errors'] || {};
-                    
-                    var errorFields = ( typeof(result.error) != 'undefined' && typeof(result.fields) != 'undefined' ) ? result.fields : {};
-                    
-                    if (errorFields.count() > 0 && !isValid || !isValid) {
-                                    
-                        if (!isValid) {
-                            var systemError = null;
-                            if ( typeof(errorFields[_this.name]) != 'undefined') {
-                                local.errorLabels['query'] = errorFields[_this.name];                                
-                            } else if ( typeof(result.error) != 'undefined' && /^5/.test(result.status) ) {
-                                // system error
-                                //console.debug('found system error: ', result);
-                                systemError = result.error;
-                            }                    
-                            errors['query'] = replace(systemError || _this['error'] || options['error'] || local.errorLabels['query'],  _this);
-                            console.debug('query error detected !! ', result);
-                        }
-                        
-                        if ( !errors['query'] && _this.value == '' ) {
-                            isValid = true;
-                        }
-                    }
-                    
-                    // if error tagged by a previous validation, remove it when isValid == true 
-                    if ( isValid && typeof(errors['query']) != 'undefined' ) {
-                        delete errors['query'];
-                    }
-                    
-                    // To handle multiple errors from backend
-                    // for (var f in errorFields.length) {
-                    //     if ( !errors['query'] && _this.value == '' ) {
-                    //         isValid = true;
-                    //     }
-            
-                    //     if (!isValid) {
-                    //         errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
-                    //     }
-                    //     // if error tagged by a previous validation, remove it when isValid == true 
-                    //     else if ( isValid && typeof(errors['query']) != 'undefined' ) {
-                    //         delete errors['query'];
-                    //     }
-                    // }
-                            
-                    _this.valid = isValid;
-                    var cachedErrors = gina.validator.$forms[_this.target.form.getAttribute('id')].cachedErrors || {};
-                    if ( errors.count() > 0 ) {
-                        
-                        _this['errors'] = errors;
-                        if ( typeof(self[_this['name']].errors) == 'undefined' ) {
-                            self[_this['name']].errors = {};
-                        }
-                        
-                        self[_this['name']].errors = merge(self[_this['name']].errors, errors);
-                        
-                        if ( typeof(errors.query) != 'undefined' && errors.query ) {
-                            
-                            if ( typeof(cachedErrors[_this.name]) == 'undefined' ) {
-                                cachedErrors[_this.name] = {}
-                            }
-                            if ( typeof(cachedErrors[_this.name].query) == 'undefined' ) {
-                                cachedErrors[_this.name].query = {}
-                            }
-                            
-                            cachedErrors[_this.name].query[_this.value] = errors.query.slice(0);
-                        }
-                        
-                        var errClass = _this.target.getAttribute('data-gina-form-errors');
-                        if ( !/query/.test(errClass) ) {
-                            if ( !errClass || errClass =='' ) {
-                                errClass = 'query' 
-                            } else {
-                                errClass +=' query'
-                            }
-                            _this.target.setAttribute('data-gina-form-errors', errClass);
-                        }
-                    } else if ( 
-                        typeof(cachedErrors[_this.name]) != 'undefined'
-                        && typeof(cachedErrors[_this.name].query) != 'undefined'
-                        && typeof(cachedErrors[_this.name].query[_this.value]) != 'undefined'
-                    ) {
-                        delete cachedErrors[_this.name].query[_this.value];
-                    }
-                                            
-                    var id = _this.target.id || _this.target.getAttribute('id');
-                    console.debug('prematurely completed event `'+ 'asyncCompleted.' + id +'`');
-                    return triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
+                    // Fixed on 2023-01-10
+                    // We want `local.errorLabels['query']` before the generic|user defined `rule` error
+                    errors['query'] = replace(systemError || _this['error'] || local.errorLabels['query'] || options['error'],  _this);
+                    console.debug('[1] query error detected !! ', result);
                 }
-                
+
+                if ( !errors['query'] && _this.value == '' ) {
+                    isValid = true;
+                }
+            }
+
+            // if error tagged by a previous validation, remove it when isValid == true
+            if ( isValid && typeof(errors['query']) != 'undefined' ) {
+                delete errors['query'];
+            }
+
+            // To handle multiple errors from backend
+            // for (var f in errorFields.length) {
+            //     if ( !errors['query'] && _this.value == '' ) {
+            //         isValid = true;
+            //     }
+
+            //     if (!isValid) {
+            //         errors['query'] = replace(_this['error'] || local.errorLabels['query'], _this)
+            //     }
+            //     // if error tagged by a previous validation, remove it when isValid == true
+            //     else if ( isValid && typeof(errors['query']) != 'undefined' ) {
+            //         delete errors['query'];
+            //     }
+            // }
+
+            _this.valid = isValid;
+            var cachedErrors = gina.validator.$forms[_this.target.form.getAttribute('id')].cachedErrors || {};
+            if ( errors.count() > 0 ) {
+
+                _this['errors'] = errors;
+                if ( typeof(self[_this['name']].errors) == 'undefined' ) {
+                    self[_this['name']].errors = {};
+                }
+
+                self[_this['name']].errors = merge(self[_this['name']].errors, errors);
+
+                if ( typeof(errors.query) != 'undefined' && errors.query ) {
+
+                    if ( typeof(cachedErrors[_this.name]) == 'undefined' ) {
+                        cachedErrors[_this.name] = {}
+                    }
+                    if ( typeof(cachedErrors[_this.name].query) == 'undefined' ) {
+                        cachedErrors[_this.name].query = {}
+                    }
+
+                    cachedErrors[_this.name].query[_this.value] = errors.query.slice(0);
+                }
+
+                var errClass = _this.target.getAttribute('data-gina-form-errors');
+                if ( !/query/.test(errClass) ) {
+                    if ( !errClass || errClass =='' ) {
+                        errClass = 'query'
+                    } else {
+                        errClass +=' query'
+                    }
+                    _this.target.setAttribute('data-gina-form-errors', errClass);
+                }
+            } else if (
+                typeof(cachedErrors[_this.name]) != 'undefined'
+                && typeof(cachedErrors[_this.name].query) != 'undefined'
+                && typeof(cachedErrors[_this.name].query[_this.value]) != 'undefined'
+            ) {
+                delete cachedErrors[_this.name].query[_this.value];
+            }
+
+            var id = _this.target.id || _this.target.getAttribute('id');
+            console.debug('prematurely completed event `'+ 'asyncCompleted.' + id +'`');
+            return triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
+        } // EO onResult
+
+
+        if (xhr) {
+
+            xhr.onerror = function(event, err) {
+
+                var error = 'Transaction error: might be due to the server CORS settings.\nPlease, check the console for more details.';
+                var result = {
+                    'status':  xhr.status, //500,
+                    'error' : error
+                };
+
+                console.debug('query error [2] detected !! ', err, error);
+                isOnException = true;
+                result = this.responseText;
+                    var contentType     = this.getResponseHeader("Content-Type");
+                    if ( /\/json/.test( contentType ) ) {
+                        result = JSON.parse(this.responseText);
+
+                        if ( typeof(result.status) == 'undefined' )
+                            result.status = this.status;
+
+                        //triggerEvent(gina, $target, 'success.' + id, result);
+                        return onResult(result)
+                    } else {
+                        result = { 'status': xhr.status, 'message': '' };
+                        if ( /^(\{|\[)/.test( xhr.responseText ) ) {
+                            try {
+                                result = merge( result, JSON.parse(xhr.responseText) );
+                            } catch (err) {
+                                result = merge(result, err);
+                            }
+                        }
+                        return onResult(result);
+                    }
+
+            }// Eo xhr.onerror
+
+            // catching ready state cb
+            // var isOnException = false;
+            // xhr.onreadystatechange = function (event) {
+            //     if (xhr.readyState == 4) {
+
+            //         console.warn(xhr.status, xhr.responseText);
+
+            //         if (xhr.status === 200) {
+            //             console.log("-> Success [3]" + xhr.responseText);
+            //             try {
+            //                 result = this.responseText;
+            //                 var contentType     = this.getResponseHeader("Content-Type");
+            //                 if ( /\/json/.test( contentType ) ) {
+            //                     result = JSON.parse(this.responseText);
+
+            //                     if ( typeof(result.status) == 'undefined' )
+            //                         result.status = this.status;
+
+            //                     //triggerEvent(gina, $target, 'success.' + id, result);
+            //                     return onResult(result)
+            //                 } else {
+            //                     result = { 'status': xhr.status, 'message': '' };
+            //                     if ( /^(\{|\[)/.test( xhr.responseText ) ) {
+            //                         try {
+            //                             result = merge( result, JSON.parse(xhr.responseText) );
+            //                         } catch (err) {
+            //                             result = merge(result, err);
+            //                         }
+            //                     }
+            //                     return onResult(result);
+            //                 }
+            //             } catch (err) {
+            //                 throw err;
+            //             }
+            //         } else {
+            //             isOnException = true;
+            //             console.log("-> Error [3]", xhr.statusText, 'isOnException: '+ isOnException);
+            //         }
+            //     }
+            // } // EO xhr.onreadystatechange = function (event) {
+
+            xhr.onload = function () {
                 try {
                     result = this.responseText;
                     var contentType     = this.getResponseHeader("Content-Type");
                     if ( /\/json/.test( contentType ) ) {
                         result = JSON.parse(this.responseText);
-                        
+
                         if ( typeof(result.status) == 'undefined' )
                             result.status = this.status;
-                            
-                        //triggerEvent(gina, $target, 'success.' + id, result); 
+
+                        //triggerEvent(gina, $target, 'success.' + id, result);
                         return onResult(result)
                     } else {
                         result = { 'status': xhr.status, 'message': '' };
@@ -6264,32 +6363,32 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     }
                 } catch (err) {
                     throw err;
-                }                    
-            }
-            
+                }
+            }// xhr.onload = function () {
+
             if (data) {
                 xhr.send( queryData ); // stringyfied
             }  else {
                 xhr.send();
-            }                                    
+            }
         }
     }
-    
+
     /**
      * queryFromBackend
-     * 
-     * 
-     * @param {object} options 
-     * @param {object} request 
-     * @param {object} response 
+     *
+     *
+     * @param {object} options
+     * @param {object} request
+     * @param {object} response
      * @param {callback} next
-     *  
-     * 
+     *
+     *
      */
     var queryFromBackend = async function(options, request, response, next) {
         var Config = require(_(GINA_FRAMEWORK_DIR +'/core/config.js', true));
         var config      = new Config().getInstance();
-        
+
         var opt     = null
             //appConf.proxy.<bundle>;
             , rule  = null
@@ -6298,7 +6397,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         ;
         // trying to retrieve proxy conf
         if ( /\@/.test(options.url) ) {
-            var attr = options.url.split(/@/); 
+            var attr = options.url.split(/@/);
             rule = attr[0];
             bundle = attr[1];
             var proxyConf = getConfig( currentBundle, 'app' ).proxy;
@@ -6306,11 +6405,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 if (config.bundle !== bundle) { // ignore if same bundle
                     // getting proxy conf when available
                     opt = getConfig( currentBundle, 'app' ).proxy[bundle];
-                }               
+                }
             } catch (proxyError) {
                 throw new Error('Could not retrieve `proxy` configuration for bundle `'+ bundle +'`. Please check your `/config/app.json`.\n'+proxyError.stack);
             }
-            
+
             attr = null;
         } else {
             // TODO - handle else; when it is an external domain/url
@@ -6318,7 +6417,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         var route       = JSON.clone(routing.getRoute(options.url, options.data));
         var env         = config.env;
-        var conf        = config[bundle][env]; 
+        var conf        = config[bundle][env];
         if (!opt) { // setup opt by default if no proxy conf found
             if (config.bundle == bundle) {
                 var credentials = getConfig( currentBundle, 'settings' ).server.credentials;
@@ -6328,13 +6427,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 options.protocol    = conf.server.protocol;
                 options.rejectUnauthorized  = false;
             }
-            opt = {       
+            opt = {
                 "ca"        : options.ca,
-                "hostname"  : options.hostname,        
-                "port"      : options.port,   
+                "hostname"  : options.hostname,
+                "port"      : options.port,
                 "path"      : options.path
             };
-            
+
             if ( typeof(options.protocol) != 'undefined' ) {
                 opt.protocol = options.protocol
             }
@@ -6342,7 +6441,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 opt.rejectUnauthorized = options.rejectUnauthorized
             }
         }
-        
+
         /**
          * BO routing configuration
          * Attention: this portion of code is from `router.js`
@@ -6361,7 +6460,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             isXMLRequest        : request.isXMLRequest,
             isWithCredentials   : request.isWithCredentials
         };
-        
+
         var templateName = params.rule.replace('\@'+ bundle, '') || '_common';
         var routeHasViews = ( typeof(conf.content.templates) != 'undefined' ) ? true : false;
         var controllerOptions = {
@@ -6384,9 +6483,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             //path: params.param.path || null, // user custom path : namespace should be ignored | left blank
             //assets: {}
         };
-        
-        controllerOptions = merge(controllerOptions, params);        
-        
+
+        controllerOptions = merge(controllerOptions, params);
+
         // BO - Template outside of namespace fix added on 2021-08-19
         // We want to keep original conf untouched
         controllerOptions.conf = JSON.clone(conf);
@@ -6397,7 +6496,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             && typeof(controllerOptions.template.ginaLoader) == 'undefined'
         ) {
             controllerOptions.template.ginaLoader = controllerOptions.conf.content.templates._common.ginaLoader;
-        }            
+        }
         controllerOptions.conf.content.routing[controllerOptions.rule].param = params.param;
         delete controllerOptions.middleware;
         delete controllerOptions.param;
@@ -6406,17 +6505,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         /**
          * EO routing configuration
          */
-        
+
         var Controller = require(_(GINA_FRAMEWORK_DIR +'/core/controller/controller.js'), true);
         var controller = new Controller(controllerOptions);
-        controller.name = route.param.control;            
+        controller.name = route.param.control;
         //controller.serverInstance = serverInstance;
         controller.setOptions(request, response, next, controllerOptions);
-        
-                                        
+
+
         var data = ( typeof(options.data) == 'object' && options.data.count() > 0 )
                 ? options.data
-                : {};        
+                : {};
         // inherited data from current query asking for validation
         var urlParams = '';
         if ( /^get|delete|put$/i.test(options.method) ) {
@@ -6434,11 +6533,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         opt.method  = options.method;
         //opt.path    = route.url + urlParams;
         opt.path    = route.url;
-             
+
         var util            = require('util');
         var promisify       = util.promisify;
         var result = { isValid: false }, err = false;
-          
+
         await promisify(controller.query)(opt, data)
             .then(function onResult(_result) {
                 result = _result;
@@ -6450,10 +6549,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             //throw err;
             console.error(err);
             result.error = err;
-        }    
+        }
         return result;
     };
-        
+
     /**
      * query
      */
@@ -6468,16 +6567,16 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     /**
      * addField
      * Add field to the validation context
-     * @param {string} el 
-     * @param {string|boolean|number|object} [value] 
+     * @param {string} el
+     * @param {string|boolean|number|object} [value]
      */
-    var addField = function(el, value) {        
+    var addField = function(el, value) {
         var val = null, label = null;
-        
+
         if ( typeof(self[el]) == 'undefined' && typeof(value) != 'undefined' ) {
             self[el] = val = value;
         }
-        
+
         if ( typeof(self[el]) == 'object' ) {
             try {
                 val = JSON.parse( JSON.stringify( self[el] ))
@@ -6527,17 +6626,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var alias       = ( typeof(window) != 'undefined' && typeof(window._currentValidatorAlias) != 'undefined' ) ? window._currentValidatorAlias : 'is';
             if ( typeof(window) != 'undefined'  && window._currentValidatorAlias)
                 delete window._currentValidatorAlias;
-                
-            var errors      = self[this['name']]['errors'] || {};  
+
+            var errors      = self[this['name']]['errors'] || {};
             local.data[this.name] = self[this.name].value;
-            
-            if ( 
+
+            if (
                 typeof(errors['isRequired']) == 'undefined'
                 && this.value == ''
-                && !/^false$/i.test(this.value) 
-                && this.value != 0 
+                && !/^false$/i.test(this.value)
+                && this.value != 0
                 ||
-                !errors['isRequired'] 
+                !errors['isRequired']
                 && this.value == ''
                 && !/^false$/i.test(this.value)
                 && this.value != 0
@@ -6546,14 +6645,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             } else if (!errors['isRequired'] && typeof(this.value) == 'string' && this.value == '') {
                 isValid = true;
             }
-            
+
             if ( !isValid && /^(true|false)$/i.test(condition) ) { // because it can be evaluated on backend validation
                 isValid = condition;
             } else if (!isValid) {
                 var re = null, flags = null;
                 // Fixed on 2021-03-13: $variable now replaced with real value beafore validation
                 if ( /[\!\=>\>\<a-z 0-9]+/i.test(condition) ) {
-                    var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)                    
+                    var variables = condition.match(/\${0}[-_,.\[\]a-z0-9]+/ig); // without space(s)
                     if (variables && variables.length > 0) {
                         var compiledCondition = condition;
                         for (var i = 0, len = variables.length; i < len; ++i) {
@@ -6569,7 +6668,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                                 }
                             }
                         }
-                        
+
                         try {
                             // security checks
                             compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
@@ -6578,7 +6677,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                             } else {
                                 isValid = eval(compiledCondition)
                             }
-                            
+
                         } catch (err) {
                             throw new Error(err.stack||err.message)
                         }
@@ -6602,7 +6701,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         } else {
                             isValid = eval(condition);
                         }
-                            
+
                         //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)
                     } catch (err) {
                         throw new Error(err.stack||err.message)
@@ -6615,7 +6714,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 if ( typeof(errorStack) != 'undefined' )
                     errors['stack'] = errorStack;
             }
-            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors[alias]) != 'undefined' ) {
                 delete errors[alias];
                 //delete errors['stack'];
@@ -6625,16 +6724,16 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
-            
+
             return self[this.name]
         }
-        
+
         self[el]['set'] = function(value) {
             this.value  = local['data'][this.name] = value;
-            //  html 
+            //  html
             this.target.setAttribute('value', value);
             // Todo : select and radio case to apply change
-            
+
             return self[this.name]
         }
 
@@ -6643,15 +6742,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
             this.value      = local['data'][this.name] = (this.value) ? this.value.toLowerCase() : this.value;
             // Apply on current field upper -> lower
-            if ( 
+            if (
                 isGFFCtx
                 && this.target
-                && this.target.value != '' 
-                && /[A-Z]+/.test(this.target.value) 
+                && this.target.value != ''
+                && /[A-Z]+/.test(this.target.value)
             ) {
                 this.target.value = this.value;
             }
-                
+
 
             var rgx         = /^(([^<>()[\]\\.,;:\s@\"]+(\.[^<>()[\]\\.,;:\s@\"]+)*)|(\".+\"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
             var isValid     = rgx.test(this['value']) ? true : false;
@@ -6664,7 +6763,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if (!isValid) {
                 errors['isEmail'] = replace(this['error'] || local.errorLabels['isEmail'], this)
             }
-            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors['isEmail']) != 'undefined' ) {
                 delete errors['isEmail'];
                 //delete errors['stack'];
@@ -6683,11 +6782,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
             this.value      = local['data'][this.name] = (this.value) ? this.value.toLowerCase() : this.value;
             // Apply on current field upper -> lower
-            if ( 
+            if (
                 isGFFCtx
                 && this.target
-                && this.target.value != '' 
-                && /[A-Z]+/.test(this.target.value) 
+                && this.target.value != ''
+                && /[A-Z]+/.test(this.target.value)
             ) {
                 this.target.value = this.value;
             }
@@ -6703,7 +6802,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if (!isValid) {
                 errors['isJsonWebToken'] = replace(this['error'] || local.errorLabels['isJsonWebToken'], this)
             }
-            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors['isJsonWebToken']) != 'undefined' ) {
                 delete errors['isJsonWebToken'];
                 //delete errors['stack'];
@@ -6716,7 +6815,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
             return self[this['name']]
         }
-        
+
         /**
          * Check if boolean and convert to `true/false` booloean if value is a string or a number
          * Will include `false` value if isRequired
@@ -6744,13 +6843,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     val = this.value = local.data[this.name] = false;
                     break;
             }
-            
+
             var isValid = (val !== null) ? true : false;
 
             if (!isValid) {
                 errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this)
             }
-            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors['isBoolean']) != 'undefined' ) {
                 delete errors['isBoolean'];
                 //delete errors['stack'];
@@ -6782,7 +6881,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 , isMaxLength   = true
                 , errors        = self[this['name']]['errors'] || {}
             ;
-            
+
             // test if val is a number
             try {
                 // if val is a string replaces comas by points
@@ -6831,7 +6930,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                 isValid = false;
             }
-            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            // if error tagged by a previous vlaidation, remove it when isValid == true
             if ( isValid && typeof(errors['isNumberLength']) != 'undefined') {
                 delete errors['isNumberLength'];
             }
@@ -6937,7 +7036,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     //     document.getElementById(this.target.id).value = this.value;
                     //     //triggerEvent(gina, this.target, 'change', self[this['name']]);
                     // }
-                        
+
                 } else {
                     this.value = this.value.replace(/\,/g,'');
                 }
@@ -7050,7 +7149,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
 
                 this.valid = true;
-                
+
                 // is in excluded ?
                 var excludedIndex = local.excluded.indexOf(this.name);
                 if ( excludedIndex > -1 ) {
@@ -7061,12 +7160,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
 
             // radio group case
-            if ( 
-                isGFFCtx 
-                && this.target 
-                && this.target.tagName == 'INPUT' 
-                && typeof(this.target.type) != 'undefined' 
-                && this.target.type == 'radio' 
+            if (
+                isGFFCtx
+                && this.target
+                && this.target.tagName == 'INPUT'
+                && typeof(this.target.type) != 'undefined'
+                && this.target.type == 'radio'
             ) {
                 var radios = document.getElementsByName(this.name);
                 for (var i = 0, len = radios.length; i < len; ++i) {
@@ -7091,7 +7190,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             if (!isValid) {
                 errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this)
             }
-            // if error tagged by a previous vlaidation, remove it when isValid == true 
+            // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid ) {
                 if (typeof(errors['isRequired']) != 'undefined' )
                     delete errors['isRequired'];
@@ -7116,7 +7215,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * {
          *  "password": {
          *      "isRequired": true,
-         * 
+         *
          *      "isString": true // Means that we just want a string and we don't care of its length
          *      // OR
          *      "isString": 7 // Means at least 7 chars length
@@ -7196,7 +7295,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *
          * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
          * */
-        self[el]['isDate'] = function(mask) {                        
+        self[el]['isDate'] = function(mask) {
             var val         = this.value
                 , isValid   = false
                 , errors    = self[this['name']]['errors'] || {}
@@ -7204,37 +7303,37 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 , date      = null
             ;
             // Default validation on livecheck & invalid init value
-            if (!val || val == '' || /NaN|Invalid Date/i.test(val) ) {                
+            if (!val || val == '' || /NaN|Invalid Date/i.test(val) ) {
                 if ( /NaN|Invalid Date/i.test(val) ) {
                     console.warn('[FormValidator::isDate] Provided value for field `'+ this.name +'` is not allowed: `'+ val +'`');
                     errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
-                    
+
                 }
                 this.valid = isValid;
                 if ( errors.count() > 0 )
-                    this['errors'] = errors;     
-                        
+                    this['errors'] = errors;
+
                 return self[this.name];
             }
-            
-            if ( 
+
+            if (
                 typeof(mask) == 'undefined'
                 ||
                 typeof(mask) != 'undefined' && /true/i.test(mask)
             ) {
                 mask = "yyyy-mm-dd"; // by default
             }
-            
+
             if (val instanceof Date) {
                 date = val.format(mask);
             } else {
-                
+
                 try {
                     m = mask.match(/[^\/\- ]+/g);
                 } catch (err) {
                     throw new Error('[FormValidator::isDate] Provided mask not allowed: `'+ mask +'`');
                 }
-                
+
                 try {
                     val = val.match(/[^\/\- ]+/g);
                     var dic = {}, d, len;
@@ -7248,10 +7347,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 } catch (err) {
                     throw new Error('[FormValidator::isDate] Provided value not allowed: `'+ val +'`' + err);
                 }
-                    
+
 
                 date = this.value = local.data[this.name] = new Date(formatedDate);
-                
+
                 if ( /Invalid Date/i.test(date) || date instanceof Date === false ) {
                     if ( !errors['isRequired'] && this.value == '' ) {
                         isValid = true
@@ -7313,7 +7412,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
             return self[this.name]
         }
-        
+
         /**
          * Trim when string starts or ends with white space(s)
          *
@@ -7337,11 +7436,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         self[el]['exclude'] = function(isApplicable) {
 
             if ( typeof(isApplicable) == 'boolean' && !isApplicable ) {
-                
+
                 if ( /^true|false$/i.test(this.value)) {
                     this.value = (/^true$/i.test(this.value)) ? true : false;
                     local.data[this.name] = this.value;
-                }                
+                }
 
                 return self[this.name]
             }
@@ -7351,8 +7450,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 local.excluded.push(this.name);
                 this.isExcluded = true;
             }
-                
-                
+
+
             // remove existing errors
             return self[this.name];
         }
@@ -7362,8 +7461,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * a request to the remote host if previous rules failed
          */
         self[el]['query'] = query;
-        
-        
+
+
         self[el]['getValidationContext'] = function() {
             return {
                 'isGFFCtx'  : isGFFCtx,
@@ -7373,10 +7472,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
         }
         // Merging user validators
-        // To debug, open inspector and look into `Extra Scripts`     
+        // To debug, open inspector and look into `Extra Scripts`
         if ( hasUserValidators() ) {
             var userValidator = null, filename = null;
-            try {                
+            try {
                 for (let v in gina.forms.validators) {
                     filename = '/validators/'+ v + '/main.js';
                     // setting default local error
@@ -7387,12 +7486,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         userValidator = bufferToString(gina.forms.validators[v].data); // ok
                         var passedContext = 'var validationContext = this.getValidationContext(),isGFFCtx = validationContext.isGFFCtx,self = validationContext.self,local = validationContext.local,replace = validationContext.replace;';
                         userValidator = userValidator.replace(/(\)\s+\{|\)\{){1}/, '$&\n\t'+ passedContext);
-                        
+
                         //userValidator += '\n//#sourceURL='+ v +'.js';
                     } else {
                         userValidator = gina.forms.validators[v].toString();
                     }
-                    
+
                     self[el][v] = eval('(' + userValidator + ')\n//# sourceURL='+ v +'.js');
                     //self[el][v] = Function('errorMessage', 'errorStack', userValidator);
                 }
@@ -7400,22 +7499,22 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 throw new Error('[UserFormValidator] Could not evaluate: `'+ filename +'`\n'+userValidatorError.stack);
             }
         }
-    } // EO addField(el, value) 
-    
-    
-    for (let el in self) {        
+    } // EO addField(el, value)
+
+
+    for (let el in self) {
         // Adding fields & validators to context
         addField(el, self[el]);
     }
-    
+
     self['addField'] = function(el, value) {
         if ( typeof(self[el]) != 'undefined' ) {
             return
         }
         addField(el, value);
     };
-        
-    
+
+
     // self['getExcludedFields'] = function() {
     //     return local.excluded;
     // };
@@ -7445,33 +7544,33 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             // }
             for (var r in self[field]) {
                 // no error for the current field rule
-                if ( 
+                if (
                     typeof(errors[field]) != 'object'
                     ||
                     typeof(errors[field][r]) == 'undefined'
                 ) {
                     continue;
                 }
-                
-                
-                if ( 
-                    typeof(self[field].valid) != 'undefined' 
-                    && /^true$/i.test(self[field].valid) 
+
+
+                if (
+                    typeof(self[field].valid) != 'undefined'
+                    && /^true$/i.test(self[field].valid)
                 ) {
                     delete errors[field][r];
                     continue;
                 }
-                
-                
+
+
                 if ( typeof( self[field]['errors']) == 'undefined' ) {
                     self[field]['errors'] = {}
                 }
-                
-                self[field]['errors'][r] = errors[field][r];                
+
+                self[field]['errors'][r] = errors[field][r];
             }
-            
+
             // if field does not have errors, remove errors[field]
-            if ( 
+            if (
                 typeof(self[field]['errors']) == 'undefined'
                     && typeof(errors[field]) != 'undefined'
                 ||
@@ -7488,34 +7587,34 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     /**
      * getErrors
      * NB.: This portion is shared between the front & the back
-     * 
+     *
      * @param {string} [fieldName]
-     * 
+     *
      * @returns errors
      */
     self['getErrors'] = function(fieldName) {
         var errors = {};
-        
+
         if ( typeof(fieldName) != 'undefined' ) {
             if ( typeof(self[fieldName]) != 'undefined' && self[fieldName] && typeof(self[fieldName]['errors']) != 'undefined' && self[fieldName]['errors'].count() > 0 ) {
                 errors[fieldName] = self[fieldName]['errors'];
-            }                        
+            }
             return errors
         }
-        
+
         for (var field in self) {
-            if ( 
+            if (
                 typeof(self[field]) != 'object'
             ) {
                 continue;
             }
-                        
+
             if ( typeof(self[field]['errors']) != 'undefined' ) {
                 if ( self[field]['errors'].count() > 0)
                     errors[field] = self[field]['errors'];
             }
         }
-        
+
         return errors
     }
 
@@ -7532,7 +7631,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         // local.data = JSON.parse(JSON.stringify(local.data).replace(/\"(true|false)\"/gi, '$1'))
         return local.data
     }
-    
+
     /**@js_externs replace*/
     var replace = function(target, fieldObj) {
         var keys = target.match(/%[a-z]+/gi);
