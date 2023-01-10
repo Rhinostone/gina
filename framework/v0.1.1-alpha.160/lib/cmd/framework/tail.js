@@ -207,9 +207,12 @@ function Tail(opt, cmd) {
                                     // if ( /is\ running/.test(projectStatus) ) {
                                     //     return;
                                     // }
-                                    process.stdout.write('[MQTail] Not keeping alive...\n' );
-                                    client.destroy();
-                                    return end()
+                                    // Bundles only !
+                                    process.stdout.write('[MQTail] Not keeping alive `'+ bundle +'`\n');
+                                    if (bundle) {
+                                        client.destroy();
+                                        return end()
+                                    }
                                 }
                                 // TODO - restart bundle if not starting or restarting
                                 else if (
