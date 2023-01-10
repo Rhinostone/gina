@@ -450,7 +450,7 @@ function Couchbase(conn, infos) {
                         console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
                         if (queryParams.length > 0) {
-                            console.debug('[ ' + trigger +' ] Found query params: '+ queryParams);
+                            console.debug('[ ' + trigger +' ] Found query params: '+ queryParams.replace(/\,/, ' ,'));
                         }
                     }
 

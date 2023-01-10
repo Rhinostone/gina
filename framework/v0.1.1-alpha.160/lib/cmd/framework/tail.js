@@ -208,8 +208,8 @@ function Tail(opt, cmd) {
                                     //     return;
                                     // }
                                     // Bundles only !
-                                    process.stdout.write('[MQTail] Not keeping alive `'+ bundle +'`\n');
                                     if (bundle) {
+                                        process.stdout.write('[MQTail] Not keeping alive bundle `'+ bundle +'`\n');
                                         client.destroy();
                                         return end()
                                     }
