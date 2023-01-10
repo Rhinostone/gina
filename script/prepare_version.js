@@ -135,11 +135,11 @@ function PrepareVersion() {
         var targetedVersion = package.version.replace(/^v/, '');
         self.targetedVersion = targetedVersion;
 
-        console.debug('selected version : ', selectedVersion);
-        console.debug('targeted version : ', targetedVersion);
+        console.debug('Selected version : ', selectedVersion);
+        console.debug('Targeted version : ', targetedVersion);
 
         if (selectedVersion != targetedVersion) {
-            console.debug('stopping gina');
+            console.debug('Stopping gina');
             execSync('gina stop');
         }
 
