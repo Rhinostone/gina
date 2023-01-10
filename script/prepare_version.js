@@ -213,6 +213,10 @@ function PrepareVersion() {
 
         // rename folder version
         destination = _(ginaPath +'/framework/v'+targetedVersion, true);
+        destinationObj = new _(destination);
+        if ( destinationObj.existsSync() && fs.lstatSync( destination ).isSymbolicLink() ) {
+            destinationObj.rmSync();
+        }
         frameworkPathObj.renameSync(destination);
 
         if (selectedVersion != targetedVersion) {
@@ -221,6 +225,7 @@ function PrepareVersion() {
             if (ginaBin) {
                 try {
                     cmd = execSync(ginaBin +' stop @'+selectedVersion);
+                    // TODO - stop all running bundles
                 } catch (err) {
                     console.error(err.stack||err.message||err);
                     return done(err);
