@@ -221,7 +221,7 @@ function PrepareVersion() {
 
         if (selectedVersion != targetedVersion) {
             console.debug('Stopping gina');
-            var ginaBin = _(destination +'/bin/gina');//execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
+            var ginaBin = _(destination +'/../../bin/gina');//execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
             if (ginaBin) {
                 try {
                     cmd = execSync(ginaBin +' stop @'+selectedVersion);
