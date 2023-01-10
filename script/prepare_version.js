@@ -371,7 +371,7 @@ function PrepareVersion() {
         var pluginPath = _(frameworkPath +'/'+ currentVersion + '/core/asset/plugin', true);
         var buildCmd = _(pluginPath +'/build', true);
 
-        console.debug('Building ['+ self.selectedVersion +']', pluginPath);
+        console.debug('Building Frontend plugins ['+ self.selectedVersion +']', pluginPath);
         var initialDir = process.cwd();
         process.chdir( pluginPath );
         console.info('Please, wait ...');
