@@ -53,7 +53,7 @@
   },
   "main": "./framework/v0.1.1-alpha.161/core/gna",
   "scripts": {
-    "prepare": "node ./script/prepare_version.js",
+    "prepublishOnly": "node ./script/prepare_version.js",
     "postpublish": "node ./script/post_publish.js",
     "preinstall": "node ./script/pre_install.js",
     "postinstall": "node ./script/post_install.js"
