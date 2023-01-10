@@ -333,6 +333,28 @@ function PrepareVersion() {
         done();
     }
 
+    self.buildPlugins = function(done) {
+
+        var frameworkPath = _(self.gina +'/framework', true);
+        // get current framework version
+        var package = require(pack);
+        var currentVersion = 'v'+ package.version.replace(/^v/, '');
+        var pluginPath = _(frameworkPath +'/'+ currentVersion + '/core/asset/plugin', true);
+        var buildCmd = _(pluginPath +'/build', true);
+
+        console.debug('Building ', pluginPath);
+        // var initialDir = process.cwd();
+        // process.chdir( self.versionPath );
+
+        console.info('running: `'+ buildCmd +'` from '+ process.cwd() );
+
+        // execSync(buildCmd);
+        // process.chdir(initialDir);
+
+
+        return done()
+    }
+
 
     self.pushChangesToGitIfNeeded = function(done) {
 
