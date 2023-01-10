@@ -231,25 +231,29 @@ function PrepareVersion() {
         destinationObj = new _(destination);
         if ( destinationObj.existsSync() && fs.lstatSync( destination ).isSymbolicLink() ) {
             // await destinationObj.rmSync();
-            await fs.unlinkSync(destination);
+            fs.unlinkSync(destination);
         }
-        frameworkPathObj.renameSync(destination);
+
+        setTimeout(() => {
+            frameworkPathObj.renameSync(destination);
 
 
 
-        // updating requirements
-        self.selectedVersion = targetedVersion;
-        self.frameworkPath = frameworkPath = ginaPath +'/framework/v'+targetedVersion;
-        helpers             = require(frameworkPath +'/helpers');
-        lib                 = require(frameworkPath +'/lib');
+            // updating requirements
+            self.selectedVersion = targetedVersion;
+            self.frameworkPath = frameworkPath = ginaPath +'/framework/v'+targetedVersion;
+            helpers             = require(frameworkPath +'/helpers');
+            lib                 = require(frameworkPath +'/lib');
 
-        // keeping package.json up to date
-        //"main": "./framework/v{version}/core/gna",
-        package.main = './framework/v'+ targetedVersion +'/core/gna';
-        new _(pack, true).rmSync();
-        lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
+            // keeping package.json up to date
+            //"main": "./framework/v{version}/core/gna",
+            package.main = './framework/v'+ targetedVersion +'/core/gna';
+            new _(pack, true).rmSync();
+            lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
 
-        done()
+            done()
+        }, 1000);
+
     };
 
     self.setupScriptCWD = function(done) {
