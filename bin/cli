@@ -13,6 +13,7 @@ async function onExec() {
 
     var isWin32         = (process.platform === 'win32') ? true : false;
     var arch            = process.arch;
+    var platform        = process.platform;
     var binPath         = __dirname;
     var ginaPath        = (binPath.replace(/\\/g, '/')).replace('/bin', '');
     ginaPath = (isWin32) ? ginaPath.replace(/\//g, '\\') : ginaPath;
@@ -124,6 +125,12 @@ async function onExec() {
             setEnvVar('GINA_ARCH', settings['arch']);// jshint ignore:line
             isUpdateRequired = true;
         }
+        if ( !settings['platform'] ) {
+            settings['platform'] = platform;
+            setEnvVar('GINA_PLATFORM', settings['platform']);// jshint ignore:line
+            isUpdateRequired = true;
+        }
+
         if (hostname != settings['hostname'] /**&& !isUpdateRequired*/) {
             setEnvVar('GINA_HOSTNAME', settings['hostname']);// jshint ignore:line
             hostname = settings['hostname'];
@@ -210,6 +217,7 @@ async function onExec() {
     if (isUpdateRequired) {
         console.debug('Updating debug settings ...');// jshint ignore:line
         settings['arch'] = getEnvVar('GINA_ARCH') || settings['arch'] || null;// jshint ignore:line
+        settings['platform'] = getEnvVar('GINA_PLATFORM') || settings['platform'] || null;// jshint ignore:line
         settings['port'] = getEnvVar('GINA_PORT') || settings['port'] || null;// jshint ignore:line
         settings['debug_port'] = getEnvVar('GINA_DEBUG_PORT') || settings['debug_port'] || null;// jshint ignore:line
 
@@ -312,7 +320,8 @@ async function onExec() {
     ) {
         // check allowedOffline ;)
         process.argv.splice(0,2);
-        console.error( '[ $ gina ' + process.argv.join(' ') + ' ] is not a valid command line' )
+        console.error( '[ $ gina ' + process.argv.join(' ') + ' ] is not a valid command line' );
+        process.exit(1)
     } else {
 
         //Connect to framework.

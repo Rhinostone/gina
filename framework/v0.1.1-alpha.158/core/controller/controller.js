@@ -3799,6 +3799,9 @@ function SuperController(options) {
                 }
                 if ( !ext || /^(html|htm)$/i.test(ext) ) {
                     isHtmlContent = true;
+                    if (!ext) {
+                        ext = 'html'
+                    }
                 }
 
                 if (

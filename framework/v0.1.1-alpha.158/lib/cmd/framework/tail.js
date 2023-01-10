@@ -207,7 +207,7 @@ function Tail(opt, cmd) {
                                     // if ( /is\ running/.test(projectStatus) ) {
                                     //     return;
                                     // }
-
+                                    process.stdout.write('[MQTail] Not keeping alive...\n' );
                                     client.destroy();
                                     return end()
                                 }
