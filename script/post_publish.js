@@ -99,20 +99,7 @@ function PostPublish() {
         }
     }
 
-    var build = function(done) {
 
-
-        var frameworkPath = _(self.gina +'/framework', true);
-        // get current framework version
-        var package = require(pack);
-        var currentVersion = 'v'+ package.version.replace(/^v/, '');
-        var pluginPath = _(frameworkPath +'/'+ currentVersion + '/core/asset/plugin', true);
-        var buildCmd = _(pluginPath +'/build');
-
-        console.debug('Building ', pluginPath);
-        // if error
-        // return done(e)
-    }
 
     var restoreSymlinks = function(done) {
 
@@ -188,10 +175,6 @@ function PostPublish() {
     self.end = function(done) {
 
         restoreSymlinks(done);
-
-        // build plugins
-        build(done);
-
         done()
     }
 
