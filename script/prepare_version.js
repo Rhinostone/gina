@@ -138,13 +138,6 @@ function PrepareVersion() {
         console.debug('Selected version : ', selectedVersion);
         console.debug('Targeted version : ', targetedVersion);
 
-        // rename folder version
-        var versionDestination = _(ginaPath +'/framework/v'+targetedVersion, true);
-        var versionDestinationObj = new _(versionDestination);
-        if ( versionDestinationObj.existsSync() && fs.lstatSync( versionDestination ).isSymbolicLink() ) {
-            // await versionDestinationObj.rmSync();
-            fs.unlinkSync(versionDestination);
-        }
 
 
         // setting up requirements
@@ -160,6 +153,19 @@ function PrepareVersion() {
         self.frameworkPath      = frameworkPath;
         helpers     = require(frameworkPath +'/helpers');
         lib         = require(frameworkPath +'/lib');
+
+        // In case of downdrade
+        // target already exist as a symlink ?
+        var versionDestination = _(ginaPath +'/framework/v'+targetedVersion, true);
+        var versionDestinationObj = new _(versionDestination);
+        if ( selectedVersion != targetedVersion && versionDestinationObj.existsSync() ) {
+            var versionDestinationIsSymlink = fs.lstatSync( versionDestination ).isSymbolicLink();
+            console.debug('versionDestination ??? ', versionDestination, versionDestinationObj.existsSync(), versionDestinationIsSymlink );
+            if (versionDestinationIsSymlink) {
+                // await versionDestinationObj.rmSync();
+                fs.unlinkSync(versionDestination);
+            }
+        }
 
         // update selected version & requirements
         shortVersion = targetedVersion.split('.');
@@ -235,7 +241,7 @@ function PrepareVersion() {
             // }
         }
 
-
+        // rename folder version
         destination = _(ginaPath +'/framework/v'+targetedVersion, true);
         frameworkPathObj.renameSync(destination);
 
