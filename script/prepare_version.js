@@ -342,7 +342,7 @@ function PrepareVersion() {
         var pluginPath = _(frameworkPath +'/'+ currentVersion + '/core/asset/plugin', true);
         var buildCmd = _(pluginPath +'/build', true);
 
-        console.debug('Building ['+ self.versionPath +']', pluginPath);
+        console.debug('Building ['+ self.selectedVersion +']', pluginPath);
         // var initialDir = process.cwd();
         // // process.chdir( self.versionPath );
 
