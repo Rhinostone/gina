@@ -372,13 +372,13 @@ function PrepareVersion() {
         var buildCmd = _(pluginPath +'/build', true);
 
         console.debug('Building ['+ self.selectedVersion +']', pluginPath);
-        // var initialDir = process.cwd();
-        // // process.chdir( self.versionPath );
+        var initialDir = process.cwd();
+        process.chdir( pluginPath );
 
-        // console.info('running: `'+ buildCmd +'` from '+ process.cwd() );
+        console.info('running: `'+ buildCmd +'` from '+ process.cwd() );
+        execSync(buildCmd);
 
-        // // execSync(buildCmd);
-        // process.chdir(initialDir);
+        process.chdir(initialDir);
 
 
         return done()
