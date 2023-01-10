@@ -138,11 +138,6 @@ function PrepareVersion() {
         console.debug('Selected version : ', selectedVersion);
         console.debug('Targeted version : ', targetedVersion);
 
-        if (selectedVersion != targetedVersion) {
-            console.debug('Stopping gina');
-            execSync('gina stop');
-        }
-
         // setting up requirements
         var shortVersion = selectedVersion.split('.');
         shortVersion.splice(2);
@@ -220,6 +215,18 @@ function PrepareVersion() {
         destination = _(ginaPath +'/framework/v'+targetedVersion, true);
         frameworkPathObj.renameSync(destination);
 
+        if (selectedVersion != targetedVersion) {
+            console.debug('Stopping gina');
+            var ginaBin = execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
+            if (ginaBin) {
+                try {
+                    cmd = execSync(ginaBin +' stop @'+selectedVersion);
+                } catch (err) {
+                    console.error(err.stack||err.message||err);
+                    return done(err);
+                }
+            }
+        }
 
         // updating requirements
         self.selectedVersion = targetedVersion;
