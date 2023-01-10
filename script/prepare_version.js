@@ -230,7 +230,7 @@ function PrepareVersion() {
         destination = _(ginaPath +'/framework/v'+targetedVersion, true);
         destinationObj = new _(destination);
         if ( destinationObj.existsSync() && fs.lstatSync( destination ).isSymbolicLink() ) {
-            destinationObj.rmSync();
+            await destinationObj.rmSync();
         }
         frameworkPathObj.renameSync(destination);
 
