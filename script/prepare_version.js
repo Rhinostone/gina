@@ -213,17 +213,17 @@ function PrepareVersion() {
 
         if (selectedVersion != targetedVersion) {
             console.debug('Stopping gina');
-            var ginaBin = _(ginaPath+'/bin/gina', true);//execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
-            if (ginaBin) {
-                try {
-                    // cmd = execSync(ginaBin +' stop @'+selectedVersion);
-                    cmd = execSync(ginaBin +' stop')
-                    // TODO - stop all running bundles
-                } catch (err) {
-                    console.error(err.stack||err.message||err);
-                    return done(err);
-                }
-            }
+            // var ginaBin = execSync("which gina").toString().replace(/(\n|\r|\t)/g, '');
+            // if (ginaBin) {
+            //     try {
+            //         cmd = execSync(ginaBin +' stop @'+selectedVersion);
+            //         // cmd = execSync(ginaBin +' stop')
+            //         // TODO - stop all running bundles
+            //     } catch (err) {
+            //         console.error(err.stack||err.message||err);
+            //         return done(err);
+            //     }
+            // }
         }
 
         // rename folder version
