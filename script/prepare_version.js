@@ -138,6 +138,11 @@ function PrepareVersion() {
         console.debug('selected version : ', selectedVersion);
         console.debug('targeted version : ', targetedVersion);
 
+        if (selectedVersion != targetedVersion) {
+            console.debug('stopping gina');
+            execSync('gina stop');
+        }
+
         // setting up requirements
         var shortVersion = selectedVersion.split('.');
         shortVersion.splice(2);
