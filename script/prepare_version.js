@@ -374,7 +374,7 @@ function PrepareVersion() {
         console.debug('Building ['+ self.selectedVersion +']', pluginPath);
         var initialDir = process.cwd();
         process.chdir( pluginPath );
-
+        console.info('Please, wait ...');
         console.info('running: `'+ buildCmd +'` from '+ process.cwd() );
         execSync(buildCmd);
 
