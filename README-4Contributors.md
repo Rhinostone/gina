@@ -68,8 +68,21 @@ Check if everything is working fine
 gina version
 ```
 
+Starting the framework
+
 ```tty
 gina start
+```
+Or in debug mode 
+
+```tty
+gina start --inspect-gina
+```
+
+Retrieve logs
+
+```tty
+gina tail --keep-alive
 ```
 
 #### Setting the framework default environment

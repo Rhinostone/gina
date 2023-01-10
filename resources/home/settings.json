@@ -4,6 +4,7 @@
     "global_mode": "{global_mode}",
     "version": "{version}",
     "arch": "{arch}",
+    "platform": "{platform}",
     "env": "{env}",
     "env_is_dev": "{env_is_dev}",
     "scope": "{scope}",

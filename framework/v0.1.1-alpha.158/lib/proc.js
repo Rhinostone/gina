@@ -233,7 +233,7 @@ function Proc(bundle, proc, usePidFile){
                 //     console.debug('Removing `currentProcess.pid`: ', currentProcess.pid);
                 //     dismiss(currentProcess.pid, "SIGKILL")
                 // }
-
+                console.debug('Dismissing ['+ this.pid+'] with [SIGTERM]');
                 dismiss(this.pid, "SIGTERM")
             });
 

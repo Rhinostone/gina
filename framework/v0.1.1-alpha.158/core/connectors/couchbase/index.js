@@ -237,7 +237,7 @@ function Couchbase(conn, infos) {
                         , _mainCallback = null;
 
                     if ( params && params.length != args.length && !/function/.test(typeof(args[args.length-1])) ) {
-                        throw new Error('[ N1QL:' + entityName+'#'+name+'() ] arguments must match parameters length. Please refer to [ '+ source +' ]\nFound in param list: ('+ params.join(', ') +') !')
+                        throw new Error('[N1QL][ ' + entityName+'#'+name+'() ] arguments must match parameters length. Please refer to [ '+ source +' ]\nFound in param list: ('+ params.join(', ') +') !')
                     } else if ( /function/.test( typeof(args[args.length-1]) ) ) {
                         // to hande Nodejs Util.promisify
                         _mainCallback = args[args.length-1]
@@ -397,7 +397,7 @@ function Couchbase(conn, infos) {
                         // merge options
                         for (var qOpt in queryOptions) {
                             if ( typeof(query[ qOpt ]) == 'undefined' ) {
-                                console.warn('N1QL:'+entityName.toLowerCase()+ '#'+ name + ': `'+ qOpt +'` is not a valid queryOption. Ignorig...');
+                                console.warn('[N1QL]['+entityName.toLowerCase()+ '#'+ name + '] `'+ qOpt +'` is not a valid queryOption. Ignorig...');
                                 continue;
                             }
                             query[ qOpt ]( queryOptions[ qOpt ] );
@@ -760,7 +760,7 @@ function Couchbase(conn, infos) {
                 // merge options
                 for (var qOpt in queryOptions) {
                     if ( typeof(query[ qOpt ]) == 'undefined' ) {
-                        console.warn('N1QL:'+entityName.toLowerCase()+ '#'+ name + ': `'+ qOpt +'` is not a valid queryOption. Ignorig...');
+                        console.warn('[N1QL]['+entityName.toLowerCase()+ '#'+ name + '] `'+ qOpt +'` is not a valid queryOption. Ignorig...');
                         continue;
                     }
                     query[ qOpt ]( queryOptions[ qOpt ] )

@@ -240,39 +240,76 @@ function Initialize(opt) {
      * */
     self.checkArch = function() {
 
-        var procArch = process.arch;
+        var currentArch = process.arch;
+        var currentPlatform = process.platform;
         // ignored for framework:set
         var mainConfig = require( self.opt.homedir + '/main.json' );
+        var defaultMainConfig = requireJSON( getPath('gina').root + '/resources/home/main.json' );
         //has registered arch ?
-        var arch   = getEnvVar('GINA_ARCH') || mainConfig['def_arch'][self.release] || null; // arch by default
+        var arch        = getEnvVar('GINA_ARCH') || mainConfig['def_arch'][self.release] || null; // arch by default
+        if ( typeof(mainConfig.archs) == 'undefined' ) {
+            mainConfig.archs = {};
+            mainConfig.archs[self.release] = defaultMainConfig.archs['{release}'];
+            mainConfig['def_arch'] = {}
+            mainConfig['def_arch'][self.release] = currentArch;
+            isUpdateNeeded = true;
+        }
         if ( mainConfig.archs[self.release].indexOf(arch) < 0 ) {
-            console.error('Arch [ ' + arch + ' ] not registered. Gina is not support your `architecture` at this moment.');
+            console.error('Arch [ ' + arch + ' ] not registered. Gina is not support your architecture `'+ process.arch +'` at this moment.');
             process.exit(1);
         }
-
+        var platform    = getEnvVar('GINA_PLATFORM') || mainConfig['def_platform'][self.release] || null; // arch by default
+        if ( typeof(mainConfig.platforms) == 'undefined' ) {
+            mainConfig.platforms = {};
+            mainConfig.platforms[self.release] = defaultMainConfig.platforms['{release}'];
+            mainConfig['def_platform'] = {}
+            mainConfig['def_platform'][self.release] = currentPlatform;
+            isUpdateNeeded = true;
+        }
+        if ( mainConfig.platforms[self.release].indexOf(platform) < 0 ) {
+            console.error('Platform [ ' + platform + ' ] not registered. Gina is not support your platform `'+ process.platform +'` at this moment.');
+            process.exit(1);
+        }
         var isUpdateNeeded = false;
-        if (arch != procArch) {
+        if (arch != currentArch) {
             // updating arch
-            arch = procArch;
+            arch = currentArch;
             if ( mainConfig.archs[self.release].indexOf(arch) < 0 ) {
-                console.error('Arch [ ' + arch + ' ] not registered. Gina is not support your `architecture` at this moment.');
+                console.error('Arch [ ' + arch + ' ] not registered. Gina is not support your architecture `'+ process.arch +'` at this moment.');
                 process.exit(1);
             }
 
             isUpdateNeeded = true;
             mainConfig['def_arch'][self.release] = arch;
         }
+        if (platform != currentPlatform) {
+            // updating platform
+            platform = currentPlatform;
+            if ( mainConfig.platforms[self.release].indexOf(platform) < 0 ) {
+                console.error('Platform [ ' + arch + ' ] not registered. Gina is not support your platform `'+ process.platform +'` at this moment.');
+                process.exit(1);
+            }
+
+            isUpdateNeeded = true;
+            mainConfig['def_platform'][self.release] = platform;
+        }
 
 
-        // has local scope ?
+        // has arch & platform ?
         if (
             isUpdateNeeded
             ||
             typeof(mainConfig['def_arch']) == 'undefined'
             ||
+            typeof(mainConfig['def_platform']) == 'undefined'
+            ||
             typeof(mainConfig['def_arch']) != 'undefined'
             && typeof(mainConfig['def_arch'][self.release]) != 'undefined'
             && mainConfig.archs[self.release].indexOf(mainConfig['def_arch'][self.release]) < 0
+            ||
+            typeof(mainConfig['def_platform']) != 'undefined'
+            && typeof(mainConfig['def_platform'][self.release]) != 'undefined'
+            && mainConfig.platforms[self.release].indexOf(mainConfig['def_platform'][self.release]) < 0
         ) {
             var target = _(self.opt.homedir +'/main.json');
             lib.generator.createFileFromDataSync(
@@ -402,6 +439,7 @@ function Initialize(opt) {
             , prefix        = getEnvVar('GINA_PREFIX') || main['def_prefix'][self.release]
             , globalMode    = getEnvVar('GINA_GLOBAL_MODE') || main['def_global_mode'][self.release]
             , arch          = getEnvVar('GINA_ARCH') || main['def_arch'][self.release]
+            , platform      = getEnvVar('GINA_PLATFORM') || main['def_platform'][self.release]
             , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
             , scope         = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release]
             , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
@@ -463,6 +501,7 @@ function Initialize(opt) {
                 'global_mode': globalMode,
                 'version' : version,
                 'arch' : arch,
+                'platform': platform,
                 'env' : env,
                 'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,
                 'dev_env' : main['dev_env'][self.release],

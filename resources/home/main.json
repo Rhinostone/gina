@@ -20,6 +20,20 @@
     "def_arch": {
         "{release}": "x64"
     },
+    "platforms": {
+        "{release}": [
+            "darwin",
+            "linux",
+            "win32",
+            "freebsd",
+            "openbsd",
+            "sunos",
+            "aix"
+        ]
+    },
+    "def_platform": {
+        "{release}": "linux"
+    },
     "scopes": {
         "{release}": [
             "local",

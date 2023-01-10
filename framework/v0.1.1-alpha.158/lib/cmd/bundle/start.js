@@ -1,5 +1,4 @@
 const fs            = require('fs');
-const { debug }     = require('console');
 const { EventEmitter }  = require('events');
 const { spawn }     = require('child_process');
 const { execSync }  = require('child_process');
@@ -8,49 +7,10 @@ const promisify = require('util').promisify;
 
 var CmdHelper   = require('./../helper');
 // `lib` is previously defiened as this file is required by anoth
-var console     = lib.logger;
-
-// function resolveAfter2Seconds(opt) {
-
-//     var e = new EventEmitter();
-//     var trigger = 'internal_start#node-modules-installed';
-
-//     var nIntervId = null;
-//     var i = 0;
-
-//     var play = function(opt) {
-//         var done = function(nIntervId, resolve) {
-//             clearInterval(nIntervId);
-//             nIntervId = null;
-//             opt.client.write('\n['+ i +'] Done ...');
-//             e.emit(trigger, 'resolved');
-//         }
-
-//         nIntervId = setInterval(() => {
-//             i++;
-
-//             // TODO - check for file availability
-//             if ( i > 2 ) {
-//                 clearInterval(nIntervId);
-//                 return done()
-//             }
-
-//             opt.client.write('\n['+ i +'] Please wait ...');
-//             opt.client.write('\n['+ nIntervId +']');
-
-//         }, 500);
-//     }
-
-//     return function onDone(opt) {
-//         e.once(trigger, function onComplete(result) {
-//             opt.client.write('\n['+ i +'] Man !!!');
-//             return result
-//         });
-
-//         play(opt)
-//     }(opt)
-
-// }
+// for user output
+var terminal    = lib.logger;
+// for logs/tail output thru the parent
+var console     = null;
 
 /**
  * Start a given bundle or start all bundles at once
@@ -73,6 +33,7 @@ var console     = lib.logger;
  * */
 function Start(opt, cmd) {
     var self    = {};
+    // terminal.register(console, opt.client.write);
 
 
     var init = function(opt, cmd) {
@@ -98,13 +59,14 @@ function Start(opt, cmd) {
     var checkArchAgainstNodeModules = function(opt, cb) {
 
         var currentArch         = GINA_ARCH
+            , currentPlatform   = GINA_PLATFORM
             , projectObj        = self.projects[ self.projectName ]
             , packagePathObj    = new _(projectObj.path +'/package.json', true)
             , packagePath       = packagePathObj.toString()
         ;
 
         if ( !packagePathObj.existsSync() ) {
-            console.warn('[checkArchAgainstNodeModules] File`'+packagePath +'` not found');
+            terminal.warn('[checkArchAgainstNodeModules] File`'+packagePath +'` not found');
             return cb(false);
         }
 
@@ -114,6 +76,8 @@ function Start(opt, cmd) {
 
         var projectArchFileObj = new _(projectObj.path +'/.gna/arch', true);
         var projectArchFile = projectArchFileObj.toString();
+        var projectPlatformFileObj = new _(projectObj.path +'/.gna/platform', true);
+        var projectPlatformFile = projectPlatformFileObj.toString();
         var nodeModulesContentArr = ( nodeModulesPathObj.existsSync() ) ? fs.readdirSync(nodeModulesPathObj.toString()) : [];
         var newNodeModulesContentArr = [], n = 0;
         for (let f in nodeModulesContentArr) {
@@ -130,7 +94,11 @@ function Start(opt, cmd) {
         if (
             !projectArchFileObj.existsSync()
             ||
+            !projectPlatformFileObj.existsSync()
+            ||
             projectArchFileObj.existsSync() && fs.readFileSync(projectArchFile).toString() != currentArch
+            ||
+            projectPlatformFileObj.existsSync() && fs.readFileSync(projectPlatformFile).toString() != currentPlatform
             ||
             !nodeModulesPathObj.existsSync()
             ||
@@ -140,14 +108,15 @@ function Start(opt, cmd) {
             nodeModulesPathObj.existsSync()
             && nodeModulesContentArr.length == 1
             && nodeModulesContentArr[0] == 'gina'
-            && typeof(pack.dependencies) != 'undefined'
+            && typeof(pack.dependencies) != 'object'
             && pack.dependencies.count() > 0
         ) {
             isNodeModulesReinstallNeeded = true;
         }
 
-        opt.client.write('\narch: '+ currentArch);
-        opt.client.write('\nprojectArchFile: '+ projectArchFile);
+        opt.client.write('\nArch: '+ currentArch);
+        // opt.client.write('\nprojectArchFile: '+ projectArchFile);
+        opt.client.write('\nPlatform: '+ currentPlatform);
         opt.client.write('\nisNodeModulesReinstallNeeded: '+ isNodeModulesReinstallNeeded);
 
         // TODO - Do we want this for production ?
@@ -164,7 +133,7 @@ function Start(opt, cmd) {
             var npmCmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
             process.chdir( _(projectObj.path, true) );
 
-            opt.client.write('\nRe-installing node_modules to match arch');
+            opt.client.write('\nRe-installing node_modules to match arch & platform');
             opt.client.write('\nrunning: `'+ npmCmd +'` from '+ process.cwd() );
             opt.client.write('\nrunning using TMPDIR: '+  _(getTmpDir(), true) );
             var oldConfigGlobal = process.env.npm_config_global;
@@ -188,7 +157,6 @@ function Start(opt, cmd) {
             }
 
             opt.client.write('\n'+result);
-            // lib.generator.createFileFromDataSync(GINA_ARCH, projectArchFile);
 
             opt.client.write('\r\nPlease wait...');
 
@@ -203,6 +171,7 @@ function Start(opt, cmd) {
 
                 opt.client.write('\nOk, I am ready :)');
                 lib.generator.createFileFromDataSync(GINA_ARCH, projectArchFile);
+                lib.generator.createFileFromDataSync(GINA_PLATFORM, projectPlatformFile);
                 setTimeout(() => {
                     done(false)
                 }, 1000);
@@ -222,7 +191,6 @@ function Start(opt, cmd) {
             }, 200);
 
             return;
-
         }
 
         cb(false);
@@ -251,20 +219,20 @@ function Start(opt, cmd) {
         var isBulkStart = (typeof(bundleIndex) != 'undefined') ? true : false;
 
         var bundle = (isBulkStart) ? self.bundles[bundleIndex] : self.name;
-        // console.debug('bundle -> ', bundle);
+        // terminal.debug('bundle -> ', bundle);
         var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
-        // console.debug('env -> ', env);
+        // terminal.debug('env -> ', env);
         var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
-        // console.debug('protocol -> ', protocol);
+        // terminal.debug('protocol -> ', protocol);
         var scheme = self.bundlesByProject[self.projectName][bundle].def_scheme;
-        // console.debug('scheme -> ', scheme);
+        // terminal.debug('scheme -> ', scheme);
         var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];
-        // console.debug('port -> ', bundlePort);
+        // terminal.debug('port -> ', bundlePort);
 
         var msg = null;
         if ( !isBulkStart && !isDefined('bundle', bundle) ) {
             msg = 'Bundle [ '+ bundle +' ] is not registered inside `@'+ self.projectName +'`';
-            console.error(msg);
+            terminal.error(msg);
             // opt.client.write(msg);
             // // CMD exit
             // opt.client.emit('end');
@@ -282,7 +250,7 @@ function Start(opt, cmd) {
 
         isRealApp(bundle, function(err, appPath){
             if (err) {
-                console.error(err.stack||err.message)
+                terminal.error(err.stack||err.message)
             } else {
                 if (isStarting)
                     return;
@@ -300,7 +268,7 @@ function Start(opt, cmd) {
                         msg += ' (debug port: '+ opt.debugPort +')'
                     }
                     // To gina log
-                    console.info(msg);
+                    terminal.info(msg);
                     // to the terminal stdout
                     opt.client.write('\n\r'+msg);
 
@@ -371,18 +339,18 @@ function Start(opt, cmd) {
 
                     var checkCaseCount = 2
                         // The 2 flags we need to free the child.stdout if we do not want the command to wait for a timeout
-                        // NB.: you can place flag by using console.notice
+                        // NB.: you can place flag by using terminal.notice
                         , checkCaseRe = new RegExp('('+bundle + '@' + self.projectName + ' mounted !|Bundle started !)', 'g')
                         , url = null
                         , debuggerOn = null
                     ;
                     var port = '', errorFound = false;
                     child.stdout.on('data', function(data) {
-                        // console.log(data);
+                        // terminal.log(data);
 
                         // handle errors
                         if ( /EADDRINUSE.*port/i.test(data) && !errorFound ) {
-                            console.log(data);
+                            terminal.log(data);
                             // kill the bundle starting process first
                             child.kill('SIGKILL');
 
@@ -406,7 +374,7 @@ function Start(opt, cmd) {
 
                         // catch fatal errors to exit
                         if ( /(\[|\[\s+)emerg/.test(data) ) {
-                            console.log(data);
+                            terminal.log(data);
 
                             // kill the bundle starting process first
                             child.kill('SIGKILL');
@@ -422,13 +390,13 @@ function Start(opt, cmd) {
                         }
 
                         // Expecting 2 flags (checkCaseCount) to free the child stdout !!
-                        // console.debug('BO case count '+ checkCaseCount);
+                        // terminal.debug('BO case count '+ checkCaseCount);
                         var _matched =  data.match(checkCaseRe);
                         if ( _matched ) {
-                            // console.warn('case count: '+ checkCaseCount +'\nMatched: '+ _matched.length + '\n'+ checkCaseRe +'\n-> '+ data + '<-\n');
+                            // terminal.warn('case count: '+ checkCaseCount +'\nMatched: '+ _matched.length + '\n'+ checkCaseRe +'\n-> '+ data + '<-\n');
                             checkCaseCount -= _matched.length;
                         }
-                        // console.debug('EO case count: '+ checkCaseCount + ' -> '+ data);
+                        // terminal.debug('EO case count: '+ checkCaseCount + ' -> '+ data);
 
                         // cache bundle state info given by the server while starting
                         if ( !debuggerOn && new RegExp('Debugger listening on','gmi').test(data)) {
@@ -451,7 +419,7 @@ function Start(opt, cmd) {
 
                             // resume logging
                             process.emit('gina#bundle-logging', GINA_MQ_PORT, GINA_HOST_V4, bundle + '@' + self.projectName);
-                            console.debug('Sent:  gina#bundle-logging');
+                            terminal.debug('Sent:  gina#bundle-logging');
 
 
                             opt.client.write('  [ ' + bundle + '@' + self.projectName + ' ] started V(-.o)V'+ url + debuggerOn);
@@ -482,7 +450,7 @@ function Start(opt, cmd) {
                             }
                         }
 
-                        console.error(error);
+                        terminal.error(error);
                     });
 
                     child.on('exit', function(code, signal) {
@@ -492,7 +460,7 @@ function Start(opt, cmd) {
                             return end(opt, cmd, isBulkStart, bundleIndex);
                         }
                         if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
-                            console.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
+                            terminal.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
                             cmd.proc.dismiss(this.pid, signal);
                             return;
                         }
@@ -602,7 +570,7 @@ function Start(opt, cmd) {
         } catch (err) {
             // default bundlesPath.
             // TODO - log warn ?
-            console.warn(err.stack||err.message);
+            terminal.warn(err.stack||err.message);
             bundleDir   = 'bundles';
             bundlesPath = _(root +'/'+ bundleDir);
             p = _(root +'/'+ bundleDir +'/'+ bundle);
