@@ -904,7 +904,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     // proxy external urls
                     // TODO - instead of using `cors.io` or similar services, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
                     //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
-                    url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
+
+
+                    // url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
+                    // url = url.match(/^(https|http)\:/)[0] + '//localhost:4100/proxy/?'+ url;
+                    url = 'http://localhost:4100/proxy/?'+ url;
+
+
+
                     //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
 
                     //delete options.headers['X-Requested-With']

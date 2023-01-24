@@ -76,10 +76,19 @@ function PrototypesHelper(instance) {
     }
 
     if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
-        if ( typeof(envVars) != 'undefined' ) {
+        if ( typeof(envVars) != 'undefined' && envVars != null ) {
             JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
         } else {
-            JSON.clone = require( GINA_DIR +'/utils/prototypes.json_clone');
+            // For unit tests
+            if (!envVars) {
+                var ginaDir = process.cwd().match(/.*\/gina/)[0];
+                require(ginaDir +'/utils/helper');
+                setEnvVar('GINA_DIR', ginaDir, true);
+                envVars = getEnvVars();
+            }
+
+            // JSON.clone = require( GINA_DIR +'/utils/prototypes.json_clone');
+            JSON.clone = require( getEnvVar('GINA_DIR') +'/utils/prototypes.json_clone');
         }
     }
 

@@ -1,6 +1,6 @@
 {
-  "name"                              : "name",
-  "official_name_en"                  : "officialName.short",
+  "name"                              : "countryName",
+  "official_name_en"                  : "officialStarteName",
   "ISO3166-1-Alpha-2"                 : "short",
   "ISO3166-1-Alpha-3"                 : "long",
   "M49"                               : "m49",

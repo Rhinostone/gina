@@ -5,8 +5,10 @@ const { execSync }  = require('child_process');
 const { arch } = require('os');
 
 var console         = lib.logger;
+var Domain          = lib.Domain;
 var ginaPath        = getPath('gina').root;
 var help            = require(ginaPath + '/utils/helper');
+// var helpers         = require(getPath('gina').helpers, true);
 
 
 var aliases = require( getPath('gina').lib + '/cmd/aliases.json' );
@@ -590,6 +592,26 @@ function Initialize(opt) {
 
     }
 
+    self.checkDomainLibRequirements = function() {
+        // check for `public_suffix_list.dat`
+        var domainLibPath    = _( getEnvVar('GINA_FRAMEWORK_DIR') + '/lib/domain', true);
+        var distPathObj         = new _(domainLibPath + '/dist', true);
+
+        if ( !distPathObj.existsSync() ) {
+            distPathObj.mkdirSync();
+        }
+        console.debug('Checking for PSL file');
+        var datFilenameObj = new _(distPathObj.toString() + '/public_suffix_list.dat', true);
+        if ( !datFilenameObj.existsSync() ) {
+            try {
+                new Domain({isCachingRrequired: true});
+            } catch (err) {
+                console.error(err.stack||err.message||err);
+                process.exit(1)
+            }
+        }
+    }
+
     self.checkIfCertificatesDir = function() {
         var certsDir = new _( getEnvVar('GINA_HOMEDIR') + '/certificates', true);
         var theRSARootCertsDir = new _(certsDir.toString() + '/RSARootCerts', true);
@@ -617,14 +639,6 @@ function Initialize(opt) {
         }
     }
 
-    // self.setLoggers = function() {
-    //     //var terminal = lib.logger('terminal', require() );
-    // }
-
-
-    // self.checkFrameworkLocals = function() {
-
-    // }
 
     self.readSettings = function() {
         for (let s in self.settings) {

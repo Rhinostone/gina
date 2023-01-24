@@ -31,10 +31,10 @@ function Tail(opt, cmd) {
     var nIntervId   = null;
     var mqPortFile  = _(getTmpDir() +'/mq-listener-v'+ GINA_VERSION +'.port', true);
 
+
     var init = function(opt, cmd) {
 
         console.debug('Getting framework logs');
-
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
@@ -46,6 +46,7 @@ function Tail(opt, cmd) {
             clearInterval(nIntervId);
             nIntervId = null;
             opt.mqPort = mqPort;
+
             tail(opt, cmd);
         });
 
@@ -82,11 +83,12 @@ function Tail(opt, cmd) {
         var format          = loggerHelper.format;
 
         var delayedMessages = [];
+
         var resumeTail = function() {
+
             var i = 0;
             while (i < delayedMessages.length) {
                 let pl = delayedMessages[i];
-
                 process.stdout.write( format(pl.group, pl.level, pl.content) );
                 i++;
             }
@@ -110,6 +112,9 @@ function Tail(opt, cmd) {
             client.write( JSON.stringify(clientOptions) +'\r\n');
 
         });
+
+
+
         client.on('error', (data) => {
             var err = data.toString();
             console.error('[MQTail] ' + err + ' - Gina might not be running');
@@ -128,6 +133,7 @@ function Tail(opt, cmd) {
 
         var payloads = null, i = null;
         client.on('data', (data) => {
+
             // console.log('[MQTail]  (data): ' + data.toString());
             payloads = data.toString();
 
@@ -137,6 +143,7 @@ function Tail(opt, cmd) {
                 //console.log(payloads);
                 i = -1;
                 while(i < payloads.length) {
+
                     i++;
                     let payload = payloads[i];
                     if (
@@ -150,6 +157,7 @@ function Tail(opt, cmd) {
                             process.stdout.write( '[MQTail] (Exception) '+ payload +'\n' );
                             continue;
                         }
+
 
 
                         if (!pl.content) {
@@ -172,6 +180,13 @@ function Tail(opt, cmd) {
                             continue;
                         }
 
+                        //  [ duplicate output fix ]
+                        // if (loggers[pl.group] && loggers[pl.group]._options.isFlushing) {
+                        //     process.stdout.write(  '[MQTail] '+ pl.group +' => '+ loggers[pl.group]._options.isFlushing +'\n' );
+                        //     break;
+                        // }
+
+
                         // resuming logging from another process
                         // we do not want to print twice in this case since another logger server is already running
                         // if (isResuming) {
@@ -180,6 +195,8 @@ function Tail(opt, cmd) {
 
                         // only for debug
                         // process.stdout.write(  '[MQTail] '+ pl.content +'\n' );
+
+
 
                         try {
                             process.stdout.write( format(pl.group, pl.level, pl.content) );
@@ -223,6 +240,13 @@ function Tail(opt, cmd) {
                                     process.stdout.write('[MQTail] '+ JSON.stringify(payloads, null, 2) +'\n' );
                                 }
                             }
+
+                            //  [ duplicate output fix ]
+                            // if (pl.level == "emerg" && ! /^gina$/.test(pl.group) ) {
+                            //     // flush needed
+                            //     process.stdout.write('[MQTail] Flush needed (2)\n' + '=> '+ loggers[pl.group]._options.isFlushing); //JSON.stringify(pl, null, 2)
+                            //     console.flush(pl.group);
+                            // }
                         } catch (writeErr) {
                             // means that the related MQSpeaker is not connected yet
                             // this can happen during `bundle:start` configuration

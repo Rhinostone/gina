@@ -872,7 +872,12 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     setTimeout( async function onStarted() {
 
                                         if ( conf.server.scheme == 'https' && /true/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) {
-                                            await server.verifyCertificate(conf.host, conf.server.port);
+                                            try {
+                                                await server.verifyCertificate(conf.host, conf.server.port);
+                                            } catch (err) {
+                                                // console.emerg(err.stack);
+                                                throw err;
+                                            }
                                         }
 
                                         console.info('is now online V(-.o)V',

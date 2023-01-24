@@ -10,6 +10,7 @@ function List(opt, cmd){
     var init = function(){
 
         self.projects = require(_(GINA_HOMEDIR + '/projects.json'));
+        var err = null;
 
         if ( typeof(process.argv[3]) != 'undefined') {
             if (process.argv[3] === '--all') {
@@ -32,8 +33,8 @@ function List(opt, cmd){
         } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
             listProjectOnly()
         } else {
-            console.error('[ '+self.name+' ] is not a valid project name.');
-            process.exit(1)
+            err = new Error('[ '+self.name+' ] is not a valid project name.');
+            end(err, 'log', true);
         }
     }
 
@@ -84,7 +85,8 @@ function List(opt, cmd){
             str += '\n\r'
         }
 
-        console.log(str)
+        console.log(str);
+        end();
     }
 
     var listProjectOnly = function (){
@@ -102,8 +104,22 @@ function List(opt, cmd){
             str += '\n\r'
         }
 
-        console.log(str)
+        console.log(str);
+        end();
     };
+
+    var end = function (err, type, messageOnly) {
+        if ( typeof(err) != 'undefined') {
+            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+            if ( typeof(type) != 'undefined' ) {
+                console[type](out)
+            } else {
+                console.error(out);
+            }
+        }
+
+        process.exit( err ? 1:0 );
+    }
 
     init()
 };

@@ -6,19 +6,19 @@
     * Default is `true`: set to false if you have describe a redirection rule from your `routing.json`
     */
     // "webrootAutoredirect": false,
-    
+
     /**
     * `template` settings
     * Default is `false`: will automatically be set to `true` when you add a view/template (`false` is right for APIs only)
     */
-    // "template": false 
-    
+    // "template": false,
+
     /**
     * `response` settings
     * This section is mostly used to setup CORS
     */
     // "response": {
-            // CORS settings sample
+    //        // CORS settings sample
     //     "header": {
     //         "access-control-allow-origin": "{bundle}@{project}, https://checkout.stripe.com",
     //         "access-control-allow-headers": "X-Requested-With", // To allow AJAX request

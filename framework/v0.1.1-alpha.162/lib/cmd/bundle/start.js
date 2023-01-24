@@ -70,13 +70,19 @@ function Start(opt, cmd) {
             return cb(false);
         }
 
+        var gnaPath    =  _(projectObj.path +'/.gna', true);
+        var gnaPathObj  =  new _(gnaPath, true);
+        if ( ! gnaPathObj.existsSync() ) {
+            gnaPathObj.mkdirSync()
+        }
 
         var isNodeModulesReinstallNeeded = false;
         var nodeModulesPathObj = new _(projectObj.path +'/node_modules', true);
 
-        var projectArchFileObj = new _(projectObj.path +'/.gna/arch', true);
+
+        var projectArchFileObj = new _(gnaPath +'/arch', true);
         var projectArchFile = projectArchFileObj.toString();
-        var projectPlatformFileObj = new _(projectObj.path +'/.gna/platform', true);
+        var projectPlatformFileObj = new _(gnaPath +'/platform', true);
         var projectPlatformFile = projectPlatformFileObj.toString();
         var nodeModulesContentArr = ( nodeModulesPathObj.existsSync() ) ? fs.readdirSync(nodeModulesPathObj.toString()) : [];
         var newNodeModulesContentArr = [], n = 0;
@@ -249,6 +255,7 @@ function Start(opt, cmd) {
         ;
 
         isRealApp(bundle, function(err, appPath){
+
             if (err) {
                 terminal.error(err.stack||err.message)
             } else {

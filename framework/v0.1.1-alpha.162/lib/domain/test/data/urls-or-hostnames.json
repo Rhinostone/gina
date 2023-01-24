@@ -1,0 +1,98 @@
+[
+    {
+        "request": "camtel.cm",
+        "expected": {
+            "rootDomain": "camtel.cm",
+            "isSLD": false,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "https://www.mesdroitssociaux.gouv.fr/accueil",
+        "expected": {
+            "rootDomain": "mesdroitssociaux.gouv.fr",
+            "isSLD": true,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "https://home24.de",
+        "expected": {
+            "rootDomain": "home24.de",
+            "isSLD": false,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "http://www.google.co.uk/blah",
+        "expected": {
+            "rootDomain": "google.co.uk",
+            "isSLD": true,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "http://google.co.jp",
+        "expected": {
+            "rootDomain": "google.co.jp",
+            "isSLD": true,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "https://public-dev.freelancer.app/index.php?key=value#continue",
+        "expected": {
+            "rootDomain": "freelancer.app",
+            "isSLD": false,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "https://my-bucket.s3.af-south-1.amazon.co.za/puppy.png",
+        "expected": {
+            "rootDomain": "amazon.co.za",
+            "isSLD": true,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "http://123456.s3-control.ap-south-1.amazonaws.com",
+        "expected": {
+            "rootDomain": "amazonaws.com",
+            "isSLD": false,
+            "isRegisteredTldOrSld": true
+        }
+    },
+    {
+        "request": "ftp://localhost.localdomain:21",
+        "expected": {
+            "rootDomain": "localhost.localdomain",
+            "isSLD": false,
+            "isRegisteredTldOrSld": false
+        }
+    },
+    {
+        "request": "https://localhost",
+        "expected": {
+            "rootDomain": "localhost",
+            "isSLD": false,
+            "isRegisteredTldOrSld": false
+        }
+    },
+    {
+        "request": "Mac-mini.local",
+        "expected": {
+            "rootDomain": "Mac-mini.local",
+            "isSLD": false,
+            "isRegisteredTldOrSld": false
+        }
+    },
+    {
+        "request": "https://frontend.myproject.beta.Mac-mini.local:3100/home",
+        "expected": {
+            "rootDomain": "Mac-mini.local",
+            "isSLD": false,
+            "isRegisteredTldOrSld": false
+        }
+    }
+]

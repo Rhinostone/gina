@@ -1,6 +1,6 @@
 [
   {
-    "full": "",
+    "name": "",
     "officialName": {
       "short": "Channel Islands"
     },
@@ -32,11 +32,11 @@
     "languages": [
       ""
     ],
-    "geoNameId": "",
+    "geonameId": "",
     "edgar": ""
   },
   {
-    "full": "",
+    "name": "",
     "officialName": {
       "short": "Sark"
     },
@@ -68,11 +68,11 @@
     "languages": [
       ""
     ],
-    "geoNameId": "",
+    "geonameId": "",
     "edgar": ""
   },
   {
-    "full": "Afghanistan",
+    "name": "Afghanistan",
     "officialName": {
       "short": "Afghanistan"
     },
@@ -107,11 +107,11 @@
       "uz-AF",
       "tk"
     ],
-    "geoNameId": "1149361",
+    "geonameId": "1149361",
     "edgar": "B2"
   },
   {
-    "full": "Albania",
+    "name": "Albania",
     "officialName": {
       "short": "Albania"
     },
@@ -144,11 +144,11 @@
       "sq",
       "el"
     ],
-    "geoNameId": "783754",
+    "geonameId": "783754",
     "edgar": "B3"
   },
   {
-    "full": "Algeria",
+    "name": "Algeria",
     "officialName": {
       "short": "Algeria"
     },
@@ -180,11 +180,11 @@
     "languages": [
       "ar-DZ"
     ],
-    "geoNameId": "2589581",
+    "geonameId": "2589581",
     "edgar": "B4"
   },
   {
-    "full": "American Samoa",
+    "name": "American Samoa",
     "officialName": {
       "short": "American Samoa"
     },
@@ -218,11 +218,11 @@
       "sm",
       "to"
     ],
-    "geoNameId": "5880801",
+    "geonameId": "5880801",
     "edgar": "B5"
   },
   {
-    "full": "Andorra",
+    "name": "Andorra",
     "officialName": {
       "short": "Andorra"
     },
@@ -254,11 +254,11 @@
     "languages": [
       "ca"
     ],
-    "geoNameId": "3041565",
+    "geonameId": "3041565",
     "edgar": "B6"
   },
   {
-    "full": "Angola",
+    "name": "Angola",
     "officialName": {
       "short": "Angola"
     },
@@ -290,11 +290,11 @@
     "languages": [
       "pt-AO"
     ],
-    "geoNameId": "3351879",
+    "geonameId": "3351879",
     "edgar": "B7"
   },
   {
-    "full": "Anguilla",
+    "name": "Anguilla",
     "officialName": {
       "short": "Anguilla"
     },
@@ -326,11 +326,11 @@
     "languages": [
       "en-AI"
     ],
-    "geoNameId": "3573511",
+    "geonameId": "3573511",
     "edgar": "1A"
   },
   {
-    "full": "Antarctica",
+    "name": "Antarctica",
     "officialName": {
       "short": ""
     },
@@ -362,11 +362,11 @@
     "languages": [
       ""
     ],
-    "geoNameId": "6697173",
+    "geonameId": "6697173",
     "edgar": ""
   },
   {
-    "full": "Antigua & Barbuda",
+    "name": "Antigua & Barbuda",
     "officialName": {
       "short": "Antigua and Barbuda"
     },
@@ -398,11 +398,11 @@
     "languages": [
       "en-AG"
     ],
-    "geoNameId": "3576396",
+    "geonameId": "3576396",
     "edgar": "B9"
   },
   {
-    "full": "Argentina",
+    "name": "Argentina",
     "officialName": {
       "short": "Argentina"
     },
@@ -439,11 +439,11 @@
       "fr",
       "gn"
     ],
-    "geoNameId": "3865483",
+    "geonameId": "3865483",
     "edgar": "C1"
   },
   {
-    "full": "Armenia",
+    "name": "Armenia",
     "officialName": {
       "short": "Armenia"
     },
@@ -475,11 +475,11 @@
     "languages": [
       "hy"
     ],
-    "geoNameId": "174982",
+    "geonameId": "174982",
     "edgar": "1B"
   },
   {
-    "full": "Aruba",
+    "name": "Aruba",
     "officialName": {
       "short": "Aruba"
     },
@@ -513,11 +513,11 @@
       "es",
       "en"
     ],
-    "geoNameId": "3577279",
+    "geonameId": "3577279",
     "edgar": "1C"
   },
   {
-    "full": "Australia",
+    "name": "Australia",
     "officialName": {
       "short": "Australia"
     },
@@ -549,11 +549,11 @@
     "languages": [
       "en-AU"
     ],
-    "geoNameId": "2077456",
+    "geonameId": "2077456",
     "edgar": "C3"
   },
   {
-    "full": "Austria",
+    "name": "Austria",
     "officialName": {
       "short": "Austria"
     },
@@ -588,11 +588,11 @@
       "hu",
       "sl"
     ],
-    "geoNameId": "2782113",
+    "geonameId": "2782113",
     "edgar": "C4"
   },
   {
-    "full": "Azerbaijan",
+    "name": "Azerbaijan",
     "officialName": {
       "short": "Azerbaijan"
     },
@@ -626,11 +626,11 @@
       "ru",
       "hy"
     ],
-    "geoNameId": "587116",
+    "geonameId": "587116",
     "edgar": "1D"
   },
   {
-    "full": "Bahamas",
+    "name": "Bahamas",
     "officialName": {
       "short": "Bahamas"
     },
@@ -662,11 +662,11 @@
     "languages": [
       "en-BS"
     ],
-    "geoNameId": "3572887",
+    "geonameId": "3572887",
     "edgar": "C5"
   },
   {
-    "full": "Bahrain",
+    "name": "Bahrain",
     "officialName": {
       "short": "Bahrain"
     },
@@ -701,11 +701,11 @@
       "fa",
       "ur"
     ],
-    "geoNameId": "290291",
+    "geonameId": "290291",
     "edgar": "C6"
   },
   {
-    "full": "Bangladesh",
+    "name": "Bangladesh",
     "officialName": {
       "short": "Bangladesh"
     },
@@ -738,11 +738,11 @@
       "bn-BD",
       "en"
     ],
-    "geoNameId": "1210997",
+    "geonameId": "1210997",
     "edgar": "C7"
   },
   {
-    "full": "Barbados",
+    "name": "Barbados",
     "officialName": {
       "short": "Barbados"
     },
@@ -774,11 +774,11 @@
     "languages": [
       "en-BB"
     ],
-    "geoNameId": "3374084",
+    "geonameId": "3374084",
     "edgar": "C8"
   },
   {
-    "full": "Belarus",
+    "name": "Belarus",
     "officialName": {
       "short": "Belarus"
     },
@@ -811,11 +811,11 @@
       "be",
       "ru"
     ],
-    "geoNameId": "630336",
+    "geonameId": "630336",
     "edgar": "1F"
   },
   {
-    "full": "Belgium",
+    "name": "Belgium",
     "officialName": {
       "short": "Belgium"
     },
@@ -849,11 +849,11 @@
       "fr-BE",
       "de-BE"
     ],
-    "geoNameId": "2802361",
+    "geonameId": "2802361",
     "edgar": "C9"
   },
   {
-    "full": "Belize",
+    "name": "Belize",
     "officialName": {
       "short": "Belize"
     },
@@ -886,11 +886,11 @@
       "en-BZ",
       "es"
     ],
-    "geoNameId": "3582678",
+    "geonameId": "3582678",
     "edgar": "D1"
   },
   {
-    "full": "Benin",
+    "name": "Benin",
     "officialName": {
       "short": "Benin"
     },
@@ -922,11 +922,11 @@
     "languages": [
       "fr-BJ"
     ],
-    "geoNameId": "2395170",
+    "geonameId": "2395170",
     "edgar": "G6"
   },
   {
-    "full": "Bermuda",
+    "name": "Bermuda",
     "officialName": {
       "short": "Bermuda"
     },
@@ -959,11 +959,11 @@
       "en-BM",
       "pt"
     ],
-    "geoNameId": "3573345",
+    "geonameId": "3573345",
     "edgar": "D0"
   },
   {
-    "full": "Bhutan",
+    "name": "Bhutan",
     "officialName": {
       "short": "Bhutan"
     },
@@ -995,11 +995,11 @@
     "languages": [
       "dz"
     ],
-    "geoNameId": "1252634",
+    "geonameId": "1252634",
     "edgar": "D2"
   },
   {
-    "full": "Bolivia",
+    "name": "Bolivia",
     "officialName": {
       "short": "Bolivia (Plurinational State of)"
     },
@@ -1033,11 +1033,11 @@
       "qu",
       "ay"
     ],
-    "geoNameId": "3923057",
+    "geonameId": "3923057",
     "edgar": ""
   },
   {
-    "full": "Bosnia",
+    "name": "Bosnia",
     "officialName": {
       "short": "Bosnia and Herzegovina"
     },
@@ -1071,11 +1071,11 @@
       "hr-BA",
       "sr-BA"
     ],
-    "geoNameId": "3277605",
+    "geonameId": "3277605",
     "edgar": "1E"
   },
   {
-    "full": "Botswana",
+    "name": "Botswana",
     "officialName": {
       "short": "Botswana"
     },
@@ -1108,11 +1108,11 @@
       "en-BW",
       "tn-BW"
     ],
-    "geoNameId": "933860",
+    "geonameId": "933860",
     "edgar": "B1"
   },
   {
-    "full": "Bouvet Island",
+    "name": "Bouvet Island",
     "officialName": {
       "short": ""
     },
@@ -1144,11 +1144,11 @@
     "languages": [
       ""
     ],
-    "geoNameId": "3371123",
+    "geonameId": "3371123",
     "edgar": ""
   },
   {
-    "full": "Brazil",
+    "name": "Brazil",
     "officialName": {
       "short": "Brazil"
     },
@@ -1183,11 +1183,11 @@
       "en",
       "fr"
     ],
-    "geoNameId": "3469034",
+    "geonameId": "3469034",
     "edgar": "D5"
   },
   {
-    "full": "British Indian Ocean Territory",
+    "name": "British Indian Ocean Territory",
     "officialName": {
       "short": ""
     },
@@ -1219,11 +1219,11 @@
     "languages": [
       "en-IO"
     ],
-    "geoNameId": "1282588",
+    "geonameId": "1282588",
     "edgar": ""
   },
   {
-    "full": "British Virgin Islands",
+    "name": "British Virgin Islands",
     "officialName": {
       "short": "British Virgin Islands"
     },
@@ -1255,11 +1255,11 @@
     "languages": [
       "en-VG"
     ],
-    "geoNameId": "3577718",
+    "geonameId": "3577718",
     "edgar": ""
   },
   {
-    "full": "Brunei",
+    "name": "Brunei",
     "officialName": {
       "short": "Brunei Darussalam"
     },
@@ -1292,11 +1292,11 @@
       "ms-BN",
       "en-BN"
     ],
-    "geoNameId": "1820814",
+    "geonameId": "1820814",
     "edgar": "D9"
   },
   {
-    "full": "Bulgaria",
+    "name": "Bulgaria",
     "officialName": {
       "short": "Bulgaria"
     },
@@ -1330,11 +1330,11 @@
       "tr-BG",
       "rom"
     ],
-    "geoNameId": "732800",
+    "geonameId": "732800",
     "edgar": "E0"
   },
   {
-    "full": "Burkina Faso",
+    "name": "Burkina Faso",
     "officialName": {
       "short": "Burkina Faso"
     },
@@ -1366,11 +1366,11 @@
     "languages": [
       "fr-BF"
     ],
-    "geoNameId": "2361809",
+    "geonameId": "2361809",
     "edgar": "X2"
   },
   {
-    "full": "Burundi",
+    "name": "Burundi",
     "officialName": {
       "short": "Burundi"
     },
@@ -1403,11 +1403,11 @@
       "fr-BI",
       "rn"
     ],
-    "geoNameId": "433561",
+    "geonameId": "433561",
     "edgar": "E2"
   },
   {
-    "full": "Cambodia",
+    "name": "Cambodia",
     "officialName": {
       "short": "Cambodia"
     },
@@ -1441,11 +1441,11 @@
       "fr",
       "en"
     ],
-    "geoNameId": "1831722",
+    "geonameId": "1831722",
     "edgar": "E3"
   },
   {
-    "full": "Cameroon",
+    "name": "Cameroon",
     "officialName": {
       "short": "Cameroon"
     },
@@ -1478,11 +1478,11 @@
       "en-CM",
       "fr-CM"
     ],
-    "geoNameId": "2233387",
+    "geonameId": "2233387",
     "edgar": "E4"
   },
   {
-    "full": "Canada",
+    "name": "Canada",
     "officialName": {
       "short": "Canada"
     },
@@ -1516,11 +1516,11 @@
       "fr-CA",
       "iu"
     ],
-    "geoNameId": "6251999",
+    "geonameId": "6251999",
     "edgar": ""
   },
   {
-    "full": "Cape Verde",
+    "name": "Cape Verde",
     "officialName": {
       "short": "Cabo Verde"
     },
@@ -1552,11 +1552,11 @@
     "languages": [
       "pt-CV"
     ],
-    "geoNameId": "3374766",
+    "geonameId": "3374766",
     "edgar": ""
   },
   {
-    "full": "Caribbean Netherlands",
+    "name": "Caribbean Netherlands",
     "officialName": {
       "short": "Bonaire, Sint Eustatius and Saba"
     },
@@ -1590,11 +1590,11 @@
       "pap",
       "en"
     ],
-    "geoNameId": "7626844",
+    "geonameId": "7626844",
     "edgar": ""
   },
   {
-    "full": "Cayman Islands",
+    "name": "Cayman Islands",
     "officialName": {
       "short": "Cayman Islands"
     },
@@ -1626,11 +1626,11 @@
     "languages": [
       "en-KY"
     ],
-    "geoNameId": "3580718",
+    "geonameId": "3580718",
     "edgar": "E9"
   },
   {
-    "full": "Central African Republic",
+    "name": "Central African Republic",
     "officialName": {
       "short": "Central African Republic"
     },
@@ -1665,11 +1665,11 @@
       "ln",
       "kg"
     ],
-    "geoNameId": "239880",
+    "geonameId": "239880",
     "edgar": "F0"
   },
   {
-    "full": "Chad",
+    "name": "Chad",
     "officialName": {
       "short": "Chad"
     },
@@ -1703,11 +1703,11 @@
       "ar-TD",
       "sre"
     ],
-    "geoNameId": "2434508",
+    "geonameId": "2434508",
     "edgar": "F2"
   },
   {
-    "full": "Chile",
+    "name": "Chile",
     "officialName": {
       "short": "Chile"
     },
@@ -1739,11 +1739,11 @@
     "languages": [
       "es-CL"
     ],
-    "geoNameId": "3895114",
+    "geonameId": "3895114",
     "edgar": "F3"
   },
   {
-    "full": "China",
+    "name": "China",
     "officialName": {
       "short": "China"
     },
@@ -1780,11 +1780,11 @@
       "ug",
       "za"
     ],
-    "geoNameId": "1814991",
+    "geonameId": "1814991",
     "edgar": "F4"
   },
   {
-    "full": "Christmas Island",
+    "name": "Christmas Island",
     "officialName": {
       "short": ""
     },
@@ -1818,11 +1818,11 @@
       "zh",
       "ms-CC"
     ],
-    "geoNameId": "2078138",
+    "geonameId": "2078138",
     "edgar": ""
   },
   {
-    "full": "Cocos (Keeling) Islands",
+    "name": "Cocos (Keeling) Islands",
     "officialName": {
       "short": ""
     },
@@ -1855,11 +1855,11 @@
       "ms-CC",
       "en"
     ],
-    "geoNameId": "1547376",
+    "geonameId": "1547376",
     "edgar": ""
   },
   {
-    "full": "Colombia",
+    "name": "Colombia",
     "officialName": {
       "short": "Colombia"
     },
@@ -1891,11 +1891,11 @@
     "languages": [
       "es-CO"
     ],
-    "geoNameId": "3686110",
+    "geonameId": "3686110",
     "edgar": "F8"
   },
   {
-    "full": "Comoros",
+    "name": "Comoros",
     "officialName": {
       "short": "Comoros"
     },
@@ -1928,11 +1928,11 @@
       "ar",
       "fr-KM"
     ],
-    "geoNameId": "921929",
+    "geonameId": "921929",
     "edgar": "F9"
   },
   {
-    "full": "Congo - Brazzaville",
+    "name": "Congo - Brazzaville",
     "officialName": {
       "short": "Congo"
     },
@@ -1966,11 +1966,11 @@
       "kg",
       "ln-CG"
     ],
-    "geoNameId": "2260494",
+    "geonameId": "2260494",
     "edgar": "G0"
   },
   {
-    "full": "Congo - Kinshasa",
+    "name": "Congo - Kinshasa",
     "officialName": {
       "short": "Democratic Republic of the Congo"
     },
@@ -2004,11 +2004,11 @@
       "ln",
       "kg"
     ],
-    "geoNameId": "203312",
+    "geonameId": "203312",
     "edgar": ""
   },
   {
-    "full": "Cook Islands",
+    "name": "Cook Islands",
     "officialName": {
       "short": "Cook Islands"
     },
@@ -2041,11 +2041,11 @@
       "en-CK",
       "mi"
     ],
-    "geoNameId": "1899402",
+    "geonameId": "1899402",
     "edgar": "G1"
   },
   {
-    "full": "Costa Rica",
+    "name": "Costa Rica",
     "officialName": {
       "short": "Costa Rica"
     },
@@ -2078,11 +2078,11 @@
       "es-CR",
       "en"
     ],
-    "geoNameId": "3624060",
+    "geonameId": "3624060",
     "edgar": "G2"
   },
   {
-    "full": "Croatia",
+    "name": "Croatia",
     "officialName": {
       "short": "Croatia"
     },
@@ -2115,11 +2115,11 @@
       "hr-HR",
       "sr"
     ],
-    "geoNameId": "3202326",
+    "geonameId": "3202326",
     "edgar": "1M"
   },
   {
-    "full": "Cuba",
+    "name": "Cuba",
     "officialName": {
       "short": "Cuba"
     },
@@ -2151,11 +2151,11 @@
     "languages": [
       "es-CU"
     ],
-    "geoNameId": "3562981",
+    "geonameId": "3562981",
     "edgar": "G3"
   },
   {
-    "full": "Curaçao",
+    "name": "Curaçao",
     "officialName": {
       "short": "Curaçao"
     },
@@ -2188,11 +2188,11 @@
       "nl",
       "pap"
     ],
-    "geoNameId": "7626836",
+    "geonameId": "7626836",
     "edgar": ""
   },
   {
-    "full": "Cyprus",
+    "name": "Cyprus",
     "officialName": {
       "short": "Cyprus"
     },
@@ -2226,11 +2226,11 @@
       "tr-CY",
       "en"
     ],
-    "geoNameId": "146669",
+    "geonameId": "146669",
     "edgar": "G4"
   },
   {
-    "full": "Czech Republic",
+    "name": "Czech Republic",
     "officialName": {
       "short": "Czechia"
     },
@@ -2263,11 +2263,11 @@
       "cs",
       "sk"
     ],
-    "geoNameId": "3077311",
+    "geonameId": "3077311",
     "edgar": ""
   },
   {
-    "full": "Côte d’Ivoire",
+    "name": "Côte d’Ivoire",
     "officialName": {
       "short": "Côte d'Ivoire"
     },
@@ -2299,11 +2299,11 @@
     "languages": [
       "fr-CI"
     ],
-    "geoNameId": "2287781",
+    "geonameId": "2287781",
     "edgar": ""
   },
   {
-    "full": "Denmark",
+    "name": "Denmark",
     "officialName": {
       "short": "Denmark"
     },
@@ -2338,11 +2338,11 @@
       "fo",
       "de-DK"
     ],
-    "geoNameId": "2623032",
+    "geonameId": "2623032",
     "edgar": "G7"
   },
   {
-    "full": "Djibouti",
+    "name": "Djibouti",
     "officialName": {
       "short": "Djibouti"
     },
@@ -2377,11 +2377,11 @@
       "so-DJ",
       "aa"
     ],
-    "geoNameId": "223816",
+    "geonameId": "223816",
     "edgar": "1G"
   },
   {
-    "full": "Dominica",
+    "name": "Dominica",
     "officialName": {
       "short": "Dominica"
     },
@@ -2413,11 +2413,11 @@
     "languages": [
       "en-DM"
     ],
-    "geoNameId": "3575830",
+    "geonameId": "3575830",
     "edgar": "G9"
   },
   {
-    "full": "Dominican Republic",
+    "name": "Dominican Republic",
     "officialName": {
       "short": "Dominican Republic"
     },
@@ -2451,11 +2451,11 @@
     "languages": [
       "es-DO"
     ],
-    "geoNameId": "3508796",
+    "geonameId": "3508796",
     "edgar": "G8"
   },
   {
-    "full": "Ecuador",
+    "name": "Ecuador",
     "officialName": {
       "short": "Ecuador"
     },
@@ -2487,11 +2487,11 @@
     "languages": [
       "es-EC"
     ],
-    "geoNameId": "3658394",
+    "geonameId": "3658394",
     "edgar": "H1"
   },
   {
-    "full": "Egypt",
+    "name": "Egypt",
     "officialName": {
       "short": "Egypt"
     },
@@ -2525,11 +2525,11 @@
       "en",
       "fr"
     ],
-    "geoNameId": "357994",
+    "geonameId": "357994",
     "edgar": "H2"
   },
   {
-    "full": "El Salvador",
+    "name": "El Salvador",
     "officialName": {
       "short": "El Salvador"
     },
@@ -2561,11 +2561,11 @@
     "languages": [
       "es-SV"
     ],
-    "geoNameId": "3585968",
+    "geonameId": "3585968",
     "edgar": "H3"
   },
   {
-    "full": "Equatorial Guinea",
+    "name": "Equatorial Guinea",
     "officialName": {
       "short": "Equatorial Guinea"
     },
@@ -2598,11 +2598,11 @@
       "es-GQ",
       "fr"
     ],
-    "geoNameId": "2309096",
+    "geonameId": "2309096",
     "edgar": "H4"
   },
   {
-    "full": "Eritrea",
+    "name": "Eritrea",
     "officialName": {
       "short": "Eritrea"
     },
@@ -2638,11 +2638,11 @@
       "kun",
       "ti-ER"
     ],
-    "geoNameId": "338010",
+    "geonameId": "338010",
     "edgar": "1J"
   },
   {
-    "full": "Estonia",
+    "name": "Estonia",
     "officialName": {
       "short": "Estonia"
     },
@@ -2675,11 +2675,11 @@
       "et",
       "ru"
     ],
-    "geoNameId": "453733",
+    "geonameId": "453733",
     "edgar": "1H"
   },
   {
-    "full": "Ethiopia",
+    "name": "Ethiopia",
     "officialName": {
       "short": "Ethiopia"
     },
@@ -2716,11 +2716,11 @@
       "so-ET",
       "sid"
     ],
-    "geoNameId": "337996",
+    "geonameId": "337996",
     "edgar": "H5"
   },
   {
-    "full": "Falkland Islands",
+    "name": "Falkland Islands",
     "officialName": {
       "short": "Falkland Islands (Malvinas)"
     },
@@ -2752,11 +2752,11 @@
     "languages": [
       "en-FK"
     ],
-    "geoNameId": "3474414",
+    "geonameId": "3474414",
     "edgar": "H7"
   },
   {
-    "full": "Faroe Islands",
+    "name": "Faroe Islands",
     "officialName": {
       "short": "Faeroe Islands"
     },
@@ -2789,11 +2789,11 @@
       "fo",
       "da-FO"
     ],
-    "geoNameId": "2622320",
+    "geonameId": "2622320",
     "edgar": ""
   },
   {
-    "full": "Fiji",
+    "name": "Fiji",
     "officialName": {
       "short": "Fiji"
     },
@@ -2826,11 +2826,11 @@
       "en-FJ",
       "fj"
     ],
-    "geoNameId": "2205218",
+    "geonameId": "2205218",
     "edgar": "H8"
   },
   {
-    "full": "Finland",
+    "name": "Finland",
     "officialName": {
       "short": "Finland"
     },
@@ -2864,11 +2864,11 @@
       "sv-FI",
       "smn"
     ],
-    "geoNameId": "660013",
+    "geonameId": "660013",
     "edgar": "H9"
   },
   {
-    "full": "France",
+    "name": "France",
     "officialName": {
       "short": "France"
     },
@@ -2906,11 +2906,11 @@
       "eu",
       "oc"
     ],
-    "geoNameId": "3017382",
+    "geonameId": "3017382",
     "edgar": "I0"
   },
   {
-    "full": "French Guiana",
+    "name": "French Guiana",
     "officialName": {
       "short": "French Guiana"
     },
@@ -2942,11 +2942,11 @@
     "languages": [
       "fr-GF"
     ],
-    "geoNameId": "3381670",
+    "geonameId": "3381670",
     "edgar": "I3"
   },
   {
-    "full": "French Polynesia",
+    "name": "French Polynesia",
     "officialName": {
       "short": "French Polynesia"
     },
@@ -2979,11 +2979,11 @@
       "fr-PF",
       "ty"
     ],
-    "geoNameId": "4030656",
+    "geonameId": "4030656",
     "edgar": "I4"
   },
   {
-    "full": "French Southern Territories",
+    "name": "French Southern Territories",
     "officialName": {
       "short": ""
     },
@@ -3015,11 +3015,11 @@
     "languages": [
       "fr"
     ],
-    "geoNameId": "1546748",
+    "geonameId": "1546748",
     "edgar": ""
   },
   {
-    "full": "Gabon",
+    "name": "Gabon",
     "officialName": {
       "short": "Gabon"
     },
@@ -3051,11 +3051,11 @@
     "languages": [
       "fr-GA"
     ],
-    "geoNameId": "2400553",
+    "geonameId": "2400553",
     "edgar": "I5"
   },
   {
-    "full": "Gambia",
+    "name": "Gambia",
     "officialName": {
       "short": "Gambia"
     },
@@ -3091,11 +3091,11 @@
       "wo",
       "ff"
     ],
-    "geoNameId": "2413451",
+    "geonameId": "2413451",
     "edgar": "I6"
   },
   {
-    "full": "Georgia",
+    "name": "Georgia",
     "officialName": {
       "short": "Georgia"
     },
@@ -3130,11 +3130,11 @@
       "hy",
       "az"
     ],
-    "geoNameId": "614540",
+    "geonameId": "614540",
     "edgar": "2Q"
   },
   {
-    "full": "Germany",
+    "name": "Germany",
     "officialName": {
       "short": "Germany"
     },
@@ -3166,11 +3166,11 @@
     "languages": [
       "de"
     ],
-    "geoNameId": "2921044",
+    "geonameId": "2921044",
     "edgar": "2M"
   },
   {
-    "full": "Ghana",
+    "name": "Ghana",
     "officialName": {
       "short": "Ghana"
     },
@@ -3205,11 +3205,11 @@
       "ee",
       "tw"
     ],
-    "geoNameId": "2300660",
+    "geonameId": "2300660",
     "edgar": "J0"
   },
   {
-    "full": "Gibraltar",
+    "name": "Gibraltar",
     "officialName": {
       "short": "Gibraltar"
     },
@@ -3244,11 +3244,11 @@
       "it",
       "pt"
     ],
-    "geoNameId": "2411586",
+    "geonameId": "2411586",
     "edgar": "J1"
   },
   {
-    "full": "Greece",
+    "name": "Greece",
     "officialName": {
       "short": "Greece"
     },
@@ -3282,11 +3282,11 @@
       "en",
       "fr"
     ],
-    "geoNameId": "390903",
+    "geonameId": "390903",
     "edgar": "J3"
   },
   {
-    "full": "Greenland",
+    "name": "Greenland",
     "officialName": {
       "short": "Greenland"
     },
@@ -3320,11 +3320,11 @@
       "da-GL",
       "en"
     ],
-    "geoNameId": "3425505",
+    "geonameId": "3425505",
     "edgar": "J4"
   },
   {
-    "full": "Grenada",
+    "name": "Grenada",
     "officialName": {
       "short": "Grenada"
     },
@@ -3356,11 +3356,11 @@
     "languages": [
       "en-GD"
     ],
-    "geoNameId": "3580239",
+    "geonameId": "3580239",
     "edgar": "J5"
   },
   {
-    "full": "Guadeloupe",
+    "name": "Guadeloupe",
     "officialName": {
       "short": "Guadeloupe"
     },
@@ -3392,11 +3392,11 @@
     "languages": [
       "fr-GP"
     ],
-    "geoNameId": "3579143",
+    "geonameId": "3579143",
     "edgar": "J6"
   },
   {
-    "full": "Guam",
+    "name": "Guam",
     "officialName": {
       "short": "Guam"
     },
@@ -3429,11 +3429,11 @@
       "en-GU",
       "ch-GU"
     ],
-    "geoNameId": "4043988",
+    "geonameId": "4043988",
     "edgar": "GU"
   },
   {
-    "full": "Guatemala",
+    "name": "Guatemala",
     "officialName": {
       "short": "Guatemala"
     },
@@ -3465,11 +3465,11 @@
     "languages": [
       "es-GT"
     ],
-    "geoNameId": "3595528",
+    "geonameId": "3595528",
     "edgar": "J8"
   },
   {
-    "full": "Guernsey",
+    "name": "Guernsey",
     "officialName": {
       "short": "Guernsey"
     },
@@ -3502,11 +3502,11 @@
       "en",
       "fr"
     ],
-    "geoNameId": "3042362",
+    "geonameId": "3042362",
     "edgar": "Y7"
   },
   {
-    "full": "Guinea",
+    "name": "Guinea",
     "officialName": {
       "short": "Guinea"
     },
@@ -3538,11 +3538,11 @@
     "languages": [
       "fr-GN"
     ],
-    "geoNameId": "2420477",
+    "geonameId": "2420477",
     "edgar": "J9"
   },
   {
-    "full": "Guinea-Bissau",
+    "name": "Guinea-Bissau",
     "officialName": {
       "short": "Guinea-Bissau"
     },
@@ -3575,11 +3575,11 @@
       "pt-GW",
       "pov"
     ],
-    "geoNameId": "2372248",
+    "geonameId": "2372248",
     "edgar": "S0"
   },
   {
-    "full": "Guyana",
+    "name": "Guyana",
     "officialName": {
       "short": "Guyana"
     },
@@ -3611,11 +3611,11 @@
     "languages": [
       "en-GY"
     ],
-    "geoNameId": "3378535",
+    "geonameId": "3378535",
     "edgar": "K0"
   },
   {
-    "full": "Haiti",
+    "name": "Haiti",
     "officialName": {
       "short": "Haiti"
     },
@@ -3648,11 +3648,11 @@
       "ht",
       "fr-HT"
     ],
-    "geoNameId": "3723988",
+    "geonameId": "3723988",
     "edgar": "K1"
   },
   {
-    "full": "Heard & McDonald Islands",
+    "name": "Heard & McDonald Islands",
     "officialName": {
       "short": ""
     },
@@ -3684,11 +3684,11 @@
     "languages": [
       ""
     ],
-    "geoNameId": "1547314",
+    "geonameId": "1547314",
     "edgar": ""
   },
   {
-    "full": "Honduras",
+    "name": "Honduras",
     "officialName": {
       "short": "Honduras"
     },
@@ -3720,11 +3720,11 @@
     "languages": [
       "es-HN"
     ],
-    "geoNameId": "3608932",
+    "geonameId": "3608932",
     "edgar": "K2"
   },
   {
-    "full": "Hong Kong",
+    "name": "Hong Kong",
     "officialName": {
       "short": "China, Hong Kong Special Administrative Region"
     },
@@ -3759,11 +3759,11 @@
       "zh",
       "en"
     ],
-    "geoNameId": "1819730",
+    "geonameId": "1819730",
     "edgar": ""
   },
   {
-    "full": "Hungary",
+    "name": "Hungary",
     "officialName": {
       "short": "Hungary"
     },
@@ -3795,11 +3795,11 @@
     "languages": [
       "hu-HU"
     ],
-    "geoNameId": "719819",
+    "geonameId": "719819",
     "edgar": "K5"
   },
   {
-    "full": "Iceland",
+    "name": "Iceland",
     "officialName": {
       "short": "Iceland"
     },
@@ -3836,11 +3836,11 @@
       "sv",
       "no"
     ],
-    "geoNameId": "2629691",
+    "geonameId": "2629691",
     "edgar": "K6"
   },
   {
-    "full": "India",
+    "name": "India",
     "officialName": {
       "short": "India"
     },
@@ -3897,11 +3897,11 @@
       "lus",
       "inc"
     ],
-    "geoNameId": "1269750",
+    "geonameId": "1269750",
     "edgar": "K7"
   },
   {
-    "full": "Indonesia",
+    "name": "Indonesia",
     "officialName": {
       "short": "Indonesia"
     },
@@ -3936,11 +3936,11 @@
       "nl",
       "jv"
     ],
-    "geoNameId": "1643084",
+    "geonameId": "1643084",
     "edgar": "K8"
   },
   {
-    "full": "Iran",
+    "name": "Iran",
     "officialName": {
       "short": "Iran (Islamic Republic of)"
     },
@@ -3973,11 +3973,11 @@
       "fa-IR",
       "ku"
     ],
-    "geoNameId": "130758",
+    "geonameId": "130758",
     "edgar": "K9"
   },
   {
-    "full": "Iraq",
+    "name": "Iraq",
     "officialName": {
       "short": "Iraq"
     },
@@ -4011,11 +4011,11 @@
       "ku",
       "hy"
     ],
-    "geoNameId": "99237",
+    "geonameId": "99237",
     "edgar": "L0"
   },
   {
-    "full": "Ireland",
+    "name": "Ireland",
     "officialName": {
       "short": "Ireland"
     },
@@ -4048,11 +4048,11 @@
       "en-IE",
       "ga-IE"
     ],
-    "geoNameId": "2963597",
+    "geonameId": "2963597",
     "edgar": "L2"
   },
   {
-    "full": "Isle of Man",
+    "name": "Isle of Man",
     "officialName": {
       "short": "Isle of Man"
     },
@@ -4085,11 +4085,11 @@
       "en",
       "gv"
     ],
-    "geoNameId": "3042225",
+    "geonameId": "3042225",
     "edgar": "Y8"
   },
   {
-    "full": "Israel",
+    "name": "Israel",
     "officialName": {
       "short": "Israel"
     },
@@ -4124,11 +4124,11 @@
       "en-IL",
       ""
     ],
-    "geoNameId": "294640",
+    "geonameId": "294640",
     "edgar": "L3"
   },
   {
-    "full": "Italy",
+    "name": "Italy",
     "officialName": {
       "short": "Italy"
     },
@@ -4166,11 +4166,11 @@
       "co",
       "sl"
     ],
-    "geoNameId": "3175395",
+    "geonameId": "3175395",
     "edgar": "L6"
   },
   {
-    "full": "Jamaica",
+    "name": "Jamaica",
     "officialName": {
       "short": "Jamaica"
     },
@@ -4202,11 +4202,11 @@
     "languages": [
       "en-JM"
     ],
-    "geoNameId": "3489940",
+    "geonameId": "3489940",
     "edgar": "L8"
   },
   {
-    "full": "Japan",
+    "name": "Japan",
     "officialName": {
       "short": "Japan"
     },
@@ -4238,11 +4238,11 @@
     "languages": [
       "ja"
     ],
-    "geoNameId": "1861060",
+    "geonameId": "1861060",
     "edgar": "M0"
   },
   {
-    "full": "Jersey",
+    "name": "Jersey",
     "officialName": {
       "short": "Jersey"
     },
@@ -4275,11 +4275,11 @@
       "en",
       "pt"
     ],
-    "geoNameId": "3042142",
+    "geonameId": "3042142",
     "edgar": "Y9"
   },
   {
-    "full": "Jordan",
+    "name": "Jordan",
     "officialName": {
       "short": "Jordan"
     },
@@ -4312,11 +4312,11 @@
       "ar-JO",
       "en"
     ],
-    "geoNameId": "248816",
+    "geonameId": "248816",
     "edgar": "M2"
   },
   {
-    "full": "Kazakhstan",
+    "name": "Kazakhstan",
     "officialName": {
       "short": "Kazakhstan"
     },
@@ -4349,11 +4349,11 @@
       "kk",
       "ru"
     ],
-    "geoNameId": "1522867",
+    "geonameId": "1522867",
     "edgar": ""
   },
   {
-    "full": "Kenya",
+    "name": "Kenya",
     "officialName": {
       "short": "Kenya"
     },
@@ -4386,11 +4386,11 @@
       "en-KE",
       "sw-KE"
     ],
-    "geoNameId": "192950",
+    "geonameId": "192950",
     "edgar": "M3"
   },
   {
-    "full": "Kiribati",
+    "name": "Kiribati",
     "officialName": {
       "short": "Kiribati"
     },
@@ -4423,11 +4423,11 @@
       "en-KI",
       "gil"
     ],
-    "geoNameId": "4030945",
+    "geonameId": "4030945",
     "edgar": "J2"
   },
   {
-    "full": "Kuwait",
+    "name": "Kuwait",
     "officialName": {
       "short": "Kuwait"
     },
@@ -4460,11 +4460,11 @@
       "ar-KW",
       "en"
     ],
-    "geoNameId": "285570",
+    "geonameId": "285570",
     "edgar": "M6"
   },
   {
-    "full": "Kyrgyzstan",
+    "name": "Kyrgyzstan",
     "officialName": {
       "short": "Kyrgyzstan"
     },
@@ -4498,11 +4498,11 @@
       "uz",
       "ru"
     ],
-    "geoNameId": "1527747",
+    "geonameId": "1527747",
     "edgar": "1N"
   },
   {
-    "full": "Laos",
+    "name": "Laos",
     "officialName": {
       "short": "Lao People's Democratic Republic"
     },
@@ -4536,11 +4536,11 @@
       "fr",
       "en"
     ],
-    "geoNameId": "1655842",
+    "geonameId": "1655842",
     "edgar": ""
   },
   {
-    "full": "Latvia",
+    "name": "Latvia",
     "officialName": {
       "short": "Latvia"
     },
@@ -4574,11 +4574,11 @@
       "ru",
       "lt"
     ],
-    "geoNameId": "458258",
+    "geonameId": "458258",
     "edgar": "1R"
   },
   {
-    "full": "Lebanon",
+    "name": "Lebanon",
     "officialName": {
       "short": "Lebanon"
     },
@@ -4613,11 +4613,11 @@
       "en",
       "hy"
     ],
-    "geoNameId": "272103",
+    "geonameId": "272103",
     "edgar": "M8"
   },
   {
-    "full": "Lesotho",
+    "name": "Lesotho",
     "officialName": {
       "short": "Lesotho"
     },
@@ -4652,11 +4652,11 @@
       "zu",
       "xh"
     ],
-    "geoNameId": "932692",
+    "geonameId": "932692",
     "edgar": "M9"
   },
   {
-    "full": "Liberia",
+    "name": "Liberia",
     "officialName": {
       "short": "Liberia"
     },
@@ -4688,11 +4688,11 @@
     "languages": [
       "en-LR"
     ],
-    "geoNameId": "2275384",
+    "geonameId": "2275384",
     "edgar": "N0"
   },
   {
-    "full": "Libya",
+    "name": "Libya",
     "officialName": {
       "short": "Libya"
     },
@@ -4726,11 +4726,11 @@
       "it",
       "en"
     ],
-    "geoNameId": "2215636",
+    "geonameId": "2215636",
     "edgar": ""
   },
   {
-    "full": "Liechtenstein",
+    "name": "Liechtenstein",
     "officialName": {
       "short": "Liechtenstein"
     },
@@ -4762,11 +4762,11 @@
     "languages": [
       "de-LI"
     ],
-    "geoNameId": "3042058",
+    "geonameId": "3042058",
     "edgar": "N2"
   },
   {
-    "full": "Lithuania",
+    "name": "Lithuania",
     "officialName": {
       "short": "Lithuania"
     },
@@ -4800,11 +4800,11 @@
       "ru",
       "pl"
     ],
-    "geoNameId": "597427",
+    "geonameId": "597427",
     "edgar": "1Q"
   },
   {
-    "full": "Luxembourg",
+    "name": "Luxembourg",
     "officialName": {
       "short": "Luxembourg"
     },
@@ -4838,11 +4838,11 @@
       "de-LU",
       "fr-LU"
     ],
-    "geoNameId": "2960313",
+    "geonameId": "2960313",
     "edgar": "N4"
   },
   {
-    "full": "Macau",
+    "name": "Macau",
     "officialName": {
       "short": "China, Macao Special Administrative Region"
     },
@@ -4876,11 +4876,11 @@
       "zh-MO",
       "pt"
     ],
-    "geoNameId": "1821275",
+    "geonameId": "1821275",
     "edgar": ""
   },
   {
-    "full": "Macedonia",
+    "name": "Macedonia",
     "officialName": {
       "short": "The former Yugoslav Republic of Macedonia"
     },
@@ -4916,11 +4916,11 @@
       "rmm",
       "sr"
     ],
-    "geoNameId": "718075",
+    "geonameId": "718075",
     "edgar": "1U"
   },
   {
-    "full": "Madagascar",
+    "name": "Madagascar",
     "officialName": {
       "short": "Madagascar"
     },
@@ -4953,11 +4953,11 @@
       "fr-MG",
       "mg"
     ],
-    "geoNameId": "1062947",
+    "geonameId": "1062947",
     "edgar": "N6"
   },
   {
-    "full": "Malawi",
+    "name": "Malawi",
     "officialName": {
       "short": "Malawi"
     },
@@ -4992,11 +4992,11 @@
       "tum",
       "swk"
     ],
-    "geoNameId": "927384",
+    "geonameId": "927384",
     "edgar": "N7"
   },
   {
-    "full": "Malaysia",
+    "name": "Malaysia",
     "officialName": {
       "short": "Malaysia"
     },
@@ -5035,11 +5035,11 @@
       "pa",
       "th"
     ],
-    "geoNameId": "1733045",
+    "geonameId": "1733045",
     "edgar": "N8"
   },
   {
-    "full": "Maldives",
+    "name": "Maldives",
     "officialName": {
       "short": "Maldives"
     },
@@ -5072,11 +5072,11 @@
       "dv",
       "en"
     ],
-    "geoNameId": "1282028",
+    "geonameId": "1282028",
     "edgar": "N9"
   },
   {
-    "full": "Mali",
+    "name": "Mali",
     "officialName": {
       "short": "Mali"
     },
@@ -5109,11 +5109,11 @@
       "fr-ML",
       "bm"
     ],
-    "geoNameId": "2453866",
+    "geonameId": "2453866",
     "edgar": "O0"
   },
   {
-    "full": "Malta",
+    "name": "Malta",
     "officialName": {
       "short": "Malta"
     },
@@ -5146,11 +5146,11 @@
       "mt",
       "en-MT"
     ],
-    "geoNameId": "2562770",
+    "geonameId": "2562770",
     "edgar": "O1"
   },
   {
-    "full": "Marshall Islands",
+    "name": "Marshall Islands",
     "officialName": {
       "short": "Marshall Islands"
     },
@@ -5183,11 +5183,11 @@
       "mh",
       "en-MH"
     ],
-    "geoNameId": "2080185",
+    "geonameId": "2080185",
     "edgar": "1T"
   },
   {
-    "full": "Martinique",
+    "name": "Martinique",
     "officialName": {
       "short": "Martinique"
     },
@@ -5219,11 +5219,11 @@
     "languages": [
       "fr-MQ"
     ],
-    "geoNameId": "3570311",
+    "geonameId": "3570311",
     "edgar": "O2"
   },
   {
-    "full": "Mauritania",
+    "name": "Mauritania",
     "officialName": {
       "short": "Mauritania"
     },
@@ -5260,11 +5260,11 @@
       "mey",
       "wo"
     ],
-    "geoNameId": "2378080",
+    "geonameId": "2378080",
     "edgar": "O3"
   },
   {
-    "full": "Mauritius",
+    "name": "Mauritius",
     "officialName": {
       "short": "Mauritius"
     },
@@ -5298,11 +5298,11 @@
       "bho",
       "fr"
     ],
-    "geoNameId": "934292",
+    "geonameId": "934292",
     "edgar": "O4"
   },
   {
-    "full": "Mayotte",
+    "name": "Mayotte",
     "officialName": {
       "short": "Mayotte"
     },
@@ -5334,11 +5334,11 @@
     "languages": [
       "fr-YT"
     ],
-    "geoNameId": "1024031",
+    "geonameId": "1024031",
     "edgar": "2P"
   },
   {
-    "full": "Mexico",
+    "name": "Mexico",
     "officialName": {
       "short": "Mexico"
     },
@@ -5370,11 +5370,11 @@
     "languages": [
       "es-MX"
     ],
-    "geoNameId": "3996063",
+    "geonameId": "3996063",
     "edgar": "O5"
   },
   {
-    "full": "Micronesia",
+    "name": "Micronesia",
     "officialName": {
       "short": "Micronesia (Federated States of)"
     },
@@ -5414,11 +5414,11 @@
       "nkr",
       "kpg"
     ],
-    "geoNameId": "2081918",
+    "geonameId": "2081918",
     "edgar": "1K"
   },
   {
-    "full": "Moldova",
+    "name": "Moldova",
     "officialName": {
       "short": "Republic of Moldova"
     },
@@ -5453,11 +5453,11 @@
       "gag",
       "tr"
     ],
-    "geoNameId": "617790",
+    "geonameId": "617790",
     "edgar": "1S"
   },
   {
-    "full": "Monaco",
+    "name": "Monaco",
     "officialName": {
       "short": "Monaco"
     },
@@ -5491,11 +5491,11 @@
       "en",
       "it"
     ],
-    "geoNameId": "2993457",
+    "geonameId": "2993457",
     "edgar": "O9"
   },
   {
-    "full": "Mongolia",
+    "name": "Mongolia",
     "officialName": {
       "short": "Mongolia"
     },
@@ -5528,11 +5528,11 @@
       "mn",
       "ru"
     ],
-    "geoNameId": "2029969",
+    "geonameId": "2029969",
     "edgar": "P0"
   },
   {
-    "full": "Montenegro",
+    "name": "Montenegro",
     "officialName": {
       "short": "Montenegro"
     },
@@ -5569,11 +5569,11 @@
       "hr",
       "rom"
     ],
-    "geoNameId": "3194884",
+    "geonameId": "3194884",
     "edgar": "Z5"
   },
   {
-    "full": "Montserrat",
+    "name": "Montserrat",
     "officialName": {
       "short": "Montserrat"
     },
@@ -5605,11 +5605,11 @@
     "languages": [
       "en-MS"
     ],
-    "geoNameId": "3578097",
+    "geonameId": "3578097",
     "edgar": "P1"
   },
   {
-    "full": "Morocco",
+    "name": "Morocco",
     "officialName": {
       "short": "Morocco"
     },
@@ -5643,11 +5643,11 @@
       "ber",
       "fr"
     ],
-    "geoNameId": "2542007",
+    "geonameId": "2542007",
     "edgar": "P2"
   },
   {
-    "full": "Mozambique",
+    "name": "Mozambique",
     "officialName": {
       "short": "Mozambique"
     },
@@ -5680,11 +5680,11 @@
       "pt-MZ",
       "vmw"
     ],
-    "geoNameId": "1036973",
+    "geonameId": "1036973",
     "edgar": "P3"
   },
   {
-    "full": "Myanmar",
+    "name": "Myanmar",
     "officialName": {
       "short": "Myanmar"
     },
@@ -5716,11 +5716,11 @@
     "languages": [
       "my"
     ],
-    "geoNameId": "1327865",
+    "geonameId": "1327865",
     "edgar": "E1"
   },
   {
-    "full": "Namibia",
+    "name": "Namibia",
     "officialName": {
       "short": "Namibia"
     },
@@ -5756,11 +5756,11 @@
       "hz",
       "naq"
     ],
-    "geoNameId": "3355338",
+    "geonameId": "3355338",
     "edgar": "T6"
   },
   {
-    "full": "Nauru",
+    "name": "Nauru",
     "officialName": {
       "short": "Nauru"
     },
@@ -5793,11 +5793,11 @@
       "na",
       "en-NR"
     ],
-    "geoNameId": "2110425",
+    "geonameId": "2110425",
     "edgar": "P5"
   },
   {
-    "full": "Nepal",
+    "name": "Nepal",
     "officialName": {
       "short": "Nepal"
     },
@@ -5830,11 +5830,11 @@
       "ne",
       "en"
     ],
-    "geoNameId": "1282988",
+    "geonameId": "1282988",
     "edgar": "P6"
   },
   {
-    "full": "Netherlands",
+    "name": "Netherlands",
     "officialName": {
       "short": "Netherlands"
     },
@@ -5867,11 +5867,11 @@
       "nl-NL",
       "fy-NL"
     ],
-    "geoNameId": "2750405",
+    "geonameId": "2750405",
     "edgar": "P7"
   },
   {
-    "full": "New Caledonia",
+    "name": "New Caledonia",
     "officialName": {
       "short": "New Caledonia"
     },
@@ -5903,11 +5903,11 @@
     "languages": [
       "fr-NC"
     ],
-    "geoNameId": "2139685",
+    "geonameId": "2139685",
     "edgar": "1W"
   },
   {
-    "full": "New Zealand",
+    "name": "New Zealand",
     "officialName": {
       "short": "New Zealand"
     },
@@ -5940,11 +5940,11 @@
       "en-NZ",
       "mi"
     ],
-    "geoNameId": "2186224",
+    "geonameId": "2186224",
     "edgar": "Q2"
   },
   {
-    "full": "Nicaragua",
+    "name": "Nicaragua",
     "officialName": {
       "short": "Nicaragua"
     },
@@ -5977,11 +5977,11 @@
       "es-NI",
       "en"
     ],
-    "geoNameId": "3617476",
+    "geonameId": "3617476",
     "edgar": "Q3"
   },
   {
-    "full": "Niger",
+    "name": "Niger",
     "officialName": {
       "short": "Niger"
     },
@@ -6016,11 +6016,11 @@
       "kr",
       "dje"
     ],
-    "geoNameId": "2440476",
+    "geonameId": "2440476",
     "edgar": "Q4"
   },
   {
-    "full": "Nigeria",
+    "name": "Nigeria",
     "officialName": {
       "short": "Nigeria"
     },
@@ -6056,11 +6056,11 @@
       "ig",
       "ff"
     ],
-    "geoNameId": "2328926",
+    "geonameId": "2328926",
     "edgar": "Q5"
   },
   {
-    "full": "Niue",
+    "name": "Niue",
     "officialName": {
       "short": "Niue"
     },
@@ -6093,11 +6093,11 @@
       "niu",
       "en-NU"
     ],
-    "geoNameId": "4036232",
+    "geonameId": "4036232",
     "edgar": "Q6"
   },
   {
-    "full": "Norfolk Island",
+    "name": "Norfolk Island",
     "officialName": {
       "short": "Norfolk Island"
     },
@@ -6129,11 +6129,11 @@
     "languages": [
       "en-NF"
     ],
-    "geoNameId": "2155115",
+    "geonameId": "2155115",
     "edgar": "Q7"
   },
   {
-    "full": "North Korea",
+    "name": "North Korea",
     "officialName": {
       "short": "Democratic People's Republic of Korea"
     },
@@ -6165,11 +6165,11 @@
     "languages": [
       "ko-KP"
     ],
-    "geoNameId": "1873107",
+    "geonameId": "1873107",
     "edgar": ""
   },
   {
-    "full": "Northern Mariana Islands",
+    "name": "Northern Mariana Islands",
     "officialName": {
       "short": "Northern Mariana Islands"
     },
@@ -6205,11 +6205,11 @@
       "ch-MP",
       "en-MP"
     ],
-    "geoNameId": "4041468",
+    "geonameId": "4041468",
     "edgar": "1V"
   },
   {
-    "full": "Norway",
+    "name": "Norway",
     "officialName": {
       "short": "Norway"
     },
@@ -6245,11 +6245,11 @@
       "se",
       "fi"
     ],
-    "geoNameId": "3144096",
+    "geonameId": "3144096",
     "edgar": "Q8"
   },
   {
-    "full": "Oman",
+    "name": "Oman",
     "officialName": {
       "short": "Oman"
     },
@@ -6284,11 +6284,11 @@
       "bal",
       "ur"
     ],
-    "geoNameId": "286963",
+    "geonameId": "286963",
     "edgar": "P4"
   },
   {
-    "full": "Pakistan",
+    "name": "Pakistan",
     "officialName": {
       "short": "Pakistan"
     },
@@ -6325,11 +6325,11 @@
       "ps",
       "brh"
     ],
-    "geoNameId": "1168579",
+    "geonameId": "1168579",
     "edgar": "R0"
   },
   {
-    "full": "Palau",
+    "name": "Palau",
     "officialName": {
       "short": "Palau"
     },
@@ -6367,11 +6367,11 @@
       "fil",
       "zh"
     ],
-    "geoNameId": "1559582",
+    "geonameId": "1559582",
     "edgar": "1Y"
   },
   {
-    "full": "Palestine",
+    "name": "Palestine",
     "officialName": {
       "short": "State of Palestine"
     },
@@ -6403,11 +6403,11 @@
     "languages": [
       "ar-PS"
     ],
-    "geoNameId": "6254930",
+    "geonameId": "6254930",
     "edgar": ""
   },
   {
-    "full": "Panama",
+    "name": "Panama",
     "officialName": {
       "short": "Panama"
     },
@@ -6440,11 +6440,11 @@
       "es-PA",
       "en"
     ],
-    "geoNameId": "3703430",
+    "geonameId": "3703430",
     "edgar": "R1"
   },
   {
-    "full": "Papua New Guinea",
+    "name": "Papua New Guinea",
     "officialName": {
       "short": "Papua New Guinea"
     },
@@ -6479,11 +6479,11 @@
       "meu",
       "tpi"
     ],
-    "geoNameId": "2088628",
+    "geonameId": "2088628",
     "edgar": "R2"
   },
   {
-    "full": "Paraguay",
+    "name": "Paraguay",
     "officialName": {
       "short": "Paraguay"
     },
@@ -6516,11 +6516,11 @@
       "es-PY",
       "gn"
     ],
-    "geoNameId": "3437598",
+    "geonameId": "3437598",
     "edgar": "R4"
   },
   {
-    "full": "Peru",
+    "name": "Peru",
     "officialName": {
       "short": "Peru"
     },
@@ -6554,11 +6554,11 @@
       "qu",
       "ay"
     ],
-    "geoNameId": "3932488",
+    "geonameId": "3932488",
     "edgar": "R5"
   },
   {
-    "full": "Philippines",
+    "name": "Philippines",
     "officialName": {
       "short": "Philippines"
     },
@@ -6592,11 +6592,11 @@
       "en-PH",
       "fil"
     ],
-    "geoNameId": "1694008",
+    "geonameId": "1694008",
     "edgar": "R6"
   },
   {
-    "full": "Pitcairn Islands",
+    "name": "Pitcairn Islands",
     "officialName": {
       "short": "Pitcairn"
     },
@@ -6628,11 +6628,11 @@
     "languages": [
       "en-PN"
     ],
-    "geoNameId": "4030699",
+    "geonameId": "4030699",
     "edgar": "R8"
   },
   {
-    "full": "Poland",
+    "name": "Poland",
     "officialName": {
       "short": "Poland"
     },
@@ -6664,11 +6664,11 @@
     "languages": [
       "pl"
     ],
-    "geoNameId": "798544",
+    "geonameId": "798544",
     "edgar": "R9"
   },
   {
-    "full": "Portugal",
+    "name": "Portugal",
     "officialName": {
       "short": "Portugal"
     },
@@ -6701,11 +6701,11 @@
       "pt-PT",
       "mwl"
     ],
-    "geoNameId": "2264397",
+    "geonameId": "2264397",
     "edgar": "S1"
   },
   {
-    "full": "Puerto Rico",
+    "name": "Puerto Rico",
     "officialName": {
       "short": "Puerto Rico"
     },
@@ -6738,11 +6738,11 @@
       "en-PR",
       "es-PR"
     ],
-    "geoNameId": "4566966",
+    "geonameId": "4566966",
     "edgar": "PR"
   },
   {
-    "full": "Qatar",
+    "name": "Qatar",
     "officialName": {
       "short": "Qatar"
     },
@@ -6775,11 +6775,11 @@
       "ar-QA",
       "es"
     ],
-    "geoNameId": "289688",
+    "geonameId": "289688",
     "edgar": "S3"
   },
   {
-    "full": "Romania",
+    "name": "Romania",
     "officialName": {
       "short": "Romania"
     },
@@ -6813,11 +6813,11 @@
       "hu",
       "rom"
     ],
-    "geoNameId": "798549",
+    "geonameId": "798549",
     "edgar": "S5"
   },
   {
-    "full": "Russia",
+    "name": "Russia",
     "officialName": {
       "short": "Russian Federation"
     },
@@ -6872,11 +6872,11 @@
       "sah",
       "nog"
     ],
-    "geoNameId": "2017370",
+    "geonameId": "2017370",
     "edgar": "1Z"
   },
   {
-    "full": "Rwanda",
+    "name": "Rwanda",
     "officialName": {
       "short": "Rwanda"
     },
@@ -6911,11 +6911,11 @@
       "fr-RW",
       "sw"
     ],
-    "geoNameId": "49518",
+    "geonameId": "49518",
     "edgar": "S6"
   },
   {
-    "full": "Réunion",
+    "name": "Réunion",
     "officialName": {
       "short": "Réunion"
     },
@@ -6947,11 +6947,11 @@
     "languages": [
       "fr-RE"
     ],
-    "geoNameId": "935317",
+    "geonameId": "935317",
     "edgar": ""
   },
   {
-    "full": "Samoa",
+    "name": "Samoa",
     "officialName": {
       "short": "Samoa"
     },
@@ -6984,11 +6984,11 @@
       "sm",
       "en-WS"
     ],
-    "geoNameId": "4034894",
+    "geonameId": "4034894",
     "edgar": "Y0"
   },
   {
-    "full": "San Marino",
+    "name": "San Marino",
     "officialName": {
       "short": "San Marino"
     },
@@ -7020,11 +7020,11 @@
     "languages": [
       "it-SM"
     ],
-    "geoNameId": "3168068",
+    "geonameId": "3168068",
     "edgar": "S8"
   },
   {
-    "full": "Saudi Arabia",
+    "name": "Saudi Arabia",
     "officialName": {
       "short": "Saudi Arabia"
     },
@@ -7056,11 +7056,11 @@
     "languages": [
       "ar-SA"
     ],
-    "geoNameId": "102358",
+    "geonameId": "102358",
     "edgar": "T0"
   },
   {
-    "full": "Senegal",
+    "name": "Senegal",
     "officialName": {
       "short": "Senegal"
     },
@@ -7095,11 +7095,11 @@
       "fuc",
       "mnk"
     ],
-    "geoNameId": "2245662",
+    "geonameId": "2245662",
     "edgar": "T1"
   },
   {
-    "full": "Serbia",
+    "name": "Serbia",
     "officialName": {
       "short": "Serbia"
     },
@@ -7134,11 +7134,11 @@
       "bs",
       "rom"
     ],
-    "geoNameId": "6290252",
+    "geonameId": "6290252",
     "edgar": "Z2"
   },
   {
-    "full": "Seychelles",
+    "name": "Seychelles",
     "officialName": {
       "short": "Seychelles"
     },
@@ -7171,11 +7171,11 @@
       "en-SC",
       "fr-SC"
     ],
-    "geoNameId": "241170",
+    "geonameId": "241170",
     "edgar": "T2"
   },
   {
-    "full": "Sierra Leone",
+    "name": "Sierra Leone",
     "officialName": {
       "short": "Sierra Leone"
     },
@@ -7209,11 +7209,11 @@
       "men",
       "tem"
     ],
-    "geoNameId": "2403846",
+    "geonameId": "2403846",
     "edgar": "T8"
   },
   {
-    "full": "Singapore",
+    "name": "Singapore",
     "officialName": {
       "short": "Singapore"
     },
@@ -7249,11 +7249,11 @@
       "ta-SG",
       "zh-SG"
     ],
-    "geoNameId": "1880251",
+    "geonameId": "1880251",
     "edgar": "U0"
   },
   {
-    "full": "Sint Maarten",
+    "name": "Sint Maarten",
     "officialName": {
       "short": "Sint Maarten (Dutch part)"
     },
@@ -7286,11 +7286,11 @@
       "nl",
       "en"
     ],
-    "geoNameId": "7609695",
+    "geonameId": "7609695",
     "edgar": ""
   },
   {
-    "full": "Slovakia",
+    "name": "Slovakia",
     "officialName": {
       "short": "Slovakia"
     },
@@ -7323,11 +7323,11 @@
       "sk",
       "hu"
     ],
-    "geoNameId": "3057568",
+    "geonameId": "3057568",
     "edgar": "2B"
   },
   {
-    "full": "Slovenia",
+    "name": "Slovenia",
     "officialName": {
       "short": "Slovenia"
     },
@@ -7360,11 +7360,11 @@
       "sl",
       "sh"
     ],
-    "geoNameId": "3190538",
+    "geonameId": "3190538",
     "edgar": "2A"
   },
   {
-    "full": "Solomon Islands",
+    "name": "Solomon Islands",
     "officialName": {
       "short": "Solomon Islands"
     },
@@ -7397,11 +7397,11 @@
       "en-SB",
       "tpi"
     ],
-    "geoNameId": "2103350",
+    "geonameId": "2103350",
     "edgar": "D7"
   },
   {
-    "full": "Somalia",
+    "name": "Somalia",
     "officialName": {
       "short": "Somalia"
     },
@@ -7436,11 +7436,11 @@
       "it",
       "en-SO"
     ],
-    "geoNameId": "51537",
+    "geonameId": "51537",
     "edgar": "U1"
   },
   {
-    "full": "South Africa",
+    "name": "South Africa",
     "officialName": {
       "short": "South Africa"
     },
@@ -7482,11 +7482,11 @@
       "ve",
       "nr"
     ],
-    "geoNameId": "953987",
+    "geonameId": "953987",
     "edgar": "T3"
   },
   {
-    "full": "South Georgia & South Sandwich Islands",
+    "name": "South Georgia & South Sandwich Islands",
     "officialName": {
       "short": ""
     },
@@ -7518,11 +7518,11 @@
     "languages": [
       "en"
     ],
-    "geoNameId": "3474415",
+    "geonameId": "3474415",
     "edgar": ""
   },
   {
-    "full": "South Korea",
+    "name": "South Korea",
     "officialName": {
       "short": "Republic of Korea"
     },
@@ -7555,11 +7555,11 @@
       "ko-KR",
       "en"
     ],
-    "geoNameId": "1835841",
+    "geonameId": "1835841",
     "edgar": "M5"
   },
   {
-    "full": "South Sudan",
+    "name": "South Sudan",
     "officialName": {
       "short": "South Sudan"
     },
@@ -7591,11 +7591,11 @@
     "languages": [
       "en"
     ],
-    "geoNameId": "7909807",
+    "geonameId": "7909807",
     "edgar": ""
   },
   {
-    "full": "Spain",
+    "name": "Spain",
     "officialName": {
       "short": "Spain"
     },
@@ -7631,11 +7631,11 @@
       "eu",
       "oc"
     ],
-    "geoNameId": "2510769",
+    "geonameId": "2510769",
     "edgar": "U3"
   },
   {
-    "full": "Sri Lanka",
+    "name": "Sri Lanka",
     "officialName": {
       "short": "Sri Lanka"
     },
@@ -7669,11 +7669,11 @@
       "ta",
       "en"
     ],
-    "geoNameId": "1227603",
+    "geonameId": "1227603",
     "edgar": "F1"
   },
   {
-    "full": "St. Barthélemy",
+    "name": "St. Barthélemy",
     "officialName": {
       "short": "Saint Barthélemy"
     },
@@ -7705,11 +7705,11 @@
     "languages": [
       "fr"
     ],
-    "geoNameId": "3578476",
+    "geonameId": "3578476",
     "edgar": ""
   },
   {
-    "full": "St. Helena",
+    "name": "St. Helena",
     "officialName": {
       "short": "Saint Helena"
     },
@@ -7741,11 +7741,11 @@
     "languages": [
       "en-SH"
     ],
-    "geoNameId": "3370751",
+    "geonameId": "3370751",
     "edgar": ""
   },
   {
-    "full": "St. Kitts & Nevis",
+    "name": "St. Kitts & Nevis",
     "officialName": {
       "short": "Saint Kitts and Nevis"
     },
@@ -7777,11 +7777,11 @@
     "languages": [
       "en-KN"
     ],
-    "geoNameId": "3575174",
+    "geonameId": "3575174",
     "edgar": "U7"
   },
   {
-    "full": "St. Lucia",
+    "name": "St. Lucia",
     "officialName": {
       "short": "Saint Lucia"
     },
@@ -7813,11 +7813,11 @@
     "languages": [
       "en-LC"
     ],
-    "geoNameId": "3576468",
+    "geonameId": "3576468",
     "edgar": "U9"
   },
   {
-    "full": "St. Martin",
+    "name": "St. Martin",
     "officialName": {
       "short": "Saint Martin (French part)"
     },
@@ -7849,11 +7849,11 @@
     "languages": [
       "fr"
     ],
-    "geoNameId": "3578421",
+    "geonameId": "3578421",
     "edgar": ""
   },
   {
-    "full": "St. Pierre & Miquelon",
+    "name": "St. Pierre & Miquelon",
     "officialName": {
       "short": "Saint Pierre and Miquelon"
     },
@@ -7885,11 +7885,11 @@
     "languages": [
       "fr-PM"
     ],
-    "geoNameId": "3424932",
+    "geonameId": "3424932",
     "edgar": "V0"
   },
   {
-    "full": "St. Vincent & Grenadines",
+    "name": "St. Vincent & Grenadines",
     "officialName": {
       "short": "Saint Vincent and the Grenadines"
     },
@@ -7922,11 +7922,11 @@
       "en-VC",
       "fr"
     ],
-    "geoNameId": "3577815",
+    "geonameId": "3577815",
     "edgar": "V1"
   },
   {
-    "full": "Sudan",
+    "name": "Sudan",
     "officialName": {
       "short": "Sudan"
     },
@@ -7960,11 +7960,11 @@
       "en",
       "fia"
     ],
-    "geoNameId": "366755",
+    "geonameId": "366755",
     "edgar": "V2"
   },
   {
-    "full": "Suriname",
+    "name": "Suriname",
     "officialName": {
       "short": "Suriname"
     },
@@ -8000,11 +8000,11 @@
       "hns",
       "jv"
     ],
-    "geoNameId": "3382998",
+    "geonameId": "3382998",
     "edgar": "V3"
   },
   {
-    "full": "Svalbard & Jan Mayen",
+    "name": "Svalbard & Jan Mayen",
     "officialName": {
       "short": "Svalbard and Jan Mayen Islands"
     },
@@ -8037,11 +8037,11 @@
       "no",
       "ru"
     ],
-    "geoNameId": "607072",
+    "geonameId": "607072",
     "edgar": "L9"
   },
   {
-    "full": "Swaziland",
+    "name": "Swaziland",
     "officialName": {
       "short": "Swaziland"
     },
@@ -8074,11 +8074,11 @@
       "en-SZ",
       "ss-SZ"
     ],
-    "geoNameId": "934841",
+    "geonameId": "934841",
     "edgar": "V6"
   },
   {
-    "full": "Sweden",
+    "name": "Sweden",
     "officialName": {
       "short": "Sweden"
     },
@@ -8113,11 +8113,11 @@
       "sma",
       "fi-SE"
     ],
-    "geoNameId": "2661886",
+    "geonameId": "2661886",
     "edgar": "V7"
   },
   {
-    "full": "Switzerland",
+    "name": "Switzerland",
     "officialName": {
       "short": "Switzerland"
     },
@@ -8152,11 +8152,11 @@
       "it-CH",
       "rm"
     ],
-    "geoNameId": "2658434",
+    "geonameId": "2658434",
     "edgar": "V8"
   },
   {
-    "full": "Syria",
+    "name": "Syria",
     "officialName": {
       "short": "Syrian Arab Republic"
     },
@@ -8193,11 +8193,11 @@
       "fr",
       "en"
     ],
-    "geoNameId": "163843",
+    "geonameId": "163843",
     "edgar": "V9"
   },
   {
-    "full": "São Tomé & Príncipe",
+    "name": "São Tomé & Príncipe",
     "officialName": {
       "short": "Sao Tome and Principe"
     },
@@ -8229,11 +8229,11 @@
     "languages": [
       "pt-ST"
     ],
-    "geoNameId": "2410758",
+    "geonameId": "2410758",
     "edgar": "S9"
   },
   {
-    "full": "Taiwan",
+    "name": "Taiwan",
     "officialName": {
       "short": ""
     },
@@ -8268,11 +8268,11 @@
       "nan",
       "hak"
     ],
-    "geoNameId": "1668284",
+    "geonameId": "1668284",
     "edgar": ""
   },
   {
-    "full": "Tajikistan",
+    "name": "Tajikistan",
     "officialName": {
       "short": "Tajikistan"
     },
@@ -8305,11 +8305,11 @@
       "tg",
       "ru"
     ],
-    "geoNameId": "1220409",
+    "geonameId": "1220409",
     "edgar": "2D"
   },
   {
-    "full": "Tanzania",
+    "name": "Tanzania",
     "officialName": {
       "short": "United Republic of Tanzania"
     },
@@ -8343,11 +8343,11 @@
       "en",
       "ar"
     ],
-    "geoNameId": "149590",
+    "geonameId": "149590",
     "edgar": "W0"
   },
   {
-    "full": "Thailand",
+    "name": "Thailand",
     "officialName": {
       "short": "Thailand"
     },
@@ -8380,11 +8380,11 @@
       "th",
       "en"
     ],
-    "geoNameId": "1605651",
+    "geonameId": "1605651",
     "edgar": "W1"
   },
   {
-    "full": "Timor-Leste",
+    "name": "Timor-Leste",
     "officialName": {
       "short": "Timor-Leste"
     },
@@ -8419,11 +8419,11 @@
       "id",
       "en"
     ],
-    "geoNameId": "1966436",
+    "geonameId": "1966436",
     "edgar": "Z3"
   },
   {
-    "full": "Togo",
+    "name": "Togo",
     "officialName": {
       "short": "Togo"
     },
@@ -8460,11 +8460,11 @@
       "dag",
       "ha"
     ],
-    "geoNameId": "2363686",
+    "geonameId": "2363686",
     "edgar": "W2"
   },
   {
-    "full": "Tokelau",
+    "name": "Tokelau",
     "officialName": {
       "short": "Tokelau"
     },
@@ -8497,11 +8497,11 @@
       "tkl",
       "en-TK"
     ],
-    "geoNameId": "4031074",
+    "geonameId": "4031074",
     "edgar": "W3"
   },
   {
-    "full": "Tonga",
+    "name": "Tonga",
     "officialName": {
       "short": "Tonga"
     },
@@ -8534,11 +8534,11 @@
       "to",
       "en-TO"
     ],
-    "geoNameId": "4032283",
+    "geonameId": "4032283",
     "edgar": "W4"
   },
   {
-    "full": "Trinidad & Tobago",
+    "name": "Trinidad & Tobago",
     "officialName": {
       "short": "Trinidad and Tobago"
     },
@@ -8574,11 +8574,11 @@
       "es",
       "zh"
     ],
-    "geoNameId": "3573591",
+    "geonameId": "3573591",
     "edgar": "W5"
   },
   {
-    "full": "Tunisia",
+    "name": "Tunisia",
     "officialName": {
       "short": "Tunisia"
     },
@@ -8611,11 +8611,11 @@
       "ar-TN",
       "fr"
     ],
-    "geoNameId": "2464461",
+    "geonameId": "2464461",
     "edgar": "W6"
   },
   {
-    "full": "Turkey",
+    "name": "Turkey",
     "officialName": {
       "short": "Turkey"
     },
@@ -8651,11 +8651,11 @@
       "az",
       "av"
     ],
-    "geoNameId": "298795",
+    "geonameId": "298795",
     "edgar": "W8"
   },
   {
-    "full": "Turkmenistan",
+    "name": "Turkmenistan",
     "officialName": {
       "short": "Turkmenistan"
     },
@@ -8689,11 +8689,11 @@
       "ru",
       "uz"
     ],
-    "geoNameId": "1218197",
+    "geonameId": "1218197",
     "edgar": "2E"
   },
   {
-    "full": "Turks & Caicos Islands",
+    "name": "Turks & Caicos Islands",
     "officialName": {
       "short": "Turks and Caicos Islands"
     },
@@ -8725,11 +8725,11 @@
     "languages": [
       "en-TC"
     ],
-    "geoNameId": "3576916",
+    "geonameId": "3576916",
     "edgar": "W7"
   },
   {
-    "full": "Tuvalu",
+    "name": "Tuvalu",
     "officialName": {
       "short": "Tuvalu"
     },
@@ -8764,11 +8764,11 @@
       "sm",
       "gil"
     ],
-    "geoNameId": "2110297",
+    "geonameId": "2110297",
     "edgar": "2G"
   },
   {
-    "full": "U.S. Outlying Islands",
+    "name": "U.S. Outlying Islands",
     "officialName": {
       "short": ""
     },
@@ -8800,11 +8800,11 @@
     "languages": [
       "en-UM"
     ],
-    "geoNameId": "5854968",
+    "geonameId": "5854968",
     "edgar": ""
   },
   {
-    "full": "U.S. Virgin Islands",
+    "name": "U.S. Virgin Islands",
     "officialName": {
       "short": "United States Virgin Islands"
     },
@@ -8836,11 +8836,11 @@
     "languages": [
       "en-VI"
     ],
-    "geoNameId": "4796775",
+    "geonameId": "4796775",
     "edgar": ""
   },
   {
-    "full": "UK",
+    "name": "UK",
     "officialName": {
       "short": "United Kingdom of Great Britain and Northern Ireland"
     },
@@ -8874,11 +8874,11 @@
       "cy-GB",
       "gd"
     ],
-    "geoNameId": "2635167",
+    "geonameId": "2635167",
     "edgar": "X0"
   },
   {
-    "full": "US",
+    "name": "US",
     "officialName": {
       "short": "United States of America"
     },
@@ -8913,11 +8913,11 @@
       "haw",
       "fr"
     ],
-    "geoNameId": "6252001",
+    "geonameId": "6252001",
     "edgar": ""
   },
   {
-    "full": "Uganda",
+    "name": "Uganda",
     "officialName": {
       "short": "Uganda"
     },
@@ -8952,11 +8952,11 @@
       "sw",
       "ar"
     ],
-    "geoNameId": "226074",
+    "geonameId": "226074",
     "edgar": "W9"
   },
   {
-    "full": "Ukraine",
+    "name": "Ukraine",
     "officialName": {
       "short": "Ukraine"
     },
@@ -8992,11 +8992,11 @@
       "pl",
       "hu"
     ],
-    "geoNameId": "690791",
+    "geonameId": "690791",
     "edgar": "2H"
   },
   {
-    "full": "United Arab Emirates",
+    "name": "United Arab Emirates",
     "officialName": {
       "short": "United Arab Emirates"
     },
@@ -9032,11 +9032,11 @@
       "hi",
       "ur"
     ],
-    "geoNameId": "290557",
+    "geonameId": "290557",
     "edgar": "C0"
   },
   {
-    "full": "Uruguay",
+    "name": "Uruguay",
     "officialName": {
       "short": "Uruguay"
     },
@@ -9068,11 +9068,11 @@
     "languages": [
       "es-UY"
     ],
-    "geoNameId": "3439705",
+    "geonameId": "3439705",
     "edgar": "X3"
   },
   {
-    "full": "Uzbekistan",
+    "name": "Uzbekistan",
     "officialName": {
       "short": "Uzbekistan"
     },
@@ -9106,11 +9106,11 @@
       "ru",
       "tg"
     ],
-    "geoNameId": "1512440",
+    "geonameId": "1512440",
     "edgar": "2K"
   },
   {
-    "full": "Vanuatu",
+    "name": "Vanuatu",
     "officialName": {
       "short": "Vanuatu"
     },
@@ -9144,11 +9144,11 @@
       "en-VU",
       "fr-VU"
     ],
-    "geoNameId": "2134431",
+    "geonameId": "2134431",
     "edgar": "2L"
   },
   {
-    "full": "Vatican City",
+    "name": "Vatican City",
     "officialName": {
       "short": "Holy See"
     },
@@ -9182,11 +9182,11 @@
       "it",
       "fr"
     ],
-    "geoNameId": "3164670",
+    "geonameId": "3164670",
     "edgar": "X4"
   },
   {
-    "full": "Venezuela",
+    "name": "Venezuela",
     "officialName": {
       "short": "Venezuela (Bolivarian Republic of)"
     },
@@ -9218,11 +9218,11 @@
     "languages": [
       "es-VE"
     ],
-    "geoNameId": "3625428",
+    "geonameId": "3625428",
     "edgar": ""
   },
   {
-    "full": "Vietnam",
+    "name": "Vietnam",
     "officialName": {
       "short": "Viet Nam"
     },
@@ -9258,11 +9258,11 @@
       "zh",
       "km"
     ],
-    "geoNameId": "1562822",
+    "geonameId": "1562822",
     "edgar": "Q1"
   },
   {
-    "full": "Wallis & Futuna",
+    "name": "Wallis & Futuna",
     "officialName": {
       "short": "Wallis and Futuna Islands"
     },
@@ -9296,11 +9296,11 @@
       "fud",
       "fr-WF"
     ],
-    "geoNameId": "4034749",
+    "geonameId": "4034749",
     "edgar": "X8"
   },
   {
-    "full": "Western Sahara",
+    "name": "Western Sahara",
     "officialName": {
       "short": "Western Sahara"
     },
@@ -9333,11 +9333,11 @@
       "ar",
       "mey"
     ],
-    "geoNameId": "2461445",
+    "geonameId": "2461445",
     "edgar": "U5"
   },
   {
-    "full": "Yemen",
+    "name": "Yemen",
     "officialName": {
       "short": "Yemen"
     },
@@ -9369,11 +9369,11 @@
     "languages": [
       "ar-YE"
     ],
-    "geoNameId": "69543",
+    "geonameId": "69543",
     "edgar": "T7"
   },
   {
-    "full": "Zambia",
+    "name": "Zambia",
     "officialName": {
       "short": "Zambia"
     },
@@ -9411,11 +9411,11 @@
       "ny",
       "toi"
     ],
-    "geoNameId": "895949",
+    "geonameId": "895949",
     "edgar": "Y4"
   },
   {
-    "full": "Zimbabwe",
+    "name": "Zimbabwe",
     "officialName": {
       "short": "Zimbabwe"
     },
@@ -9450,11 +9450,11 @@
       "nr",
       "nd"
     ],
-    "geoNameId": "878675",
+    "geonameId": "878675",
     "edgar": "Y5"
   },
   {
-    "full": "Åland Islands",
+    "name": "Åland Islands",
     "officialName": {
       "short": "Åland Islands"
     },
@@ -9486,7 +9486,7 @@
     "languages": [
       "sv-AX"
     ],
-    "geoNameId": "661882",
+    "geonameId": "661882",
     "edgar": ""
   }
 ]

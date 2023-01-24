@@ -9,7 +9,7 @@
  var fs = require('fs');
  var console = require('./../../../lib/logger');
 /**
- * TextHelper
+ * JSONHelper
  *
  * @package     Gina.Utils.Helpers
  * @author      Rhinostone <contact@gina.io>

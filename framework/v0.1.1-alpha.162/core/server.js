@@ -227,8 +227,10 @@ function Server(options) {
                 })
             });
         } catch (err) {
-            console.emerg(sslDetails +'\n'+ err.stack);
-            return;
+            if (!sslDetails) {
+                throw new Error('DNS issue ? Did you check your `/etc/hosts` or your DNS configuration ?\n'+ err.stack);
+            }
+            throw new Error(sslDetails +'\n'+ err.stack);
         }
 
 
@@ -249,31 +251,30 @@ function Server(options) {
         //     ]
         // }
 
-        // const isHandleByWildcardCert = function(endpoint, hv) {
-        //     var isAllowed = false;
-        //     const start = new Date(hv.validFrom).format('longIsoDateTime');
-        //     const end = new Date(hv.validTo).format('longIsoDateTime');
-        //     const today = new Date().format('longIsoDateTime');
-        //     const allowed = hv.validFor;
+        const isHandleByWildcardCert = function(endpoint, hv) {
+            var isAllowed = false;
+            const start = new Date(hv.validFrom).format('longIsoDateTime');
+            const end = new Date(hv.validTo).format('longIsoDateTime');
+            const today = new Date().format('longIsoDateTime');
+            const allowed = hv.validFor;
 
-        //     for (let i=0, len=allowed.length; i<len; ++i ) {
-        //         // skip if not a wildcard
-        //         if ( ! /^[*]\./.test(allowed[i]) ) continue;
+            for (let i=0, len=allowed.length; i<len; ++i ) {
+                // skip if not a wildcard
+                if ( ! /^[*]\./.test(allowed[i]) ) continue;
 
-        //         let re = new RegExp( allowed[i].replace(/^[*]/, '')+'$' );
-        //         if ( ! re.test(endpoint) ) continue;
+                let re = new RegExp( allowed[i].replace(/^[*]/, '')+'$' );
+                if ( ! re.test(endpoint) ) continue;
 
-        //         if ( today >= start && today < end) {
-        //             isAllowed = true;
-        //             break
-        //         }
-        //     }
-        //     return isAllowed;
-        // }
-
-        // if ( failed && Array.isArray(sslDetails.validFor) && isHandleByWildcardCert(endpoint, sslDetails) ) {
-        //     return;
-        // }
+                if ( today >= start && today < end) {
+                    isAllowed = true;
+                    break
+                }
+            }
+            return isAllowed;
+        }
+        if ( failed && Array.isArray(sslDetails.validFor) && isHandleByWildcardCert(endpoint, sslDetails) ) {
+            return;
+        }
 
 
         if (failed) {
@@ -2197,7 +2198,6 @@ function Server(options) {
 
         });//EO this.instance
 
-
         self.instance.listen(self.conf[self.appName][self.env].server.port);//By Default 3100
         self.instance.timeout = (1000 * 300); // e.g.: 1000x60 => 60 sec
 
@@ -2473,7 +2473,7 @@ function Server(options) {
             } else {
                 console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
             }
-            return type || 'plain/text'
+            return type || 'plain/text'
         } catch (err) {
             console.error('Error while trying to getHead('+ file +') extention. Replacing with `plain/text` '+ err.stack);
             return 'plain/text'
