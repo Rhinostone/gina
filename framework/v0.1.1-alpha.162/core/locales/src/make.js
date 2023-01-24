@@ -17,13 +17,11 @@ function Make() {
     var setup = function () {
 
         var opt         = {}
-            , filename  = null
             , targets   = [ 'currency', 'region' ]
             , tmp       = null
-            , dir       = __dirname
-            ;
+        ;
 
-        for (var i = 1, len = process.argv.length; i < len; ++i) {
+        for (let i = 1, len = process.argv.length; i < len; ++i) {
             if ( /^\-\-[-_0-9a-z]+\=/i.test( process.argv[i] ) ) {
                 tmp = process.argv[i].split(/\=/);
                 tmp[0] = tmp[0].replace(/\-\-/, '');
@@ -37,6 +35,24 @@ function Make() {
         if ( targets.indexOf(opt.target) < 0 )
             throw new Error('`--target=`'+ opt.target +' option is not allowed.');
 
+        if ( typeof(opt.region) != 'undefined' && /\,/.test(opt.region) ) {
+            var regions = opt.region.split(/\,/g);
+            for (let i=0, len=regions.length; i<len; ++i) {
+                let options = JSON.clone(opt);
+                options.region = regions[i];
+                generate(options)
+            }
+            return;
+        }
+        generate(opt)
+    }
+
+    var generate = function(opt) {
+
+        var filename    = null
+            , dir       = __dirname
+        ;
+
         filename = (opt.filename) ? opt.filename : _(dir +'/resources/'+ opt.target +'.csv', true);
 
         var region      = (opt.region) ? opt.region : 'en';
@@ -48,34 +64,11 @@ function Make() {
             throw err
         }
 
-        // rec.mapping = {
-        //     "name"                              : "full",
-        //     "official_name_en"                  : "officialName.short",
-        //     "ISO3166-1-Alpha-2"                 : "short",
-        //     "ISO3166-1-Alpha-3"                 : "long",
-        //     "M49"                               : "m49",
-        //     "ITU"                               : "itu",
-        //     "MARC"                              : "marc",
-        //     "WMO"                               : "wmo",
-        //     "DS"                                : "ds",
-        //     "Dial"                              : "dial",
-        //     "FIFA"                              : "fifa",
-        //     "FIPS"                              : "fips",
-        //     "GAUL"                              : "gaul",
-        //     "IOC"                               : "ioc",
-        //     "ISO4217-currency_alphabetic_code"  : "currency.code",
-        //     "ISO4217-currency_country_name"     : "currency.countryName",
-        //     "ISO4217-currency_minor_unit"       : "currency.minorUnit",
-        //     "ISO4217-currency_name"             : "currency.name",
-        //     "ISO4217-currency_numeric_code"     : "currency.numCode",
-        //     "is_independent"                    : "isIndependent",
-        //     "Capital"                           : "capital",
-        //     "Continent"                         : "continent",
-        //     "TLD"                               : "tld",
-        //     "Languages"                         : "languages",
-        //     "Geoname ID"                        : "geonameId",
-        //     "EDGAR"                             : "edgar"
-        // };
+        try {
+            rec.mapping = requireJSON(mappingFile);
+        } catch (err) {
+            throw err
+        }
 
         if ( opt.region != 'en' ) {
             rec.mapping[ 'official_name_' + opt.region ] = JSON.clone(rec.mapping["official_name_en"]);
@@ -221,10 +214,11 @@ function Make() {
 
             bodyCols    = [];
             bc          = 0;
-            for (var a = 0, aLen = arr.length; a < aLen; ++a) {
+            aLen = arr.length
+            for (let a = 0; a < aLen; ++a) {
                 aContent = arr[a].split(/"/g);
 
-                for (var ac = 0, acLen = aContent.length; ac < acLen; ++ac) {
+                for (let ac = 0, acLen = aContent.length; ac < acLen; ++ac) {
                     if ( ac == acLen-1 ) {
                         aContent[ac] = (aContent[ac].substr(0,1) == ';') ? aContent[ac].substr(1) : aContent[ac];
                         subArr = aContent[ac].split(/;/);
@@ -318,6 +312,5 @@ function Make() {
 
     setup();
     process.exit(0);
-};
-
-module.exports = Make()
+}
+module.exports = Make();

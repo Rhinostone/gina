@@ -836,7 +836,10 @@ function SuperController(options) {
             }
 
             // adding plugins
-
+            // means that we don't want GFF context or we already have it loaded
+            viewInfos = JSON.clone(data.page.view);
+            if ( !isWithoutLayout )
+                    viewInfos.assets = assets;
 
             if (
                 hasViews() && self.isCacheless() && !isWithoutLayout
@@ -870,8 +873,14 @@ function SuperController(options) {
                 if (isWithoutLayout && localOptions.debugMode || localOptions.debugMode ) {
 
                     XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
+                    XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
+                    if ( /<\/body>/i.test(layout) ) {
+                        layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
+                    } else {
+                        // popin case
+                        layout += XHRData + XHRView + '\n\t'
+                    }
 
-                    layout = layout.replace(/<\/body>/i, XHRData + '\n\t</body>');
                 }
 
                 if (self.isCacheless() || localOptions.debugMode ) {
@@ -903,9 +912,9 @@ function SuperController(options) {
                     delete data.page.view.stylesheets;
                 }
                 // means that we don't want GFF context or we already have it loaded
-                viewInfos = JSON.clone(data.page.view);
-                if ( !isWithoutLayout )
-                    viewInfos.assets = assets;
+                // viewInfos = JSON.clone(data.page.view);
+                // if ( !isWithoutLayout )
+                //     viewInfos.assets = assets;
 
                 XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
                 XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
@@ -3218,6 +3227,7 @@ function SuperController(options) {
 
     /**
      * Get locales
+     * Will take only supported lang
      *
      * @param {string} [shortCountryCode] - e.g. EN
      *
@@ -3243,29 +3253,27 @@ function SuperController(options) {
         /**
          * Get countries list
          *
-         * @param {string} [code] - e.g.: short, long, fifa, m49, countryName
+         * @param {string} [code] - e.g.: officialStateName, isoShort, isoLong, continent, capital, currency.name
          *
          * @returns {object} countries - countries code & value list
          * */
         var getCountries = function (code) {
-            var list = {}, cde = 'full', name = null;
+            var list = {}, cde = 'countryName';
 
             if ( typeof(code) != 'undefined' && typeof(userLocales[0][code]) == 'string' ) {
                 cde = code
-            } else if ( typeof(code) != 'undefined' ) (
+            } else if ( typeof(code) != 'undefined' ) {
                 console.warn('`'+ code +'` not supported : sticking with `short` code')
-            )
+            }
 
 
-            for ( var i = 0, len = userLocales.length; i< len; ++i ) {
-
-                if (userLocales[i][cde]) {
-
-                    name = userLocales[i].officialName.short || userLocales[i].full;
-
-                    if ( name )
-                        list[ userLocales[i][cde] ] = name;
-                }
+            for ( let i = 0, len = userLocales.length; i< len; ++i ) {
+                list[ i ] = {
+                    isoShort: userLocales[i].isoShort,
+                    isoLong: userLocales[i].isoLong,
+                    countryName: userLocales[i].countryName,
+                    officialStateName: userLocales[i].officialStateName
+                };
             }
 
             return list
