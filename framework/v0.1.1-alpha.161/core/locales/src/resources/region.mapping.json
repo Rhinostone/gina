@@ -1,22 +1,33 @@
+// extract from region.csv
 {
-  // extract from region.csv
   "name": "countryName",
   "official_name_en": "officialStateName",
   "ISO3166-1-Alpha-2": "isoShort",
   "ISO3166-1-Alpha-3": "isoLong",
   // Standard Country or Area Codes for Statistical Use (Series M, No. 49)
-  "M49": "m49",
-  "Geoname ID": "geonameId",
+  // "M49": "m49",
+  // "ITU": "itu",
+  // "MARC": "marc",
+  // "WMO": "wmo",
+  // "DS": "ds",
+  // Country codes for FIFA members
+  // "FIFA": "fifa",
+  // "FIPS": "fips",
+  // "GAUL": "gaul",
+  // "IOC": "ioc",
+  // "EDGAR": "edgar",
+  // "Geoname ID": "geonameId",
   "Continent": "continent",
   "Languages": "languages",
   "Capital": "capital",
   "is_independent": "isIndependent",
   // Country dial-in codes, telephone number prefixes
   "Dial": "dial",
-  // extract from currency.csv
   "ISO4217-currency_name": "currency.name",
   "ISO4217-currency_alphabetic_code": "currency.alphacode",
-  "ISO4217-currency_numeric_code": "currency.numCode",
+  // "ISO4217-currency_numeric_code": "currency.numCode",
   "ISO4217-currency_minor_unit": "currency.minorUnit",
   // "ISO4217-currency_country_name": "currency.countryName",
+  // Top level domain for the country
+  "TLD": "tld"
 }
