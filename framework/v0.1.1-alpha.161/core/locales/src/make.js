@@ -13,9 +13,9 @@ var merge       = lib.merge;
  * */
 function Make() {
     var self = {}, rec = {};
-    
+
     var setup = function () {
-        
+
         var opt         = {}
             , filename  = null
             , targets   = [ 'currency', 'region' ]
@@ -43,34 +43,11 @@ function Make() {
         var mappingFile = _(dir+ '/resources/'+ opt.target +'.mapping.json', true);
         var content     = null;
 
-        rec.mapping = {
-            "name"                              : "full",
-            "official_name_en"                  : "officialName.short",
-            "ISO3166-1-Alpha-2"                 : "short",
-            "ISO3166-1-Alpha-3"                 : "long",
-            "M49"                               : "m49",
-            "ITU"                               : "itu",
-            "MARC"                              : "marc",
-            "WMO"                               : "wmo",
-            "DS"                                : "ds",
-            "Dial"                              : "dial",
-            "FIFA"                              : "fifa",
-            "FIPS"                              : "fips",
-            "GAUL"                              : "gaul",
-            "IOC"                               : "ioc",
-            "ISO4217-currency_alphabetic_code"  : "currency.code",
-            "ISO4217-currency_country_name"     : "currency.countryName",
-            "ISO4217-currency_minor_unit"       : "currency.minorUnit",
-            "ISO4217-currency_name"             : "currency.name",
-            "ISO4217-currency_numeric_code"     : "currency.numCode",
-            "is_independent"                    : "isIndependent",
-            "Capital"                           : "capital",
-            "Continent"                         : "continent",
-            "TLD"                               : "tld",
-            "Languages"                         : "languages",
-            "Geoname ID"                        : "geonameId",
-            "EDGAR"                             : "edgar"
-        };
+        try {
+            rec.mapping = requireJSON(mappingFile);
+        } catch (err) {
+            throw err
+        }
 
         if ( opt.region != 'en' ) {
             rec.mapping[ 'official_name_' + opt.region ] = JSON.clone(rec.mapping["official_name_en"]);
@@ -109,7 +86,7 @@ function Make() {
         }
         rec.mapping = newMapping;
     }
-    
+
     var save = function (filename, data) {
 
         if ( fs.existsSync(filename) ) {
@@ -308,7 +285,7 @@ function Make() {
         }
 
         self.body = body;
-        
+
     }
 
     setup();
