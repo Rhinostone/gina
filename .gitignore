@@ -8,6 +8,7 @@ nbproject
 .history
 
 # Gina
+/services
 /logs
 /tmp
 /cache

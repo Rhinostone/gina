@@ -223,6 +223,7 @@ function Proc(bundle, proc, usePidFile){
                     code = 0;
                 }
 
+
                 // var bundle = self.bundle;
                 // var env =  process.env.NODE_ENV || 'prod';
                 // var pid = self.getPidByBundleName(bundle);
@@ -264,6 +265,7 @@ function Proc(bundle, proc, usePidFile){
                 if ( typeof(process.list[p]) == 'undefined' || process.list[p] == null )
                     continue;
 
+
                 if ( process.list[p].pid == pid &&  !/^gina\-/.test(process.list[p].name) ) {
                     index       = p;
 
@@ -297,6 +299,9 @@ function Proc(bundle, proc, usePidFile){
             delete process.list[index];
 
         console.debug('[ PROC ] Received '+ signal +' signal to end process [ '+ pid +' ]');
+
+
+
         // handles only signals that cannot be cannot be caught or ignored
         if ( /^(SIGKILL|SIGSTOP|SIGABRT)$/i.test(signal) ) {
             removePidFileSync(pid);
@@ -470,14 +475,19 @@ function Proc(bundle, proc, usePidFile){
             dismiss(existingProcess.pid);
             console.debug('[ PROC ] Don\'t pannic ...');
             existingProcess = null;
+            return;
         }
+
 
 
         if ( /^gina\-/.test(bundle) || !/^gina\-/.test(bundle) && self.bundles.indexOf(bundle) < 0 ) {
             console.debug('[ PROC ] Now registering `'+bundle+'` with PID `'+ pid +'`');
+
+
             var list = {};
 
             var processRegistration = function () {
+
 
                 if (!/^gina\-/.test(bundle) && !existingProcess) {
                     self.bundles.push(bundle);

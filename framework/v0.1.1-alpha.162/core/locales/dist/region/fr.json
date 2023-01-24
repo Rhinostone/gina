@@ -1,9 +1,7 @@
 [
   {
-    "full": "",
-    "officialName": {
-      "short": "Îles Anglo-Normandes"
-    },
+    "countryName": "",
+    "officialStarteName": "Îles Anglo-Normandes",
     "short": "",
     "long": "",
     "m49": "830",
@@ -36,10 +34,8 @@
     "edgar": ""
   },
   {
-    "full": "",
-    "officialName": {
-      "short": "Sercq"
-    },
+    "countryName": "",
+    "officialStarteName": "Sercq",
     "short": "",
     "long": "",
     "m49": "680",
@@ -72,10 +68,8 @@
     "edgar": ""
   },
   {
-    "full": "Afghanistan",
-    "officialName": {
-      "short": "Afghanistan"
-    },
+    "countryName": "Afghanistan",
+    "officialStarteName": "Afghanistan",
     "short": "AF",
     "long": "AFG",
     "m49": "4",
@@ -111,10 +105,8 @@
     "edgar": "B2"
   },
   {
-    "full": "Albania",
-    "officialName": {
-      "short": "Albanie"
-    },
+    "countryName": "Albania",
+    "officialStarteName": "Albanie",
     "short": "AL",
     "long": "ALB",
     "m49": "8",
@@ -148,10 +140,8 @@
     "edgar": "B3"
   },
   {
-    "full": "Algeria",
-    "officialName": {
-      "short": "Algérie"
-    },
+    "countryName": "Algeria",
+    "officialStarteName": "Algérie",
     "short": "DZ",
     "long": "DZA",
     "m49": "12",
@@ -184,10 +174,8 @@
     "edgar": "B4"
   },
   {
-    "full": "American Samoa",
-    "officialName": {
-      "short": "Samoa américaines"
-    },
+    "countryName": "American Samoa",
+    "officialStarteName": "Samoa américaines",
     "short": "AS",
     "long": "ASM",
     "m49": "16",
@@ -222,10 +210,8 @@
     "edgar": "B5"
   },
   {
-    "full": "Andorra",
-    "officialName": {
-      "short": "Andorre"
-    },
+    "countryName": "Andorra",
+    "officialStarteName": "Andorre",
     "short": "AD",
     "long": "AND",
     "m49": "20",
@@ -258,10 +244,8 @@
     "edgar": "B6"
   },
   {
-    "full": "Angola",
-    "officialName": {
-      "short": "Angola"
-    },
+    "countryName": "Angola",
+    "officialStarteName": "Angola",
     "short": "AO",
     "long": "AGO",
     "m49": "24",
@@ -294,10 +278,8 @@
     "edgar": "B7"
   },
   {
-    "full": "Anguilla",
-    "officialName": {
-      "short": "Anguilla"
-    },
+    "countryName": "Anguilla",
+    "officialStarteName": "Anguilla",
     "short": "AI",
     "long": "AIA",
     "m49": "660",
@@ -330,10 +312,8 @@
     "edgar": "1A"
   },
   {
-    "full": "Antarctica",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "Antarctica",
+    "officialStarteName": "",
     "short": "AQ",
     "long": "ATA",
     "m49": "10",
@@ -366,10 +346,8 @@
     "edgar": ""
   },
   {
-    "full": "Antigua & Barbuda",
-    "officialName": {
-      "short": "Antigua-et-Barbuda"
-    },
+    "countryName": "Antigua & Barbuda",
+    "officialStarteName": "Antigua-et-Barbuda",
     "short": "AG",
     "long": "ATG",
     "m49": "28",
@@ -402,10 +380,8 @@
     "edgar": "B9"
   },
   {
-    "full": "Argentina",
-    "officialName": {
-      "short": "Argentine"
-    },
+    "countryName": "Argentina",
+    "officialStarteName": "Argentine",
     "short": "AR",
     "long": "ARG",
     "m49": "32",
@@ -443,10 +419,8 @@
     "edgar": "C1"
   },
   {
-    "full": "Armenia",
-    "officialName": {
-      "short": "Arménie"
-    },
+    "countryName": "Armenia",
+    "officialStarteName": "Arménie",
     "short": "AM",
     "long": "ARM",
     "m49": "51",
@@ -479,10 +453,8 @@
     "edgar": "1B"
   },
   {
-    "full": "Aruba",
-    "officialName": {
-      "short": "Aruba"
-    },
+    "countryName": "Aruba",
+    "officialStarteName": "Aruba",
     "short": "AW",
     "long": "ABW",
     "m49": "533",
@@ -517,10 +489,8 @@
     "edgar": "1C"
   },
   {
-    "full": "Australia",
-    "officialName": {
-      "short": "Australie"
-    },
+    "countryName": "Australia",
+    "officialStarteName": "Australie",
     "short": "AU",
     "long": "AUS",
     "m49": "36",
@@ -553,10 +523,8 @@
     "edgar": "C3"
   },
   {
-    "full": "Austria",
-    "officialName": {
-      "short": "Autriche"
-    },
+    "countryName": "Austria",
+    "officialStarteName": "Autriche",
     "short": "AT",
     "long": "AUT",
     "m49": "40",
@@ -592,10 +560,8 @@
     "edgar": "C4"
   },
   {
-    "full": "Azerbaijan",
-    "officialName": {
-      "short": "Azerbaïdjan"
-    },
+    "countryName": "Azerbaijan",
+    "officialStarteName": "Azerbaïdjan",
     "short": "AZ",
     "long": "AZE",
     "m49": "31",
@@ -630,10 +596,8 @@
     "edgar": "1D"
   },
   {
-    "full": "Bahamas",
-    "officialName": {
-      "short": "Bahamas"
-    },
+    "countryName": "Bahamas",
+    "officialStarteName": "Bahamas",
     "short": "BS",
     "long": "BHS",
     "m49": "44",
@@ -666,10 +630,8 @@
     "edgar": "C5"
   },
   {
-    "full": "Bahrain",
-    "officialName": {
-      "short": "Bahreïn"
-    },
+    "countryName": "Bahrain",
+    "officialStarteName": "Bahreïn",
     "short": "BH",
     "long": "BHR",
     "m49": "48",
@@ -705,10 +667,8 @@
     "edgar": "C6"
   },
   {
-    "full": "Bangladesh",
-    "officialName": {
-      "short": "Bangladesh"
-    },
+    "countryName": "Bangladesh",
+    "officialStarteName": "Bangladesh",
     "short": "BD",
     "long": "BGD",
     "m49": "50",
@@ -742,10 +702,8 @@
     "edgar": "C7"
   },
   {
-    "full": "Barbados",
-    "officialName": {
-      "short": "Barbade"
-    },
+    "countryName": "Barbados",
+    "officialStarteName": "Barbade",
     "short": "BB",
     "long": "BRB",
     "m49": "52",
@@ -778,10 +736,8 @@
     "edgar": "C8"
   },
   {
-    "full": "Belarus",
-    "officialName": {
-      "short": "Bélarus"
-    },
+    "countryName": "Belarus",
+    "officialStarteName": "Bélarus",
     "short": "BY",
     "long": "BLR",
     "m49": "112",
@@ -815,10 +771,8 @@
     "edgar": "1F"
   },
   {
-    "full": "Belgium",
-    "officialName": {
-      "short": "Belgique"
-    },
+    "countryName": "Belgium",
+    "officialStarteName": "Belgique",
     "short": "BE",
     "long": "BEL",
     "m49": "56",
@@ -853,10 +807,8 @@
     "edgar": "C9"
   },
   {
-    "full": "Belize",
-    "officialName": {
-      "short": "Belize"
-    },
+    "countryName": "Belize",
+    "officialStarteName": "Belize",
     "short": "BZ",
     "long": "BLZ",
     "m49": "84",
@@ -890,10 +842,8 @@
     "edgar": "D1"
   },
   {
-    "full": "Benin",
-    "officialName": {
-      "short": "Bénin"
-    },
+    "countryName": "Benin",
+    "officialStarteName": "Bénin",
     "short": "BJ",
     "long": "BEN",
     "m49": "204",
@@ -926,10 +876,8 @@
     "edgar": "G6"
   },
   {
-    "full": "Bermuda",
-    "officialName": {
-      "short": "Bermudes"
-    },
+    "countryName": "Bermuda",
+    "officialStarteName": "Bermudes",
     "short": "BM",
     "long": "BMU",
     "m49": "60",
@@ -963,10 +911,8 @@
     "edgar": "D0"
   },
   {
-    "full": "Bhutan",
-    "officialName": {
-      "short": "Bhoutan"
-    },
+    "countryName": "Bhutan",
+    "officialStarteName": "Bhoutan",
     "short": "BT",
     "long": "BTN",
     "m49": "64",
@@ -999,10 +945,8 @@
     "edgar": "D2"
   },
   {
-    "full": "Bolivia",
-    "officialName": {
-      "short": "Bolivie (État plurinational de)"
-    },
+    "countryName": "Bolivia",
+    "officialStarteName": "Bolivie (État plurinational de)",
     "short": "BO",
     "long": "BOL",
     "m49": "68",
@@ -1037,10 +981,8 @@
     "edgar": ""
   },
   {
-    "full": "Bosnia",
-    "officialName": {
-      "short": "Bosnie-Herzégovine"
-    },
+    "countryName": "Bosnia",
+    "officialStarteName": "Bosnie-Herzégovine",
     "short": "BA",
     "long": "BIH",
     "m49": "70",
@@ -1075,10 +1017,8 @@
     "edgar": "1E"
   },
   {
-    "full": "Botswana",
-    "officialName": {
-      "short": "Botswana"
-    },
+    "countryName": "Botswana",
+    "officialStarteName": "Botswana",
     "short": "BW",
     "long": "BWA",
     "m49": "72",
@@ -1112,10 +1052,8 @@
     "edgar": "B1"
   },
   {
-    "full": "Bouvet Island",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "Bouvet Island",
+    "officialStarteName": "",
     "short": "BV",
     "long": "BVT",
     "m49": "74",
@@ -1148,10 +1086,8 @@
     "edgar": ""
   },
   {
-    "full": "Brazil",
-    "officialName": {
-      "short": "Brésil"
-    },
+    "countryName": "Brazil",
+    "officialStarteName": "Brésil",
     "short": "BR",
     "long": "BRA",
     "m49": "76",
@@ -1187,10 +1123,8 @@
     "edgar": "D5"
   },
   {
-    "full": "British Indian Ocean Territory",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "British Indian Ocean Territory",
+    "officialStarteName": "",
     "short": "IO",
     "long": "IOT",
     "m49": "86",
@@ -1223,10 +1157,8 @@
     "edgar": ""
   },
   {
-    "full": "British Virgin Islands",
-    "officialName": {
-      "short": "Îles Vierges britanniques"
-    },
+    "countryName": "British Virgin Islands",
+    "officialStarteName": "Îles Vierges britanniques",
     "short": "VG",
     "long": "VGB",
     "m49": "92",
@@ -1259,10 +1191,8 @@
     "edgar": ""
   },
   {
-    "full": "Brunei",
-    "officialName": {
-      "short": "Brunéi Darussalam"
-    },
+    "countryName": "Brunei",
+    "officialStarteName": "Brunéi Darussalam",
     "short": "BN",
     "long": "BRN",
     "m49": "96",
@@ -1296,10 +1226,8 @@
     "edgar": "D9"
   },
   {
-    "full": "Bulgaria",
-    "officialName": {
-      "short": "Bulgarie"
-    },
+    "countryName": "Bulgaria",
+    "officialStarteName": "Bulgarie",
     "short": "BG",
     "long": "BGR",
     "m49": "100",
@@ -1334,10 +1262,8 @@
     "edgar": "E0"
   },
   {
-    "full": "Burkina Faso",
-    "officialName": {
-      "short": "Burkina Faso"
-    },
+    "countryName": "Burkina Faso",
+    "officialStarteName": "Burkina Faso",
     "short": "BF",
     "long": "BFA",
     "m49": "854",
@@ -1370,10 +1296,8 @@
     "edgar": "X2"
   },
   {
-    "full": "Burundi",
-    "officialName": {
-      "short": "Burundi"
-    },
+    "countryName": "Burundi",
+    "officialStarteName": "Burundi",
     "short": "BI",
     "long": "BDI",
     "m49": "108",
@@ -1407,10 +1331,8 @@
     "edgar": "E2"
   },
   {
-    "full": "Cambodia",
-    "officialName": {
-      "short": "Cambodge"
-    },
+    "countryName": "Cambodia",
+    "officialStarteName": "Cambodge",
     "short": "KH",
     "long": "KHM",
     "m49": "116",
@@ -1445,10 +1367,8 @@
     "edgar": "E3"
   },
   {
-    "full": "Cameroon",
-    "officialName": {
-      "short": "Cameroun"
-    },
+    "countryName": "Cameroon",
+    "officialStarteName": "Cameroun",
     "short": "CM",
     "long": "CMR",
     "m49": "120",
@@ -1482,10 +1402,8 @@
     "edgar": "E4"
   },
   {
-    "full": "Canada",
-    "officialName": {
-      "short": "Canada"
-    },
+    "countryName": "Canada",
+    "officialStarteName": "Canada",
     "short": "CA",
     "long": "CAN",
     "m49": "124",
@@ -1520,10 +1438,8 @@
     "edgar": ""
   },
   {
-    "full": "Cape Verde",
-    "officialName": {
-      "short": "Cabo Verde"
-    },
+    "countryName": "Cape Verde",
+    "officialStarteName": "Cabo Verde",
     "short": "CV",
     "long": "CPV",
     "m49": "132",
@@ -1556,10 +1472,8 @@
     "edgar": ""
   },
   {
-    "full": "Caribbean Netherlands",
-    "officialName": {
-      "short": "Bonaire, Saint-Eustache et Saba"
-    },
+    "countryName": "Caribbean Netherlands",
+    "officialStarteName": "Bonaire, Saint-Eustache et Saba",
     "short": "BQ",
     "long": "BES",
     "m49": "535",
@@ -1594,10 +1508,8 @@
     "edgar": ""
   },
   {
-    "full": "Cayman Islands",
-    "officialName": {
-      "short": "Îles Caïmanes"
-    },
+    "countryName": "Cayman Islands",
+    "officialStarteName": "Îles Caïmanes",
     "short": "KY",
     "long": "CYM",
     "m49": "136",
@@ -1630,10 +1542,8 @@
     "edgar": "E9"
   },
   {
-    "full": "Central African Republic",
-    "officialName": {
-      "short": "République centrafricaine"
-    },
+    "countryName": "Central African Republic",
+    "officialStarteName": "République centrafricaine",
     "short": "CF",
     "long": "CAF",
     "m49": "140",
@@ -1669,10 +1579,8 @@
     "edgar": "F0"
   },
   {
-    "full": "Chad",
-    "officialName": {
-      "short": "Tchad"
-    },
+    "countryName": "Chad",
+    "officialStarteName": "Tchad",
     "short": "TD",
     "long": "TCD",
     "m49": "148",
@@ -1707,10 +1615,8 @@
     "edgar": "F2"
   },
   {
-    "full": "Chile",
-    "officialName": {
-      "short": "Chili"
-    },
+    "countryName": "Chile",
+    "officialStarteName": "Chili",
     "short": "CL",
     "long": "CHL",
     "m49": "152",
@@ -1743,10 +1649,8 @@
     "edgar": "F3"
   },
   {
-    "full": "China",
-    "officialName": {
-      "short": "Chine"
-    },
+    "countryName": "China",
+    "officialStarteName": "Chine",
     "short": "CN",
     "long": "CHN",
     "m49": "156",
@@ -1784,10 +1688,8 @@
     "edgar": "F4"
   },
   {
-    "full": "Christmas Island",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "Christmas Island",
+    "officialStarteName": "",
     "short": "CX",
     "long": "CXR",
     "m49": "162",
@@ -1822,10 +1724,8 @@
     "edgar": ""
   },
   {
-    "full": "Cocos (Keeling) Islands",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "Cocos (Keeling) Islands",
+    "officialStarteName": "",
     "short": "CC",
     "long": "CCK",
     "m49": "166",
@@ -1859,10 +1759,8 @@
     "edgar": ""
   },
   {
-    "full": "Colombia",
-    "officialName": {
-      "short": "Colombie"
-    },
+    "countryName": "Colombia",
+    "officialStarteName": "Colombie",
     "short": "CO",
     "long": "COL",
     "m49": "170",
@@ -1895,10 +1793,8 @@
     "edgar": "F8"
   },
   {
-    "full": "Comoros",
-    "officialName": {
-      "short": "Comores"
-    },
+    "countryName": "Comoros",
+    "officialStarteName": "Comores",
     "short": "KM",
     "long": "COM",
     "m49": "174",
@@ -1932,10 +1828,8 @@
     "edgar": "F9"
   },
   {
-    "full": "Congo - Brazzaville",
-    "officialName": {
-      "short": "Congo"
-    },
+    "countryName": "Congo - Brazzaville",
+    "officialStarteName": "Congo",
     "short": "CG",
     "long": "COG",
     "m49": "178",
@@ -1970,10 +1864,8 @@
     "edgar": "G0"
   },
   {
-    "full": "Congo - Kinshasa",
-    "officialName": {
-      "short": "République démocratique du Congo"
-    },
+    "countryName": "Congo - Kinshasa",
+    "officialStarteName": "République démocratique du Congo",
     "short": "CD",
     "long": "COD",
     "m49": "180",
@@ -2008,10 +1900,8 @@
     "edgar": ""
   },
   {
-    "full": "Cook Islands",
-    "officialName": {
-      "short": "Îles Cook"
-    },
+    "countryName": "Cook Islands",
+    "officialStarteName": "Îles Cook",
     "short": "CK",
     "long": "COK",
     "m49": "184",
@@ -2045,10 +1935,8 @@
     "edgar": "G1"
   },
   {
-    "full": "Costa Rica",
-    "officialName": {
-      "short": "Costa Rica"
-    },
+    "countryName": "Costa Rica",
+    "officialStarteName": "Costa Rica",
     "short": "CR",
     "long": "CRI",
     "m49": "188",
@@ -2082,10 +1970,8 @@
     "edgar": "G2"
   },
   {
-    "full": "Croatia",
-    "officialName": {
-      "short": "Croatie"
-    },
+    "countryName": "Croatia",
+    "officialStarteName": "Croatie",
     "short": "HR",
     "long": "HRV",
     "m49": "191",
@@ -2119,10 +2005,8 @@
     "edgar": "1M"
   },
   {
-    "full": "Cuba",
-    "officialName": {
-      "short": "Cuba"
-    },
+    "countryName": "Cuba",
+    "officialStarteName": "Cuba",
     "short": "CU",
     "long": "CUB",
     "m49": "192",
@@ -2155,10 +2039,8 @@
     "edgar": "G3"
   },
   {
-    "full": "Curaçao",
-    "officialName": {
-      "short": "Curaçao"
-    },
+    "countryName": "Curaçao",
+    "officialStarteName": "Curaçao",
     "short": "CW",
     "long": "CUW",
     "m49": "531",
@@ -2192,10 +2074,8 @@
     "edgar": ""
   },
   {
-    "full": "Cyprus",
-    "officialName": {
-      "short": "Chypre"
-    },
+    "countryName": "Cyprus",
+    "officialStarteName": "Chypre",
     "short": "CY",
     "long": "CYP",
     "m49": "196",
@@ -2230,10 +2110,8 @@
     "edgar": "G4"
   },
   {
-    "full": "Czech Republic",
-    "officialName": {
-      "short": "Tchéquie"
-    },
+    "countryName": "Czech Republic",
+    "officialStarteName": "Tchéquie",
     "short": "CZ",
     "long": "CZE",
     "m49": "203",
@@ -2267,10 +2145,8 @@
     "edgar": ""
   },
   {
-    "full": "Côte d’Ivoire",
-    "officialName": {
-      "short": "Côte d'Ivoire"
-    },
+    "countryName": "Côte d’Ivoire",
+    "officialStarteName": "Côte d'Ivoire",
     "short": "CI",
     "long": "CIV",
     "m49": "384",
@@ -2303,10 +2179,8 @@
     "edgar": ""
   },
   {
-    "full": "Denmark",
-    "officialName": {
-      "short": "Danemark"
-    },
+    "countryName": "Denmark",
+    "officialStarteName": "Danemark",
     "short": "DK",
     "long": "DNK",
     "m49": "208",
@@ -2342,10 +2216,8 @@
     "edgar": "G7"
   },
   {
-    "full": "Djibouti",
-    "officialName": {
-      "short": "Djibouti"
-    },
+    "countryName": "Djibouti",
+    "officialStarteName": "Djibouti",
     "short": "DJ",
     "long": "DJI",
     "m49": "262",
@@ -2381,10 +2253,8 @@
     "edgar": "1G"
   },
   {
-    "full": "Dominica",
-    "officialName": {
-      "short": "Dominique"
-    },
+    "countryName": "Dominica",
+    "officialStarteName": "Dominique",
     "short": "DM",
     "long": "DMA",
     "m49": "212",
@@ -2417,10 +2287,8 @@
     "edgar": "G9"
   },
   {
-    "full": "Dominican Republic",
-    "officialName": {
-      "short": "République dominicaine"
-    },
+    "countryName": "Dominican Republic",
+    "officialStarteName": "République dominicaine",
     "short": "DO",
     "long": "DOM",
     "m49": "214",
@@ -2455,10 +2323,8 @@
     "edgar": "G8"
   },
   {
-    "full": "Ecuador",
-    "officialName": {
-      "short": "Équateur"
-    },
+    "countryName": "Ecuador",
+    "officialStarteName": "Équateur",
     "short": "EC",
     "long": "ECU",
     "m49": "218",
@@ -2491,10 +2357,8 @@
     "edgar": "H1"
   },
   {
-    "full": "Egypt",
-    "officialName": {
-      "short": "Égypte"
-    },
+    "countryName": "Egypt",
+    "officialStarteName": "Égypte",
     "short": "EG",
     "long": "EGY",
     "m49": "818",
@@ -2529,10 +2393,8 @@
     "edgar": "H2"
   },
   {
-    "full": "El Salvador",
-    "officialName": {
-      "short": "El Salvador"
-    },
+    "countryName": "El Salvador",
+    "officialStarteName": "El Salvador",
     "short": "SV",
     "long": "SLV",
     "m49": "222",
@@ -2565,10 +2427,8 @@
     "edgar": "H3"
   },
   {
-    "full": "Equatorial Guinea",
-    "officialName": {
-      "short": "Guinée équatoriale"
-    },
+    "countryName": "Equatorial Guinea",
+    "officialStarteName": "Guinée équatoriale",
     "short": "GQ",
     "long": "GNQ",
     "m49": "226",
@@ -2602,10 +2462,8 @@
     "edgar": "H4"
   },
   {
-    "full": "Eritrea",
-    "officialName": {
-      "short": "Érythrée"
-    },
+    "countryName": "Eritrea",
+    "officialStarteName": "Érythrée",
     "short": "ER",
     "long": "ERI",
     "m49": "232",
@@ -2642,10 +2500,8 @@
     "edgar": "1J"
   },
   {
-    "full": "Estonia",
-    "officialName": {
-      "short": "Estonie"
-    },
+    "countryName": "Estonia",
+    "officialStarteName": "Estonie",
     "short": "EE",
     "long": "EST",
     "m49": "233",
@@ -2679,10 +2535,8 @@
     "edgar": "1H"
   },
   {
-    "full": "Ethiopia",
-    "officialName": {
-      "short": "Éthiopie"
-    },
+    "countryName": "Ethiopia",
+    "officialStarteName": "Éthiopie",
     "short": "ET",
     "long": "ETH",
     "m49": "231",
@@ -2720,10 +2574,8 @@
     "edgar": "H5"
   },
   {
-    "full": "Falkland Islands",
-    "officialName": {
-      "short": "Îles Falkland (Malvinas)"
-    },
+    "countryName": "Falkland Islands",
+    "officialStarteName": "Îles Falkland (Malvinas)",
     "short": "FK",
     "long": "FLK",
     "m49": "238",
@@ -2756,10 +2608,8 @@
     "edgar": "H7"
   },
   {
-    "full": "Faroe Islands",
-    "officialName": {
-      "short": "Îles Féroé"
-    },
+    "countryName": "Faroe Islands",
+    "officialStarteName": "Îles Féroé",
     "short": "FO",
     "long": "FRO",
     "m49": "234",
@@ -2793,10 +2643,8 @@
     "edgar": ""
   },
   {
-    "full": "Fiji",
-    "officialName": {
-      "short": "Fidji"
-    },
+    "countryName": "Fiji",
+    "officialStarteName": "Fidji",
     "short": "FJ",
     "long": "FJI",
     "m49": "242",
@@ -2830,10 +2678,8 @@
     "edgar": "H8"
   },
   {
-    "full": "Finland",
-    "officialName": {
-      "short": "Finlande"
-    },
+    "countryName": "Finland",
+    "officialStarteName": "Finlande",
     "short": "FI",
     "long": "FIN",
     "m49": "246",
@@ -2868,10 +2714,8 @@
     "edgar": "H9"
   },
   {
-    "full": "France",
-    "officialName": {
-      "short": "France"
-    },
+    "countryName": "France",
+    "officialStarteName": "France",
     "short": "FR",
     "long": "FRA",
     "m49": "250",
@@ -2910,10 +2754,8 @@
     "edgar": "I0"
   },
   {
-    "full": "French Guiana",
-    "officialName": {
-      "short": "Guyane française"
-    },
+    "countryName": "French Guiana",
+    "officialStarteName": "Guyane française",
     "short": "GF",
     "long": "GUF",
     "m49": "254",
@@ -2946,10 +2788,8 @@
     "edgar": "I3"
   },
   {
-    "full": "French Polynesia",
-    "officialName": {
-      "short": "Polynésie française"
-    },
+    "countryName": "French Polynesia",
+    "officialStarteName": "Polynésie française",
     "short": "PF",
     "long": "PYF",
     "m49": "258",
@@ -2983,10 +2823,8 @@
     "edgar": "I4"
   },
   {
-    "full": "French Southern Territories",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "French Southern Territories",
+    "officialStarteName": "",
     "short": "TF",
     "long": "ATF",
     "m49": "260",
@@ -3019,10 +2857,8 @@
     "edgar": ""
   },
   {
-    "full": "Gabon",
-    "officialName": {
-      "short": "Gabon"
-    },
+    "countryName": "Gabon",
+    "officialStarteName": "Gabon",
     "short": "GA",
     "long": "GAB",
     "m49": "266",
@@ -3055,10 +2891,8 @@
     "edgar": "I5"
   },
   {
-    "full": "Gambia",
-    "officialName": {
-      "short": "Gambie"
-    },
+    "countryName": "Gambia",
+    "officialStarteName": "Gambie",
     "short": "GM",
     "long": "GMB",
     "m49": "270",
@@ -3095,10 +2929,8 @@
     "edgar": "I6"
   },
   {
-    "full": "Georgia",
-    "officialName": {
-      "short": "Géorgie"
-    },
+    "countryName": "Georgia",
+    "officialStarteName": "Géorgie",
     "short": "GE",
     "long": "GEO",
     "m49": "268",
@@ -3134,10 +2966,8 @@
     "edgar": "2Q"
   },
   {
-    "full": "Germany",
-    "officialName": {
-      "short": "Allemagne"
-    },
+    "countryName": "Germany",
+    "officialStarteName": "Allemagne",
     "short": "DE",
     "long": "DEU",
     "m49": "276",
@@ -3170,10 +3000,8 @@
     "edgar": "2M"
   },
   {
-    "full": "Ghana",
-    "officialName": {
-      "short": "Ghana"
-    },
+    "countryName": "Ghana",
+    "officialStarteName": "Ghana",
     "short": "GH",
     "long": "GHA",
     "m49": "288",
@@ -3209,10 +3037,8 @@
     "edgar": "J0"
   },
   {
-    "full": "Gibraltar",
-    "officialName": {
-      "short": "Gibraltar"
-    },
+    "countryName": "Gibraltar",
+    "officialStarteName": "Gibraltar",
     "short": "GI",
     "long": "GIB",
     "m49": "292",
@@ -3248,10 +3074,8 @@
     "edgar": "J1"
   },
   {
-    "full": "Greece",
-    "officialName": {
-      "short": "Grèce"
-    },
+    "countryName": "Greece",
+    "officialStarteName": "Grèce",
     "short": "GR",
     "long": "GRC",
     "m49": "300",
@@ -3286,10 +3110,8 @@
     "edgar": "J3"
   },
   {
-    "full": "Greenland",
-    "officialName": {
-      "short": "Groenland"
-    },
+    "countryName": "Greenland",
+    "officialStarteName": "Groenland",
     "short": "GL",
     "long": "GRL",
     "m49": "304",
@@ -3324,10 +3146,8 @@
     "edgar": "J4"
   },
   {
-    "full": "Grenada",
-    "officialName": {
-      "short": "Grenade"
-    },
+    "countryName": "Grenada",
+    "officialStarteName": "Grenade",
     "short": "GD",
     "long": "GRD",
     "m49": "308",
@@ -3360,10 +3180,8 @@
     "edgar": "J5"
   },
   {
-    "full": "Guadeloupe",
-    "officialName": {
-      "short": "Guadeloupe"
-    },
+    "countryName": "Guadeloupe",
+    "officialStarteName": "Guadeloupe",
     "short": "GP",
     "long": "GLP",
     "m49": "312",
@@ -3396,10 +3214,8 @@
     "edgar": "J6"
   },
   {
-    "full": "Guam",
-    "officialName": {
-      "short": "Guam"
-    },
+    "countryName": "Guam",
+    "officialStarteName": "Guam",
     "short": "GU",
     "long": "GUM",
     "m49": "316",
@@ -3433,10 +3249,8 @@
     "edgar": "GU"
   },
   {
-    "full": "Guatemala",
-    "officialName": {
-      "short": "Guatemala"
-    },
+    "countryName": "Guatemala",
+    "officialStarteName": "Guatemala",
     "short": "GT",
     "long": "GTM",
     "m49": "320",
@@ -3469,10 +3283,8 @@
     "edgar": "J8"
   },
   {
-    "full": "Guernsey",
-    "officialName": {
-      "short": "Guernesey"
-    },
+    "countryName": "Guernsey",
+    "officialStarteName": "Guernesey",
     "short": "GG",
     "long": "GGY",
     "m49": "831",
@@ -3506,10 +3318,8 @@
     "edgar": "Y7"
   },
   {
-    "full": "Guinea",
-    "officialName": {
-      "short": "Guinée"
-    },
+    "countryName": "Guinea",
+    "officialStarteName": "Guinée",
     "short": "GN",
     "long": "GIN",
     "m49": "324",
@@ -3542,10 +3352,8 @@
     "edgar": "J9"
   },
   {
-    "full": "Guinea-Bissau",
-    "officialName": {
-      "short": "Guinée-Bissau"
-    },
+    "countryName": "Guinea-Bissau",
+    "officialStarteName": "Guinée-Bissau",
     "short": "GW",
     "long": "GNB",
     "m49": "624",
@@ -3579,10 +3387,8 @@
     "edgar": "S0"
   },
   {
-    "full": "Guyana",
-    "officialName": {
-      "short": "Guyana"
-    },
+    "countryName": "Guyana",
+    "officialStarteName": "Guyana",
     "short": "GY",
     "long": "GUY",
     "m49": "328",
@@ -3615,10 +3421,8 @@
     "edgar": "K0"
   },
   {
-    "full": "Haiti",
-    "officialName": {
-      "short": "Haïti"
-    },
+    "countryName": "Haiti",
+    "officialStarteName": "Haïti",
     "short": "HT",
     "long": "HTI",
     "m49": "332",
@@ -3652,10 +3456,8 @@
     "edgar": "K1"
   },
   {
-    "full": "Heard & McDonald Islands",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "Heard & McDonald Islands",
+    "officialStarteName": "",
     "short": "HM",
     "long": "HMD",
     "m49": "334",
@@ -3688,10 +3490,8 @@
     "edgar": ""
   },
   {
-    "full": "Honduras",
-    "officialName": {
-      "short": "Honduras"
-    },
+    "countryName": "Honduras",
+    "officialStarteName": "Honduras",
     "short": "HN",
     "long": "HND",
     "m49": "340",
@@ -3724,10 +3524,8 @@
     "edgar": "K2"
   },
   {
-    "full": "Hong Kong",
-    "officialName": {
-      "short": "Chine, région administrative spéciale de Hong Kong"
-    },
+    "countryName": "Hong Kong",
+    "officialStarteName": "Chine, région administrative spéciale de Hong Kong",
     "short": "HK",
     "long": "HKG",
     "m49": "344",
@@ -3763,10 +3561,8 @@
     "edgar": ""
   },
   {
-    "full": "Hungary",
-    "officialName": {
-      "short": "Hongrie"
-    },
+    "countryName": "Hungary",
+    "officialStarteName": "Hongrie",
     "short": "HU",
     "long": "HUN",
     "m49": "348",
@@ -3799,10 +3595,8 @@
     "edgar": "K5"
   },
   {
-    "full": "Iceland",
-    "officialName": {
-      "short": "Islande"
-    },
+    "countryName": "Iceland",
+    "officialStarteName": "Islande",
     "short": "IS",
     "long": "ISL",
     "m49": "352",
@@ -3840,10 +3634,8 @@
     "edgar": "K6"
   },
   {
-    "full": "India",
-    "officialName": {
-      "short": "Inde"
-    },
+    "countryName": "India",
+    "officialStarteName": "Inde",
     "short": "IN",
     "long": "IND",
     "m49": "356",
@@ -3901,10 +3693,8 @@
     "edgar": "K7"
   },
   {
-    "full": "Indonesia",
-    "officialName": {
-      "short": "Indonésie"
-    },
+    "countryName": "Indonesia",
+    "officialStarteName": "Indonésie",
     "short": "ID",
     "long": "IDN",
     "m49": "360",
@@ -3940,10 +3730,8 @@
     "edgar": "K8"
   },
   {
-    "full": "Iran",
-    "officialName": {
-      "short": "Iran (République islamique d')"
-    },
+    "countryName": "Iran",
+    "officialStarteName": "Iran (République islamique d')",
     "short": "IR",
     "long": "IRN",
     "m49": "364",
@@ -3977,10 +3765,8 @@
     "edgar": "K9"
   },
   {
-    "full": "Iraq",
-    "officialName": {
-      "short": "Iraq"
-    },
+    "countryName": "Iraq",
+    "officialStarteName": "Iraq",
     "short": "IQ",
     "long": "IRQ",
     "m49": "368",
@@ -4015,10 +3801,8 @@
     "edgar": "L0"
   },
   {
-    "full": "Ireland",
-    "officialName": {
-      "short": "Irlande"
-    },
+    "countryName": "Ireland",
+    "officialStarteName": "Irlande",
     "short": "IE",
     "long": "IRL",
     "m49": "372",
@@ -4052,10 +3836,8 @@
     "edgar": "L2"
   },
   {
-    "full": "Isle of Man",
-    "officialName": {
-      "short": "Île de Man"
-    },
+    "countryName": "Isle of Man",
+    "officialStarteName": "Île de Man",
     "short": "IM",
     "long": "IMN",
     "m49": "833",
@@ -4089,10 +3871,8 @@
     "edgar": "Y8"
   },
   {
-    "full": "Israel",
-    "officialName": {
-      "short": "Israël"
-    },
+    "countryName": "Israel",
+    "officialStarteName": "Israël",
     "short": "IL",
     "long": "ISR",
     "m49": "376",
@@ -4128,10 +3908,8 @@
     "edgar": "L3"
   },
   {
-    "full": "Italy",
-    "officialName": {
-      "short": "Italie"
-    },
+    "countryName": "Italy",
+    "officialStarteName": "Italie",
     "short": "IT",
     "long": "ITA",
     "m49": "380",
@@ -4170,10 +3948,8 @@
     "edgar": "L6"
   },
   {
-    "full": "Jamaica",
-    "officialName": {
-      "short": "Jamaïque"
-    },
+    "countryName": "Jamaica",
+    "officialStarteName": "Jamaïque",
     "short": "JM",
     "long": "JAM",
     "m49": "388",
@@ -4206,10 +3982,8 @@
     "edgar": "L8"
   },
   {
-    "full": "Japan",
-    "officialName": {
-      "short": "Japon"
-    },
+    "countryName": "Japan",
+    "officialStarteName": "Japon",
     "short": "JP",
     "long": "JPN",
     "m49": "392",
@@ -4242,10 +4016,8 @@
     "edgar": "M0"
   },
   {
-    "full": "Jersey",
-    "officialName": {
-      "short": "Jersey"
-    },
+    "countryName": "Jersey",
+    "officialStarteName": "Jersey",
     "short": "JE",
     "long": "JEY",
     "m49": "832",
@@ -4279,10 +4051,8 @@
     "edgar": "Y9"
   },
   {
-    "full": "Jordan",
-    "officialName": {
-      "short": "Jordanie"
-    },
+    "countryName": "Jordan",
+    "officialStarteName": "Jordanie",
     "short": "JO",
     "long": "JOR",
     "m49": "400",
@@ -4316,10 +4086,8 @@
     "edgar": "M2"
   },
   {
-    "full": "Kazakhstan",
-    "officialName": {
-      "short": "Kazakhstan"
-    },
+    "countryName": "Kazakhstan",
+    "officialStarteName": "Kazakhstan",
     "short": "KZ",
     "long": "KAZ",
     "m49": "398",
@@ -4353,10 +4121,8 @@
     "edgar": ""
   },
   {
-    "full": "Kenya",
-    "officialName": {
-      "short": "Kenya"
-    },
+    "countryName": "Kenya",
+    "officialStarteName": "Kenya",
     "short": "KE",
     "long": "KEN",
     "m49": "404",
@@ -4390,10 +4156,8 @@
     "edgar": "M3"
   },
   {
-    "full": "Kiribati",
-    "officialName": {
-      "short": "Kiribati"
-    },
+    "countryName": "Kiribati",
+    "officialStarteName": "Kiribati",
     "short": "KI",
     "long": "KIR",
     "m49": "296",
@@ -4427,10 +4191,8 @@
     "edgar": "J2"
   },
   {
-    "full": "Kuwait",
-    "officialName": {
-      "short": "Koweït"
-    },
+    "countryName": "Kuwait",
+    "officialStarteName": "Koweït",
     "short": "KW",
     "long": "KWT",
     "m49": "414",
@@ -4464,10 +4226,8 @@
     "edgar": "M6"
   },
   {
-    "full": "Kyrgyzstan",
-    "officialName": {
-      "short": "Kirghizistan"
-    },
+    "countryName": "Kyrgyzstan",
+    "officialStarteName": "Kirghizistan",
     "short": "KG",
     "long": "KGZ",
     "m49": "417",
@@ -4502,10 +4262,8 @@
     "edgar": "1N"
   },
   {
-    "full": "Laos",
-    "officialName": {
-      "short": "République démocratique populaire lao"
-    },
+    "countryName": "Laos",
+    "officialStarteName": "République démocratique populaire lao",
     "short": "LA",
     "long": "LAO",
     "m49": "418",
@@ -4540,10 +4298,8 @@
     "edgar": ""
   },
   {
-    "full": "Latvia",
-    "officialName": {
-      "short": "Lettonie"
-    },
+    "countryName": "Latvia",
+    "officialStarteName": "Lettonie",
     "short": "LV",
     "long": "LVA",
     "m49": "428",
@@ -4578,10 +4334,8 @@
     "edgar": "1R"
   },
   {
-    "full": "Lebanon",
-    "officialName": {
-      "short": "Liban"
-    },
+    "countryName": "Lebanon",
+    "officialStarteName": "Liban",
     "short": "LB",
     "long": "LBN",
     "m49": "422",
@@ -4617,10 +4371,8 @@
     "edgar": "M8"
   },
   {
-    "full": "Lesotho",
-    "officialName": {
-      "short": "Lesotho"
-    },
+    "countryName": "Lesotho",
+    "officialStarteName": "Lesotho",
     "short": "LS",
     "long": "LSO",
     "m49": "426",
@@ -4656,10 +4408,8 @@
     "edgar": "M9"
   },
   {
-    "full": "Liberia",
-    "officialName": {
-      "short": "Libéria"
-    },
+    "countryName": "Liberia",
+    "officialStarteName": "Libéria",
     "short": "LR",
     "long": "LBR",
     "m49": "430",
@@ -4692,10 +4442,8 @@
     "edgar": "N0"
   },
   {
-    "full": "Libya",
-    "officialName": {
-      "short": "Libye"
-    },
+    "countryName": "Libya",
+    "officialStarteName": "Libye",
     "short": "LY",
     "long": "LBY",
     "m49": "434",
@@ -4730,10 +4478,8 @@
     "edgar": ""
   },
   {
-    "full": "Liechtenstein",
-    "officialName": {
-      "short": "Liechtenstein"
-    },
+    "countryName": "Liechtenstein",
+    "officialStarteName": "Liechtenstein",
     "short": "LI",
     "long": "LIE",
     "m49": "438",
@@ -4766,10 +4512,8 @@
     "edgar": "N2"
   },
   {
-    "full": "Lithuania",
-    "officialName": {
-      "short": "Lituanie"
-    },
+    "countryName": "Lithuania",
+    "officialStarteName": "Lituanie",
     "short": "LT",
     "long": "LTU",
     "m49": "440",
@@ -4804,10 +4548,8 @@
     "edgar": "1Q"
   },
   {
-    "full": "Luxembourg",
-    "officialName": {
-      "short": "Luxembourg"
-    },
+    "countryName": "Luxembourg",
+    "officialStarteName": "Luxembourg",
     "short": "LU",
     "long": "LUX",
     "m49": "442",
@@ -4842,10 +4584,8 @@
     "edgar": "N4"
   },
   {
-    "full": "Macau",
-    "officialName": {
-      "short": "Chine, région administrative spéciale de Macao"
-    },
+    "countryName": "Macau",
+    "officialStarteName": "Chine, région administrative spéciale de Macao",
     "short": "MO",
     "long": "MAC",
     "m49": "446",
@@ -4880,10 +4620,8 @@
     "edgar": ""
   },
   {
-    "full": "Macedonia",
-    "officialName": {
-      "short": "Ex-République yougoslave de Macédoine"
-    },
+    "countryName": "Macedonia",
+    "officialStarteName": "Ex-République yougoslave de Macédoine",
     "short": "MK",
     "long": "MKD",
     "m49": "807",
@@ -4920,10 +4658,8 @@
     "edgar": "1U"
   },
   {
-    "full": "Madagascar",
-    "officialName": {
-      "short": "Madagascar"
-    },
+    "countryName": "Madagascar",
+    "officialStarteName": "Madagascar",
     "short": "MG",
     "long": "MDG",
     "m49": "450",
@@ -4957,10 +4693,8 @@
     "edgar": "N6"
   },
   {
-    "full": "Malawi",
-    "officialName": {
-      "short": "Malawi"
-    },
+    "countryName": "Malawi",
+    "officialStarteName": "Malawi",
     "short": "MW",
     "long": "MWI",
     "m49": "454",
@@ -4996,10 +4730,8 @@
     "edgar": "N7"
   },
   {
-    "full": "Malaysia",
-    "officialName": {
-      "short": "Malaisie"
-    },
+    "countryName": "Malaysia",
+    "officialStarteName": "Malaisie",
     "short": "MY",
     "long": "MYS",
     "m49": "458",
@@ -5039,10 +4771,8 @@
     "edgar": "N8"
   },
   {
-    "full": "Maldives",
-    "officialName": {
-      "short": "Maldives"
-    },
+    "countryName": "Maldives",
+    "officialStarteName": "Maldives",
     "short": "MV",
     "long": "MDV",
     "m49": "462",
@@ -5076,10 +4806,8 @@
     "edgar": "N9"
   },
   {
-    "full": "Mali",
-    "officialName": {
-      "short": "Mali"
-    },
+    "countryName": "Mali",
+    "officialStarteName": "Mali",
     "short": "ML",
     "long": "MLI",
     "m49": "466",
@@ -5113,10 +4841,8 @@
     "edgar": "O0"
   },
   {
-    "full": "Malta",
-    "officialName": {
-      "short": "Malte"
-    },
+    "countryName": "Malta",
+    "officialStarteName": "Malte",
     "short": "MT",
     "long": "MLT",
     "m49": "470",
@@ -5150,10 +4876,8 @@
     "edgar": "O1"
   },
   {
-    "full": "Marshall Islands",
-    "officialName": {
-      "short": "Îles Marshall"
-    },
+    "countryName": "Marshall Islands",
+    "officialStarteName": "Îles Marshall",
     "short": "MH",
     "long": "MHL",
     "m49": "584",
@@ -5187,10 +4911,8 @@
     "edgar": "1T"
   },
   {
-    "full": "Martinique",
-    "officialName": {
-      "short": "Martinique"
-    },
+    "countryName": "Martinique",
+    "officialStarteName": "Martinique",
     "short": "MQ",
     "long": "MTQ",
     "m49": "474",
@@ -5223,10 +4945,8 @@
     "edgar": "O2"
   },
   {
-    "full": "Mauritania",
-    "officialName": {
-      "short": "Mauritanie"
-    },
+    "countryName": "Mauritania",
+    "officialStarteName": "Mauritanie",
     "short": "MR",
     "long": "MRT",
     "m49": "478",
@@ -5264,10 +4984,8 @@
     "edgar": "O3"
   },
   {
-    "full": "Mauritius",
-    "officialName": {
-      "short": "Maurice"
-    },
+    "countryName": "Mauritius",
+    "officialStarteName": "Maurice",
     "short": "MU",
     "long": "MUS",
     "m49": "480",
@@ -5302,10 +5020,8 @@
     "edgar": "O4"
   },
   {
-    "full": "Mayotte",
-    "officialName": {
-      "short": "Mayotte"
-    },
+    "countryName": "Mayotte",
+    "officialStarteName": "Mayotte",
     "short": "YT",
     "long": "MYT",
     "m49": "175",
@@ -5338,10 +5054,8 @@
     "edgar": "2P"
   },
   {
-    "full": "Mexico",
-    "officialName": {
-      "short": "Mexique"
-    },
+    "countryName": "Mexico",
+    "officialStarteName": "Mexique",
     "short": "MX",
     "long": "MEX",
     "m49": "484",
@@ -5374,10 +5088,8 @@
     "edgar": "O5"
   },
   {
-    "full": "Micronesia",
-    "officialName": {
-      "short": "Micronésie (États fédérés de)"
-    },
+    "countryName": "Micronesia",
+    "officialStarteName": "Micronésie (États fédérés de)",
     "short": "FM",
     "long": "FSM",
     "m49": "583",
@@ -5418,10 +5130,8 @@
     "edgar": "1K"
   },
   {
-    "full": "Moldova",
-    "officialName": {
-      "short": "République de Moldova"
-    },
+    "countryName": "Moldova",
+    "officialStarteName": "République de Moldova",
     "short": "MD",
     "long": "MDA",
     "m49": "498",
@@ -5457,10 +5167,8 @@
     "edgar": "1S"
   },
   {
-    "full": "Monaco",
-    "officialName": {
-      "short": "Monaco"
-    },
+    "countryName": "Monaco",
+    "officialStarteName": "Monaco",
     "short": "MC",
     "long": "MCO",
     "m49": "492",
@@ -5495,10 +5203,8 @@
     "edgar": "O9"
   },
   {
-    "full": "Mongolia",
-    "officialName": {
-      "short": "Mongolie"
-    },
+    "countryName": "Mongolia",
+    "officialStarteName": "Mongolie",
     "short": "MN",
     "long": "MNG",
     "m49": "496",
@@ -5532,10 +5238,8 @@
     "edgar": "P0"
   },
   {
-    "full": "Montenegro",
-    "officialName": {
-      "short": "Monténégro"
-    },
+    "countryName": "Montenegro",
+    "officialStarteName": "Monténégro",
     "short": "ME",
     "long": "MNE",
     "m49": "499",
@@ -5573,10 +5277,8 @@
     "edgar": "Z5"
   },
   {
-    "full": "Montserrat",
-    "officialName": {
-      "short": "Montserrat"
-    },
+    "countryName": "Montserrat",
+    "officialStarteName": "Montserrat",
     "short": "MS",
     "long": "MSR",
     "m49": "500",
@@ -5609,10 +5311,8 @@
     "edgar": "P1"
   },
   {
-    "full": "Morocco",
-    "officialName": {
-      "short": "Maroc"
-    },
+    "countryName": "Morocco",
+    "officialStarteName": "Maroc",
     "short": "MA",
     "long": "MAR",
     "m49": "504",
@@ -5647,10 +5347,8 @@
     "edgar": "P2"
   },
   {
-    "full": "Mozambique",
-    "officialName": {
-      "short": "Mozambique"
-    },
+    "countryName": "Mozambique",
+    "officialStarteName": "Mozambique",
     "short": "MZ",
     "long": "MOZ",
     "m49": "508",
@@ -5684,10 +5382,8 @@
     "edgar": "P3"
   },
   {
-    "full": "Myanmar",
-    "officialName": {
-      "short": "Myanmar"
-    },
+    "countryName": "Myanmar",
+    "officialStarteName": "Myanmar",
     "short": "MM",
     "long": "MMR",
     "m49": "104",
@@ -5720,10 +5416,8 @@
     "edgar": "E1"
   },
   {
-    "full": "Namibia",
-    "officialName": {
-      "short": "Namibie"
-    },
+    "countryName": "Namibia",
+    "officialStarteName": "Namibie",
     "short": "NA",
     "long": "NAM",
     "m49": "516",
@@ -5760,10 +5454,8 @@
     "edgar": "T6"
   },
   {
-    "full": "Nauru",
-    "officialName": {
-      "short": "Nauru"
-    },
+    "countryName": "Nauru",
+    "officialStarteName": "Nauru",
     "short": "NR",
     "long": "NRU",
     "m49": "520",
@@ -5797,10 +5489,8 @@
     "edgar": "P5"
   },
   {
-    "full": "Nepal",
-    "officialName": {
-      "short": "Népal"
-    },
+    "countryName": "Nepal",
+    "officialStarteName": "Népal",
     "short": "NP",
     "long": "NPL",
     "m49": "524",
@@ -5834,10 +5524,8 @@
     "edgar": "P6"
   },
   {
-    "full": "Netherlands",
-    "officialName": {
-      "short": "Pays-Bas"
-    },
+    "countryName": "Netherlands",
+    "officialStarteName": "Pays-Bas",
     "short": "NL",
     "long": "NLD",
     "m49": "528",
@@ -5871,10 +5559,8 @@
     "edgar": "P7"
   },
   {
-    "full": "New Caledonia",
-    "officialName": {
-      "short": "Nouvelle-Calédonie"
-    },
+    "countryName": "New Caledonia",
+    "officialStarteName": "Nouvelle-Calédonie",
     "short": "NC",
     "long": "NCL",
     "m49": "540",
@@ -5907,10 +5593,8 @@
     "edgar": "1W"
   },
   {
-    "full": "New Zealand",
-    "officialName": {
-      "short": "Nouvelle-Zélande"
-    },
+    "countryName": "New Zealand",
+    "officialStarteName": "Nouvelle-Zélande",
     "short": "NZ",
     "long": "NZL",
     "m49": "554",
@@ -5944,10 +5628,8 @@
     "edgar": "Q2"
   },
   {
-    "full": "Nicaragua",
-    "officialName": {
-      "short": "Nicaragua"
-    },
+    "countryName": "Nicaragua",
+    "officialStarteName": "Nicaragua",
     "short": "NI",
     "long": "NIC",
     "m49": "558",
@@ -5981,10 +5663,8 @@
     "edgar": "Q3"
   },
   {
-    "full": "Niger",
-    "officialName": {
-      "short": "Niger"
-    },
+    "countryName": "Niger",
+    "officialStarteName": "Niger",
     "short": "NE",
     "long": "NER",
     "m49": "562",
@@ -6020,10 +5700,8 @@
     "edgar": "Q4"
   },
   {
-    "full": "Nigeria",
-    "officialName": {
-      "short": "Nigéria"
-    },
+    "countryName": "Nigeria",
+    "officialStarteName": "Nigéria",
     "short": "NG",
     "long": "NGA",
     "m49": "566",
@@ -6060,10 +5738,8 @@
     "edgar": "Q5"
   },
   {
-    "full": "Niue",
-    "officialName": {
-      "short": "Nioué"
-    },
+    "countryName": "Niue",
+    "officialStarteName": "Nioué",
     "short": "NU",
     "long": "NIU",
     "m49": "570",
@@ -6097,10 +5773,8 @@
     "edgar": "Q6"
   },
   {
-    "full": "Norfolk Island",
-    "officialName": {
-      "short": "Île Norfolk"
-    },
+    "countryName": "Norfolk Island",
+    "officialStarteName": "Île Norfolk",
     "short": "NF",
     "long": "NFK",
     "m49": "574",
@@ -6133,10 +5807,8 @@
     "edgar": "Q7"
   },
   {
-    "full": "North Korea",
-    "officialName": {
-      "short": "République populaire démocratique de Corée"
-    },
+    "countryName": "North Korea",
+    "officialStarteName": "République populaire démocratique de Corée",
     "short": "KP",
     "long": "PRK",
     "m49": "408",
@@ -6169,10 +5841,8 @@
     "edgar": ""
   },
   {
-    "full": "Northern Mariana Islands",
-    "officialName": {
-      "short": "Îles Mariannes septentrionales"
-    },
+    "countryName": "Northern Mariana Islands",
+    "officialStarteName": "Îles Mariannes septentrionales",
     "short": "MP",
     "long": "MNP",
     "m49": "580",
@@ -6209,10 +5879,8 @@
     "edgar": "1V"
   },
   {
-    "full": "Norway",
-    "officialName": {
-      "short": "Norvège"
-    },
+    "countryName": "Norway",
+    "officialStarteName": "Norvège",
     "short": "NO",
     "long": "NOR",
     "m49": "578",
@@ -6249,10 +5917,8 @@
     "edgar": "Q8"
   },
   {
-    "full": "Oman",
-    "officialName": {
-      "short": "Oman"
-    },
+    "countryName": "Oman",
+    "officialStarteName": "Oman",
     "short": "OM",
     "long": "OMN",
     "m49": "512",
@@ -6288,10 +5954,8 @@
     "edgar": "P4"
   },
   {
-    "full": "Pakistan",
-    "officialName": {
-      "short": "Pakistan"
-    },
+    "countryName": "Pakistan",
+    "officialStarteName": "Pakistan",
     "short": "PK",
     "long": "PAK",
     "m49": "586",
@@ -6329,10 +5993,8 @@
     "edgar": "R0"
   },
   {
-    "full": "Palau",
-    "officialName": {
-      "short": "Palaos"
-    },
+    "countryName": "Palau",
+    "officialStarteName": "Palaos",
     "short": "PW",
     "long": "PLW",
     "m49": "585",
@@ -6371,10 +6033,8 @@
     "edgar": "1Y"
   },
   {
-    "full": "Palestine",
-    "officialName": {
-      "short": "État de Palestine"
-    },
+    "countryName": "Palestine",
+    "officialStarteName": "État de Palestine",
     "short": "PS",
     "long": "PSE",
     "m49": "275",
@@ -6407,10 +6067,8 @@
     "edgar": ""
   },
   {
-    "full": "Panama",
-    "officialName": {
-      "short": "Panama"
-    },
+    "countryName": "Panama",
+    "officialStarteName": "Panama",
     "short": "PA",
     "long": "PAN",
     "m49": "591",
@@ -6444,10 +6102,8 @@
     "edgar": "R1"
   },
   {
-    "full": "Papua New Guinea",
-    "officialName": {
-      "short": "Papouasie-Nouvelle-Guinée"
-    },
+    "countryName": "Papua New Guinea",
+    "officialStarteName": "Papouasie-Nouvelle-Guinée",
     "short": "PG",
     "long": "PNG",
     "m49": "598",
@@ -6483,10 +6139,8 @@
     "edgar": "R2"
   },
   {
-    "full": "Paraguay",
-    "officialName": {
-      "short": "Paraguay"
-    },
+    "countryName": "Paraguay",
+    "officialStarteName": "Paraguay",
     "short": "PY",
     "long": "PRY",
     "m49": "600",
@@ -6520,10 +6174,8 @@
     "edgar": "R4"
   },
   {
-    "full": "Peru",
-    "officialName": {
-      "short": "Pérou"
-    },
+    "countryName": "Peru",
+    "officialStarteName": "Pérou",
     "short": "PE",
     "long": "PER",
     "m49": "604",
@@ -6558,10 +6210,8 @@
     "edgar": "R5"
   },
   {
-    "full": "Philippines",
-    "officialName": {
-      "short": "Philippines"
-    },
+    "countryName": "Philippines",
+    "officialStarteName": "Philippines",
     "short": "PH",
     "long": "PHL",
     "m49": "608",
@@ -6596,10 +6246,8 @@
     "edgar": "R6"
   },
   {
-    "full": "Pitcairn Islands",
-    "officialName": {
-      "short": "Pitcairn"
-    },
+    "countryName": "Pitcairn Islands",
+    "officialStarteName": "Pitcairn",
     "short": "PN",
     "long": "PCN",
     "m49": "612",
@@ -6632,10 +6280,8 @@
     "edgar": "R8"
   },
   {
-    "full": "Poland",
-    "officialName": {
-      "short": "Pologne"
-    },
+    "countryName": "Poland",
+    "officialStarteName": "Pologne",
     "short": "PL",
     "long": "POL",
     "m49": "616",
@@ -6668,10 +6314,8 @@
     "edgar": "R9"
   },
   {
-    "full": "Portugal",
-    "officialName": {
-      "short": "Portugal"
-    },
+    "countryName": "Portugal",
+    "officialStarteName": "Portugal",
     "short": "PT",
     "long": "PRT",
     "m49": "620",
@@ -6705,10 +6349,8 @@
     "edgar": "S1"
   },
   {
-    "full": "Puerto Rico",
-    "officialName": {
-      "short": "Porto Rico"
-    },
+    "countryName": "Puerto Rico",
+    "officialStarteName": "Porto Rico",
     "short": "PR",
     "long": "PRI",
     "m49": "630",
@@ -6742,10 +6384,8 @@
     "edgar": "PR"
   },
   {
-    "full": "Qatar",
-    "officialName": {
-      "short": "Qatar"
-    },
+    "countryName": "Qatar",
+    "officialStarteName": "Qatar",
     "short": "QA",
     "long": "QAT",
     "m49": "634",
@@ -6779,10 +6419,8 @@
     "edgar": "S3"
   },
   {
-    "full": "Romania",
-    "officialName": {
-      "short": "Roumanie"
-    },
+    "countryName": "Romania",
+    "officialStarteName": "Roumanie",
     "short": "RO",
     "long": "ROU",
     "m49": "642",
@@ -6817,10 +6455,8 @@
     "edgar": "S5"
   },
   {
-    "full": "Russia",
-    "officialName": {
-      "short": "Fédération de Russie"
-    },
+    "countryName": "Russia",
+    "officialStarteName": "Fédération de Russie",
     "short": "RU",
     "long": "RUS",
     "m49": "643",
@@ -6876,10 +6512,8 @@
     "edgar": "1Z"
   },
   {
-    "full": "Rwanda",
-    "officialName": {
-      "short": "Rwanda"
-    },
+    "countryName": "Rwanda",
+    "officialStarteName": "Rwanda",
     "short": "RW",
     "long": "RWA",
     "m49": "646",
@@ -6915,10 +6549,8 @@
     "edgar": "S6"
   },
   {
-    "full": "Réunion",
-    "officialName": {
-      "short": "Réunion"
-    },
+    "countryName": "Réunion",
+    "officialStarteName": "Réunion",
     "short": "RE",
     "long": "REU",
     "m49": "638",
@@ -6951,10 +6583,8 @@
     "edgar": ""
   },
   {
-    "full": "Samoa",
-    "officialName": {
-      "short": "Samoa"
-    },
+    "countryName": "Samoa",
+    "officialStarteName": "Samoa",
     "short": "WS",
     "long": "WSM",
     "m49": "882",
@@ -6988,10 +6618,8 @@
     "edgar": "Y0"
   },
   {
-    "full": "San Marino",
-    "officialName": {
-      "short": "Saint-Marin"
-    },
+    "countryName": "San Marino",
+    "officialStarteName": "Saint-Marin",
     "short": "SM",
     "long": "SMR",
     "m49": "674",
@@ -7024,10 +6652,8 @@
     "edgar": "S8"
   },
   {
-    "full": "Saudi Arabia",
-    "officialName": {
-      "short": "Arabie saoudite"
-    },
+    "countryName": "Saudi Arabia",
+    "officialStarteName": "Arabie saoudite",
     "short": "SA",
     "long": "SAU",
     "m49": "682",
@@ -7060,10 +6686,8 @@
     "edgar": "T0"
   },
   {
-    "full": "Senegal",
-    "officialName": {
-      "short": "Sénégal"
-    },
+    "countryName": "Senegal",
+    "officialStarteName": "Sénégal",
     "short": "SN",
     "long": "SEN",
     "m49": "686",
@@ -7099,10 +6723,8 @@
     "edgar": "T1"
   },
   {
-    "full": "Serbia",
-    "officialName": {
-      "short": "Serbie"
-    },
+    "countryName": "Serbia",
+    "officialStarteName": "Serbie",
     "short": "RS",
     "long": "SRB",
     "m49": "688",
@@ -7138,10 +6760,8 @@
     "edgar": "Z2"
   },
   {
-    "full": "Seychelles",
-    "officialName": {
-      "short": "Seychelles"
-    },
+    "countryName": "Seychelles",
+    "officialStarteName": "Seychelles",
     "short": "SC",
     "long": "SYC",
     "m49": "690",
@@ -7175,10 +6795,8 @@
     "edgar": "T2"
   },
   {
-    "full": "Sierra Leone",
-    "officialName": {
-      "short": "Sierra Leone"
-    },
+    "countryName": "Sierra Leone",
+    "officialStarteName": "Sierra Leone",
     "short": "SL",
     "long": "SLE",
     "m49": "694",
@@ -7213,10 +6831,8 @@
     "edgar": "T8"
   },
   {
-    "full": "Singapore",
-    "officialName": {
-      "short": "Singapour"
-    },
+    "countryName": "Singapore",
+    "officialStarteName": "Singapour",
     "short": "SG",
     "long": "SGP",
     "m49": "702",
@@ -7253,10 +6869,8 @@
     "edgar": "U0"
   },
   {
-    "full": "Sint Maarten",
-    "officialName": {
-      "short": "Saint-Martin (partie néerlandaise)"
-    },
+    "countryName": "Sint Maarten",
+    "officialStarteName": "Saint-Martin (partie néerlandaise)",
     "short": "SX",
     "long": "SXM",
     "m49": "534",
@@ -7290,10 +6904,8 @@
     "edgar": ""
   },
   {
-    "full": "Slovakia",
-    "officialName": {
-      "short": "Slovaquie"
-    },
+    "countryName": "Slovakia",
+    "officialStarteName": "Slovaquie",
     "short": "SK",
     "long": "SVK",
     "m49": "703",
@@ -7327,10 +6939,8 @@
     "edgar": "2B"
   },
   {
-    "full": "Slovenia",
-    "officialName": {
-      "short": "Slovénie"
-    },
+    "countryName": "Slovenia",
+    "officialStarteName": "Slovénie",
     "short": "SI",
     "long": "SVN",
     "m49": "705",
@@ -7364,10 +6974,8 @@
     "edgar": "2A"
   },
   {
-    "full": "Solomon Islands",
-    "officialName": {
-      "short": "Îles Salomon"
-    },
+    "countryName": "Solomon Islands",
+    "officialStarteName": "Îles Salomon",
     "short": "SB",
     "long": "SLB",
     "m49": "90",
@@ -7401,10 +7009,8 @@
     "edgar": "D7"
   },
   {
-    "full": "Somalia",
-    "officialName": {
-      "short": "Somalie"
-    },
+    "countryName": "Somalia",
+    "officialStarteName": "Somalie",
     "short": "SO",
     "long": "SOM",
     "m49": "706",
@@ -7440,10 +7046,8 @@
     "edgar": "U1"
   },
   {
-    "full": "South Africa",
-    "officialName": {
-      "short": "Afrique du Sud"
-    },
+    "countryName": "South Africa",
+    "officialStarteName": "Afrique du Sud",
     "short": "ZA",
     "long": "ZAF",
     "m49": "710",
@@ -7486,10 +7090,8 @@
     "edgar": "T3"
   },
   {
-    "full": "South Georgia & South Sandwich Islands",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "South Georgia & South Sandwich Islands",
+    "officialStarteName": "",
     "short": "GS",
     "long": "SGS",
     "m49": "239",
@@ -7522,10 +7124,8 @@
     "edgar": ""
   },
   {
-    "full": "South Korea",
-    "officialName": {
-      "short": "République de Corée"
-    },
+    "countryName": "South Korea",
+    "officialStarteName": "République de Corée",
     "short": "KR",
     "long": "KOR",
     "m49": "410",
@@ -7559,10 +7159,8 @@
     "edgar": "M5"
   },
   {
-    "full": "South Sudan",
-    "officialName": {
-      "short": "Soudan du Sud"
-    },
+    "countryName": "South Sudan",
+    "officialStarteName": "Soudan du Sud",
     "short": "SS",
     "long": "SSD",
     "m49": "728",
@@ -7595,10 +7193,8 @@
     "edgar": ""
   },
   {
-    "full": "Spain",
-    "officialName": {
-      "short": "Espagne"
-    },
+    "countryName": "Spain",
+    "officialStarteName": "Espagne",
     "short": "ES",
     "long": "ESP",
     "m49": "724",
@@ -7635,10 +7231,8 @@
     "edgar": "U3"
   },
   {
-    "full": "Sri Lanka",
-    "officialName": {
-      "short": "Sri Lanka"
-    },
+    "countryName": "Sri Lanka",
+    "officialStarteName": "Sri Lanka",
     "short": "LK",
     "long": "LKA",
     "m49": "144",
@@ -7673,10 +7267,8 @@
     "edgar": "F1"
   },
   {
-    "full": "St. Barthélemy",
-    "officialName": {
-      "short": "Saint-Barthélemy"
-    },
+    "countryName": "St. Barthélemy",
+    "officialStarteName": "Saint-Barthélemy",
     "short": "BL",
     "long": "BLM",
     "m49": "652",
@@ -7709,10 +7301,8 @@
     "edgar": ""
   },
   {
-    "full": "St. Helena",
-    "officialName": {
-      "short": "Sainte-Hélène"
-    },
+    "countryName": "St. Helena",
+    "officialStarteName": "Sainte-Hélène",
     "short": "SH",
     "long": "SHN",
     "m49": "654",
@@ -7745,10 +7335,8 @@
     "edgar": ""
   },
   {
-    "full": "St. Kitts & Nevis",
-    "officialName": {
-      "short": "Saint-Kitts-et-Nevis"
-    },
+    "countryName": "St. Kitts & Nevis",
+    "officialStarteName": "Saint-Kitts-et-Nevis",
     "short": "KN",
     "long": "KNA",
     "m49": "659",
@@ -7781,10 +7369,8 @@
     "edgar": "U7"
   },
   {
-    "full": "St. Lucia",
-    "officialName": {
-      "short": "Sainte-Lucie"
-    },
+    "countryName": "St. Lucia",
+    "officialStarteName": "Sainte-Lucie",
     "short": "LC",
     "long": "LCA",
     "m49": "662",
@@ -7817,10 +7403,8 @@
     "edgar": "U9"
   },
   {
-    "full": "St. Martin",
-    "officialName": {
-      "short": "Saint-Martin (partie française)"
-    },
+    "countryName": "St. Martin",
+    "officialStarteName": "Saint-Martin (partie française)",
     "short": "MF",
     "long": "MAF",
     "m49": "663",
@@ -7853,10 +7437,8 @@
     "edgar": ""
   },
   {
-    "full": "St. Pierre & Miquelon",
-    "officialName": {
-      "short": "Saint-Pierre-et-Miquelon"
-    },
+    "countryName": "St. Pierre & Miquelon",
+    "officialStarteName": "Saint-Pierre-et-Miquelon",
     "short": "PM",
     "long": "SPM",
     "m49": "666",
@@ -7889,10 +7471,8 @@
     "edgar": "V0"
   },
   {
-    "full": "St. Vincent & Grenadines",
-    "officialName": {
-      "short": "Saint-Vincent-et-les Grenadines"
-    },
+    "countryName": "St. Vincent & Grenadines",
+    "officialStarteName": "Saint-Vincent-et-les Grenadines",
     "short": "VC",
     "long": "VCT",
     "m49": "670",
@@ -7926,10 +7506,8 @@
     "edgar": "V1"
   },
   {
-    "full": "Sudan",
-    "officialName": {
-      "short": "Soudan"
-    },
+    "countryName": "Sudan",
+    "officialStarteName": "Soudan",
     "short": "SD",
     "long": "SDN",
     "m49": "729",
@@ -7964,10 +7542,8 @@
     "edgar": "V2"
   },
   {
-    "full": "Suriname",
-    "officialName": {
-      "short": "Suriname"
-    },
+    "countryName": "Suriname",
+    "officialStarteName": "Suriname",
     "short": "SR",
     "long": "SUR",
     "m49": "740",
@@ -8004,10 +7580,8 @@
     "edgar": "V3"
   },
   {
-    "full": "Svalbard & Jan Mayen",
-    "officialName": {
-      "short": "Îles Svalbard-et-Jan Mayen"
-    },
+    "countryName": "Svalbard & Jan Mayen",
+    "officialStarteName": "Îles Svalbard-et-Jan Mayen",
     "short": "SJ",
     "long": "SJM",
     "m49": "744",
@@ -8041,10 +7615,8 @@
     "edgar": "L9"
   },
   {
-    "full": "Swaziland",
-    "officialName": {
-      "short": "Swaziland"
-    },
+    "countryName": "Swaziland",
+    "officialStarteName": "Swaziland",
     "short": "SZ",
     "long": "SWZ",
     "m49": "748",
@@ -8078,10 +7650,8 @@
     "edgar": "V6"
   },
   {
-    "full": "Sweden",
-    "officialName": {
-      "short": "Suède"
-    },
+    "countryName": "Sweden",
+    "officialStarteName": "Suède",
     "short": "SE",
     "long": "SWE",
     "m49": "752",
@@ -8117,10 +7687,8 @@
     "edgar": "V7"
   },
   {
-    "full": "Switzerland",
-    "officialName": {
-      "short": "Suisse"
-    },
+    "countryName": "Switzerland",
+    "officialStarteName": "Suisse",
     "short": "CH",
     "long": "CHE",
     "m49": "756",
@@ -8156,10 +7724,8 @@
     "edgar": "V8"
   },
   {
-    "full": "Syria",
-    "officialName": {
-      "short": "République arabe syrienne"
-    },
+    "countryName": "Syria",
+    "officialStarteName": "République arabe syrienne",
     "short": "SY",
     "long": "SYR",
     "m49": "760",
@@ -8197,10 +7763,8 @@
     "edgar": "V9"
   },
   {
-    "full": "São Tomé & Príncipe",
-    "officialName": {
-      "short": "Sao Tomé-et-Principe"
-    },
+    "countryName": "São Tomé & Príncipe",
+    "officialStarteName": "Sao Tomé-et-Principe",
     "short": "ST",
     "long": "STP",
     "m49": "678",
@@ -8233,10 +7797,8 @@
     "edgar": "S9"
   },
   {
-    "full": "Taiwan",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "Taiwan",
+    "officialStarteName": "",
     "short": "TW",
     "long": "TWN",
     "m49": "158",
@@ -8272,10 +7834,8 @@
     "edgar": ""
   },
   {
-    "full": "Tajikistan",
-    "officialName": {
-      "short": "Tadjikistan"
-    },
+    "countryName": "Tajikistan",
+    "officialStarteName": "Tadjikistan",
     "short": "TJ",
     "long": "TJK",
     "m49": "762",
@@ -8309,10 +7869,8 @@
     "edgar": "2D"
   },
   {
-    "full": "Tanzania",
-    "officialName": {
-      "short": "République-Unie de Tanzanie"
-    },
+    "countryName": "Tanzania",
+    "officialStarteName": "République-Unie de Tanzanie",
     "short": "TZ",
     "long": "TZA",
     "m49": "834",
@@ -8347,10 +7905,8 @@
     "edgar": "W0"
   },
   {
-    "full": "Thailand",
-    "officialName": {
-      "short": "Thaïlande"
-    },
+    "countryName": "Thailand",
+    "officialStarteName": "Thaïlande",
     "short": "TH",
     "long": "THA",
     "m49": "764",
@@ -8384,10 +7940,8 @@
     "edgar": "W1"
   },
   {
-    "full": "Timor-Leste",
-    "officialName": {
-      "short": "Timor-Leste"
-    },
+    "countryName": "Timor-Leste",
+    "officialStarteName": "Timor-Leste",
     "short": "TL",
     "long": "TLS",
     "m49": "626",
@@ -8423,10 +7977,8 @@
     "edgar": "Z3"
   },
   {
-    "full": "Togo",
-    "officialName": {
-      "short": "Togo"
-    },
+    "countryName": "Togo",
+    "officialStarteName": "Togo",
     "short": "TG",
     "long": "TGO",
     "m49": "768",
@@ -8464,10 +8016,8 @@
     "edgar": "W2"
   },
   {
-    "full": "Tokelau",
-    "officialName": {
-      "short": "Tokelau"
-    },
+    "countryName": "Tokelau",
+    "officialStarteName": "Tokelau",
     "short": "TK",
     "long": "TKL",
     "m49": "772",
@@ -8501,10 +8051,8 @@
     "edgar": "W3"
   },
   {
-    "full": "Tonga",
-    "officialName": {
-      "short": "Tonga"
-    },
+    "countryName": "Tonga",
+    "officialStarteName": "Tonga",
     "short": "TO",
     "long": "TON",
     "m49": "776",
@@ -8538,10 +8086,8 @@
     "edgar": "W4"
   },
   {
-    "full": "Trinidad & Tobago",
-    "officialName": {
-      "short": "Trinité-et-Tobago"
-    },
+    "countryName": "Trinidad & Tobago",
+    "officialStarteName": "Trinité-et-Tobago",
     "short": "TT",
     "long": "TTO",
     "m49": "780",
@@ -8578,10 +8124,8 @@
     "edgar": "W5"
   },
   {
-    "full": "Tunisia",
-    "officialName": {
-      "short": "Tunisie"
-    },
+    "countryName": "Tunisia",
+    "officialStarteName": "Tunisie",
     "short": "TN",
     "long": "TUN",
     "m49": "788",
@@ -8615,10 +8159,8 @@
     "edgar": "W6"
   },
   {
-    "full": "Turkey",
-    "officialName": {
-      "short": "Turquie"
-    },
+    "countryName": "Turkey",
+    "officialStarteName": "Turquie",
     "short": "TR",
     "long": "TUR",
     "m49": "792",
@@ -8655,10 +8197,8 @@
     "edgar": "W8"
   },
   {
-    "full": "Turkmenistan",
-    "officialName": {
-      "short": "Turkménistan"
-    },
+    "countryName": "Turkmenistan",
+    "officialStarteName": "Turkménistan",
     "short": "TM",
     "long": "TKM",
     "m49": "795",
@@ -8693,10 +8233,8 @@
     "edgar": "2E"
   },
   {
-    "full": "Turks & Caicos Islands",
-    "officialName": {
-      "short": "Îles Turques-et-Caïques"
-    },
+    "countryName": "Turks & Caicos Islands",
+    "officialStarteName": "Îles Turques-et-Caïques",
     "short": "TC",
     "long": "TCA",
     "m49": "796",
@@ -8729,10 +8267,8 @@
     "edgar": "W7"
   },
   {
-    "full": "Tuvalu",
-    "officialName": {
-      "short": "Tuvalu"
-    },
+    "countryName": "Tuvalu",
+    "officialStarteName": "Tuvalu",
     "short": "TV",
     "long": "TUV",
     "m49": "798",
@@ -8768,10 +8304,8 @@
     "edgar": "2G"
   },
   {
-    "full": "U.S. Outlying Islands",
-    "officialName": {
-      "short": ""
-    },
+    "countryName": "U.S. Outlying Islands",
+    "officialStarteName": "",
     "short": "UM",
     "long": "UMI",
     "m49": "581",
@@ -8804,10 +8338,8 @@
     "edgar": ""
   },
   {
-    "full": "U.S. Virgin Islands",
-    "officialName": {
-      "short": "Îles Vierges américaines"
-    },
+    "countryName": "U.S. Virgin Islands",
+    "officialStarteName": "Îles Vierges américaines",
     "short": "VI",
     "long": "VIR",
     "m49": "850",
@@ -8840,10 +8372,8 @@
     "edgar": ""
   },
   {
-    "full": "UK",
-    "officialName": {
-      "short": "Royaume-Uni de Grande-Bretagne et d'Irlande du Nord"
-    },
+    "countryName": "UK",
+    "officialStarteName": "Royaume-Uni de Grande-Bretagne et d'Irlande du Nord",
     "short": "GB",
     "long": "GBR",
     "m49": "826",
@@ -8878,10 +8408,8 @@
     "edgar": "X0"
   },
   {
-    "full": "US",
-    "officialName": {
-      "short": "États-Unis d'Amérique"
-    },
+    "countryName": "US",
+    "officialStarteName": "États-Unis d'Amérique",
     "short": "US",
     "long": "USA",
     "m49": "840",
@@ -8917,10 +8445,8 @@
     "edgar": ""
   },
   {
-    "full": "Uganda",
-    "officialName": {
-      "short": "Ouganda"
-    },
+    "countryName": "Uganda",
+    "officialStarteName": "Ouganda",
     "short": "UG",
     "long": "UGA",
     "m49": "800",
@@ -8956,10 +8482,8 @@
     "edgar": "W9"
   },
   {
-    "full": "Ukraine",
-    "officialName": {
-      "short": "Ukraine"
-    },
+    "countryName": "Ukraine",
+    "officialStarteName": "Ukraine",
     "short": "UA",
     "long": "UKR",
     "m49": "804",
@@ -8996,10 +8520,8 @@
     "edgar": "2H"
   },
   {
-    "full": "United Arab Emirates",
-    "officialName": {
-      "short": "Émirats arabes unis"
-    },
+    "countryName": "United Arab Emirates",
+    "officialStarteName": "Émirats arabes unis",
     "short": "AE",
     "long": "ARE",
     "m49": "784",
@@ -9036,10 +8558,8 @@
     "edgar": "C0"
   },
   {
-    "full": "Uruguay",
-    "officialName": {
-      "short": "Uruguay"
-    },
+    "countryName": "Uruguay",
+    "officialStarteName": "Uruguay",
     "short": "UY",
     "long": "URY",
     "m49": "858",
@@ -9072,10 +8592,8 @@
     "edgar": "X3"
   },
   {
-    "full": "Uzbekistan",
-    "officialName": {
-      "short": "Ouzbékistan"
-    },
+    "countryName": "Uzbekistan",
+    "officialStarteName": "Ouzbékistan",
     "short": "UZ",
     "long": "UZB",
     "m49": "860",
@@ -9110,10 +8628,8 @@
     "edgar": "2K"
   },
   {
-    "full": "Vanuatu",
-    "officialName": {
-      "short": "Vanuatu"
-    },
+    "countryName": "Vanuatu",
+    "officialStarteName": "Vanuatu",
     "short": "VU",
     "long": "VUT",
     "m49": "548",
@@ -9148,10 +8664,8 @@
     "edgar": "2L"
   },
   {
-    "full": "Vatican City",
-    "officialName": {
-      "short": "Saint-Siège"
-    },
+    "countryName": "Vatican City",
+    "officialStarteName": "Saint-Siège",
     "short": "VA",
     "long": "VAT",
     "m49": "336",
@@ -9186,10 +8700,8 @@
     "edgar": "X4"
   },
   {
-    "full": "Venezuela",
-    "officialName": {
-      "short": "Venezuela (République bolivarienne du)"
-    },
+    "countryName": "Venezuela",
+    "officialStarteName": "Venezuela (République bolivarienne du)",
     "short": "VE",
     "long": "VEN",
     "m49": "862",
@@ -9222,10 +8734,8 @@
     "edgar": ""
   },
   {
-    "full": "Vietnam",
-    "officialName": {
-      "short": "Viet Nam"
-    },
+    "countryName": "Vietnam",
+    "officialStarteName": "Viet Nam",
     "short": "VN",
     "long": "VNM",
     "m49": "704",
@@ -9262,10 +8772,8 @@
     "edgar": "Q1"
   },
   {
-    "full": "Wallis & Futuna",
-    "officialName": {
-      "short": "Îles Wallis-et-Futuna"
-    },
+    "countryName": "Wallis & Futuna",
+    "officialStarteName": "Îles Wallis-et-Futuna",
     "short": "WF",
     "long": "WLF",
     "m49": "876",
@@ -9300,10 +8808,8 @@
     "edgar": "X8"
   },
   {
-    "full": "Western Sahara",
-    "officialName": {
-      "short": "Sahara occidental"
-    },
+    "countryName": "Western Sahara",
+    "officialStarteName": "Sahara occidental",
     "short": "EH",
     "long": "ESH",
     "m49": "732",
@@ -9337,10 +8843,8 @@
     "edgar": "U5"
   },
   {
-    "full": "Yemen",
-    "officialName": {
-      "short": "Yémen"
-    },
+    "countryName": "Yemen",
+    "officialStarteName": "Yémen",
     "short": "YE",
     "long": "YEM",
     "m49": "887",
@@ -9373,10 +8877,8 @@
     "edgar": "T7"
   },
   {
-    "full": "Zambia",
-    "officialName": {
-      "short": "Zambie"
-    },
+    "countryName": "Zambia",
+    "officialStarteName": "Zambie",
     "short": "ZM",
     "long": "ZMB",
     "m49": "894",
@@ -9415,10 +8917,8 @@
     "edgar": "Y4"
   },
   {
-    "full": "Zimbabwe",
-    "officialName": {
-      "short": "Zimbabwe"
-    },
+    "countryName": "Zimbabwe",
+    "officialStarteName": "Zimbabwe",
     "short": "ZW",
     "long": "ZWE",
     "m49": "716",
@@ -9454,10 +8954,8 @@
     "edgar": "Y5"
   },
   {
-    "full": "Åland Islands",
-    "officialName": {
-      "short": "Îles d'Åland"
-    },
+    "countryName": "Åland Islands",
+    "officialStarteName": "Îles d'Åland",
     "short": "AX",
     "long": "ALA",
     "m49": "248",

@@ -38,6 +38,7 @@ function Lib() {
         inherits        : _require('./inherits'),
         helpers         : _require('./../helpers'),
         //this one must move to Dev since it's dev related
+        Domain          : _require('./domain'),
         Model           : _require('./model'),
         Collection      : _require('./collection'),
         merge           : _require('./merge'),

@@ -238,7 +238,8 @@ function Logger() {
              */
             //off: [5]
         },
-        isReporting: true
+        isReporting: true,
+        isFlushing: false
     };
 
     var getInstance = function() {
@@ -260,7 +261,7 @@ function Logger() {
             getInstance();
             // process.env.NODE_ENV
             if (opt.hierarchies[opt.hierarchy].indexOf( opt.levels['debug'].code) > -1) {
-                emit(opt, 'debug', 'Logger instance already exists: reusing it ;)');
+                emit(opt, 'debug', '`'+ opt.name +' `Logger instance already exists: reusing it ;)');
             }
 
             return self;
@@ -661,8 +662,24 @@ function Logger() {
     self.pauseReporting = function() {
         loggers[ctx._options.name]._options.isReporting = false;
     }
-    self.resumeReporting = function() {
+    self.resumeReporting = function(group) {
+
+        //  [ duplicate output fix ]
+        // if (group && loggers[group]._options) {
+        //     self.warn('[logger]['+ group +'] now resuming ('+ group +')\n');
+        //     loggers[group]._options.isFlushing = false;
+        // }
+
         loggers[ctx._options.name]._options.isReporting = true;
+
+
+
+    }
+
+    //  [ duplicate output fix ]
+    self.flush = function (group) {
+        self.warn('[logger]['+ group +'] now flushing ('+ group +')\n');
+        loggers[group]._options.isFlushing = true;
     }
 
 

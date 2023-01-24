@@ -38,9 +38,14 @@ function MqContainer(opt, loggers) {
 
     function onPayload() {
         process.on('logger#'+self.name, function onPayload(payload) {
+            if ( loggers[opt.name]._options.isFlushing ) {
+                return;
+            }
+
             if ( !loggers[opt.name]._options.isReporting ) {
                 return;
             }
+
             if (mqSpeaker.write) {
                 mqSpeaker.write( payload +'\r\n' );
             }

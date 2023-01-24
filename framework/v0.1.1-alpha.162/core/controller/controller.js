@@ -292,6 +292,7 @@ function SuperController(options) {
             set('page.forms', options.conf.content.forms);
 
             set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname);
+            set('page.environment.rootDomain', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].rootDomain);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
             set('page.environment.project', options.conf.projectName);
@@ -3242,12 +3243,12 @@ function SuperController(options) {
         /**
          * Get countries list
          *
-         * @param {string} [code] - e.g.: short, long, fifa, m49
+         * @param {string} [code] - e.g.: short, long, fifa, m49, countryName
          *
          * @returns {object} countries - countries code & value list
          * */
         var getCountries = function (code) {
-            var list = {}, cde = 'short', name = null;
+            var list = {}, cde = 'full', name = null;
 
             if ( typeof(code) != 'undefined' && typeof(userLocales[0][code]) == 'string' ) {
                 cde = code
@@ -3272,6 +3273,7 @@ function SuperController(options) {
 
         return {
             'getCountries': getCountries
+            // TODO - getCurrencies()
         }
     }
 

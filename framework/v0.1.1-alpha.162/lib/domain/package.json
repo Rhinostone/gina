@@ -1,7 +1,7 @@
 {
-  "name": "json",
+  "name": "domain",
   "version": "1.0.0",
-  "description": "JSON helper",
+  "description": "Domain handler",
 
   "author": {
     "name": "Maritn-Luther ETOUMAN",

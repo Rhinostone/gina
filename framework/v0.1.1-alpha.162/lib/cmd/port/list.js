@@ -31,7 +31,6 @@ function List(opt, cmd) {
             , selectedBundles: null // array if assigned
             , filename: null
         }
-        , local = {}
     ;
 
     var init = function() {
@@ -197,7 +196,8 @@ function List(opt, cmd) {
 
 
 
-        console.log(data)
+        console.log(data);
+        end();
     }
 
 
@@ -439,6 +439,19 @@ function List(opt, cmd) {
 
         outputTo(str);
     };
+
+    var end = function (err, type, messageOnly) {
+        if ( typeof(err) != 'undefined') {
+            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+            if ( typeof(type) != 'undefined' ) {
+                console[type](out)
+            } else {
+                console.error(out);
+            }
+        }
+
+        process.exit( err ? 1:0 )
+    }
 
     init()
 };

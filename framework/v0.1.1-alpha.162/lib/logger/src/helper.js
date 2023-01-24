@@ -59,6 +59,7 @@
                 throw new Error('Not able to define colors. Please check logger‘s group: `'+ group +'`\n')
             }
 
+
             var now = new Date().format('logger');
             var sCount = s.length;
             if ( sCount < opt._maxLevelLen ) {

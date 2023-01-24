@@ -8,12 +8,15 @@
  */
 //Imports.
 var fs              = require('fs');
+var os              = require('os');
 var dns             = require('dns');
 var util            = require('util');
 var Events          = require('events');
 var EventEmitter    = require('events').EventEmitter;
 var locales         = require('./locales');
 var lib             = require('./../lib');
+var Domain          = lib.Domain;
+var domainLib       = new Domain();
 var merge           = lib.merge;
 var inherits        = lib.inherits;
 var console         = lib.logger;
@@ -494,9 +497,10 @@ function Config(opt, contextResetNeeded) {
         //Pushing default app first.
         self.bundles.push(self.startingApp);//This is a JSON.push.
         var root = new _(self.executionPath).toUnixStyle();
-        var pkg  = null;
+        var manifest = null, pkg  = null;
         try {
-            pkg = require(_(root + '/manifest.json')).bundles;
+            manifest = require(_(root + '/manifest.json', true));
+            pkg = manifest.bundles;
             // by default but may be overriden
             masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
         } catch (err) {
@@ -814,8 +818,25 @@ function Config(opt, contextResetNeeded) {
                     newContent[app][env].executionPath = root
                 }
 
-                //Constants to be exposed in configuration files.
-                //Variables replace. Compare with gina/core/template/conf/env.json.
+                // Constants to be exposed in configuration files.
+                // Variables replace. Compare with gina/core/template/conf/env.json.
+                // Defining root domain (TLD or SLD)
+                // by default
+                var rootDomain = domainLib.getRootDomain(os.hostname());
+                // if overrided by the project `manifest.json`: meaning all bundles belong to the same TLD or SLD
+                if ( typeof(manifest.rootDomain) != 'undefined' ) {
+                    rootDomain = manifest.rootDomain;
+                }
+                // if overrided by the project/env/bundle `env.json` or `bundle/config/settings.server.json`: meaning the bundles belong to a specific TLD or SLD
+                if ( typeof(newContent[app][env].rootDomain) != 'undefined' && newContent[app][env].rootDomain != '' ) {
+                    rootDomain = newContent[app][env].rootDomain;
+                }
+                // custom override: user entry in the project/env/bundle `env.json` or `bundle/config/settings.server.json`
+                if (!/\{rootDomain\}/.test(newContent[app][env].host) ) {
+                    rootDomain = domainLib.getRootDomain(newContent[app][env].host);
+                }
+                newContent[app][env].rootDomain = rootDomain;
+
                 let reps = {
                     "frameworkDir"  : getEnvVar('GINA_FRAMEWORK_DIR'),
                     "executionPath" : root,
@@ -824,6 +845,9 @@ function Config(opt, contextResetNeeded) {
                     "modelsPath" : modelsPath,
                     "tmpPath" : newContent[app][env].tmpPath,
                     "scope"     : newContent[app][env].server.scope,
+                    "rootDomain"     : rootDomain,
+                    "projectVersion"   : manifest,
+                    "projectVersionMajor"   : manifest.version.split(/\./g)[0],
                     "host"     : newContent[app][env].host,
                     "env" : env,
                     "bundle" : app,

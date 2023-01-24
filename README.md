@@ -278,7 +278,7 @@ You will not have to restart your bundle anytime you modify files inside directo
 - /templates
 
 ### Timezone
-> __Attention :__ Thiw will impact the logs output
+> __Attention :__ This will impact the logs output
 
 The default timezone is set to `Africa/Douala`.
 You can change it to your local timezone. For example, if you live in London:
