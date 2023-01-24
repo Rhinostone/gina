@@ -48,6 +48,11 @@ https://github.com/stefangabos/world_countries/
 ``` tty
 node src/make --target=region --region=en
 ```
+or if you want to select multiple languages
+``` tty
+node src/make --target=region --region=en,fr
+```
+
 A `dist/region/en.json` file will be created.
 
 __NB.: To keep the file updated__

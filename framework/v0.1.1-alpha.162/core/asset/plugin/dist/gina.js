@@ -3665,10 +3665,19 @@ function PrototypesHelper(instance) {
     }
 
     if ( typeof(JSON.clone) == 'undefined' && !isGFFCtx ) {
-        if ( typeof(envVars) != 'undefined' ) {
+        if ( typeof(envVars) != 'undefined' && envVars != null ) {
             JSON.clone = require( envVars.GINA_DIR +'/utils/prototypes.json_clone');
         } else {
-            JSON.clone = require( GINA_DIR +'/utils/prototypes.json_clone');
+            // For unit tests
+            if (!envVars) {
+                var ginaDir = process.cwd().match(/.*\/gina/)[0];
+                require(ginaDir +'/utils/helper');
+                setEnvVar('GINA_DIR', ginaDir, true);
+                envVars = getEnvVars();
+            }
+
+            // JSON.clone = require( GINA_DIR +'/utils/prototypes.json_clone');
+            JSON.clone = require( getEnvVar('GINA_DIR') +'/utils/prototypes.json_clone');
         }
     }
 
@@ -19522,10 +19531,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
         function updateToolbar(result, resultIsObject) {
             // update toolbar errors
             var $popin = getActivePopin();
-
+            var XHRData = null;
             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
 
-                var XHRData = result;
+                XHRData = result;
 
                 try {
                     var XHRDataNew = null;
@@ -19560,7 +19569,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
             // update toolbar
             try {
-                var $popin = getPopinById(instance.activePopinId);
+                $popin = getPopinById(instance.activePopinId);
                 var $el = $popin.target;
             } catch (err) {
                 ginaToolbar.update('data-xhr', err );
@@ -19568,7 +19577,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
 
             // XHRData
-            var XHRData = null;
+            XHRData = null;
             if ( typeof(result) == 'string' && /\<(.*)\>/.test(result) ) {
                 // converting Element to DOM object
                 XHRData = new DOMParser().parseFromString(result, 'text/html').getElementById('gina-without-layout-xhr-data');
@@ -19609,6 +19618,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                         // reset data-xhr
                         //ginaToolbar.update("view-xhr", null);
                         ginaToolbar.update('view-xhr', XHRView);
+                        return;
                     }
 
                     // popin content
@@ -19701,7 +19711,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                     // proxy external urls
                     // TODO - instead of using `cors.io` or similar services, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
                     //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
-                    url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
+
+
+                    // url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
+                    // url = url.match(/^(https|http)\:/)[0] + '//localhost:4100/proxy/?'+ url;
+                    url = 'http://localhost:4100/proxy/?'+ url;
+
+
+
                     //url = url.match(/^(https|http)\:/)[0] + '//cors-anywhere.herokuapp.com/' + url;
 
                     //delete options.headers['X-Requested-With']
@@ -19715,7 +19732,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             // updating popin options
             $popin.options  = merge(options, $popin.options);
 
-
+            var result = null;
             if ( options.withCredentials ) { // Preflighted requests
                 if ('withCredentials' in xhr) {
                     // XHR for Chrome/Firefox/Opera/Safari.
@@ -19731,7 +19748,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 } else {
                     // CORS not supported.
                     xhr = null;
-                    var result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
+                    result = 'CORS not supported: the server is missing the header `"Access-Control-Allow-Credentials": true` ';
                     triggerEvent(gina, $el, 'error.' + id, result)
                 }
             } else { // simple requests
@@ -19744,7 +19761,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             }
 
 
-
+            var resultIsObject = false;
             if (xhr) {
                 // setting up headers
                 xhr.withCredentials = ( typeof(options.withCredentials) != 'undefined' ) ? options.withCredentials : false;
@@ -19752,12 +19769,12 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 xhr.onerror = function(event, err) {
 
                     var error = 'Transaction error: might be due to the server CORS settings.\nPlease, check the console for more details.';
-                    var result = {
+                    result = {
                         'status':  xhr.status, //500,
                         'error' : error
                     };
 
-                    var resultIsObject = true;
+                    resultIsObject = true;
                     instance.eventData.error = result +'\n'+ err;
                     updateToolbar(result, resultIsObject);
                     triggerEvent(gina, $el, 'error.' + id, result)
@@ -19773,11 +19790,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                 xhr.onreadystatechange = function (event) {
                     if (xhr.readyState == 4) {
                         // 200, 201, 201' etc ...
+                        var result = null
                         if( /^2/.test(xhr.status) ) {
-
                             try {
-                                var result          = xhr.responseText
-                                    , contentType   = xhr.getResponseHeader("Content-Type")
+                                result = xhr.responseText;
+                                var contentType   = xhr.getResponseHeader("Content-Type")
                                     , isJsonContent = (/application\/json/.test( contentType )) ? true : false
                                     , isRedirecting = true // by default
                                 ;
@@ -19887,9 +19904,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
                                         //return
                                     //}
                                     if ( !isJsonContent ) {
+                                        if (GINA_ENV_IS_DEV)
+                                            updateToolbar(result);
                                         triggerEvent(gina, $el, 'loaded.' + id, result);
                                         return
                                     }
+
+                                    if (GINA_ENV_IS_DEV)
+                                            updateToolbar(result);
 
                                     triggerEvent(gina, $forms[0], 'success.' + id, result);
 
@@ -19900,9 +19922,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                             } catch (err) {
 
-                                var resultIsObject = false;
+                                resultIsObject = false;
 
-                                var result = {
+                                result = {
                                     'status':  422,
                                     'error' : err.description || err.stack
                                 };
@@ -19921,8 +19943,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
 
                         } else {
                             //console.log('error event triggered ', event.target, $form);
-                            var resultIsObject = false;
-                            var result = {
+                            resultIsObject = false;
+                            result = {
                                 'status':  xhr.status,
                                 'error' : xhr.responseText
                             };
@@ -20129,8 +20151,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid','utils/merge', 'utils/
             instance.activePopinId = $popin.id;
 
             // update toolbar
-            if (GINA_ENV_IS_DEV)
-                updateToolbar();
+            // if (GINA_ENV_IS_DEV)
+            //     updateToolbar();
             // var XHRData = document.getElementById('gina-without-layout-xhr-data');
             // if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && XHRData ) {
             //     try {
