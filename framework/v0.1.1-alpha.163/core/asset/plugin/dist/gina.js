@@ -16586,7 +16586,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
     /**
      * Toolbar plugin
-     * 
+     *
      * TODO - search using `datatables` plugin (https://stackoverflow.com/questions/10400033/is-there-a-jquery-plugin-like-datatables-for-a-ul)
      */
     function Toolbar() {
@@ -16757,39 +16757,41 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
          * */
         var loadData = function (section, data, ginaData) {
 
-            var $currentForms = null;
+            var $currentForms = null, txt = null;
             try {
-                var txt = ($json) ? $json.text() : '';
+
+                txt = ($json) ? $json.text() : '';
                 if (txt == '' || txt == 'null' ) {
                     $json.text('Empty')
                 } else {
                     jsonObject = JSON.parse( txt );
                     ginaJsonObject = JSON.parse($ginaJson.text());
-                    
+
                     $json.text('');
 
                     // backing up document data for restore action
                     if (!originalData) {
-                        
+
                         originalData = {
                             jsonObject      : JSON.clone(jsonObject),
                             ginaJsonObject  : JSON.clone( ginaJsonObject)
                         };
                         lastJsonObjectState = {}; // jsonObject.data
-                        
+
                     }
                 }
 
             } catch (err) {
-                
+
                 var sectionStr = ( section ) ? ' [ '+ section + ' ] ' : ' ';
-                var _err = 'Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err);
+                // var _err = 'Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err);
+                var _err = 'Could not load'+ sectionStr +'json\n' + err.message +'\n'+ err.stack;
                 if ($json) {
                     $json.text(_err);
                 } else {
                     throw _err;
                 }
-                
+
             }
 
             if (jsonObject) {
@@ -16847,7 +16849,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 }
 
                 if ( !section || /^(data)$/.test(section) ) {
-                    
+
 
                     // -> Data
                     $htmlData.html('<ul class="gina-toolbar-code">' + parseObject(userObject.data, ginaObject.data, null, isXHR) +'</ul>');
@@ -16860,11 +16862,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                                     '</div>';
 
                     $htmlView.html(htmlProp);
-                    
+
                     $htmlView.html( parseView(userObject.view, ginaObject.view, null, isXHR, $htmlView) );
 
                     // -> Forms
-                    $currentForms = $forms;                    
+                    $currentForms = $forms;
                     $htmlForms.html('');
                     $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR) );
                     // Form binding
@@ -16878,9 +16880,9 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     });
 
                     //$htmlForms.html( parseView(jsonObject.forms, ginaJsonObject.forms, null, $htmlForms) );
-                } //else 
+                } //else
                 if ( /^(data-xhr|view-xhr)$/.test(section) ) {
-                    
+
                     // reset case
                     if ( typeof(jsonObject[section]) == 'undefined' || !jsonObject[section] || jsonObject[section] == 'null' ) {
                         return false;
@@ -16889,11 +16891,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     // -> XHR Data
                     isXHR = true;
                     isXHRViewData = (typeof (jsonObject[section].isXHRViewData) != 'undefined') ? true : isXHRViewData;
-                        
-                    
+
+
                     // update data section without erasing old data
                     if (!isXHRViewData && !/^(view-xhr)$/.test(section)) {
-                        
+
                         // also update original data to handle restore action
                         if ( typeof (jsonObject['el-xhr']) != 'undefined' ) {
                             lastJsonObjectState.data = JSON.clone(jsonObject[section]);
@@ -16919,11 +16921,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         $htmlView.html(htmlProp);
                         $htmlView.html( parseView(jsonObject[section], ginaJsonObject[section], null, isXHR, $htmlView) );
                     }
-                    
-                } //else 
+
+                } //else
                 if ( /^(el-xhr)$/.test(section) ) {
                     // -> XHR Forms
-                    isXHR = true;                    
+                    isXHR = true;
                     $currentForms = $('#' + data).find('form:not(' + formsIgnored + ')');
                     $htmlForms.html('');
                     $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR ) );
@@ -16936,16 +16938,16 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             .find('ul').first()
                             .slideToggle();
                     });
-                } //else 
+                } //else
                 if ( /^(forms)$/.test(section) ) {
                     isXHR = true;
                     self.isValidator = true;
-                    
+
                     var $form = $('#gina-toolbar-form-' + data.id);
                     // for live changes (eg.: on `Validator::getFormById()` call)
                     if ( !$form.length ) {
                         // crearte toolbar entry for the new form
-                        $currentForms = $forms;                    
+                        $currentForms = $forms;
                         $htmlForms.html('');
                         $htmlForms.html( parseForms(userObject.forms, ginaObject.forms, $htmlForms, 0, $currentForms, $currentForms.length, isXHR) );
                         // Form binding
@@ -16958,12 +16960,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                                 .slideToggle();
                         });
                     }
-                    
+
                     // form data sent
                     if ( typeof(data.rules) != 'undefined' ) {
                         updateForm(data.id, 'rules', data.rules, isXHR)
                     }
-                    
+
                     // form errors
                     if ( typeof(data.errors) != 'undefined' && data.errors.count() > 0 ) {
                         updateForm(data.id, 'errors', data.errors, isXHR)
@@ -16986,7 +16988,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 if (jsonObject.file == settings.currentFile) {
                     // If current page is the same as the previous page, unfold code as neede
                     $(document).ready(function () {
-                        
+
                         if (self.isValidator ) {
                             self.isXHR = true;
                             if (settings.isUnfolded.length > 0 && !self.initiatedXhrFoldingState) {
@@ -17013,12 +17015,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         }
                     })
                 }
-            }   
-            
+            }
+
             if ( !section || section == 'el-xhr' && !self.hasParsedUrls) {
                 self.hasParsedUrls = (section && section == 'el-xhr' ) ? true : false;
                 parseUrls(section);
-            }                
+            }
         }
 
 
@@ -17156,8 +17158,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             });
 
             // Show/hide toolbar using gg shorcut
-            $('body').off('keypress').on('keypress', function onKeypressed(event){                 
-            
+            $('body').off('keypress').on('keypress', function onKeypressed(event){
+
                 if (!/INPUT|TEXTAREA/.test(event.target.tagName )) {
                     if (event.keyCode) {
                         // IE
@@ -17186,10 +17188,10 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     lastPressedKey.pressTime = now.getTime();
                     lastPressedKey.keynum = keynum;
                 }
-                
+
             });
 
-                       
+
             // Updates Toolbar with current values
 
             // Select the current tab
@@ -17265,7 +17267,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         }
 
         var toggleCodeFolding = function ($el, cb, toggledByClick) {
-            
+
             if ( typeof(toggledByClick) == 'undefined' ) {
                 var toggledByClick = false
             }
@@ -17277,7 +17279,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 var hasXhrFlag = false;
 
                 if ( /(gina-toolbar-folding-state-[a-z 0-9_-]+|gina-toolbar-xhr-folding-state-[a-z 0-9_-]+)/i.test(self.foldingClass) ) {
-                    
+
                     if ( /gina-toolbar-folding-state-[a-z0-9_-]+/i.test(self.foldingClass) ) {
                         self.foldingClass = self.foldingClass.match(/gina-toolbar-folding-state-[a-z0-9_-]+/i)[0].replace(/gina-toolbar-folding-state-/, '');
                     } else {
@@ -17287,15 +17289,15 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     }
 
                     if ( settings.isUnfolded.indexOf(self.foldingClass) < 0 ) {
-                        
+
                         settings.isUnfolded.push(self.foldingClass);
                         settings.save();
-                        
+
                         if (!$el.hasClass('gina-toolbar-unfolded')) {
                             $el.addClass('gina-toolbar-unfolded');
                             $el.next('ul').slideToggle('fast');
                         }
-                        
+
                     } else {
 
                         if ( settings.isUnfolded.indexOf(self.foldingClass) > -1 && $el.hasClass('gina-toolbar-unfolded') ) {
@@ -17310,22 +17312,22 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                                     }
                                 }
                             }
-                            
+
                             settings.save(true);
-                            
+
                             if ( settings.isUnfolded.indexOf(self.foldingClass) < 0 ) {
                                 $el.removeClass('gina-toolbar-unfolded');
                                 $el.next('ul').slideToggle('fast');
                             }
-                                
+
 
                         } else {
                             $el.addClass('gina-toolbar-unfolded');
                             $el.next('ul').slideToggle('fast');
-                        }   
+                        }
                     }
                 }
-                
+
             }
 
             if (typeof (cb) != 'undefined' && cb != null )
@@ -17360,11 +17362,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         }
 
         var normalizeFoldingStateName = function(stateSection, stateName) {
-            
+
             var foldingStateName = '', section = null, name = null;
 
             if ( typeof(stateSection) != 'undefined' && stateSection != '' ) {
-                
+
                 section = stateSection;
                 if ( typeof(stateSection) == 'string' ) {
                     section = stateSection
@@ -17372,7 +17374,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         .replace(/\]/, '')
                         .replace(/[^A-Za-z0-9_-]/g, '_')
                 }
-                
+
                 foldingStateName += section + '-'
             }
 
@@ -17384,12 +17386,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                         .replace(/(\]\[|\[)/g, '-')
                         .replace(/\]/, '')
                 }
-                
+
                 foldingStateName += name
             } else {
                 foldingStateName = foldingStateName.substr(0, foldingStateName.length-1)
             }
-            
+
             return foldingStateName.trim()
         }
 
@@ -17469,14 +17471,14 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             var section         = ( typeof(elSection) != 'undefined' && elSection != null ) ? elSection : '';
             var isXHR           = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
 
-            // patch 
+            // patch
             if (!ginaArr) {
                 ginaArr = [];
             }
             for (var i = 0, len = arr.length; i<len; ++i) {
                 if ( typeof(arr[i]) == 'object' && !Array.isArray(arr[i]) ) {
                     //id   += i + '-';
-                    // patch 
+                    // patch
                     if (!ginaArr[i]) {
                         ginaArr[i] = arr[i]
                     }
@@ -17513,7 +17515,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         }
 
         var parseView = function (obj, ginaObj, elId, elIsXHR, $html, $root) {
-                        
+
             var id          = (elId != null) ? elId.replace(/[^A-Za-z0-9_-]/g, '_') : '';
             var section     = null;
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
@@ -17529,7 +17531,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             if (!$root)
                 $root = $html;
 
-            for (var i in obj) {                
+            for (var i in obj) {
                 section = i;
                 if ( typeof(obj[i]) == 'object' && !Array.isArray(obj[i]) && obj[i] !== null ) { // parse
 
@@ -17539,7 +17541,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     if (!hasParent ) {
                         id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
-                        if (i == 'params') { // force to top 
+                        if (i == 'params') { // force to top
                             var htmlParams =    '<div id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'" class="gina-toolbar-section">' +
                                                     '<h2 class="gina-toolbar-section-title">'+ id.substr(0, id.length - 1) +'</h2>' +
                                                     '<ul class="'+ id.substr(0, id.length - 1) +'"></ul>' +
@@ -17548,9 +17550,9 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             $('#gina-toolbar-view-html-properties')
                                 .before(htmlParams);
                         } else {
-                            
+
                             if ( !/^html/.test(id) ) {
-                                
+
                                 var htmlOther = '<div id="gina-toolbar-view-'+ id.substr(0, id.length - 1) +'" class="gina-toolbar-section">' +
                                                 '<h2 class="gina-toolbar-section-title">'+ id.substr(0, id.length - 1) +'</h2>' +
                                                 '<ul class="'+ id.substr(0, id.length - 1) +'"></ul>' +
@@ -17563,7 +17565,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                                     .find('.gina-toolbar-properties')
                                     .append('ul.' + id.substr(0, id.length - 1))
                             }*/
-                            
+
                         }
 
                         parseView(obj[i], ginaObj[i], id, elIsXHR, $html.find('ul.'+ id.substr(0, id.length - 1)), $root );
@@ -17588,14 +17590,14 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
                 } else if ( Array.isArray(obj[i]) ) { // parse collection
 
-                    
-                    
+
+
                     $parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
-                    
+
                     hasParent = ( $parent.length ) ? true : false;
-                    
-                    if ( !hasParent || /^html/.test(id) ) {                        
-                        
+
+                    if ( !hasParent || /^html/.test(id) ) {
+
                         $parent = $('.' + id);
                         parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
@@ -17603,17 +17605,17 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             //.find('ul.'+ id.substr(0, id.length - 1))
                             .append('<li class="gina-toolbar-collection"><a href="#" class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul> '+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section )+'</ul></li>');
 
-                        
+
                         //parentId = parentId.substr(0, parentId.length - 1)+ '-';
-                        //parentId = id.substr(0, id.length - i.length - 1);     
+                        //parentId = id.substr(0, id.length - i.length - 1);
                         //parseView(obj[i], ginaObj[i], parentId, elIsXHR, $parent.find('ul.'+ parentId.substr(0, parentId.length - 1)), $root );
 
                         //id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                         //$parent = $('#gina-toolbar-view-' + id.substr(0, id.length - 1));
                         id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
-                    } else {                       
-                        
-                        
+                    } else {
+
+
                         parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
                         $parent
@@ -17621,20 +17623,20 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), parentId.substr(0, parentId.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $parent.find('li ul.'+ id.substr(0, id.length - 1)), section ) +'</ul></li>');
 
                         id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
-                        
-                    }
-                    
 
-                    // if ( !hasParent || /^html/.test(id) ) {                        
+                    }
+
+
+                    // if ( !hasParent || /^html/.test(id) ) {
                     //     id = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                     //     $root
                     //         .find('.gina-toolbar-properties')
                     //         .append('<li class="gina-toolbar-collection"><a class="gina-toolbar-key gina-toolbar'+ isXHR +'-folding-state-'+ normalizeFoldingStateName( i.replace(/[^A-Za-z0-9_-]/g, '_'), id.substr(0, id.length - 1) ) +'">'+ i +' <span>['+ obj[i].length +']</span></a><ul>'+ parseCollection(obj[i], ginaObj[i], parentId, $root.find('.gina-toolbar-properties'), section) +'</ul></li>');
 
 
-                    // } else {                       
-                        
-                        
+                    // } else {
+
+
                     //     parentId = id + i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
 
                     //     $parent
@@ -17647,17 +17649,17 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     // clear one level
                     id = id.substr(0, id.length - i.length - 1);
                 } else {
-                    
-                    
-                    
+
+
+
                     objType = (ginaObj[i] === null) ? 'null' : typeof(ginaObj[i]);
                     if ( objType == 'undefined' ) { // new key  declaration added by user
                         if (/\-$/.test(id)) {
                             id = id.substr(0, id.length - 1);
                         }
-                        
+
                         if (!id) continue;
-                        
+
                         $html
                             .find('ul.' + id)
                             .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key gina-toolbar-key-added">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i]+'</span></li>');
@@ -17670,7 +17672,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             if (!id) {
                                 id += i.replace(/[^A-Za-z0-9_-]/g, '_') + '-';
                             }
-                            
+
                             try {
                                 $html
                                     .find('ul.' + id)
@@ -17683,7 +17685,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                             } catch (err) {
                                 throw new Error('GinaToolbarError: `ul.'+ id +'` not found');
                             }
-                            
+
                         } else {
 
                             if ( !id || /^html\-properties/.test(id) ) { // properties case
@@ -17695,10 +17697,10 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                                     $root
                                         .find('.gina-toolbar-properties')
                                         .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span></li>')
-                                //}                                
-                                    
+                                //}
+
                             } else {
-                                                            
+
                                 $root
                                     .find('ul.' + id.substr(0, id.length - 1))
                                     .append('<li class="gina-toolbar-key-value"><span class="gina-toolbar-key">'+ i +':</span> <span class="gina-toolbar-value gina-toolbar-value-type-is-'+ objType +'">'+ obj[i] +'</span></li>')
@@ -17715,9 +17717,9 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
             return parseObject(rules, rules, id, elIsXHR, section)
         }
-        
+
         var parseUrls = function(section) {
-            
+
             var $el = null;
             var $currentPopin = (gina.hasPopinHandler) ? gina.popin.getActivePopin() : null;
             var isPopinContext = ( gina.hasPopinHandler ) ? true : false;
@@ -17726,7 +17728,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             } else {
                 $el = $('body');
             }
-            
+
             // look for `404: `
             var found = {}
                 , foundStr = null
@@ -17740,19 +17742,19 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 for (; f < fLen; ++f) {
                     foundStr = matched[f].replace(/\"(.*)|\"/g, '');
                     formMethod = foundStr.match(/\[(.*)\]/g, '')[0].replace(/\[|\]/g,'');
-                    
+
                     routing.getRouteByUrl(foundStr, formMethod)
                 }
-            } 
-               
+            }
+
             printLogs();
-            
+
             //console.debug('popinIsActive: '+ isPopinContext +'isXHR: ', self.isXHR, ' -> ' + section, routing.notFound);
         }
-        
+
         var printLogs = function() {
             fLen = routing.notFound.count();
-            if ( fLen > 0 ) {                
+            if ( fLen > 0 ) {
                 for (f in routing.notFound) {
                     console.warn( '(x'+ routing.notFound[f].count +') ' + f + ' => ' + routing.notFound[f].message );
                 }
@@ -17760,13 +17762,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
         }
 
         var parseForms = function (obj, ginaObj, $html, i, $forms, len, elIsXHR) {
-            
+
             if (!len) return false;
 
             var attributes  = $forms[i].attributes;
             var formMethod  = null;
             var attrClass   = 'gina-toolbar-form-attributes';
-            var id = $forms[i].getAttribute('id') || $forms[i].id;            
+            var id = $forms[i].getAttribute('id') || $forms[i].id;
             var section     = attrClass; // by default
             var isXHR       = ( typeof(elIsXHR) != 'undefined' && elIsXHR != null ) ? '-xhr' : '';
             // form fields set
@@ -17792,8 +17794,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                 , routeObj  = null
             ;
 
-            // testing for action attr to add action route            
-           
+            // testing for action attr to add action route
+
 
             // adding form attributes
             for ( var a = 0, aLen = attributes.length; a < aLen; ++a ) {
@@ -17809,14 +17811,14 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     val = '<ul><li>'+ val.replace(/\s+/g, '</li><li>') +'</li></ul>';
 
                 if ( /^action$/.test(key) ) {
-                    
-                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;   
-                    
+
+                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;
+
                     if (!formMethod) {
-                        console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ attributes['id'].nodeValue +'` method attribute cannot be left undefined !');                        
+                        console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ attributes['id'].nodeValue +'` method attribute cannot be left undefined !');
                     }
-                    
-                    routeObj    = routing.getRouteByUrl(val, formMethod);                    
+
+                    routeObj    = routing.getRouteByUrl(val, formMethod);
 
                     if ( typeof(routeObj) == 'undefined' || !routeObj ) {
                         routeObj = {
@@ -17827,8 +17829,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                                 file: 'not found'
                             }
                         }
-                    } 
-                    
+                    }
+
                     val =   '<ul>' +
                                 '<li>' +
                                     '<span class="gina-toolbar-key">url</span>' +
@@ -17881,7 +17883,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
                     }
 
-                    
+
                     content =   '<li>' +
                                     '<span class="gina-toolbar-key">'+ key +':</span>' +
                                     '<span class="gina-toolbar-value">'+ val +'</span>' +
@@ -17916,15 +17918,15 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             var rules = null;
 
             try {
-                
+
                 var dataRule = $forms[i].getAttribute('data-gina-form-rule');
-                
+
                 if ( typeof(dataRule) != 'undefined' && dataRule!= null ) {
                     rules = eval('gina.forms.rules.' + dataRule.replace(/-/g, '.'))
                 } else {
                     rules = eval('gina.forms.rules.' + id.replace(/-/g, '.'))
                 }
-                
+
             } catch (err) {}
 
             if ( rules ) {
@@ -17934,8 +17936,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
                     .append('<li class="gina-toolbar-form-'+ section +'">' +
                                 '<h3 class="gina-toolbar-sub-section-title">'+ section +'</h3>' +
                                 '<ul class="gina-toolbar-properties">'+ parseSection( rules, id, elIsXHR, section ) +'</ul>' +
-                            '</li>');                
-                
+                            '</li>');
+
             }
 
 
@@ -17986,7 +17988,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             if ( !$sectionContent.is(':visible') ) {
                 $sectionContent.slideToggle()
             }
-            
+
         }
 
         var createInputFile = function(id, label) {
@@ -18096,13 +18098,13 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             if (lastJsonObjectState && typeof (lastJsonObjectState.data) != 'undefined' ) {
                 originalData.jsonObject.data = lastJsonObjectState.data;
             }
-            
+
             loadData('data', originalData.jsonObject, originalData.ginaJsonObject);
             self.hasParsedUrls = false;
             routing.notFound = {};
         }
 
-        
+
         if ( typeof(gina.validator) != 'undefined' ) {
             gina.validator.on('initialized', function onValidatorReady(){
                 console.log('toolbar validator ready');
@@ -18110,8 +18112,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
             })
         } else {
             init();
-        }       
-        
+        }
+
     }
 
     return Toolbar
