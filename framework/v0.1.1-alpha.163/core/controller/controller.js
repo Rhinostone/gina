@@ -877,7 +877,8 @@ function SuperController(options) {
                     if ( /<\/body>/i.test(layout) ) {
                         layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
                     } else {
-                        // popin case
+                        // Popin case
+                        // Fix added on 2023-01-25
                         layout += XHRData + XHRView + '\n\t'
                     }
 
@@ -3258,7 +3259,7 @@ function SuperController(options) {
          * @returns {object} countries - countries code & value list
          * */
         var getCountries = function (code) {
-            var list = {}, cde = 'countryName';
+            var list = [], cde = 'countryName';
 
             if ( typeof(code) != 'undefined' && typeof(userLocales[0][code]) == 'string' ) {
                 cde = code
