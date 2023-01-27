@@ -3784,12 +3784,13 @@ function SuperController(options) {
                     errOutput = JSON.stringify(
                         {
                             status  : errorObject.status,
-                            error   : output
+                            error   : output,
+                            stack   : errorObject.stack || null
                         }
                     );
                 }
 
-                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url +'\n'+ errOutput);
+                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url +'\n'+ errorObject);
                 return res.end(errOutput);
             } else {
 
