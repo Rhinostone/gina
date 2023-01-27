@@ -1221,22 +1221,15 @@ function Server(options) {
     }
 
     this.onHttp2Stream = function(stream, headers, response) {
+        var header      = null
+            , isWebroot = false
+            , pathname  = null
+            , asset     = null
+            , assets    = this._options.template.assets
+            , conf      = this._options.conf
+            , cacheless = conf.cacheless
+        ;
 
-        if (!stream.pushAllowed) {
-            //header = merge({ ':status': 200 }, response.getHeaders());
-            stream.respond({ ':status': 200 });
-            stream.end();
-            return;
-        }
-
-        if (stream.headersSent) return;
-
-        if ( !this._options.template ) {
-            throwError({stream: stream}, 500, 'Internal server error\n' + headers[':path'] + '\nNo template found');
-            return;
-        }
-
-        var header = null, isWebroot = false, pathname = null;
         if (
             headers[':path'] == '/'
             || headers[':path'] == this._options.conf.server.webroot
@@ -1248,6 +1241,59 @@ function Server(options) {
                 || headers[':path'] == this._options.conf.server.webroot
                     && this._options.conf.server.webrootAutoredirect
             ) {
+                isWebroot = true
+            }
+        }
+
+        var url = (isWebroot) ? this._referrer : headers[':path'];
+
+        if (!stream.pushAllowed) {
+            asset = {
+                url         : url,
+                filename    : assets[ url ].filename,
+                file        : null,
+                isAvailable : assets[ url ].isAvailable,
+                mime        : assets[ url ].mime,
+                encoding    : conf.encoding,
+                isHandler   : false
+            };
+            header = merge({ ':status': 200 }, response.getHeaders());
+            header['content-type'] = ( !/charset/.test(asset.mime ) ) ? asset.mime + '; charset='+ asset.encoding : asset.mime;
+            header = completeHeaders(header, local.request, response);
+            if (assets[ url ].isBinary) {
+                header['content-length'] = fs.statSync(assets[ url ].filename).size;
+                stream.respondWithFile(
+                    asset.filename
+                    , header
+                    //, { onError }
+                );
+            } else {
+                stream.respond(header);
+                stream.end();
+            }
+
+            return;
+        }
+
+        if (stream.headersSent) return;
+
+        if ( !this._options.template ) {
+            throwError({stream: stream}, 500, 'Internal server error\n' + headers[':path'] + '\nNo template found');
+            return;
+        }
+
+        if (
+            // headers[':path'] == '/'
+            // || headers[':path'] == this._options.conf.server.webroot
+            /^true$/i.test(isWebroot)
+        ) {
+
+            // if (
+            //     this._options.conf.server.webroot != headers[':path']
+            //     && this._options.conf.server.webrootAutoredirect
+            //     || headers[':path'] == this._options.conf.server.webroot
+            //         && this._options.conf.server.webrootAutoredirect
+            // ) {
 
                 header = {
                     ':status': 301
@@ -1263,9 +1309,10 @@ function Server(options) {
                 stream.respond(header);
                 stream.end();
                 return;
-            } else {
-                isWebroot = true;
-            }
+            // }
+            // else {
+            //     isWebroot = true;
+            // }
         }
 
         if (
@@ -1278,21 +1325,19 @@ function Server(options) {
             header = {
                 ':status': 200
             };
-            var url = (isWebroot) ? this._referrer : headers[':path'];
-            var assets = this._options.template.assets;
+            // var assets = this._options.template.assets;
+            // var url = (isWebroot) ? this._referrer : headers[':path'];
             var responseHeaders = ( typeof(this._responseHeaders) != 'undefined') ? this._responseHeaders : null;
-            var conf = this._options.conf;
-            var asset = {
-                    url         : url,
-                    filename    : assets[ url ].filename,
-                    file        : null,
-                    isAvailable : assets[ url ].isAvailable,
-                    mime        : assets[ url ].mime,
-                    encoding    : conf.encoding,
-                    isHandler   : false
-                }
-                , cacheless = conf.cacheless
-            ;
+            // var conf = this._options.conf;
+            asset = {
+                url         : url,
+                filename    : assets[ url ].filename,
+                file        : null,
+                isAvailable : assets[ url ].isAvailable,
+                mime        : assets[ url ].mime,
+                encoding    : conf.encoding,
+                isHandler   : false
+            };
 
             console.debug('h2 pushing: '+ headers[':path'] + ' -> '+ asset.filename);
 
@@ -1330,6 +1375,9 @@ function Server(options) {
 
 
                 header['content-type'] = ( !/charset/.test(asset.mime ) ) ? asset.mime + '; charset='+ asset.encoding : asset.mime;
+                if (assets[ url ].isBinary) {
+                    header['content-length'] = fs.statSync(assets[ url ].filename).size;
+                }
 
                 if (cacheless) {
                     // source maps integration for javascript & css
@@ -1501,15 +1549,21 @@ function Server(options) {
                 }
 
 
-                if (cacheless)
+                if (cacheless) {
                     delete require.cache[require.resolve(filename)];
+                }
 
-
+                if (response.headersSent) {
+                    // May be sent by http/2 push
+                    return
+                }
                 fs.readFile(filename, bundleConf.encoding, function onStaticFileRead(err, file) {
                     if (err) {
                         throwError(response, 404, 'Page not found: \n' + pathname, next);
                         return;
-                    } else if (!response.headersSent) {
+                    }
+
+                    if (!response.headersSent) {
 
                         isBinary = true;
 
@@ -1556,7 +1610,8 @@ function Server(options) {
                                         isAvailable: true,
                                         mime: contentType,
                                         url: request.url,
-                                        filename: filename
+                                        filename: filename,
+                                        isBinary: isBinary
                                     }
                                 }
 
@@ -1635,7 +1690,8 @@ function Server(options) {
                                                     isAvailable: (!/404\.html/.test(filename)) ? true : false,
                                                     mime: contentType,
                                                     url: request.url,
-                                                    filename: filename
+                                                    filename: filename,
+                                                    isBinary: isBinary
                                                 }
                                             }
 
@@ -1648,7 +1704,8 @@ function Server(options) {
                                                     isAvailable: true,
                                                     mime: contentType,
                                                     url: request.url,
-                                                    filename: filename
+                                                    filename: filename,
+                                                    isBinary: isBinary
                                                 }
                                             }
                                             self.onHttp2Stream(stream, headers, response);
