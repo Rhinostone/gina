@@ -12,6 +12,9 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils
     /**
      * Gina Link Handler
      *
+     * Activate binding with: `data-gina-link`
+     * Optional, if your a.href is empty or with another value than the targeted action : `data-gina-link-url`
+     *
      * @param {object} options
      * */
     function Link(options) {
@@ -348,7 +351,7 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils
             for (; i < len; ++i) {
                 found = $a[i].getAttribute('data-gina-link');
 
-                if (!found) continue;
+                if (!found && found != "" || /^false$/i.test(found) ) continue;
 
                 $el     = $a[i];
                 props   = {

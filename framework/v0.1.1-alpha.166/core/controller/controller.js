@@ -1949,6 +1949,12 @@ function SuperController(options) {
      *  OR
      *  - locally: `Controller.store(target, cb)` must be called to store on `onComplete` event
      *
+     *      - Will trigger on frontend : Failed to load resource: Frame load interrupted
+     *        because there is no `res.end()`: whitch is normal, we want to stay on the referrer page
+     *
+     *      - To avoid this, add to your download link the attribute `data-gina-link`
+     *        This will convert the regular HTTP Request to an XML Request
+     *
      * @param {string} url - eg.: https://upload.wikimedia.org/wikipedia/fr/2/2f/Firefox_Old_Logo.png
      * @param {object} [options]
      *
@@ -2062,39 +2068,44 @@ function SuperController(options) {
         var browser = require(''+ scheme);
         //console.debug('requestOptions: \n', JSON.stringify(requestOptions, null, 4));
 
-        browser.get(requestOptions, function(response) {
+        browser
+            .get(requestOptions, function(response) {
 
-            local.res.setHeader('content-type', contentType + '; charset='+ local.options.conf.encoding);
-            local.res.setHeader('content-disposition', opt.contentDisposition);
-            if (opt.fileSize) {
-                local.res.setHeader('content-length', opt.fileSize);
-            }
-            //local.res.setHeader('content-length', opt.fileSize);
-            // local.res.setHeader('cache-control', 'must-revalidate');
-            // local.res.setHeader('pragma', 'must-revalidate');
+                local.res.setHeader('content-type', contentType + '; charset='+ local.options.conf.encoding);
+                local.res.setHeader('content-disposition', opt.contentDisposition);
+                if (opt.fileSize) {
+                    local.res.setHeader('content-length', opt.fileSize);
+                }
+                //local.res.setHeader('content-length', opt.fileSize);
+                // local.res.setHeader('cache-control', 'must-revalidate');
+                // local.res.setHeader('pragma', 'must-revalidate');
 
-            // response.on('end', function onResponsePipeEnd(){
-            //     self.renderJSON({ url: url});
-            //     //local.res.end( Buffer.from(data) );
-            //     //local.res.headersSent = true;
 
-            //     // if ( typeof(local.next) != 'undefined')
-            //     //     local.next();
-            //     // else
-            //     //     return;
-            // });
+                response.pipe(local.res);
+            })
+            .on('error', function onDownloadError(err) {
+                self.throwError(local.res, 500, err);
+            });
 
-            response.pipe(local.res);
-        });
 
-        return;
 
+        // Will trigger on frontend : Failed to load resource: Frame load interrupted
+        // because there is no `res.end()`: whitch is normal, we want to stay on the referrer page
+
+        // To avoid this, add to your download link the attribute `data-gina-link`
+        // This will convert the regular HTTP Request to an XML Request
     }
 
 
     /**
      * Download to targeted filename.ext - Will create target if new
      * Use `cb` callback or `onComplete` event
+     *
+     *      - Will trigger on frontend : Failed to load resource: Frame load interrupted
+     *        because there is no `res.end()`: whitch is normal, we want to stay on the referrer page
+     *
+     *      - To avoid this, add to your download link the attribute `data-gina-link`
+     *        This will convert the regular HTTP Request to an XML Request
      *
      * @param {string} filename
      * @param {object} options
