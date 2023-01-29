@@ -21465,10 +21465,9 @@ require.config({
 });
 
 // exporting
-require(["jquery"]);
+// require(["jquery"]);
 require([
     //vendors
-    // "jquery",
     "vendor/uuid",
     "vendor/engine.io",
 
