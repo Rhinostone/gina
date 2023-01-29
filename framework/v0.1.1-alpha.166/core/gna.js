@@ -41,7 +41,7 @@ var modelUtil   = new lib.Model();
 gna.initialized = process.initialized = false;
 gna.routed      = process.routed = false;
 
-gna.utils       = lib;
+gna.lib         = lib;
 gna.locales     = locales;
 gna.plugins     = plugins;
 
@@ -51,7 +51,7 @@ gna.plugins     = plugins;
 var isLoadedThroughCLI      = false; // with gina
 var isLoadedThroughWorker   = false;
 
-//copy & backup for utils/cmd/app.js.
+//copy & backup for lib/cmd/app.js.
 var tmp         = JSON.clone(process.argv); // by default
 var projectName = null;
 
@@ -186,7 +186,7 @@ setPath('project', root);
 
 
 
-setContext('gina.utils', lib);
+setContext('gina.lib', lib);
 setContext('gina.Config', Config);
 setContext('gina.locales', locales);
 setContext('gina.plugins', plugins);
@@ -461,7 +461,7 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
     if ( isSourceFound ) {
         //will override existing each time you restart.
-        gna.utils.generator.createPathSync(bundlesPath, function onPathCreated(err){
+        gna.lib.generator.createPathSync(bundlesPath, function onPathCreated(err){
             if (!err) {
                 try {
                     var targetObj = new _(target);

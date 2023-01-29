@@ -38,7 +38,7 @@ if ( typeof(JSON.clone) == 'undefined' ) {
      * Clone JSON object
      *
      * Changes made here must be reflected in:
-     *  - gina/utils/prototypes.js
+     *  - gina/lib/prototypes.js
      *  - gina/framework/version/helpers/prototypes.js
      *  - gina/framework/version/core/asset/plugin/src/gina/utils/polyfill.js
      *
@@ -84,7 +84,7 @@ if ( typeof(JSON.escape) == 'undefined' ) {
      * Escape special characters
      *
      * Changes made here must be reflected in:
-     *  - gina/utils/prototypes.js
+     *  - gina/lib/prototypes.js
      *  - gina/framework/version/helpers/prototypes.js
      *  - gina/framework/version/core/asset/plugin/src/gina/utils/polyfill.js
      *

@@ -34,7 +34,7 @@ var refreshCore = function() {
     //update lib & helpers
     delete require.cache[require.resolve(_(libPath +'/index.js', true))];
     require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
-    require.cache[_(corePath + '/gna.js', true)].exports.utils = require.cache[_(libPath +'/index.js', true)];
+    require.cache[_(corePath + '/gna.js', true)].exports.lib = require.cache[_(libPath +'/index.js', true)];
 
     //update plugins
     delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];

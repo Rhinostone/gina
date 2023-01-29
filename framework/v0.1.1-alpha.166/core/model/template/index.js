@@ -21,9 +21,8 @@ var Model;
 //Imports.
 var fs      = require('fs');
 var Module  = require('module');
-var utils   = require('gina').utils;
-var merge   = utils.merge;
-//var Dev     = Utils.Dev;
+var lib     = require('gina').lib;
+var merge   = lib.merge;
 var EventEmitter  = require('events').EventEmitter;
 var Config  = require('./../config');
 
@@ -42,25 +41,27 @@ Model = function(namespace){
         //TODO - if intance...
 
 
-        if ( typeof(namespace) == "undefined" || namespace == "") {
+        if ( typeof(namespace) == "undefined" || namespace == "") {
             //logger.error('gina', 'MODEL:ERR:1', 'EEMPTY: Model namespace', __stack);
             console.error(new Error('EEMPTY: Model namespace'));
         }
         var suffix = 'Entity';
-        var namespace = namespace.split(/\//g);
+        namespace = namespace.split(/\//g);
         var bundle = namespace[0];
         namespace.shift();
+
+        var model = null;
         //Capitalize - Normalize
         if (namespace.length > 1) {
             for (var i; i<namespace.length; ++i)
                 namespace[i] = namespace[i].substring(0, 1).toUpperCase() + namespace[i].substring(1);
 
-            var model = namespace.join(".");
+            model = namespace.join(".");
         } else {
             //Dir name.
             var modelDirName = namespace[0];
             namespace[0] = namespace[0].substring(0, 1).toUpperCase() + namespace[0].substring(1);
-            var model = namespace[0];
+            model = namespace[0];
         }
 
         //console.log("\nBundle", bundle);
@@ -84,11 +85,11 @@ Model = function(namespace){
 
                     var entityName, exluded = ['index.js'];
 
-                    //Will be in Utils.Dev.Factory soon.
+                    //Will be in Dev.Lib.Factory soon.
                     var produce = function(entityName, i){
                         console.debug("producing ", files[i]);
 
-                        utils.config.get('gina', 'project.json', function(err, config){
+                        lib.config.get('gina', 'project.json', function(err, config){
                             //if (err) logger.error('gina', 'MODEL:ERR:2', 'EEMPTY: EntitySuper' + err, __stack);
                             if (err) console.error(err.stack||err.message);
 
@@ -104,7 +105,7 @@ Model = function(namespace){
                                 try {
                                     if (entityName != "undefiend") {
                                         console.log("preparing entity ", entityName);
-                                        //TODO - Would be great to implement in Utils.Dev.
+                                        //TODO - Would be great to implement in Dev.Lib
                                         var EntityFactorySource = source
                                             .replace(/\{Entity\}/g, entityName)
                                             .replace(/\{Model\}/g, model);
@@ -125,7 +126,7 @@ Model = function(namespace){
                                 }
 
                                 //Entity = new entitiesManager[model]();
-                                //utils.merge(_this, Entity, true);
+                                //lib.merge(_this, Entity, true);
                                 //console.debug("EntityManager  \n",  entitiesManager,"\n VS \n",  EntityFactory);
                                 if (i == files.length-1) {
                                     //console.debug("All done !");
@@ -135,7 +136,7 @@ Model = function(namespace){
 
                             })//EO loadFile
 
-                        })//EO Utils.Config.get
+                        })//EO lib.config.get()
 
                     };//EO produce
 
@@ -158,7 +159,7 @@ Model = function(namespace){
 
                 });//EO fs.readdir.
 
-            } else {
+            } else {
                 _this.emit('ready', 'no configuration found for your model: ' + model);
                 console.log("no configuration found...");
             }

@@ -2,8 +2,8 @@
  * ValidatorPlugin
  *
  * Dependencies:
- *  - utils/form-validator
- *  - utils/merge
+ *  - lib/form-validator
+ *  - lib/merge
  *  - utils/events
  *  - vendor/uuid
  *
@@ -88,11 +88,11 @@
     }
 
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
-    var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
-    var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
-    //var Collection      = (isGFFCtx) ? require('utils/collection') : require('../../../../../lib/collection');
-    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../../../lib/merge');
+    var inherits        = (isGFFCtx) ? require('lib/inherits') : require('../../../../../lib/inherits');
+    var FormValidator   = (isGFFCtx) ? require('lib/form-validator') : require('./form-validator');
+    //var Collection      = (isGFFCtx) ? require('lib/collection') : require('../../../../../lib/collection');
+    var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
 
     /** definitions */
     var instance    = {
@@ -6934,5 +6934,5 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports  = ValidatorPlugin
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/validator', ['utils/events', 'utils/dom', 'utils/form-validator'], function(){ return ValidatorPlugin })
+    define('gina/validator', ['utils/events', 'utils/dom', 'lib/form-validator'], function(){ return ValidatorPlugin })
 }

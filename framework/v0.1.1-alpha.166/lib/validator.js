@@ -400,7 +400,7 @@ function Validator(data, errorLabels) {
          *
          * @param {string} [mask] - by default "yyyy-mm-dd"
          *
-         * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {date} date - extended by gina::lib::helpers::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el].isDate = function(mask) {
             var val = this.value;
@@ -431,7 +431,7 @@ function Validator(data, errorLabels) {
 
         /**
          * Formating date using DateFormatHelper
-         * Check out documentation in the helper source: `utils/helpers/dateFormat.js`
+         * Check out documentation in the helper source: `lib/helpers/dateFormat.js`
          * e.g.:
          *      d.start
          *        .isDate('dd/mm/yyyy')

@@ -12,16 +12,15 @@ var EventEmitter    = require('events').EventEmitter;
 var corePath        = getPath('gina').core;
 var Config          = require( corePath + '/config' );
 var config          = new Config();
-var utils           = require('gina').utils;
-var console         = utils.logger;
-var math            = utils.math;
-var inherits        = utils.inherits;
-//var merge           = utils.merge;
-var utilsConfig     = new utils.Config();
-var modelUtil       = new utils.Model();
+var lib             = require('gina').lib;
+var console         = lib.logger;
+var math            = lib.math;
+var inherits        = lib.inherits;
+//var merge           = lib.merge;
+var configLib     = new lib.Config();
+var modelUtil       = new lib.Model();
 var Module          = require('module');
 
-//UtilsConfig = Utils.Config(),
 //dev     = require(_(corePath + '/dev') ),
 
 
@@ -222,7 +221,7 @@ function Model(namespace, _config) {
 
         // try {
 
-        //     var locals = _locals = utilsConfig.getSync('gina', 'locals.json')
+        //     var locals = _locals = configLib.getSync('gina', 'locals.json')
         // } catch (err) {
         //     console.emerg('[ MODEL ][ ' + _connector +' ] Error while calling `Model::getConfigSync()` '+ err.stack||err.message);
         //     if ( i < 10) {

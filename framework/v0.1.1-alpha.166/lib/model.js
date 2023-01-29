@@ -15,7 +15,7 @@ var math        = require('./math');
 /**
  * Model uitl
  *
- * @package     Gina.Utils
+ * @package     Gina.Lib
  * @author      Rhinostone <contact@gina.io>
  * @api public
  * */

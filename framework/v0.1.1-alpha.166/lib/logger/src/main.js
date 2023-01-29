@@ -189,8 +189,8 @@ function Logger() {
         // This will apply for the framework, and will be inherited for all bundles unless you ovveride it in your application/bundle code
         // ----
         // [ Inside your code ]
-        // var utils       = require('gina').utils;
-        // var console     = utils.logger;
+        // var lib      = require('gina').lib;
+        // var console  = lib.logger;
         // console.setLevel('trace', bundleName) - Put that in the bundle bootstrap
         hierarchy: process.env.LOG_LEVEL || defaultLogLevel || 'info', // by default: info
         hierarchies: {

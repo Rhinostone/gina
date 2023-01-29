@@ -2676,7 +2676,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports = Merge()
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define( 'utils/merge',[],function() { return Merge() })
+    define( 'lib/merge',[],function() { return Merge() })
 };
 function registerEvents(plugin, events) {
     if ( typeof(gina) == 'undefined' && typeof(window.gina) != 'undefined' ) {
@@ -2755,7 +2755,7 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
         var evt = null, isDefaultPrevented = false, isAttachedToDOM = false, merge  = null;
         // if (proxiedEvent) {
-        //     merge = require('utils/merge');
+        //     merge = require('lib/merge');
         // }
         // done separately because it can be listen at the same time by the user & by gina
         if ( jQuery ) { //thru jQuery if detected
@@ -2946,7 +2946,7 @@ function handleXhr(xhr, $el, options, require) {
     if (!xhr)
         throw new Error('No `xhr` object initiated');
 
-    //var merge   = require('utils/merge');
+    //var merge   = require('lib/merge');
 
     var blob            = null
         , isAttachment  = null // handle download
@@ -3846,7 +3846,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 function DateFormatHelper() {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('./../lib/merge');
 
 
     // if ( typeof(define) === 'function' && define.amd ) {
@@ -3942,7 +3942,7 @@ function DateFormatHelper() {
     var format = function(date, mask, utc) {
 
         // if ( typeof(merge) == 'undefined' || !merge ) {
-        //     merge = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+        //     merge = (isGFFCtx) ? require('lib/merge') : require('./../lib/merge');
 
         // }
 
@@ -3957,7 +3957,7 @@ function DateFormatHelper() {
         } catch( mergeErr) {
             // called from logger - redefinition needed for none-dev env: cache issue
             isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
-            merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+            merge           = (isGFFCtx) ? require('lib/merge') : require('./../lib/merge');
             masksList = merge(i18n.masks, dF.masks);
         }
 
@@ -4096,8 +4096,8 @@ function DateFormatHelper() {
     /**
      *  Will give an array of dates between the current date to a targeted date
      *
-     *  TODO - add a closure to `ignoreWeekend()` based on Utils::Validator
-     *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
+     *  TODO - add a closure to `ignoreWeekend()` based on Lib::Validator
+     *  TODO - add a closure to `ignoreFromList(array)` based on Lib::Validator
      *
      *  @param {object} dateTo
      *  @param {string} [ mask ]
@@ -4366,7 +4366,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  * @param {object} [options]
  *
  * @returns {object} instance
- * 
+ *
  * Collection.length will return result length : dont't use .count() which is going to include functions to the count
  *
  * Collection::find
@@ -4374,7 +4374,7 @@ if ( typeof(module) !== 'undefined' && module.exports ) {
  *      eg.: { uid: 'someUID' }
  *      eg.: { type: 'not null', country: 'France' } // `AND` clause
  *      NB.: To filter `not empty`, use { type: '!=""' }
- *      eg.: { country: 'The Hashemite Kingdom of Jordan' }, { country: 'Libanon'} // `OR` clause 
+ *      eg.: { country: 'The Hashemite Kingdom of Jordan' }, { country: 'Libanon'} // `OR` clause
  *      eg.: { 'obj.prop': true }
  *      eg.: { 'contacts[*].name': 'Doe' } // `WITHIN` (array|collection) clause
  *      eg.: { lastUpdate: '>= 2016-12-01T00:00:00' }  // also available for date comparison `=`, `<`, `>`
@@ -4399,7 +4399,7 @@ function Collection(content, options) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
 
     // defined search option rules
     var searchOptionRules = {
@@ -4415,17 +4415,17 @@ function Collection(content, options) {
     };
     var withOrClause = false;
     var notInSearchModeEnabled = false;
-    
+
     var localSearchOptions  = null;
-    
+
     var defaultOptions = {
         useLocalStorage: false,
         locale: 'en', // TODO - get settigs.region, or user.region
         searchOptionRules: searchOptionRules
     };
-    
-        
-    
+
+
+
     options = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions;
 
     var keywords    = ['not null']; // TODO - null, exists (`true` if property is defined)
@@ -4444,7 +4444,7 @@ function Collection(content, options) {
         throw new Error('`new Collection([content] [, options] )`: `content` argument must be an Array !');
 
     content = (content) ? JSON.clone(content) : []; // original content -> not to be touched
-        
+
     // Indexing : uuids are generated for each entry
     var searchIndex = [], idx = 0;
     for (var entry = 0, entryLen = content.length; entry < entryLen; ++entry) {
@@ -4457,16 +4457,16 @@ function Collection(content, options) {
         ++idx;
     }
 
-    var instance = content;    
+    var instance = content;
     /**
      * Set local search option for the current collection method call
-     * 
-     * eg.: 
+     *
+     * eg.:
      *  var recCollection = new Collection(arrayCollection);
      *  var rec =  recCollection
      *                  .setSearchOption('name', 'isCaseSensitive', false)
      *                  .find({ city: 'cap Town' });
-     * 
+     *
      * eg.:
      *  var recCollection = new Collection(arrayCollection);
      *  var searchOptions = {
@@ -4476,64 +4476,64 @@ function Collection(content, options) {
      *  };
      *  var rec =  recCollection
      *                  .setSearchOption(searchOptions)
-     *                  .find({ city: 'cap Town' });     * 
-     * 
+     *                  .find({ city: 'cap Town' });     *
+     *
      * @param {object|string} searchOptionObject or searchOptionTargetedProperty
      * @param {string} [searchRule]
      * @param {boolean} [searchRuleValue] - true to enable, false to disabled
-     * 
+     *
      * @returns {object} instance with local search options
      */
     instance['setSearchOption'] = function() {
-        
+
         if (!arguments.length)
             throw new Error('searchOption cannot be left blank');
-            
+
         if (arguments.length > 3 || arguments.length < 3 && arguments.length > 1)
             throw new Error('argument length mismatch');
-        
+
         var i       = 0
             , len   = arguments.length
         ;
-        
+
         if (arguments.length == 1) {
             if ( typeof(arguments[0]) != 'object' )
                 throw new Error('searchOption must be an object');
-                
+
             for (var prop in arguments[0]) {
                 if ( typeof(searchOptionRules[prop]) == 'undefined' )
                     throw new Error(arguments[1] + ' is not an allowed searchOption !');
             }
-            
+
             localSearchOptions = arguments[0];
         } else {
-            
+
             if ( !localSearchOptions )
                 localSearchOptions = {};
-            
-            for (; i < len; ++i) {                
+
+            for (; i < len; ++i) {
                 if ( typeof(searchOptionRules[arguments[1]]) == 'undefined' )
                     throw new Error(arguments[1] + ' is not an allowed searchOption !');
-                
+
                 if (typeof(localSearchOptions[arguments[0]]) == 'undefined')
                     localSearchOptions[arguments[0]] = {};
-                
+
                 if ( /true|false/i.test(arguments[2]) ) {
                     localSearchOptions[arguments[0]][arguments[1]] = /true/i.test(arguments[2]) ? true : false
                 } else {
                     localSearchOptions[arguments[0]][arguments[1]] = arguments[2]
-                }                
+                }
             }
-        }    
-        
+        }
+
         return instance
     }
 
-    
+
     instance['find'] = function() {
-        // reset 
+        // reset
         withOrClause = false;
-        
+
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
             withOrClause = arguments[arguments.length-1];
             delete arguments[arguments.length-1];
@@ -4548,13 +4548,13 @@ function Collection(content, options) {
             filters         = JSON.parse(filtersStr);
             filtersCount    = filters.count();
         } catch( filtersError) {
-            throw new Error('filter must be an object\n'+ filtersError.stack);  
-        } 
-        
+            throw new Error('filter must be an object\n'+ filtersError.stack);
+        }
+
         if ( typeof(filters) != 'undefined' && filtersCount > 0 ) {
-            
+
             if (filtersCount > 1) {
-                withOrClause = true;                
+                withOrClause = true;
             }
             // checking filter : this should be forbidden -> { type: 'red', type: 'orange'}
             // var filtersFields = null;
@@ -4567,7 +4567,7 @@ function Collection(content, options) {
             //         filtersFields[ fField ] = true;
             //     }
             // }
-                        
+
             var filter              = null
                 , condition         = null
                 , i                 = 0
@@ -4587,13 +4587,13 @@ function Collection(content, options) {
             var matched = null
                 , filterIsArray = null
                 , searchResult = [];
-            
+
             /**
              *  Regular Search
-             * @param {object} filter 
-             * @param {string} field 
-             * @param {strine|number|date} _content 
-             * @param {number} matched 
+             * @param {object} filter
+             * @param {string} field
+             * @param {strine|number|date} _content
+             * @param {number} matched
              */
             var search = function(filter, field, _content, matched, searchOptionRules) {
                 var reValidCount = null, searchOptCount = null;
@@ -4602,23 +4602,23 @@ function Collection(content, options) {
                     ++matched;
 
                 } else if (
-                    filter 
-                    && keywords.indexOf(localeLowerCase) > -1 
-                    && localeLowerCase == 'not null' 
-                    && typeof(_content) != 'undefined' 
-                    && typeof(_content) !== 'object' 
-                    && _content != 'null' 
+                    filter
+                    && keywords.indexOf(localeLowerCase) > -1
+                    && localeLowerCase == 'not null'
+                    && typeof(_content) != 'undefined'
+                    && typeof(_content) !== 'object'
+                    && _content != 'null'
                     && _content != 'undefined'
                 ) {
-                    
+
                     if (result.indexOf(_content) < 0) {
                         ++matched;
                     }
 
-                } else if ( 
-                    typeof(_content) != 'undefined' 
-                    && typeof(_content) !== 'object' 
-                    && /(<|>|=)/.test(filter) 
+                } else if (
+                    typeof(_content) != 'undefined'
+                    && typeof(_content) !== 'object'
+                    && /(<|>|=)/.test(filter)
                     && !/undefined|function/.test(typeof(_content))
                 ) { // with operations
                     let originalFilter = filter;
@@ -4632,7 +4632,7 @@ function Collection(content, options) {
                         // restoring in case of datetime eval
                         filter = originalFilter;
                     }
-                    
+
                     // looking for a datetime ?
                     if (
                         /(\d{4})\-(\d{2})\-(\d{2})(\s+|T)(\d{2}):(\d{2}):(\d{2})/.test(_content)
@@ -4647,44 +4647,44 @@ function Collection(content, options) {
                         ++matched;
                     }
 
-                } else if ( 
-                    typeof(_content) != 'undefined' 
-                    && typeof(_content) !== 'object' 
+                } else if (
+                    typeof(_content) != 'undefined'
+                    && typeof(_content) !== 'object'
                     && _content === filter
                     && !searchOptions
                     ||
-                    typeof(_content) != 'undefined' 
-                    && typeof(_content) !== 'object' 
+                    typeof(_content) != 'undefined'
+                    && typeof(_content) !== 'object'
                     && _content === filter
                     && typeof(searchOptions[field]) == 'undefined'
                 ) {
 
                     ++matched;
-                } else if ( 
-                    typeof(_content) != 'undefined' 
-                    && typeof(_content) !== 'object' 
+                } else if (
+                    typeof(_content) != 'undefined'
+                    && typeof(_content) !== 'object'
                     && searchOptions
                     && typeof(searchOptions[field]) != 'undefined'
                 ) {
-                    
+
                     reValidCount    = 0;
                     searchOptCount  = searchOptions[field].count();
                     for ( var rule in searchOptions[field]) {
                         searchOptionRules[rule][searchOptions[field][rule]].re = searchOptionRules[rule][searchOptions[field][rule]].re.replace(/\%s/, filter);
-                        
+
                         if (searchOptionRules[rule][searchOptions[field][rule]].modifiers) {
-                            re = new RegExp(searchOptionRules[rule][searchOptions[field][rule]].re, searchOptionRules[rule][searchOptions[field][rule]].modifiers);   
+                            re = new RegExp(searchOptionRules[rule][searchOptions[field][rule]].re, searchOptionRules[rule][searchOptions[field][rule]].modifiers);
                         } else {
                             re = new RegExp(searchOptionRules[rule][searchOptions[field][rule]].re);
                         }
-                        
+
                         if ( re.test(_content) ) {
                             ++reValidCount
                         }
                     }
-                    
+
                     if (reValidCount == searchOptCount) {
-                        ++matched;    
+                        ++matched;
                     }
                 }
 
@@ -4698,26 +4698,26 @@ function Collection(content, options) {
                 var field = f.split(/\./g);
                 field = field[field.length - 1];
                 re = new RegExp('("' + field + '":\\w+)');
-                
+
                 var value = null;
-                
+
                 try {
                     if ( _content )
                         value = eval('_content.'+f);
                 } catch (err) {
                     // Nothing to do
                     // means that the field is not available in the collection
-                } 
-                
-                                   
+                }
+
+
 
                 if (value /** && value.length > 0*/) {
                     if ( Array.isArray(value) )
                         value = value[1].split(/:/)[1];
                     else if ( typeof(value) == 'string' && /\:/.test(value) )
                         value = value.split(/:/)[1];
-                    
-                    
+
+
                     if (/(<|>|=)/.test(filter)) {
 
                         // looking for a datetime ?
@@ -4742,7 +4742,7 @@ function Collection(content, options) {
                         }
                     }
 
-                }                
+                }
 
                 return {
                     matched: matched
@@ -4751,25 +4751,25 @@ function Collection(content, options) {
 
             // if one of the entry matches the given filter, tag the whole entry as matched
             var searchWithin = function(filter, f, _content, matched, i) {
-                
+
                 var collectionName  = null
                     , collection    = null
                     , arr           = null
                     , field         = null;
 
-               
+
                 arr = f.split(/\[\*\]/g);
                 collectionName = arr[0].replace(/\[\*\]/, '');// only take the first collection
                 collection = _content[ collectionName ];
-                
-                
+
+
                 field = arr[1];
                 if (/^\./.test(field) )
                     field = field.substr(1);
 
                 var subMatched = 0;
                 if (collection) {
-                    
+
                     for (var c = 0, cLen = collection.length; c < cLen; ++c) {
                         // cases with _filter.prop
                         if (/\./.test(field)) {
@@ -4786,32 +4786,32 @@ function Collection(content, options) {
                         if (subMatched > 0) break;
                     }
                 }
-                
+
                 return {
                     matched: (matched + subMatched)
                 }
             }
 
-            
+
             for (var o in tmpContent) {
 
                 if (!tmpContent[o]) {
                     tmpContent[o] = {}
                 }
-                
+
                 if (!/undefined|function/.test( typeof(tmpContent[o]))) {
-                    
+
                     for (let l = 0, lLen = filters.count(); l<lLen; ++l) {
                         filter = filters[l];
                         condition = filter.count();
-                        // for each condition 
+                        // for each condition
                         matched = 0;
-                        
+
                         for (var f in filter) {
                             if ( typeof(filter[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
 
                             localeLowerCase = ( filter[f] !== null && !/(boolean|number)/.test(typeof(filter[f])) ) ? filter[f].toLocaleLowerCase() : filter[f];
-                            
+
                             // cases with tmpContent.prop
                             if (/\./.test(f)) {
                                 //JSON.stringify(tmpContent[o]).match(/("gross":\w+)/)[1].split(/:/)[1]
@@ -4829,19 +4829,19 @@ function Collection(content, options) {
                                 }
 
                             } else { // normal case
-                                                                    
-                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);                                
+
+                                searchResult = search(filter[f], f, tmpContent[o][f], matched, searchOptionRules);
                                 matched = searchResult.matched;
-                            }                            
+                            }
                         }
 
                         if (matched == condition ) { // all conditions must be fulfilled to match
                             // `this` {Array} is the result of the previous search or the current content
-                            // TODO - Add a switch                             
+                            // TODO - Add a switch
                             if (
-                                withOrClause 
+                                withOrClause
                                 && notInSearchModeEnabled
-                                && searchIndex.indexOf(tmpContent[o]._uuid) < 0 
+                                && searchIndex.indexOf(tmpContent[o]._uuid) < 0
                                 || notInSearchModeEnabled
                                 || !withOrClause
                             ) {
@@ -4857,12 +4857,12 @@ function Collection(content, options) {
                                 if (result.indexOf(tmpContent[o]._uuid) < 0) {
                                     result[i] = tmpContent[o];
                                     ++i;
-                                }   
+                                }
                             }
                         }
 
                     }
-                    
+
                 }
             }
         } else {
@@ -4871,7 +4871,7 @@ function Collection(content, options) {
 
         // reset localSearchOptions for nest calls
         localSearchOptions = null;
-        
+
         // TODO - remove this
         //if (withOrClause) {
             // merging with previous result
@@ -4881,13 +4881,13 @@ function Collection(content, options) {
             // }
             // TODO - remove this part
             // Removed this on 2021-01-21 because it was causing duplicate content
-            //result  = merge(this, result, true)            
+            //result  = merge(this, result, true)
         //}
 
         // chaining
         //result._options         = instance._options;
         //result.setSearchOption  = instance.setSearchOption;
-        
+
         result.insert           = instance.insert;
         result.notIn            = instance.notIn;
         result.find             = this.find;
@@ -4903,24 +4903,24 @@ function Collection(content, options) {
 
         return result
     }
-    
-    /** 
+
+    /**
      * findOne
-     * 
-     * E.g.: 
+     *
+     * E.g.:
      *  - new Collection(projects).findOne({name: 'My Project'})
      *  - new Collection(projects)
      *              .setSearchOption({name: { isCaseSensitive: false }})
      *              .findOne({name: 'my project'})
-     * 
-     * 
+     *
+     *
      * Available options :
      *  isCaseSensitive: [true|false] - set to true by default
-     * 
+     *
      * @param {object} filter
-     * 
+     *
      * @returns {object} result
-     * 
+     *
     */
     instance['findOne'] = function() {
         var key         = null // comparison key
@@ -4934,17 +4934,17 @@ function Collection(content, options) {
             delete arguments[arguments.length - 1];
             --arguments.length;
         }
-        
+
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
         //     --arguments.length;
         // }
-        
+
         if (arguments.length > 0) {
             filters = arguments;
         }
-        
+
 
         if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
             throw new Error('[ Collection ][ findOne ] `filters` argument must be defined: Array or Filter Object(s) expected');
@@ -4959,9 +4959,9 @@ function Collection(content, options) {
         } else {
             foundResults = instance.find.apply(this, arguments) || [];
         }
-        
+
         if (foundResults.length > 0) {
-            currentResult = foundResults.limit(1).toRaw()[0];            
+            currentResult = foundResults.limit(1).toRaw()[0];
         }
 
         result          = currentResult;
@@ -5000,31 +5000,31 @@ function Collection(content, options) {
 
         return result
     }
-    
-    /** 
+
+    /**
      * notIn
      * Works like a filter to match results by `excluding` through given `filters` !!
-     * 
-     *  filter can be like 
+     *
+     *  filter can be like
      *      { car: 'toyota' }
      *      { car: 'toyota', color: 'red' }
-     *      
+     *
      *  You can pass more than one filter
      *      { car: 'toyota', color: 'red' }, { car: 'porche' }
-     * 
+     *
      * .notIn(filter) // AND syntax
      * .notIn(filter1, filter2, filter3) // OR syntax
      * .notIn(filter, 'id') where `id` is the uuid used for the DIFF - `_uuid
      * .noIn(collectionObj, 'id')
-     * 
+     *
      * By default, Collection use its own internal `_uuid` to search and compare.
      * This mode is called `uuidSearchModeEnabled`, and it is by default set to `true`.
      * If you want to disable this mode in order to MATCH/DIFF by forcing check on every single filter
      * of the resultset :
      *      .notIn(filter, false) where false must be a real boolean
-     * 
-     * 
-     * 
+     *
+     *
+     *
      * @param {object|array} filters|arrayToFilter - works like find filterss
      * @param {string} [key] - unique id for comparison; faster when provided
     */
@@ -5042,17 +5042,17 @@ function Collection(content, options) {
             delete arguments[arguments.length - 1];
             --arguments.length;
         }
-        
+
         if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
             uuidSearchModeEnabled = arguments[arguments.length - 1]
             delete arguments[arguments.length - 1];
             --arguments.length;
         }
-        
+
         if (arguments.length > 0) {
             filters = arguments;
         }
-        
+
 
         if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
             throw new Error('[ Collection ][ notIn ] `filters` argument must be defined: Array or Filter Object(s) expected');
@@ -5060,7 +5060,7 @@ function Collection(content, options) {
 
         // If an operation (find, insert ...) has been executed, get the previous result; if not, get the whole collection
         var currentResult = JSON.clone( (Array.isArray(this)) ? this : content );
-        
+
         var foundResults = null;
         if ( Array.isArray(arguments[0]) ) {
             foundResults    = arguments[0];
@@ -5069,16 +5069,16 @@ function Collection(content, options) {
             foundResults    = instance.find.apply(this, arguments) || [];
             notInSearchModeEnabled = false;
         }
-        
-        
+
+
         if (foundResults.length > 0) {
-            
+
             // check key
-            if ( 
+            if (
                 uuidSearchModeEnabled
-                && key 
-                && typeof(foundResults[0]) == 'undefined' 
-                && typeof(foundResults[0][key]) == 'undefined' 
+                && key
+                && typeof(foundResults[0]) == 'undefined'
+                && typeof(foundResults[0][key]) == 'undefined'
             ) {
                 throw new Error('[ Collection ][ notIn ] `key` not valid');
             } else if ( uuidSearchModeEnabled && !key && typeof(foundResults[0]['_uuid']) != 'undefined' ) {
@@ -5086,10 +5086,10 @@ function Collection(content, options) {
             } else if ( typeof(foundResults[0]['id']) != 'undefined' ) {
                 key = 'id';
             }
-            
+
             if ( !key || typeof(foundResults[0][key]) == 'undefined' ) {
                 throw new Error('No comparison key defined !')
-            } 
+            }
 
             // fast search with key
             var r       = 0
@@ -5103,17 +5103,17 @@ function Collection(content, options) {
                 , fullFiltersMatched = 0
             ;
             if ( uuidSearchModeEnabled && typeof(currentResult[c]) != 'undefined' && currentResult[c].hasOwnProperty(key) ) {
-                // for every single result found        
+                // for every single result found
                 for (; r < rLen; ++r) {
-                    
+
                     if (!currentResult.length) break;
-                    
+
                     c = 0; cLen = currentResult.length;
                     for (; c < cLen; ++c) {
                         if ( typeof(currentResult[c]) == 'undefined' || typeof(foundResults[r]) == 'undefined' ) {
                             continue
                         }
-                        // when matched, we want to remove those not in current result                        
+                        // when matched, we want to remove those not in current result
                         if (currentResult[c][key] === foundResults[r][key]) {
                             currentResult.splice(c,1);
                             break;
@@ -5123,48 +5123,48 @@ function Collection(content, options) {
             } else if ( typeof(currentResult[c]) == 'undefined' ) { //empty source case
                 // means that since we don't have a source to compare, current === found
                 currentResult = JSON.clone(foundResults);
-                
+
             } else { // search based on provided filters
-                // for every single result found        
+                // for every single result found
                 for (; r < rLen; ++r) {
-                    if (!currentResult.length) break;                    
-                    
+                    if (!currentResult.length) break;
+
                     //onRemoved:
                     c = 0; cLen = currentResult.length;
-                    for (; c < cLen; ++c) { // current results                        
-                
+                    for (; c < cLen; ++c) { // current results
+
                         if ( typeof (currentResult[c]) != 'undefined' ) {
-                            
+
                             // for each filter
-                            fullFiltersMatched = 0;  
-                            f = 0;  
+                            fullFiltersMatched = 0;
+                            f = 0;
                             for (; f < fLen; ++f ) {
                                 if ( typeof(filters[f]) == 'undefined' ) throw new Error('filter `'+f+'` cannot be left undefined');
-                                
+
                                 keyLen = filters[f].count();
                                 matched = 0;
                                 for (key in filters[f]) {
                                     if ( currentResult[c].hasOwnProperty(key) && currentResult[c][key] === foundResults[r][key] ) {
                                         ++matched;
-                                    }   
-                                }    
+                                    }
+                                }
                                 if (matched == keyLen) {
                                     ++fullFiltersMatched
-                                }              
+                                }
                             }
-                            
+
                             if (fullFiltersMatched) {
                                 currentResult.splice(c,1);
                                 //break onRemoved;
                                 break;
                             }
-                            
+
                         }
                     }
                 }
-            }   
-                
-        } 
+            }
+
+        }
 
         result          = currentResult;
         result.notIn    = instance.notIn;
@@ -5217,12 +5217,12 @@ function Collection(content, options) {
 
     /**
      * update
-     * 
+     *
      * @param {object} filter
      * @param {object} set
-     * 
+     *
      * @returns {objet} instance
-     */    
+     */
     instance['update'] = function() {
         var key         = '_uuid' // comparison key is _uuid by default
             , result    = null
@@ -5231,34 +5231,34 @@ function Collection(content, options) {
             //, uuidSearchModeEnabled = true
         ;
 
-        // comparison key  : _uuid by default, but can be set to id        
+        // comparison key  : _uuid by default, but can be set to id
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
             --arguments.length;
-        } 
-        
+        }
+
         if ( typeof(arguments[arguments.length-1]) == 'object' ) {
             set = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
             --arguments.length
         }
-        
+
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
         //     --arguments.length;
         // }
-        
+
         if (arguments.length > 0) {
             filters = arguments;
         }
-        
+
 
         if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
             throw new Error('[ Collection ][ update ] `filters` argument must be defined: Array or Filter Object(s) expected');
         }
-        
+
         if ( typeof(set) == 'undefined' || !set || typeof(set) != 'object' ) {
             throw new Error('[ Collection ][ update ] `set` argument must be defined: Object expected');
         }
@@ -5270,23 +5270,23 @@ function Collection(content, options) {
         } else {
             foundResults = instance.find.apply(this, arguments) || [];
         }
-        
+
         result = Array.isArray(this) ? this : JSON.clone(content);
-        if (foundResults.length > 0 ) {          
+        if (foundResults.length > 0 ) {
             var arr = foundResults.toRaw();
-            for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
+            for (var a = 0, aLen = arr.length; a < aLen; ++a) {
                 arr[a] = merge( JSON.clone(set), arr[a]);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
                     if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
                         key = 'id';
                     }
-                    
+
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
                     }
                 }
-            }            
+            }
         }
 
         // chaining
@@ -5305,8 +5305,8 @@ function Collection(content, options) {
 
         return result
     }
-    
-    
+
+
     instance['replace'] = function() {
         var key         = '_uuid' // comparison key
             , result    = null
@@ -5315,34 +5315,34 @@ function Collection(content, options) {
             //, uuidSearchModeEnabled = true
         ;
 
-                
+
         if ( typeof(arguments[arguments.length-1]) == 'string' ) {
             key = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
             --arguments.length;
-        } 
-        
+        }
+
         if ( typeof(arguments[arguments.length-1]) == 'object' ) {
             set = arguments[arguments.length - 1];
             delete arguments[arguments.length - 1];
             --arguments.length;
         }
-        
+
         // if ( typeof(arguments[arguments.length-1]) == 'boolean' ) {
         //     uuidSearchModeEnabled = arguments[arguments.length - 1]
         //     delete arguments[arguments.length - 1];
         //     --arguments.length;
         // }
-        
+
         if (arguments.length > 0) {
             filters = arguments;
         }
-        
+
 
         if ( typeof(filters) == 'undefined' || !filters || typeof(filters) != 'object' ) {
             throw new Error('[ Collection ][ update ] `filters` argument must be defined: Array or Filter Object(s) expected');
         }
-        
+
         if ( typeof(set) == 'undefined' || !set || typeof(set) != 'object' ) {
             throw new Error('[ Collection ][ update ] `set` argument must be defined: Object expected');
         }
@@ -5356,25 +5356,25 @@ function Collection(content, options) {
         } else {
             foundResults = instance.find.apply(this, arguments) || [];
         }
-        
+
         result = Array.isArray(this) ? this : JSON.clone(content);
-        if (foundResults.length > 0 ) {          
+        if (foundResults.length > 0 ) {
             var arr = foundResults.toRaw();
-            for (var a = 0, aLen = arr.length; a < aLen; ++a) {                
+            for (var a = 0, aLen = arr.length; a < aLen; ++a) {
                 arr[a] = JSON.clone(set);
                 for (var r = 0, rLen = result.length; r < rLen; ++r) {
                     if ( typeof(result[r][key]) == 'undefined' && key == '_uuid' && typeof(result[r]['id']) != 'undefined' ) {
                         key = 'id';
                     } else if (typeof(result[r][key]) == 'undefined' && key == '_uuid') {
                         throw new Error('No comparison key defined !')
-                    } 
-                    
+                    }
+
                     if ( result[r][key] == arr[a][key] ) {
                         result[r] = arr[a];
                         break;
                     }
                 }
-            }            
+            }
         }
 
         // chaining
@@ -5393,24 +5393,24 @@ function Collection(content, options) {
 
         return result
     }
-    
+
     /**
      * .delete({ key: 2 })
      * .delete({ name: 'Jordan' }, ''id) where id will be use as the `uuid` to compare records
-     * 
+     *
      * AND syntax
      * .delete({ car: 'toyota', color: 'red' })
-     * 
+     *
      * OR syntax
      * .delete({ car: 'toyota', color: red }, { car: 'ford' } ) // will delete all `toyota red cars` & all `ford cars`
-     * 
+     *
      *  N.B.: will not affect current result - just returning the DIFF
      *  If you
      * @param {object} filter - samme as `.find(filter)`
      * @param {string|boolean} [ uuid | disabled ] - by default, Collection is using its internal _uuid
      * If you want to delete without key comparison, disable `uuid` search mode
      * .delete({ name: 'Jordan' }, false)
-     * 
+     *
      * @returns {array} result
      */
     instance['delete'] = function() {
@@ -5441,10 +5441,10 @@ function Collection(content, options) {
      * @param {object|array} filter
      * */
     instance['orderBy'] = function () {
-        
+
         if ( typeof(arguments) == 'undefined' || arguments.length < 1)
             throw new Error('[ Collection->orderBy(filter) ] where `filter` must not be empty or null' );
-            
+
         var filter = null;
         if ( arguments.length == 1 ) {
             filter = arguments[0];
@@ -5459,27 +5459,27 @@ function Collection(content, options) {
         var variableContent = (Array.isArray(this)) ? this : JSON.clone(content);
         return sortResult(filter, variableContent.toRaw())
     }
-    
+
     /**
      * max
-     * E.g: 
+     * E.g:
      *  myCollection.max({ order: 'not null'})
      *      => 5
      *  myCollection.max({ createAt: 'not null'})
      *      => '2021-12-31T23:59:59'
      *  myCollection.max({ firstName: 'not null'})
      *      => 'Zora'
-     * 
+     *
      * @param {object|array} filter
-     * 
+     *
      * @returns {number|date|string}
      * */
     instance['max'] = function () {
         if ( typeof(arguments) == 'undefined' || arguments.length < 1)
             throw new Error('[ Collection->max(filter) ] where `filter` must not be empty or null' );
-        
+
         var filter = null;
-        if ( 
+        if (
             arguments.length > 1
             || Array.isArray(arguments[0])
             || typeof(arguments[0]) == 'object' && arguments[0].count() > 1
@@ -5508,11 +5508,11 @@ function Collection(content, options) {
      *
      *  // overriding filters -> last filter is always right
      *  .orderBy([ { updatedAt : 'desc'}, { name: 'asc' } ])
-     * 
-     *  // sorting boolean 
+     *
+     *  // sorting boolean
      *  .orderBy({ isActive: 'desc'}) => will display all active(TRUE) first
      *  NB.: Boolean are 0 (FALSE) or 1 (TRUE)
-     * 
+     *
      *  // combining filters -> the first one is always right
      *  .orderBy({ updatedAt : 'desc'}, { name: 'asc' })
      *
@@ -5544,33 +5544,33 @@ function Collection(content, options) {
                 _m[prop] = obj[prop];
                 return _m;
             });
-            
-            mapped.sort(function onAscSort(a, b) {    
-                
-                
+
+            mapped.sort(function onAscSort(a, b) {
+
+
                 var _compare = function(a, b) {
                     // handle booleans
                     if ( /^(true|false)$/i.test(a) ) {
                         a = ( /true/i.test(a) ) ? 1 : 0;
                     }
-                    
+
                     if ( /^(true|false)$/i.test(b) ) {
                         b = ( /true/i.test(b) ) ? 1 : 0;
                     }
-                    
-                    
+
+
                     if ( typeof(a) == 'string' && a != '' ||  typeof(b) == 'string' ) {
-                        
+
                         if ( typeof(a) == 'number' ) {
                             a = ''+a; // cast to string
-                        } 
+                        }
                         if ( typeof(b) == 'number' ) {
                             b = ''+b; // cast to string
-                        } 
-                        
+                        }
+
                         return a.localeCompare(b, undefined, {sensitivity: 'case', caseFirst: 'upper'})
                     }
-                    
+
                     if (a > b) {
                         return 1;
                     }
@@ -5578,18 +5578,18 @@ function Collection(content, options) {
                         return -1;
                     }
                     // a must be equal to b
-                    return 0;                    
+                    return 0;
                 }
-                
-                
+
+
                 if ( typeof(a) == 'object' ) {
                     return _compare(a[prop], b[prop])
                 }
-                
+
                 return _compare(a, b)
-                    
+
             });
-            
+
             return mapped.map(function(m, index, result){
                 return content[m.index];
             });
@@ -5601,24 +5601,24 @@ function Collection(content, options) {
         }
 
         multiSortOp = function(content, filter) {
-            
+
             var props = [], keys = [];
-            
+
             if ( Array.isArray(filter) ) {
                 for (var f = 0, fLen = filter.length; f < fLen; ++f) {
                     props[f] = Object.keys(filter[f])[0];
-                    keys[f] = filter[f][ props[f]] ;     
+                    keys[f] = filter[f][ props[f]] ;
                 }
             } else {
                 var f = 0;
                 for (var flt in filter) {
                     props[f] = flt;
-                    keys[f] = filter[flt] ;  
+                    keys[f] = filter[flt] ;
                     ++f;
                 }
             }
-            
-            
+
+
 
             sortRecursive = function(a, b, columns, order_by, index) {
 
@@ -5635,7 +5635,7 @@ function Collection(content, options) {
                     } else if (res != 0) {
                         return res < 0 ? 1 : -1
                     }
-                    
+
                     // a must be equal to b
                     return columns.length - 1 > index ? sortRecursive(a, b, columns, order_by, index + 1) : 0;
 
@@ -5696,11 +5696,11 @@ function Collection(content, options) {
         }
 
         if ( Array.isArray(filter) || filter.count() > 1 ) {
-            
+
             result = multiSortOp(content, filter);
-            
+
         } else {
-                        
+
             prop    = Object.keys(filter)[0];
             key     = filter[prop];
 
@@ -5722,7 +5722,7 @@ function Collection(content, options) {
         result.max      = instance.max;
         result.toRaw    = instance.toRaw;
         result.filter   = instance.filter;
-        
+
         return result
     };
 
@@ -5743,7 +5743,7 @@ function Collection(content, options) {
 
         return JSON.clone(result);
     }
-    
+
     /**
      * filter
      * Reduce record propName
@@ -5754,7 +5754,7 @@ function Collection(content, options) {
      * @returns {array} rawFilteredResult
      * */
      instance['filter'] = function(filter) {
-        
+
         if ( typeof(filter) == 'undefined' ) {
             throw new Error('`filter` parametter must be a string or an array.');
         }
@@ -5764,7 +5764,7 @@ function Collection(content, options) {
         }
         var i = 0, len = result.length;
         var rawFilteredResult = [], fCount = 0;
-                
+
         if ( Array.isArray(filter) ) {
             var f = null, fLen = filter.length, wrote = null;
             for (; i < len; ++i) {
@@ -5792,12 +5792,12 @@ function Collection(content, options) {
                     ++fCount;
                 }
             }
-        }            
+        }
 
         return JSON.clone(rawFilteredResult);
     }
-    
-    
+
+
     return instance;
 };
 
@@ -5806,16 +5806,16 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports = Collection
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('utils/collection',[],function() { return Collection })
+    define('lib/collection',[],function() { return Collection })
 };
 /**
  * FormValidatorUtil
  *
  * Dependencies:
- *  - utils/helpers
- *  - utils/helpers/dateFormat
- *  - utils/merge
- *  - utils/routing (for API calls)
+ *  - lib/helpers
+ *  - lib/helpers/dateFormat
+ *  - lib/merge
+ *  - lib/routing (for API calls)
  *
  * @param {object} data
  * @param {object} [ $fields ] - isGFFCtx only
@@ -5829,10 +5829,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     // if (isGFFCtx && !$fields )
     //     throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
 
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../../../lib/merge');
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
-    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
+    var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
 
     var hasUserValidators = function() {
 
@@ -7302,7 +7302,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *
          * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
-         * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {date} date - extended by gina::lib::helpers::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el]['isDate'] = function(mask) {
             var val         = this.value
@@ -7383,7 +7383,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
         /**
          * Formating date using DateFormatHelper
-         * Check out documentation in the helper source: `utils/helpers/dateFormat.js`
+         * Check out documentation in the helper source: `lib/helpers/dateFormat.js`
          * e.g.:
          *      d.start
          *        .isDate('dd/mm/yyyy')
@@ -7667,7 +7667,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports  = FormValidatorUtil
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('utils/form-validator',[],function() { return FormValidatorUtil })
+    define('lib/form-validator',[],function() { return FormValidatorUtil })
 };
 /*
  * This file is part of the gina package.
@@ -7696,8 +7696,14 @@ function Routing() {
 
     self.allowedMethodsString   = self.allowedMethods.join(',');
 
-    // loading utils & plugins
-    var plugins = null, inherits = null, merge = null, Validator = null, fs = null, promisify = null;
+    // loading lib & plugins
+    var plugins     = null
+        , inherits  = null
+        , merge     = null
+        , Validator = null
+        , fs        = null
+        , promisify = null
+    ;
     if (!isGFFCtx) {
         fs          = require('fs');
         promisify   = require('util').promisify;
@@ -7710,10 +7716,10 @@ function Routing() {
     // BO - In case of partial rendering whithout handler defined for the partial
     else {
         if ( !merge || typeof(merge) != 'function' ) {
-            var merge = require('utils/merge');
+            merge = require('lib/merge');
         }
-        if ( !Validator || typeof(Validator) != 'function' ) {
-            var Validator = require('utils/form-validator');
+        if ( !Validator || typeof(Validator) != 'function' ) {
+            Validator = require('lib/form-validator');
         }
     }
     // EO - In case of partial rendering whithout handler defined for the partial
@@ -9159,7 +9165,7 @@ if ((typeof (module) !== 'undefined') && module.exports) {
     module.exports = Routing()
 } else if (typeof (define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('utils/routing', ['require', 'utils/form-validator', 'utils/merge'], function() { return Routing() })
+    define('lib/routing', ['require', 'lib/form-validator', 'lib/merge'], function() { return Routing() })
 };
 /**
  * Gina Local Storage
@@ -9170,8 +9176,8 @@ if ((typeof (module) !== 'undefined') && module.exports) {
  * */
 function StoragePlugin(options) {
 
-    var merge       = merge || require('utils/merge');;
-    var Collection  = Collection || require('utils/collection');
+    var merge       = merge || require('lib/merge');;
+    var Collection  = Collection || require('lib/collection');
     var uuid        = uuid || require('vendor/uuid');
     var dateFormat  = dateFormat || require('helpers/dateFormat');
 
@@ -9578,8 +9584,8 @@ function StoragePlugin(options) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('utils/merge'); //require('../../../../../lib/merge');
-    var Collection  = require('utils/collection'); //require('../../../../../lib/collection');
+    var merge       = require('lib/merge'); //require('../../../../../lib/merge');
+    var Collection  = require('lib/collection'); //require('../../../../../lib/collection');
     var uuid        = require('uuid');
 
     module.exports = StoragePlugin
@@ -9661,8 +9667,8 @@ define("utils/dom", function(){});
  * ValidatorPlugin
  *
  * Dependencies:
- *  - utils/form-validator
- *  - utils/merge
+ *  - lib/form-validator
+ *  - lib/merge
  *  - utils/events
  *  - vendor/uuid
  *
@@ -9747,11 +9753,11 @@ define("utils/dom", function(){});
     }
 
     var uuid            = (isGFFCtx) ? require('vendor/uuid') : require('uuid');
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
-    var inherits        = (isGFFCtx) ? require('utils/inherits') : require('../../../../../lib/inherits');
-    var FormValidator   = (isGFFCtx) ? require('utils/form-validator') : require('./form-validator');
-    //var Collection      = (isGFFCtx) ? require('utils/collection') : require('../../../../../lib/collection');
-    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../../../lib/merge');
+    var inherits        = (isGFFCtx) ? require('lib/inherits') : require('../../../../../lib/inherits');
+    var FormValidator   = (isGFFCtx) ? require('lib/form-validator') : require('./form-validator');
+    //var Collection      = (isGFFCtx) ? require('lib/collection') : require('../../../../../lib/collection');
+    var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
 
     /** definitions */
     var instance    = {
@@ -16593,15 +16599,16 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports  = ValidatorPlugin
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('gina/validator', ['utils/events', 'utils/dom', 'utils/form-validator'], function(){ return ValidatorPlugin })
+    define('gina/validator', ['utils/events', 'utils/dom', 'lib/form-validator'], function(){ return ValidatorPlugin })
 };
-define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 'utils/collection', 'utils/routing', 'gina/storage', 'gina/validator' ], function (require) {
+define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'lib/collection', 'lib/routing', 'gina/storage', 'gina/validator' ], function (require) {
 
     var $           = require('jquery');
+
     $.noConflict();
-    //var merge       = require('utils/merge');
-    var routing     = require('utils/routing');
-    var Collection  = require('utils/collection');
+    //var merge       = require('lib/merge');
+    var routing     = require('lib/routing');
+    var Collection  = require('lib/collection');
     var Storage     = require('gina/storage');
     //var Validator   = require('gina/validator');
 
@@ -18139,11 +18146,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 
 
     return Toolbar
 });
-define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
+define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
 
 
     var eventsHandler   = require('utils/events'); // events handler
-    var merge           = require('utils/merge');
+    var merge           = require('lib/merge');
     var dateFormat      = require('helpers/dateFormat')();
     var prototypes      = require('helpers/prototypes')({ dateFormat: dateFormat });
     var uuid            = require('vendor/uuid');
@@ -18728,7 +18735,11 @@ function Domain(options, cb) {
                 isRegisteredTldOrSld: isRegisteredTldOrSld
             }
         }
-        return rootDomain
+        return {
+            value               : rootDomain,
+            isSLD               : isSLD,
+            isRegisteredTldOrSld: isRegisteredTldOrSld
+        }
     }
 
     // Both backend & frontend
@@ -18780,17 +18791,28 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports = Domain
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define( 'utils/domain',[],function() { return Domain })
+    define( 'lib/domain',[],function() { return Domain })
 }
 ;
-define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils/merge', 'utils/events' ], function (require) {
+define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/merge', 'utils/events' ], function (require) {
 
     var $               = require('jquery');
+    // $.noConflict = function( deep ) {
+    //     if ( window.$ === jQuery ) {
+    //         window.$ = _$;
+    //     }
+
+    //     if ( deep && window.jQuery === jQuery ) {
+    //         window.jQuery = _jQuery;
+    //     }
+
+    //     return jQuery;
+    // }
     $.noConflict();
     var uuid            = require('vendor/uuid');
-    var Domain          = require('utils/domain');
+    var Domain          = require('lib/domain');
     var domainInstance  = null;
-    var merge           = require('utils/merge');
+    var merge           = require('lib/merge');
 
     require('utils/events'); // events
 
@@ -19284,15 +19306,15 @@ define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils
 
     return Link
 });
-define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils/merge', 'utils/routing', 'utils/events' ], function (require) {
+define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/merge', 'lib/routing', 'utils/events' ], function (require) {
 
     var $               = require('jquery');
     $.noConflict();
     var uuid            = require('vendor/uuid');
-    var Domain          = require('utils/domain');
+    var Domain          = require('lib/domain');
     var domainInstance  = null;
-    var merge           = require('utils/merge');
-    var routing         = require('utils/routing');
+    var merge           = require('lib/merge');
+    var routing         = require('lib/routing');
 
     require('utils/events'); // events
 
@@ -21042,7 +21064,7 @@ if ( typeof(JSON.clone) == 'undefined' ) {
      * Clone JSON object
      *
      * Changes made here must be reflected in:
-     *  - gina/utils/prototypes.js
+     *  - gina/lib/prototypes.js
      *  - gina/framework/version/helpers/prototypes.js
      *  - gina/framework/version/core/asset/plugin/src/gina/utils/polyfill.js
      *
@@ -21088,7 +21110,7 @@ if ( typeof(JSON.escape) == 'undefined' ) {
      * Escape special characters
      *
      * Changes made here must be reflected in:
-     *  - gina/utils/prototypes.js
+     *  - gina/lib/prototypes.js
      *  - gina/framework/version/helpers/prototypes.js
      *  - gina/framework/version/core/asset/plugin/src/gina/utils/polyfill.js
      *
@@ -21124,8 +21146,8 @@ define("utils/polyfill", function(){});
 /**
  * @class Inherits
  *
- * @package gina.utils
- * @namesame gina.utils.inherits
+ * @package gina.lib
+ * @namesame gina.lib.inherits
  * @author Rhinostone <contact@gina.io>
  *
  * @api Public
@@ -21205,7 +21227,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     module.exports = Inherits();
 } else if ( typeof(define) === 'function' && define.amd) {
     // Publish as AMD module
-    define( 'utils/inherits',[],function() { return Inherits(); });
+    define( 'lib/inherits',[],function() { return Inherits(); });
 };
 /**
  * Gina Frontend Framework
@@ -21226,16 +21248,22 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  *
  *  window['originalContext']
  *      You have to passe your `jQuery` or your `DollarDom` context to Gina
- *      e.g.: 
+ *      e.g.:
  *          window['originalContext'] = window['jQuery']
- *      
+ *
  *      This can be achieved by overriding `window['originalContext']` before defining your handler
  *       Default value will be jQuery
  *
  * */
 
 //var wContext = ( typeof(window.onGinaLoaded) == 'undefined') ? window : parent.window; // iframe case
-var readyList = [ { name: 'gina', ctx: window['gina'], fn: window.onGinaLoaded } ];
+var readyList = [
+    {
+        name: 'gina',
+        ctx: window['gina'],
+        fn: window.onGinaLoaded
+    }
+];
 var readyFired = false;
 var readyEventHandlersInstalled = false;
 
@@ -21260,7 +21288,7 @@ function ready() {
                             if ( typeof(readyList) == 'undefined' ) {
                                 // Fixing init bug in chrome
                                 readyList = window.readyList;
-                            }                            
+                            }
                             readyList[i].ctx = window.gina;
                             result = readyList[i].fn.call(window, readyList[i].ctx, window.require);
 
@@ -21287,7 +21315,8 @@ function ready() {
                     if ( typeof(window.originalContext) == 'undefined' && typeof(window.$) != 'undefined' ) {
                         window.originalContext = window.$
                     }
-                    readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
+                    // passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
+                    readyList[i].ctx = window.originalContext || $;
                     readyList[i].fn.call(window, readyList[i].ctx, window.require);
                     ++i;
                     handleEvent(i, readyList);
@@ -21301,10 +21330,10 @@ function ready() {
 
         handleEvent(i, readyList);
     }
-}
+} // EO function ready()
 
 function readyStateChange() {
-    if ( document.readyState === 'complete' ) {        
+    if ( document.readyState === 'complete' ) {
         gina.ready();
     }
 }
@@ -21317,30 +21346,30 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
          * `_global` is used mainly for google closure compilation in some cases
          * where eval() is called
          * It will store extenal variable definitions
-         * e.g.: 
+         * e.g.:
          *  root -> window.root
          *  then you need to call :
          *      gina._global.register({'root': yourValue });
          *      => `window.root`now accessible
          *  before using:
          *      eval(root +'=value');
-         *  
+         *
          *  when not required anymore
          *      gina._global.unregister(['root])
          */
         /**@js_externs _global*/
         _global: {
-            
+
             /**@js_externs register*/
             register: function(variables) {
                 if ( typeof(variables) != 'undefined') {
-                    for (let k in variables) {                        
+                    for (let k in variables) {
                         // if ( typeof(window[k]) != 'undefined' ) {
                         //     // already register
                         //     continue;
                         //     //throw new Error('Gina cannot register _global.'+k+': variable name need to be changed, or you need to called `_global.unregister(['+k+'])` in order to use it');
                         // }
-                        //window.gina['_global'][k] = variables[k];                        
+                        //window.gina['_global'][k] = variables[k];
                         window[k] = variables[k];
                     }
                 }
@@ -21350,7 +21379,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
                 if ( typeof(variables) == 'undefined' || !Array.isArray(variables)) {
                     throw new Error('`variables` needs to ba an array')
                 }
-                
+
                 for (let i = 0, len = variables.length; i < len; i++) {
                     //delete  window.gina['_global'][ variables[i] ];
                     //if ( typeof(window[ variables[i] ]) != 'undefined' ) {
@@ -21374,7 +21403,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
         ready: function(callback, context) {
 
 
-            // if ready has already fired, then just schedule the callback
+            // if ready has already beenfired, then just schedule the callback
             // to fire asynchronously, but right away
             if (readyFired) {
                 setTimeout(function() {callback(context);}, 1);
@@ -21411,8 +21440,24 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 
 
 define('core', ['require', 'gina'], function (require) {
+    // require(['jquery'], function onjQueryLoaded(_jQuery) {
+    //     console.debug('_jQuery loaded ', _jQuery.fn.jquery);
+    //     jquery = _jQuery
+    // });
+
     require('gina')(window['gina']); // passing core required lib through parameters
+
 });
+
+/**
+ * It will not work, since jQuery registers itself with the name of 'jquery' and not 'lib/jquery'.
+ * In general, explicitly naming modules in the define() call are discouraged, but jQuery has some special constraints.
+ */
+// if ( typeof define === "function" && define.amd ) {
+// 	define(['require'], function(require) {
+// 		jQuery = require('jquery');
+// 	});
+// // }
 
 
 require.config({
@@ -21420,8 +21465,10 @@ require.config({
 });
 
 // exporting
+require(["jquery"]);
 require([
     //vendors
+    // "jquery",
     "vendor/uuid",
     "vendor/engine.io",
 
@@ -21437,20 +21484,20 @@ require([
     "gina/popin",
     "gina/storage",
 
-    // utils
+    // lib
     "utils/dom",
     "utils/events",
     "utils/effects",
     "utils/polyfill",
-    "utils/inherits",
-    //"utils/merge",
-    "utils/form-validator",
-    "utils/collection",
-    "utils/routing"
+    "lib/inherits",
+    //"lib/merge",
+    "lib/form-validator",
+    "lib/collection",
+    "lib/domain",
+    "lib/routing"
 ]);
 
-
-// catching freelancer script load event
+// catching gina script load event
 var tags = document.getElementsByTagName('script');
 
 for (var t = 0, len = tags.length; t < len; ++t) {
@@ -21486,12 +21533,12 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             'webroot' : '{{ page.environment.webroot }}',
                         };
 
-                       
+
                         // globals
                         window['GINA_ENV']          = '{{ GINA_ENV }}';
                         window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
                         if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
+                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;
                         }
 
                         gina["setOptions"](options);

@@ -1,12 +1,12 @@
-define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils/merge', 'utils/routing', 'utils/events' ], function (require) {
+define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/merge', 'lib/routing', 'utils/events' ], function (require) {
 
     var $               = require('jquery');
     $.noConflict();
     var uuid            = require('vendor/uuid');
-    var Domain          = require('utils/domain');
+    var Domain          = require('lib/domain');
     var domainInstance  = null;
-    var merge           = require('utils/merge');
-    var routing         = require('utils/routing');
+    var merge           = require('lib/merge');
+    var routing         = require('lib/routing');
 
     require('utils/events'); // events
 

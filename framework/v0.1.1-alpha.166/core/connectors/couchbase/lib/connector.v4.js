@@ -5,10 +5,10 @@ var EventEmitter    = require('events').EventEmitter;
 uuid                = require('uuid');
 var couchbase       = require(getPath('project') +'/node_modules/couchbase');// jshint ignore:line
 var gina            = require('../../../../core/gna');
-var utils           = gina.utils;
-var console         = utils.logger;
-var merge           = utils.merge;
-var modelUtil       = new utils.Model();
+var lib             = gina.lib;
+var console         = lib.logger;
+var merge           = lib.merge;
+var modelUtil       = new lib.Model();
 
 //globalized
 // N1qlQuery           = couchbase.N1qlQuery || null;// jshint ignore:line

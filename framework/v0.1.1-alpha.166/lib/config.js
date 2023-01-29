@@ -1,4 +1,4 @@
-/* Gina.Utils.Config
+/* Gina.Lib.Config
  *
  * This file is part of the gina package.
  * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
@@ -58,7 +58,7 @@ function ConfigUtil() {
     this.set = function(app, file, content, callback){
         switch (app) {
             case 'gina':
-            case 'gina.utils':
+            case 'gina.lib':
                 setFile(app, file, content, function(err){
                     callback(err);
                 });
@@ -82,15 +82,15 @@ function ConfigUtil() {
 
         switch (project) {
             case 'gina':
-            case 'gina.utils':
+            case 'gina.lib':
                 try {
-                    //You are under gina.utils/lib/...
+                    //You are under gina.lib/lib/...
                     if ( typeof(self.value) != "undefined" ) {
 
                         try {
                             config = self.value;//????
-                        } catch (err) {
-                            err = 'Utils.Config.get(...) : self.value['+ file +'] : key not found.\n' + err;
+                        } catch (_err) {
+                            err = 'Lib.Config.get(...) : self.value['+ file +'] : key not found.\n' + _err;
                         }
 
                     } else {
@@ -102,25 +102,25 @@ function ConfigUtil() {
                                 self.value = config;
                                 self.paths = config['paths'];
 
-                            } catch (err) {
+                            } catch (_err) {
                                 //Means that the file was not found..
-                                console.error(err.stack || err.message);
-                                err = new Error(self.__dirname  + '/.gna/locals.json: project configuration file not found.');
+                                err = new Error(self.__dirname  + '/.gna/locals.json: project configuration file not found.\n'+ (_err.stack||_err.message));
+                                console.emerg(err);
                                 process.exit(1)
                             }
                         }
                     }
                     callback(err, config)
 
-                } catch (err) {
-                    var err = new Error('[ UtilsConfig ]  .gna/locals.json: project configuration file not found. \n' + (err.stack||err.message));
-                    //logger.error('gina', 'UTILS:CONFIG:ERR:3', err, __stack);
+                } catch (_err) {
+                    err = new Error('[ LibConfig ]  .gna/locals.json: project configuration file not found. \n' + (_err.stack||_err.message));
+                    //logger.error('gina', 'LIB:CONFIG:ERR:3', err, __stack);
                     callback(err);
                 }
                 break;
 
             default :
-                callback('[ UtilsConfig ] Config.get('+project+'): case not found');
+                callback('[ LibConfig ] Config.get('+project+'): case not found');
         }
     }
 
@@ -146,7 +146,7 @@ function ConfigUtil() {
         } else {
             var filename = self.paths.root +'/.gna/'+ file;
             if (i > 0) {
-                console.debug('[ UtilsConfig ] retrying [ '+i+' ] to load: `' + filename +'`')
+                console.debug('[ LibConfig ] retrying [ '+i+' ] to load: `' + filename +'`')
             }
 
             try {
@@ -155,23 +155,23 @@ function ConfigUtil() {
                 } else {
                     // you might just be experimenting some latencies
                     if (i < maxRetry) {
-                        console.debug('[ UtilsConfig ] retrying to load config after timeout `' + filename +'`');
+                        console.debug('[ LibConfig ] retrying to load config after timeout `' + filename +'`');
                         setTimeout(function(){
-                            console.debug('[ UtilsConfig ] It is time re reload config');
+                            console.debug('[ LibConfig ] It is time re reload config');
                             self.getSync(project, file, i+1)
                         }, delay);
                         //return
                     } else {
-                        var err = new Error('[ UtilsConfig ] '+ filename + ' not found');
+                        var err = new Error('[ LibConfig ] '+ filename + ' not found');
                         console.emerg(err.stack||err.message);
                         process.exit(1);
                     }
                 }
             } catch (err) {
                 if (i < maxRetry) {
-                    console.debug('[ UtilsConfig ] (catched) retrying to load config after timeout');
+                    console.debug('[ LibConfig ] (catched) retrying to load config after timeout');
                     setTimeout(function(){
-                        console.debug('[ UtilsConfig ] It is time re reload config');
+                        console.debug('[ LibConfig ] It is time re reload config');
                         self.getSync(project, file, i+1)
                     }, delay);
                 } else {
@@ -197,8 +197,8 @@ function ConfigUtil() {
     var setFile = function(app, file, content, callback) {
 
         var paths = {
-            root : content.paths.root,
-            utils : content.paths.utils
+            root    : content.paths.root,
+            lib     : content.paths.lib
         };
         var gnaFolder = content.paths.root + '/.gna';
         console.debug('Checking for `'+ gnaFolder +'` ...');
@@ -280,7 +280,7 @@ function ConfigUtil() {
 
                     var locals = require(gnaFolder +'/'+ file);
 
-                    if (paths.utils != locals.paths.utils) {
+                    if (paths.lib != locals.paths.lib) {
 
                         new _(gnaFolder).rm( function(err){
                             if (err) {
@@ -334,10 +334,10 @@ function ConfigUtil() {
                 })
             } else {
                 //log & ignore. This is not a real issue.
-                //logger.warn('gina', 'UTILS:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
+                //logger.warn('gina', 'LIB:CONFIG:WARN:1', 'Path not found: ' + path, __stack);
                 console.warn( 'Path not found: ' + path, __stack);
                 onSymlinkRemoved(self.paths, function(err){
-                    //if (err) logger.error('gina', 'UTILS:CONFIG:ERR:9', err, __stack);
+                    //if (err) logger.error('gina', 'LIB:CONFIG:ERR:9', err, __stack);
                     if (err) console.error(err.stack||err.message);
 
                     callback(false)
@@ -368,11 +368,11 @@ function ConfigUtil() {
                 p.rm(function(err, path){
                     //console.log("receives ", err, path);
                     if (err) {
-                        //logger.error('gina', 'UTILS:CONFIG:ERR:8', err, __stack);
+                        //logger.error('gina', 'LIB:CONFIG:ERR:8', err, __stack);
                         console.error(err.stack||err.message);
                         callback(err)
                     } else {
-                        //logger.info('gina', 'UTILS:CONFIG:INFO:1', path +': deleted with success !');
+                        //logger.info('gina', 'LIB:CONFIG:INFO:1', path +': deleted with success !');
                         console.info( path +': deleted with success !');
                         callback(false)
                     }
@@ -399,7 +399,7 @@ function ConfigUtil() {
             null,
             function(err){
                 if (err) {
-                    //logger.error('gina', 'UTILS:CONFIG:ERR:2', err, __stack);
+                    //logger.error('gina', 'LIB:CONFIG:ERR:2', err, __stack);
                     console.error('`Error on while calling createContent()`: ' + err.stack||err.message);
                     callback(err)
                 } else {
@@ -451,9 +451,9 @@ function ConfigUtil() {
 
         self.get(app, function(err, config){
             if (err) {
-                //logger.error('gina', 'UTILS:CONFIG:ERR:4', err, __stack);
+                //logger.error('gina', 'LIB:CONFIG:ERR:4', err, __stack);
                 console.error(err.stack||err.message);
-                callback(err + 'Utils.Config.get(...)');
+                callback(err + 'Lib.Config.get(...)');
             }
 
             try {

@@ -4,10 +4,10 @@ var util            = require('util');
 var EventEmitter    = require('events').EventEmitter;
 var couchbase       = require('couchbase');
 var gina            = require('../../../../core/gna');
-var utils           = gina.utils;
-var console         = utils.logger;
-var merge           = utils.merge;
-var modelUtil       = new utils.Model();
+var lib             = gina.lib;
+var console         = lib.logger;
+var merge           = lib.merge;
+var modelUtil       = new lib.Model();
 
 //globalized
 N1qlQuery           = couchbase.N1qlQuery || null;
@@ -45,44 +45,44 @@ function Connector(dbString) {
             version: 3
         }
     ;
-    
+
     /**
      * connect
      *
      * @param {object} dbString
      * @callback cb
-     * */    
+     * */
     this.connect = function(dbString, cb) {
         // Attention: the connection is lost 5 minutes once the bucket is opened.
         var conn        = null;
-        
+
         var onError = function (err, next) {
             delete self.instance.reconnecting;
             self.instance.reconnected = self.instance.connected = false;
             console.error('[ CONNECTOR ][ ' + local.bundle +' ] couchbase could not be reached !!\n'+ ( err.stack || err.message || err ) );
-            
+
             // reconnecting
             console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in a few secs...');
             self.instance.reconnecting = true;
-            
+
             setTimeout( function onRetry(){
                 if ( typeof(next) != 'undefined' ) {
                     self.connect(dbString, next)
                 } else {
                     self.connect(dbString)
                 }
-            }, 5000)   
-            
+            }, 5000)
+
         };
-        
+
         // once
         var onConnect = function onConnect(cb){
-            console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!'); 
+            console.debug('[ CONNECTOR ][ ' + local.bundle +' ] couchbase is alive !!');
             console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ] now connected...');
-            
+
             self.instance.reconnected  = self.instance.connected   = true;
             var options = local.options;
-            
+
             // updating context
             var ctx = getContext()
                 , bundle = ctx.bundle
@@ -101,7 +101,7 @@ function Connector(dbString) {
                 if ( typeof(cb) != 'undefined' ) { // this portition is not working yet on Mac OS X
                     console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ '+ env +' ] connected to couchbase !!');
 
-                    
+
                     modelUtil.setConnection(bundle, name, self.instance);
 
                     if ( fs.existsSync(modelsPath) ) {
@@ -116,7 +116,7 @@ function Connector(dbString) {
                         cb(new Error('[ CONNECTOR ][ ' + local.bundle +' ][ '+ env +' ] '+ modelsPath+ ' not found') )
                     }
 
-                } else {                                      
+                } else {
                     console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ '+ env +' ] connection to bucket `'+ name +'` is being kept alive ...');
                 }
             });
@@ -132,7 +132,7 @@ function Connector(dbString) {
                     self.instance.reconnected = false;
                     self.instance.reconnecting = false;
                 }
-                
+
                 if (
                     err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                     //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
@@ -141,14 +141,14 @@ function Connector(dbString) {
                     // reconnecting
                     console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in 5 secs...');
                     self.reconnecting = true;
-                    
+
                     setTimeout( function onRetry(){
                         if ( typeof(next) != 'undefined' ) {
                             self.connect(dbString, next)
                         } else {
                             self.connect(dbString)
                         }
-                    }, 5000)                            
+                    }, 5000)
 
                 } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
                     self.instance.disconnect();
@@ -164,7 +164,7 @@ function Connector(dbString) {
                     if (err && err instanceof Error) {
 
                         console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
-                        
+
                         if ( typeof(err) == 'object' ) {
                             res.end(JSON.stringify({
                                 status: 500,
@@ -174,7 +174,7 @@ function Connector(dbString) {
                         } else {
                             res.end(err)
                         }
-                        
+
                         res.headersSent = true;
                     } else {
                         // express js patch
@@ -184,33 +184,33 @@ function Connector(dbString) {
                             console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                             return;
                         }
-                    }                            
+                    }
                 }
             });
-            
-                               
-            self.emit('ready', false, self.instance);  
+
+
+            self.emit('ready', false, self.instance);
         }
-        
+
         try {
-                        
+
             // if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
             //     conn = self.cluster.bucket(dbString.database, dbString.password);
             // } else {
             //     conn = self.cluster.bucket(dbString.database);
             // }
-            
+
             // conn.sdk        = sdk;
-            // self.instance   = conn;   
+            // self.instance   = conn;
             // onConnect(cb)
-            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {                
+            if ( typeof(dbString.password) != 'undefined' && typeof(self.cluster.authenticate) == 'undefined' ) {
                 conn = await self.cluster.openBucket(dbString.database, dbString.password, function onBucketOpened(bErr) {
                     if (bErr) {
                         cb(bErr)
                     } else {
                         conn.sdk        = sdk;
                         self.instance   = conn;
-                        onConnect(cb); 
+                        onConnect(cb);
                     }
                 });
             } else {
@@ -224,13 +224,13 @@ function Connector(dbString) {
                     }
                 });
             }
-            
+
         } catch (err) {
             console.error('[ CONNECTOR ][ ' + local.bundle +' ] '+ local.env +' ] couchbase could not connect to bucket `'+ dbString.database +'`\n'+ (err.stack || err.message || err) );
             onError(err, cb)
         }
 
-        
+
         return conn
     }
 
@@ -250,7 +250,7 @@ function Connector(dbString) {
             local.bundle    = getConfig().bundle
 
             console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ][ ' + dbString.database +' ] authenticating to couchbase cluster @'+ dbString.protocol + dbString.host);
-            
+
             try {
                 self.cluster = new couchbase.Cluster(dbString.protocol + dbString.host);
                 // version 5.x
@@ -259,15 +259,15 @@ function Connector(dbString) {
             } catch(_err) {
                 console.error('[ CONNECTOR ][ ' + local.bundle +' ] could not authenticate to couchbase @`'+ dbString.protocol + dbString.host +'`\n'+ (_err.stack || _err.message || _err) );
             }
-                
+
             console.info('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.connector +' ][ ' + dbString.database +' ] connecting to couchbase cluster @'+ dbString.protocol + dbString.host);
-            
+
             self
                 .connect(dbString)
                 // .on('error', function(err){
                 //     if (!self.reconnecting)
-                //         console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);                    
-                   
+                //         console.emerg('[ CONNECTOR ][ ' + local.bundle +' ][ '+ dbString.database +' ] Handshake aborted ! PLease check that Couchbase is running.\n',  err.message);
+
                 //     if (err)
                 //         console.error(err.stack);
                 // })
@@ -285,7 +285,7 @@ function Connector(dbString) {
                 //             self.instance.reconnected = false;
                 //             self.instance.reconnecting = false;
                 //         }
-                        
+
                 //         if (
                 //             err instanceof couchbase.Error && err.code == 16 && !self.reconnected
                 //             //|| err instanceof couchbase.Error && err.code == 23 && !self.reconnecting
@@ -294,14 +294,14 @@ function Connector(dbString) {
                 //             // reconnecting
                 //             console.debug('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] trying to reconnect in 5 secs...');
                 //             self.reconnecting = true;
-                            
+
                 //             setTimeout( function onRetry(){
                 //                 if ( typeof(next) != 'undefined' ) {
                 //                     self.connect(dbString, next)
                 //                 } else {
                 //                     self.connect(dbString)
                 //                 }
-                //             }, 5000)                            
+                //             }, 5000)
 
                 //         } else if (err instanceof couchbase.Error && err.code == 23 && !self.reconnecting) {
                 //             self.instance.disconnect();
@@ -317,7 +317,7 @@ function Connector(dbString) {
                 //             if (err && err instanceof Error) {
 
                 //                 console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
-                                
+
                 //                 if ( typeof(err) == 'object' ) {
                 //                     res.end(JSON.stringify({
                 //                         status: 500,
@@ -327,7 +327,7 @@ function Connector(dbString) {
                 //                 } else {
                 //                     res.end(err)
                 //                 }
-                                
+
                 //                 res.headersSent = true;
                 //             } else {
                 //                 // express js patch
@@ -337,7 +337,7 @@ function Connector(dbString) {
                 //                     console.error('[ CONNECTOR ][ ' + local.bundle +' ][ ' + dbString.database +' ] gina fatal error ('+ err.code +'): ' + (err.message||err) + '\nstack: '+ err.stack);
                 //                     return;
                 //                 }
-                //             }                            
+                //             }
                 //         }
                 //     })
                 // })
@@ -348,7 +348,7 @@ function Connector(dbString) {
         }
     }
 
-    
+
 
     /**
      * ping
@@ -395,10 +395,10 @@ function Connector(dbString) {
             }
 
             self.pingId = setInterval(function onTimeout(){
-                
+
                 if (!self.instance.connected) {
                     console.debug('[ CONNECTOR ][ ' + local.bundle +' ] connecting to couchbase');
-                    
+
                     self.instance.reconnected = false;
                     self.instance.reconnecting = true;
                     if ( typeof(next) != 'undefined' ) {
@@ -406,11 +406,11 @@ function Connector(dbString) {
                     } else {
                         self.connect(dbString)
                     }
-                    
-                } else {                    
+
+                } else {
                     self.ping(options.pingInterval, cb, ncb);
                 }
-                                
+
             }, interval);
             ncb(cb)
         } else {

@@ -17,10 +17,10 @@ var fs = require('fs');
 
 try {
     require('./node_modules/gina/node_modules/colors');
-    var utils = require("./node_modules/gina/core/utils");
-    var console = utils.logger;
+    var lib     = require("./node_modules/gina/core/lib");
+    var console = lib.logger;
     console.log('Gina I/O Command Line Tool \r\n'.rainbow);
-    utils.cmd.load(__dirname, "/node_modules/gina/package.json")
+    lib.cmd.load(__dirname, "/node_modules/gina/package.json")
 } catch (err) {
     process.stdout.write(err.stack + '\r\n')
 }

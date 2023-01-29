@@ -10,10 +10,10 @@ var fs = require('fs');
 /**
  * @module Helpers
  *
- * Gina Utils Helpers
+ * Gina Lib Helpers
  *
- * @package     Gina.Utils
- * @namespace   Gina.Utils.Helpers
+ * @package     Gina.Lib
+ * @namespace   Gina.Lib.Helpers
  * @author      Rhinostone <contact@gina.io>
  */
 var _require = function(path) {

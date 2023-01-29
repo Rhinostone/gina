@@ -1,10 +1,11 @@
-define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'utils/merge'*/, 'utils/collection', 'utils/routing', 'gina/storage', 'gina/validator' ], function (require) {
+define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'lib/collection', 'lib/routing', 'gina/storage', 'gina/validator' ], function (require) {
 
     var $           = require('jquery');
+
     $.noConflict();
-    //var merge       = require('utils/merge');
-    var routing     = require('utils/routing');
-    var Collection  = require('utils/collection');
+    //var merge       = require('lib/merge');
+    var routing     = require('lib/routing');
+    var Collection  = require('lib/collection');
     var Storage     = require('gina/storage');
     //var Validator   = require('gina/validator');
 

@@ -1,9 +1,9 @@
 'use strict';
 var fs      = require('fs');
 const {execSync}    = require('child_process');
-var help    = require( getPath('gina').root + '/utils/helper');
+var help    = require( getPath('gina').root + '/utils/helper');// jshint ignore:line
 // var child   = require('child_process');
-var lib     = require( getPath('gina').lib );
+var lib     = require( getPath('gina').lib );// jshint ignore:line
 //var helpers     = require( getPath('gina').helpers );
 var console = lib.logger;
 /**
@@ -33,8 +33,8 @@ function Start(opt){
 
 
         self.pid        = opt.pid;
-        setEnvVar('GINA_PID', opt.pid);
-        self.projects   = require(GINA_HOMEDIR + '/projects.json');
+        setEnvVar('GINA_PID', opt.pid);// jshint ignore:line
+        self.projects   = require(GINA_HOMEDIR + '/projects.json');// jshint ignore:line
         self.services   = [];
         self.bundles    = [];
 
@@ -47,7 +47,7 @@ function Start(opt){
 
     // TODO  - not working with execSync ... should try with spawn, like or restart
     var restartRunningBunldes = function() {
-        var list = fs.readdirSync(_(GINA_RUNDIR, true));
+        var list = fs.readdirSync(_(GINA_RUNDIR, true));// jshint ignore:line
         for (let i=0, len=list.length; i<len; i++ ) {
             let file = list[i];
             if (/^\./.test(file) || !/\.pid$/.test(file) || /^gina\-/.test(file) || /(minion)/.test(file) ) {
@@ -60,7 +60,7 @@ function Start(opt){
 
     var cleanPIDs = function() {
         var f = 0
-            , path = _(GINA_RUNDIR)
+            , path = _(GINA_RUNDIR)// jshint ignore:line
             , files = null
         ;
 
@@ -83,15 +83,15 @@ function Start(opt){
 
                 let filePid = null;
                 try {
-                    filePid = fs.readFileSync(_(path +'/'+ files[f], true)).toString().trim();
+                    filePid = fs.readFileSync(_(path +'/'+ files[f], true)).toString().trim();// jshint ignore:line
                 } catch(fileErr) {
-                    fs.unlinkSync(_(path +'/'+ files[f], true));
+                    fs.unlinkSync(_(path +'/'+ files[f], true));// jshint ignore:line
                     continue;
                 }
                 // remove old framework pid files
                 if (filePid && filePid != self.pid) {
                     try {
-                        new _(path +'/'+ files[f]).rmSync()
+                        new _(path +'/'+ files[f]).rmSync()// jshint ignore:line
                     } catch(err) {
                         return end(err)
                     }

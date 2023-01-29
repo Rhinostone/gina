@@ -61,5 +61,22 @@ if [ ! "${rjs_env}" == "dev" ]; then
     eval $cmd
 fi
 
+# Compiling & minifying pluging loader
+
+# Compiling & minifying pluging Loader
+echo -e "\n[ Compiling & minifying pluging loader ]"
+echo -e "\nPlease, wait ..."
+if [ ! "${rjs_env}" == "dev" ]; then
+    cmd="$java_bin -jar $SCRIPT_PATH/lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --jscomp_warning=es5Strict --js $SCRIPT_PATH/src/gina/utils/loader.js --create_source_map $SCRIPT_PATH/dist/gina.onload.min.js.map --js_output_file $SCRIPT_PATH/dist/gina.onload.min.js"
+else
+    #cmd="$java_bin -jar $SCRIPT_PATH/lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level WHITESPACE_ONLY --jscomp_warning=es5Strict --js $SCRIPT_PATH/src/gina/utils/loader.js --create_source_map $SCRIPT_PATH/dist/gina.onload.min.js.map --js_output_file $SCRIPT_PATH/dist/gina.onload.min.js"
+    cmd="cp $SCRIPT_PATH/src/gina/utils/loader.js $SCRIPT_PATH/dist/gina.onload.min.js"
+fi
+echo -e "Running: ${cmd}"
+eval $cmd
+
+
+
+
 
 echo -e "\r\nCompleted build.\nAttention, you might need to refresh your page twice to clear the cache."

@@ -15,7 +15,7 @@ const swig          = require( _(GINA_FRAMEWORK_DIR +'/node_modules/swig', true)
 var Config          = require('./config');
 var Router          = require('./router');
 var lib             = require('./../lib');
-var routingUtils    = lib.routing;
+var routingLib    = lib.routing;
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var Proc            = lib.Proc;
@@ -1171,7 +1171,12 @@ function Server(options) {
 
             var headerValue = null;
             for (var h in resHeaders) {
-                if (!response.headersSent) {
+                if (
+                    // typeof(response.finished) != 'undefined' && !response.finished
+                    // || typeof(response.writableEnded) != 'undefined' && !response.writableEnded
+                    // ||
+                    !response.headersSent
+                ) {
                     // handles multiple origins
                     if ( /access\-control\-allow\-origin/i.test(h) ) { // re.test(resHeaders[h]
                         if (sameOrigin) {
@@ -1194,13 +1199,26 @@ function Server(options) {
                                 origin = sameOrigin;
 
 
-                            response.setHeader(h, origin);
+                            // if (
+                            //     typeof(response.finished) != 'undefined' && !response.finished
+                            //     || typeof(response.writableEnded) != 'undefined' && !response.writableEnded
+                            //     || !response.headersSent
+                            // ) {
+                                response.setHeader(h, origin);
+                            // }
+
                         }
                         sameOrigin = false;
                     } else {
                         headerValue = resHeaders[h];
                         try {
-                            response.setHeader(h, headerValue)
+                            // if (
+                            //     typeof(response.finished) != 'undefined' && !response.finished
+                            //     || typeof(response.writableEnded) != 'undefined' && !response.writableEnded
+                            //     || !response.headersSent
+                            // ) {
+                                response.setHeader(h, headerValue)
+                            // }
                         } catch (headerError) {
                             console.error(headerError)
                         }
@@ -1230,6 +1248,7 @@ function Server(options) {
             , cacheless = conf.cacheless
         ;
 
+
         if (
             headers[':path'] == '/'
             || headers[':path'] == this._options.conf.server.webroot
@@ -1247,6 +1266,10 @@ function Server(options) {
 
         var url = (isWebroot) ? this._referrer : headers[':path'];
 
+        var hanlersPath     = conf.handlersPath
+            , isHandler     = ( new RegExp('^'+ hanlersPath).test(assets[ url ].filename) ) ? true: false
+        ;
+
         if (!stream.pushAllowed) {
             asset = {
                 url         : url,
@@ -1255,13 +1278,39 @@ function Server(options) {
                 isAvailable : assets[ url ].isAvailable,
                 mime        : assets[ url ].mime,
                 encoding    : conf.encoding,
-                isHandler   : false
+                isBinary    : assets[ url ].isBinary,
+                isHandler   : assets[ url ].isHandler
             };
             header = merge({ ':status': 200 }, response.getHeaders());
             header['content-type'] = ( !/charset/.test(asset.mime ) ) ? asset.mime + '; charset='+ asset.encoding : asset.mime;
             header = completeHeaders(header, local.request, response);
-            if (assets[ url ].isBinary) {
-                header['content-length'] = fs.statSync(assets[ url ].filename).size;
+            if (asset.isBinary || asset.isHandler ) {
+
+
+                if (asset.isHandler) {
+                    // adding handler `gina.ready(...)` wrapper
+                    var file = null;
+                    if ( !fs.existsSync(asset.filename) ) {
+                        throwError({stream: stream}, 404, 'Page not found: \n' + headers[':path']);
+                        return;
+                    }
+
+                    if (!assets[ url ].file) {
+                        file      = fs.readFileSync(asset.filename, asset.encoding).toString();
+                        file      = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));';
+                        this._options.template.assets[ headers[':path'] ].file = file;
+                    } else {
+                        file = assets[ url ].file;
+                    }
+
+                    // header['content-length'] = fs.statSync(file).size;
+                    stream.respond(header);
+                    stream.end(file);
+
+                    return;
+                }
+
+                header['content-length'] = fs.statSync(asset.filename).size;
                 stream.respondWithFile(
                     asset.filename
                     , header
@@ -1336,7 +1385,7 @@ function Server(options) {
                 isAvailable : assets[ url ].isAvailable,
                 mime        : assets[ url ].mime,
                 encoding    : conf.encoding,
-                isHandler   : false
+                isHandler   : isHandler
             };
 
             console.debug('h2 pushing: '+ headers[':path'] + ' -> '+ asset.filename);
@@ -1349,7 +1398,7 @@ function Server(options) {
                     return;
                 }
 
-                asset.isHandler = true;
+                asset.isHandler = this._options.template.assets[ headers[':path'] ].isHandler  = true;
                 asset.file      = fs.readFileSync(asset.filename, asset.encoding).toString();
                 asset.file      = '(gina.ready(function onGinaReady($){\n'+ asset.file + '\n},window["originalContext"]));';
 
@@ -1473,6 +1522,7 @@ function Server(options) {
         var isFilenameDir   = null
             , dirname       = null
             , isBinary      = null
+            , isHandler     = null
             , hanlersPath   = null
         ;
 
@@ -1565,7 +1615,8 @@ function Server(options) {
 
                     if (!response.headersSent) {
 
-                        isBinary = true;
+                        isBinary    = true;
+                        isHandler   = false;
 
                         try {
                             contentType = getHead(response, filename);
@@ -1585,7 +1636,8 @@ function Server(options) {
                                 hanlersPath = bundleConf.handlersPath;
 
                                 if ( new RegExp('^'+ hanlersPath).test(filename) ) {
-                                    isBinary = false;
+                                    isBinary    = false;
+                                    isHandler   = true;
                                     file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
                                 }
                             }
@@ -1611,7 +1663,8 @@ function Server(options) {
                                         mime: contentType,
                                         url: request.url,
                                         filename: filename,
-                                        isBinary: isBinary
+                                        isBinary: isBinary,
+                                        isHandler: isHandler
                                     }
                                 }
 
@@ -1691,12 +1744,14 @@ function Server(options) {
                                                     mime: contentType,
                                                     url: request.url,
                                                     filename: filename,
-                                                    isBinary: isBinary
+                                                    isBinary: isBinary,
+                                                    isHandler: isHandler
                                                 }
                                             }
 
                                             if (!fs.existsSync(filename)) return;
-                                            isBinary = ( /text\/html/i.test(contentType) ) ? false : true;
+                                            isBinary    = ( /text\/html/i.test(contentType) ) ? false : true;
+                                            isHandler   = ( new RegExp('^'+ bundleConf.handlersPath).test(filename) ) ? true : false;
                                             if ( isBinary ) {
                                                 // override
                                                 self._options.template.assets[request.url] = {
@@ -1705,7 +1760,18 @@ function Server(options) {
                                                     mime: contentType,
                                                     url: request.url,
                                                     filename: filename,
-                                                    isBinary: isBinary
+                                                    isBinary: isBinary,
+                                                    isHandler: isHandler
+                                                }
+                                            }
+
+                                            if ( isHandler ) {
+                                                // adding handler `gina.ready(...)` wrapper
+                                                var file = null;
+                                                if (!self._options.template.assets[request.url].file) {
+                                                    file      = fs.readFileSync(filename, bundleConf.encoding).toString();
+                                                    file      = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));';
+                                                    self._options.template.assets[request.url].file = file;
                                                 }
                                             }
                                             self.onHttp2Stream(stream, headers, response);
@@ -2732,7 +2798,7 @@ function Server(options) {
             , wroot             = null
         ;
 
-        //matched = routingUtils.getRouteByUrl(req.url, bundle, (req.method||req[':method']), req);
+        //matched = routingLib.getRouteByUrl(req.url, bundle, (req.method||req[':method']), req);
 
         req = checkPreflightRequest(req);
         var params      = {}
@@ -2798,7 +2864,7 @@ function Server(options) {
 
                 //Parsing for the right url.
                 try {
-                    isRoute = await routingUtils.compareUrls(params, routing[name].url, req, res, next);
+                    isRoute = await routingLib.compareUrls(params, routing[name].url, req, res, next);
                 } catch (err) {
                     var msg = 'Internal server error.\nRule [ '+name+' ] needs your attention.\n';
                     // TODO - Refactor `ApiError`to handle the following param
@@ -2918,7 +2984,7 @@ function Server(options) {
         }
 
         if (!res.headersSent) {
-            res.headersSent = true;
+            // res.headersSent = true;
             local.request = checkPreflightRequest(local.request);
             // updated filter on controller.js : 2020/09/25
             //if (isXMLRequest || !withViews || !isUsingTemplate ) {
@@ -3037,7 +3103,7 @@ function Server(options) {
                     }
 
                     var eRule = 'custom-error-page@'+ self.appName;
-                    var routeObj = routingUtils.getRoute(eRule);
+                    var routeObj = routingLib.getRoute(eRule);
                     routeObj.rule = eRule;
                     routeObj.url = url;
                     routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;

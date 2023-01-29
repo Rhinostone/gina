@@ -20,7 +20,7 @@ function {Bundle}ContentController() {
         var data = {
             msg: appConf.greeting
         };
-        
+
         self.renderJSON(data);
 
         // use this to render errors

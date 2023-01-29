@@ -4,7 +4,7 @@ var Class = function() {
      *
      * Usage :
      *  var YourSingletonObject = {...};
-     *  var YourClass = Utils.construct(YourSingletonObject);
+     *  var YourClass = Lib.construct(YourSingletonObject);
      *
      * @param {object} Class
      * @param {boolean} [autoInit]

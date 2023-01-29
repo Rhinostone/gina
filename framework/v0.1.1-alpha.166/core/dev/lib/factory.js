@@ -1,4 +1,4 @@
-/* Gina.Utils.Dev.Factory
+/* Gina.Dev.Lib.Factory
  *
  * This file is part of the gina package.
  * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>

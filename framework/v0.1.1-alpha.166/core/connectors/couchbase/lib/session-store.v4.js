@@ -3,11 +3,10 @@ var fs              = require('fs');
 var util            = require('util');
 
 var gina            = require('../../../../core/gna');
-var utils           = gina.utils;
-var helpers         = utils.helpers;
+var lib             = gina.lib;
+var console         = lib.logger;
+var helpers         = lib.helpers;
 var dateFormat      = helpers.dateFormat;
-
-var console         = utils.logger;
 
 /*!
  * Connect - Couchbase

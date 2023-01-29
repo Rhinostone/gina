@@ -671,14 +671,14 @@ function Initialize(opt) {
         console.debug('Checking for PSL file');
         var datFilenameObj = new _(distPathObj.toString() + '/public_suffix_list.dat', true);
         if ( !datFilenameObj.existsSync() ) {
-            // try {
-            //     new Domain({isCachingRrequired: true}, done);
-            // } catch (err) {
-            //     // console.error(err.stack||err.message||err);
-            //     // process.exit(1)
-            //     return done(err)
-            // }
-            new Domain({isCachingRrequired: true}, done);
+            try {
+                new Domain({isCachingRrequired: true}, done);
+            } catch (err) {
+                // console.error(err.stack||err.message||err);
+                // process.exit(1)
+                return done(err)
+            }
+            // new Domain({isCachingRrequired: true}, done);
         }
 
         done()

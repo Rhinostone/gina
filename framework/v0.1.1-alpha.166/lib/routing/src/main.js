@@ -25,8 +25,14 @@ function Routing() {
 
     self.allowedMethodsString   = self.allowedMethods.join(',');
 
-    // loading utils & plugins
-    var plugins = null, inherits = null, merge = null, Validator = null, fs = null, promisify = null;
+    // loading lib & plugins
+    var plugins     = null
+        , inherits  = null
+        , merge     = null
+        , Validator = null
+        , fs        = null
+        , promisify = null
+    ;
     if (!isGFFCtx) {
         fs          = require('fs');
         promisify   = require('util').promisify;
@@ -39,10 +45,10 @@ function Routing() {
     // BO - In case of partial rendering whithout handler defined for the partial
     else {
         if ( !merge || typeof(merge) != 'function' ) {
-            var merge = require('utils/merge');
+            merge = require('lib/merge');
         }
-        if ( !Validator || typeof(Validator) != 'function' ) {
-            var Validator = require('utils/form-validator');
+        if ( !Validator || typeof(Validator) != 'function' ) {
+            Validator = require('lib/form-validator');
         }
     }
     // EO - In case of partial rendering whithout handler defined for the partial
@@ -1488,5 +1494,5 @@ if ((typeof (module) !== 'undefined') && module.exports) {
     module.exports = Routing()
 } else if (typeof (define) === 'function' && define.amd) {
     // Publish as AMD module
-    define('utils/routing', ['require', 'utils/form-validator', 'utils/merge'], function() { return Routing() })
+    define('lib/routing', ['require', 'lib/form-validator', 'lib/merge'], function() { return Routing() })
 }

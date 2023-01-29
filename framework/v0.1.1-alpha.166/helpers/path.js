@@ -23,7 +23,7 @@ e.setMaxListeners(100);
 /**
  * PathHelper
  *
- * @package     Gina.Utils.Helpers
+ * @package     Gina.Lib.Helpers
  * @author      Rhinzostone <contact@gina.io>
  * @api public
  *
@@ -866,7 +866,7 @@ function PathHelper() {
 //                if (err) {
 //                    logger.error(
 //                        'gina',
-//                        'UTILS:PATH:ERROR:7',
+//                        'LIB:HELPERS:PATH:ERROR:7',
 //                        err,
 //                        __stack
 //                    );

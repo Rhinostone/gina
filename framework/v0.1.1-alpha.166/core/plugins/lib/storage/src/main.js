@@ -7,8 +7,8 @@
  * */
 function StoragePlugin(options) {
 
-    var merge       = merge || require('utils/merge');;
-    var Collection  = Collection || require('utils/collection');
+    var merge       = merge || require('lib/merge');;
+    var Collection  = Collection || require('lib/collection');
     var uuid        = uuid || require('vendor/uuid');
     var dateFormat  = dateFormat || require('helpers/dateFormat');
 
@@ -415,8 +415,8 @@ function StoragePlugin(options) {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('utils/merge'); //require('../../../../../lib/merge');
-    var Collection  = require('utils/collection'); //require('../../../../../lib/collection');
+    var merge       = require('lib/merge'); //require('../../../../../lib/merge');
+    var Collection  = require('lib/collection'); //require('../../../../../lib/collection');
     var uuid        = require('uuid');
 
     module.exports = StoragePlugin

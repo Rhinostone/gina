@@ -24,7 +24,7 @@ var merge           = lib.merge;
 var inherits        = lib.inherits;
 var console         = lib.logger;
 var Collection      = lib.Collection;
-var routingUtils    = lib.routing;
+var routingLib      = lib.routing;
 var swig            = require('swig');
 var SwigFilters     = lib.SwigFilters;
 var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
@@ -1518,7 +1518,7 @@ function SuperController(options) {
     /**
      * redirect
      *
-     * TODO - improve redirect based on `utils.routing`
+     * TODO - improve redirect based on `lib.routing`
      * e.g.: self.redirect('project-get', { companyId: companyId, clientId: clientId, id: projectId }, true)
      *
      * How to avoid redirect inside popin context

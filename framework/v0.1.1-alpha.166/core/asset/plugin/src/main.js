@@ -17,16 +17,22 @@
  *
  *  window['originalContext']
  *      You have to passe your `jQuery` or your `DollarDom` context to Gina
- *      e.g.: 
+ *      e.g.:
  *          window['originalContext'] = window['jQuery']
- *      
+ *
  *      This can be achieved by overriding `window['originalContext']` before defining your handler
  *       Default value will be jQuery
  *
  * */
 
 //var wContext = ( typeof(window.onGinaLoaded) == 'undefined') ? window : parent.window; // iframe case
-var readyList = [ { name: 'gina', ctx: window['gina'], fn: window.onGinaLoaded } ];
+var readyList = [
+    {
+        name: 'gina',
+        ctx: window['gina'],
+        fn: window.onGinaLoaded
+    }
+];
 var readyFired = false;
 var readyEventHandlersInstalled = false;
 
@@ -51,7 +57,7 @@ function ready() {
                             if ( typeof(readyList) == 'undefined' ) {
                                 // Fixing init bug in chrome
                                 readyList = window.readyList;
-                            }                            
+                            }
                             readyList[i].ctx = window.gina;
                             result = readyList[i].fn.call(window, readyList[i].ctx, window.require);
 
@@ -78,7 +84,8 @@ function ready() {
                     if ( typeof(window.originalContext) == 'undefined' && typeof(window.$) != 'undefined' ) {
                         window.originalContext = window.$
                     }
-                    readyList[i].ctx = window.originalContext || $;// passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
+                    // passes the user's orignalContext by default; if no orignalContext is set will try users'jQuery
+                    readyList[i].ctx = window.originalContext || $;
                     readyList[i].fn.call(window, readyList[i].ctx, window.require);
                     ++i;
                     handleEvent(i, readyList);
@@ -92,10 +99,10 @@ function ready() {
 
         handleEvent(i, readyList);
     }
-}
+} // EO function ready()
 
 function readyStateChange() {
-    if ( document.readyState === 'complete' ) {        
+    if ( document.readyState === 'complete' ) {
         gina.ready();
     }
 }
@@ -108,30 +115,30 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
          * `_global` is used mainly for google closure compilation in some cases
          * where eval() is called
          * It will store extenal variable definitions
-         * e.g.: 
+         * e.g.:
          *  root -> window.root
          *  then you need to call :
          *      gina._global.register({'root': yourValue });
          *      => `window.root`now accessible
          *  before using:
          *      eval(root +'=value');
-         *  
+         *
          *  when not required anymore
          *      gina._global.unregister(['root])
          */
         /**@js_externs _global*/
         _global: {
-            
+
             /**@js_externs register*/
             register: function(variables) {
                 if ( typeof(variables) != 'undefined') {
-                    for (let k in variables) {                        
+                    for (let k in variables) {
                         // if ( typeof(window[k]) != 'undefined' ) {
                         //     // already register
                         //     continue;
                         //     //throw new Error('Gina cannot register _global.'+k+': variable name need to be changed, or you need to called `_global.unregister(['+k+'])` in order to use it');
                         // }
-                        //window.gina['_global'][k] = variables[k];                        
+                        //window.gina['_global'][k] = variables[k];
                         window[k] = variables[k];
                     }
                 }
@@ -141,7 +148,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
                 if ( typeof(variables) == 'undefined' || !Array.isArray(variables)) {
                     throw new Error('`variables` needs to ba an array')
                 }
-                
+
                 for (let i = 0, len = variables.length; i < len; i++) {
                     //delete  window.gina['_global'][ variables[i] ];
                     //if ( typeof(window[ variables[i] ]) != 'undefined' ) {
@@ -165,7 +172,7 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
         ready: function(callback, context) {
 
 
-            // if ready has already fired, then just schedule the callback
+            // if ready has already beenfired, then just schedule the callback
             // to fire asynchronously, but right away
             if (readyFired) {
                 setTimeout(function() {callback(context);}, 1);
@@ -202,8 +209,24 @@ if ( typeof(window['gina']) == 'undefined' ) {// could have be defined by loader
 
 
 define('core', ['require', 'gina'], function (require) {
+    // require(['jquery'], function onjQueryLoaded(_jQuery) {
+    //     console.debug('_jQuery loaded ', _jQuery.fn.jquery);
+    //     jquery = _jQuery
+    // });
+
     require('gina')(window['gina']); // passing core required lib through parameters
+
 });
+
+/**
+ * It will not work, since jQuery registers itself with the name of 'jquery' and not 'lib/jquery'.
+ * In general, explicitly naming modules in the define() call are discouraged, but jQuery has some special constraints.
+ */
+// if ( typeof define === "function" && define.amd ) {
+// 	define(['require'], function(require) {
+// 		jQuery = require('jquery');
+// 	});
+// // }
 
 
 require.config({
@@ -211,6 +234,7 @@ require.config({
 });
 
 // exporting
+// require(["jquery"]);
 require([
     //vendors
     "vendor/uuid",
@@ -228,20 +252,20 @@ require([
     "gina/popin",
     "gina/storage",
 
-    // utils
+    // lib
     "utils/dom",
     "utils/events",
     "utils/effects",
     "utils/polyfill",
-    "utils/inherits",
-    //"utils/merge",
-    "utils/form-validator",
-    "utils/collection",
-    "utils/routing"
+    "lib/inherits",
+    //"lib/merge",
+    "lib/form-validator",
+    "lib/collection",
+    "lib/domain",
+    "lib/routing"
 ]);
 
-
-// catching freelancer script load event
+// catching gina script load event
 var tags = document.getElementsByTagName('script');
 
 for (var t = 0, len = tags.length; t < len; ++t) {
@@ -277,12 +301,12 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             'webroot' : '{{ page.environment.webroot }}',
                         };
 
-                       
+
                         // globals
                         window['GINA_ENV']          = '{{ GINA_ENV }}';
                         window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
                         if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;  
+                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;
                         }
 
                         gina["setOptions"](options);

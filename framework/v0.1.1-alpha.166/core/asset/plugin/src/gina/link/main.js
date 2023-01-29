@@ -1,11 +1,22 @@
-define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'utils/domain', 'utils/merge', 'utils/events' ], function (require) {
+define('gina/link', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/merge', 'utils/events' ], function (require) {
 
     var $               = require('jquery');
+    // $.noConflict = function( deep ) {
+    //     if ( window.$ === jQuery ) {
+    //         window.$ = _$;
+    //     }
+
+    //     if ( deep && window.jQuery === jQuery ) {
+    //         window.jQuery = _jQuery;
+    //     }
+
+    //     return jQuery;
+    // }
     $.noConflict();
     var uuid            = require('vendor/uuid');
-    var Domain          = require('utils/domain');
+    var Domain          = require('lib/domain');
     var domainInstance  = null;
-    var merge           = require('utils/merge');
+    var merge           = require('lib/merge');
 
     require('utils/events'); // events
 
