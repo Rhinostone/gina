@@ -1,8 +1,8 @@
 
 function IntlPlugin() {
 
-    var merge       = merge || require('utils/merge');
-    var Collection  = Collection || require('utils/collection');
+    var merge       = merge || require('lib/merge');
+    var Collection  = Collection || require('lib/collection');
 
     var self = {
         options : {
@@ -10,7 +10,7 @@ function IntlPlugin() {
             locale: 'en' // by default
         }
     };
-    
+
     // load phrases
     var phrases = {
         'amendment' : {
@@ -24,8 +24,8 @@ function IntlPlugin() {
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // Publish as node.js module
-    var merge       = require('utils/merge');
-    var Collection  = require('utils/collection');
+    var merge       = require('lib/merge');
+    var Collection  = require('lib/collection');
 
     module.exports  = IntlPlugin
 

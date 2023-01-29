@@ -40,7 +40,7 @@ function Archiver() {
 
     var self        = this;
     var isGFFCtx    = ((typeof (module) !== 'undefined') && module.exports) ? false :  true;
-    var merge       = (isGFFCtx) ? require('utils/merge') : require('../../../lib/merge');
+    var merge       = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
     var zip         = null;
 
 

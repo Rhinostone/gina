@@ -201,17 +201,17 @@ function Config(opt, contextResetNeeded) {
                     //console.error("found bundles ", self.bundlesConfiguration.bundles);
 
                     //TODO - Don't override if syntax is ok - no mixed paths.
-                    //Set paths for utils. Override for now.
+                    //Set paths for lib. Override for now.
                     //To reset it, just delete the hidden folder.
                     var ginaPath = opt.ginaPath;
-                    var utilsConfig = new lib.Config();
+                    var libConfig = new lib.Config();
 
-                    utilsConfig.set('gina', 'locals.json', {
-                        project : utilsConfig.getProjectName(),
+                    libConfig.set('gina', 'locals.json', {
+                        project : libConfig.getProjectName(),
                         paths : {
                             project : self.projectName,
                             gina    : ginaPath,
-                            utils   : utilsConfig.__dirname,
+                            lib     : libConfig.__dirname,
                             root    : opt.executionPath,
                             env     : opt.executionPath + '/env.json',
                             tmp     : opt.executionPath + '/tmp'
@@ -834,7 +834,7 @@ function Config(opt, contextResetNeeded) {
                 // Variables replace. Compare with gina/core/template/conf/env.json.
                 // Defining root domain (TLD or SLD)
                 // by default
-                var rootDomain = domainLib.getRootDomain(os.hostname());
+                var rootDomain = domainLib.getRootDomain(os.hostname()).value;
                 // if overrided by the project `manifest.json`: meaning all bundles belong to the same TLD or SLD
                 if ( typeof(manifest.rootDomain) != 'undefined' ) {
                     rootDomain = manifest.rootDomain;
@@ -845,7 +845,7 @@ function Config(opt, contextResetNeeded) {
                 }
                 // custom override: user entry in the project/env/bundle `env.json` or `bundle/config/settings.server.json`
                 if (!/\{rootDomain\}/.test(newContent[app][env].host) ) {
-                    rootDomain = domainLib.getRootDomain(newContent[app][env].host);
+                    rootDomain = domainLib.getRootDomain(newContent[app][env].host).value;
                 }
                 newContent[app][env].rootDomain = rootDomain;
 

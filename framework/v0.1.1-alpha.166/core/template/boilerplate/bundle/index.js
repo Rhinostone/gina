@@ -6,10 +6,22 @@
 //var session = require('express-session');
 var {bundle} = require('gina');
 
+// gina lib samples
+// var lib             = {bundle}.lib;
+// var routing         = lib.routing;
+// var console         = lib.logger;
+// var operate         = lib.math.operate;
+// var Collection      = lib.Collection;
+// var SessionStore    = lib.SessionStore(session);
+// var Domain          = lib.Domain;
+
+
 // do whatever things you need to do before server starts
 //{bundle}.onInitialize( function(event, app, express){//
 //    var self = {bundle};
-//    var conf = self.getConfig(); // getting config/app.json would be: self.getConfig('app')
+//    // getting config/app.json would be: self.getConfig('app')
+//    // or self.getConfig().app
+//    var conf = self.getConfig();
 //    // you can use express middleware components
 //    // eg.: app.use( session({secret: '1234567890QWERTY'}) );
 //

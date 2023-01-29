@@ -10,8 +10,8 @@
 /**
  * @class Inherits
  *
- * @package gina.utils
- * @namesame gina.utils.inherits
+ * @package gina.lib
+ * @namesame gina.lib.inherits
  * @author Rhinostone <contact@gina.io>
  *
  * @api Public

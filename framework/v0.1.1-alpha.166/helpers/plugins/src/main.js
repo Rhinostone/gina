@@ -10,7 +10,7 @@
 /**
  * PluginsHelper
  *
- * @package     Gina.Utils.Helpers
+ * @package     Gina.Lib.Helpers
  * @author      Rhinostone <contact@gina.io>
  * @api public
  * */

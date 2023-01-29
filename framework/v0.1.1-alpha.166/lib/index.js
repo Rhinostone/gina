@@ -34,7 +34,7 @@ function Lib() {
 
     var self = {
         Config          : _require('./config'),
-        //dev     : require('./lib/dev'),//must be at the same level than gina.utils => gina.dev
+        //dev     : require('./lib/dev'),//must be at the same level than gina.lib => gina.dev
         inherits        : _require('./inherits'),
         helpers         : _require('./../helpers'),
         //this one must move to Dev since it's dev related

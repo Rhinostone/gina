@@ -2,10 +2,10 @@
  * FormValidatorUtil
  *
  * Dependencies:
- *  - utils/helpers
- *  - utils/helpers/dateFormat
- *  - utils/merge
- *  - utils/routing (for API calls)
+ *  - lib/helpers
+ *  - lib/helpers/dateFormat
+ *  - lib/merge
+ *  - lib/routing (for API calls)
  *
  * @param {object} data
  * @param {object} [ $fields ] - isGFFCtx only
@@ -19,10 +19,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     // if (isGFFCtx && !$fields )
     //     throw new Error('No `Validator` instance found.\nTry:\nvar FormValidator = require("gina/validator"):\nvar formValidator = new FormValidator(...);')
 
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('../../../../../lib/merge');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../../../lib/merge');
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
-    var routing         = (isGFFCtx) ? require('utils/routing') : require('../../../../../lib/routing');
+    var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
 
     var hasUserValidators = function() {
 
@@ -1492,7 +1492,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *
          * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
-         * @returns {date} date - extended by gina::utils::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {date} date - extended by gina::lib::helpers::dateFormat; an adaptation of Steven Levithan's code
          * */
         self[el]['isDate'] = function(mask) {
             var val         = this.value
@@ -1573,7 +1573,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
         /**
          * Formating date using DateFormatHelper
-         * Check out documentation in the helper source: `utils/helpers/dateFormat.js`
+         * Check out documentation in the helper source: `lib/helpers/dateFormat.js`
          * e.g.:
          *      d.start
          *        .isDate('dd/mm/yyyy')

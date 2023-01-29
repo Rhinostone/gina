@@ -1,4 +1,4 @@
-/* Gina.Utils.Generator
+/* Gina.Lib.Generator
  *
  * This file is part of the gina package.
  * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
@@ -14,8 +14,8 @@ var fs = require('fs');
  *
  * Generator Class
  *
- * @package     Gina.Utils
- * @namespace   Gina.Utils.Generator
+ * @package     Gina.Lib
+ * @namespace   Gina.Lib.Generator
  * @author      Rhinostone <contact@gina.io>
  * */
 var Generator = {

@@ -14,7 +14,7 @@ var crypto      = require('crypto');
 /**
  * MathHelper
  *
- * @package     gina.utils.math
+ * @package     gina.lib.math
  * @author      Rhinostone <contact@gina.io>
  * @api public
  * */
@@ -40,7 +40,7 @@ function MathHelper() {
      *
      * e.g.:
      *
-     *  var operate = require("gina").utils.math.operate;
+     *  var operate = require("gina").lib.math.operate;
      *  var computation = "10*2";
      *  var result = operate(computation);
      *      => 20

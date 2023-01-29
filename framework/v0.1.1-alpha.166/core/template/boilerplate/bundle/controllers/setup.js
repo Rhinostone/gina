@@ -1,7 +1,7 @@
 //Imports goes here.
-// var md = require('marked'); // visit: https://github.com/jmcmanus/pagedown-extra
-// var utils   = require('gina').utils;
-// var merge   = utils.merge;
+// var md       = require('marked'); // visit: https://github.com/jmcmanus/pagedown-extra
+// var lib      = require('gina').lib;
+// var merge    = lib.merge;
 
 /**
  * Setup Class
@@ -21,14 +21,14 @@ function SetupClass(req, res, next){
 
     // defining filters
     var swig = this.engine;
-    
+
     /**
      * Inherited filters from Gina are:
      * [ getWebroot ]
      * Will get the current webroot
      *  e.g.:
      *      {{ '' | getWebroot() }}
-     * 
+     *
      * [ getUrl ]
      * Will tranlate a route name to an url
      *  e.g.:
@@ -38,25 +38,25 @@ function SetupClass(req, res, next){
      *      <a href="{{ 'users-get-empty' | getUrl({ id: '' }) }}">Get empty</a>
      *      <a href="{{ 'users-list' | getUrl(null, 'http://domain.com') }}">Display all users</a>
      *      <a href="{{ '/dashboard' | getUrl(null, 'admin') }}">Go to admin bundle's dashboard page</a>
-     *      <a href="{{ 'home@admin' | getUrl() }}">Go to admin bundle's dashboard page</a>      
-     * 
+     *      <a href="{{ 'home@admin' | getUrl() }}">Go to admin bundle's dashboard page</a>
+     *
      * [ length ]
      *  Extends default Swig `length` filter
-     *  
+     *
      * [ nl2br ]
      * Will replace all `\n` by `<br/>`
      *  e.g.:
      *      {{ contact.address | nl2br }}
      */
-    
-    
+
+
     /**
      * Sample of a swig filter to render markdown content
      * To activate this code, you will need :
      * 1) to install `marked` dependency : npm install marked --save
      * 2) uncomment imports on the top of this script
      * 3) uncomment the following filter definition
-     */    
+     */
     // // default markdown options
     // var markdownOpt = { // visit: https://github.com/jmcmanus/pagedown-extra
     //     //renderer    : mdRenderer,
@@ -71,11 +71,11 @@ function SetupClass(req, res, next){
     // };
 
     // md.setOptions(markdownOpt);
-    
+
     // var setupSwigFilters = function(swig) {
-        
+
     //     if ( typeof(swig) == 'undefined' ) return;
-        
+
     //     /*
     //     * markdown filter
     //     * Usage:
@@ -101,7 +101,7 @@ function SetupClass(req, res, next){
     //         return text
     //     });
     // }
-    
+
     if (swig && typeof(setupSwigFilters) != 'undefined') { // not always available: redirect, xhr requests
         setupSwigFilters(swig)
     }

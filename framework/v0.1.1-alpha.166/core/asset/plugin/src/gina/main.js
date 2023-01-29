@@ -1,8 +1,8 @@
-define('gina', [ 'require', 'vendor/uuid', 'utils/merge', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
+define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers/prototypes', 'helpers/dateFormat', 'gina/toolbar' ], function (require) {
 
 
     var eventsHandler   = require('utils/events'); // events handler
-    var merge           = require('utils/merge');
+    var merge           = require('lib/merge');
     var dateFormat      = require('helpers/dateFormat')();
     var prototypes      = require('helpers/prototypes')({ dateFormat: dateFormat });
     var uuid            = require('vendor/uuid');

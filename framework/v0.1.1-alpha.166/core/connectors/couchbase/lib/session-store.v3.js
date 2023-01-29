@@ -3,8 +3,8 @@ var fs              = require('fs');
 var util            = require('util');
 
 var gina            = require('../../../../core/gna');
-var utils           = gina.utils;
-var console         = utils.logger;
+var lib             = gina.lib;
+var console         = lib.logger;
 
 /*!
  * Connect - Couchbase
@@ -120,7 +120,7 @@ module.exports = function(session, bundle){
             //var coll = connectOptions.db.collection(bundle);
             var coll = connectOptions.db.defaultCollection();
             //var coll  = ( typeof(bundle) != 'undefined' ) ? bucket.collection(bundle) : bucket.defaultCollection();
-            
+
             this.client = coll;
         } else {
             var Couchbase = require('couchbase');
@@ -160,8 +160,8 @@ module.exports = function(session, bundle){
         if ('function' !== typeof fn) { fn = noop; }
         sid = this.prefix + sid;
         console.debug('GET "%s"', sid);
-        
-        
+
+
         var err = false, result = null, data = null;
         // this.client.get(sid, function(err, data){
         //     //Handle Key Not Found error
@@ -183,18 +183,18 @@ module.exports = function(session, bundle){
         this.client
             .get(sid)
             .then(function onData(_data) {
-                data = _data;                
+                data = _data;
             })
             .catch(function onErr(_err){
                 err = _err;
             });
-            
-        //Handle Key Not Found error    
+
+        //Handle Key Not Found error
         if (err && err.code == 13) {
             return fn();
         }
         if (err) return fn(err);
-        
+
         if (!data || !data.value) return fn();
         data = data.value.toString();
         console.debug('GOT %s', data);
@@ -257,14 +257,14 @@ module.exports = function(session, bundle){
                         err = _err
                         // if(err)
                         //     debug('Session Set complete', err.stack || err.message || err);
-                            
+
                        //fn && fn.apply(this, arguments);
                     })
             if (err) {
                  fn && fn(err);
             }
              fn && fn(err, result);
-            
+
         } catch (err) {
             fn && fn(err);
         }
@@ -334,7 +334,7 @@ module.exports = function(session, bundle){
                 err || debug('Session Touch complete');
                 fn && fn.apply(this, arguments);
             })
-        
+
     };
 
     return CouchbaseStore;

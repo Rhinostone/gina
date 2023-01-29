@@ -382,7 +382,11 @@ function Domain(options, cb) {
                 isRegisteredTldOrSld: isRegisteredTldOrSld
             }
         }
-        return rootDomain
+        return {
+            value               : rootDomain,
+            isSLD               : isSLD,
+            isRegisteredTldOrSld: isRegisteredTldOrSld
+        }
     }
 
     // Both backend & frontend

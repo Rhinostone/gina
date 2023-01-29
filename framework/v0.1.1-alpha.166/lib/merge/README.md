@@ -1,6 +1,6 @@
 # merge()
 
-**Package:** gina.utils
+**Package:** gina.lib
 **Name:** merge
 
 **Requirement: **
@@ -8,7 +8,7 @@
 
 **Description**
 Merges the contents of two or more objects together into the first object.
-`merge` is a function from gina.utils, but can be require without having to install the [framework](https://github.com/rhinostone/gina).
+`merge` is a function from gina.lib, but can be require without having to install the [framework](https://github.com/rhinostone/gina).
 
 **usage:** merge(object1, [objectN], [override])
 

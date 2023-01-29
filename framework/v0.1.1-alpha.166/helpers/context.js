@@ -14,7 +14,7 @@ const {execSync}    = require('child_process');
 /**
  * ContextHelper
  *
- * @package     Gina.Utils.Helpers
+ * @package     Gina.Lib.Helpers
  * @author      Rhinostone <contact@gina.io>
  * @api public
  * */
@@ -258,7 +258,7 @@ function ContextHelper(contexts) {
 
         setContext('envs', projects[projectName].envs);
         setContext('bundles', bundles);
-        // setContext('gina.utils', lib);
+        // setContext('gina.lib', lib);
         // setContext('gina.Config', Config);
         // setContext('gina.locales', locales);
         // setContext('gina.plugins', plugins);

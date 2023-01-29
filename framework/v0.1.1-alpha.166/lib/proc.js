@@ -1,4 +1,4 @@
-/* Gina.utils.Proc
+/* Gina.lib.Proc
  *
  * This file is part of the gina package.
  * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
@@ -44,7 +44,7 @@
 var fs          = require('fs');
 var Emitter     = require('events').EventEmitter;
 var spawn       = require('child_process').spawn;
-var UtilsConfig = require( _(__dirname + '/config') );
+var LibConfig   = require( _(__dirname + '/config') );
 var inherits    = require( _(__dirname + '/inherits') );
 var console     = require( _(__dirname + '/logger') );
 var Collection  = require( _(__dirname + '/collection') );

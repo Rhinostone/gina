@@ -9,8 +9,8 @@
 /**
  * ConsoleHelper
  *
- * @package     Gina.Utils.Helpers
- * @namespace   Gina.Utils.Helpers.ConsoleHelper
+ * @package     Gina.Lib.Helpers
+ * @namespace   Gina.Lib.Helpers.ConsoleHelper
  * @author      Rhinostone <contact@gina.io>
  * */
 

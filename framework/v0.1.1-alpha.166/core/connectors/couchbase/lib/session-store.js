@@ -1,8 +1,8 @@
 "use strict";
 var fs = require('fs');
 var gina            = require('../../../../core/gna');
-var utils           = gina.utils;
-var console         = utils.logger;
+var lib             = gina.lib;
+var console         = lib.logger;
 
 var version = 2; // by default
 var dependenciesPath = getPath('project') + '/package.json';// jshint ignore:line

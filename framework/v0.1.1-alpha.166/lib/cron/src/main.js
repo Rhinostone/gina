@@ -1,7 +1,8 @@
 // Imports.
 var fs      = require('fs');
-// var utils   = require('gina').utils;
-// var console = utils.logger;
+
+// var lib     = require('gina').lib;
+// var console = lib.logger;
 
 // *    *    *    *    * command to be executed
 // ┬    ┬    ┬    ┬    ┬

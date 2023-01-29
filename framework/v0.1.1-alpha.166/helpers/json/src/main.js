@@ -11,14 +11,14 @@
 /**
  * JSONHelper
  *
- * @package     Gina.Utils.Helpers
+ * @package     Gina.Lib.Helpers
  * @author      Rhinostone <contact@gina.io>
  * @api public
  * */
 
 module.exports = function(){
 
-    // `JSON.clone()` is a prototype defined in `GINA_DIR//utils/prototypes.json_clone`
+    // `JSON.clone()` is a prototype defined in `GINA_DIR//lib/prototypes.json_clone`
 
     /**
      * Load a json file and removing comments if found

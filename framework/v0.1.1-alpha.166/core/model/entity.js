@@ -7,12 +7,12 @@
  */
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
-var utils           = require('gina').utils;
-var console         = utils.logger;
-var helpers         = utils.helpers;
-var inherits        = utils.inherits;
-var merge           = utils.merge;
-var modelUtil       = new utils.Model();
+var lib             = require('gina').lib;
+var console         = lib.logger;
+var helpers         = lib.helpers;
+var inherits        = lib.inherits;
+var merge           = lib.merge;
+var modelUtil       = new lib.Model();
 
 /**
  * @class Model.EntitySuper class

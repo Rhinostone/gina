@@ -30,7 +30,7 @@
 function DateFormatHelper() {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
-    var merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+    var merge           = (isGFFCtx) ? require('lib/merge') : require('./../lib/merge');
 
 
     // if ( typeof(define) === 'function' && define.amd ) {
@@ -126,7 +126,7 @@ function DateFormatHelper() {
     var format = function(date, mask, utc) {
 
         // if ( typeof(merge) == 'undefined' || !merge ) {
-        //     merge = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+        //     merge = (isGFFCtx) ? require('lib/merge') : require('./../lib/merge');
 
         // }
 
@@ -141,7 +141,7 @@ function DateFormatHelper() {
         } catch( mergeErr) {
             // called from logger - redefinition needed for none-dev env: cache issue
             isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
-            merge           = (isGFFCtx) ? require('utils/merge') : require('./../lib/merge');
+            merge           = (isGFFCtx) ? require('lib/merge') : require('./../lib/merge');
             masksList = merge(i18n.masks, dF.masks);
         }
 
@@ -280,8 +280,8 @@ function DateFormatHelper() {
     /**
      *  Will give an array of dates between the current date to a targeted date
      *
-     *  TODO - add a closure to `ignoreWeekend()` based on Utils::Validator
-     *  TODO - add a closure to `ignoreFromList(array)` based on Utils::Validator
+     *  TODO - add a closure to `ignoreWeekend()` based on Lib::Validator
+     *  TODO - add a closure to `ignoreFromList(array)` based on Lib::Validator
      *
      *  @param {object} dateTo
      *  @param {string} [ mask ]

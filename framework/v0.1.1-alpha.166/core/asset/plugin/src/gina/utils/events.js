@@ -75,7 +75,7 @@ function triggerEvent (target, element, name, args, proxiedEvent) {
     if (typeof(element) != 'undefined' && element != null) {
         var evt = null, isDefaultPrevented = false, isAttachedToDOM = false, merge  = null;
         // if (proxiedEvent) {
-        //     merge = require('utils/merge');
+        //     merge = require('lib/merge');
         // }
         // done separately because it can be listen at the same time by the user & by gina
         if ( jQuery ) { //thru jQuery if detected
@@ -266,7 +266,7 @@ function handleXhr(xhr, $el, options, require) {
     if (!xhr)
         throw new Error('No `xhr` object initiated');
 
-    //var merge   = require('utils/merge');
+    //var merge   = require('lib/merge');
 
     var blob            = null
         , isAttachment  = null // handle download

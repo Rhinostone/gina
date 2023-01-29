@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Gina.Utils.cmd
+ * Gina.Lib.cmd
  * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
