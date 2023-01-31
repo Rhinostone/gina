@@ -15,7 +15,10 @@ var console     = lib.logger;
  * */
  function Link(opt, cmd) {
 
-    var self    = {};
+    var self    = {
+        // destination prefix - usaually the project location
+        prefix: null
+    };
 
     var init = function(opt, cmd) {
         var err = false;
@@ -30,6 +33,19 @@ var console     = lib.logger;
         // check CMD configuration
         if (!isCmdConfigured()) return false;
 
+        self.prefix = self.projectLocation;
+        var a = [], k = null, v = null;
+        for (let i=3; i<process.argv.length; ++i) {
+            a = process.argv[i].split(/=/);
+            k = a[0];
+            v = a[1];
+            // console.log('Preprocessing `framework:link '+ process.argv[i] +'` ['+k+'] -> ['+ v +']');
+            if ( /^\-\-prefix$/.test(k) ) {
+                self.prefix = _(v, true);
+                continue
+            }
+        }
+
         link(opt, cmd);
     }
 
@@ -40,7 +56,7 @@ var console     = lib.logger;
 
         if ( folder.isValidPath() && isValidName(self.projectName) ) {
 
-            var destination = new _(self.projectLocation + '/node_modules');
+            var destination = new _(self.prefix + '/node_modules', true);
 
             if ( !destination.existsSync() ) {
                 err = destination.mkdirSync();
@@ -51,6 +67,7 @@ var console     = lib.logger;
             destination = new _(destination.toString() +'/gina');
             var source = new _(GINA_PREFIX + '/lib/node_modules/gina');
 
+
             console.debug('Link '+ source + ' -> '+destination + ' [ exists ] ? '+ destination.existsSync() );
             if ( destination.existsSync() ) {
                 if ( destination.isSymlinkSync() && destination.getSymlinkSourceSync() == source.toString() ) {
@@ -58,11 +75,10 @@ var console     = lib.logger;
                     return end();
                 }
                 destination.rmSync();
-                var ginaFileObj = new _(self.projectLocation + '/gina');
+                var ginaFileObj = new _(self.prefix + '/gina');
                 if ( ginaFileObj.existsSync() ) {
                     ginaFileObj.rmSync()
                 }
-
             }
 
             err = source.symlinkSync(destination.toString());

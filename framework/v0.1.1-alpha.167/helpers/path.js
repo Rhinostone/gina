@@ -6,13 +6,14 @@
  * file that was distributed with this source code.
  */
 
-var fs = require('fs');
-var util = require('util');
-var Events = require('events');
-var Path = require('path');
+var fs          = require('fs');
+var util        = require('util');
+var Events      = require('events');
+var Path        = require('path');
+var execSync    = require('child_process').execSync;
 
-var merge = require('./../lib/merge');
-var console = require('./../lib/logger');
+var merge       = require('./../lib/merge');
+var console     = require('./../lib/logger');
 
 var ContextHelper = require('./context');
 var e =  new Events.EventEmitter();
@@ -51,6 +52,18 @@ function PathHelper() {
 
         if ( typeof(path) == 'undefined' || !path || path == '' || path.length <=2 ) {
             throw new Error('This source cannot be used: `'+ path +'`')
+        }
+
+        // $HOME detection
+        if ( /^\~/.test(path) ) {
+            var homedir = null;
+            try {
+                homedir = execSync('echo $HOME').toString().replace(/(\r|\n)$/g, '');
+            } catch (err) {
+                throw err
+            }
+
+            path = path.replace(/^\~/, homedir);
         }
 
         if ( typeof(force) == undefined) {
