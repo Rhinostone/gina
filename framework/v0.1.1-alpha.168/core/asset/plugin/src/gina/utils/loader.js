@@ -4,7 +4,9 @@
  *
  * Used in the framework to load gina from the Super controller
  *
- * NB.: this file is built appart
+ * NB.:
+ *  - this file is built appart
+ *  - on change, you have to restart the bundle
  *
  * Must be placed before gina <script> tag
  *
@@ -78,9 +80,23 @@ window['onGinaLoaded']      = function(gina) {
 
         // globals
         window['GINA_ENV']              = '{{ GINA_ENV }}';
-        window['GINA_ENV_IS_DEV']       = /true/i.test('{{ GINA_ENV_IS_DEV }}') ? true: false;
-        if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = /true/i.test(window.location.search.match(/debug=(true|false)/)[0].split(/\=/)[1]) ? true: false;
+        window['GINA_ENV_IS_DEV']       = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true: false;
+        if (
+            typeof(location.search) != 'undefined' && /debug\=/i.test(location.search)
+            ||
+            !location.search && /\?/.test(location.href)
+        ) {
+            // deep copy
+            var search = (' ' + location.search).slice(1);
+            if (!search && /\?/.test(location.href) ) {
+                search = location.href.match(/\?.*/);
+                if (Array.isArray(search) && search.length > 0) {
+                    search = search[0]
+                }
+            }
+            var matched = search.match(/debug=(true|false)/);
+            if (matched)
+                window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = ( /^true$/i.test(matched[0].split(/\=/)[1]) ) ? true: false;
         }
 
         gina["isFrameworkLoaded"]       = true;
@@ -122,7 +138,7 @@ window['onGinaLoaded']      = function(gina) {
         }
 
         // all required must be listed in `src/gina.js` defined modules list
-        if (options['envIsDev']) {
+        if ( /^true$/i.test(options['envIsDev']) ) {
             var Toolbar             = window['require']('gina/toolbar');
             window['ginaToolbar']   = new Toolbar();
         }

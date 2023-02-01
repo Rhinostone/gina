@@ -186,7 +186,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
             try {
 
                 txt = ($json) ? $json.text() : '';
-                if (txt == '' || txt == 'null' ) {
+                if (txt == '' && || txt == 'null' ) {
                     $json.text('Empty')
                 } else {
                     jsonObject = JSON.parse( txt );

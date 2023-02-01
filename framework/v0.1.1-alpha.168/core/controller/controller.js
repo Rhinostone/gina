@@ -473,7 +473,12 @@ function SuperController(options) {
             && typeof(local.req[ local.req.method.toLowerCase() ]) != 'undefined'
             && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined'
         ) {
-            localOptions.debugMode = ( /true/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
+            if ( !/^(true|false)$/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) {
+                console.warn('Detected wrong value for `debug`: '+ local.req[ local.req.method.toLowerCase() ].debug);
+                console.warn('Switching `debug` to `true` as `cacheless` mode is enabled');
+                local.req[ local.req.method.toLowerCase() ].debug = true;
+            }
+            localOptions.debugMode = ( /^true$/i.test(local.req[ local.req.method.toLowerCase() ].debug) ) ? true : false;
         } else if (
             self.isCacheless()
             && hasViews()

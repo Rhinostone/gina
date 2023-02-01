@@ -2330,7 +2330,7 @@ function Server(options) {
 
     var processRequestData = function(request, response, next) {
 
-        var bodyStr = null, obj = null;
+        var bodyStr = null, obj = null, exception = null;
         // to compare with /core/controller/controller.js -> getParams()
         switch( request.method.toLowerCase() ) {
             case 'post':
@@ -2360,6 +2360,11 @@ function Server(options) {
 
                             try {
                                 obj = parseBody(bodyStr);
+                                if ( !obj) {
+                                    exception = new Error('Could not convert POST::BODY_STRING to POST::OBJECT. Possible JSON error in `bodyStr`');
+                                    throwError(response, 500, exception, next);
+                                    return;
+                                }
                                 request.post = obj;
                                 isPostSet = true;
                             } catch (err) {
@@ -2392,7 +2397,8 @@ function Server(options) {
                     if (request.body.count() == 0 && typeof(request.query) != 'string' && request.query.count() > 0 ) {
                         request.body = request.query
                     }
-                    bodyStr = JSON.stringify(request.body);
+                    // 2023-01-31: fixed `request.body` might not be an `object`
+                    bodyStr = ( typeof(request.body) == 'object') ? JSON.stringify(request.body) : request.body;
                     // false & true case
                     if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
@@ -2401,7 +2407,7 @@ function Server(options) {
                 }
 
                 try {
-                    if ( obj.count() > 0 ) {
+                    if ( typeof(obj) == 'object' && obj.count() > 0 ) {
                         // still need this to allow compatibility with express & connect middlewares
                         request.body = request.post = obj;
                     }
