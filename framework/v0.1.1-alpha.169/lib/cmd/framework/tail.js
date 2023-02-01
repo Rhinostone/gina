@@ -237,7 +237,11 @@ function Tail(opt, cmd) {
                                     && ! /(SIGKILL|SIGTERM|SIGINT)/.test(pl.content)
                                 ) {
                                     // only for debug
+                                    process.stdout.write('[MQTail]['+ bundle +'] bundle is going offline !\n' );
                                     process.stdout.write('[MQTail] '+ JSON.stringify(payloads, null, 2) +'\n' );
+                                    // if (project && bundle) {
+
+                                    // }
                                 }
                             }
 

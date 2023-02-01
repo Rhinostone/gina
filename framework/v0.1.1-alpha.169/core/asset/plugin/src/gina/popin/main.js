@@ -726,8 +726,9 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
 
         function updateToolbar(result, resultIsObject) {
             // update toolbar errors
-            var $popin = getActivePopin();
+            var $popin  = getActivePopin();
             var XHRData = null;
+            var $el     = null;
             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && typeof(result) != 'undefined' && typeof(resultIsObject) != 'undefined' && result ) {
 
                 XHRData = result;
@@ -757,6 +758,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
 
                     XHRData.isXHRViewData = true;
                     ginaToolbar.update('data-xhr', XHRData );
+
                     return;
                 } catch (err) {
                     throw err
@@ -764,11 +766,23 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             }
 
             // update toolbar
+
             try {
                 $popin = getPopinById(instance.activePopinId);
-                var $el = $popin.target;
+                $el = $popin.target;
             } catch (err) {
-                ginaToolbar.update('data-xhr', err );
+                if ($popin) {
+                    ginaToolbar.update('data-xhr', err );
+                }
+            }
+            // XHR - case; popin is in the result, but not loaded yet
+            if (!$popin) {
+                var popinObject = new DOMParser().parseFromString(result, 'text/html').getElementsByClassName('popin')[0];
+                $popin = {
+                    id      : popinObject.id,
+                    target  : popinObject
+                };
+                $el = $popin.target;
             }
 
 
@@ -812,19 +826,17 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
 
                         XHRView = JSON.parse( decodeURIComponent( XHRView.value ) );
                         // reset data-xhr
-                        //ginaToolbar.update("view-xhr", null);
                         ginaToolbar.update('view-xhr', XHRView);
-                        return;
                     }
-
-                    // popin content
-                    ginaToolbar.update('el-xhr', $popin.id);
 
                 } catch (err) {
                     throw err
                 }
             }
-        }
+
+            // XHRForm - updated by `open.`+ $popin.id event
+            // See: triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
+        } // EO function updateToolbar(result, resultIsObject)
 
 
 
@@ -1255,6 +1267,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             } else {
                 triggerEvent(gina, instance.target, 'loaded.' + $popin.id, $popin);
             }
+            // Update toolbar
+            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                try {
+                    ginaToolbar.update("el-xhr", $popin.id);
+                } catch (err) {
+                    throw err
+                }
+            }
         }
 
         function getScript(source) {
@@ -1389,6 +1409,14 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             // }
 
             triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
+            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
+                try {
+                    ginaToolbar.update("el-xhr", $popin.id);
+                } catch (err) {
+                    throw err
+                }
+            }
+
         }
 
         /**
