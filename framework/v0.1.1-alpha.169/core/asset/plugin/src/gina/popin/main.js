@@ -212,6 +212,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                             addListener(gina, $popin.target, 'loaded.'+$popin.id, function(e) {
                                 e.preventDefault();
 
+                                // console.debug('Popin loaded: true, fired: '+ fired + ', $popin.isOpen: '+ $popin.isOpen);
+
                                 if (!fired) {
                                     fired = true;
                                     console.debug('active popin should be ', $popin.id);
@@ -395,7 +397,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                     }
                 });
 
-            };
+            }; // EO var register = function (type, evt, $element) {
 
             gina.popinIsBinded = true;
 
@@ -722,7 +724,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                 }
             }
 
-        }
+        } // EO function popinBind(e, $popin) {
 
         function updateToolbar(result, resultIsObject) {
             // update toolbar errors
@@ -777,7 +779,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             }
             // XHR - case; popin is in the result, but not loaded yet
             if (!$popin) {
-                var popinObject = new DOMParser().parseFromString(result, 'text/html').getElementsByClassName('popin')[0];
+                var popinObject = new DOMParser().parseFromString(result, 'text/html').getElementsByClassName('popin')[0] || new DOMParser().parseFromString(result, 'text/html').getElementsByTagName('div')[0];
                 $popin = {
                     id      : popinObject.id,
                     target  : popinObject
@@ -1001,7 +1003,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                     if (xhr.readyState == 4) {
                         // 200, 201, 201' etc ...
                         var result = null
-                        if( /^2/.test(xhr.status) ) {
+                        if ( /^2/.test(xhr.status) ) {
                             try {
                                 result = xhr.responseText;
                                 var contentType   = xhr.getResponseHeader("Content-Type")
@@ -1023,6 +1025,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                                     ||
                                     !isJsonContent && $popin.isOpen && isRedirecting
                                 ) {
+                                    // console.debug('Popin now redirecting [1]');
                                     popinLoadContent(result, isRedirecting);
                                 } else {
 
@@ -1038,8 +1041,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                                         ) {
                                             isXhrRedirect = true;
                                         }
+                                        // console.debug('Popin now redirecting [2]');
                                         if ( typeof(result.location) != 'undefined' && isXhrRedirect ) {
-
                                             if (
                                                 typeof(result.popin) != 'undefined'
                                                 && typeof(result.popin.close) != 'undefined'
@@ -1091,6 +1094,7 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                                         }
 
                                         if ( typeof(result.location) != 'undefined' ) {
+                                            // console.debug('Popin now redirecting [4]');
                                             document.location = result.location;
                                             return;
                                         }
@@ -1151,7 +1155,8 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                                 triggerEvent(gina, $el, 'error.' + id, result)
                             }
 
-                        } else {
+                        } // EO if ( /^2/.test(xhr.status) )
+                        else {
                             //console.log('error event triggered ', event.target, $form);
                             resultIsObject = false;
                             result = {
@@ -1262,11 +1267,16 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             popinUnbind($popin.name, true);
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
 
+            // Fixing Safari issue - 2023-02-02
+            refreshCSS();
+
             if ( !$popin.isRedirecting ) {
                 triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
             } else {
+                // console.debug('Popin now redirecting [1-b]');
                 triggerEvent(gina, instance.target, 'loaded.' + $popin.id, $popin);
             }
+
             // Update toolbar
             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar ) {
                 try {
@@ -1287,6 +1297,43 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
                 eval(xhr.response);
             };
             xhr.send();
+        }
+
+        function getStyle(source) {
+            // then trigger scripts load
+            //var xhr = new XMLHttpRequest();
+            var xhr = setupXhr();
+            xhr.open('GET', source, true);
+            xhr.setRequestHeader("Content-Type", "text/css");
+            xhr.onload = function () {
+                eval(xhr.response);
+            };
+            xhr.send();
+        }
+
+        function refreshCSS() {
+            if (!/safari/i.test(window.navigator.userAgent)) {
+                return;
+            }
+            let links = document.getElementsByTagName('link');
+            for (let i = 0; i < links.length; i++) {
+                if (
+                    links[i].getAttribute('rel') == 'stylesheet'
+                ) {
+
+                    let href = links[i].getAttribute('href')
+                                        .split('?')[0];
+                    // only for gina styles
+                    if ( !/gina\.min\.css|gina\.css/.test(href) ) {
+                        continue;
+                    }
+
+                    let newHref = href + '?version='
+                                + new Date().getMilliseconds();
+
+                    links[i].setAttribute('href', newHref);
+                }
+            }
         }
 
         /**
@@ -1324,10 +1371,11 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             $el = document.getElementById(id);
 
             // load external resources in order of declaration
-            // TODO - Add support for stylesheets
             var globalScriptsList   = $popin.parentScripts
                 , scripts           = $el.getElementsByTagName('script')
-                //, globalStylesList  = $popin.parentStyles
+                , globalStylesList  = $popin.parentStyles
+                // A <link> element can occur either in the <head> or <body> element, depending on whether it
+                , styles            = $el.getElementsByTagName('link')
                 , i                 = 0
                 , len               = scripts.length
             ;
@@ -1346,7 +1394,23 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
 
                 getScript(scripts[i].src);
             }
-            //i = 0; len = styles.length
+
+            // Styles
+            i   = 0;
+            len = styles.length;
+            for (;i < len; ++i) {
+                if ( typeof(styles[i].href) == 'undefined' || styles[i].href == '' ) {
+                    continue;
+                }
+                let filename = styles[i].href
+                                .replace(/(https|http|)\:\/\//, '')
+                                .replace(reDomain, '');
+                // don't load if already in the global context
+                if ( globalStylesList.indexOf(filename) > -1 )
+                    continue;
+
+                getStyle(styles[i].href);
+            }
 
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
 
