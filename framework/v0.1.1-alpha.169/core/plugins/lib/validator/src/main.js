@@ -1185,11 +1185,13 @@
                                         if ( !$popin ) {
                                             throw new Error('Popin with name `'+ popinName+'` not found !');
                                         }
+                                        console.debug('Validator::Popin now redirecting [1-c]');
                                         $popin.load($popin.name, popinUrl, $popin.options);
                                     } else if ($popin) {
+                                        console.debug('Validator::Popin now redirecting [1-d]');
                                         $popin.load($popin.name, popinUrl, $popin.options);
                                     }
-                                    if ($popin) {
+                                    if ($popin && !$popin.isOpen) {
                                         return setTimeout( function onPopinredirect($popin){
                                             if (!$popin.isOpen) {
                                                 $popin.open();

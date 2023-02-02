@@ -387,8 +387,8 @@ function SuperController(options) {
             var swigOptions = {
                 autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
                 // `memory` is no working yet ... advanced rendering setup required
-                //cache       : (local.options.cacheless) ? false : 'memory'
-                cache       : false
+                cache       : (local.options.cacheless) ? false : 'memory'
+                // cache       : false
             };
             if (dir) {
                 swigOptions.loader = swig.loaders.fs(dir);
@@ -727,17 +727,17 @@ function SuperController(options) {
                 // layout = fs.readFileSync(layoutPath).toString();
 
                 await Promise.all([
-                    readFile(layoutPath),
-                    readFile(path)
+                        readFile(layoutPath),
+                        readFile(path)
                     ])
                     .then(([_layout, _tpl]) => {
                         layout  = _layout.toString();
                         tpl     = _tpl.toString();
                     })
                     .catch(error => {
-                    console.error(error.message);
-                    return;
-                });
+                        console.error(error.message);
+                        return;
+                    });
 
 
                 // mappin conf
