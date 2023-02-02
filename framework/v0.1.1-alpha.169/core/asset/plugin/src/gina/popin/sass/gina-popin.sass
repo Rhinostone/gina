@@ -1,4 +1,4 @@
-// @import config
+@use "config" as *
 
 // .gina-popins
 
@@ -43,15 +43,14 @@
     // opacity: 0
     border: none
     background: #fff
-    z-index: 1000
-    transition: opacity 0.3s, visibility 0 0.3s
 
+    // transition: opacity 0.3s, visibility 0 0.3s
 
-    &.gina-popin-is-active
-    opacity: 1
-    visibility: visible
+    // &.gina-popin-is-active
+    //     opacity: 1
+    //     visibility: visible
 
-    transition-delay: 0
+    //     transition-delay: 0
 
     &::backdrop
         background-color: #000

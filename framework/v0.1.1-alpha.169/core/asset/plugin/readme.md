@@ -84,7 +84,7 @@ java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level A
 
 __Popin__
 ```tty
-sass --no-cache  --watch sass/gina-popin.sass --update sass/gina-popin.sass:css/popin.css css/popin.css;css/popin.css.map
+sass --no-cache  --watch sass/gina-popin.sass sass/gina-popin.sass:css/popin.css css/popin.css;css/popin.css.map
 ```
 
 __Toolbar__

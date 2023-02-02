@@ -1,0 +1,15 @@
+.gina-popin-container {
+  border: none;
+  background: #fff;
+  z-index: 1000;
+  transition: opacity 0.3s, visibility 0 0.3s;
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0; }
+  .gina-popin-container::backdrop {
+    background-color: #000;
+    opacity: 0.75;
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px); }
+
+/*# sourceMappingURL=gina-popin.css.map */
