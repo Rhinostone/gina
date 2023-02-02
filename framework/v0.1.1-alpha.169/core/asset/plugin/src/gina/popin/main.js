@@ -92,12 +92,10 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             $container.setAttribute('id', instance.id);
             $container.setAttribute('class', 'gina-popins');
 
-            var $overlay = document.createElement('div');
-            $overlay.setAttribute('id', 'gina-popins-overlay');
-            $overlay.setAttribute('class', 'gina-popins-overlay');
-
-
-            $container.appendChild( $overlay );
+            // var $overlay = document.createElement('div');
+            // $overlay.setAttribute('id', 'gina-popins-overlay');
+            // $overlay.setAttribute('class', 'gina-popins-overlay');
+            // $container.appendChild( $overlay );
 
             // adding to DOM
             document.body.appendChild($container);
@@ -887,12 +885,26 @@ define('gina/popin', [ 'require', 'jquery', 'vendor/uuid', 'lib/domain', 'lib/me
             var $el         = document.getElementById(id) || null;
 
             if ( $el == null ) {
+                // DIV
+                // var className   = $popin.options.class +' '+ id;
+                // $el             = document.createElement('div');
+                // $el.setAttribute('id', id);
+                // $el.setAttribute('class', className);
+                // instance.target.firstChild.appendChild($el);
 
+                // DIALOG
+                // <dialog class="dialog" id="sample-dialog-1" data-type="modal" method="dialog" aria-labelledby="dialog-title">
+                // Then to open
+                // <button class="button" data-dialog="sample-dialog-1" type="button">Open dialog</button>
                 var className   = $popin.options.class +' '+ id;
-                $el             = document.createElement('div');
+                $el             = document.createElement('dialog');
                 $el.setAttribute('id', id);
                 $el.setAttribute('class', className);
+                $el.setAttribute('data-type', 'modal');
+                $el.setAttribute('method', 'dialog');
+                $el.setAttribute('aria-labelledby', name);
                 instance.target.firstChild.appendChild($el);
+
             }
 
             if ( typeof(options) == 'undefined' ) {

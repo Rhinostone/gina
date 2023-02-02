@@ -1,4 +1,4 @@
-@import config
+// @import config
 
 // .gina-popins
 
@@ -9,29 +9,29 @@
 // popin background overlay
 // -------------------------------
 
-.gina-popins-overlay
-    position: fixed
-    left: 0
-    top: 0
+// .gina-popins-overlay
+//     position: fixed
+//     left: 0
+//     top: 0
 
-    width: 100%
-    height: 100%
+//     width: 100%
+//     height: 100%
 
-    visibility: hidden
-    opacity: 0
-    transition: opacity 0.3s, visibility 0.3s
+//     visibility: hidden
+//     opacity: 0
+//     transition: opacity 0.3s, visibility 0.3s
 
-    overflow: auto
-    z-index: 1
-    background: rgba(0,0,0,0.75)
+//     overflow: auto
+//     z-index: 1
+//     background: rgba(0,0,0,0.75)
 
-    &.gina-popin-is-active
-        visibility: visible
-        opacity: 1
-        transition-delay: 0
+//     &.gina-popin-is-active
+//         visibility: visible
+//         opacity: 1
+//         transition-delay: 0
 
-        // Blurs background on Safari
-        -webkit-backdrop-filter: blur(6px)
+//         // Blurs background on Safari
+//         -webkit-backdrop-filter: blur(6px)
 
 
 // -------------------------------
@@ -39,11 +39,11 @@
 // -------------------------------
 
 .gina-popin-container
-    visibility: hidden
-    opacity: 0
-    z-index: 1
+    // visibility: hidden
+    // opacity: 0
+    border: none
     background: #fff
-
+    z-index: 1000
     transition: opacity 0.3s, visibility 0 0.3s
 
 
@@ -52,3 +52,9 @@
     visibility: visible
 
     transition-delay: 0
+
+    &::backdrop
+        background-color: #000
+        opacity: .75
+        backdrop-filter: blur(6px)
+        -webkit-backdrop-filter: blur(6px)
