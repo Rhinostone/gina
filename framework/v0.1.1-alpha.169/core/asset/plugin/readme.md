@@ -82,9 +82,17 @@ java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level A
 
 ### Building SASS assets into CSS
 
+__Popin__
 ```tty
-sass --no-cache --update sass/toolbar.sass:css/toolbar.css css/toolbar.css;css/toolbar.map.css
+sass --no-cache  --watch sass/gina-popin.sass --update sass/gina-popin.sass:css/popin.css css/popin.css;css/popin.css.map
 ```
+
+__Toolbar__
+```tty
+sass --no-cache --update sass/toolbar.sass:css/toolbar.css css/toolbar.css;css/toolbar.css.map
+```
+
+
 
 ### Building CSS assets
 
