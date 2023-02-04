@@ -19,13 +19,15 @@ var zlib            = require('zlib');
 // var tls = require('tls');
 // var crypto = require('crypto');
 
-var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
+var lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 var merge           = lib.merge;
 var inherits        = lib.inherits;
 var console         = lib.logger;
 var Collection      = lib.Collection;
 var routingLib      = lib.routing;
 var swig            = require('swig');
+// Swig 2
+// var swig            = require('./../deps/swig-client/swig-2.0.0.min.js');
 var SwigFilters     = lib.SwigFilters;
 var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
 
@@ -388,7 +390,7 @@ function SuperController(options) {
                 autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
                 // `memory` is no working yet ... advanced rendering setup required
                 cache       : (local.options.cacheless) ? false : 'memory'
-                // cache       : false
+                // cache       : 'memory'
             };
             if (dir) {
                 swigOptions.loader = swig.loaders.fs(dir);
@@ -870,7 +872,7 @@ function SuperController(options) {
                     + '{%- set userDataInspector.view.scripts       = "ignored-by-toolbar"  -%}'
                     + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
                     + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
-                    + '{%- include "'+ getPath('gina').core +'/asset/plugin/dist/toolbar/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'// jshint ignore:line
+                    + '{%- include "'+ getPath('gina').core +'/asset/plugin/dist/vendor/gina/html/toolbar.html" with { gina: ginaDataInspector, user: userDataInspector } -%}'// jshint ignore:line
                     + '{# END Gina Toolbar #}'
                 ;
 

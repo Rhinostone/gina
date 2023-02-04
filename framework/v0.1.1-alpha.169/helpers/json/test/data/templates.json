@@ -33,7 +33,7 @@
         "url"     : "/js/vendor/gina/gina.min.js"
       }
     ],
-    "_pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/src/utils/loader.js}",
-    "pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/dist/gina.onload.min.js}"
+    "_pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/src/vendor/gina/utils/loader.js}",
+    "pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/dist/vendor/gina/js/gina.onload.min.js}"
   }
 }
