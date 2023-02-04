@@ -5,14 +5,57 @@
   font-style: normal;
 }
 .gina-popin-container {
-  z-index: 1;
   background: #fff;
 }
-.gina-popin-container::backdrop {
-  background-color: #000;
-  opacity: 0.75;
-  backdrop-filter: blur(6px);
+
+div.gina-popin-container {
+  visibility: hidden;
+  opacity: 0;
+  z-index: 1;
+  transition: opacity 0.3s, visibility 0 0.3s;
+}
+div.gina-popin-container.gina-popin-is-active {
+  opacity: 1;
+  visibility: visible;
+  transition-delay: 0;
+}
+
+dialog.gina-popin-container {
+  padding: 0;
+  border: none;
+}
+
+.gina-popins-overlay {
+  position: fixed;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  visibility: hidden;
+  opacity: 0;
+  transition: opacity 0.3s, visibility 0.3s;
+  overflow: auto;
+  z-index: 1;
+  background: rgba(0, 0, 0, 0.75);
+}
+.gina-popins-overlay.gina-popin-is-active {
+  visibility: visible;
+  opacity: 1;
+  transition-delay: 0;
   -webkit-backdrop-filter: blur(6px);
+          backdrop-filter: blur(6px);
+}
+
+dialog::-webkit-backdrop {
+  background-color: rgba(0, 0, 0, 0.75);
+  -webkit-backdrop-filter: blur(6px);
+          backdrop-filter: blur(6px);
+}
+
+dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.75);
+  -webkit-backdrop-filter: blur(6px);
+          backdrop-filter: blur(6px);
 }
 
 /*# sourceMappingURL=popin.css.map */
