@@ -5,5 +5,5 @@
     "sass": "{templatesPath}/sass",  // used for templating
     "handlers": "{handlersPath}",  // used for templating
     //"common": "{sharedPath}",
-    "js/vendor/gina": "{gina}/framework/v{version}/core/asset/plugin/dist"
+    "js/vendor/gina": "{gina}/framework/v{version}/core/asset/plugin/dist/vendor/gina/js"
 }

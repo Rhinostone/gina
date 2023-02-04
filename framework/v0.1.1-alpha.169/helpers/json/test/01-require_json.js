@@ -875,7 +875,7 @@ exports['requireJSON: statics.json case'] = function(test) {
       "html": "{templatesPath}/html",
       "sass": "{templatesPath}/sass",
       "handlers": "{handlersPath}",
-      "js/vendor/gina": "{gina}/framework/v{version}/core/asset/plugin/dist"
+      "js/vendor/gina": "{gina}/framework/v{version}/core//vendor/gina/js"
     };
 
     test.equal( typeof(staticsCase), 'object' );
@@ -916,8 +916,7 @@ exports['requireJSON: templates.json case'] = function(test) {
               "url"     : "/js/vendor/gina/gina.min.js"
             }
           ],
-          "_pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/src/utils/loader.js}",
-          "pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/dist/gina.onload.min.js}"
+          "pluginLoader": "{src:{gina}/framework/v{version}/core/asset/plugin/dist/vendor/gina/js/gina.onload.min.js}"
         }
       };
 

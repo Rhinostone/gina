@@ -25,7 +25,7 @@ if ( typeof(JSON.escape) == 'undefined' ) {
      * Changes made here must be reflected in:
      *  - gina/utils/prototypes.js
      *  - gina/framework/version/helpers/prototypes.js
-     *  - gina/framework/version/core/asset/plugin/src/gina/utils/polyfill.js
+     *  - gina/framework/version/core/asset/plugin/src/vendor/gina/js/utils/polyfill.js
      *
      * @param {object} jsonStr
      *
