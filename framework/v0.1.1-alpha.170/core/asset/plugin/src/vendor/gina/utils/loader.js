@@ -79,8 +79,8 @@ window['onGinaLoaded']      = function(gina) {
         };
 
         // globals
-        window['GINA_ENV']              = '{{ GINA_ENV }}';
-        window['GINA_ENV_IS_DEV']       = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true: false;
+        window['GINA_ENV']              = '{{ page.environment.env }}';
+        window['GINA_ENV_IS_DEV']       = /^true$/i.test('{{ page.environment.envIsDev }}') ? true: false;
         if (
             typeof(location.search) != 'undefined' && /debug\=/i.test(location.search)
             ||

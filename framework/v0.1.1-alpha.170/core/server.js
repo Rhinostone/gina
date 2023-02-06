@@ -2829,9 +2829,10 @@ function Server(options) {
         }
         var isMethodAllowed = null, hostname = null;
         out:
-            for (var name in routing) {
-                if (typeof(routing[name]['param']) == 'undefined')
+            for (let name in routing) {
+                if ( typeof(routing[name]['param']) == 'undefined' ) {
                     break;
+                }
 
                 // updating hostname
                 // if (

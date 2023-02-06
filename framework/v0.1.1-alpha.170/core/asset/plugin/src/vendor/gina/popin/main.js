@@ -1,6 +1,8 @@
-define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'utils/events' ], function (require) {
+define('gina/popin', [ 'require', 'vendor/uuid', 'jquery', 'lib/domain', 'lib/merge', 'utils/events' ], function (require) {
 
     // TODO - Integrate dialog-polyfill : https://github.com/GoogleChrome/dialog-polyfill/blob/master/dist/dialog-polyfill.js
+    var $               = require('jquery');
+    $.noConflict();
     var uuid            = require('vendor/uuid');
     var Domain          = require('lib/domain');
     var domainInstance  = null;
@@ -24,7 +26,7 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             'options' : {
                 'name' : undefined,
                 'class': 'gina-popin-default',
-                // Support of `<dialog>` tag
+                // Support of `<dialog>` tag, set `true`
                 'useDialogMode': true,
                 'cancelOnOverlayClick': false
             },
@@ -93,7 +95,7 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             $container.setAttribute('id', instance.id);
             $container.setAttribute('class', 'gina-popins');
 
-            if ( !self.options.useDialogMode ) {
+            if ( !self.options.useDialogMode || gina.config.envIsDev) {
                 var $overlay = document.createElement('div');
                 $overlay.setAttribute('id', 'gina-popins-overlay');
                 $overlay.setAttribute('class', 'gina-popins-overlay');
@@ -409,7 +411,7 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             // bind overlay on click
             if (!$popin.isOpen && self.options.cancelOnOverlayClick) {
                 var $overlay = $popin.target;
-                if ( !self.options.useDialogMode ) {
+                if ( !self.options.useDialogMode || gina.config.envIsDev) {
                     $overlay = instance.target.childNodes[0];
                 }
                 addListener(gina, $overlay, 'mousedown', function(event) {
@@ -890,9 +892,10 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             var $el         = document.getElementById(id) || null;
 
             if ( $el == null ) {
+                var className = null;
                 if ( !self.options.useDialogMode ) {
                     // DIV
-                    var className   = $popin.options.class +' '+ id;
+                    className   = $popin.options.class +' '+ id;
                     $el             = document.createElement('div');
                     $el.setAttribute('id', id);
                     $el.setAttribute('class', className);
@@ -902,7 +905,7 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
                     // <dialog class="dialog" id="sample-dialog-1" data-type="modal" method="dialog" aria-labelledby="dialog-title">
                     // Then to open
                     // <button class="button" data-dialog="sample-dialog-1" type="button">Open dialog</button>
-                    var className   = $popin.options.class +' '+ id;
+                    className   = $popin.options.class +' '+ id;
                     $el             = document.createElement('dialog');
                     $el.setAttribute('id', id);
                     $el.setAttribute('class', className);
@@ -1285,8 +1288,11 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             popinUnbind($popin.name, true);
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
 
-            // Fixing Safari issue - 2023-02-02
-            // refreshCSS();
+            // Fixing Safari repaint issue - 2023-02-02
+            // Not needed when using `dialog` instead of `div`
+            if ( !self.options.useDialogMode ) {
+                 refreshCSS();
+            }
 
             if ( !$popin.isRedirecting ) {
                 triggerEvent(gina, instance.target, 'open.'+ $popin.id, $popin);
@@ -1436,7 +1442,7 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             if ( !/gina-popin-is-active/.test($el.className) )
                 $el.className += ' gina-popin-is-active';
 
-            if ( !self.options.useDialogMode ) {
+            if ( !self.options.useDialogMode || gina.config.envIsDev ) {
                 // overlay
                 if ( !/gina-popin-is-active/.test(instance.target.firstChild.className) )
                     instance.target.firstChild.className += ' gina-popin-is-active';
@@ -1447,9 +1453,13 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             }
 
 
-            if ( !$el.getAttribute('open') ) {
+            if ( self.options.useDialogMode && !$el.getAttribute('open') ) {
                 if ( typeof($el.showModal) === "function" ) {
-                    $el.showModal();
+                    if (gina.config.envIsDev) {
+                        $el.show();
+                    } else {
+                        $el.showModal();
+                    }
                 } else {
                     $el.setAttribute('open', true)
                 }
@@ -1462,7 +1472,7 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'lib/domain', 'lib/merge', 'uti
             instance.activePopinId = $popin.id;
 
             // update toolbar
-            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar && GINA_ENV_IS_DEV) {
+            if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar /**&& GINA_ENV_IS_DEV*/) {
                 try {
                     ginaToolbar.update("el-xhr", $popin.id);
                 } catch (err) {

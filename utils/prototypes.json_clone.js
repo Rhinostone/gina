@@ -34,13 +34,14 @@ function JSONClone(source, target) {
         throw err;
     }
 
-    var i       = 0
-        , len   = Object.getOwnPropertyNames(source).length || 0
-        , keys  = Object.keys(source)
+    var i               = 0
+        , srcObjProps   = Object.getOwnPropertyNames(source)
+        , len           = srcObjProps.length || 0
+        , keys          = Object.keys(source)
     ;
 
     while (i<len) {
-        let key = Object.getOwnPropertyNames(source)[i];
+        let key = srcObjProps[i];
         if (key == 'undefined') {
             i++;
             continue;

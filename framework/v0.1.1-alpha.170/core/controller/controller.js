@@ -215,7 +215,7 @@ function SuperController(options) {
                 , rule              = local.options.rule
                 , ext               = 'html' // by default
                 , isWithoutLayout   = false // by default
-                , namespace         = local.options.namespace || '';
+                , namespace         = local.options.namespace || '';
 
 
             if ( typeof(local.options.template) != 'undefined' && local.options.template ) {
@@ -253,7 +253,7 @@ function SuperController(options) {
                 }
 
                 rule        = local.options.rule;
-                namespace   = local.options.namespace || 'default';
+                namespace   = local.options.namespace || 'default';
 
 
                 set('page.view.file', local.options.file);
@@ -567,7 +567,7 @@ function SuperController(options) {
                     file = ''+ file.replace(localOptions.namespace+'-', '');
 
                 // means that rule name === namespace -> pointing to root namespace dir
-                if (!file || file === localOptions.namespace) {
+                if (!file || file === localOptions.namespace) {
                     file = 'index'
                 }
                 path = (isRenderingCustomError) ? _(file) : _(localOptions.template.html +'/'+ localOptions.namespace + '/' + file)
@@ -676,10 +676,10 @@ function SuperController(options) {
                 , isUsingGinaLayout     = (!isWithoutLayout && typeof(localOptions.template.layout) != 'undefined' && fs.existsSync(local.options.template.layout)) ? true : false
             ;
 
-            if ( isWithoutLayout || isUsingGinaLayout ) {
+            if ( isWithoutLayout || isUsingGinaLayout ) {
                 layoutPath = (isWithoutLayout) ? localOptions.template.noLayout : localOptions.template.layout;
                 // user layout override
-                if ( isUsingGinaLayout && !isWithoutLayout ) {
+                if ( isUsingGinaLayout && !isWithoutLayout ) {
                     layoutPath = localOptions.template.layout;
                 }
                 if (isWithoutLayout) {
@@ -1228,7 +1228,7 @@ function SuperController(options) {
                         }
                     }
                     if ( next ) {
-                        next()
+                        return next()
                     }
 
                     return;
@@ -1329,7 +1329,7 @@ function SuperController(options) {
      * Get data
      *
      * @param {String} variable Data name to set
-     * @returns {Object | String} data Data object or String
+     * @returns {Object | String} data Data object or String
      * */
     var get = function(variable) {
         return local.userData[variable]
@@ -1476,7 +1476,7 @@ function SuperController(options) {
     }
 
     this.getRequestMethodParams = function() {
-        return (localRequestMethodParams) ? localRequestMethodParams : local.req[local.req.method.toLowerCase()]
+        return (localRequestMethodParams) ? localRequestMethodParams : local.req[local.req.method.toLowerCase()]
     }
 
     /**
@@ -1715,11 +1715,11 @@ function SuperController(options) {
             originalMethod = ( typeof(req.originalMethod) != 'undefined') ? req.originalMethod :  req.method;
         }
 
-        var path        = originalUrl || req.routing.param.path || '';
+        var path        = originalUrl || req.routing.param.path || '';
         var url         = req.routing.param.url;
-        var code        = req.routing.param.code || 301;
+        var code        = req.routing.param.code || 301;
 
-        var keepParams  = req.routing.param['keep-params'] || false;
+        var keepParams  = req.routing.param['keep-params'] || false;
 
         var condition   = true; //set by default for url @ path redirect
 
@@ -1769,7 +1769,7 @@ function SuperController(options) {
 
                 // backing up oldParams
                 var oldParams = local.req[originalMethod.toLowerCase()];
-                var requestParams = req[req.method.toLowerCase()] || {};
+                var requestParams = req[req.method.toLowerCase()] || {};
                 if ( typeof(requestParams) != 'undefined' && typeof(requestParams.error) != 'undefined' ) {
                     var redirectError = requestParams.error;
                     self.throwError(requestParams.error);
@@ -2196,7 +2196,7 @@ function SuperController(options) {
                     var fileName = null;
                     for (var len = files.length; i < len; ++i ){
 
-                        fileName = files[i].filename || files[i].originalFilename
+                        fileName = files[i].filename || files[i].originalFilename
 
                         list[i] = {
                             source: files[i].path,
@@ -2475,8 +2475,8 @@ function SuperController(options) {
             }
 
             // might be != from the bundle requesting
-            //options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
-            //options.scheme    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.scheme || ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
+            //options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.protocol || ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
+            //options.scheme    = ctx.gina.config.envConf[bundle][ctx.env].content.settings.server.scheme || ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
         }
 
         if ( typeof(options.protocol) == 'undefined' ) {
@@ -2644,7 +2644,7 @@ function SuperController(options) {
 
             if (
                 typeof(err.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(err.code)
-                || typeof(err.cause) != 'undefined' && typeof(err.cause.code) != 'undefined' &&  /ECONNREFUSED|ECONNRESET/.test(err.cause.code)
+                || typeof(err.cause) != 'undefined' && typeof(err.cause.code) != 'undefined' &&  /ECONNREFUSED|ECONNRESET/.test(err.cause.code)
             ) {
 
                 var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];//err.port || err.cause.port
@@ -2666,7 +2666,7 @@ function SuperController(options) {
             } else {
                 var error = {
                     status    : 500,
-                    error     : err.stack || err.message
+                    error     : err.stack || err.message
                 };
 
                 self.emit('query#complete', error)
@@ -3209,7 +3209,7 @@ function SuperController(options) {
 
             // TODO - filter : redirect & location
 
-            // if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
+            // if ( self.isXMLRequest() || !hasViews() || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
                 self.renderJSON(result)
             // } else {
             //     self.render(result)
@@ -3681,7 +3681,7 @@ function SuperController(options) {
             || typeof(arguments[arguments.length-1]) == 'string' && !(arguments[0] instanceof Error)
         ) {
 
-            code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
+            code    = ( res && typeof(res.status) != 'undefined' ) ?  res.status : 500;
 
             if ( typeof(statusCodes[code]) != 'undefined' ) {
                 standardErrorMessage = statusCodes[code];
@@ -3732,7 +3732,7 @@ function SuperController(options) {
         if (!res.headersSent) {
             // DELETE request methods don't normaly use a view,
             // but if we are calling it from a view, we should render the error back to the view
-            if ( self.isXMLRequest() || !hasViews() && !/delete/i.test(req.method) || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
+            if ( self.isXMLRequest() || !hasViews() && !/delete/i.test(req.method) || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
                 // fallback interception
                 if ( fallback ) {
                     if ( typeof(fallback) == 'string' ){ // string url: user provided
@@ -3757,7 +3757,7 @@ function SuperController(options) {
                     console.warn('[ ApiValidator ] statusCode `'+ code +'` not matching any definition in `'+_( getPath('gina').core + '/status.codes')+'`\nPlease contact the Gina dev team to add one if required');
                 }
 
-                // if ( !local.res.getHeaders()['content-type'] /**!req.headers['content-type'] */  ) {
+                // if ( !local.res.getHeaders()['content-type'] /**!req.headers['content-type'] */  ) {
                 //     // Internet Explorer override
                 //     if ( typeof(req.headers['user-agent']) != 'undefined' && /msie/i.test(req.headers['user-agent']) ) {
                 //         res.writeHead(code, "content-type", "text/plain")
