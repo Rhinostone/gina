@@ -133,6 +133,9 @@ function Router(env) {
                 if (isAuthenticated) {
                     request.session.user = this[property]
                 }
+                if (isAuthenticated && typeof(request.session.user.cached) == 'undefined' ) {
+                    request.session.user.cached = {}
+                }
                 return isAuthenticated;
             };
         }

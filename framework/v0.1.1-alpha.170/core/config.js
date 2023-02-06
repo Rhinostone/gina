@@ -1568,7 +1568,7 @@ function Config(opt, contextResetNeeded) {
             "sharedPath"        : conf[bundle][env].sharedPath,
             "logsPath"          : conf[bundle][env].logsPath,
             "tmpPath"           : conf[bundle][env].tmpPath,
-            "version"           : getContext('gina').version
+            "version"           : getContext('gina').version,
         };
 
         for (let _contant in process.gina) {
@@ -2077,6 +2077,8 @@ function Config(opt, contextResetNeeded) {
                     + '\n\t\t</script>';
 
                 files['templates']._common.ginaLoader = scriptTag;
+
+                // files['templates']._common.ginaLoader = whisper(reps, files['templates']._common.ginaLoader);
 
             } catch (err) {
                 callback(err)

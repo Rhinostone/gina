@@ -292,7 +292,7 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
                         var options = gina['config'] = {
                             /**@js_externs env*/
-                            //env     : '{{ page.environment.env }}',
+                            env     : '{{ page.environment.env }}',
                             /**@js_externs envIsDev*/
                             envIsDev : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
                             /**@js_externs version*/
@@ -303,8 +303,8 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
 
                         // globals
-                        window['GINA_ENV']          = '{{ GINA_ENV }}';
-                        window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ GINA_ENV_IS_DEV }}') ? true : false;
+                        window['GINA_ENV']          = '{{ page.environment.env }}';
+                        window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ page.environment.envIsDev }}') ? true : false;
                         if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
                             var search = (' ' + window.location.search).slice(1);
                             if (!search && /\?/.test(window.location.href) ) {

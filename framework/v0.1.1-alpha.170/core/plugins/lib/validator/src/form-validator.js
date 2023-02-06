@@ -615,6 +615,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             throw new Error('external url/domain not  handled at this moment, please contact us if you need support for it.')
         }
         var route       = JSON.clone(routing.getRoute(options.url, options.data));
+        // var route       = routing.getRoute(options.url, options.data);
+
         var env         = config.env;
         var conf        = config[bundle][env];
         if (!opt) { // setup opt by default if no proxy conf found
@@ -647,7 +649,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          * Any modification on this part must be reflected on `router.js`
          */
         // default param setting
-         var params = {
+        var params = {
             method              : route.method,
             requirements        : route.requirements,
             namespace           : route.namespace || undefined,
@@ -673,8 +675,6 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             //bundle          : bundle,//module
             // bundlePath      : conf.bundlesPath + '/' + bundle,
             // rootPath        : self.executionPath,
-            // We don't want to keep original conf untouched
-            conf            : JSON.clone(conf),
             //instance: self.serverInstance,
             //template: (routeHasViews) ? conf.content.templates[templateName] : undefined,
             //isUsingTemplate: local.isUsingTemplate,
@@ -687,7 +687,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
         // BO - Template outside of namespace fix added on 2021-08-19
         // We want to keep original conf untouched
-        controllerOptions.conf = JSON.clone(conf);
+        var _conf = JSON.clone(conf);
+        // controllerOptions.conf = JSON.clone(conf);
+        controllerOptions.conf = _conf;
         controllerOptions.conf.content.routing[controllerOptions.rule].param = params.param;
         // inheriting from _common
         if (

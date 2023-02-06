@@ -23,6 +23,7 @@ div.gina-popin-container.gina-popin-is-active {
 dialog.gina-popin-container {
   padding: 0;
   border: none;
+  z-index: 1;
 }
 
 .gina-popins-overlay {
