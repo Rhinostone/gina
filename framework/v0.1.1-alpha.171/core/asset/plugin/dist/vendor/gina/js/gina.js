@@ -6463,7 +6463,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             method              : route.method,
             requirements        : route.requirements,
             namespace           : route.namespace || undefined,
-            url                 : unescape(route.url), /// avoid %20
+            url                 : decodeURI(route.url), /// avoid %20
             rule                : rule + '@' + bundle,
             param               : JSON.clone(route.param),
             middleware          : JSON.clone(route.middleware),
@@ -6536,7 +6536,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 if (i > 0) {
                     urlParams += '&';
                 }
-                let val = (typeof(data[p]) == 'object') ? encodeURIComponent(JSON.stringify(data[p])) : data[p];
+                let val = (typeof(data[p]) == 'object') ? encodeRFC5987ValueChars(JSON.stringify(data[p])) : data[p];
                 urlParams += p +'='+ val;
                 i++;
             }
@@ -8676,7 +8676,7 @@ function Routing() {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
                 if (typeof(params[r]) != 'undefined' )
-                    queryParams += r +'='+ encodeURIComponent(params[r])+ '&';
+                    queryParams += r +'='+ encodeRFC5987ValueChars(params[r])+ '&';
             }
 
             if (queryParams.length > 1) {
@@ -8965,7 +8965,7 @@ function Routing() {
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
         if ( typeof(request.routing.path) == 'undefined' )
-            request.routing.path = unescape(pathname);
+            request.routing.path = decodeURI(pathname);
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
 
         if (isMethodProvidedByDefault) {
@@ -8973,7 +8973,7 @@ function Routing() {
             request.originalMethod = request.method;
 
             request.method = method;
-            request.routing.path = unescape(pathname)
+            request.routing.path = decodeURI(pathname)
         }
         // last method check
         if ( !request.method)
@@ -9008,7 +9008,7 @@ function Routing() {
                     method              : localMethod,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
-                    url                 : unescape(pathname), /// avoid %20
+                    url                 : decodeURI(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
                     param               : routing[name].param,
                     //middleware: routing[name].middleware,
@@ -16679,7 +16679,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
             , timeoutId          = null
             , $copyCache         = null
             , copyValue          = null
-            ;
+        ;
 
         var init = function () {
             // Get elements
@@ -16794,7 +16794,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
 
                 txt = ($json) ? $json.text() : '';
                 if (txt == '' || txt == 'null' ) {
-                    $json.text('Empty')
+                    // $json.text('Empty')
+                    $json.text('{}')
                 } else {
                     jsonObject = JSON.parse( txt );
                     ginaJsonObject = JSON.parse($ginaJson.text());
@@ -16818,11 +16819,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
                 var sectionStr = ( section ) ? ' [ '+ section + ' ] ' : ' ';
                 // var _err = 'Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err);
                 var _err = 'Could not load'+ sectionStr +'json\n' + err.message +'\n'+ err.stack;
-                if ($json) {
-                    $json.text(_err);
-                } else {
-                    throw _err;
-                }
+                console.error(_err);
+                // if ($json) {
+                //     $json.text(_err);
+                // } else {
+                //     throw _err;
+                // }
 
             }
 
@@ -16849,12 +16851,18 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
                 // Create DOM from JSON
                 // -> Configuration::environment
                 // filtering before
-                delete jsonObject.environment.routing;
-                delete ginaJsonObject.environment.routing;
-                delete jsonObject.environment.reverseRouting;
-                delete ginaJsonObject.environment.reverseRouting;
-                delete jsonObject.environment.forms;
-                delete ginaJsonObject.environment.forms;
+                if (ginaJsonObject.environment) {
+                    delete ginaJsonObject.environment.routing;
+                    delete ginaJsonObject.environment.reverseRouting;
+                    delete ginaJsonObject.environment.forms;
+                }
+
+                if (jsonObject.environment) {
+                    delete jsonObject.environment.routing;
+                    delete jsonObject.environment.reverseRouting;
+                    delete jsonObject.environment.forms;
+                }
+
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
 
 
@@ -19994,9 +20002,9 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'jquery', 'lib/domain', 'lib/me
                             // has already params ?
                             if ( inheritedData.count() > 0 ) {
                                 if ( /\?/.test(linkEvent.currentTarget.href) ) {
-                                    linkEvent.currentTarget.href += '&inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                                    linkEvent.currentTarget.href += '&inheritedData=' + encodeRFC5987ValueChars(JSON.stringify(inheritedData));
                                 } else {
-                                    linkEvent.currentTarget.href += '?inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                                    linkEvent.currentTarget.href += '?inheritedData=' + encodeRFC5987ValueChars(JSON.stringify(inheritedData));
                                 }
                             }
                         }

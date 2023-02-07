@@ -37,11 +37,11 @@ window['onGinaLoaded']      = function(gina) {
             /**@js_externs hostname*/
             'hostname': '{{ page.environment.hostname }}',
             /**@js_externs routing*/
-            'routing': JSON.parse(unescape('{{ page.environment.routing }}')),
+            'routing': JSON.parse(decodeURIComponent('{{ page.environment.routing }}')),
             /**@js_externs reverseRouting*/
-            'reverseRouting': JSON.parse(unescape('{{ page.environment.reverseRouting }}')),
+            'reverseRouting': JSON.parse(decodeURIComponent('{{ page.environment.reverseRouting }}')),
             /**@js_externs forms*/
-            //'forms': JSON.parse(unescape('{{ page.environment.forms }}')),
+            //'forms': JSON.parse(decodeURIComponent('{{ page.environment.forms }}')),
             /**@js_externs version*/
             version : '{{ page.environment.version }}',
             /**@js_externs webroot*/
@@ -103,7 +103,7 @@ window['onGinaLoaded']      = function(gina) {
         gina["setOptions"](options);
 
         try {
-            gina["forms"]               = JSON.parse(unescape('{{ page.environment.forms }}'));
+            gina["forms"]               = JSON.parse(decodeURIComponent('{{ page.environment.forms }}'));
         } catch (err) {
             throw err
         }

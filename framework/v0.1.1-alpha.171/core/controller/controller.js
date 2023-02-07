@@ -284,13 +284,13 @@ function SuperController(options) {
 
 
             var routing = local.options.conf.routing = ctx.config.envConf.routing; // all routes
-            set('page.environment.routing', escape(JSON.stringify(routing))); // export for GFF
+            set('page.environment.routing', encodeRFC5987ValueChars(JSON.stringify(routing))); // export for GFF
             //reverseRouting
             var reverseRouting = local.options.conf.reverseRouting = ctx.config.envConf.reverseRouting; // all routes
-            set('page.environment.reverseRouting', escape(JSON.stringify(reverseRouting))); // export for GFF
+            set('page.environment.reverseRouting', encodeRFC5987ValueChars(JSON.stringify(reverseRouting))); // export for GFF
 
             var forms = local.options.conf.forms = options.conf.content.forms // all forms
-            set('page.environment.forms', escape(JSON.stringify(forms))); // export for GFF
+            set('page.environment.forms', encodeRFC5987ValueChars(JSON.stringify(forms))); // export for GFF
             set('page.forms', options.conf.content.forms);
 
             set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname);
@@ -389,8 +389,8 @@ function SuperController(options) {
             var swigOptions = {
                 autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
                 // `memory` is no working yet ... advanced rendering setup required
-                cache       : (local.options.cacheless) ? false : 'memory'
-                // cache       : 'memory'
+                // cache       : (local.options.cacheless) ? false : 'memory'
+                cache       : false
             };
             if (dir) {
                 swigOptions.loader = swig.loaders.fs(dir);
@@ -859,7 +859,9 @@ function SuperController(options) {
             ) {
 
                 layout = ''
+                    // + '{%- set ginaDataInspector                    = JSON.clone(page) -%}'
                     + '{%- set ginaDataInspector                    = JSON.clone(page) -%}'
+                    // + '{%- set ginaDataInspector                    = { view: {}, environment: { routing: {}}} -%}'
                     + '{%- set ginaDataInspector.view.assets        = {} -%}'
                     + '{%- set ginaDataInspector.view.scripts       = "ignored-by-toolbar" -%}'
                     + '{%- set ginaDataInspector.view.stylesheets   = "ignored-by-toolbar" -%}'
@@ -869,6 +871,7 @@ function SuperController(options) {
                 plugin = '\t'
                     + '{# Gina Toolbar #}'
                     + '{%- set userDataInspector                    = JSON.clone(page) -%}'
+                    // + '{%- set userDataInspector                    = { view: {}, environment: { routing: {}}} -%}'
                     + '{%- set userDataInspector.view.scripts       = "ignored-by-toolbar"  -%}'
                     + '{%- set userDataInspector.view.stylesheets   = "ignored-by-toolbar"  -%}'
                     + '{%- set userDataInspector.view.assets        = '+ JSON.stringify(assets) +' -%}'
@@ -879,15 +882,18 @@ function SuperController(options) {
 
                 if (isWithoutLayout && localOptions.debugMode || localOptions.debugMode ) {
 
-                    XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">\n\r';
-                    XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
-                    if ( /<\/body>/i.test(layout) ) {
-                        layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
-                    } else {
-                        // Popin case
-                        // Fix added on 2023-01-25
-                        layout += XHRData + XHRView + '\n\t'
+                    if (self.isXMLRequest()) {
+                        XHRData = '\t<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeRFC5987ValueChars(JSON.stringify(data.page.data)) +'">\n\r';
+                        XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeRFC5987ValueChars(JSON.stringify(viewInfos)) +'">';
+                        if ( /<\/body>/i.test(layout) ) {
+                            layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
+                        } else {
+                            // Popin case
+                            // Fix added on 2023-01-25
+                            layout += XHRData + XHRView + '\n\t'
+                        }
                     }
+
 
                 }
 
@@ -924,11 +930,18 @@ function SuperController(options) {
                 // if ( !isWithoutLayout )
                 //     viewInfos.assets = assets;
 
-                XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeURIComponent(JSON.stringify(data.page.data)) +'">';
-                XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeURIComponent(JSON.stringify(viewInfos)) +'">';
 
+                XHRData = '\n<input type="hidden" id="gina-without-layout-xhr-data" value="'+ encodeRFC5987ValueChars(JSON.stringify(data.page.data)) +'">';
+                XHRView = '\n<input type="hidden" id="gina-without-layout-xhr-view" value="'+ encodeRFC5987ValueChars(JSON.stringify(viewInfos)) +'">';
+                if ( /<\/body>/i.test(layout) ) {
+                    layout = layout.replace(/<\/body>/i, XHRData + XHRView + '\n\t</body>');
+                } else {
+                    // Popin case
+                    // Fix added on 2023-01-25
+                    layout += XHRData + XHRView + '\n\t'
+                }
 
-                layout += XHRData + XHRView;
+                // layout += XHRData + XHRView;
 
             } else { // other envs like prod ...
 
@@ -1800,9 +1813,9 @@ function SuperController(options) {
 
                     var inheritedData = null;
                     if ( /\?/.test(path) ) {
-                        inheritedData = '&inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));
+                        inheritedData = '&inheritedData='+ encodeRFC5987ValueChars(JSON.stringify(requestParams));
                     } else {
-                        inheritedData = '?inheritedData='+ encodeURIComponent(JSON.stringify(requestParams));
+                        inheritedData = '?inheritedData='+ encodeRFC5987ValueChars(JSON.stringify(requestParams));
                     }
 
                     if ( inheritedData.length > 2000 ) {
@@ -2373,7 +2386,7 @@ function SuperController(options) {
             // TODO - if 'application/json' && method == (put|post)
             if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
                 // replacing
-                queryData = encodeURIComponent(JSON.stringify(data))
+                queryData = encodeRFC5987ValueChars(JSON.stringify(data))
                 //queryData = JSON.stringify(data)
 
             } else {
@@ -2385,7 +2398,7 @@ function SuperController(options) {
                     if ( typeof(tmpData[d]) == 'object') {
                         tmpData[d] = JSON.stringify(tmpData[d]);
                     }
-                    queryData += d + '=' + encodeURIComponent(tmpData[d]) + '&';
+                    queryData += d + '=' + encodeRFC5987ValueChars(tmpData[d]) + '&';
                 }
 
                 queryData = queryData.substring(0, queryData.length-1);
@@ -3817,7 +3830,7 @@ function SuperController(options) {
 
 
                  // intercept none HTML mime types
-                 var url                     = unescape(local.req.url) /// avoid %20
+                 var url                     = decodeURI(local.req.url) /// avoid %20
                     , ext                   = null
                     , isHtmlContent         = false
                     , hasCustomErrorFile    = false
@@ -3889,7 +3902,7 @@ function SuperController(options) {
                         var eRule = 'custom-error-page@'+ bundle;
                         var routeObj = bundleConf.content.routing[eRule];
                         routeObj.rule = eRule;
-                        //routeObj.url = unescape(local.req.url);/// avoid %20
+                        //routeObj.url = decodeURI(local.req.url);/// avoid %20
                         routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
                         routeObj.param.file = eFilename;
                         routeObj.param.error = eData;

@@ -29,7 +29,7 @@ function Add(opt, cmd) {
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
         for (let i=3, len=process.argv.length; i<len; i++) {
-            if ( /^\-\-start\-from\=/.test(process.argv[i]) ) {
+            if ( /^\-\-start\-port\-from\=/.test(process.argv[i]) ) {
                 self.startFrom = process.argv[i].split(/\=/)[1]
             }
         }

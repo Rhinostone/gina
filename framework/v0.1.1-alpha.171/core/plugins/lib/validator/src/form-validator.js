@@ -653,7 +653,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             method              : route.method,
             requirements        : route.requirements,
             namespace           : route.namespace || undefined,
-            url                 : unescape(route.url), /// avoid %20
+            url                 : decodeURI(route.url), /// avoid %20
             rule                : rule + '@' + bundle,
             param               : JSON.clone(route.param),
             middleware          : JSON.clone(route.middleware),
@@ -726,7 +726,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 if (i > 0) {
                     urlParams += '&';
                 }
-                let val = (typeof(data[p]) == 'object') ? encodeURIComponent(JSON.stringify(data[p])) : data[p];
+                let val = (typeof(data[p]) == 'object') ? encodeRFC5987ValueChars(JSON.stringify(data[p])) : data[p];
                 urlParams += p +'='+ val;
                 i++;
             }

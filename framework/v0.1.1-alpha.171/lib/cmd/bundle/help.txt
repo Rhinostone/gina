@@ -11,6 +11,8 @@
     To add a new bundle or to import an existing one, use the following command line.
 
     $ gina bundle:add <bundle_name> @<project_name>
+    Or
+    $ gina bundle:add <bundle_name> @<project_name> --start-port-from<port_number>
 
 
     Adding multiple

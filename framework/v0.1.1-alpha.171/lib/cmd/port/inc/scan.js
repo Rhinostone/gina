@@ -15,6 +15,7 @@ module.exports = function Scanner(opt, cb){
         // default binding for localhost
         // remote scan can be added later if needed (e.g: for remote setup)
         host: 'localhost',
+        // --start-port-from
         startFrom: null,
         start: 3100,
         // max 65535, but user assigned == 49151 - see [RFC6335](https://www.rfc-editor.org/rfc/rfc6335.html)
@@ -62,7 +63,7 @@ module.exports = function Scanner(opt, cb){
         }
 
         // skip port present in the `ignore list`
-        if ( opt.ignore.length > 0 && opt.ignore.indexOf( port ) > -1 ) {
+        if ( opt.ignore.length > 0 && opt.ignore.indexOf( ''+port ) > -1 ) {
             port++;
             return find(port);
         }

@@ -1003,7 +1003,7 @@ function Routing() {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
                 if (typeof(params[r]) != 'undefined' )
-                    queryParams += r +'='+ encodeURIComponent(params[r])+ '&';
+                    queryParams += r +'='+ encodeRFC5987ValueChars(params[r])+ '&';
             }
 
             if (queryParams.length > 1) {
@@ -1292,7 +1292,7 @@ function Routing() {
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
         if ( typeof(request.routing.path) == 'undefined' )
-            request.routing.path = unescape(pathname);
+            request.routing.path = decodeURI(pathname);
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
 
         if (isMethodProvidedByDefault) {
@@ -1300,7 +1300,7 @@ function Routing() {
             request.originalMethod = request.method;
 
             request.method = method;
-            request.routing.path = unescape(pathname)
+            request.routing.path = decodeURI(pathname)
         }
         // last method check
         if ( !request.method)
@@ -1335,7 +1335,7 @@ function Routing() {
                     method              : localMethod,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
-                    url                 : unescape(pathname), /// avoid %20
+                    url                 : decodeURI(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
                     param               : routing[name].param,
                     //middleware: routing[name].middleware,

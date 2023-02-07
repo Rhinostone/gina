@@ -1639,10 +1639,10 @@ function Config(opt, contextResetNeeded) {
             }
 
             // templates root directories
-            var d           = 0
-                , dirs      = null
-                , pCount    = 0
-                , sCount    = 0
+            var d               = 0
+                , dirsOrFiles   = null
+                , pCount        = 0
+                , sCount        = 0
             ;
             if (conf[bundle][env].publicPath && fs.existsSync(conf[bundle][env].publicPath) ) {
                 var publicResources = []
@@ -1650,26 +1650,38 @@ function Config(opt, contextResetNeeded) {
                 ;
 
                 d = 0;
-                dirs = fs.readdirSync(conf[bundle][env].publicPath);
+                dirsOrFiles = fs.readdirSync(conf[bundle][env].publicPath);
                 // ignoring html (template files) directory
-                //dirs.splice(dirs.indexOf(new _(reps.html, true).toArray().last()), 1);
+                //dirsOrFiles.splice(dirsOrFiles.indexOf(new _(reps.html, true).toArray().last()), 1);
 
                 // making statics allowed directories
-                while ( d < dirs.length) {
-                    lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirs[d], true));
-                    if ( !/^\./.test(dirs[d]) && lStat.isDirectory() ) {
+                while ( d < dirsOrFiles.length) {
+                    if ( /^\./.test(dirsOrFiles[d]) ) {
+                        ++d;
+                        continue;
+                    }
+                    lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirsOrFiles[d], true));
+                    if ( lStat.isDirectory() ) {
                         // regular path
-                        publicResources[pCount] = '/'+ dirs[d] +'/';
+                        publicResources[pCount] = '/'+ dirsOrFiles[d] +'/';
                         ++pCount;
+                        if ( conf[bundle][env].server.webroot == "/" ) {
+                            ++d;
+                            continue;
+                        }
                         // handle resources from public with webroot in url
-                        publicResources[pCount] = conf[bundle][env].server.webroot + dirs[d] +'/';
+                        publicResources[pCount] = conf[bundle][env].server.webroot + dirsOrFiles[d] +'/';
                         ++pCount
-                    } else if ( !/^\./.test(dirs[d]) && lStat.isFile() ) {
+                    } else if ( lStat.isFile() ) {
                         // regular path
-                        publicResources[pCount] = '/'+ dirs[d];
+                        publicResources[pCount] = '/'+ dirsOrFiles[d];
                         ++pCount;
+                        if ( conf[bundle][env].server.webroot == "/" ) {
+                            ++d;
+                            continue;
+                        }
                         // handle resources from public with webroot in url
-                        publicResources[pCount] = conf[bundle][env].server.webroot + dirs[d];
+                        publicResources[pCount] = conf[bundle][env].server.webroot + dirsOrFiles[d];
                         ++pCount
                     }
                     ++d

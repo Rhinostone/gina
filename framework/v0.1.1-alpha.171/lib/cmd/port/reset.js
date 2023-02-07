@@ -11,7 +11,7 @@ const { setFips } = require('crypto');
  *
  * e.g.:
  *  gina port:reset @<project_name>
- *  gina port:reset @<project_name> --start-from=4100
+ *  gina port:reset @<project_name> --start-port-from=4100
  *
  * */
 function Reset(opt, cmd) {
@@ -36,7 +36,7 @@ function Reset(opt, cmd) {
         if (!isCmdConfigured()) return false;
 
         for (let i=3, len=process.argv.length; i<len; i++) {
-            if ( /^\-\-start\-from\=/.test(process.argv[i]) ) {
+            if ( /^\-\-start\-port\-from\=/.test(process.argv[i]) ) {
                 self.startFrom = process.argv[i].split(/\=/)[1]
             }
         }
