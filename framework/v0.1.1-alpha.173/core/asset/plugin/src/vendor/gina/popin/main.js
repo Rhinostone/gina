@@ -912,7 +912,12 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'jquery', 'lib/domain', 'lib/me
                     $el.setAttribute('data-type', 'modal');
                     // $el.setAttribute('method', 'dialog');
                     $el.setAttribute('aria-labelledby', name);
-                    instance.target.appendChild($el);
+                    $overlay = document.getElementById('gina-popins-overlay');
+                    if ($overlay) {
+                        $overlay.appendChild($el);
+                    } else {
+                        instance.target.appendChild($el);
+                    }
                 }
             }
 
