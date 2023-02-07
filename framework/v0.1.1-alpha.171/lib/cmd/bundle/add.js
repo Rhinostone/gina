@@ -14,10 +14,15 @@ var scan        = require('../port/inc/scan');
  *
  * Usage:
  * $ gina bundle:add <bundle_name> @<project_name>
+ * or
+ * $ gina bundle:add <bundle_name> @<project_name> --start-port-from=<port_number>
  * */
 function Add(opt, cmd) {
 
-    var self    = {}
+    var self    = {
+            // --start-port-from
+            startFrom: null
+        }
         , local     = {
             // bundle index while searching or browsing
             b : 0,
@@ -33,6 +38,31 @@ function Add(opt, cmd) {
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
+
+        var portErr = null;
+        for (let i=3, len=process.argv.length; i<len; i++) {
+            if ( /^\-\-start\-port\-from\=/.test(process.argv[i]) ) {
+                let port = process.argv[i].split(/\=/)[1];
+                if ( /[^0-9]+/.test(port) ) {
+                    portErr = new Error('Port number must be an integer');
+                    break;
+                }
+                port = parseInt(port);
+                if (
+                    typeof(port) != 'number'
+                    || !Number.isInteger(port)
+                ) {
+                    portErr = new Error('Port number must be an integer');
+                    break;
+                }
+                self.startFrom = port
+            }
+        }
+
+        if (portErr) {
+            console.error(portErr.message||portErr);
+            return process.exit(1)
+        }
 
         // var i = 3, envs = [];
         // for (; i<process.argv.length; ++i) {
@@ -95,8 +125,9 @@ function Add(opt, cmd) {
 
             // find available port
             options = {
-                ignore  : getPortsList(),
-                limit   : getBundleScanLimit(bundle)
+                ignore      : getPortsList(),
+                limit       : getBundleScanLimit(bundle),
+                startFrom   : self.startFrom
             };
             console.log('['+bundle+'] starting ports scan' );
 

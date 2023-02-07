@@ -686,9 +686,9 @@ define('gina/popin', [ 'require', 'vendor/uuid', 'jquery', 'lib/domain', 'lib/me
                             // has already params ?
                             if ( inheritedData.count() > 0 ) {
                                 if ( /\?/.test(linkEvent.currentTarget.href) ) {
-                                    linkEvent.currentTarget.href += '&inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                                    linkEvent.currentTarget.href += '&inheritedData=' + encodeRFC5987ValueChars(JSON.stringify(inheritedData));
                                 } else {
-                                    linkEvent.currentTarget.href += '?inheritedData=' + encodeURIComponent(JSON.stringify(inheritedData));
+                                    linkEvent.currentTarget.href += '?inheritedData=' + encodeRFC5987ValueChars(JSON.stringify(inheritedData));
                                 }
                             }
                         }

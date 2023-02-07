@@ -72,7 +72,7 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
             , timeoutId          = null
             , $copyCache         = null
             , copyValue          = null
-            ;
+        ;
 
         var init = function () {
             // Get elements
@@ -187,7 +187,8 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
 
                 txt = ($json) ? $json.text() : '';
                 if (txt == '' || txt == 'null' ) {
-                    $json.text('Empty')
+                    // $json.text('Empty')
+                    $json.text('{}')
                 } else {
                     jsonObject = JSON.parse( txt );
                     ginaJsonObject = JSON.parse($ginaJson.text());
@@ -211,11 +212,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
                 var sectionStr = ( section ) ? ' [ '+ section + ' ] ' : ' ';
                 // var _err = 'Could not load'+ sectionStr +'json\n' + (err.stack||err.message||err);
                 var _err = 'Could not load'+ sectionStr +'json\n' + err.message +'\n'+ err.stack;
-                if ($json) {
-                    $json.text(_err);
-                } else {
-                    throw _err;
-                }
+                console.error(_err);
+                // if ($json) {
+                //     $json.text(_err);
+                // } else {
+                //     throw _err;
+                // }
 
             }
 
@@ -242,12 +244,18 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
                 // Create DOM from JSON
                 // -> Configuration::environment
                 // filtering before
-                delete jsonObject.environment.routing;
-                delete ginaJsonObject.environment.routing;
-                delete jsonObject.environment.reverseRouting;
-                delete ginaJsonObject.environment.reverseRouting;
-                delete jsonObject.environment.forms;
-                delete ginaJsonObject.environment.forms;
+                if (ginaJsonObject.environment) {
+                    delete ginaJsonObject.environment.routing;
+                    delete ginaJsonObject.environment.reverseRouting;
+                    delete ginaJsonObject.environment.forms;
+                }
+
+                if (jsonObject.environment) {
+                    delete jsonObject.environment.routing;
+                    delete jsonObject.environment.reverseRouting;
+                    delete jsonObject.environment.forms;
+                }
+
                 $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
 
 

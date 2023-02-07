@@ -2860,7 +2860,7 @@ function Server(options) {
                     method              : method,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
-                    url                 : unescape(pathname), /// avoid %20
+                    url                 : decodeURI(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
                     param               : JSON.clone(routing[name].param),
                     middleware          : JSON.clone(routing[name].middleware),
@@ -3048,7 +3048,7 @@ function Server(options) {
                 //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
                 console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
                 // intercept none HTML mime types
-                var url                     = unescape(local.request.url) /// avoid %20
+                var url                     = decodeURI(local.request.url) /// avoid %20
                     , ext                   = null
                     , isHtmlContent         = false
                     , hasCustomErrorFile    = false

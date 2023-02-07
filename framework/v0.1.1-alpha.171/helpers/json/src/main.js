@@ -20,6 +20,32 @@ module.exports = function(){
 
     // `JSON.clone()` is a prototype defined in `GINA_DIR//lib/prototypes.json_clone`
 
+    encodeRFC5987ValueChars = function(str) {
+        // return encodeURIComponent(str).
+        //   // Bien que la RFC 3986 réserve "!", RFC 5987 ne réserve pas ce caractère,
+        //   // il n'est donc pas nécessaire l'échapper
+        //   replace(/['()*]/g, c => '%' + c.charCodeAt(0).toString(16)). // i.e., %27 %28 %29 %2a
+        //   // on notera que l'encodage valide pour "*" est %2A et qui faut donc appeler toUpperCase()
+        //   // pour encoder exactement.
+
+        //   // Selon la RFC 5987 ce qui suit n'est pas nécessairement requis
+        //   // on peut donc bénéficier d'un peu plus de lisibilité : |`^
+        //   replace(/%(7C|60|5E)/g, (str, hex) => String.fromCharCode(parseInt(hex, 16)));
+
+        // return encodeURIComponent(str).replace(/[!'()*]/g, function(c) {
+        //     return '%' + c.charCodeAt(0).toString(16);
+        //   });
+
+        return encodeURIComponent(str).
+        // Bien que la RFC 3986 réserve "!", RFC 5987 ne réserve pas ce caractère,
+        // il n'est donc pas nécessaire l'échapper
+        replace(/['()]/g, escape). // c'est-à-dire %27 %28 %29
+        replace(/\*/g, '%2A').
+            // Selon la RFC 5987 ce qui suit n'est pas nécessairement requis
+            // on peut donc bénéficier d'un peu plus de lisibilité : |`^
+            replace(/%(?:7C|60|5E)/g, unescape);
+    };
+
     /**
      * Load a json file and removing comments if found
      *
