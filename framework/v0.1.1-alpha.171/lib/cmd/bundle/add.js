@@ -495,10 +495,10 @@ function Add(opt, cmd) {
             var f = null;
             f = (f=file.split(/\//))[f.length-1];
             var isJS = /\.js/.test(f.substring(f.length-3))
-                , isJSON = /\.js/.test(f.substring(f.length-5))
+                , isJSON = /\.json/.test(f.substring(f.length-5))
             ;
 
-            if ( isJS || isJSON && /config\/app\.json/.test(file) ) {
+            if ( isJS || isJSON /*&& /config\/app\.json/.test(file)*/ ) {
                 var contentFile = fs.readFileSync(file, 'utf8').toString();
                 var dic = {
                     "Bundle" : local.bundle.substring(0, 1).toUpperCase() + local.bundle.substring(1),
