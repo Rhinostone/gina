@@ -71,14 +71,20 @@
         "{release}": "http"
     },
     "cultures": {
-        "_comment": "e.g.:  en-US, fr-FR ... available for the framework then used to translate the admin dashboard",
-        "{release}": [  "en-US", "fr-FR" ]
+        "_comment": "e.g.:  en_US, fr_FR ... available for the framework then used to translate the admin dashboard",
+        "{release}": [  "en_CM", "fr_CM" ]
     },
     "def_culture": {
-        "{release}": "en-US"
+        "{release}": "en_CM"
+    },
+    "def_iso_short": {
+        "{release}": "cm"
     },
     "def_timezone": {
         "{release}": "Africa/Douala"
+    },
+    "def_date": {
+        "{release}": "yyyy/mm/dd"
     },
     "log_levels": {
         "_comment": "hierarchy",

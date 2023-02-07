@@ -24,6 +24,8 @@
     "tmpdir": "{tmp_dir}",
     "logdir": "{log_dir}",
     "culture": "{culture}",
+    "iso_short": "{iso_short}",
     "timezone": "{timezone}",
+    "date": "{date}",
     "log_level": "{log_level}"
 }
