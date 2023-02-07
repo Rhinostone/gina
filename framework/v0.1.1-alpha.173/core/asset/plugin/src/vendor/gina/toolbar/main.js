@@ -197,13 +197,11 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
 
                     // backing up document data for restore action
                     if (!originalData) {
-
                         originalData = {
                             jsonObject      : JSON.clone(jsonObject),
                             ginaJsonObject  : JSON.clone( ginaJsonObject)
                         };
                         lastJsonObjectState = {}; // jsonObject.data
-
                     }
                 }
 
@@ -218,7 +216,6 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
                 // } else {
                 //     throw _err;
                 // }
-
             }
 
             if (jsonObject) {
