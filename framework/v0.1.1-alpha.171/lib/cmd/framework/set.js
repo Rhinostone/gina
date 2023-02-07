@@ -75,12 +75,21 @@ function Set(opt){
                 setKeyVal('host_v4', v);
             break;
 
+            case '--iso_short':
+            case '--iso-short':
+                setKeyVal('iso_short', v);
+            break;
+
             case '--hostname':
                 setKeyVal('hostname', v);
             break;
 
             case '--timezone':
                 setTimezone(v);
+            break;
+
+            case '--date':
+                setKeyVal('date', v);
             break;
 
             default:
