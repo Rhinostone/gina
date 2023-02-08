@@ -563,8 +563,13 @@ function SuperController(options) {
             // making path thru [namespace &] file
             if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
                 // excepted for custom paths
-                if ( !/^(\.|\/|\\)/.test(file) )
+                if ( !/^(\.|\/|\\)/.test(file) ) {
+                    var _ext = data.page.view.ext;
+                    console.warn('file `'+ file +'` used in routing `'+ localOptions.rule +'` does not respect gina naming convention ! You should rename the file `'+ file + _ext +'` to `'+ ''+ file.replace(localOptions.namespace+'-', '') + _ext +'`');
+                    console.warn('The reason you are getting this message is because your filename begeins with `<namespace>-`\n If you don\‘t want to rename, use template path like ./../'+ localOptions.namespace +'/'+file);
                     file = ''+ file.replace(localOptions.namespace+'-', '');
+                }
+
 
                 // means that rule name === namespace -> pointing to root namespace dir
                 if (!file || file === localOptions.namespace) {

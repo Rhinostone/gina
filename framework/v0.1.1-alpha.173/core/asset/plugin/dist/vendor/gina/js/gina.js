@@ -7853,7 +7853,7 @@ function Routing() {
      * @private
      * */
     var hasParams = function(pathname) {
-        return (/:/.test(pathname)) ? true : false;
+        return (/\:/.test(pathname)) ? true : false;
     };
 
     /**
@@ -8270,7 +8270,7 @@ function Routing() {
         //     params.param.file = params.param.file.replace(regex, urlVal);
         // }
         // file is handle like url replacement (path is like pathname)
-        if (typeof (params.param.file) != 'undefined' && /:/.test(params.param.file)) {
+        if ( typeof(params.param.file) != 'undefined' && /\:/.test(params.param.file)) {
             var _regex = new RegExp('(:'+urlVar+'/|:'+urlVar+'$)', 'g');
             replacement.variable = urlVal;
             params.param.file = params.param.file.replace( _regex, replacement );
@@ -8521,17 +8521,17 @@ function Routing() {
                     regex = new RegExp('(:'+variable+'/|:'+variable+'$)', 'g');
 
 
-                    if ( typeof(route.param.path) != 'undefined' && /:/.test(route.param.path) ) {
+                    if ( typeof(route.param.path) != 'undefined' && /\:/.test(route.param.path) ) {
                         route.param.path = route.param.path.replace( regex, params[variable]);
                     }
-                    if (typeof (route.param.title) != 'undefined' && /:/.test(route.param.title)) {
+                    if (typeof (route.param.title) != 'undefined' && /\:/.test(route.param.title)) {
                         route.param.title = route.param.title.replace( regex, params[variable]);
                     }
-                    if (typeof (route.param.namespace) != 'undefined' && /:/.test(route.param.namespace)) {
+                    if (typeof (route.param.namespace) != 'undefined' && /\:/.test(route.param.namespace)) {
                         route.param.namespace = route.param.namespace.replace( regex, params[variable]);
                     }
                     // file is handle like url replacement (path is like pathname)
-                    if (typeof (route.param.file) != 'undefined' && /:/.test(route.param.file)) {
+                    if (typeof (route.param.file) != 'undefined' && /\:/.test(route.param.file)) {
                         replacement.variable = params[variable];
                         route.param.file = route.param.file.replace( regex, replacement );
                     }
