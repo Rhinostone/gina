@@ -1,6 +1,8 @@
 {
   //"favicon.ico": "{templatesPath}/favicon.ico",
   //"favicons": "{templatesPath}/favicons",
+  // for plain html or public access
+  "": "{publicPath}",
   "html": "{templatesPath}/html",  // used for templating
   "sass": "{templatesPath}/sass",  // used for templating
   "handlers": "{handlersPath}",  // used for templating
