@@ -1267,7 +1267,7 @@ function Server(options) {
         var url = (isWebroot) ? this._referrer : headers[':path'];
 
         var hanlersPath     = conf.handlersPath
-            , isHandler     = ( new RegExp('^'+ hanlersPath).test(assets[ url ].filename) ) ? true: false
+            , isHandler     = ( assets[ url ].filename && new RegExp('^'+ hanlersPath).test(assets[ url ].filename) ) ? true: false
         ;
 
         if (!stream.pushAllowed) {
@@ -1619,7 +1619,7 @@ function Server(options) {
                         isHandler   = false;
 
                         try {
-                            contentType = getHead(response, filename);
+                            contentType = getContentTypeByFilename(filename);
 
                             // adding gina loader
                             if ( /text\/html/i.test(contentType) && self.isCacheless() ) {
@@ -1728,7 +1728,7 @@ function Server(options) {
                                                 }
                                             }
 
-                                            contentType = getHead(response, filename);
+                                            contentType = getContentTypeByFilename(filename);
                                             contentType = contentType +'; charset='+ bundleConf.encoding;
                                             ext = request.url.match(/\.([A-Za-z0-9]+)$/);
                                             request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
@@ -2590,21 +2590,21 @@ function Server(options) {
         })
     }
 
-    var getHead = function(response, file) {
+    var getContentTypeByFilename = function(filename) {
         try {
-            var s       = file.split(/\./);
+            var s       = filename.split(/\./);
             var ext     = s[s.length-1];
             var type    = null;
             var mime    = self.conf[self.appName][self.env].server.coreConfiguration.mime;
 
-            if( typeof(mime[ext]) != 'undefined' ) {
+            if ( typeof(mime[ext]) != 'undefined' ) {
                 type = mime[ext];
             } else {
-                console.warn('[ '+file+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
+                console.warn('[ '+filename+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
             }
             return type || 'plain/text'
         } catch (err) {
-            console.error('Error while trying to getHead('+ file +') extention. Replacing with `plain/text` '+ err.stack);
+            console.error('Error while trying to getContentTypeByFilename('+ filename +') extention. Replacing with `plain/text` '+ err.stack);
             return 'plain/text'
         }
 
