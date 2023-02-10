@@ -10,13 +10,10 @@
 
 //Imports.
 var fs                = require('fs')
-
     , lib               = require('./../lib')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
-    , routing           = lib.routing
-
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -108,17 +105,17 @@ function Router(env) {
     this.route = function(request, response, next, params) {
 
         /**
-        * BO e
         * ExpressJS modules + HTTP2 fix
-        * Hack required until `express-<plugin>` get support for http2 (express-session)
+        * Hack required until `express-<plugin>` get support for http2 `express-session`
+        * or similar modules
         */
         if (!response._implicitHeader) {
             response._implicitHeader = function(){ return; }; // we need to force it
         }
+
         /**
         * EO Passport JS HTTP2 fix
         */
-
 
         /**
         * BO Passport JS HTTP2 fix : taken from passport/request.js
@@ -190,7 +187,7 @@ function Router(env) {
         }
 
         // for redirect with `hidden inheritedData`
-        if ( /get/i.test(request.method) && typeof(request.session) != 'undefined' ) {
+        if ( /^get$/i.test(request.method) && typeof(request.session) != 'undefined' ) {
             var userSession = request.session.user || request.session;
             if ( typeof(userSession.inheritedData) != 'undefined' ) {
                 if (!request.get) {
@@ -489,8 +486,6 @@ function Router(env) {
                             // Inheriting SuperController functions & objects
                             // Exporting config & common methods
                             Setup.engine                = controller.engine;
-                            // This is working, but too heavy
-                            // TODO- Allow user to target selected methods to be exported
                             // TODO - loop on a defiend SuperController property like SuperController._allowedForExport
                             // for ( let f in controller) {
                             //     if ( typeof(controller[f]) != 'function' ) {
@@ -670,11 +665,6 @@ function Router(env) {
         }
     };
 
-    // var hasViews = function() {
-    //     return local.routeHasViews;
-    // };
-
     init()
-};
-
-module.exports = Router
+}
+module.exports = Router;

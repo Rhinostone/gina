@@ -12,8 +12,9 @@ const inherits          = lib.inherits;
 const merge             = lib.merge;
 const console           = lib.logger;
 
-const env     = process.env.NODE_ENV
-    , isDev = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
+const env       = process.env.NODE_ENV
+    , isDev     = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
+;
 
 var refreshCore = function() {
 
@@ -31,12 +32,12 @@ var refreshCore = function() {
         }
     }
 
-    //update lib & helpers
+    // Update lib & helpers
     delete require.cache[require.resolve(_(libPath +'/index.js', true))];
     require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
     require.cache[_(corePath + '/gna.js', true)].exports.lib = require.cache[_(libPath +'/index.js', true)];
 
-    //update plugins
+    // Update plugins
     delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
     require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
     require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
@@ -141,90 +142,6 @@ function ServerEngineClass(options) {
         //     stream.end('<h1>404</h1>');
         // }
     }
-
-    if ( typeof(options.ioServer) != 'undefined' && typeof(options.ioServer.integrationMode) != 'undefined' && /^attach$/.test(options.ioServer.integrationMode) ) {
-        console.info('[IO SERVER ] `eio` found using `'+ options.ioServer.integrationMode +'` integration mode');
-        delete options.ioServer.integrationMode;
-        // test done in case we would like to switch to socket.io-server
-        ioServer = ( typeof(Eio.attach) != 'undefined' ) ? new Eio.attach(server, options.ioServer) : new Eio(server, options.ioServer);
-
-        ioServer.getClientsBySessionId = function(sessionId) {
-
-            if (this.clients.count() == 0)
-                return null;
-
-            var clients = null;
-
-            for (var id in this.clients) {
-
-                if ( typeof(this.clients[id].sessionId) == 'undefined' )
-                    continue;
-
-                if (!clients) clients = {};
-
-                clients[id] = this.clients[id];
-            }
-
-            if (clients) {
-                // allowing to send for each client found sharing the same request session
-                clients.send = function(payload, option, callback) {
-                    for ( var id in this) {
-                        if ( typeof(this[id].sessionId) == 'undefined')
-                            continue;
-
-                        this[id].send(payload, option, callback)
-                    }
-                }
-            }
-
-
-            return clients;
-        }
-
-        server.eio = ioServer;
-
-        ioServer.on('connection', function (socket) {
-
-            socket.send(JSON.stringify({
-                id: this.id,//socket.id,
-                handshake: 'Welcomed to `'+ options.bundle +'` main socket !',
-                // how many ms before sending a new ping packet
-                pingTimeout: options.ioServer.pingTimeout || options.ioServer.timeout,
-                // how many ms without a pong packet to consider the connection closed
-                pingInterval: options.ioServer.pingInterval || options.ioServer.interval
-            }));
-
-            socket.on('message', function(payload){
-
-                try {
-                    console.debug('[IO SERVER ] receiving '+ payload);
-                    payload = JSON.parse(payload);
-                    // bind to session ID
-                    if ( typeof(payload.session) != 'undefined' ) {
-                        this.sessionId = payload.session.id;
-                    }
-                } catch(err) {
-                    console.error(err.stack||err.message|| err)
-                }
-
-            });
-
-            socket.on('close', function(){
-                console.debug('[IO SERVER ] closed socket #'+ this.id);
-            });
-        });
-
-        server.on('upgrade', function(req, socket, head){
-            console.debug('[IO SERVER ] upgrading socket #'+ this.id);
-            ioServer.handleUpgrade(req, socket, head);
-        });
-        // httpServer.on('request', function(req, res){
-        //     ioServer.handleRequest(req, res);
-        // });
-
-
-    }
-
 
 
     const onPath = function(path, cb, allowAll) {
@@ -369,20 +286,99 @@ function ServerEngineClass(options) {
     }
 
 
-
-
     server.on('error', (err) => {
         console.error(err)
     });
 
-    // server.on('stream', (stream, headers) => {
-    //     // stream is a Duplex
-    //     stream.respond({
-    //         'content-type': 'text/html',
-    //         ':status': 200
-    //     });
-    //     stream.end('<h1>Hello World</h1>');
-    // });
+
+    //------------------------------------
+    // Engine IO server
+    //------------------------------------
+    if (
+        typeof(options.ioServer) != 'undefined'
+        && typeof(options.ioServer.integrationMode) != 'undefined'
+        && /^attach$/.test(options.ioServer.integrationMode)
+    ) {
+        console.info('[IO SERVER ] `eio` found using `'+ options.ioServer.integrationMode +'` integration mode');
+        delete options.ioServer.integrationMode;
+        // test done in case we would like to switch to socket.io-server
+        ioServer = ( typeof(Eio.attach) != 'undefined' ) ? new Eio.attach(server, options.ioServer) : new Eio(server, options.ioServer);
+
+        ioServer.getClientsBySessionId = function(sessionId) {
+
+            if (this.clients.count() == 0)
+                return null;
+
+            var clients = null;
+
+            for (var id in this.clients) {
+
+                if ( typeof(this.clients[id].sessionId) == 'undefined' )
+                    continue;
+
+                if (!clients) clients = {};
+
+                clients[id] = this.clients[id];
+            }
+
+            if (clients) {
+                // allowing to send for each client found sharing the same request session
+                clients.send = function(payload, option, callback) {
+                    for ( var id in this) {
+                        if ( typeof(this[id].sessionId) == 'undefined')
+                            continue;
+
+                        this[id].send(payload, option, callback)
+                    }
+                }
+            }
+
+
+            return clients;
+        }
+
+        server.eio = ioServer;
+
+        ioServer.on('connection', function (socket) {
+
+            socket.send(JSON.stringify({
+                id: this.id,//socket.id,
+                handshake: 'Welcomed to `'+ options.bundle +'` main socket !',
+                // how many ms before sending a new ping packet
+                pingTimeout: options.ioServer.pingTimeout || options.ioServer.timeout,
+                // how many ms without a pong packet to consider the connection closed
+                pingInterval: options.ioServer.pingInterval || options.ioServer.interval
+            }));
+
+            socket.on('message', function(payload){
+
+                try {
+                    console.debug('[IO SERVER ] receiving '+ payload);
+                    payload = JSON.parse(payload);
+                    // bind to session ID
+                    if ( typeof(payload.session) != 'undefined' ) {
+                        this.sessionId = payload.session.id;
+                    }
+                } catch(err) {
+                    console.error(err.stack||err.message|| err)
+                }
+            });
+
+            socket.on('close', function(){
+                console.debug('[IO SERVER ] closed socket #'+ this.id);
+            });
+        });
+
+        server.on('upgrade', function(req, socket, head){
+            console.debug('[IO SERVER ] upgrading socket #'+ this.id);
+            ioServer.handleUpgrade(req, socket, head);
+        });
+        // httpServer.on('request', function(req, res){
+        //     ioServer.handleRequest(req, res);
+        // });
+
+
+    }
 
 
 

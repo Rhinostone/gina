@@ -5214,7 +5214,7 @@
                                     event.currentTarget.setAttribute('method', newFormMethod);
                                 }
                             } else if ($el.parentNode.form) {
-                                if ($el.form.setAttribute) {
+                                if (el.parentNode.setAttribute) {
                                     $el.parentNode.form.setAttribute('method', newFormMethod);
                                 } else {
                                     event.currentTarget.setAttribute('method', newFormMethod);
