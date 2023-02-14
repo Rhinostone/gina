@@ -1625,7 +1625,8 @@ function Config(opt, contextResetNeeded) {
                 files['statics'] = requireJSON(staticsPath)
             } else if ( typeof(files['statics']) != 'undefined' ) {
                 var defaultAliases = requireJSON(staticsPath);
-                files['statics'] = merge(defaultAliases, files['statics'], true)
+                // files['statics'] = merge(defaultAliases, files['statics'], true)
+                files['statics'] = merge(files['statics'], defaultAliases);
             }
 
 

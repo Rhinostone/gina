@@ -1267,7 +1267,11 @@ function Server(options) {
         var url = (isWebroot) ? this._referrer : headers[':path'];
 
         var hanlersPath     = conf.handlersPath
-            , isHandler     = ( assets[ url ].filename && new RegExp('^'+ hanlersPath).test(assets[ url ].filename) ) ? true: false
+            , isHandler     = (
+                                typeof(assets[ url ]) != 'undefined'
+                                && typeof(assets[ url ].filename) != 'undefined'
+                                && new RegExp('^'+ hanlersPath).test(assets[ url ].filename)
+                            ) ? true: false
         ;
 
         if (!stream.pushAllowed) {
@@ -1445,8 +1449,9 @@ function Server(options) {
                     header = merge(header, responseHeaders);
                 }
                 header = completeHeaders(header, local.request, response);
+                var pushedFile = (/index.html$/.test(headers[':path']) && /\/$/.test(asset.filename) ) ? asset.filename +'index.html': asset.filename;
                 pushStream.respondWithFile(
-                    asset.filename
+                    pushedFile
                     , header
                     //, { onError }
                 );
@@ -2600,7 +2605,7 @@ function Server(options) {
             if ( typeof(mime[ext]) != 'undefined' ) {
                 type = mime[ext];
             } else {
-                console.warn('[ '+filename+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Replacing with `plain/text` ')
+                console.warn('[ '+filename+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Pathname must be a directory. Replacing with `plain/text` ')
             }
             return type || 'plain/text'
         } catch (err) {

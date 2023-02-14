@@ -109,6 +109,24 @@ function SuperController(options) {
 
         return /http2/.test(httpLib)
     }
+
+    var headersSent = function(res) {
+        var _res = ( typeof(res) != 'undefined' ) ? res : local.res;
+
+        if ( typeof(_res.headersSent) != 'undefined' ) {
+            return _res.headersSent
+        }
+
+        if (
+            typeof(_res.stream) != 'undefined'
+            && typeof(_res.stream.headersSent) != 'undefined'
+            && _res.stream.headersSent != 'null'
+        ) {
+            return true
+        }
+
+        return false;
+    }
     /**
      * isSecured
      * Returns `true` if server configured to handle a HTTPS exchanges
@@ -1025,7 +1043,8 @@ function SuperController(options) {
             */
 
 
-            if ( !local.res.headersSent ) {
+            // if ( !local.res.headersSent ) {
+            if ( !headersSent() ) {
                 local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
                 //catching errors
                 if (
@@ -1088,7 +1107,7 @@ function SuperController(options) {
                 // Last compilation before rendering
                 layout = swig.compile(layout, mapping)(data);
 
-                if ( !local.res.headersSent ) {
+                if ( !headersSent() ) {
                     if ( local.options.isRenderingCustomError ) {
                         local.options.isRenderingCustomError = false;
                     }
@@ -1190,7 +1209,7 @@ function SuperController(options) {
                 response.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['json'] + '; charset='+ local.options.conf.encoding)
             }
 
-            if ( !response.headersSent ) {
+            if ( !headersSent(response) ) {
                 console.info(request.method +' ['+ response.statusCode +'] '+ request.url);
 
                 if ( local.options.isXMLRequest && self.isWithCredentials() )  {
@@ -1204,7 +1223,7 @@ function SuperController(options) {
                         len = data.length
                     }
 
-                    if (!response.headersSent)
+                    if (!headersSent(response))
                         response.setHeader("content-length", len);
 
 
@@ -1237,7 +1256,7 @@ function SuperController(options) {
 
                 } else { // normal case
                     response.end(JSON.stringify(jsonObj));
-                    if (!response.headersSent) {
+                    if (!headersSent(response)) {
                         try {
                             response.headersSent = true;
                         } catch(err) {
@@ -1278,7 +1297,7 @@ function SuperController(options) {
             local.res.setHeader('content-type', 'text/plain' + '; charset='+ local.options.conf.encoding);
         }
 
-        if ( !local.res.headersSent ) {
+        if ( !headersSent() ) {
             console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
             local.res.end(content);
             try {
@@ -1783,7 +1802,7 @@ function SuperController(options) {
 
 
 
-            if (!local.res.headersSent) {
+            if (!headersSent()) {
 
                 // backing up oldParams
                 var oldParams = local.req[originalMethod.toLowerCase()];
@@ -3668,6 +3687,20 @@ function SuperController(options) {
         self.render(data, displayToolbar, errOptions);
     }
 
+    var getResponseProtocol = function (response) {
+        // var options =  local.options;
+        // var protocolVersion = ~~options.conf.server.protocol.match(/\/(.*)$/)[1].replace(/\.\d+/, '');
+
+        var protocol    = 'http/'+ local.req.httpVersion; // inheriting request protocol version by default
+        var bundleConf  = options.conf;
+        // switching protocol to h2 when possible
+        if ( /http\/2/.test(bundleConf.server.protocol) && response.stream ) {
+            protocol    = bundleConf.server.protocol;
+        }
+
+        return protocol;
+    }
+
 
     /**
      * Throw error
@@ -3679,6 +3712,11 @@ function SuperController(options) {
      * @returns {void}
      * */
     this.throwError = function(res, code, msg) {
+
+        var protocol        = getResponseProtocol(res);
+        var stream          = ( /http\/2/.test(protocol) && res.stream ) ? res.stream : null;
+        var header          = ( /http\/2/.test(protocol) && res.stream ) ? {} : null;
+
         self.isProcessingError = true;
         var errorObject = null; // to be returned
 
@@ -3744,10 +3782,16 @@ function SuperController(options) {
             res           = local.res;
         }
 
-        var responseHeaders = res.getHeaders() || local.res.getHeaders();
+        var responseHeaders = null;
+        if ( typeof(res.getHeaders) == 'undefined' && typeof(res.stream) != 'undefined' ) {
+            responseHeaders = res.stream.sentHeader;
+        } else {
+            responseHeaders = res.getHeaders() || local.res.getHeaders();
+        }
+        // var responseHeaders = res.getHeaders() || local.res.getHeaders();
         var req             = local.req;
         var next            = local.next;
-        if (!res.headersSent) {
+        if (!headersSent()) {
             // DELETE request methods don't normaly use a view,
             // but if we are calling it from a view, we should render the error back to the view
             if ( self.isXMLRequest() || !hasViews() && !/delete/i.test(req.method) || !local.options.isUsingTemplate && !hasViews() || hasViews() && !local.options.isUsingTemplate ) {
@@ -4000,8 +4044,12 @@ function SuperController(options) {
             if (typeof(next) != 'undefined')
                 return next();
         }
-        res.end();
-        return;
+
+        if ( /http\/2/.test(protocol) ) {
+            return stream.end();
+        }
+
+        return res.end();
     }
 
     // converting references to objects
