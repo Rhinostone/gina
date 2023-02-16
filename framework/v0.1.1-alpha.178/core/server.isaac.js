@@ -217,7 +217,7 @@ function ServerEngineClass(options) {
                                     a[0] = decodeURIComponent(a[0])
                                 }
 
-                                request.query = JSON.parse(a[0]);
+                                request.query = a[0] ? JSON.parse(a[0]) : {};
                             } catch(err) {
                                 console.error(err.stack)
                             }

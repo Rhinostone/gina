@@ -1620,7 +1620,7 @@ function SuperController(options) {
      *      only means that the ID you are using for the form might be
      *      a duplicate one from the the main document !!!
      *
-     * @param {object|string} req|rule - Request Object or Rule/Route name
+     * @param {object|string} req|rule|url - Request Object or Rule/Route name
      * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
      * @param {object} [params] TODO
      *
@@ -1824,6 +1824,7 @@ function SuperController(options) {
                     code = 303;
                 }
 
+                var inheritedDataIsNeeded = ( req.method.toLowerCase() == originalMethod.toLowerCase() ) ? false: true;
 
                 // merging new & olds params
                 requestParams = merge(requestParams, oldParams);
@@ -1866,7 +1867,9 @@ function SuperController(options) {
                         return;
                     }
 
-                    path += inheritedData;
+                    if (inheritedDataIsNeeded) {
+                        path += inheritedData;
+                    }
                 }
 
                 var ext = 'html';
