@@ -3604,7 +3604,27 @@ function SuperController(options) {
             delete requestStorage.inheritedData;
             requestStorage.haltedRequestUrlResumed = url;
 
+            if (
+                typeof(req.routing.param.isPopinContext) != 'undefined'
+                && /^true$/i.test(req.routing.param.isPopinContext)
+                && self.isXMLRequest()
+            ) {
+                return self.renderJSON({
+                    isXhrRedirect: true,
+                    popin: {
+                        url: url
+                    }
+                })
+            }
+            else if (self.isXMLRequest() ) {
+                return self.renderJSON({
+                    isXhrRedirect: true,
+                    location: url
+                })
+            }
+
             requiredController.redirect(url, true);
+
         } else {
             local.onHaltedRequestResumed = function(err) {
                 if (!err) {
