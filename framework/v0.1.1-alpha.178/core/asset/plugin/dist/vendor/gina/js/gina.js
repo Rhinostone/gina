@@ -10843,8 +10843,7 @@ define("utils/dom", function(){});
                                         && typeof(result.popin.name) != 'undefined'
                                         && popinName != result.popin.name
                                     ) {
-                                        //$popin = gina.popin.getActivePopin();
-                                        if ($popin)
+                                        if ($popin && $popin.isOpen)
                                             $popin.close();
 
                                         popinName = result.popin.name;
@@ -10856,6 +10855,8 @@ define("utils/dom", function(){});
                                         $popin.load($popin.name, popinUrl, $popin.options);
                                     } else if ($popin) {
                                         console.debug('Validator::Popin now redirecting [1-d]');
+                                        if ($popin && $popin.isOpen)
+                                            $popin.close();
                                         $popin.load($popin.name, popinUrl, $popin.options);
                                     }
                                     if ($popin && !$popin.isOpen) {
