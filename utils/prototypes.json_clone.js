@@ -38,6 +38,7 @@ function JSONClone(source, target) {
         , srcObjProps   = Object.getOwnPropertyNames(source)
         , len           = srcObjProps.length || 0
         , keys          = Object.keys(source)
+        , warn          = null
     ;
 
     while (i<len) {
@@ -47,7 +48,7 @@ function JSONClone(source, target) {
             continue;
         }
         if (source[key] === undefined) {
-            var warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`');
+            warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`');
             warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
             if ( typeof(warn.message) != 'undefined' ) {
                 warn.message = warn.message.replace(/^Error\:\s+/g, '');
@@ -55,7 +56,38 @@ function JSONClone(source, target) {
             console.warn(warn);
             target[key] = null
         } else {
-            target[key] = (typeof target[key] == 'undefined' ) ? JSONClone(source[key], null) : target[key];
+            // try {
+
+                // if (key == 'contexts') {
+                // // if ( typeof(target[key]) == 'undefined' && target[key] != 'null' && typeof(source[key]) == 'object' && !Array.isArray(source[key]) && typeof(source[key]) != 'object' &&  !/\[native code\]/.test(source[key].constructor) ) {
+                //     console.log('Kyeyyyyy ', key);
+
+                //     target[key] = {}.toString.call(source[key]);
+                //     // target[key] = {};
+                //     i++;
+                //     continue;
+                // }
+
+
+                target[key] = (typeof(target[key]) == 'undefined' ) ? JSONClone(source[key], null) : target[key];
+            // } catch (jsonErr) {
+            //     // warn = new Error('JSON.clone(...) Exception detected @ source['+key+']\nKey: '+ key +'\nType: '+ (typeof(source[key])) + '\nisArray ? '+ Array.isArray(source[key]) +'\n');
+            //     // warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
+            //     // if ( typeof(warn.message) != 'undefined' ) {
+            //     //     warn.message = warn.message.replace(/^Error\:\s+/g, '');
+            //     // }
+            //     // console.warn(warn);
+            //     // console.warn('key: '+ key, '\nvalue: ', source[key], jsonErr);
+
+            //     console.warn('JSON.clone(...) Complex Object Exception detected @ source['+key+']\nConstructor: '+ source.constructor +'\nKey: '+ key +'\nType: '+ (typeof(source[key])) + '\nisArray ? '+ Array.isArray(source[key]) +'\nTarget[key]: '+ target[key] +'\n'+jsonErr.stack);
+            //     // Break to avoid memory leak
+            //     break;
+
+            //     // throw new Error('JSON.clone(...) Complex Object Exception detected @ source['+key+']\nKey: '+ key +'\nType: '+ (typeof(source[key])) + '\nisArray ? '+ Array.isArray(source[key]) +'\n'+jsonErr.stack)
+
+            //     // throw jsonErr;
+            // }
+
         }
 
         i++;
