@@ -17238,8 +17238,12 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
                     delete jsonObject.environment.reverseRouting;
                     delete jsonObject.environment.forms;
                 }
-
-                $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
+                // if (
+                //     typeof(ginaJsonObject.environment) != 'undefined'
+                //     && typeof(jsonObject.environment) != 'undefined'
+                // ) {
+                    $htmlConfigurationEnvironment.html(parseObject(jsonObject.environment, ginaJsonObject.environment));
+                // }
 
 
                 var userObject   = { data: jsonObject.data, view: jsonObject.view, forms: jsonObject.forms }
@@ -17465,6 +17469,18 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
 
             // Add folding behavior
             $htmlData
+                .add($htmlView).off('click', 'a').on('click', 'a', function(event) {
+                    event.preventDefault();
+
+                    toggleCodeFolding( $(this), null, true )
+                })
+                .add($htmlForms).off('click', 'a').on('click', 'a', function(event) {
+                    event.preventDefault();
+
+                    toggleCodeFolding( $(this), null, true )
+                });
+
+            $htmlConfigurationEnvironment
                 .add($htmlView).off('click', 'a').on('click', 'a', function(event) {
                     event.preventDefault();
 
@@ -17820,6 +17836,10 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
             var count           = '';
             var objType         = '';
             var isEmptyClass    = null;
+
+            if (!obj) {
+                return;
+            }
 
             obj     = orderKeys(obj);
             ginaObj = orderKeys(ginaObj);
