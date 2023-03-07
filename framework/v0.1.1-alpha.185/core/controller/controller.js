@@ -417,7 +417,7 @@ function SuperController(options) {
                 local._swigOptions = JSON.clone(swigOptions);
             }
             swig.setDefaults(swigOptions);
-            // used for self.engine.compile(tpl, swigOptions)(data)
+            // used for self.engine.compile(tpl, swigOptions)(swigData)
             swig.getOptions = function() {
                 return local._swigOptions;
             }
@@ -1019,7 +1019,7 @@ function SuperController(options) {
                     layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
                     layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
                     //swig.invalidateCache();
-                    layout = swig.compile(layout, mapping)(data);
+                    layout = swig.compile(layout, mapping)(swigData);
 
 
                 } catch (err) {
@@ -1032,7 +1032,7 @@ function SuperController(options) {
             else if (hasViews() && localOptions.debugMode && self.isCacheless()) {
                 try {
                     //layout = whisper(dic, layout, /\{{ ([a-zA-Z.]+) \}}/g );
-                    layout = swig.compile(layout, mapping)(data);
+                    layout = swig.compile(layout, mapping)(swigData);
                 } catch (err) {
                     filename = localOptions.template.html;
                     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
@@ -1105,6 +1105,7 @@ function SuperController(options) {
                 }
 
                 // Last compilation before rendering
+                // Now we can use `data` instead of `swigData`
                 layout = swig.compile(layout, mapping)(data);
 
                 if ( !headersSent() ) {
