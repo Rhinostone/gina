@@ -176,6 +176,13 @@ function ServerEngineClass(options) {
                     queryParams = request.url.split(/\?/);
 
                     len = queryParams.length;
+                    // fixing `?` > 1 occurence
+                    if (len > 2) {
+                        queryParams[1] = queryParams.slice(1).join('&');
+                        // cleanup
+                        queryParams.splice(2);
+                        len = queryParams.length;
+                    }
                     request.params[0] = queryParams[0];
 
                     if ( /\&/.test(queryParams[1]) ) {

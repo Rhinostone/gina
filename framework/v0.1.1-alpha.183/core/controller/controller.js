@@ -3672,6 +3672,9 @@ function SuperController(options) {
 
         var session = getSession();
         if (session) {
+            if (!data) {
+                data = {}
+            }
             data.session = JSON.clone(session)
         }
         var displayToolbar = req.routing.param.displayToolbar || false;
