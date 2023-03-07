@@ -971,14 +971,8 @@ function Routing() {
             throw new Error('[ RoutingHelper::getRouting(rule, params) ] : `' +rule + '` not found !')
         }
 
-        var route = JSON.clone(routing[rule]);
-        var variable    = null
-            , regex     = null
-            , urls      = null
-            , i         = null
-            , len       = null
-            , msg       = null
-        ;
+        var route   = JSON.clone(routing[rule]);
+        var msg     = null;
         route = checkRouteParams(route, params);
 
         if ( /\,/.test(route.url) ) {
@@ -997,21 +991,29 @@ function Routing() {
 
         // Completeting url with extra params e.g.: ?param1=val1&param2=val2
         if ( /GET/i.test(route.method) && typeof(params) != 'undefined' ) {
-            var queryParams = '?', maskedUrl = routing[rule].url;
-            //self.reservedParams;
+            var queryParams = '?'
+                , maskedUrl = routing[rule].url
+            ;
+
+            // in route.rule params
+            var extracted = [], i = 0;
             for (let r in route.param) {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
                 if (typeof(params[r]) != 'undefined' ) {
                     queryParams += r +'='+ encodeRFC5987ValueChars(params[r])+ '&';
-                    delete params[r]
+                    extracted[i] = params[r];
+                    ++i;
                 }
-
             }
 
             // extra params ( not declared in the rule, but added by getUrl() )
             for (let p in params) {
-                if ( self.reservedParams.indexOf(p) > -1 || typeof(route.requirements[p]) != 'undefined' ) {
+                if (
+                    self.reservedParams.indexOf(p) > -1
+                    || typeof(route.requirements[p]) != 'undefined'
+                    || extracted.indexOf(p) > -1
+                ) {
                     continue;
                 }
                 if ( typeof(params[p]) == 'object' ) {
@@ -1019,14 +1021,17 @@ function Routing() {
                 } else {
                     queryParams += p +'='+ params[p] +'&';
                 }
-
             }
+            maskedUrl = null;
+            extracted = null;
+            i = null;
 
             if (queryParams.length > 1) {
                 queryParams = queryParams.substring(0, queryParams.length-1);
 
                 route.url += queryParams;
             }
+            queryParams = null;
         }
 
         // recommanded for x-bundle coms
