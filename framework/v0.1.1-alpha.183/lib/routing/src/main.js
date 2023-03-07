@@ -1002,12 +1002,29 @@ function Routing() {
             for (let r in route.param) {
                 if ( self.reservedParams.indexOf(r) > -1 || new RegExp(route.param[r]).test(maskedUrl) )
                     continue;
-                if (typeof(params[r]) != 'undefined' )
+                if (typeof(params[r]) != 'undefined' ) {
                     queryParams += r +'='+ encodeRFC5987ValueChars(params[r])+ '&';
+                    delete params[r]
+                }
+
+            }
+
+            // extra params ( not declared in the rule, but added by getUrl() )
+            for (let p in params) {
+                if ( self.reservedParams.indexOf(p) > -1 || typeof(route.requirements[p]) != 'undefined' ) {
+                    continue;
+                }
+                if ( typeof(params[p]) == 'object' ) {
+                    queryParams += p +'='+ encodeRFC5987ValueChars(JSON.stringify(params[p])) +'&';
+                } else {
+                    queryParams += p +'='+ params[p] +'&';
+                }
+
             }
 
             if (queryParams.length > 1) {
                 queryParams = queryParams.substring(0, queryParams.length-1);
+
                 route.url += queryParams;
             }
         }
