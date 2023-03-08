@@ -1114,7 +1114,6 @@ function Server(options) {
         // Should not override main server.response.header.methods
         resHeaders['access-control-allow-methods'] = request.routing.method.replace(/(\,\s+|\,)/g, ', ').toUpperCase();
 
-
         if ( typeof(request.headers.origin) != 'undefined' ) {
             authority = request.headers.origin;
         } else if (request.headers.referer) {
@@ -1125,7 +1124,6 @@ function Server(options) {
         // access-control-allow-origin settings
         if ( resHeaders.count() > 0 ) {
             // authority by default if no Access Control Allow Origin set
-            //authority = ( typeof(referer) != 'undefined') ? conf.server.scheme +'://'+ request.headers.referer.match(/:\/\/(.[^\/]+)(.*)/)[1] : (request.headers[':scheme'] +'://'+request.headers[':authority'] || conf.server.scheme +'://'+request.headers.host || null);
             if (!authority) {
                 if (!referer) {
                     if ( /http\/2/.test(conf.server.protocol) ) {
@@ -1150,6 +1148,7 @@ function Server(options) {
             allowedOrigin = ( typeof(conf.server.response.header['access-control-allow-origin']) != 'undefined' && conf.server.response.header['access-control-allow-origin'] != '' ) ? conf.server.response.header['access-control-allow-origin'] : authority;
             var found = null, origin = null, origins = null; // to handles multiple origins
             var originHostReplacement = function(name) {
+                name = name.replace(/\{|\}/g, '');
                 name = name.split(/\@/);
                 var bundle      = name[0]
                     , project   = name[1]
@@ -1169,12 +1168,9 @@ function Server(options) {
                 return domain
             }
 
-            var headerValue = null;
+            var headerValue = null, re = new RegExp('\{\s*(.*)\s*\}', 'g');
             for (var h in resHeaders) {
                 if (
-                    // typeof(response.finished) != 'undefined' && !response.finished
-                    // || typeof(response.writableEnded) != 'undefined' && !response.writableEnded
-                    // ||
                     !response.headersSent
                 ) {
                     // handles multiple origins
@@ -1183,42 +1179,35 @@ function Server(options) {
                             origin = sameOrigin
                         } else {
                             if ( /\,/.test(allowedOrigin) ) {
-                                origins = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement).split(/\,/g);
+                                // origins = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement).split(/\,/g);
+                                origins = allowedOrigin.replace(/\s+/g, '').replace(re, originHostReplacement).split(/\,/g);
 
                                 found = ( origins.indexOf(authority) > -1 ) ? origins[origins.indexOf(authority)] : false;
                                 if ( found != false ) {
                                     origin = found
                                 }
                             } else {
-                                origin = allowedOrigin
+                                // origin = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement);
+                                origin = allowedOrigin.replace(/\s+/g, '').replace(re, originHostReplacement);
                             }
                         }
 
                         if (origin || sameOrigin) {
-                            if (!origin && sameOrigin)
+                            if (!origin && sameOrigin) {
                                 origin = sameOrigin;
+                            }
 
-
-                            // if (
-                            //     typeof(response.finished) != 'undefined' && !response.finished
-                            //     || typeof(response.writableEnded) != 'undefined' && !response.writableEnded
-                            //     || !response.headersSent
-                            // ) {
+                            try {
                                 response.setHeader(h, origin);
-                            // }
-
+                            } catch (headerError) {
+                                console.error(headerError)
+                            }
                         }
                         sameOrigin = false;
                     } else {
                         headerValue = resHeaders[h];
                         try {
-                            // if (
-                            //     typeof(response.finished) != 'undefined' && !response.finished
-                            //     || typeof(response.writableEnded) != 'undefined' && !response.writableEnded
-                            //     || !response.headersSent
-                            // ) {
-                                response.setHeader(h, headerValue)
-                            // }
+                            response.setHeader(h, headerValue);
                         } catch (headerError) {
                             console.error(headerError)
                         }

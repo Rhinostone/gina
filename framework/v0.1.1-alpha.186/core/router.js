@@ -153,6 +153,7 @@ function Router(env) {
                 var session = (options.session === undefined) ? true : options.session;
 
                 this[property] = user;
+
                 if (session) {
                     if (!this._passport) { throw new Error('passport.initialize() middleware not in use'); }
                     if (typeof done != 'function') { throw new Error('req#login requires a callback function'); }
