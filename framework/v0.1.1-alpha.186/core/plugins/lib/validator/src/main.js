@@ -4581,15 +4581,25 @@
                     selectedIndex = $select[s].options[ $select[s].selectedIndex ].index
                 }
 
+                if (
+                    $select[s].options.length > 0
+                    && typeof($select[s].options[ selectedIndex ]) != 'undefined'
+                ) {
+                    selectedValue = $select[s].options[ selectedIndex ].value;
+                }
+
                 $form.fieldsSet[ elId ] = {
                     id              : elId,
                     name            : $select[s].name || null,
-                    value           : $select[s].options[ selectedIndex ].value || selectedValue || null,
+                    value           : selectedValue || null,
                     selectedIndex   : selectedIndex || 0
                 };
 
                 // update select
-                if ( typeof($select[s].selectedIndex) != 'undefined' ) {
+                if (
+                    typeof($select[s].selectedIndex) != 'undefined'
+                    && $select[s].selectedIndex > -1
+                ) {
                     $select[s].options[ selectedIndex ].selected = true;
                     $select[s].setAttribute('data-value',  $select[s].options[ selectedIndex ].value);
                 }

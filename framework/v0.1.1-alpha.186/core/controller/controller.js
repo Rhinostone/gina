@@ -3676,7 +3676,7 @@ function SuperController(options) {
             if (!data) {
                 data = {}
             }
-            data.session = JSON.clone(session)
+            data.session = ( typeof(session.user) != 'undefined' ) ? JSON.clone(session.user) : JSON.clone(session);
         }
         var displayToolbar = req.routing.param.displayToolbar || false;
         if (req.routing.param.displayToolbar) {

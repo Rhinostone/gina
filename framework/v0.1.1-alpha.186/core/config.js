@@ -1047,6 +1047,38 @@ function Config(opt, contextResetNeeded) {
         }
     }
 
+    var originHostReplacement = function(name) {
+        var matched = name.match(/\{\s*(.*)\s*\}/g);
+        if (!matched || !Array.isArray(matched) || Array.isArray(matched) && matched.length == 0 ) {
+            return name
+        }
+        var env = self.envConf.env;
+
+        for (let i=0, len=matched.length; i<len; ++i) {
+            let oldHost = matched[i];
+            let newHost = matched[i].replace(/\{|\}|\s+/g, '');
+            newHost = newHost.split(/\@/);
+            let bundle      = newHost[0]
+                , project   = newHost[1]
+                , arr       = null
+                , hostname  = null
+                , scheme    = null
+            ;
+            if ( /\//.test(newHost[1]) ) {
+                arr     = newHost[1].split(/\//);
+                project = arr[0];
+                env     = (arr[1]) ? arr[1] : env;
+            }
+            scheme  = self.envConf[bundle][env].server.scheme;
+            hostname  = ( !self.envConf[bundle][env].hostname ) ? self.envConf[bundle][env].server.scheme + '://' + self.envConf[bundle][env].host + ':' + self.envConf[bundle][env].server.port : self.envConf[bundle][env].hostname;
+            name    = name.replace(oldHost, hostname);
+        }
+        matched = null;
+        env = null;
+
+        return name;
+    }
+
     var loadBundleConfig = function(bundles, b, callback, reload, collectedRules) {
 
         // current bundle
@@ -1264,25 +1296,6 @@ function Config(opt, contextResetNeeded) {
                     fileContent = undefined
                 }
             }
-
-            // if (/\./.test(fNameWithNoExt)) {
-            //     let nameArr = fNameWithNoExt.split(/\./g);
-            //     if ( typeof(files[nameArr[0]]) == 'undefined')
-            //         files[nameArr[0]] = {};
-
-            //     try {
-            //         files = parseFileConf(files, nameArr, files, nameArr.length, 0, fileContent);
-            //         continue;
-            //     } catch (_err) {
-            //         e = '[ ' + nameArr + ' ] could not parse file conf !!\n\r' + (_err.stack || _err.message);
-            //         console.error(e);
-            //         callback(new Error(e))
-            //     }
-
-
-            // } else {
-            //     files[name] = fileContent;
-            // }
 
             if (section != '' ) {
                 if (/\-/.test(section)) {
@@ -1830,13 +1843,23 @@ function Config(opt, contextResetNeeded) {
                         for (; t < tLen; ++t) {
                             noneDefaultCss[t]           = JSON.clone(css);
                             url                         = tTmp[t];
+                            let re = new RegExp('\{\s*(.*)\s*\}', 'g');
                             if ( typeof(url) == 'string') {
-                                noneDefaultCss[t].url       = url;
+                                noneDefaultCss[t].url       = url.replace(re, originHostReplacement);
                                 noneDefaultCss[t].name      = url.substring(url.lastIndexOf('/')+1, url.lastIndexOf('.')).replace(/\W+/g, '-');
                                 noneDefaultCss[t].isCommon  = ( /^_common$/.test(section) ) ? true : false;
                             } else {
+                                // url replacements
+                                for (let prop in url) {
+                                    if ( prop != 'url' || prop == 'url' && !url[prop] ) {
+                                        continue;
+                                    }
+                                    // replacing url.url bundle@project -> <scheme>://<domain>:<port>/<webroot>
+                                    url[prop] = url[prop].replace(re, originHostReplacement);
+                                }
                                 noneDefaultCss[t] = merge(url, noneDefaultCss[t]);
                             }
+                            // .replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement)
                         }
                     }
 
@@ -2128,8 +2151,8 @@ function Config(opt, contextResetNeeded) {
 
 
         } else {
-            protocol    = conf[bundle][env].server.protocol;
-            scheme      = conf[bundle][env].server.scheme;
+            protocol    = conf[bundle][env].server.protocol;
+            scheme      = conf[bundle][env].server.scheme;
         }
 
         conf[bundle][env].server.supportedRequestMethods = conf[bundle][env].content.settings.server.supportedRequestMethods;
