@@ -1147,25 +1147,57 @@ function Server(options) {
             re = new RegExp(authority);
             allowedOrigin = ( typeof(conf.server.response.header['access-control-allow-origin']) != 'undefined' && conf.server.response.header['access-control-allow-origin'] != '' ) ? conf.server.response.header['access-control-allow-origin'] : authority;
             var found = null, origin = null, origins = null; // to handles multiple origins
+            // var originHostReplacement = function(name) {
+            //     name = name.replace(/\{|\}/g, '');
+            //     name = name.split(/\@/);
+            //     var bundle      = name[0]
+            //         , project   = name[1]
+            //         , arr       = null
+            //         , domain    = null
+            //     ;
+            //     var env     = conf.env; // current env by default
+            //     if ( /\//.test(name[1]) ) {
+            //         arr     = name[1].split(/\//);
+            //         project = arr[0];
+            //         env     = (arr[1]) ? arr[1] : env;
+            //     }
+
+            //     domain      = ( !/^http/.test(self.conf[bundle][env].hostname) || /^\/\//.test(self.conf[bundle][env].hostname) ) ? scheme +'://'+ self.conf[bundle][env].hostname.replace(/^\/\//, '') : self.conf[bundle][env].hostname;
+            //     // sameOrigin  = (domain == self.conf[bundle][env].hostname) ? self.conf[bundle][env].hostname : false;
+
+            //     return domain
+            // }
+
             var originHostReplacement = function(name) {
-                name = name.replace(/\{|\}/g, '');
-                name = name.split(/\@/);
-                var bundle      = name[0]
-                    , project   = name[1]
-                    , arr       = null
-                    , domain    = null
-                ;
-                var env     = conf.env; // current env by default
-                if ( /\//.test(name[1]) ) {
-                    arr     = name[1].split(/\//);
-                    project = arr[0];
-                    env     = (arr[1]) ? arr[1] : env;
+                var matched = name.match(/{([-_A-z]+?@[-_A-z]+?)}/g);
+                if (!matched || !Array.isArray(matched) || Array.isArray(matched) && matched.length == 0 ) {
+                    return name
                 }
+                var env = self.conf.env;
 
-                domain      = ( !/^http/.test(self.conf[bundle][env].hostname) || /^\/\//.test(self.conf[bundle][env].hostname) ) ? scheme +'://'+ self.conf[bundle][env].hostname.replace(/^\/\//, '') : self.conf[bundle][env].hostname;
-                sameOrigin  = (domain == self.conf[bundle][env].hostname) ? self.conf[bundle][env].hostname : false;
+                for (let i=0, len=matched.length; i<len; ++i) {
+                    let oldHost = matched[i];
+                    let newHost = matched[i].replace(/\{|\}|\s+/g, '');
+                    newHost = newHost.split(/\@/);
+                    let bundle      = newHost[0]
+                        , project   = newHost[1]
+                        , arr       = null
+                        , hostname  = null
+                        , scheme    = null
+                    ;
+                    if ( /\//.test(newHost[1]) ) {
+                        arr     = newHost[1].split(/\//);
+                        project = arr[0];
+                        env     = (arr[1]) ? arr[1] : env;
+                    }
+                    scheme  = self.conf[bundle][env].server.scheme;
+                    hostname  = ( !self.conf[bundle][env].hostname ) ? self.conf[bundle][env].server.scheme + '://' + self.conf[bundle][env].host + ':' + self.conf[bundle][env].server.port : self.conf[bundle][env].hostname;
+                    name    = name.replace(oldHost, hostname);
+                }
+                matched = null;
+                env = null;
 
-                return domain
+                return name;
             }
 
             var headerValue = null, re = new RegExp('\{\s*(.*)\s*\}', 'g');
@@ -1179,7 +1211,6 @@ function Server(options) {
                             origin = sameOrigin
                         } else {
                             if ( /\,/.test(allowedOrigin) ) {
-                                // origins = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement).split(/\,/g);
                                 origins = allowedOrigin.replace(/\s+/g, '').replace(re, originHostReplacement).split(/\,/g);
 
                                 found = ( origins.indexOf(authority) > -1 ) ? origins[origins.indexOf(authority)] : false;
@@ -1187,7 +1218,6 @@ function Server(options) {
                                     origin = found
                                 }
                             } else {
-                                // origin = allowedOrigin.replace(/\s+/g, '').replace(/([a-z0-9_-]+\@[a-z0-9_-]+|[a-z0-9_-]+\@[a-z0-9_-]+\/[a-z0-9_-]+\@[a-z0-9_-]+)/ig, originHostReplacement);
                                 origin = allowedOrigin.replace(/\s+/g, '').replace(re, originHostReplacement);
                             }
                         }
@@ -1566,7 +1596,7 @@ function Server(options) {
                                 header['pragma'] = 'no-cache';
                                 header['expires'] = '0';
                             }
-                            request = checkPreflightRequest(request);
+                            request = checkPreflightRequest(request, response);
                             header  = completeHeaders(header, request, response);
 
                             if (!stream.destroyed) {
@@ -1576,7 +1606,7 @@ function Server(options) {
 
                         } else {
                             response.setHeader('location', request.url);
-                            request = checkPreflightRequest(request);
+                            request = checkPreflightRequest(request, response);
                             completeHeaders(null, request, response);
                             if (cacheless) {
                                 response.writeHead(301, {
@@ -1889,21 +1919,23 @@ function Server(options) {
              * */
             request.isWithCredentials  = ( request.headers['access-control-allow-credentials'] && request.headers['access-control-allow-credentials'] == true ) ? true : false;
             /**
-             * Intercept gina headers
+             * Intercept gina headers for:
+             *  - form valdiation
+             *  - form security
              */
-            if ( typeof(request.headers['x-gina-form-id']) != 'undefined' ) {
-                var ginaHeaders = {
-                    form: {
-                        id: request.headers['x-gina-form-id']
-                    }
-                };
-                if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
-                    var rule = request.headers['x-gina-form-rule'].split(/\@/);
-                    ginaHeaders.form.rule = rule[0];
-                    ginaHeaders.form.bundle = rule[1];
-                }
-                request.ginaHeaders = ginaHeaders;
+            var ginaHeaders = {
+                form: {}
+            };
+            // if (/x\-gina\-form\-id/i.test(request.headers['access-control-request-headers']) ) {
+            if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
+                ginaHeaders.form.id = request.headers['x-gina-form-id'];
             }
+            if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
+                var rule = request.headers['x-gina-form-rule'].split(/\@/);
+                ginaHeaders.form.rule = rule[0];
+                ginaHeaders.form.bundle = rule[1];
+            }
+            request.ginaHeaders = ginaHeaders;
 
             local.request = request;
 
@@ -1990,8 +2022,6 @@ function Server(options) {
             if (
                 staticProps.isStaticFilename && staticsArr.indexOf(request.url) > -1
                 || staticProps.isStaticFilename && staticsArr.indexOf( request.url.replace(request.url.substr(request.url.lastIndexOf('/')+1), '') ) > -1
-                //|| staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
-                // take ^/dir/sub/*
                 || staticProps.isStaticFilename && new RegExp('^'+ staticProps.firstLevel).test(request.url)
                 || /\/$/.test(request.url) && !isWebrootHandledByRouting && !/\/engine\.io\//.test(request.url)
             ) {
@@ -2005,7 +2035,7 @@ function Server(options) {
                     'method': 'GET',
                     'bundle' : self.appName
                 };
-                request = checkPreflightRequest(request);
+                request = checkPreflightRequest(request, response);
                 local.request = request; // update request
                 // filtered to handle only html for now
                 if ( /text\/html/.test(request.headers['accept'])
@@ -2082,6 +2112,8 @@ function Server(options) {
                      * ref.:
                      *  - https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
                      *  - https://jsperf.com/arraybuffer-string-conversion/4
+                     *
+                     * TODO - Test with audio content
                      *
                      * @param {string} str
                      *
@@ -2729,7 +2761,7 @@ function Server(options) {
         });
     };
 
-    var checkPreflightRequest = function(request) {
+    var checkPreflightRequest = function(request, response) {
         var config = self.conf[self.appName][self.env];
         // by default, if not set in `${projectPath}/env.json`
         var corsMethod = 'GET, POST, HEAD';
@@ -2773,7 +2805,7 @@ function Server(options) {
             } else {
                 request.method = method
             }
-            accessControlRequestHeaders = ( typeof(request.headers['access-control-request-headers']) != 'undefined' ) ? request.headers['access-control-request-headers'] : '';
+            accessControlRequestHeaders = ( typeof(request.headers['access-control-request-headers']) != 'undefined' ) ? request.headers['access-control-request-headers'].replace(/\s+/, '').split(/\,/g) : '';
             if ( typeof(request.headers['access-control-request-credentials']) != 'undefined' && typeof(serverResponseHeaders['access-control-allow-credentials']) != 'undefined' ) {
                 request.isWithCredentials = true;
             }
@@ -2783,6 +2815,7 @@ function Server(options) {
                         request.isXMLRequest = true;
                     }
                 }
+                response.setHeader('access-control-allow-headers', request.headers['access-control-request-headers']);
             }
         }
 
@@ -2801,7 +2834,7 @@ function Server(options) {
 
         //matched = routingLib.getRouteByUrl(req.url, bundle, (req.method||req[':method']), req);
 
-        req = checkPreflightRequest(req);
+        req = checkPreflightRequest(req, res);
         var params      = {}
             , _routing  = {}
             , method    = ( /http\/2/.test(self.conf[self.appName][self.env].server.protocol) ) ? req.headers[':method'] : req.method
@@ -2987,7 +3020,7 @@ function Server(options) {
 
         if (!res.headersSent) {
             // res.headersSent = true;
-            local.request = checkPreflightRequest(local.request);
+            local.request = checkPreflightRequest(local.request, local.response);
             // updated filter on controller.js : 2020/09/25
             //if (isXMLRequest || !withViews || !isUsingTemplate ) {
             if (isXMLRequest || !withViews || !isUsingTemplate || withViews && !isUsingTemplate ) {
