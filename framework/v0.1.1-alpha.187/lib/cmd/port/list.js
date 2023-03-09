@@ -440,13 +440,16 @@ function List(opt, cmd) {
         outputTo(str);
     };
 
-    var end = function (err, type, messageOnly) {
-        if ( typeof(err) != 'undefined') {
-            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
             if ( typeof(type) != 'undefined' ) {
-                console[type](out)
+                console[type](output)
             } else {
-                console.error(out);
+                console.log(output);
             }
         }
 

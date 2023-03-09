@@ -203,7 +203,7 @@ function Remove(opt, cmd) {
             // }
             lib.generator.createFileFromDataSync(
                 self.projectData,
-                self.projectPath
+                self.projectManifestPath
             );
         // }
 
@@ -216,12 +216,21 @@ function Remove(opt, cmd) {
     }
 
 
-    var end = function() {
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
+            if ( typeof(type) != 'undefined' ) {
+                console[type](output)
+            } else {
+                console.log(output);
+            }
+        }
 
-
-
-        process.exit(0)
-    };
+        process.exit( err ? 1:0 )
+    }
 
     init(opt)
 };

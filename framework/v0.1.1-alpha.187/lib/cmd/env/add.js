@@ -18,11 +18,11 @@ function Add(opt, cmd) {
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
-        
-        self.projects = requireJSON(_(GINA_HOMEDIR + '/projects.json'));        
+
+        self.projects = requireJSON(_(GINA_HOMEDIR + '/projects.json'));
         self.bundles = [];
         self.portsAvailable = {};
-        
+
         var i = 3, envs = [];
         for (; i<process.argv.length; ++i) {
             if ( /^\@[a-z0-9_.]/.test(process.argv[i]) ) {
@@ -35,15 +35,15 @@ function Add(opt, cmd) {
                 envs.push(process.argv[i])
             }
         }
-        
-        
+
+
         if ( typeof(self.projectName) == 'undefined') {
             var folder = new _(process.cwd()).toArray().last();
             if ( isDefined('project', folder) ) {
                 self.projectName = folder
             }
         }
-        
+
         if ( isDefined('project', self.projectName) && envs.length > 0) {
             self.envs = envs;
             saveEnvs()
@@ -53,7 +53,7 @@ function Add(opt, cmd) {
             process.exit(1)
         }
     }
- 
+
 
     var saveEnvs = function() {
         var file    = _(self.projects[self.projectName].path + '/env.json')
@@ -78,7 +78,7 @@ function Add(opt, cmd) {
                     if ( self.portsList.indexOf(p) > -1 ) continue;
                     self.portsList.push(p)
                 }
-            }            
+            }
         }
         self.portsList.sort();
         for (let b in self.project.bundles) {
@@ -136,15 +136,15 @@ function Add(opt, cmd) {
 
             local.bundle    = bundle;
             local.b         = b;
-                                   
-                        
+
+
             // find available port
             var options = {
                 ignore  : getPortsList(),
                 limit   : getBundleScanLimit(bundle)
             };
             console.log('['+bundle+'] starting ports scan' );
-            
+
             scan(options, function(err, ports){
                 if (err) {
                     rollback(err);
@@ -155,7 +155,7 @@ function Add(opt, cmd) {
                     self.portsList.push(ports[p])
                 }
                 self.portsList.sort();
-                
+
                 console.debug('available ports '+ JSON.stringify(ports, null, 2));
                 //self.portsAvailable = ports;
                 setPorts(local.bundle, ports, function onPortsSet(err) {
@@ -163,7 +163,7 @@ function Add(opt, cmd) {
                         rollback(err);
                         return;
                     }
-                    
+
                     //console.debug('available ports '+ JSON.stringify(self.portsAvailable[local.bundle], null, 2));
                     ++local.b;
                     addEnvToBundles(local.b)
@@ -206,14 +206,14 @@ function Add(opt, cmd) {
     //         , allProjectProtocols   = self.projects[self.projectName].protocols
     //         , allProjectSchemes     = self.projects[self.projectName].schemes
     //     ;
-        
-        
-        
+
+
+
     //     // BO project/env.json
     //     if ( typeof(content[bundle]) == 'undefined' ) {
     //         content[bundle] = {}
     //     }
-        
+
     //     // getting available all envs
     //     for (let n in self.envs) {
     //         let newEnv = self.envs[n];
@@ -238,7 +238,7 @@ function Add(opt, cmd) {
     //             allProjectSchemes.push(newScheme);
     //         }
     //     }
-        
+
     //     // editing env.json to add host infos
     //     for (let e in allProjectEnvs) {
     //         let env = allProjectEnvs[e];
@@ -247,24 +247,24 @@ function Add(opt, cmd) {
     //                 "host" : "localhost"
     //             }
     //         }
-    //     }            
+    //     }
     //     // EO project/env.json
-        
-        
+
+
     //     // BO ~/.gina/ports.reverse.json - part 1/2
     //     if ( typeof(portsReverse[bundle + '@' + self.projectName]) == 'undefined' ) {
     //         portsReverse[bundle + '@' + self.projectName] = {}
     //     }
-    //     if ( 
+    //     if (
     //         typeof(portsReverse[bundle + '@' + self.projectName][env]) == 'undefined'
     //         ||
     //         /^string$/i.test( typeof(portsReverse[bundle + '@' + self.projectName][env]) )
     //     ) {
     //         portsReverse[bundle + '@' + self.projectName][env] = {}
-    //     }          
+    //     }
     //     // EO ~/.gina/ports.reverse.json - part 1/2
 
-        
+
     //     // BO ~/.gina/ports.json
     //     for (let p in allProjectProtocols) {
     //         let protocol = allProjectProtocols[p];
@@ -287,7 +287,7 @@ function Add(opt, cmd) {
     //             if ( typeof(portsReverse[bundle + '@' + self.projectName][env][protocol][scheme]) == 'undefined' ) {
     //                 portsReverse[bundle + '@' + self.projectName][env][protocol][scheme] = {}
     //             }
-                
+
     //             let assigned = [];
     //             if ( ports[protocol][scheme].count() > 0 ) {
     //                 for (let port in ports[protocol][scheme]) {
@@ -299,18 +299,18 @@ function Add(opt, cmd) {
     //                         self.portsAvailable[bundle][env].unshift(port);
     //                         continue;
     //                     }
-    //                     assigned.push(portDescription);                    
+    //                     assigned.push(portDescription);
     //                 }
     //             }
-                    
-                
+
+
     //             let stringifiedScheme = JSON.stringify(ports[protocol][scheme]);
     //             let patt = new RegExp(bundle +'@'+ self.projectName +'/'+ env);
     //             let found = false;
     //             let portToAssign = null;
     //             // do not override if existing
     //             if ( patt.test(stringifiedScheme) ) { // there can multiple matches
-    //                 found = true;                    
+    //                 found = true;
     //                 // reusing the same for portsReverse
     //                 let re = new RegExp('([0-9]+)\"\:(|\s+)\"('+ bundle +'\@'+ self.projectName +'\/'+ env +')', 'g');
     //                 let m;
@@ -318,12 +318,12 @@ function Add(opt, cmd) {
     //                     // This is necessary to avoid infinite loops with zero-width matches
     //                     if (m.index === re.lastIndex) {
     //                         re.lastIndex++;
-    //                     }                        
+    //                     }
     //                     // The result can be accessed through the `m`-variable.
     //                     try {
     //                         m.forEach((match, groupIndex) => {
     //                             //console.debug(`Found match, group ${groupIndex}: ${match}`);
-    //                             if (groupIndex == 1) {                                    
+    //                             if (groupIndex == 1) {
     //                                 portToAssign = ~~match;
     //                                 //console.debug('['+bundle+'] port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
     //                                 throw new Error('breakExeception');
@@ -333,9 +333,9 @@ function Add(opt, cmd) {
     //                         break;
     //                     }
     //                 }
-                    
+
     //             }
-                
+
     //             if (!portToAssign) {
     //                 //console.debug('['+bundle+'] No port to assign '+ portToAssign + ' - ' + protocol +' '+ scheme);
     //                 portToAssign = self.portsAvailable[bundle][env][0];
@@ -343,17 +343,17 @@ function Add(opt, cmd) {
     //                 self.portsAvailable[bundle][env].splice(0,1);
     //             }
     //             ports[protocol][scheme][portToAssign] = bundle +'@'+ self.projectName +'/'+ env;
-                
+
     //             // BO ~/.gina/ports.reverse.json - part 2/2
     //             //override needed since it is relying on ports definitions
     //             portsReverse[bundle + '@' + self.projectName][env][protocol][scheme] = ~~portToAssign;
     //             // EO ~/.gina/ports.reverse.json - part 2/2
-                    
+
     //         } // EO for (let scheme in schemes)
-    //     } // for (let protocol in protocols)        
+    //     } // for (let protocol in protocols)
     //     // EO ~/.gina/ports.json
-        
-        
+
+
 
     //     try {
     //         // save to /<project_path>/env.json
@@ -362,7 +362,7 @@ function Add(opt, cmd) {
     //         // save to ~/.gina/projects.json
     //         // lib.generator.createFileFromDataSync(ports, portsPath);
     //         // self.projectsDataWrote = true;
-            
+
     //         // save to ~/.gina/ports.json
     //         lib.generator.createFileFromDataSync(ports, portsPath);
     //         self.portsDataWrote = true;
@@ -402,9 +402,10 @@ function Add(opt, cmd) {
         );
         self.projectDataWrote = true
     }
-    
+
     var updateManifest = function() {
-        
+        // projectManifestPath
+
     }
 
     var rollback = function(err) {
@@ -413,14 +414,14 @@ function Add(opt, cmd) {
 
         var writeFiles = function() {
             //restore env.json
-            lib.generator.createFileFromDataSync(self.envData, self.envPath);            
+            lib.generator.createFileFromDataSync(self.envData, self.envPath);
 
             //restore ports.json
             lib.generator.createFileFromDataSync(self.portsData, self.portsPath);
 
             //restore ports.reverse.json
             lib.generator.createFileFromDataSync(self.portsReverseData, self.portsReversePath);
-            
+
             // restore projects.json
             lib.generator.createFileFromDataSync(self.projects, self.projectsPath);
 

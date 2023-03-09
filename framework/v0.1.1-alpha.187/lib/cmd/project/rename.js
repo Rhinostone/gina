@@ -32,7 +32,7 @@ function Rename(opt, cmd) {
         local.target = self.projectArgvList[1];
 
 
-        if ( !isDefined('project', local.target) ) {
+        if ( isDefined('project', local.target) ) {
             rename()
         } else {
             console.error('New project name [ '+local.target+' ] is already taken !');
@@ -57,8 +57,8 @@ function Rename(opt, cmd) {
             , project = {}// local manifest.json
             , pack = {};// local pakage.json
 
-            
-            
+
+
         folder.mv(target, function(err){
             console.debug('bundles => ', JSON.stringify(self.bundles, null, 4));
             console.debug('project => ', JSON.stringify(self.projects, null, 4));
@@ -67,8 +67,8 @@ function Rename(opt, cmd) {
                 process.exit(1)
             }
 
-            
-            
+
+
             // renaming project in config files
             self.projects[local.target].path = target;
 
@@ -94,9 +94,9 @@ function Rename(opt, cmd) {
 
             // updating projects
             delete self.projects[local.source];
-            
-            
-            
+
+
+
 
             // renaming & update ports
             var ports               = JSON.clone(self.portsData)
@@ -108,9 +108,9 @@ function Rename(opt, cmd) {
 
             portsReverseStr = JSON.stringify(portsReverse);
             for (var protocol in ports) {
-                
+
                 for (var scheme in ports[protocol]) {
-                    
+
                     for (var port in ports[protocol][scheme]) {
 
                         re = new RegExp("\@"+ local.source +"\/");
@@ -126,7 +126,7 @@ function Rename(opt, cmd) {
 
                         }
                     }
-                }                    
+                }
             }
             portsReverse = JSON.parse(portsReverseStr);
 

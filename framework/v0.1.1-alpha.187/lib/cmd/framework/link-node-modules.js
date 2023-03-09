@@ -1,9 +1,9 @@
-var fs          = require('fs');
+var fs              = require('fs');
 var os              = require('os');
 const {spawn}       = require('child_process');
 const {execSync}    = require('child_process');
-var CmdHelper   = require('./../helper');
-var console     = lib.logger;
+var CmdHelper       = require('./../helper');
+var console         = lib.logger;
 
 /**
  * Framework link node_modules
@@ -32,48 +32,78 @@ var console     = lib.logger;
         if (!isCmdConfigured()) return false;
 
 
-        linkNodeModules(opt, cmd);
+        if ( !isDefined('project', self.projectName) ) {
+            err = new Error('Missing argument: `@<project-name>`');
+            return end(err, 'error')
+        }
+
+        var projectLocationObj = new _(self.projectLocation)
+        if ( !projectLocationObj.isValidPath() ) {
+            err = new Error('Project path not found. You should run project:add @'+ self.projectLocation + ' --path=<your-project-location>');
+            return end(err, 'error')
+        }
+
+        linkLocalNodeModules(opt, cmd);
     }
 
-    var linkNodeModules = function(opt, cmd) {
-        console.debug('Linking link node_modules');
+    var linkLocalNodeModules = function(opt, cmd) {
+        var projectObj  = self.projects[ self.projectName ]
+            err         = null
+        ;
 
-        var err = null, folder = new _(self.projectLocation);
-        if ( folder.isValidPath() && isValidName(self.projectName) ) {
-            // destination = new _(destination.toString() +'/gina');
-            var source = new _(self.projectLocation +'/node_modules.'+ os.platform(), true);
-            if ( !source.existsSync() ) {
-                source.mkdirSync()
-            }
 
-            var destination = new _(self.projectLocation + '/node_modules');
-            console.debug('Link node_modules '+ source.toString() + ' -> '+destination.toString() + ' [ exists ] ? '+ destination.existsSync() );
-            if ( destination.existsSync() ) {
-                if ( destination.isSymlinkSync() && destination.getSymlinkSourceSync() == source.toString() ) {
-                    console.debug('Skipping symlink: same source, not overriding.');
-                    return end();
-                }
-                destination.rmSync()
-            }
+        if (!projectObj || typeof(projectObj) == 'undefined' ) {
+            err = new Error('Node modules not found for project '+ self.projectName);
+            return end(err, 'error')
+        }
 
-            err = source.symlinkSync(destination.toString());
 
-            if (err instanceof Error) {
-                return end(err, 'error')
+        var nodeModulesFromProjectHomeDir = _(projectObj.homedir + '/lib/node_modules', true)
+        var nodeModulesDirObj = new _(self.projectLocation + '/node_modules', true);
+        var hasNodeModules = ( nodeModulesDirObj.existsSync() ) ? true : false;
+        // Check if symlink
+        if (
+            hasNodeModules && nodeModulesDirObj.isSymlinkSync()
+        ) {
+
+            // same scope ? e.g: Shared code between docker & localhost
+            if ( nodeModulesDirObj.getSymlinkSourceSync() != nodeModulesFromProjectHomeDir ) {
+                // if not, remove symlink
+                nodeModulesDirObj.rmSync();
+                hasNodeModules = false;
             }
         }
 
-        end()
+        var sourceObj = new _(nodeModulesFromProjectHomeDir, true);
+        if (!hasNodeModules) {
+            if ( !sourceObj.existsSync() ) {
+                sourceObj.mkdirSync()
+            }
+            // link from homdir to project path
+            var destination = _(self.projectLocation + '/node_modules', true);
+
+            err = sourceObj.symlinkSync(destination);
+            if (err instanceof Error) {
+                return end(err, 'error')
+            }
+
+            return end('Node modules link updated to '+ sourceObj.toString())
+        }
+
+        // nothing to do
+        end('Node modules linked to `'+ sourceObj.toString() +'`')
     }
 
-    var end = function (err, type, messageOnly) {
-
-        if ( typeof(err) != 'undefined') {
-            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
             if ( typeof(type) != 'undefined' ) {
-                console[type](out)
+                console[type](output)
             } else {
-                console.error(out);
+                console.log(output);
             }
         }
 

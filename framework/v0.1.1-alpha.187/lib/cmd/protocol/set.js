@@ -457,8 +457,9 @@ function Set(opt, cmd) {
         lib.generator.createFileFromDataSync(portsReverse, self.portsReversePath);
 
         self.mainConfigUpdated = true;
-        end()
 
+        console.log('Protocol updated with success ;)');
+        end('You need to restart your ' + self.actionType);
     };
 
     var setBundleOnly = function(protocol, scheme) {
@@ -607,17 +608,9 @@ function Set(opt, cmd) {
 
         self.bundleConfigUpdated = true;
 
-        end()
-    };
-
-    var end = function () {
-
         console.log('Protocol updated with success ;)');
-        if ( self.mainConfigUpdated || self.portsUpdated || self.portsReverseUpdated || self.bundleConfigUpdated )
-            console.log('You need to restart your ' + self.actionType);
-
-        exit()
-    }
+        end('You need to restart your ' + self.actionType);
+    };
 
     var rollback = function(err) {
         console.error('[ CLI ] could not complete protocol creation: ', (err.stack||err.message));
@@ -663,6 +656,22 @@ function Set(opt, cmd) {
         //     writeFiles()
         // }
     };
+
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
+            if ( typeof(type) != 'undefined' ) {
+                console[type](output)
+            } else {
+                console.log(output);
+            }
+        }
+
+        process.exit( err ? 1:0 )
+    }
 
     init();
 }
