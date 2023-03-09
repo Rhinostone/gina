@@ -207,6 +207,7 @@ function Add(opt, cmd) {
 
         projects[self.projectName] = {
             "path": self.projectLocation,
+            "homedir": self.projectHomedir,
             "def_prefix": GINA_PREFIX,
             "framework": "v" + GINA_VERSION,
             "envs": self.envs,

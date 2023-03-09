@@ -1,8 +1,8 @@
-var fs          = require('fs');
+var fs              = require('fs');
 const {spawn}       = require('child_process');
 const {execSync}    = require('child_process');
-var CmdHelper   = require('./../helper');
-var console     = lib.logger;
+var CmdHelper       = require('./../helper');
+var console        = lib.logger;
 
 /**
  * Framework link
@@ -45,13 +45,15 @@ var console     = lib.logger;
                 continue
             }
         }
+        // console.log(' prefix: ', self.prefix);
 
         link(opt, cmd);
     }
 
+
     var link = function(opt, cmd) {
         console.debug('Linking framework');
-        var err = null, folder = new _(self.projectLocation);
+        var err = null, folder = new _(self.projectLocation, true);
 
         if ( folder.isValidPath() && isValidName(self.projectName) ) {
 
@@ -63,8 +65,8 @@ var console     = lib.logger;
                     return end(err, 'error')
                 }
             }
-            destination = new _(destination.toString() +'/gina');
-            var source = new _(GINA_PREFIX + '/lib/node_modules/gina');
+            destination = new _(destination.toString() +'/gina', true);
+            var source = new _(GINA_PREFIX + '/lib/node_modules/gina', true);
 
 
             console.debug('Link '+ source + ' -> '+destination + ' [ exists ] ? '+ destination.existsSync() );
@@ -90,13 +92,16 @@ var console     = lib.logger;
         end()
     }
 
-    var end = function (err, type, messageOnly) {
-        if ( typeof(err) != 'undefined') {
-            var out = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? err.message : (err.stack||err.message);
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
             if ( typeof(type) != 'undefined' ) {
-                console[type](out)
+                console[type](output)
             } else {
-                console.error(out);
+                console.log(output);
             }
         }
 

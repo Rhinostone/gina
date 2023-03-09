@@ -300,7 +300,7 @@ function Add(opt, cmd) {
                 if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
                     delete self.projectData.bundles[local.bundle]
                 }
-                lib.generator.createFileFromDataSync(self.projectData, self.projectPath)
+                lib.generator.createFileFromDataSync(self.projectData, self.projectManifestPath)
             }
 
             //restore ports.json

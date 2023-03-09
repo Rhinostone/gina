@@ -324,8 +324,8 @@ function Add(opt, cmd) {
         }
 
         try {
-            //var path = self.projectPath.replace(/\.json$/, env + '.json');
-            lib.generator.createFileFromDataSync(data, self.projectPath);
+            //var path = self.projectManifestPath.replace(/\.json$/, env + '.json');
+            lib.generator.createFileFromDataSync(data, self.projectManifestPath);
             local.projectDataWrote = true;
 
             callback(false, data)
@@ -390,7 +390,7 @@ function Add(opt, cmd) {
 
         loadAssets();
 
-        var projectData = require(self.projectPath)
+        var projectData = requireJSON(self.projectManifestPath)
             , target    = _( self.projects[self.projectName].path +'/'+ projectData.bundles[local.bundle].src, true )
             , sample    = new _( getPath('gina').core + '/template/boilerplate/bundle/' );
 
@@ -529,11 +529,11 @@ function Add(opt, cmd) {
             //restore env.json
             lib.generator.createFileFromDataSync(self.envData, self.envPath);
 
-            //restore project.json
+            //restore manifest.json
             if ( typeof(self.projectData.bundles[local.bundle]) != 'undefined') {
                 delete self.projectData.bundles[local.bundle]
             }
-            lib.generator.createFileFromDataSync(self.projectData, self.projectPath);
+            lib.generator.createFileFromDataSync(self.projectData, self.projectManifestPath);
 
             //restore ports.json
             lib.generator.createFileFromDataSync(self.portsData, self.portsPath);

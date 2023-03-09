@@ -46,12 +46,13 @@ function CmdHelper(cmd, client, debug) {
         projectArgvList: [],
         // global projects collection {collection}
         projects : null, // defined by filterArgs()
-        projectsPath : _(GINA_HOMEDIR + '/projects.json'), // ~/.gina/project.json
+        projectsPath : _(GINA_HOMEDIR + '/projects.json', true), // ~/.gina/project.json
         projectsList : [], // Array of project names, asc sorted
-        // current project path
-        projectPath : null, // local project/manifest.json - defined by filterArgs()
+        // current project paths
+        projectManifestPath : null, // local project/manifest.json - defined by filterArgs()
         projectConfigPath: null, // path to .gina/project.json
-        projectData: {},
+        projectHomedir: null, // path to ~/.<my-project> ( project $home)
+        projectData: {}, // Project manifest object
         // current project bundles list {array}
         bundles : [], // defined by filterArgs()
         // don't use this collection to store into files
@@ -368,10 +369,10 @@ function CmdHelper(cmd, client, debug) {
                 }
 
                 if ( typeof(cmd.projects[cmd.projectName]) == 'undefined') {
-                    cmd.projectPath = _(cmd.projectLocation + '/manifest.json', true)
+                    cmd.projectManifestPath = _(cmd.projectLocation + '/manifest.json', true)
                 }
 
-                cmd.projectPath = (!cmd.projectPath) ? _(cmd.projects[cmd.projectName].path + '/manifest.json', true) : cmd.projectPath;
+                cmd.projectManifestPath = (!cmd.projectManifestPath) ? _(cmd.projects[cmd.projectName].path + '/manifest.json', true) : cmd.projectManifestPath;
 
                 if (typeof (cmd.projects[cmd.projectName]) != 'undefined') // ignore when adding project
                     cmd.envPath = _(cmd.projects[cmd.projectName].path + '/env.json', true);
@@ -441,21 +442,39 @@ function CmdHelper(cmd, client, debug) {
             //&& !cmd.params['force']
         ) { // ignore when adding project
 
-            if (!cmd.projectPath) {
-                cmd.projectPath =  _(cmd.projects[cmd.projectName].path + '/manifest.json', true);
-
+            if (!cmd.projectManifestPath) {
+                cmd.projectManifestPath =  _(cmd.projects[cmd.projectName].path + '/manifest.json', true);
             }
 
-            if ( typeof(require.cache[cmd.projectPath]) != 'undefined') {
-                delete require.cache[require.resolve(cmd.projectPath)]
+            if ( typeof(require.cache[cmd.projectManifestPath]) != 'undefined') {
+                delete require.cache[require.resolve(cmd.projectManifestPath)]
             }
-            if ( ! new _(cmd.projectPath).existsSync() ) {
-                console.error('A project with this name is already added. If you want to override, you should try to add: `--force` at the end of your command line');
+            if ( ! new _(cmd.projectManifestPath).existsSync() ) {
+                console.error('Project manifest.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
                 return process.exit(1);
             }
 
-            cmd.projectData         = requireJSON(cmd.projectPath);
-            cmd.projectLocation     = cmd.projects[cmd.projectName].path;
+            cmd.projectData         = requireJSON(cmd.projectManifestPath);
+            cmd.projectHomedir      = (
+                                        typeof(cmd.projects[cmd.projectName].homedir) != 'undefined'
+                                        && cmd.projects[cmd.projectName].homedir
+                                    ) ? _(cmd.projects[cmd.projectName].homedir, true)
+                                    : _(getUserHome() +'/.'+ cmd.projectName, true);
+            var projectHomedirObject = new _(cmd.projectHomedir, true);
+            console.debug('Creating project homedir');
+            if (projectHomedirObject.existsSync() && !projectHomedirObject.isDirectory() ) {
+                throw new Error('Found ' + projectHomedirObject.toString() + ': but it appears to be a symbolik link !');
+            } else if (!projectHomedirObject.existsSync() ) {
+                projectHomedirObject.mkdirSync();
+                cmd.projects[cmd.projectName].homedir = projectHomedirObject.toString();
+            }
+
+            if ( typeof(cmd.projects[cmd.projectName].homedir) == 'undefined' ) {
+                cmd.projects[cmd.projectName].homedir = cmd.projectHomedir
+            }
+
+
+            cmd.projectLocation     = _(cmd.projects[cmd.projectName].path, true);
             cmd.bundlesLocation     = _(cmd.projects[cmd.projectName].path +'/src', true);
             cmd.envPath             = _(cmd.projects[cmd.projectName].path + '/env.json', true);
 
@@ -565,7 +584,7 @@ function CmdHelper(cmd, client, debug) {
 
             cmd.configured = true;
 
-            // detect node_modules vs platform
+            // detect lib/node_modules
             // if (
             //     cmd.projectName != null
             //     && /^true$/i.test(GINA_GLOBAL_MODE)
@@ -588,6 +607,13 @@ function CmdHelper(cmd, client, debug) {
                 && !/\:(link|link-node-modules)$/.test(cmd.task)
                 && !/(project\:add)$/.test(cmd.task)
             ) {
+                console.debug('Running: gina link-node-modules @'+cmd.projectName);
+                err = execSync('gina link-node-modules @'+cmd.projectName);// +' --inspect-gina'
+                if (err instanceof Error) {
+                    console.error(err.message || err.stack);
+                    return exit(err.message || err.stack);
+                }
+
                 console.debug('Running: gina link @'+cmd.projectName);
                 err = execSync('gina link @'+cmd.projectName);// +' --inspect-gina'
                 if (err instanceof Error) {

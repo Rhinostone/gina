@@ -241,6 +241,19 @@ function PathHelper() {
         return self
     }
 
+    var isDirectory = function(value) {
+        try {
+            if ( fs.lstatSync(value).isDirectory() && !fs.lstatSync(value).isSymbolicLink() ) {
+                return true
+            }
+        } catch (dirErr) {}
+
+        return false;
+    }
+    _.prototype.isDirectory = function() {
+        return isDirectory(this.value)
+    }
+
     var isSymlinkSync = function(value) {
         try {
             if ( fs.lstatSync(value).isSymbolicLink() ) {

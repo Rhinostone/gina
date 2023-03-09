@@ -14,7 +14,7 @@ function Remove(opt, cmd) {
 
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
-        
+
         self.target = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
         var env = local.env = process.argv[3];
@@ -22,11 +22,11 @@ function Remove(opt, cmd) {
             end( new Error('Missing argument in [ gina env:rm <environment> @<project> ]') )
         }
         else if ( typeof(env) != 'undefined' ) {
-            if ( !self.projects[self.projectName].envs.inArray(env) ) { 
+            if ( !self.projects[self.projectName].envs.inArray(env) ) {
                 end( new Error('Environment [ '+env+' ] not found') )
             }// else, continue
         }
-        
+
         if ( typeof(process.argv[4]) != 'undefined') {
             if ( !isValidName(process.argv[4]) ) {
                 end( new Error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].') );
@@ -39,16 +39,16 @@ function Remove(opt, cmd) {
                 self.projectName = name
             }
         }
-        
+
         if ( typeof(self.projectName) == 'undefined' ) {
             end( new Error('Project name is required: @<project_name>') )
         } else if ( typeof(self.projectName) != 'undefined' && isDefined('project', self.projectName) ) {
             removeEnv(self.projects, self.target)
         } else {
             end( new Error('[ '+self.projectName+' ] is not a valid project name.') )
-        }        
+        }
     }
-    
+
     var removeEnv = function(projects, target) {
         var err = null, env = local.env;
         // default `dev env` cannot be removed
@@ -58,7 +58,7 @@ function Remove(opt, cmd) {
             } else {
                 err = new Error('Environment [ '+env+' ] is linked as "development environment"')
             }
-            
+
             return end(err);
         }
 
@@ -84,9 +84,9 @@ function Remove(opt, cmd) {
                         delete ports[protocol][scheme][p]
                     }
                 }
-            }                    
+            }
         }
-        
+
         patt = new RegExp("\@"+ self.projectName +"$");
         for (let bundle in portsReverse) {
             if ( patt.test(bundle) ) {
@@ -95,7 +95,7 @@ function Remove(opt, cmd) {
                         delete portsReverse[bundle][e]
                     }
                 }
-            }            
+            }
         }
 
         for (let bundle in envs) {
@@ -112,35 +112,35 @@ function Remove(opt, cmd) {
 
         updateManifest();
     };
-    
+
     var updateManifest = function() {
         var env = local.env;
         var projectData    = JSON.clone(self.projectData);
         for (let bundle in projectData.bundles) {
-            if ( typeof(projectData.bundles[bundle].releases[env].target) != 'undefined' ) {                
+            if ( typeof(projectData.bundles[bundle].releases[env].target) != 'undefined' ) {
                 delete projectData.bundles[bundle].releases[env].target
             }
         }
-        
-        lib.generator.createFileFromDataSync(projectData, self.projectPath);
-        
+
+        lib.generator.createFileFromDataSync(projectData, self.projectManifestPath);
+
         end()
     }
-    
+
     var end = function(err) {
-        console.debug('GINA_ENV_IS_DEV ', GINA_ENV_IS_DEV);        
+        console.debug('GINA_ENV_IS_DEV ', GINA_ENV_IS_DEV);
         if (err) {
             if (GINA_ENV_IS_DEV) {
                 console.error(err.stack);
             } else {
                 console.error(err.message);
             }
-            
+
             return process.exit(1);
         }
         var env = local.env;
         console.log('Environment [ '+env+' ] removed with success');
-        
+
         return process.exit(0)
     }
 
