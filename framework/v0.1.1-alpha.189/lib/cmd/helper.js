@@ -82,12 +82,13 @@ function CmdHelper(cmd, client, debug) {
 
 
     // merging with default
+    // cmd = merge(cmd, self);
     var _cmd = JSON.clone(cmd);
-
     _cmd = merge(_cmd, self);
     for (let prop in _cmd) {
         cmd[prop] = _cmd[prop]
     }
+
 
     var getParams = function () {
 
@@ -385,6 +386,7 @@ function CmdHelper(cmd, client, debug) {
 
 
             loadAssets();
+
             // cmd.configured = true;
             var err = null;
 
@@ -455,9 +457,12 @@ function CmdHelper(cmd, client, debug) {
             }
 
             cmd.projectData         = requireJSON(cmd.projectManifestPath);
+
             cmd.projectHomedir      = (
                                         typeof(cmd.projects[cmd.projectName].homedir) != 'undefined'
-                                        && cmd.projects[cmd.projectName].homedir
+                                        && cmd.projects[cmd.projectName].homedir != ''
+                                        && cmd.projects[cmd.projectName].homedir != 'null'
+                                        && cmd.projects[cmd.projectName].homedir != null
                                     ) ? _(cmd.projects[cmd.projectName].homedir, true)
                                     : _(getUserHome() +'/.'+ cmd.projectName, true);
             var projectHomedirObject = new _(cmd.projectHomedir, true);
@@ -606,6 +611,8 @@ function CmdHelper(cmd, client, debug) {
                 && /^true$/i.test(GINA_GLOBAL_MODE)
                 && !/\:(link|link-node-modules)$/.test(cmd.task)
                 && !/(project\:add)$/.test(cmd.task)
+                && !/(project\:rm|project\:remove)$/.test(cmd.task)
+                && !/(project\:set|project\:unset)$/.test(cmd.task)
             ) {
                 console.debug('Running: gina link-node-modules @'+cmd.projectName);
                 err = execSync('gina link-node-modules @'+cmd.projectName);// +' --inspect-gina'

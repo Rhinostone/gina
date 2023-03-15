@@ -80,6 +80,7 @@ var console         = lib.logger;
                 sourceObj.mkdirSync()
             }
             // link from homdir to project path
+
             var destination = _(self.projectLocation + '/node_modules', true);
 
             err = sourceObj.symlinkSync(destination);
