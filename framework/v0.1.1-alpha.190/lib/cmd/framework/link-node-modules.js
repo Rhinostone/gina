@@ -57,6 +57,9 @@ var console         = lib.logger;
             return end(err, 'error')
         }
 
+        if ( !projectObj.homedir ) {
+            return;
+        }
 
         var nodeModulesFromProjectHomeDir = _(projectObj.homedir + '/lib/node_modules', true)
         var nodeModulesDirObj = new _(self.projectLocation + '/node_modules', true);
