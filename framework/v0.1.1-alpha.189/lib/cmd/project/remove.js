@@ -19,6 +19,8 @@ function Remove(opt, cmd) {
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
 
+
+
         var err         = false
             , folder    = new _(self.projectLocation)
             , force     = ( typeof(self.params['force']) != 'undefined' ) ? self.params['force'] : false;

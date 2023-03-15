@@ -298,6 +298,8 @@ function SuperController(options) {
             set('page.environment.engine', options.conf.server.engine);//version.middleware
             set('page.environment.env', process.env.NODE_ENV);
             set('page.environment.envIsDev', self.isCacheless());
+            set('page.environment.scope', process.env.NODE_SCOPE);
+            set('page.environment.scopeIsLocal', process.env.NODE_SCOPE_IS_LOCAL);
             set('page.environment.date.now', new Date().format("isoDateTime"));
 
 
