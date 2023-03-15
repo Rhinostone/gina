@@ -3278,6 +3278,8 @@ function SuperController(options) {
                 //config = Object.freeze(local.options.conf.content[name]);
                 //Object.seal(local.options.conf.content[name]);
                 //Object.freeze(local.options.conf.content[name]);
+                // if ( self.isCacheless() ) {
+                // }
                 return JSON.clone(local.options.conf.content[name]);
             } catch (err) {
                 return undefined;

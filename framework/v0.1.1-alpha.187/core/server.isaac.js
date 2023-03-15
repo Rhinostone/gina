@@ -1,4 +1,4 @@
-//"use strict";
+"use strict";
 /**
  * Isaac Server Integration
  *
@@ -11,6 +11,7 @@ const lib               = require('./../lib');
 const inherits          = lib.inherits;
 const merge             = lib.merge;
 const console           = lib.logger;
+
 
 const env       = process.env.NODE_ENV
     , isDev     = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
@@ -158,7 +159,16 @@ function ServerEngineClass(options) {
         // See `${core}/router.js` & `${core}/controller/controller.js`
 
         server.on('request', (request, response) => {
-
+            // healthcheck
+            // TODO - add a top level API : server.api.js (check, get ...)
+            // TODO - on 90% RAM usage, redirect to `come back later then restart bundle`
+            // TODO - check url against wroot : getContext() ?
+            if ( /^get$/i.test(request.method) && /\_gina\/health\/check$/i.test(request.url) ) {
+                // server.toApi(reques, response)
+                response.setHeader('content-type', 'application/json; charset=utf8' );
+                response.setHeader('x-powered-by', 'Gina/'+ GINA_VERSION );
+                return response.end('{"status":"ok"}');
+            }
             if (isDev) {
                 refreshCore()
             }
