@@ -32,6 +32,7 @@ async function onExec() {
         , hostname          = os.hostname() // by default
         , hostV4            = null
         , mqPort            = null
+        , settingsPath      = null
     ;
     try {
         var packObj         = require(pack);
@@ -106,7 +107,7 @@ async function onExec() {
         home = getEnvVar('GINA_HOMEDIR');// jshint ignore:line
 
         settings = { 'log_level': 'info' }; // First time launch or reset
-        var settingsPath = _( home +'/'+ shortVersion +'/settings.json', true );// jshint ignore:line
+        settingsPath = _( home +'/'+ shortVersion +'/settings.json', true );// jshint ignore:line
         if ( new _(settingsPath).existsSync() ) {// jshint ignore:line
             settings = requireJSON(settingsPath);// jshint ignore:line
         }
@@ -214,7 +215,7 @@ async function onExec() {
     if (!settings) {
         settings = requireJSON(settingsPath);// jshint ignore:line
     }
-    if (isUpdateRequired) {
+    if (isUpdateRequired && settings) {
         console.debug('Updating debug settings ...');// jshint ignore:line
         settings['arch'] = getEnvVar('GINA_ARCH') || settings['arch'] || null;// jshint ignore:line
         settings['platform'] = getEnvVar('GINA_PLATFORM') || settings['platform'] || null;// jshint ignore:line
