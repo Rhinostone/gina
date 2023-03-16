@@ -165,6 +165,7 @@ function ServerEngineClass(options) {
             // TODO - check url against wroot : getContext() ?
             if ( /^get$/i.test(request.method) && /\_gina\/health\/check$/i.test(request.url) ) {
                 // server.toApi(reques, response)
+                // console.debug('[200] '+ request.url);
                 response.setHeader('content-type', 'application/json; charset=utf8' );
                 response.setHeader('x-powered-by', 'Gina/'+ GINA_VERSION );
                 return response.end('{"status":"ok"}');
