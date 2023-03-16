@@ -105,9 +105,9 @@ async function onExec() {
         }
         home = getEnvVar('GINA_HOMEDIR');// jshint ignore:line
 
-        settings = { 'log_level': 'info'}; // First time launch or reset
-        if ( new _( home +'/'+ shortVersion +'/settings.json', true ).existsSync() ) {// jshint ignore:line
-            var settingsPath =  _( home +'/'+ shortVersion +'/settings.json', true );// jshint ignore:line
+        settings = { 'log_level': 'info' }; // First time launch or reset
+        var settingsPath = _( home +'/'+ shortVersion +'/settings.json', true );// jshint ignore:line
+        if ( new _(settingsPath).existsSync() ) {// jshint ignore:line
             settings = requireJSON(settingsPath);// jshint ignore:line
         }
 
