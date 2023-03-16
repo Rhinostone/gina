@@ -117,11 +117,13 @@ function PreInstall() {
             pkg = execSync(cmd).toString().replace(/\n$/g, '');
             self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
 
+            pkgObj = JSON.parse(pkg);
+            self.optionalPrefix     = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
         } catch(err) {
-            throw err
+            // means that gina is not already installed
+            // throw err
         }
-        pkgObj = JSON.parse(pkg);
-        self.optionalPrefix     = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
+
 
         if ( self.prefix != self.defaultPrefix ) {
             self.isCustomPrefix = true;
@@ -189,6 +191,33 @@ function PreInstall() {
         } else {
             process.exit(0);
         }
+    }
+
+    self.checkPermissions = function(done) {
+        // E.g.:
+        // {
+        //     uid: 0,
+        //     gid: 0,
+        //     username: 'root',
+        //     homedir: '/root',
+        //     shell: '/bin/bash'
+        // }
+        self.userInfo = os.userInfo();
+        var cmd = null;
+        if ( !isWin32() ) {
+            var uid = self.userInfo.uid;
+            var gid = self.userInfo.gid;
+
+            if ( self.userInfo.username == 'root' ) {
+                cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
+                execSync(cmd);
+                cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
+                execSync(cmd);
+            }
+        }
+
+
+        done();
     }
 
 
