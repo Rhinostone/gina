@@ -24,7 +24,9 @@ Note that Gina does not rely on Connect or ExpressJS, still, you can use all plu
 ### Installing Gina
 Gina aims to be at the same time a framework, a deployment and monitoring environment for your projects. So, to fully enjoy Gina, we recommend that you install it with the `-g` option.
 > For Microsoft Windows, you might have to run the command line with Administrator privileges.
-> For Linux & Mac OS X, __the use of `sudo` is discouraged.__
+> For Linux & Mac OS X:
+> -  __the use of `sudo` is discouraged.__
+> - You should have a dedicated user such as `node` with its group `node`
 
 #### Versions
 
@@ -36,7 +38,7 @@ Gina aims to be at the same time a framework, a deployment and monitoring enviro
 #### 1st method (prefered) - Custom PREFIX
 
 This will install Gina in the user's home directory avoiding at the same time the need to use `sudo` or the `root` user.
-By adding at the end the `--reset` argument, you will ensure a factory reset for the `~/.gina` preferences folder: all preferences will be lost, but your existing projects will not be erased.
+By adding at the end the `--reset` argument, you will ensure a factory reset for the `~/.gina` preferences folder: all `gina` preferences will be lost, but your existing projects will not be erased.
 
 ```tty
 npm install -g gina@latest --prefix=~/.npm-global
@@ -91,7 +93,7 @@ __NB.:__ This is a shortcut for `gina framework:version`
 If you feel like you do not need to install globally Gina for some reasons like only using the framework for a single project, you can install Gina without the `-g` argument.
 Go to your project's root and tap:
 ```tty
-npm instal gina@latest
+npm install gina@latest
 ```
 
 __Attention:__  to use gina CLI, you will need to run it from your project location since the CLI was not installed with the global argument `-g`.
