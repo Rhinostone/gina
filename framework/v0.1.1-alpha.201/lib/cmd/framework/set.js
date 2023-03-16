@@ -161,7 +161,10 @@ function Set(opt){
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
         // update package.json
         pack.config.globalMode = globalMode;
-        lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
+        if ( new _(GINA_DIR +'/package.json', true ).existSync() ) {
+            lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
+        }
+        // lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
     }
 
     var setLogLevel = function(level) {
