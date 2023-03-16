@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-
+'use strict';
 /**
  * This file is part of the gina package.
  * Copyright (c) 2009-2023 Rhinostone <contact@gina.io>
@@ -221,9 +221,12 @@ function PostInstall() {
 
                 // OK ... found installed gina but on a different prefix
                 // In this case, let's assume that it is not really installed
+                console.info('A previous version of gina has been detected');
                 if ( !new RegExp('^'+ self.prefix).test(hasFoundGina.dependencies.gina.path) ) {
                     self.isGinaInstalled = false;
+                    console.info('Ignoring previous because of a mismatching install prefix');
                 }
+
             }
         } catch (err) {}
 
@@ -247,7 +250,6 @@ function PostInstall() {
      * Bebin - Will run checking tasks in order of declaration
      * */
      var begin = async function(i) {
-        //console.debug('i is ', i);
         var n = 0, funct = null, functName = null;
         for (let t in self) {
             if ( typeof(self[t]) == 'function') {
@@ -324,7 +326,7 @@ function PostInstall() {
 
     self.createVersionFile = function(done) {
         var version = self.version;
-        console.debug('writting version number: '+ version);
+        console.debug('Writting version number: '+ version);
 
         var target = _(self.versionPath + '/VERSION');
         try {
@@ -427,7 +429,7 @@ function PostInstall() {
         console.debug('Target: '+ target);
 
         if ( callback && typeof(callback) != 'undefined') {
-            console.info('linking to binaries dir: '+ source +' -> '+ target);
+            console.info('Linking to binaries dir: '+ source +' -> '+ target);
             try {
                 if ( fs.existsSync(target) ) {
                     fs.unlinkSync(target)
@@ -478,7 +480,7 @@ function PostInstall() {
                     return npmInstall(done)
                 } else {
                     var target = new _(self.versionPath + '/node_modules');
-                    console.debug('replacing: ', target.toString() );
+                    console.debug('Replacing: ', target.toString() );
                     return target
                         .rm( function onRemove(err) {
                             if (err) {
@@ -522,7 +524,7 @@ function PostInstall() {
 
     var npmInstall = function(done) {
 
-        console.info('Now installing modules: please, wait ...');
+        console.info('Now installing modules. Please, wait ...');
         console.info('Prefix ('+ self.isCustomPrefix +'): '+ self.prefix);
         console.info('Default prefix: '+ self.defaultPrefix);
         var initialDir = process.cwd();
@@ -532,11 +534,12 @@ function PostInstall() {
 
         process.chdir( self.versionPath );
 
-        console.info('running: `'+ cmd +'` from '+ process.cwd() );
-        console.info('running using TMPDIR: '+  _(getTmpDir(), true) );
+        console.info('Running: `'+ cmd +'` from '+ process.cwd() );
+        console.info('Running using TMPDIR: '+  _(getTmpDir(), true) );
         var oldConfigGlobal = process.env.npm_config_global;
         process.env.npm_config_global = false;
-        execSync(cmd);
+        console.info('Running using TMPDIR: '+ cmd);
+        console.info(execSync(cmd).toString());
         process.chdir(initialDir);
         process.env.npm_config_global = oldConfigGlobal;
 
@@ -576,6 +579,32 @@ function PostInstall() {
     }
 
     self.checkUserExtensions = async function(done) {
+        var err = null;
+        var versionDirObj = new _( getUserHome() +'/.gina/'+ self.shortVersion, true);
+        console.debug('versionDirObj: '+ versionDirObj.toString() );
+        if ( !versionDirObj.existsSync() ) {
+            versionDirObj.mkdirSync()
+        }
+        var defaultSettingsObj = new _(versionDirObj.toString() + '/settings.json', true);
+        if (!defaultSettingsObj.existsSync()) {
+            promisify(new _(self.gina +'/resources/home/main.json').cp)(defaultSettingsObj.toString())
+                .catch( function onCopyError(_err) {
+                    err = _err;
+                })
+        }
+        if (err) {
+            return done(err);
+        }
+        var defaultMainObj = new _(versionDirObj.toString() + '/main.json', true);
+        if (!defaultMainObj.existsSync()) {
+            promisify(new _(self.gina +'/resources/home/main.json').cp)(defaultMainObj.toString())
+                .catch( function onCopyError(_err) {
+                    err = _err;
+                })
+        }
+        if (err) {
+            return done(err);
+        }
 
         var userDir = _(getUserHome() + '/.gina/user', true);
         // var userDirObj = new _(userDir);
@@ -598,7 +627,7 @@ function PostInstall() {
         // }
         var folders = [];
         try {
-            console.debug('Reading : '+ ext + ' - isDirectory ? '+ fs.lstatSync( ext ).isDirectory() );
+            console.debug('Reading :'+ ext + ' - isDirectory ? '+ fs.lstatSync( ext ).isDirectory() );
             folders = fs.readdirSync(ext);
 
         } catch(readErr) {
@@ -647,7 +676,7 @@ function PostInstall() {
 
             for (let n = 0, nLen = files.length; n < nLen; n++) {
                 let file = files[n];
-                console.debug('file --> ', file);
+                console.debug('File --> ', file);
                 let extentionPath   = _(extDir +'/'+ file, true);
                 let extensionPathObj =  new _(extentionPath);
                 // redefined
@@ -662,7 +691,7 @@ function PostInstall() {
                             err = _err;
                         })
                         .then( function onCopy(_destination) {// jshint ignore:line
-                            console.info('Copy '+ extentionPath +' to '+ _destination +' done !');
+                            console.debug('Copy '+ extentionPath +' to '+ _destination +' done !');
                         });
 
                     if (err) {
@@ -697,7 +726,7 @@ function PostInstall() {
             await promisify(run)(cmd, { cwd: _(self.versionPath), tmp: _(getTmpDir(), true), outToProcessSTD: true, shell: "/bin/bash"})
                 .catch(function onError(err){
                     if (err) {
-                        console.warn('try to run: sudo ' + cmd);
+                        console.warn('Try to run: sudo ' + cmd);
                         return done(err);
                     }
                 });
@@ -742,9 +771,12 @@ function PostInstall() {
             return;
         }
         // get current framework version
-        var package = require(pack);
-        var currentVersion = 'v'+ package.version.replace(/^v/, '');
-
+        var ginaPackage = require(pack);
+        self.version = ginaPackage.version.replace(/^v/, '');
+        self.shortVersion = self.version.split('.');
+        self.shortVersion.splice(2);
+        self.shortVersion = self.shortVersion.join('.');
+        var currentVersion = 'v'+ self.version;
         // cleanup first
         var versionsFolders = fs.readdirSync(frameworkPath);
         for (let i = 0, len = versionsFolders.length; i < len; i++) {
@@ -811,8 +843,9 @@ function PostInstall() {
         }
 
         if ( !fs.existsSync(ginaBinanry) ) {
-            console.error('`'+ ginaBinanry +'` not found !');
+            console.error('Outch: `'+ ginaBinanry +'` not found !');
         }
+
 
         try {
             execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
