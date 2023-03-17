@@ -166,8 +166,9 @@ function PostInstall() {
             }
 
             // No package.json ?
-            var projectName = process.cwd().split('/').slice(-1)[0];
-            var projectPackageJsonObj = new _(process.cwd() +'/package.json', true);
+            var projectName = self.prefix.split('/').slice(-1)[0];
+            var projectPackageJsonObj = new _(self.prefix +'/package.json', true);
+            console.info('Checking for: '+ projectPackageJsonObj.toString(), '['+ projectPackageJsonObj.existsSync()  +']');
             if ( !projectPackageJsonObj.existsSync() ) {
                 var defaultPackageJsonContent = {
                     "name": ""+ projectName,
@@ -869,23 +870,23 @@ function PostInstall() {
         }
 
         // double checking
-        if ( !self.isGlobalInstall ) {
-            // No package.json ?
-            var projectName = process.cwd().split('/').slice(-1)[0];
-            var projectPackageJsonObj = new _(process.cwd() +'/package.json', true);
-            if ( !projectPackageJsonObj.existsSync() ) {
-                var defaultPackageJsonContent = {
-                    "name": ""+ projectName,
-                    "version": "0.0.1",
-                    "description": projectName+ " is a nice project !",
-                    "engine": [
-                        "node >=" + process.version.substring(1)
-                    ]
-                };
-                console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
-                lib.generator.createFileFromDataSync(defaultPackageJsonContent, projectPackageJsonObj.toString());
-            }
-        }
+        // if ( !self.isGlobalInstall ) {
+        //     // No package.json ?
+        //     var projectName = process.cwd().split('/').slice(-1)[0];
+        //     var projectPackageJsonObj = new _(process.cwd() +'/package.json', true);
+        //     if ( !projectPackageJsonObj.existsSync() ) {
+        //         var defaultPackageJsonContent = {
+        //             "name": ""+ projectName,
+        //             "version": "0.0.1",
+        //             "description": projectName+ " is a nice project !",
+        //             "engine": [
+        //                 "node >=" + process.version.substring(1)
+        //             ]
+        //         };
+        //         console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
+        //         lib.generator.createFileFromDataSync(defaultPackageJsonContent, projectPackageJsonObj.toString());
+        //     }
+        // }
 
 
 
