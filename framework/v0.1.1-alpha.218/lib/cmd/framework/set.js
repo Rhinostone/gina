@@ -152,13 +152,17 @@ function Set(opt){
             console.error(err.message);
             return
         }
+        var ginaPackagePathObj = new _(GINA_DIR +'/package.json', true);
         globalMode = /^true$/i.test(globalMode) ? true : false;
         // save to ~/.gina/main.json
         if ( typeof(mainConf['def_global_mode']) == 'undefined' ) {
             mainConf['def_global_mode'] = {}
         }
         mainConf['def_global_mode'][GINA_SHORT_VERSION] = globalMode;
-        lib.generator.createFileFromDataSync(mainConf, mainConfPath);
+        // skip for post install step
+        if ( ginaPackagePathObj.existsSync() ) {
+            lib.generator.createFileFromDataSync(mainConf, mainConfPath);
+        }
         // save to ~/.gina/{GINA_VERSION_SHORT}/settings.json
         process['gina']['global_mode'] = globalMode;
         mainSettingsConf['global_mode'] = globalMode;
@@ -166,7 +170,7 @@ function Set(opt){
         // update package.json
         pack.config.globalMode = globalMode;
         console.info('GINA_DIR => ', GINA_DIR);
-        var ginaPackagePathObj = new _(GINA_DIR +'/package.json', true);
+
         // skip for post install step
         if ( ginaPackagePathObj.existsSync() ) {
             lib.generator.createFileFromDataSync(pack, ginaPackagePathObj.toString());
