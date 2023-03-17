@@ -868,6 +868,25 @@ function PostInstall() {
             console.error('Outch: `'+ ginaBinanry +'` not found !');
         }
 
+        // double checking
+        if ( !self.isGlobalInstall ) {
+            // No package.json ?
+            var projectName = process.cwd().split('/').slice(-1)[0];
+            var projectPackageJsonObj = new _(process.cwd() +'/package.json', true);
+            if ( !projectPackageJsonObj.existsSync() ) {
+                var defaultPackageJsonContent = {
+                    "name": ""+ projectName,
+                    "version": "0.0.1",
+                    "description": projectName+ " is a nice project !",
+                    "engine": [
+                        "node >=" + process.version.substring(1)
+                    ]
+                };
+                console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
+                lib.generator.createFileFromDataSync(defaultPackageJsonContent, projectPackageJsonObj.toString());
+            }
+        }
+
 
 
         try {
