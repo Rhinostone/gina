@@ -772,6 +772,7 @@ function PostInstall() {
         }
         // get current framework version
         var ginaPackage = require(pack);
+        self.versionPath = self.gina;
         self.version = ginaPackage.version.replace(/^v/, '');
         self.shortVersion = self.version.split('.');
         self.shortVersion.splice(2);
@@ -839,7 +840,7 @@ function PostInstall() {
         // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
         if (!self.isCustomPrefix && self.isGlobalInstall) {
-            ginaBinanry = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina')
+            ginaBinanry = _( self.defaultPrefix + '/lib/node_modules/gina/bin/gina', true)
         }
 
         if ( !fs.existsSync(ginaBinanry) ) {
