@@ -70,7 +70,7 @@ function PreInstall() {
         if ( !isWin32() ) {
             var uid = self.userInfo.uid;
             var gid = self.userInfo.gid;
-            console.debug('Install user infos:\n'+ JSON.stringify(self.userInfo, null, 2));
+
             if ( /^(root|nobody)$/i.test(self.userInfo.username) ) {
                 if (/^(root)$/i.test(self.userInfo.username) ) {
                     self.isRootUser = true;
@@ -90,8 +90,9 @@ function PreInstall() {
                 //     console.debug('Running: '+ cmd);
                 //     execSync(cmd);
                 // }
-                console.warn('If you get errors, try tu run: chown -R $(whoami) ~/.npm')
+                console.warn('If you get errors, try to run: chown -R $(whoami) ~/.npm')
             }
+            console.debug('Install user infos:\n'+ JSON.stringify(self.userInfo, null, 2));
         }
         console.debug('self.isRootUser => '+ self.isRootUser);
 
