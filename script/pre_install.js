@@ -273,6 +273,7 @@ function PreInstall() {
             if ( typeof(fs.rmSync) == 'function' ) {
                 fs.rmSync(ginaHome, { recursive: true, force: true });
             } else {
+                helpers = require(self.gina+ '/utils/helper');
                 new _(ginaHome, true).rmSync()
             }
         }
