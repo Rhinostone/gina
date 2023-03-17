@@ -71,17 +71,26 @@ function PreInstall() {
             var uid = self.userInfo.uid;
             var gid = self.userInfo.gid;
             console.debug('Install user infos:\n'+ JSON.stringify(self.userInfo, null, 2));
-            if ( self.userInfo.username == 'root' ) {
-                self.isRootUser = true;
-                console.debug('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
+            if ( /^(root|nobody)$/i.trest(self.userInfo.username) ) {
+                if (/^(root)$/i.trest(self.userInfo.username) ) {
+                    self.isRootUser = true;
+                }
+                if (/nonexistent$/i.test(self.userInfo.homedir) || !self.userInfo.homedir ) {
+                    self.userInfo.homedir = getUserHome()
+                }
 
-                cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
-                console.debug('Running: '+ cmd);
-                execSync(cmd);
+                // if (self.isRootUser) {
+                //     console.debug('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
 
-                cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
-                console.debug('Running: '+ cmd);
-                execSync(cmd);
+                //     cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
+                //     console.debug('Running: '+ cmd);
+                //     execSync(cmd);
+
+                //     cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
+                //     console.debug('Running: '+ cmd);
+                //     execSync(cmd);
+                // }
+                console.warn('If you get errors, try tu run: chown -R $(whoami) ~/.npm')
             }
         }
         console.debug('self.isRootUser => '+ self.isRootUser);
