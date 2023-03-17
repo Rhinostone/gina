@@ -301,7 +301,11 @@ function PreInstall() {
 
         var ginaHomeDir = getUserHome() + ((isWin32()) ? '\\.gina': '/.gina');
         if (!existsSync(ginaHomeDir) ) {
-            fs.mkdirSync(ginaHomeDir)
+            fs.mkdirSync(ginaHomeDir);
+
+            var cmd = 'chown -R $(whoami) '+ ginaHomeDir;
+            console.debug('Running: '+ cmd);
+            execSync(cmd);
         }
 
         // check for `/usr/local/tmp` or `/tmp`
