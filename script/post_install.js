@@ -878,7 +878,7 @@ function PostInstall() {
             console.info('Running: '+ cmd);
             console.debug(execSync(cmd));
         } catch (err) {
-            return done(err)
+            //return done(err)
         }
 
 
