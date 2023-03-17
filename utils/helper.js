@@ -1,6 +1,6 @@
 var fs = require('fs');
 var os = require('os');
-const { execSync } = require('child_process');
+var { execSync } = require('child_process');
 
 var lib         = null;
 var console     = null;
@@ -301,7 +301,7 @@ function MainHelper(opt) {
             }
 
             runDir = prefix +'/var/run';//by default.
-            if ( !existsSync(runDir) ) {
+            if ( ! new _(runDir).existsSync() ) {
                 fs.mkdirSync(runDir)
             }
         } catch (err) {
@@ -348,12 +348,12 @@ function MainHelper(opt) {
 
                 if ( new RegExp('^'+ prefix).test(tmpDir) && !isWritableSync(prefix) ) {
                     tmpDir = getUserHome() +'/.gina/tmp';
-                    if ( !existsSync(tmpDir) ) {
+                    if ( ! new _(tmpDir).existsSync() ) {
                         fs.mkdirSync(tmpDir)
                     }
                 }
 
-                if ( new RegExp('^'+ prefix +'/var').test(tmpDir) && !existsSync(prefix +'/var') ) {
+                if ( new RegExp('^'+ prefix +'/var').test(tmpDir) && !new _(prefix +'/var').existsSync() ) {
                     fs.mkdirSync(prefix +'/var');
                 }
             }
