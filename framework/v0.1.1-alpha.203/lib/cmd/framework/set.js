@@ -137,7 +137,11 @@ function Set(opt){
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
         // update package.json
         pack.config.prefix = prefix;
-        lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
+        var ginaPackagePathObj = new _(GINA_DIR +'/package.json', true);
+        // skip for post install step
+        if ( ginaPackagePathObj.existsSync() ) {
+            lib.generator.createFileFromDataSync(pack, ginaPackagePathObj.toString());
+        }
     }
 
 
@@ -161,8 +165,12 @@ function Set(opt){
         lib.generator.createFileFromDataSync(mainSettingsConf, mainSettingsPath);
         // update package.json
         pack.config.globalMode = globalMode;
-
-        lib.generator.createFileFromDataSync(pack, _(GINA_DIR +'/package.json', true ));
+        console.info('GINA_DIR => ', GINA_DIR);
+        var ginaPackagePathObj = new _(GINA_DIR +'/package.json', true);
+        // skip for post install step
+        if ( ginaPackagePathObj.existsSync() ) {
+            lib.generator.createFileFromDataSync(pack, ginaPackagePathObj.toString());
+        }
     }
 
     var setLogLevel = function(level) {

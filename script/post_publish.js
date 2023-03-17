@@ -14,8 +14,8 @@ var promisify   = util.promisify;
 const { execSync } = require('child_process');
 
 
-var scriptPath = __dirname;
-var ginaPath = (scriptPath.replace(/\\/g, '/')).replace('/script', '');
+var scriptPath  = __dirname;
+var ginaPath    = (scriptPath.replace(/\\/g, '/')).replace('/script', '');
 var help        = require(ginaPath + '/utils/helper.js');
 var pack        = ginaPath + '/package.json';
 pack =  (isWin32()) ? pack.replace(/\//g, '\\') : pack;

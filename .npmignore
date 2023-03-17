@@ -26,3 +26,5 @@ tmp/*
 gina.com
 MIDDLEWARE
 package-lock.json
+script/post_publish.js
+script/prepare_version.js
