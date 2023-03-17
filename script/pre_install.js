@@ -70,7 +70,7 @@ function PreInstall() {
         if ( !isWin32() ) {
             var uid = self.userInfo.uid;
             var gid = self.userInfo.gid;
-
+            console.debug('Install user infos:\n'+ JSON.stringify(self.userInfo, null, 2));
             if ( self.userInfo.username == 'root' ) {
                 self.isRootUser = true;
                 console.debug('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
