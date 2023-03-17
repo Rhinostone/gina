@@ -56,6 +56,31 @@ function PreInstall() {
         self.isCustomPrefix     = false;
         self.isGinaInstalled    = false;
 
+        self.isRootUser         = false;
+        self.userInfo = os.userInfo();
+        // E.g.:
+        // {
+        //     uid: 0,
+        //     gid: 0,
+        //     username: 'root',
+        //     homedir: '/root',
+        //     shell: '/bin/bash'
+        // }
+        var cmd = null;
+        if ( !isWin32() ) {
+            var uid = self.userInfo.uid;
+            var gid = self.userInfo.gid;
+
+            if ( self.userInfo.username == 'root' ) {
+                self.isRootUser = true;
+                console.warn('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
+                cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
+                execSync(cmd);
+                cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
+                execSync(cmd);
+            }
+        }
+
         // Overriding thru passed arguments
         var args = process.argv, i = 0, len = args.length;
         for (; i < len; ++i) {
@@ -197,33 +222,31 @@ function PreInstall() {
         }
     }
 
-    self.checkPermissions = function(done) {
-        // E.g.:
-        // {
-        //     uid: 0,
-        //     gid: 0,
-        //     username: 'root',
-        //     homedir: '/root',
-        //     shell: '/bin/bash'
-        // }
-        self.userInfo = os.userInfo();
-        var cmd = null;
-        if ( !isWin32() ) {
-            var uid = self.userInfo.uid;
-            var gid = self.userInfo.gid;
+    // self.checkPermissions = function(done) {
+    //     // E.g.:
+    //     // {
+    //     //     uid: 0,
+    //     //     gid: 0,
+    //     //     username: 'root',
+    //     //     homedir: '/root',
+    //     //     shell: '/bin/bash'
+    //     // }
+    //     self.userInfo = os.userInfo();
+    //     var cmd = null;
+    //     if ( !isWin32() ) {
+    //         var uid = self.userInfo.uid;
+    //         var gid = self.userInfo.gid;
 
-            if ( self.userInfo.username == 'root' ) {
-                console.warn('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
-                cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
-                execSync(cmd);
-                cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
-                execSync(cmd);
-            }
-        }
-
-
-        done();
-    }
+    //         if ( self.userInfo.username == 'root' ) {
+    //             console.warn('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
+    //             cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
+    //             execSync(cmd);
+    //             cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
+    //             execSync(cmd);
+    //         }
+    //     }
+    //     done();
+    // }
 
 
 
