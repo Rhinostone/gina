@@ -74,12 +74,17 @@ function PreInstall() {
             if ( self.userInfo.username == 'root' ) {
                 self.isRootUser = true;
                 console.warn('User `root` detected, changing permissions for `~/.config`& `~/.npm` to avoid install exceptions');
+
                 cmd = 'chown -R '+ uid +':'+ gid +' '+ self.userInfo.homedir +'/.config';
+                console.info('Running: '+ cmd);
                 execSync(cmd);
+
                 cmd = 'chown -R nobody:'+ gid +' '+ self.userInfo.homedir +'/.npm';
+                console.info('Running: '+ cmd);
                 execSync(cmd);
             }
         }
+        console.debug('self.isRootUser => '+ self.isRootUser);
 
         // Overriding thru passed arguments
         var args = process.argv, i = 0, len = args.length;
