@@ -71,8 +71,8 @@ function PreInstall() {
             var uid = self.userInfo.uid;
             var gid = self.userInfo.gid;
             console.debug('Install user infos:\n'+ JSON.stringify(self.userInfo, null, 2));
-            if ( /^(root|nobody)$/i.trest(self.userInfo.username) ) {
-                if (/^(root)$/i.trest(self.userInfo.username) ) {
+            if ( /^(root|nobody)$/i.test(self.userInfo.username) ) {
+                if (/^(root)$/i.test(self.userInfo.username) ) {
                     self.isRootUser = true;
                 }
                 if (/nonexistent$/i.test(self.userInfo.homedir) || !self.userInfo.homedir ) {
