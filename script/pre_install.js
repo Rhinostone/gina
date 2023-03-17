@@ -41,8 +41,12 @@ function PreInstall() {
         }
 
         self.isWin32            = isWin32();
-        self.isGlobalInstall    = process.env.npm_config_global || false;
-        self.isResetNeeded      = process.env.npm_config_reset || false;
+        self.isGlobalInstall    = ( typeof(process.env.npm_config_global) != 'undefined' && /^(true|false)$/i.test(process.env.npm_config_global) )
+                                    ? (/^true$/i.test(process.env.npm_config_global) ? true: false)
+                                    : false;
+        self.isResetNeeded      = ( typeof(process.env.npm_config_reset) != 'undefined' && /^(true|false)$/i.test(process.env.npm_config_reset) )
+                                    ? (/^true$/i.test(process.env.npm_config_reset) ? true: false)
+                                    : false;
         self.defaultPrefix      = execSync('npm config get prefix').toString().replace(/\n$/g, '');
 
 

@@ -99,8 +99,12 @@ function PostInstall() {
         }
 
         self.isWin32            = isWin32();
-        self.isGlobalInstall    = process.env.npm_config_global || false;
-        self.isResetNeeded      = process.env.npm_config_reset || false;
+        self.isGlobalInstall    = ( typeof(process.env.npm_config_global) != 'undefined' && /^(true|false)$/i.test(process.env.npm_config_global) )
+                                    ? (/^true$/i.test(process.env.npm_config_global) ? true: false)
+                                    : false;
+        self.isResetNeeded      = ( typeof(process.env.npm_config_reset) != 'undefined' && /^(true|false)$/i.test(process.env.npm_config_reset) )
+                                    ? (/^true$/i.test(process.env.npm_config_reset) ? true: false)
+                                    : false;
         self.defaultPrefix      = execSync('npm config get prefix').toString().replace(/\n$/g, '');
         // var pkg = null;
         // try {
@@ -156,9 +160,25 @@ function PostInstall() {
         if ( !self.isGlobalInstall ) {
             console.warn('Local installation is not fully supported at the moment.');
             console.warn('You are encouraged to use `npm install -g gina`\nor, if you are trying to link gina to your project, use `npm link gina` if Gina has already been installed globally\n');
-            // Just in case someone is trying to run pre_install from the `gina` module
+            // Just in case someone is trying to run post_install from the `gina` module of from the project dir
             if (!/node\_modules(\\\\|\/)gina$/.test(process.env.INIT_CWD)) {
-                self.prefix = process.env.INIT_CWD;//process.cwd();
+                self.prefix = process.env.INIT_CWD || process.cwd();
+            }
+
+            // No package.json ?
+            var projectName = process.cwd().split('/').slice(-1)[0];
+            var projectPackageJsonObj = new _(process.cwd() +'/package.json', true);
+            if ( !projectPackageJsonObj.existsSync() ) {
+                var defaultPackageJsonContent = {
+                    "name": ""+ projectName,
+                    "version": "0.0.1",
+                    "description": projectName+ " is a nice project !",
+                    "engine": [
+                        "node >=" + process.version.substring(1)
+                    ]
+                };
+                console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
+                lib.generator.createFileFromDataSync(defaultPackageJsonContent, projectPackageJsonObj.toString());
             }
         }
 
@@ -191,11 +211,12 @@ function PostInstall() {
             self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
 
         } catch(err) {
-            throw err
+            // throw err
+            // ignore exception
         }
+
         pkgObj = JSON.parse(pkg);
         self.optionalPrefix     = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
-
 
         if ( self.prefix != self.defaultPrefix ) {
             self.isCustomPrefix = true;
@@ -846,6 +867,7 @@ function PostInstall() {
         if ( !fs.existsSync(ginaBinanry) ) {
             console.error('Outch: `'+ ginaBinanry +'` not found !');
         }
+
 
 
         try {

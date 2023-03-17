@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.1.1-alpha.203",
+  "version": "0.1.1-alpha.204",
   "description": "MVC Framework for Node.",
   "keywords": [
     "framework",
@@ -46,12 +46,12 @@
   "config": {
     "optionalPrefix": "~/.npm-global",
     "prefix": "/usr/local",
-    "globalMode": true
+    "globalMode": false
   },
   "bin": {
     "gina": "./bin/gina"
   },
-  "main": "./framework/v0.1.1-alpha.203/core/gna",
+  "main": "./framework/v0.1.1-alpha.204/core/gna",
   "scripts": {
     "prepare": "node script/prepare_version.js",
     "postpublish": "node script/post_publish.js",
@@ -59,5 +59,8 @@
     "postinstall": "node script/post_install.js"
   },
   "license": "MIT",
-  "readmeFilename": "README.md"
+  "readmeFilename": "README.md",
+  "dependencies": {
+    "colors": "^1.4.0"
+  }
 }

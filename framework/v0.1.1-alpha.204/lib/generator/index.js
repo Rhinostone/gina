@@ -53,7 +53,7 @@ var Generator = {
         if (data instanceof Error) {
             throw data
         } else {
-            if(fs.existsSync(target)){
+            if (fs.existsSync(target)) {
                 //Just in case.
                 fs.chmodSync(target, 0755);
 
