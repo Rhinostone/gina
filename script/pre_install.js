@@ -270,7 +270,11 @@ function PreInstall() {
         var ginaHome = getUserHome() + ( isWin32() ? '\\.gina' : '/.gina' );
         if ( self.isResetNeeded && existsSync(ginaHome) ) {
             console.debug('`.gina` reset requested ...');
-            fs.rmSync(ginaHome, { recursive: true, force: true });
+            if ( typeof(fs.rmSync) == 'function' ) {
+                fs.rmSync(ginaHome, { recursive: true, force: true });
+            } else {
+                new _(ginaHome, true).rmSync()
+            }
         }
 
         // Let's temporarily install `colors` into `GINA_DIR` it will be removed by the `post_install.js` script
