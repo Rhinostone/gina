@@ -869,30 +869,14 @@ function PostInstall() {
             console.error('Outch: `'+ ginaBinanry +'` not found !');
         }
 
-        // double checking
-        // if ( !self.isGlobalInstall ) {
-        //     // No package.json ?
-        //     var projectName = process.cwd().split('/').slice(-1)[0];
-        //     var projectPackageJsonObj = new _(process.cwd() +'/package.json', true);
-        //     if ( !projectPackageJsonObj.existsSync() ) {
-        //         var defaultPackageJsonContent = {
-        //             "name": ""+ projectName,
-        //             "version": "0.0.1",
-        //             "description": projectName+ " is a nice project !",
-        //             "engine": [
-        //                 "node >=" + process.version.substring(1)
-        //             ]
-        //         };
-        //         console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
-        //         lib.generator.createFileFromDataSync(defaultPackageJsonContent, projectPackageJsonObj.toString());
-        //     }
-        // }
-
-
-
+        var cmd = null;
         try {
-            execSync(ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall);
-            execSync(ginaBinanry + ' framework:set --prefix='+ self.prefix);
+            cmd = ginaBinanry + ' framework:set --global-mode='+ self.isGlobalInstall;
+            console.info('Running: '+ cmd);
+            console.debug(execSync(cmd));
+            cmd = ginaBinanry + ' framework:set --prefix='+ self.prefix;
+            console.info('Running: '+ cmd);
+            console.debug(execSync(cmd));
         } catch (err) {
             return done(err)
         }
