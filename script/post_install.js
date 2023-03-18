@@ -748,10 +748,10 @@ function PostInstall() {
         if ( !self.isGlobalInstall || isWin32() ) {
             return done()
         }
-        if (!self.isCustomPrefix || self.prefix == self.defaultPrefix) {
-            return done()
-        }
-
+        // if (!self.isCustomPrefix || self.prefix == self.defaultPrefix) {
+        //     return done()
+        // }
+        var cmd = null;
         var profilePath = getUserHome() + '/.profile';
         var profilePathObj = new _(profilePath);
         if ( !profilePathObj.existsSync() ) {
@@ -787,7 +787,9 @@ function PostInstall() {
 
             // we need to source/update ~/.profile
             try {
-                execSync("source "+ profilePath, {shell: "/bin/bash"});
+                cmd = "source "+ profilePath;
+                console.info('Running: '+ cmd);
+                execSync(cmd, {shell: "/bin/bash"});
             } catch (err) {
                 return done(err)
             }
