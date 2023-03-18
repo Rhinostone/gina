@@ -9,7 +9,7 @@
 >
 > Some commands or features might not work since the framework is still under development & testing
 >
-> We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version: which should come by the end of 2022. Thank you for your patience.
+> We have some applications using the framework in production and we are improving our code in order to release the `1.0.0` version as soon as possible. Thank you for your patience.
 
 ## Philosophy behind
 
@@ -26,7 +26,7 @@ Gina aims to be at the same time a framework, a deployment and monitoring enviro
 > For Microsoft Windows, you might have to run the command line with Administrator privileges.
 > For Linux & Mac OS X:
 > -  __the use of `sudo` is discouraged.__
-> - You should have a dedicated user such as `node` with its group `node`
+> - you should have a dedicated user such as `node` with its group `node`
 
 #### Versions
 
@@ -55,6 +55,12 @@ __NB.:__ This is a shortcut for `gina framework:version`
 
 ```  tty
 npm install -g gina@latest
+```
+
+Or with a `nobody:nogroup` user (not recomanded for production)
+
+```  tty
+npm install -g --unsafe-perm gina@latest
 ```
 
 __A few words about this method__
