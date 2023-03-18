@@ -74,14 +74,14 @@ function Initialize(opt) {
 
     var checkForAliases = function(task) {
         try {
-            var aliasArr = aliases[task.topic].toArray();
+            // var aliasArr = aliases[task.topic].toArray();
+            var aliasObj = aliases[task.topic];
             if (
-                typeof(aliases) != 'undefined' &&
-                typeof(aliases[task.topic]) &&
-                task.action in aliasArr
-
+                typeof(aliases) != 'undefined'
+                && typeof(aliasObj) != 'undefined'
+                && typeof(aliasObj[task.action]) != 'undefined'
             ) {
-                task.action = aliasArr[task.action]
+                task.action = aliasObj[task.action]
             }
         } catch (err) {}
 

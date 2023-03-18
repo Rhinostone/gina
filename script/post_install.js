@@ -202,6 +202,7 @@ function PostInstall() {
             // process.env.npm_config_prefix = self.prefix = self.optionalPrefix;
         }
 
+        self.gina = __dirname +'/..';
         var pkg = null, pkgObj = null, cmd = null;
         try {
             cmd = 'npm list gina --long --json --prefix='+ self.prefix;
@@ -210,20 +211,30 @@ function PostInstall() {
             }
             pkg = execSync(cmd).toString().replace(/\n$/g, '');
             self.optionalPrefix = JSON.parse(pkg).dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
-
+            pkgObj = JSON.parse(pkg);
+            self.optionalPrefix = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
         } catch(err) {
             // throw err
             // ignore exception
+            if ( !self.isGlobalInstall ) {
+                pkgObj = requireJSON(_(pack, true));
+                self.versionPath = self.gina;
+                self.versionPath += (isWin32()) ? '\\framework\\' : '/framework/';
+                self.version = pkgObj.version;
+                self.versionPath += 'v'+ self.version;
+
+                self.shortVersion = self.version.split('.');
+                self.shortVersion.splice(2);
+                self.shortVersion = self.shortVersion.join('.');
+            }
         }
 
-        pkgObj = JSON.parse(pkg);
-        self.optionalPrefix     = pkgObj.dependencies.gina.config.optionalPrefix.replace(/^\~/, getUserHome());
 
         if ( self.prefix != self.defaultPrefix ) {
             self.isCustomPrefix = true;
         }
 
-        self.gina = __dirname +'/..';
+
         // tying to figure out if gina is already install the given prefix
         var hasFoundGina = pkg;
         try {
@@ -439,7 +450,7 @@ function PostInstall() {
         console.info('Current package.json: '+  _(self.gina + '/package.json', true) );
 
         console.info('Creating framework command line:');
-        var appPath = process.env.INIT_CWD;
+        var appPath = process.env.INIT_CWD || process.cwd();
         console.debug('App path: '+ appPath);
         var source = _(appPath + '/node_modules/.bin/gina', true);
         var target = _(appPath +'/gina', true);
