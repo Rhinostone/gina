@@ -102,6 +102,12 @@ Go to your project's root and tap:
 npm install gina@latest
 ```
 
+Or with a `nobody:nogroup` user (not recomanded for production)
+
+```  tty
+npm install --unsafe-perm gina@latest
+```
+
 __Attention:__  to use gina CLI, you will need to run it from your project location since the CLI was not installed with the global argument `-g`.
 
 You can now check if Gina is properly installed.
