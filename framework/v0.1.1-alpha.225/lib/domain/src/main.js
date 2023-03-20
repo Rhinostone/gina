@@ -57,7 +57,7 @@ function Domain(options, cb) {
         url                 : "https://publicsuffix.org/list/public_suffix_list.dat",
         alternativeUrl      : "https://raw.githubusercontent.com/publicsuffix/list/master/public_suffix_list.dat",
         // only available from backend calls
-        isCachingRrequired  : false,
+        isCachingRequired  : false,
         isUpdating          : false
     }
 
@@ -84,9 +84,9 @@ function Domain(options, cb) {
             options.filename = __dirname +'/'+ options.filename;
         }
 
-        if (isGFFCtx && options.isCachingRrequired ) {
-            console.warn('[DOMAIN] `options.isCachingRrequired` is only available for backend');
-            options.isCachingRrequired = false
+        if (isGFFCtx && options.isCachingRequired ) {
+            console.warn('[DOMAIN] `options.isCachingRequired` is only available for backend');
+            options.isCachingRequired = false
         }
 
         self.options = options;
@@ -117,7 +117,7 @@ function Domain(options, cb) {
     }
 
     var loadPSL = async function(opt, cb) {
-        var filenameOrUrl   = (isGFFCtx || opt.isCachingRrequired) ? opt.url : opt.filename;
+        var filenameOrUrl   = (isGFFCtx || opt.isCachingRequired) ? opt.url : opt.filename;
         var isUpdating      = ( typeof(opt.isUpdating) != 'undefined' ) ? opt.isUpdating : false;
         var err             = null;
 
@@ -176,10 +176,10 @@ function Domain(options, cb) {
         }
 
         if (!exists) {
-            opt.isCachingRrequired = true;
+            opt.isCachingRequired = true;
         }
 
-        if (opt.isCachingRrequired) { // Fetch is only supported from NodeJS >= 18.0.0
+        if (opt.isCachingRequired) { // Fetch is only supported from NodeJS >= 18.0.0
             var cmd = 'curl -o '+opt.filename +' '+ opt.url +' >/dev/null 2>&1';
             console.debug('[DOMAIN] Running: '+ cmd);
             try {
