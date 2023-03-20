@@ -152,8 +152,6 @@ function MQListener(opt, cb) {
     function startMQListener(opt, cb) {
         var port = opt.port;
         var host = opt.hostV4;
-        // AbortController is a global object
-        const controller = new AbortController();// jshint ignore:line
         var server = net.createServer( function(conn) {//'connection' listener
 
             conn.sessionId = uuid.v4();
@@ -167,7 +165,7 @@ function MQListener(opt, cb) {
                 delete sessions[this.sessionId];
                 if ( this.request != 'report' ) {
                     forwardId = forwardList[this.request].indexOf(this.sessionId);
-                    if ( forwardId > -1 ) {
+                    if ( forwardId > -1 && typeof(forwardList[this.request]) != 'undefined') {
                         forwardList[this.request].splice(forwardId, 1);
                     }
                 }
@@ -284,11 +282,19 @@ function MQListener(opt, cb) {
             }
         });
 
-        server.listen({
+        var listenOption = {
             host: host,
-            port: port,
-            signal: controller.signal
-          }, function() {
+            port: port
+        };
+        var controller = null;
+        // AbortController nodejs >= v15
+        if ( typeof(AbortController) != 'undefined' ) {
+            // AbortController is a global object
+            var controller = new AbortController();// jshint ignore:line
+            listenOption.signal = controller.signal;
+        }
+
+        server.listen(listenOption, function() {
             // Server started.
             console.info('[MQListener] `'+ host +'`is waitting for speakers on port `'+ port +'`');
             if (cb) {

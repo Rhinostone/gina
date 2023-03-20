@@ -672,13 +672,13 @@ function Initialize(opt) {
         var datFilenameObj = new _(distPathObj.toString() + '/public_suffix_list.dat', true);
         if ( !datFilenameObj.existsSync() ) {
             try {
-                new Domain({isCachingRrequired: true}, done);
+                new Domain({isCachingRequired: true}, done);
             } catch (err) {
                 // console.error(err.stack||err.message||err);
                 // process.exit(1)
                 return done(err)
             }
-            // new Domain({isCachingRrequired: true}, done);
+            // new Domain({isCachingRequired: true}, done);
         }
 
         done()

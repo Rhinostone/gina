@@ -1199,7 +1199,8 @@ function Config(opt, contextResetNeeded) {
             // e.g: if env == `dev` and we have app.prod.json, we should skip it
             let skipIt = false;
             for (let e = 0, eLen = allEnvs.length; e < eLen; e++) {
-                let re = new RegExp('\.'+ allEnvs[e] +'\.json$');
+                // *.dev.json or *.common.json
+                let re = new RegExp('\.('+ allEnvs[e] +'|common)\.json$');
                 if ( re.test(fName) && allEnvs[e] != env ) {
                     // we should skip it
                     skipIt = true;
@@ -1472,6 +1473,10 @@ function Config(opt, contextResetNeeded) {
             // default middleware
             if ( typeof(routing[rule].middleware) == 'undefined' || !routing[rule].middleware )
                 routing[rule].middleware = [];
+
+            if ( typeof(commonMiddlewares) != 'undefined' ) {
+                routing[rule].middleware = merge(commonMiddlewares.slice(), routing[rule].middleware)
+            }
 
             // default url
             if ( typeof(routing[rule].url) == 'undefined' || !routing[rule].url )
