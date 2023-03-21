@@ -620,7 +620,7 @@ function PostInstall() {
         }
         var defaultSettingsObj = new _(versionDirObj.toString() + '/settings.json', true);
         if (!defaultSettingsObj.existsSync()) {
-            promisify(new _(self.gina +'/resources/home/main.json').cp)(defaultSettingsObj.toString())
+            promisify(new _(self.gina +'/resources/home/settings.json').cp)(defaultSettingsObj.toString())
                 .catch( function onCopyError(_err) {
                     err = _err;
                 })
