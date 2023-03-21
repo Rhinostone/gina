@@ -225,9 +225,7 @@ async function onExec() {
         settings['mq_port'] = getEnvVar('GINA_MQ_PORT') || settings['mq_port'] || null;// jshint ignore:line
         settings['host_v4'] = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || null;// jshint ignore:line
         settings['hostname'] = getEnvVar('GINA_HOSTNAME') || settings['hostname'] || null;// jshint ignore:line
-        if ( new _(settingsPath).existsSync() ) {// jshint ignore:line
-            generator.createFileFromDataSync(settings, settingsPath);// jshint ignore:line
-        }
+        generator.createFileFromDataSync(settings, settingsPath);// jshint ignore:line
     }
 
 
