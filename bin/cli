@@ -116,19 +116,20 @@ async function onExec() {
         }
 
         settingsPath = _( homeVersionDirObj.toString() +'/settings.json', true );// jshint ignore:line
-        if ( !new _(settingsPath).existsSync() ) {// jshint ignore:line
-            process.stdout.write('gina: getting default settings from [ ' + _(ginaPath +'/resources/home/settings.json', true) + ' ]\n');
-            promisify(new _(ginaPath +'/resources/home/settings.json', true).cp)(settingsPath)
-                .catch( function onCopyError(_err) {
-                    err = _err;
-                })
+        // if ( !new _(settingsPath).existsSync() ) {// jshint ignore:line
+        //     process.stdout.write('gina: getting default settings from [ ' + _(ginaPath +'/resources/home/settings.json', true) + ' ]\n');
+        //     process.stdout.write('gina: copy default settings to [ ' + settingsPath + ' ]\n');
+        //     promisify(new _(ginaPath +'/resources/home/settings.json', true).cp)(settingsPath)
+        //         .catch( function onCopyError(_err) {
+        //             err = _err;
+        //         })
 
-            if (err) {
-                process.stdout.write('gina: could not write [ ' + settingsPath + ' ]\n' + err.stack);
-                return process.exit(1)
-            }
-        }
-        settings = merge(settings, requireJSON(settingsPath));// jshint ignore:line
+        //     if (err) {
+        //         process.stdout.write('gina: could not write [ ' + settingsPath + ' ]\n' + err.stack);
+        //         return process.exit(1)
+        //     }
+        // }
+        settings = requireJSON(settingsPath);// jshint ignore:line
 
 
         setEnvVar('GINA_LOG_LEVEL', settings['log_level']);// jshint ignore:line
