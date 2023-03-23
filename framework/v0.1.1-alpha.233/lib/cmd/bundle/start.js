@@ -455,6 +455,11 @@ function Start(opt, cmd) {
                             if (!opt.client.destroyed) {
                                 opt.client.write(error);
                             }
+
+                            if (/address already in use/i.test(error)) {
+                                return terminal.warn(error);
+                            }
+                            return terminal.info(error);
                         }
 
                         terminal.error(error);
@@ -466,7 +471,9 @@ function Start(opt, cmd) {
                         if (onException) { // dual debug --inspect-gina && --inspect
                             return end(opt, cmd, isBulkStart, bundleIndex);
                         }
-                        if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
+                        // if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
+                        // Fixed on 2023-03-23 - Allowing docker to catch exit signal on `SIGABRT`
+                        if (/^(SIGKILL|SIGSTOP|SIGABRT)$/i.test(signal)) {
                             terminal.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
                             cmd.proc.dismiss(this.pid, signal);
                             return;

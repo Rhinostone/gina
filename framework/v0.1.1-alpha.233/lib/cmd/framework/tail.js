@@ -201,7 +201,7 @@ function Tail(opt, cmd) {
                         try {
                             process.stdout.write( format(pl.group, pl.level, pl.content) );
                             if (
-                                /(exiting|Got exit code)(.*)(SIGKILL|SIGTERM|SIGINT)/.test(pl.content)
+                                /(exiting|Got exit code)(.*)(SIGKILL|SIGTERM|SIGINT|SIGABRT)/.test(pl.content)
                                 ||
                                 // killed by terminal signal or activity monitor
                                 // Received SIGTERM or Received SIGINT)
@@ -239,6 +239,7 @@ function Tail(opt, cmd) {
                                     // only for debug
                                     process.stdout.write('[MQTail]['+ bundle +'] bundle is going offline !\n' );
                                     process.stdout.write('[MQTail] '+ JSON.stringify(payloads, null, 2) +'\n' );
+                                    // restart the bundle: look into payloads[0].content
                                     // if (project && bundle) {
 
                                     // }
