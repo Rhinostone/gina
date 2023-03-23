@@ -33,6 +33,7 @@ async function onExec() {
         , hostV4            = null
         , mqPort            = null
         , settingsPath      = null
+        , err               = null
     ;
     try {
         var packObj         = require(pack);
@@ -107,10 +108,25 @@ async function onExec() {
         home = getEnvVar('GINA_HOMEDIR');// jshint ignore:line
 
         settings = { 'log_level': 'info' }; // First time launch or reset
-        settingsPath = _( home +'/'+ shortVersion +'/settings.json', true );// jshint ignore:line
-        if ( new _(settingsPath).existsSync() ) {// jshint ignore:line
-            settings = requireJSON(settingsPath);// jshint ignore:line
+
+        var homeVersionDirObj = new _( home +'/'+ shortVersion, true );
+        if ( !homeVersionDirObj.existsSync() ) {
+            homeVersionDirObj.mkdirSync();
         }
+
+        settingsPath = _( homeVersionDirObj.toString() +'/settings.json', true );// jshint ignore:line
+        if ( !new _(settingsPath).existsSync() ) {// jshint ignore:line
+            promisify(new _(ginaPath +'/resources/home/settings.json').cp)(settingsPath)
+                .catch( function onCopyError(_err) {
+                    err = _err;
+                })
+
+            if (err) {
+                process.stdout.write('gina: could not write [ ' + settingsPath + ' ]\n' + err.stack);
+                return process.exit(1)
+            }
+        }
+        settings = requireJSON(settingsPath);// jshint ignore:line
 
 
         setEnvVar('GINA_LOG_LEVEL', settings['log_level']);// jshint ignore:line
