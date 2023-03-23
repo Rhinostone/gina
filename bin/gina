@@ -79,19 +79,18 @@ function runAsSubProcess() {
 
         // Normal case
         if ( new RegExp('Framework ready for connections','gmi').test(data) ) {
+            // Do not use `process.exit(0)` right away or the framework PID file will be removed
+            // after bundle:start, and only God knows whatever shit is going to happen
+            // Make a pause until the CLI tels otherwise (process.kill(cmd.pid, 'SIGCONT');)
+            // Docker considerations: All signals except for SIGKILL and SIGSTOP can be intercepted by the process.
+            // Ref.: https://medium.com/@gchudnov/trapping-signals-in-docker-containers-7a57fdda7d86
             console.info('Gina server started with PID `'+ child.pid +'`');
             // sending kill command to parent restart process
             if (restartPid) {
                 // we can't just use process.kill() here ...
                 process.stdout.write('[ quit ]\n');
             }
-            // Do not use `process.exit(0)` right away or the framework PID file will be removed
-            // after bundle:start, and only God knows whatever shit is going to happen
-            // Make a pause until the CLI tels otherwise (process.kill(cmd.pid, 'SIGCONT');)
-            // Docker considerations: All signals except for SIGKILL and SIGSTOP can be intercepted by the process.
-            // Ref.: https://medium.com/@gchudnov/trapping-signals-in-docker-containers-7a57fdda7d86
 
-            // process.kill(process.pid, 'SIGSTOP');
             // Docker fix - 2022-08-20
             process.exit(0);
         }
