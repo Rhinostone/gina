@@ -109,7 +109,7 @@ async function onExec() {
 
         settings = { 'log_level': 'info' }; // First time launch or reset
 
-        var homeVersionDirObj = new _( home +'/'+ shortVersion, true );
+        var homeVersionDirObj = new _( home +'/.gina/'+ shortVersion, true );
         if ( !homeVersionDirObj.existsSync() ) {
             homeVersionDirObj.mkdirSync();
         }
