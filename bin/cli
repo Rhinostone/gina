@@ -109,14 +109,16 @@ async function onExec() {
 
         settings = { 'log_level': 'info' }; // First time launch or reset
 
-        var homeVersionDirObj = new _( home +'/.gina/'+ shortVersion, true );
+        var homeVersionDirObj = new _( home +'/'+ shortVersion, true );
         if ( !homeVersionDirObj.existsSync() ) {
+            process.stdout.write('gina: Creating directory [ ' + homeVersionDirObj.toString() + ' ]\n');
             homeVersionDirObj.mkdirSync();
         }
 
         settingsPath = _( homeVersionDirObj.toString() +'/settings.json', true );// jshint ignore:line
         if ( !new _(settingsPath).existsSync() ) {// jshint ignore:line
-            promisify(new _(ginaPath +'/resources/home/settings.json').cp)(settingsPath)
+            process.stdout.write('gina: getting default settings from [ ' + _(ginaPath +'/resources/home/settings.json', true) + ' ]\n');
+            promisify(new _(ginaPath +'/resources/home/settings.json', true).cp)(settingsPath)
                 .catch( function onCopyError(_err) {
                     err = _err;
                 })
@@ -126,7 +128,7 @@ async function onExec() {
                 return process.exit(1)
             }
         }
-        settings = requireJSON(settingsPath);// jshint ignore:line
+        settings = merge(settings, requireJSON(settingsPath));// jshint ignore:line
 
 
         setEnvVar('GINA_LOG_LEVEL', settings['log_level']);// jshint ignore:line
