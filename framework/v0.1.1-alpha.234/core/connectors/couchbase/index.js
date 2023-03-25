@@ -599,9 +599,12 @@ function Couchbase(conn, infos) {
                                         try {
                                             onQueryCallback(false, data.rows, data.meta);
                                         } catch (_err) {
+                                            _err.stack = '[ ' + trigger + '] onQueryCallbackError: - Did you leave any bad comments ?\n- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
                                             console.error(_err.stack);
                                         }
                                     });
+                                    // Added on 2023-03-25
+                                    return;
                             } else {
                                 conn.query(query, queryParams, onQueryCallback);
                             }

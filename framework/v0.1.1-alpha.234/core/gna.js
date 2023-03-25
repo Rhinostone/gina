@@ -59,7 +59,8 @@ var projectName = null;
 if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
 
     var ctxObj = null;
-    if ( /(child)\.js$/.test(tmp[1]) ) { // required under a worker
+    // Workers case
+    if ( /(child)\.js$/.test(tmp[1]) || /(child-)(.*)\.js$/.test(tmp[1]) ) {
 
         isLoadedThroughWorker = true;
         var ctxFilename = null;
@@ -101,7 +102,11 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
         }
     } else {
         isLoadedThroughCLI = true;
-        ctxObj = JSON.parse(tmp[2]);
+        try {
+            ctxObj = JSON.parse(tmp[2]);
+        } catch (contextException) {
+            console.error(new Error('[ FRAMEWORK ] Context Exception raised !\nContent (tmp[2]) should be a JSON String: '+ tmp[2] +'\n'+ contextException.stack));
+        }
     }
 
 
@@ -176,8 +181,8 @@ try {
 if ( typeof(getEnvVar) == 'undefined') {
     console.debug('[ FRAMEWORK ][PROCESS ARGV] Process ARGV error ' + process.argv);
 }
-//console.debug('[ FRAMEWORK ] GINA_HOMEDIR ' + getEnvVar('GINA_HOMEDIR') );
 
+// console.debug('[ FRAMEWORK ] GINA_HOMEDIR [' + (GINA_HOMEDIR||null) +'] vs getEnvVar(GINA_HOMEDIR) [' + getEnvVar('GINA_HOMEDIR') +']' );
 var projects    = require( _(GINA_HOMEDIR + '/projects.json') );
 var root        = projects[projectName].path;
 

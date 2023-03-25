@@ -459,7 +459,12 @@ function Start(opt, cmd) {
                             if (/address already in use/i.test(error)) {
                                 return terminal.warn(error);
                             }
-                            return terminal.info(error);
+
+                            if (/listening|attached/i.test(error)) {
+                                return terminal.info(error);
+                            }
+
+                            return terminal.error(error);
                         }
 
                         terminal.error(error);
