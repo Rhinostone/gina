@@ -612,9 +612,9 @@ function CmdHelper(cmd, client, debug) {
                 && !/\:(link|link-node-modules)$/.test(cmd.task)
             ) {
                 if (
-                    /project\:(start|stop)$/.test(cmd.task)
+                    /project\:(restart|start|stop)$/.test(cmd.task)
                     ||
-                    /bundle\:(start|stop)$/.test(cmd.task)
+                    /bundle\:(restart|start|stop)$/.test(cmd.task)
                 ) {
                     console.debug('Running: gina link-node-modules @'+cmd.projectName);
                     err = execSync('gina link-node-modules @'+cmd.projectName);// +' --inspect-gina'

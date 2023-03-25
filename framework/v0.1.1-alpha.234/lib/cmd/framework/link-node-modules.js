@@ -57,6 +57,10 @@ var console         = lib.logger;
             return end(err, 'error')
         }
 
+        if ( typeof(projectObj.homedir) == 'undefined' || projectObj.homedir == '' || !projectObj.homedir) {
+            projectObj.homedir = self.projectHomedir || _(getUserHome() +'/.'+ self.projectName, true);
+        }
+
         var nodeModulesFromProjectHomeDir = _(projectObj.homedir + '/lib/node_modules', true)
         var nodeModulesDirObj = new _(self.projectLocation + '/node_modules', true);
         var hasNodeModules = ( nodeModulesDirObj.existsSync() ) ? true : false;
