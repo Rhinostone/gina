@@ -55,16 +55,18 @@ function Build(opt, cmd){
         }
     }
 
-    self.buildToolbar = function(done) {
-        var pluginDir       = _(GINA_CORE +'/asset/plugin', true);// jshint ignore:line
-        var toolbarDistObj  = new _(pluginDir +'/dist/toolbar', true);
-        if ( toolbarDistObj.existsSync() ) {
-            toolbarDistObj.rmSync()
-        }
 
-        var toolbarSrcObj   = new _(pluginDir +'/src/gina/toolbar', true);
-        var excludedList    = ['.gitignore', 'mock.gina.json', 'mock.user.json', 'readme.md', 'sass', 'svg-src'];
-        toolbarSrcObj.cp(toolbarDistObj.toString(), excludedList, done);
+    self.buildFrontPlugin = function(done) {
+        var argv        = process.argv.slice(3);
+        var bashScript  = _(GINA_CORE +'/asset/plugin/build', true);// jshint ignore:line
+        if (Array.isArray(argv) && argv.length > 0) {
+            bashScript += " "+argv.join(" ")
+        }
+        console.debug('Used arguments ', argv.join(" "));
+        console.debug('Running: '+ bashScript);
+
+        console.log(execSync(bashScript).toString());
+        done()
     }
 
     var end = function (output, type, messageOnly) {

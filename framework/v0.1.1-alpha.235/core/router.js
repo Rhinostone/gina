@@ -506,7 +506,8 @@ function Router(env) {
                             Setup.renderJSON            = controller.renderJSON;
                             Setup.renderWithoutLayout   = controller.renderWithoutLayout;
                             Setup.isXMLRequest          = controller.isXMLRequest;
-                            Setup.isWithCredentials     = controller.isWithCredentials,
+                            Setup.isWithCredentials     = controller.isWithCredentials;
+                            Setup.isPopinContext        = controller.isPopinContext;
                             Setup.isCacheless           = controller.isCacheless;
                             Setup.requireController     = controller.requireController;
 

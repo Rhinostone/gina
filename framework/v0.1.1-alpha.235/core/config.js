@@ -2275,6 +2275,12 @@ function Config(opt, contextResetNeeded) {
         return (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false;
     }
     /**
+     * Check if the project scope is set for local
+     * */
+    this.isLocalScope = function() {
+        return (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false;
+    }
+    /**
      * Refresh for cachless mode
      *
      * @param {string} bundle

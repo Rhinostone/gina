@@ -21,8 +21,9 @@ var console         = lib.logger;
  */
 
 function Couchbase(conn, infos) {
-    var EntitySuperClass = null, EntityN1qlClass = null;
-    var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+    var EntitySuperClass    = null, EntityN1qlClass = null;
+    var envIsDev            = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+    var scopeIsLocal        = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
 
     /**
      * Init
@@ -98,7 +99,7 @@ function Couchbase(conn, infos) {
 
 
             for (; f<files.length; ++f) {
-                // ignoring filename starting with .
+                // skip hidden
                 if ( /^\./.test(files[f]) ) {
                     continue;
                 }
@@ -111,11 +112,11 @@ function Couchbase(conn, infos) {
         return entities
     };
 
-    var loadN1QL = function(entities, filename) {
+    var loadN1QL = function(entities, filename, originalInfos) {
         var arr = null
             , entityName = null
         ;
-
+        // n1ql/<entityName>/
         if ( fs.statSync(filename).isDirectory() ) {
             var files           = fs.readdirSync(filename)
                 , f             = 0
@@ -123,33 +124,65 @@ function Couchbase(conn, infos) {
             arr         = filename.split(/\//g);
             entityName  = arr[arr.length-1];
             entityName  = entityName.charAt(0).toUpperCase() + entityName.slice(1);
-
+            if ( typeof(originalInfos) != 'undefined' ) {
+                entityName  = originalInfos.entityName;
+            }
+            // n1ql/<entityName>/<method>
             for (; f < files.length; ++f) {
+                // skip hidden
+                if ( /^\./.test(files[f]) ) {
+                    continue;
+                }
+
+                let methodFilename = _(filename + '/' + files[f], true);
+                // will ignore <sub folder> excepted when `<sub folder>/_main.sql` is found
+                if ( fs.statSync(methodFilename).isDirectory() ) {
+                    // skip empty
+                    if (fs.readdirSync(methodFilename).length === 0) {
+                        continue;
+                    }
+
+                    // _main.sql case
+                    let altFilenameObj = new _(methodFilename + '/_main.sql', true);
+                    if (altFilenameObj.existsSync()) {
+                        let arr             = methodFilename.split(/\//g);
+                        let altMethodName   =  arr[arr.length-1].replace(/\.sql/, '') || null;
+                        readSource(entities, entityName, altFilenameObj.toString(), altMethodName);
+                        continue;
+                    }
+                    // TODO - See if <sub folder>For/<anything> is possible
+                    // loadN1QL(entities, methodFilename, {entityName: entityName});
+                    continue;
+                }
+
+
                 // ignoring filename starting with . & sub folders
                 if (
                     /^\./.test(files[f])
                     ||
                     !/\.sql$/i.test(files[f])
-                    ||
-                    fs.statSync( _(filename + '/' + files[f], true) ).isDirectory()
                 ) {
                     continue;
                 }
-                readSource(entities, entityName, filename + '/' + files[f])
+                readSource(entities, entityName, methodFilename)
             }
 
-        } else {
-            arr         = filename.split(/\//g);
-            entityName  =  arr[arr.length-1].replace(/\.sql/, '').split(/\_/)[0];
-            entityName  = entityName.charAt(0).toUpperCase() + entityName.slice(1);
-
-            readSource(entities, entityName, filename)
+            return;
         }
+
+        arr         = filename.split(/\//g);
+        entityName  = arr[arr.length-1].replace(/\.sql/, '').split(/\_/)[0];
+        entityName  = entityName.charAt(0).toUpperCase() + entityName.slice(1);
+        if ( typeof(originalInfos) != 'undefined' ) {
+            entityName  = originalInfos.entityName;
+        }
+
+        readSource(entities, entityName, filename);
     }
 
-    var readSource = function (entities, entityName, source) {
+    var readSource = function (entities, entityName, source, altMethodName) {
         var arr             = source.split(/\//g)
-            , name          = arr[arr.length-1].replace(/\.sql/, '') || null
+            , name          = altMethodName || arr[arr.length-1].replace(/\.sql/, '') || null
             , comments      = ''
             , queryString   = null
             , includes      = null
@@ -599,7 +632,7 @@ function Couchbase(conn, infos) {
                                         try {
                                             onQueryCallback(false, data.rows, data.meta);
                                         } catch (_err) {
-                                            _err.stack = '[ ' + trigger + '] onQueryCallbackError: - Did you leave any bad comments ?\n- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
+                                            _err.stack = '[ ' + trigger + '] onQueryCallbackError: \n\t- Did you leave any bad comments ?\n\t- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
                                             console.error(_err.stack);
                                         }
                                     });

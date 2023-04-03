@@ -381,6 +381,8 @@ function ContextHelper(contexts) {
 
         var env = ctx.env || getEnvVar('GINA_ENV');
         var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+        var scope = ctx.scope || getEnvVar('GINA_SCOPE');
+        var scopeIsLocal = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
         var Config = ctx.gina.Config;
         var conf = null;
 
@@ -389,6 +391,7 @@ function ContextHelper(contexts) {
         } else {
             conf = new Config({
                 env: env,
+                scope: scope,
                 projectName: getContext('projectName'),
                 executionPath: getPath('project'),
                 startingApp: bundle,
@@ -410,6 +413,7 @@ function ContextHelper(contexts) {
             try {
                 conf.bundlesConfiguration.conf.bundle = bundle;
                 conf.bundlesConfiguration.conf.env = env;
+                conf.bundlesConfiguration.conf.scope = scope;
                 conf.bundlesConfiguration.conf.projectName = getContext('projectName');
                 conf.bundlesConfiguration.conf.bundles = getContext('bundles');
 
@@ -484,11 +488,14 @@ function ContextHelper(contexts) {
             }
         }
 
-        var env         = process.env.NODE_ENV || GINA_ENV;
-        var envIsDev    = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+        var env             = process.env.NODE_ENV || GINA_ENV;
+        var envIsDev        = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+        var scope           = process.env.NODE_SCOPE || GINA_SCOPE;
+        var scopeIsLocal    = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
         var Config      = ctx.gina.Config;
         var conf = new Config({
             env             : env,
+            scope             : scope,
             projectName     : getContext('projectName'),
             executionPath   : getPath('project'),
             startingApp     : bundle,
@@ -525,10 +532,12 @@ function ContextHelper(contexts) {
                     };
 
                     return new LibClass ({
-                        bundle      : bundle,
-                        env         : env,
-                        cacheless   : envIsDev,
-                        libPath     : libPath
+                        bundle          : bundle,
+                        env             : env,
+                        cacheless       : envIsDev,
+                        scope           : scope,
+                        scopeIsLocal    : scopeIsLocal,
+                        libPath         : libPath
                     })
 
                 } catch(err) {
