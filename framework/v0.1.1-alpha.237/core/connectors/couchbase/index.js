@@ -310,7 +310,7 @@ function Couchbase(conn, infos) {
                             }
 
 
-                            if ( sdkVersion == 3 ) { // SDK v3 only
+                            if ( sdkVersion == 3 ) { // SDK v3 ONLY
                                 queryParams = {};
                                 index = 0; i = 0; len = inlineParams.length;
                                 var matched = null;
@@ -319,16 +319,16 @@ function Couchbase(conn, infos) {
                                     matched = params.indexOf( inl[i] );
                                     if ( matched > -1 && typeof(p[matched]) != 'undefined' )  {
                                         // e.g.: queryParams[ $3 ] = 1
-                                        queryParams[ inl[i] ] = p[matched];
+                                        // queryParams[ inl[i] ] = p[matched];
                                         // qStr = qStr.replace( new RegExp('\\'+ inl[i], 'g'), '"' + p[matched] + '"')
                                     }
                                 }
-                            } else {
-                                // Novemeber 2020 patch
+                            } else { // v2 & v > 3
+                                // April 2023 patch - Replaced p[i] by args[i]
                                 index = 0; i = 0; len = params.length;
                                 for (; i < len; ++i) {
-                                    if ( typeof(p[i]) != 'undefined' )  {
-                                        queryParams[i] = p[i];
+                                    if ( typeof(args[i]) != 'undefined' )  {
+                                        queryParams[i] = args[i];
                                     } else { // means that placeholder has been replaced
                                         // But we still need to keep the reference in the list
                                         queryParams[i] = null
