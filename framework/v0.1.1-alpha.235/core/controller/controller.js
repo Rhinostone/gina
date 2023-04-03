@@ -1148,6 +1148,13 @@ function SuperController(options) {
         return ( /true/.test(local.options.withCredentials) ) ? true : false;
     }
 
+    this.isPopinContext = function() {
+        return (
+            typeof(local.req.headers['x-gina-popin-id']) != 'undefined'
+            || typeof(local.req.headers['x-gina-popin-name']) != 'undefined'
+        ) ? true : false;
+    }
+
     /**
      * Render JSON
      *
@@ -1574,7 +1581,7 @@ function SuperController(options) {
      * N.B.: When you are in a popin context, add an `id` to your template tag so it can be ignored by the default PopinHandler
      *    E.g.: id="delete-link" -> <a href="#" id="delete-link">delete</a>
      *
-     * You have to ways of using this method
+     * You have two ways of using this method
      *
      * 1) Through routing.json
      * ---------------------
@@ -1805,7 +1812,17 @@ function SuperController(options) {
                 //path = local.req.headers.host + path
             }
 
-
+            var isPopinContext = false;
+            if (
+                typeof(req.routing.param.isPopinContext) != 'undefined'
+                && /^true$/i.test(req.routing.param.isPopinContext)
+                && self.isXMLRequest()
+                ||
+                self.isPopinContext()
+                && self.isXMLRequest()
+            ) {
+                isPopinContext = true;
+            }
 
             if (!headersSent()) {
 
@@ -1857,14 +1874,25 @@ function SuperController(options) {
                     // if redirecting from a xhrRequest
                     if ( self.isXMLRequest() ) {
                         // `requestParams` should be stored in the session to avoid passing datas in clear
-                        var redirectObj = { location: path, isXhrRedirect: true };
+                        var redirectObj = { isXhrRedirect: true };
+                        if (isPopinContext) {
+                            redirectObj.popin = {
+                                url: path
+                            }
+                        } else {
+                            redirectObj.location = path;
+                        }
                         if (requestParams.count() > 0)  {
                             var userSession = req.session.user || req.session;
                             if ( userSession && local.haltedRequestUrlResumed ) {
                                 // will be reused for server.js on `case : 'GET'`
                                 userSession.inheritedData = requestParams;
                             } else { // will be passed in clear
-                                redirectObj.location += inheritedData;
+                                if (isPopinContext) {
+                                    redirectObj.popin.url += inheritedData
+                                } else {
+                                    redirectObj.location += inheritedData;
+                                }
                             }
                         }
 
@@ -1875,6 +1903,15 @@ function SuperController(options) {
                     if (inheritedDataIsNeeded) {
                         path += inheritedData;
                     }
+                }
+                // Popin redirect
+                if ( isPopinContext ) {
+                    return self.renderJSON({
+                        isXhrRedirect: true,
+                        popin: {
+                            url: path
+                        }
+                    })
                 }
 
                 var ext = 'html';
@@ -3618,6 +3655,9 @@ function SuperController(options) {
             if (
                 typeof(req.routing.param.isPopinContext) != 'undefined'
                 && /^true$/i.test(req.routing.param.isPopinContext)
+                && self.isXMLRequest()
+                ||
+                self.isPopinContext()
                 && self.isXMLRequest()
             ) {
                 return self.renderJSON({

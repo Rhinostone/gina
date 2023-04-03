@@ -50,19 +50,19 @@ function Remove(opt, cmd) {
     }
 
     var removeEnv = function(projects, target) {
-        var err = null, env = local.env;
-        // default `dev env` cannot be removed
-        if(env === projects[self.projectName]['dev_env']|| env === projects[self.projectName]['def_env']) {
-            if (env === projects[self.projectName]['def_env']) {
-                err = new Error('Environment [ '+env+' ] is set as "default environment"')
+        var err = null, scope = local.scope;
+        // default `local scope` cannot be removed
+        if(scope === projects[self.projectName]['local_scope']|| env === projects[self.projectName]['def_scope']) {
+            if (scope === projects[self.projectName]['def_env']) {
+                err = new Error('Scope [ '+scope+' ] is set as "default scope"')
             } else {
-                err = new Error('Environment [ '+env+' ] is linked as "development environment"')
+                err = new Error('Scope [ '+scope+' ] is linked as "local scope"')
             }
 
             return end(err);
         }
 
-        projects[self.projectName]['envs'].splice(projects[self.projectName]['envs'].indexOf(env), 1);
+        projects[self.projectName]['scopes'].splice(projects[self.projectName]['scopes'].indexOf(scope), 1);
         lib.generator.createFileFromDataSync(
             projects,
             target
@@ -110,17 +110,17 @@ function Remove(opt, cmd) {
         lib.generator.createFileFromDataSync(portsReverse, portsReversePath);
         lib.generator.createFileFromDataSync(envs, envsPath);
 
-        updateManifest();
+        updateManifest(projects);
     };
 
-    var updateManifest = function() {
-        var env = local.env;
+    var updateManifest = function(projects) {
+        var scope = local.scope;
         var projectData    = JSON.clone(self.projectData);
-        for (let bundle in projectData.bundles) {
-            if ( typeof(projectData.bundles[bundle].releases[env].target) != 'undefined' ) {
-                delete projectData.bundles[bundle].releases[env].target
-            }
+
+        if (projectData.scope == scope) {
+            projectData.scope = projects[self.projectName]['def_scope']
         }
+        projectData.scope  = scope;
 
         lib.generator.createFileFromDataSync(projectData, self.projectManifestPath);
 
@@ -138,13 +138,12 @@ function Remove(opt, cmd) {
 
             return process.exit(1);
         }
-        var env = local.env;
-        console.log('Environment [ '+env+' ] removed with success');
+        var scope = local.scope;
+        console.log('Scope [ '+scope+' ] removed with success');
 
         return process.exit(0)
     }
 
     init()
-};
-
-module.exports = Remove
+}
+module.exports = Remove;

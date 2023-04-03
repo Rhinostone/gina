@@ -1,79 +1,109 @@
-var console = lib.logger;
+var CmdHelper   = require('./../helper');
+var console     = lib.logger;
 /**
- * Select the default environment
+ * Select the default scope
  * */
 function Use(opt, cmd) {
     var self = {};
 
+    console.debug('scope:use called');
+
     var init = function() {
         self.target = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
+        var err = null;
 
+        // if ( typeof(process.argv[4]) != 'undefined') {
+        //     if ( !isValidName(process.argv[4]) ) {
+        //         err = new Error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
+        //         return end(err, 'log', true);
+        //     }
+        // } else {
+        //     // is current path == project path ?
+        //     var root = process.cwd();
+        //     var name = new _(root).toArray().last();
+        //     if ( isDefined(name) ) {
+        //         self.name = name
+        //     }
+        // }
 
+        // if ( typeof(self.name) == 'undefined' ) {
+        //     err = new Error('Project name is required: @<project_name>');
+        //     end(err, 'log', true);
+        // } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
+        //     if ( typeof(process.argv[3]) != 'undefined' ) {
 
-        if ( typeof(process.argv[4]) != 'undefined') {
-            if ( !isValidName(process.argv[4]) ) {
-                console.error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
-                process.exit(1);
-            }
-        } else {
-            // is current path == project path ?
-            var root = process.cwd();
-            var name = new _(root).toArray().last();
-            if ( isDefined(name) ) {
-                self.name = name
-            }
+        //         if ( !self.projects[self.name].scopes.inArray(process.argv[3]) ) {
+        //             err = new Error('Scope [ '+process.argv[3]+' ] not found');
+        //             return end(err, 'log', true);
+        //         }
+        //     } else {
+        //         err = new Error('Missing argument in [ gina scope:use <scope> ]');
+        //         end(err, 'log', true);
+        //     }
+        //     useScope(process.argv[3], self.projects, self.target)
+        // } else {
+        //     err = new Error('[ '+self.name+' ] is not a valid project name.');
+        //     end(err, 'log', true);
+        // }
+
+        // import CMD helpers
+        new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
+
+        // check CMD configuration
+        if ( !isCmdConfigured() ) return false;
+
+        if (!self.scopes) {
+            return end( new Error('No scope found for your project `'+ self.projectName +'`') );
         }
 
-        if ( typeof(self.name) == 'undefined' ) {
-            console.error('Project name is required: @<project_name>');
-            process.exit(1)
-        } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
-            if ( typeof(process.argv[3]) != 'undefined' ) {
-
-                if ( !self.projects[self.name].envs.inArray(process.argv[3]) ) {
-                    console.error('Environment [ '+process.argv[3]+' ] not found');
-                    process.exit(1)
-                }
-            } else {
-                console.error('Missing argument in [ gina env:use <environment> ]');
-                process.exit(1)
-            }
-            useEnv(process.argv[3], self.projects, self.target)
-        } else {
-            console.error('[ '+self.name+' ] is not a valid project name.');
-            process.exit(1)
-        }
-
+        useScope(process.argv[3], self.projects, self.target)
     }
 
-    var isDefined = function(name) {
-        if ( typeof(self.projects[name]) != 'undefined' ) {
-            return true
-        }
-        return false
+    var updateManifest = function(scope, projects) {
+        var projectData    = JSON.clone(self.projectData);
+        projectData.scope = scope
+
+        lib.generator.createFileFromDataSync(projectData, self.projectManifestPath);
     }
 
-    var isValidName = function(name) {
-        if (name == undefined) return false;
+    var useScope = function(scope, projects, target) {
+        console.debug('proj.: ', scope, self.name, projects[self.name]);
 
-        self.name = name.replace(/\@/, '');
-        var patt = /^[a-z0-9_.]/;
-        return patt.test(self.name)
-    }
+        // defining for gina only
+        if ( typeof(projects[self.name]) == 'undefined' ) {
 
-    var useEnv = function(env, projects, target) {
-        //console.log('proj.: ', self.name, projects[self.name]);
-        if (env !== projects[self.name]['def_env']) {
-            projects[self.name]['def_env'] = env;
-            lib.generator.createFileFromDataSync(
-                projects,
-                target
-            )
+            return end('Scope [ '+ scope +' ] defined with success')
         }
+        // if (scope !== projects[self.name]['def_scope']) {
+        //     projects[self.name]['def_scope'] = scope;
+        //     lib.generator.createFileFromDataSync(
+        //         projects,
+        //         target
+        //     )
+        // }
+
+        updateManifest(scope, projects);
+
+        end('Scope [ '+ scope +' ] defined with success')
     };
 
-    init()
-};
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
+            if ( typeof(type) != 'undefined' ) {
+                console[type](output)
+            } else {
+                console.log(output);
+            }
+        }
 
-module.exports = Use
+        process.exit( err ? 1:0 )
+    }
+
+    init()
+}
+module.exports = Use;

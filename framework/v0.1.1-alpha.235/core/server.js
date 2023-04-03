@@ -199,9 +199,17 @@ function Server(options) {
             process.exit(1)
         }
     }
-
+    /**
+     * Check if env is running cacheless
+     * */
     this.isCacheless = function() {
         return (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
+    }
+    /**
+     * Check if the project scope is set for local
+     * */
+    this.isLocalScope = function() {
+        return (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false;
     }
 
     this.onConfigured = function(callback) {
@@ -221,6 +229,7 @@ function Server(options) {
                 method: 'GET',
                 // rejectUnauthorized: true,
                 port: port || 443,
+                path: "/_gina/health/check",
                 ca: fs.readFileSync(self.conf[self.appName][self.env].content.settings.server.credentials.ca),
                 agent: new https.Agent({
                     maxCachedSessions: 0
@@ -1924,11 +1933,18 @@ function Server(options) {
              *  - form security
              */
             var ginaHeaders = {
-                form: {}
+                form: {},
+                popin: {}
             };
             // if (/x\-gina\-form\-id/i.test(request.headers['access-control-request-headers']) ) {
             if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
                 ginaHeaders.form.id = request.headers['x-gina-form-id'];
+            }
+            if ( typeof(request.headers['x-gina-popin-id']) != 'undefined' ) {
+                ginaHeaders.popin.id = request.headers['x-gina-popin-id'];
+            }
+            if ( typeof(request.headers['x-gina-popin-name']) != 'undefined' ) {
+                ginaHeaders.popin.name = request.headers['x-gina-popin-name'];
             }
             if ( typeof(request.headers['x-gina-form-rule']) != 'undefined' ) {
                 var rule = request.headers['x-gina-form-rule'].split(/\@/);

@@ -63,6 +63,9 @@ function CmdHelper(cmd, client, debug) {
         envPath : null, // path to env.json - defined by filterArgs()
         // current env {object}
         envData : {}, // defined by loadAssets()
+        scopes : [], // all gina envs defined by loadAssets()
+        defaultScope : null, // defined by loadAssets()
+        localScope : null, // defined by loadAssets()
         envs : [], // all gina envs defined by loadAssets()
         defaultEnv : null, // defined by loadAssets()
         devEnv : null, // defined by loadAssets()
@@ -500,13 +503,65 @@ function CmdHelper(cmd, client, debug) {
             cmd.def_framework_short = ( typeof(cmd.projects[cmd.projectName].framework) != 'undefined' ) ? (cmd.projects[cmd.projectName].framework.replace(/^v/, '').split(/\./g).splice(0,2)).join('.') : (cmd.mainConfig.def_framework.split(/\./g).splice(0,2)).join('.');
             console.debug('default def_framework_short ', cmd.def_framework_short);
 
-            // updating default envs list
-            cmd.envs = [];
-            for (let e in cmd.projects[cmd.projectName].envs) {
-                cmd.envs.push(cmd.projects[cmd.projectName].envs[e])
-            }
+            // // updating default scopes list
+            // cmd.scopes = [];
+            // for (let e in cmd.projects[cmd.projectName].scopes) {
+            //     cmd.scopes.push(cmd.projects[cmd.projectName].scopes[e])
+            // }
+            // cmd.scopes.sort();
 
+            // // updating default envs list
+            // cmd.envs = [];
+            // for (let e in cmd.projects[cmd.projectName].envs) {
+            //     cmd.envs.push(cmd.projects[cmd.projectName].envs[e])
+            // }
+            // cmd.envs.sort();
+
+
+            // getting default scopes list
+            cmd.scopes = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['scopes'] : cmd.mainConfig['scopes'][ GINA_SHORT_VERSION ];
+            // getting default scope
+            cmd.defaultScope = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_scope'] : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ];
+            // getting dev scope
+            cmd.localScope = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['local_scope'] : cmd.mainConfig['local_scope'][ GINA_SHORT_VERSION ];
+            // project or bundle scope override through : --scope=<some scope>
+            if ( typeof(cmd.params.scope) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
+                console.debug('Overriding default project scope: '+ cmd.defaultScope +' => '+ cmd.params.scope);
+                if (cmd.scopes.indexOf(cmd.params.scope) < 0) {
+                    errMsg = 'Scope `'+ cmd.params.scope +'` not found in your project ['+ cmd.projectName +']';
+                    console.error(errMsg);
+                    return false;
+                }
+                cmd.defaultScope = process.env.NODE_SCOPE = cmd.params.scope;
+            } else {
+                delete process.env.NODE_SCOPE
+            }
+            cmd.scopes.sort();
+
+            // getting default envs list
+            cmd.envs = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
+            // getting default env
+            cmd.defaultEnv = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
+            // getting dev env
+            cmd.devEnv = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
+            //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.defaultEnv; // by default
+            // project or bundle environment override through : --env=<some env>
+            if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
+                console.debug('Overriding default project env: '+ cmd.defaultEnv +' => '+ cmd.params.env);
+                if (cmd.envs.indexOf(cmd.params.env) < 0) {
+                    errMsg = 'Environment `'+ cmd.params.env +'` not found in your project ['+ cmd.projectName +']';
+                    console.error(errMsg);
+                    return false;
+                }
+                cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
+                // override
+                //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
+            } else {
+                delete process.env.NODE_ENV
+            }
             cmd.envs.sort();
+
+
             // updating default protocols list
             cmd.protocols = [];
             for (let p in cmd.projects[cmd.projectName].protocols) {
@@ -554,15 +609,15 @@ function CmdHelper(cmd, client, debug) {
             // protocols & schemes list: for the project
             re = new RegExp('\@' + cmd.projectName, '');
 
-            for (var protocol in ports) {
+            for (let protocol in ports) {
                 if ( typeof(cmd.portsData[protocol]) == 'undefined')
                     cmd.portsData[protocol] = {};
 
-                for (var scheme in ports[protocol]) {
+                for (let scheme in ports[protocol]) {
                     if ( typeof(cmd.portsData[protocol][scheme]) == 'undefined')
                         cmd.portsData[protocol][scheme] = {};
 
-                    for (var port in ports[protocol][scheme]) {
+                    for (let port in ports[protocol][scheme]) {
                         // updating protocols list
                         if (cmd.protocols.indexOf(protocol) < 0 && re.test(ports[protocol][scheme][port])) {
                             //cmd.protocols.push(protocol);
@@ -639,27 +694,27 @@ function CmdHelper(cmd, client, debug) {
         cmd.protocols.sort();
         cmd.schemes.sort();
 
-        // getting defautl envs list
-        cmd.envs = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
-        // getting default env
-        cmd.defaultEnv = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
-        // getting dev env
-        cmd.devEnv = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
-        //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.defaultEnv; // by default
-        // project or bundle environment override through : --env=<some env>
-        if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
-            console.debug('Overriding default project env: '+ cmd.defaultEnv +' => '+ cmd.params.env);
-            if (cmd.envs.indexOf(cmd.params.env) < 0) {
-                errMsg = 'Environment `'+ cmd.params.env +'` not found in your project ['+ cmd.projectName +']';
-                console.error(errMsg);
-                return false;
-            }
-            cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
-            // override
-            //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
-        } else {
-            delete process.env.NODE_ENV
-        }
+        // // getting default envs list
+        // cmd.envs = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
+        // // getting default env
+        // cmd.defaultEnv = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
+        // // getting dev env
+        // cmd.devEnv = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
+        // //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.defaultEnv; // by default
+        // // project or bundle environment override through : --env=<some env>
+        // if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
+        //     console.debug('Overriding default project env: '+ cmd.defaultEnv +' => '+ cmd.params.env);
+        //     if (cmd.envs.indexOf(cmd.params.env) < 0) {
+        //         errMsg = 'Environment `'+ cmd.params.env +'` not found in your project ['+ cmd.projectName +']';
+        //         console.error(errMsg);
+        //         return false;
+        //     }
+        //     cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
+        //     // override
+        //     //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
+        // } else {
+        //     delete process.env.NODE_ENV
+        // }
 
         // available protocols
         cmd.protocolsAvailable = cmd.mainConfig.protocols[GINA_SHORT_VERSION];
@@ -901,6 +956,9 @@ function CmdHelper(cmd, client, debug) {
 
             case 'env':
                 return ( typeof(cmd.envs) != 'undefined' && cmd.envs.indexOf(name) > -1 ) ? true : false;
+
+            case 'scope':
+                return ( typeof(cmd.scopes) != 'undefined' && cmd.scopes.indexOf(name) > -1 ) ? true : false;
 
             default:
                 return false;

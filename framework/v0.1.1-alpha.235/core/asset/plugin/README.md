@@ -89,7 +89,7 @@ cd /usr/local/node_modules/gina/node_modules/gina/framework/v.0.1.0/core/asset/p
 ```
 
 ```tty
-java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
+java -jar ./lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level ADVANCED_OPTIMIZATIONS --js ./src/vendor/gina/utils/loader.js --create_source_map ./dist/gina.onload.min.js.map --js_output_file ./dist/gina.onload.min.js
 ```
 
 ### Building SASS assets into CSS
@@ -121,13 +121,13 @@ cd ${project}/node_modules/gina/core/asset/plugin
 #### Without GZIP
 
 ```tty
-cat ./src/gina/toolbar/css/toolbar.css ./src/gina/popin/css/popin.css | csso > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
+cat ./src/vendor/gina/toolbar/css/toolbar.css ./src/vendor/gina/popin/css/popin.css | csso > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
 ```
 
 #### With GZIP
 
 ```tty
-cat ./src/gina/toolbar/css/toolbar.css ./src/gina/popin/css/popin.css | csso | gzip -9 -c > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
+cat ./src/vendor/gina/toolbar/css/toolbar.css ./src/vendor/gina/popin/css/popin.css | csso | gzip -9 -c > ./dist/gina.min.css | csso ./dist/gina.min.css --map ./dist/gina.min.css.map
 ```
 
 ## Using GFF

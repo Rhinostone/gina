@@ -35,6 +35,8 @@ function Restart(opt, cmd) {
             }
         }
 
+        self.inheritedArgv =  self.inheritedArgv.join(' ');
+
         // start all bundles
         opt.onlineCount = 0;
         opt.notStarted = [];

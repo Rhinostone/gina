@@ -880,6 +880,18 @@
             options.headers['X-Gina-Form-Rule'] = $form.target.dataset.ginaFormRule +'@'+ gina.config.bundle;
         }
 
+        if (isPopinContext()) {
+            // select popin current active popin
+            $activePopin = gina.popin.getActivePopin();
+            if ( $activePopin.isOpen ) {
+                if ( typeof($activePopin.id) != 'undefined' )
+                    options.headers['X-Gina-Popin-Id'] = $activePopin.id;
+
+                if ( typeof($activePopin.name) != 'undefined' )
+                    options.headers['X-Gina-Popin-Name'] = $activePopin.name;
+            }
+        }
+
 
         // forward callback to HTML data event attribute through `hform` status
         hFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-submit-success') || $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;

@@ -15,6 +15,8 @@ const console           = lib.logger;
 
 const env       = process.env.NODE_ENV
     , isDev     = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
+    , scope         = process.env.NODE_SCOPE
+    , isLocalScope  = (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false
 ;
 
 var refreshCore = function() {

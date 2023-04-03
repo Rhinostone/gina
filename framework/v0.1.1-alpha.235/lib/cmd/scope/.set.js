@@ -3,10 +3,10 @@ var console = lib.logger;
  * Add or edit framework settings
  *
  *  // set or change log_level
- *  $ gina env:set --log-level=debug
+ *  $ gina scope:set --scope=production
  *
  *  // remove sample key
- *  $ gina env:set --sample
+ *  $ gina scope:unset --scope
  *
  *  NB.: key values can be set to undefined or null
  *  $ gina env:set --sample=undefined
