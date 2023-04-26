@@ -522,6 +522,19 @@ function CmdHelper(cmd, client, debug) {
             cmd.bundlesLocation     = _(cmd.projects[cmd.projectName].path +'/src', true);
             cmd.envPath             = _(cmd.projects[cmd.projectName].path + '/env.json', true);
 
+            if ( ! new _(cmd.envPath).existsSync() ) {
+                if ( !/^project\:(add|import)/.test(cmd.task) ) {
+                    console.error('Project env.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
+                    return process.exit(1);
+                }
+
+                // Creating default manifest
+                lib.generator.createFileFromDataSync(
+                    {},
+                    cmd.envPath
+                )
+            }
+
             if (fs.existsSync(cmd.projectLocation) ) {
                 cmd.projects[cmd.projectName].exists = true;
             } else {
