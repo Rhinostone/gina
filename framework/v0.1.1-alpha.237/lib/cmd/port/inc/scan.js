@@ -53,7 +53,7 @@ module.exports = function Scanner(opt, cb){
         , total = ~~opt.limit
     ;
 
-    var find = function(port) {
+    var find = function(port, cb) {
 
         if (port > self.end) { // not available port found
             console.warn('found '+ ports.length +'/'+ total);
@@ -100,7 +100,7 @@ module.exports = function Scanner(opt, cb){
                     cb(false, ports);
                 } else {
                     port++;
-                    find(port);
+                    find(port, cb);
                 }
                 return;
             } else if (err) {
@@ -116,9 +116,9 @@ module.exports = function Scanner(opt, cb){
             s.destroy();
 
             port++;
-            find(port);
+            find(port, cb);
         })
     };
 
-    find(port)
+    find(port, cb)
 }

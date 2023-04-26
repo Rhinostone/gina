@@ -60,21 +60,6 @@ function Reset(opt, cmd) {
         // }
     }
 
-    //  check if bundle is defined
-    // var isDefined = function(name) {
-    //     if (typeof (self.projects[name]) != 'undefined') {
-    //         return true
-    //     }
-    //     return false
-    // }
-
-    // var isValidName = function(name) {
-    //     if (name == undefined) return false;
-
-    //     self.name = name.replace(/\@/, '');
-    //     var patt = /^[a-z0-9_.]/;
-    //     return patt.test(self.name)
-    // }
 
     var reset = function() {
         // get bundles list
