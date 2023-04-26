@@ -62,7 +62,7 @@ function Add(opt, cmd) {
         // creating project file
         file = new _(self.projectLocation + '/manifest.json', true);
         if ( !file.existsSync() ) {
-            createProjectFile( file.toString() )
+            createManifestFile( file.toString() )
         } else {
             console.warn('[ manifest.json ] already exists in this location: '+ file);
         }
@@ -141,7 +141,7 @@ function Add(opt, cmd) {
         }
     }
 
-    var createProjectFile = function(target) {
+    var createManifestFile = function(target) {
 
         loadAssets();
 

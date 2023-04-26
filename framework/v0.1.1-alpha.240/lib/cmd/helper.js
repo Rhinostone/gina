@@ -469,10 +469,7 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.projectManifestPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectManifestPath)]
             }
-            if ( ! new _(cmd.projectManifestPath).existsSync()  && !/^project\:(add|import)/.test(cmd.task) ) {
-                console.error('Project manifest.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
-                return process.exit(1);
-            }
+
 
             cmd.projectData         = requireJSON(cmd.projectManifestPath);
 
@@ -706,6 +703,27 @@ function CmdHelper(cmd, client, debug) {
                     console.error(err.message || err.stack);
                     return exit(err.message || err.stack);
                 }
+            }
+
+            if ( ! new _(cmd.projectManifestPath).existsSync() ) {
+                if ( !/^project\:(add|import)/.test(cmd.task) ) {
+                    console.error('Project manifest.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
+                    return process.exit(1);
+                }
+
+                // Creating default manifest
+                var conf        = _(getPath('gina').core +'/template/conf/manifest.json', true);
+                var contentFile = require(conf);
+                var dic = {
+                    "project"   : cmd.projectName,
+                    "version"   : "1.0.0"
+                };
+
+                contentFile = whisper(dic, contentFile); //data
+                lib.generator.createFileFromDataSync(
+                    contentFile,
+                    _(cmd.projectManifestPath, true)
+                )
             }
         }
 
