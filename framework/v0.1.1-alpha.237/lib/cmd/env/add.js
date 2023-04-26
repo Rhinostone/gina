@@ -398,7 +398,7 @@ function Add(opt, cmd) {
         //writing
         lib.generator.createFileFromDataSync(
             projects,
-            self.projectsPath
+            self.projectConfigPath
         );
         self.projectDataWrote = true
     }
@@ -423,7 +423,7 @@ function Add(opt, cmd) {
             lib.generator.createFileFromDataSync(self.portsReverseData, self.portsReversePath);
 
             // restore projects.json
-            lib.generator.createFileFromDataSync(self.projects, self.projectsPath);
+            lib.generator.createFileFromDataSync(self.projects, self.projectConfigPath);
 
             process.exit(1)
         };

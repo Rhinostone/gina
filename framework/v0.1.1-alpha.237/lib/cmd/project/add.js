@@ -1,4 +1,6 @@
 var fs          = require('fs');
+var util        = require('util');
+var promisify   = util.promisify;
 
 var CmdHelper   = require('./../helper');
 var Shell       = lib.Shell;
@@ -34,7 +36,7 @@ function Add(opt, cmd) {
             }
         }
 
-        local.imported = false;
+        local.imported = ( /\:import/i.test(self.task) ) ? true : false;
         if ( checkImportMode() ) {
             return;
         }
@@ -198,7 +200,7 @@ function Add(opt, cmd) {
         end(true)
     }
 
-    var end = function(created) {
+    var end = async function(created) {
 
         var target = _(GINA_HOMEDIR + '/projects.json')
             , projects = JSON.clone(self.projects)
@@ -221,7 +223,16 @@ function Add(opt, cmd) {
 
         // create/update ports, protocols & schemes
         if ( /^true$/.test(local.imported) ) {
-            addBundlePorts(0);
+            self.bundles.sort();
+            var bundlePortsErr = null;
+            await promisify(addBundlePorts)(0)
+                .catch( function onBundlePortsError(err) {
+                    bundlePortsErr = err;
+                });
+            if (bundlePortsErr) {
+                console.error('Could not finalize [ addBundlePorts ] \n'+ bundlePortsErr.stack);
+                process.exit(1)
+            }
         }
 
 
@@ -234,7 +245,7 @@ function Add(opt, cmd) {
 
 
         var onSuccess = function () {
-            if ( self.task == 'project:add' ) {
+            if ( /project\:add/i.test(self.task) ) {
                 console.log('Project [ '+ self.projectName +' ] has been added');
             } else {
                 console.log('Project [ '+ self.projectName +' ] has been imported');
@@ -294,8 +305,11 @@ function Add(opt, cmd) {
      * NB.: also used in `port:reset` task
      *
      * @param {number} b - Bundle index
+     * @callback done
+     *  @param {object|bool} err
+     *  @param {array} ports
      */
-    var addBundlePorts = function(b) {
+    var addBundlePorts = async function(b, done) {
         loadAssets();
 
         if (b > self.bundles.length-1) { // writing to files on complete
@@ -356,6 +370,12 @@ function Add(opt, cmd) {
                     }
 
                     for (let scheme in ports[protocol]) {
+
+                        // skipping none `https` schemes for `http/2`
+                        if ( /^http\/2/.test(protocol) && scheme != 'https' ) {
+                            console.debug('skipping none `https` schemes for `http/2`');
+                            continue;
+                        }
 
                         if ( !ports[protocol][scheme].count() ) {
                             ports[protocol][scheme][ portsList[i] ] = null;
@@ -469,7 +489,7 @@ function Add(opt, cmd) {
             lib.generator.createFileFromDataSync( merge(self.portsReverseData, portsReverse), self.portsReversePath);
 
 
-            return;
+            return done(false);
         }
 
         //console.debug('Bundles list on project import [ '+ b +' ]', self.bundles.length, self.bundles);
@@ -497,8 +517,28 @@ function Add(opt, cmd) {
                 options.startFrom = ~~(''+ (self.projectsList.indexOf(self.projectName)+3) + 100);
             }
             // scanning for available ports ...
-            scan(options, function(err, ports){
+            // var scanErr = null;
+            // await promisify(scan)(options)
+            //     .catch(function onScanErr(err) {
+            //         scanErr = err;
+            //     })
+            //     .then( function onPortsFound(ports) {
+            //         for (let p = 0; p < ports.length; ++p) {
+            //             local.ports.push(ports[p])
+            //         }
 
+            //         local.ports.sort();
+
+            //         ++local.b;
+            //         addBundlePorts(local.b, done);
+            //     });
+
+            // if (scanErr) {
+            //     console.error(err.stack|err.message);
+            //     process.exit(1)
+            // }
+
+            await scan(options, function(err, ports){
                 if (err) {
                     console.error(err.stack|err.message);
                     process.exit(1)
@@ -512,7 +552,7 @@ function Add(opt, cmd) {
                 local.ports.sort();
 
                 ++local.b;
-                addBundlePorts(local.b);
+                addBundlePorts(local.b, done);
 
             });
 
@@ -520,8 +560,9 @@ function Add(opt, cmd) {
 
 
         } else {
-            console.error('[ '+ bundle+' ] is not a valid bundle name')
-            process.exit(1)
+            // console.error('[ '+ bundle+' ] is not a valid bundle name')
+            // process.exit(1)
+            return done( new Error('[ '+ bundle+' ] is not a valid bundle name'))
         }
     }
 

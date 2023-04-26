@@ -46,12 +46,11 @@ function CmdHelper(cmd, client, debug) {
         projectArgvList: [],
         // global projects collection {collection}
         projects : null, // defined by filterArgs()
-        projectsPath : _(GINA_HOMEDIR + '/projects.json', true), // ~/.gina/project.json
         projectsList : [], // Array of project names, asc sorted
         // current project paths
         projectManifestPath : null, // local project/manifest.json - defined by filterArgs()
-        projectConfigPath: null, // path to .gina/project.json
-        projectHomedir: null, // path to ~/.<my-project> ( project $home)
+        projectConfigPath: null, // path to .gina/projects.json
+        projectHomedir: null, // path to ~/.<my-project> ( project $home), defined by loadAssets()
         projectData: {}, // Project manifest object
         // current project bundles list {array}
         bundles : [], // defined by filterArgs()
@@ -194,7 +193,7 @@ function CmdHelper(cmd, client, debug) {
             }
             cmd.mainConfig  = requireJSON( cmd.mainConfigPath );
 
-            // projectsprojects
+            // projects
             cmd.projectConfigPath = _(GINA_HOMEDIR + '/projects.json', true);
             if ( typeof(require.cache[cmd.projectConfigPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectConfigPath)]
@@ -299,6 +298,22 @@ function CmdHelper(cmd, client, debug) {
                             console.error(errMsg);
                             exit(errMsg);
                             return false;
+                        }
+                    }
+
+                    if ( cmd.projectName && !cmd.projects.count() ) {
+                        cmd.projects[cmd.projectName] = {
+                            "path": cmd.projectLocation,
+                            "homedir": cmd.projectHomedir,
+                            "def_prefix": GINA_PREFIX,
+                            "framework": "v" + GINA_VERSION,
+                            "envs": cmd.envs,
+                            "def_env": cmd.defaultEnv,
+                            "dev_env": cmd.devEnv,
+                            "protocols": cmd.protocolsAvailable,
+                            "def_protocol": cmd.defaultProtocol,
+                            "schemes": cmd.schemesAvailable,
+                            "def_scheme": cmd.defaultScheme
                         }
                     }
 
@@ -477,8 +492,11 @@ function CmdHelper(cmd, client, debug) {
                 cmd.projects[cmd.projectName].homedir = projectHomedirObject.toString();
             }
 
-            if ( typeof(cmd.projects[cmd.projectName].homedir) == 'undefined' ) {
-                cmd.projects[cmd.projectName].homedir = cmd.projectHomedir
+            if (
+                typeof(cmd.projects[cmd.projectName].homedir) == 'undefined'
+                || cmd.projects[cmd.projectName].homedir != projectHomedirObject.toString()
+            ) {
+                cmd.projects[cmd.projectName].homedir = projectHomedirObject.toString()
             }
 
 
@@ -503,27 +521,29 @@ function CmdHelper(cmd, client, debug) {
             cmd.def_framework_short = ( typeof(cmd.projects[cmd.projectName].framework) != 'undefined' ) ? (cmd.projects[cmd.projectName].framework.replace(/^v/, '').split(/\./g).splice(0,2)).join('.') : (cmd.mainConfig.def_framework.split(/\./g).splice(0,2)).join('.');
             console.debug('default def_framework_short ', cmd.def_framework_short);
 
-            // // updating default scopes list
-            // cmd.scopes = [];
-            // for (let e in cmd.projects[cmd.projectName].scopes) {
-            //     cmd.scopes.push(cmd.projects[cmd.projectName].scopes[e])
-            // }
-            // cmd.scopes.sort();
-
-            // // updating default envs list
-            // cmd.envs = [];
-            // for (let e in cmd.projects[cmd.projectName].envs) {
-            //     cmd.envs.push(cmd.projects[cmd.projectName].envs[e])
-            // }
-            // cmd.envs.sort();
 
 
             // getting default scopes list
-            cmd.scopes = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['scopes'] : cmd.mainConfig['scopes'][ GINA_SHORT_VERSION ];
+            cmd.scopes = (
+                            cmd.projectName != null
+                            && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                            && Array.isArray(cmd.projects[cmd.projectName]['scopes'])
+                            && cmd.projects[cmd.projectName]['scopes'].length > 0
+                        ) ? cmd.projects[cmd.projectName]['scopes'] : cmd.mainConfig['scopes'][ GINA_SHORT_VERSION ];
             // getting default scope
-            cmd.defaultScope = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_scope'] : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ];
+            cmd.defaultScope = (
+                            cmd.projectName != null
+                            && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                            && typeof(cmd.projects[cmd.projectName]['def_scope']) != 'undefined'
+                            && cmd.projects[cmd.projectName]['def_scope']
+                        ) ? cmd.projects[cmd.projectName]['def_scope'] : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ];
             // getting dev scope
-            cmd.localScope = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['local_scope'] : cmd.mainConfig['local_scope'][ GINA_SHORT_VERSION ];
+            cmd.localScope = (
+                                cmd.projectName != null
+                                && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                                && typeof(cmd.projects[cmd.projectName]['local_scope']) != 'undefined'
+                                && cmd.projects[cmd.projectName]['local_scope']
+                            ) ? cmd.projects[cmd.projectName]['local_scope'] : cmd.mainConfig['local_scope'][ GINA_SHORT_VERSION ];
             // project or bundle scope override through : --scope=<some scope>
             if ( typeof(cmd.params.scope) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
                 console.debug('Overriding default project scope: '+ cmd.defaultScope +' => '+ cmd.params.scope);
@@ -539,18 +559,33 @@ function CmdHelper(cmd, client, debug) {
             cmd.scopes.sort();
 
             // getting default envs list
-            cmd.envs = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined') ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
+            cmd.envs = (
+                            cmd.projectName != null
+                            && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                            && Array.isArray(cmd.projects[cmd.projectName]['envs'])
+                            && cmd.projects[cmd.projectName]['envs'].length > 0
+                        ) ? cmd.projects[cmd.projectName]['envs'] : cmd.mainConfig['envs'][ GINA_SHORT_VERSION ];
             // getting default env
-            cmd.defaultEnv = (cmd.projectName != null && typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
+            cmd.defaultEnv = (
+                                cmd.projectName != null
+                                && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                                && typeof(cmd.projects[cmd.projectName]['def_env']) != 'undefined'
+                                && cmd.projects[cmd.projectName]['def_env']
+                            ) ? cmd.projects[cmd.projectName]['def_env'] : cmd.mainConfig['def_env'][ GINA_SHORT_VERSION ];
             // getting dev env
-            cmd.devEnv = (cmd.projectName != null &&typeof(cmd.projects[cmd.projectName]) != 'undefined' ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
+            cmd.devEnv = (
+                            cmd.projectName != null
+                            && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                            && typeof(cmd.projects[cmd.projectName]['dev_env']) != 'undefined'
+                            && cmd.projects[cmd.projectName]['dev_env']
+                        ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
             //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.defaultEnv; // by default
             // project or bundle environment override through : --env=<some env>
             if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
                 console.debug('Overriding default project env: '+ cmd.defaultEnv +' => '+ cmd.params.env);
                 if (cmd.envs.indexOf(cmd.params.env) < 0) {
                     errMsg = 'Environment `'+ cmd.params.env +'` not found in your project ['+ cmd.projectName +']';
-                    console.error(errMsg);
+                    console.emerg(errMsg);
                     return false;
                 }
                 cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
@@ -644,21 +679,6 @@ function CmdHelper(cmd, client, debug) {
 
             cmd.configured = true;
 
-            // detect lib/node_modules
-            // if (
-            //     cmd.projectName != null
-            //     && /^true$/i.test(GINA_GLOBAL_MODE)
-            //     && !/\:(link|link-node-modules)$/.test(cmd.task)
-            //     && !/(project\:add)$/.test(cmd.task)
-            // ) {
-            //     console.debug('Running: gina link-node-modules @'+cmd.projectName);
-            //     err = execSync('gina link-node-modules @'+cmd.projectName); // +' --inspect-gina'
-            //     console.debug(err.toString());
-            //     if (err instanceof Error) {
-            //         console.error(err.message || err.stack);
-            //         return exit(err.message || err.stack);
-            //     }
-            // }
 
             // linking gina
             if (

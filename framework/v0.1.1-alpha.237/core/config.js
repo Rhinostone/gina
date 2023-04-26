@@ -468,9 +468,9 @@ function Config(opt, contextResetNeeded) {
     //  TODO - replace `bundle`@`project` in `server.response.header['access-control-allow-origin']`
     // This will allow replacement of variables before the bundle is loaded, saving some time while routing
     // var getAllProjects = function(env) {
-    //     var projectsPath        = _(GINA_HOMEDIR + '/projects.json', true)
+    //     var projectConfigPath        = _(GINA_HOMEDIR + '/projects.json', true)
     //         , projectsList      = []
-    //         , projects          = requireJSON(projectsPath)
+    //         , projects          = requireJSON(projectConfigPath)
     //         , p                 = 0
     //         , bundlesInfosPath  = _(GINA_HOMEDIR + '/ports.reverse.json', true)
     //         , bundlesInfos      = requireJSON(bundlesInfosPath)

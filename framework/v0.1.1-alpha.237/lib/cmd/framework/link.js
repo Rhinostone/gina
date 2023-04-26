@@ -65,8 +65,23 @@ var console        = lib.logger;
                     return end(err, 'error')
                 }
             }
+            // Safety check for node_modules
+            else if ( destination.isSymlinkSync() && !new _(destination.getSymlinkSourceSync()).existsSync() ) {
+                // Means that the symlink is not up to date
+                err = destination.mkdirSync();
+                if (err instanceof Error) {
+                    return end(err, 'error')
+                }
+
+                console.debug('Running: gina link-node-modules @'+self.projectName);
+                err = execSync('gina link-node-modules @'+self.projectName);// +' --inspect-gina'
+                if (err instanceof Error) {
+                    return end(err, 'error')
+                }
+            }
             destination = new _(destination.toString() +'/gina', true);
             var source = new _(GINA_PREFIX + '/lib/node_modules/gina', true);
+
 
 
             console.debug('Link '+ source + ' -> '+destination + ' [ exists ] ? '+ destination.existsSync() );
