@@ -469,7 +469,7 @@ function CmdHelper(cmd, client, debug) {
             if ( typeof(require.cache[cmd.projectManifestPath]) != 'undefined') {
                 delete require.cache[require.resolve(cmd.projectManifestPath)]
             }
-            if ( ! new _(cmd.projectManifestPath).existsSync() ) {
+            if ( ! new _(cmd.projectManifestPath).existsSync()  && !/^project\:(add|import)/.test(cmd.task) ) {
                 console.error('Project manifest.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
                 return process.exit(1);
             }
