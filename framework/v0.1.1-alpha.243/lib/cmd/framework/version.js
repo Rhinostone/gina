@@ -12,7 +12,7 @@ function Version(opt){
                 "number"        : GINA_VERSION,
                 "platform"      : process.platform,
                 "arch"          : process.arch,
-                "middleware"    : fs.readFileSync(_( opt.frameworkPath + '/MIDDLEWARE')).toString() || 'none',
+                "middleware"    : fs.readFileSync(_( opt.frameworkPath + '/MIDDLEWARE')).toString() || 'none',
                 "copyright"     : require(opt.pack).copyright
             };
 

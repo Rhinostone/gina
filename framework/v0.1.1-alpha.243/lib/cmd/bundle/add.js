@@ -324,7 +324,6 @@ function Add(opt, cmd) {
         }
 
         try {
-            //var path = self.projectManifestPath.replace(/\.json$/, env + '.json');
             lib.generator.createFileFromDataSync(data, self.projectManifestPath);
             local.projectDataWrote = true;
 

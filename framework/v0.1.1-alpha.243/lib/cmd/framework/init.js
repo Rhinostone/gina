@@ -168,6 +168,15 @@ function Initialize(opt) {
         done()
     }
 
+    self.checkIfMiddlewareFile = function(done) {
+        var middlewareFileObj = new _( opt.frameworkPath + '/MIDDLEWARE');
+        console.debug('Checking for: '+ middlewareFileObj.toString());
+        if ( !middlewareFileObj.existsSync() ) {
+            console.debug('Did not find '+ middlewareFileObj.toString());
+        }
+        done()
+    }
+
     self.checkIfMain = function(done) {
         console.debug('Checking main...');
         var source      = getPath('gina').root + '/resources/home/main.json';
@@ -220,13 +229,13 @@ function Initialize(opt) {
 
 
         // don't remove def_protocol
-        var defProtocol     = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
-        var defScheme       = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
-        var defCulture      = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
-        var defTimezone     = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
-        var defLogLevel     = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
-        var defPrefix       = (mainConfig['def_prefix']) ? mainConfig['def_prefix'][self.release] : data.def_prefix[self.release];
-        var defGlobalMode   = (mainConfig['def_global_mode']) ? mainConfig['def_global_mode'][self.release] : data.def_global_mode[self.release];
+        var defProtocol     = (mainConfig['def_protocol']) ? mainConfig['def_protocol'][self.release] : data.def_protocol[self.release];
+        var defScheme       = (mainConfig['def_scheme']) ? mainConfig['def_scheme'][self.release] : data.def_scheme[self.release];
+        var defCulture      = (mainConfig['def_culture']) ? mainConfig['def_culture'][self.release] : data.def_culture[self.release];
+        var defTimezone     = (mainConfig['def_timezone']) ? mainConfig['def_timezone'][self.release] : data.def_timezone[self.release];
+        var defLogLevel     = (mainConfig['def_log_level']) ? mainConfig['def_log_level'][self.release] : data.def_log_level[self.release];
+        var defPrefix       = (mainConfig['def_prefix']) ? mainConfig['def_prefix'][self.release] : data.def_prefix[self.release];
+        var defGlobalMode   = (mainConfig['def_global_mode']) ? mainConfig['def_global_mode'][self.release] : data.def_global_mode[self.release];
 
 
         if ( mainConfig.protocols[self.release].indexOf(defProtocol) < 0 )
@@ -571,6 +580,8 @@ function Initialize(opt) {
                 'scope_is_local' : (main['local_scope'][self.release] == scope) ? true : false,
                 'local_scope': main['local_scope'][self.release],
                 'culture' : getEnvVar('GINA_CULTURE'),
+                'iso_short': main['def_iso_short'][self.release],
+                'date' : main['def_date'][self.release],
                 'timezone' : getEnvVar('GINA_TIMEZONE'),
                 'node_version': process.version,
                 'port' : getEnvVar('GINA_PORT') || 8124, // TODO - scan for the next available port

@@ -1,6 +1,6 @@
 {
   "name": "{project}",
-  "version": "0.0.1",
+  "version": "1.0.0",
   "description": "{project} is a nice project !",
   "dependencies": {
     // "gina" : "{gina_version}"
