@@ -472,8 +472,8 @@ function CmdHelper(cmd, client, debug) {
 
             if ( ! new _(cmd.projectManifestPath).existsSync() ) {
                 if ( !/^project\:(add|import)/.test(cmd.task) ) {
-                    console.error('Project manifest.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
-                    return process.exit(1);
+                    console.warn('Project manifest.json not found. Trying to fix it ...');
+                    // return process.exit(1);
                 }
 
                 // Creating default manifest
