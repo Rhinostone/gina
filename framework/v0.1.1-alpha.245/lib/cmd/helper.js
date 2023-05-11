@@ -524,8 +524,8 @@ function CmdHelper(cmd, client, debug) {
             // For safety precaution
             if ( ! new _(cmd.envPath).existsSync() ) {
                 if ( !/^project\:(add|import)/.test(cmd.task) ) {
-                    console.error('Project env.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
-                    return process.exit(1);
+                    console.warn('Project env.json not found. Trying to fix it ...');
+                    // return process.exit(1);
                 }
 
                 // Creating default manifest
