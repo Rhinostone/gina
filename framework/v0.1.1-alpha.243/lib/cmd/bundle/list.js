@@ -150,7 +150,6 @@ function List(opt, cmd) {
         ;
 
         bundles = orderBundles(bundles);
-
         for (b in bundles) {
             let jsonBundle  = {bundle: b, project: self.projectName}
             if ( fs.existsSync(_(path + '/'+ bundles[b].src)) ) {

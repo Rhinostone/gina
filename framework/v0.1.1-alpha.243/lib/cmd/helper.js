@@ -521,7 +521,7 @@ function CmdHelper(cmd, client, debug) {
             cmd.projectLocation     = _(cmd.projects[cmd.projectName].path, true);
             cmd.bundlesLocation     = _(cmd.projects[cmd.projectName].path +'/src', true);
             cmd.envPath             = _(cmd.projects[cmd.projectName].path + '/env.json', true);
-
+            // For safety precaution
             if ( ! new _(cmd.envPath).existsSync() ) {
                 if ( !/^project\:(add|import)/.test(cmd.task) ) {
                     console.error('Project env.json not found. If you want to fix this, you should try to project:add with `--force` argument at the end of your command line');
@@ -847,27 +847,58 @@ function CmdHelper(cmd, client, debug) {
             cmd.schemes.sort();
 
         // supplementing projects with bundles collection
-        var projectPropertiesPath = null;
+
         //console.debug('[ ConfigAssetsLoaderHelper ] getting bundles by project ', JSON.stringify(cmd.projects, null, 4));
         for (let project in cmd.projects) {
 
-            projectPropertiesPath = _(cmd.projects[project].path + '/manifest.json', true);
+            let projectPropertiesPath = _(cmd.projects[project].path + '/manifest.json', true);
             if (typeof (require.cache[projectPropertiesPath]) != 'undefined') {
                 delete require.cache[require.resolve(projectPropertiesPath)]
             }
-            cmd.bundlesByProject[project] = {};
+            cmd.bundlesByProject[project] = (typeof(cmd.bundlesByProject[project]) != 'undefined' ) ? cmd.bundlesByProject[project] : {};
             if (fs.existsSync(cmd.projects[project].path) ) {
                 cmd.projects[project].exists    = true;
                 if ( !new _(projectPropertiesPath).existsSync() ) {
                     console.error('`'+ projectPropertiesPath +'` not found ! Maybe, you can try to remove the project reference by hand by editing: `'+ _(GINA_HOMEDIR + '/project.json') +'`')
                 }
 
-                cmd.bundlesByProject[project]   = requireJSON(projectPropertiesPath).bundles;
+                cmd.bundlesByProject[project]   = (cmd.bundlesByProject[project].count() > 0) ? cmd.bundlesByProject[project] : requireJSON(projectPropertiesPath).bundles;
+                // additional checks
+                let bundlesCount = cmd.bundlesByProject[project].count();
+                if ( /^project\:(add|import)/.test(cmd.task) && bundlesCount > 0 ) {
+                    let releasesPathObj = new _(cmd.projects[project].path +'/releases', true);
+                    let _bundleConfigPath = cmd.bundlesLocation;
+                    let files = [], f = 0;
+                    if ( new _(cmd.projects[project].path +'/src', true).existsSync() ) {
+                        files = fs.readdirSync(_(cmd.projects[project].path +'/src', true));
+                    } else if (releasesPathObj.existsSync()) {
+                        _bundleConfigPath = releasesPathObj.toString();
+                        files = fs.readdirSync(releasesPathObj.toString());
+                    }
+                    let _count = 0;
+                    for (;f < files.length; ++f) {
+                        // skip hidden
+                        let name = files[f];
+                        if ( /^\./.test(name) ) continue;
+                        _count++
+                    }
+                    if (_count != bundlesCount) {
+                        cmd.bundles = [];
+                        cmd.bundlesByProject[project] = {}
+                        let updatedManifest = requireJSON(projectPropertiesPath);
+                        updatedManifest.bundles = {};
+                        lib.generator.createFileFromDataSync(
+                            updatedManifest,
+                            projectPropertiesPath
+                        )
+                    }
+                }
 
             } else {
                 cmd.projects[project].exists    = false;
             }
         }
+
 
 
         var bundleConfigPath = null, settings = null, isBulkOperation = false;
@@ -958,6 +989,8 @@ function CmdHelper(cmd, client, debug) {
             }
         }
 
+
+
         // control the bundle name
         // no existing project found for the bundle
         if ( cmd.projectName != null && cmd.name != null && typeof(cmd.projects[cmd.projectName]) == 'undefined' ) {
@@ -976,6 +1009,31 @@ function CmdHelper(cmd, client, debug) {
                 console.warn(errMsg);
             }
             return false;
+        }
+
+        if ( /^project\:(add|import)/.test(cmd.task) && !cmd.bundles.length ) {
+            var releasesPathObj = new _(cmd.projects[cmd.projectName].path +'/releases', true);
+            var _bundleConfigPath = cmd.bundlesLocation;
+            var files = [], f = 0;
+            if ( new _(cmd.bundlesLocation).existsSync() ) {
+                files = fs.readdirSync(cmd.bundlesLocation);
+            } else if (releasesPathObj.existsSync()) {
+                _bundleConfigPath = releasesPathObj.toString();
+                files = fs.readdirSync(releasesPathObj.toString());
+            }
+            for (;f < files.length; ++f) {
+                // skip hidden
+                let name = files[f];
+                if ( /^\./.test(name) ) continue;
+                cmd.bundles.push(name);
+                _bundleConfigPath += '/'+ name;
+                cmd.bundlesByProject[cmd.projectName][name] = {
+                    configPaths: {
+                        settings: _(_bundleConfigPath +'/config/settings.json', true)
+                    }
+                };
+            }
+            cmd.bundles.sort()
         }
 
     }
