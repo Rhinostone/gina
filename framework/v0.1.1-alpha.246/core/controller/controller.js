@@ -3838,6 +3838,9 @@ function SuperController(options) {
                     console.warn('[ Controller ] Ignoring message because of the format.\n'+res.message)
                 }
 
+                // ApiError merge
+
+
             } else if ( typeof(arguments[arguments.length-1]) == 'string' ) {
                 // formated error
                 errorObject.message = arguments[arguments.length-1] || msg
@@ -3846,6 +3849,13 @@ function SuperController(options) {
                 arguments[arguments.length-1] instanceof Error
                 || typeof(res) == 'object' && typeof(res.stack) != 'undefined'
             ) {
+                errorObject = merge(arguments[arguments.length-1], errorObject)
+            } else if (
+                !arguments[arguments.length-1] instanceof Error
+                && typeof(res) == 'object'
+                && typeof(res.error) != 'undefined'
+                && typeof(res.fields) != 'undefined'
+            ) { // ApiError merge
                 errorObject = merge(arguments[arguments.length-1], errorObject)
             }
 
