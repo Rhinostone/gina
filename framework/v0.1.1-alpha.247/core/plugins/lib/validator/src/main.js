@@ -504,6 +504,10 @@
                         && typeof(instance.$forms[formId]) != 'undefined'
                         && typeof(instance.$forms[formId].errors) != 'undefined'
                         && instance.$forms[formId].errors.count() == 0
+                        ||
+                        typeof(instance.$forms) != 'undefined'
+                        && typeof(instance.$forms[formId]) != 'undefined'
+                        && !instance.$forms[formId].errors
                     ) {
                         // update submit trigger state
                         updateSubmitTriggerState( $form, true );
