@@ -3851,7 +3851,7 @@ function SuperController(options) {
             ) {
                 errorObject = merge(arguments[arguments.length-1], errorObject)
             } else if (
-                !arguments[arguments.length-1] instanceof Error
+                !(arguments[arguments.length-1] instanceof Error)
                 && typeof(res) == 'object'
                 && typeof(res.error) != 'undefined'
                 && typeof(res.fields) != 'undefined'
