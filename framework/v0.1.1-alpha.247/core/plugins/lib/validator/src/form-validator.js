@@ -387,7 +387,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     }
                     // Fixed on 2023-01-10
                     // We want `local.errorLabels['query']` before the generic|user defined `rule` error
-                    errors['query'] = replace(systemError || _this['error'] || local.errorLabels['query'] || options['error'],  _this);
+                    var optionError = ( typeof(options['error']) != 'undefined' ) ? options['error'] : null;
+                    errors['query'] = replace(systemError || _this['error'] || optionError || local.errorLabels['query'],  _this);
                     console.debug('[1] query error detected !! ', result);
                 }
 
