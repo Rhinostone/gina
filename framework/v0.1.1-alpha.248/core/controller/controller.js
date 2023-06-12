@@ -3855,6 +3855,11 @@ function SuperController(options) {
                 && typeof(res) == 'object'
                 && typeof(res.error) != 'undefined'
                 && typeof(res.fields) != 'undefined'
+                ||
+                !(arguments[arguments.length-1] instanceof Error)
+                && typeof(res) == 'object'
+                && typeof(res.error) != 'undefined'
+                && typeof(res.flash) != 'undefined'
             ) { // ApiError merge
                 errorObject = merge(arguments[arguments.length-1], errorObject)
             }
