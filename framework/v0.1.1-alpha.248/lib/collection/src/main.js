@@ -1384,14 +1384,16 @@ function Collection(content, options) {
      * */
     instance['toRaw'] = function() {
 
-        var result = ( Array.isArray(this) ) ? this : content;
+        var result = ( Array.isArray(this) ) ? this.slice() : content.slice();
         // cleanup
         for (var i = 0, len = result.length; i < len; ++i) {
             if (result[i]._uuid)
                 delete result[i]._uuid;
+
         }
 
-        return JSON.clone(result);
+        // return JSON.clone(result);
+        return result
     }
 
     /**

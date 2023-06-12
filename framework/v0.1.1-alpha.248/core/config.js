@@ -1199,8 +1199,8 @@ function Config(opt, contextResetNeeded) {
             // e.g: if env == `dev` and we have app.prod.json, we should skip it
             let skipIt = false;
             for (let e = 0, eLen = allEnvs.length; e < eLen; e++) {
-                // *.dev.json or *.common.json
-                let re = new RegExp('\.('+ allEnvs[e] +'|common)\.json$');
+                // *.dev.json or *.global.json
+                let re = new RegExp('\.('+ allEnvs[e] +'|global)\.json$');
                 if ( re.test(fName) && allEnvs[e] != env ) {
                     // we should skip it
                     skipIt = true;

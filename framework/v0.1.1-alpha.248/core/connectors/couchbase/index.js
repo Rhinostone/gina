@@ -188,6 +188,7 @@ function Couchbase(conn, infos) {
             , includes      = null
             , queryStatement= null // this is the usable queryString
             , params        = []
+            , paramTypes    = []
             , inlineParams  = [] // order of use inside the query
             , returnType    = null // Array or Object : Array by default
             , returnVariable= null // return variable
@@ -222,6 +223,12 @@ function Couchbase(conn, infos) {
                     queryString = queryString.replace(includes[i], fs.readFileSync( filename ).toString() );
                 }
             }
+            paramTypes = queryString.match(/\@param \{(.*)\}/gm);
+            if ( paramTypes && Array.isArray(paramTypes) ) {
+                for (let t=0, tLen = paramTypes.length; t<tLen; t++) {
+                    paramTypes[t] = paramTypes[t].match(/\{(.*)\}/)[1];
+                }
+            }
             queryString = queryString.replace(/\n/g, ' ');
 
             // extract comments
@@ -244,6 +251,28 @@ function Couchbase(conn, infos) {
                 inlineParams = Array.from(new Set(inlineParams))
             } else { // ES5 + gina
                 inlineParams = Array.from(inlineParams)
+            }
+
+            var cast = function(dataArray, paramTypes) {
+                for (let t=0, tLen=paramTypes.length; t<tLen; t++) {
+                    switch (paramTypes[t]) {
+                        case 'number':
+                        case 'integer':
+                            dataArray[t] = parseInt(dataArray[t]);
+                            break;
+
+                        case 'float':
+                            dataArray[t] = parseFloat(dataArray[t].replace(/\,/, '.'));
+                            break;
+
+                        case 'string':
+                            dataArray[t] = ''+dataArray[t];
+                            break;
+
+                        // default:
+                        //     break;
+                    }
+                }
             }
 
             try {
@@ -274,6 +303,10 @@ function Couchbase(conn, infos) {
                     } else if ( /function/.test( typeof(args[args.length-1]) ) ) {
                         // to hande Nodejs Util.promisify
                         _mainCallback = args[args.length-1]
+                    }
+
+                    if ( paramTypes && paramTypes.length > 0 ) {
+                        cast(args, paramTypes)
                     }
 
                     var sdkVersion = conn.sdk.version || 2;
@@ -324,6 +357,7 @@ function Couchbase(conn, infos) {
                                     }
                                 }
                             } else { // v2 & v > 3
+
                                 // April 2023 patch - Replaced p[i] by args[i]
                                 index = 0; i = 0; len = params.length;
                                 for (; i < len; ++i) {
@@ -610,6 +644,7 @@ function Couchbase(conn, infos) {
                                 try {
                                     cb(err, data, meta)
                                 } catch (onCompleteError) {
+                                    // catch errors inside the call of the user code
                                     cb(onCompleteError)
                                 }
                             });
