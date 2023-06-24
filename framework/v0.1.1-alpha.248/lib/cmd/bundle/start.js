@@ -7,9 +7,9 @@ const promisify = require('util').promisify;
 
 var CmdHelper   = require('./../helper');
 // `lib` is previously defiened as this file is required by anoth
-// for user output
+// For user output
 var terminal    = lib.logger;
-// for logs/tail output thru the parent
+// For logs/tail output thru the parent
 var console     = null;
 
 /**
@@ -227,6 +227,7 @@ function Start(opt, cmd) {
         var bundle = (isBulkStart) ? self.bundles[bundleIndex] : self.name;
         // terminal.debug('bundle -> ', bundle);
         var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
+        var scope = ( typeof(self.bundlesByProject[self.projectName][bundle].def_scope) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_scpoe : self.defaultScope;
         // terminal.debug('env -> ', env);
         var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
         // terminal.debug('protocol -> ', protocol);

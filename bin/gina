@@ -26,11 +26,11 @@
  * For zsh, if we want to hide all outputs
  * $ gina start  >&/dev/null &!
  */
-var fs      = require('fs');
-const {spawn}   = require('child_process');
-const {execSync}   = require('child_process');
+var fs              = require('fs');
+const {spawn}       = require('child_process');
+const {execSync}    = require('child_process');
 
-var restartPid = null;
+var restartPid      = null;
 
 function runAsSubProcess() {
 
@@ -50,7 +50,7 @@ function runAsSubProcess() {
     argv.splice(0, 0, cliBin);
     argv.splice(argv.length, 0, fakeDaemonPid);
 
-    // overriding process.argv which is used in `./cli`
+    // Overriding process.argv which is used in `./cli`
     Array.prototype.splice.call(process.argv, 0, 0, nodeBin);
     Array.prototype.splice.call(process.argv, 0, 0, cliBin);
     Array.prototype.splice.call(process.argv, process.argv.length, 0, fakeDaemonPid);
@@ -64,13 +64,13 @@ function runAsSubProcess() {
     );
     var pid = null;
 
-    // set encoding
+    // Set encoding
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', function(data) {
 
         // Uncomment if you want all the noise to debug
         // TODO - Allow if `GINA_ENV_IS_DEV` == true
-        // check `~/.gina/{shortVersion}/settings.json`
+        // Check `~/.gina/{shortVersion}/settings.json`
         process.stdout.write(data);
 
         /**
@@ -85,9 +85,9 @@ function runAsSubProcess() {
             // Docker considerations: All signals except for SIGKILL and SIGSTOP can be intercepted by the process.
             // Ref.: https://medium.com/@gchudnov/trapping-signals-in-docker-containers-7a57fdda7d86
             console.info('Gina server started with PID `'+ child.pid +'`');
-            // sending kill command to parent restart process
+            // Sending kill command to parent restart process
             if (restartPid) {
-                // we can't just use process.kill() here ...
+                // We can't just use process.kill() here ...
                 process.stdout.write('[ quit ]\n');
             }
 
@@ -158,6 +158,7 @@ function runCMD() {
         }
 
     }
+    r = null;
     if (restartPid) {
         console.debug('removing `--restart-pid`: '+ restartPid);
         // removing `--restart-pid`
@@ -179,11 +180,8 @@ function runCMD() {
     var cliBin  = __dirname + '/cli';
     if ( argv.indexOf('--inspect-gina') > -1 ) {
         cliBin  = __dirname + '/cli-debug';
-
-        // TODO - Remove this, not needed anymore since 2023-01-07 debug fix
-        // argv.splice(argv.indexOf('--inspect-gina'), 1);
-        // Array.prototype.splice.call(process.argv, argv.indexOf('--inspect-gina'), 1);
     }
+
     require(cliBin);
 }
 

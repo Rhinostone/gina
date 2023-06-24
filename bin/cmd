@@ -66,18 +66,18 @@ function Cmd(opt, runOffine) {
                 //Launch.
                 lib.cmd.load({
                     isOnlineCommand : true,
-                    ginaPath : local.ginaPath,
-                    frameworkPath : local.frameworkPath,
-                    pack : local.pack,
-                    argv : argv,
-                    client : conn,
-                    homedir : local.homedir,
-                    port : local.port,
-                    debugPort : local.debugPort,
+                    ginaPath        : local.ginaPath,
+                    frameworkPath   : local.frameworkPath,
+                    pack            : local.pack,
+                    argv            : argv,
+                    client          : conn,
+                    homedir         : local.homedir,
+                    port            : local.port,
+                    debugPort       : local.debugPort,
                     debugBrkEnabled : local.debugBrkEnabled,
-                    hostname : local.hostname,
-                    hostV4: local.hostV4,
-                    mqPort: local.mqPort
+                    hostname        : local.hostname,
+                    hostV4          : local.hostV4,
+                    mqPort          : local.mqPort
                 })
             })
         });
@@ -116,20 +116,20 @@ function Cmd(opt, runOffine) {
 
             //First time launch.
             lib.cmd.load({
-                ginaPath : local.ginaPath,
-                frameworkPath : local.frameworkPath,
-                pack : local.pack,
-                argv : process.argv,
-                client : process.stdout,
+                ginaPath        : local.ginaPath,
+                frameworkPath   : local.frameworkPath,
+                pack            : local.pack,
+                argv            : process.argv,
+                client          : process.stdout,
                 isFromFramework : true,
-                homedir : local.homedir,
-                port : local.port,
-                debugPort : local.debugPort,
+                homedir         : local.homedir,
+                port            : local.port,
+                debugPort       : local.debugPort,
                 debugBrkEnabled : local.debugBrkEnabled,
-                hostname: local.hostname,
-                hostV4: local.hostV4,
-                mqPort: local.mqPort,
-                task : {
+                hostname        : local.hostname,
+                hostV4          : local.hostV4,
+                mqPort          : local.mqPort,
+                task            : {
                     topic : "framework",
                     action : "start"
                 }
@@ -146,20 +146,20 @@ function Cmd(opt, runOffine) {
 
 
         lib.cmd.load({
-            ginaPath : local.ginaPath,
-            frameworkPath : local.frameworkPath,
-            pack : local.pack,
-            argv : process.argv,
-            client : process.stdout,
+            ginaPath        : local.ginaPath,
+            frameworkPath   : local.frameworkPath,
+            pack            : local.pack,
+            argv            : process.argv,
+            client          : process.stdout,
             isFromFramework : true,
-            homedir : local.homedir,
-            port: local.port,
-            debugPort : local.debugPort,
+            homedir         : local.homedir,
+            port            : local.port,
+            debugPort       : local.debugPort,
             debugBrkEnabled : local.debugBrkEnabled,
-            hostname: local.hostname,
-            hostV4: local.hostV4,
-            mqPort: local.mqPort,
-            task : {
+            hostname        : local.hostname,
+            hostV4          : local.hostV4,
+            mqPort          : local.mqPort,
+            task            : {
                 topic : topic,
                 action : action
             }

@@ -27,7 +27,7 @@ var fs                = require('fs')
  * @author      Rhinostone <contact@gina.io>
  * @api         Public
  */
-function Router(env) {
+function Router(env, scope) {
 
     this.name = 'Router';
 
@@ -103,6 +103,18 @@ function Router(env) {
      * @callback next
      * */
     this.route = function(request, response, next, params) {
+
+        /**
+         * Sample code to detect memory leaks before Router::route()
+         */
+        // response.end(JSON.stringify({ status: 'ok'}));
+        // request     = null;
+        // response    = null;
+        // params      = null;
+        // if (next) {
+        //     return next()
+        // }
+        // return ;
 
         /**
         * ExpressJS modules + HTTP2 fix
@@ -210,6 +222,7 @@ function Router(env) {
             , conf              = null
             , bundle            = null
             , env               = null
+            , scope             = null
             , cacheless         = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
        ;
         try {
@@ -228,6 +241,7 @@ function Router(env) {
             }
             bundle      = local.bundle = params.bundle;
             env         = config.env;
+            scope       = config.scope;
             conf        = config[bundle][env];
         } catch (configErr) {
             serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
@@ -424,6 +438,7 @@ function Router(env) {
                 var config      = getContext('gina').Config.instance;
                 var bundle      = config.bundle;
                 var env         = config.env;
+                var scope       = config.scope;
                 var bundleConf  = config.Env.getConf(bundle, env);
 
                 var controllerFile  = ( typeof(namespace) != 'undefined' && namespace != '' && namespace != 'null' && namespace != null ) ? 'controller.'+ namespace : 'controller';
@@ -531,7 +546,7 @@ function Router(env) {
                 processMiddlewares(middleware, controller, action, request, response, next,
                     function onDone(action, request, response, next){
                         // handle superController events
-                        for (var e=0; e<reservedActions.length; ++e) {
+                        for (let e=0; e<reservedActions.length; ++e) {
                             if ( typeof(controller[reservedActions[e]]) == 'function' ) {
                                 controller[reservedActions[e]](request, response, next)
                             }
@@ -554,7 +569,7 @@ function Router(env) {
             } else {
                 // handle superController events
                 // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
-                for (var e=0; e<reservedActions.length; ++e) {
+                for (let e=0; e<reservedActions.length; ++e) {
                     if ( typeof(controller[reservedActions[e]]) == 'function' ) {
                         controller[reservedActions[e]](request, response, next)
                     }
@@ -571,12 +586,21 @@ function Router(env) {
                 }
             }
 
+            // controller = null;
+            // Controller = null;
+            // MainController = null;
+
         } catch (err) {
             if ( typeof(controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
                 serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json or the related control in your `' + controllerFile + '`.')).stack);
             } else {
                 serverInstance.throwError(response, 500, err.stack);
             }
+
+            // controller = null;
+            // Controller = null;
+            // MainController = null;
+
             return;
         }
 
@@ -591,7 +615,7 @@ function Router(env) {
             , re            = new RegExp('^'+filename);
 
         if ( middlewares.length > 0 ) {
-            for (var m=0; m<middlewares.length; ++m) {
+            for (let m=0; m<middlewares.length; ++m) {
                 constructor = middlewares[m].split(/\./g);
                 constructor = constructor
                     .splice(constructor.length-1,1)

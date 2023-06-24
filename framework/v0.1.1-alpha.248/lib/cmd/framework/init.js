@@ -17,7 +17,7 @@ var aliases = require( getPath('gina').lib + '/cmd/aliases.json' );
 
 function Initialize(opt) {
 
-    var self = {};
+    var self = {}, local = {};
     var init = function(opt) {
         self.opt = opt;
         begin()
@@ -422,80 +422,6 @@ function Initialize(opt) {
     }
 
 
-    /**
-     * Check env
-     *
-     * */
-    self.checkEnv = function(done) {
-        // ignored for framework:set
-        //if (self.opt.task.Action != 'set' && self.opt.task.topic != 'framework') {
-        var err     = null;
-        var main    = require( self.opt.homedir + '/main.json' );
-        //has registered env ?
-        var env     = getEnvVar('GINA_ENV') || main['dev_env'][self.release]; // dev by default
-
-        if ( main.envs[self.release].indexOf(env) < 0 ) {
-            // console.error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
-            // process.exit(1)
-            err = new Error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
-            return done(err)
-        }
-
-        // has dev env ?
-        if (
-            typeof(main['dev_env']) == 'undefined' ||
-            typeof(main['dev_env']) != 'undefined' &&
-            typeof(main['dev_env'][self.release]) != 'undefined' &&
-            main.envs[self.release].indexOf(main['dev_env'][self.release]) < 0
-        ) {
-            err = new Error('the framework has no dev env linked to any' +
-                            'environment to gina\'s.\nUse: $ gina env:link-dev <your_new_dev_env>');
-
-            // process.exit(1)
-            return done(err)
-        }
-
-        done()
-    }
-
-    /**
-     * Check scope
-     *
-     * */
-    self.checkScope = function(done) {
-        // ignored for framework:set
-        var err     = null;
-        var main    = require( self.opt.homedir + '/main.json' );
-        //has registered scope ?
-        var scope   = getEnvVar('GINA_SCOPE') || main['local_scope'][self.release]; // scope by default
-        if ( main.scopes[self.release].indexOf(scope) < 0 ) {
-            // console.error('Scope [ ' + scope + ' ] not registered. See [ man gina-scope ].');
-            // process.exit(1)
-            err = new Error('Scope [ ' + scope + ' ] not registered. See [ man gina-scope ].');
-            return done(err)
-        }
-
-
-        // has local scope ?
-        if (
-            typeof(main['local_scope']) == 'undefined' ||
-            typeof(main['local_scope']) != 'undefined' &&
-            typeof(main['local_scope'][self.release]) != 'undefined' &&
-            main.scopes[self.release].indexOf(main['local_scope'][self.release]) < 0
-        ) {
-            // console.error('the framework has no local scope linked to any ' +
-            //     'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
-
-            // process.exit(1)
-            err = new Error('the framework has no local scope linked to any ' +
-                            'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
-
-            return done(err)
-        }
-
-        done()
-    }
-
 
 
     /**
@@ -597,7 +523,7 @@ function Initialize(opt) {
                 'run_dir' : _( getRunDir(), true ),
                 'tmp_dir' : _( getTmpDir(), true ),
                 'log_dir' : _( getLogDir(), true ),
-                'log_level' : getEnvVar('GINA_LOG_LEVEL') || main['def_log_level'][self.release] || 'info'
+                'log_level' : getEnvVar('GINA_LOG_LEVEL') || main['def_log_level'][self.release] || 'info'
             };
 
             settings = whisper(dic, settings);
@@ -668,6 +594,170 @@ function Initialize(opt) {
             newProjects,
             target
         );
+
+        var argv = process.argv;
+        for (let i=0, len=argv.length; i<len; i++) {
+            if (/^\@/.test(argv[i]) ) {
+                local.projectName = argv[i].substring(1);
+                if ( typeof(newProjects[local.projectName]) != 'undefined' ) {
+                    local.projectData = newProjects[local.projectName];
+                }
+                continue;
+            }
+
+            if ( /^\-\-scope\=/.test(argv[i]) ) {
+                local.scope = argv[i].split(/\=/)[1];
+                continue;
+            }
+
+            if ( /^\-\-env\=/.test(argv[i]) ) {
+                local.env = argv[i].split(/\=/)[1];
+                continue;
+            }
+        }
+
+        done()
+    }
+
+    /**
+     * Check env
+     *
+     * */
+    self.checkEnv = function(done) {
+        // ignored for framework:set
+        //if (self.opt.task.Action != 'set' && self.opt.task.topic != 'framework') {
+        var err     = null;
+        var main    = require( self.opt.homedir + '/main.json' );
+        //has registered env ?
+        // dev by default
+        var env     = getEnvVar('GINA_ENV') || main['def_env'][self.release];
+        var readFromMainConf = true;
+        if ( typeof(local.projectData) != 'undefined' && local.env) {
+            readFromMainConf = false;
+            env = local.env;
+        }
+
+        switch (readFromMainConf) {
+            case false:
+                var projectData = JSON.clone(local.projectData);
+                if ( projectData.envs.indexOf(env) < 0 ) {
+                    err = new Error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
+                    return done(err)
+                }
+
+                // has dev env ?
+                if (
+                    typeof(projectData['dev_env']) == 'undefined'
+                    ||
+                    typeof(projectData['dev_env']) != 'undefined'
+                    && typeof(projectData['dev_env']) != 'undefined'
+                    && projectData.envs.indexOf(env) < 0
+                ) {
+                    err = new Error('the framework has no dev env linked to any' +
+                                    'environment to gina\'s.\nUse: $ gina env:link-dev <your_new_dev_env>');
+
+                    return done(err)
+                }
+                break;
+
+            default:
+                if ( main.envs[self.release].indexOf(env) < 0 ) {
+                    err = new Error('Environment [ ' + env + ' ] not registered. See [ man gina-env ].');
+                    return done(err)
+                }
+
+                // has dev env ?
+                if (
+                    typeof(main['dev_env']) == 'undefined'
+                    || typeof(main['dev_env']) != 'undefined'
+                    && typeof(main['dev_env'][self.release]) != 'undefined'
+                    && main.envs[self.release].indexOf(main['dev_env'][self.release]) < 0
+                ) {
+                    err = new Error('the framework has no dev env linked to any' +
+                                    'environment to gina\'s.\nUse: $ gina env:link-dev <your_new_dev_env>');
+
+                    return done(err)
+                }
+                break;
+        }
+        err                 = null;
+        main                = null;
+        readFromMainConf    = null;
+        env                 = null;
+
+        done()
+    }
+
+    /**
+     * Check scope
+     *
+     * */
+    self.checkScope = function(done) {
+        // ignored for framework:set
+        var err     = null;
+        var main    = require( self.opt.homedir + '/main.json' );
+        //has registered scope ?
+        // scope by default
+        var scope   = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release];
+        var readFromMainConf = true;
+        if ( typeof(local.projectData) != 'undefined' && local.scope) {
+            readFromMainConf = false;
+            scope = local.scope;
+        }
+
+        switch (readFromMainConf) {
+            case false:
+                var projectData = JSON.clone(local.projectData);
+                if ( projectData.scopes.indexOf(scope) < 0 ) {
+                    err = new Error('Scope [ ' + scope + ' ] not registered. See [ man gina-scope ].');
+                    return done(err)
+                }
+
+                // has local scope ?
+                if (
+                    typeof(projectData['local_scope']) == 'undefined'
+                    ||
+                    typeof(projectData['local_scope']) != 'undefined'
+                    && typeof(projectData['local_scope']) != 'undefined'
+                    && projectData.scopes.indexOf(scope) < 0
+                ) {
+                    // process.exit(1)
+                    err = new Error('the framework has no local scope linked to any ' +
+                                    'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
+
+                    return done(err)
+                }
+
+                projectData = null;
+                break;
+
+            default:
+                if ( main.scopes[self.release].indexOf(scope) < 0 ) {
+                    err = new Error('Scope [ ' + scope + ' ] not registered. See [ man gina-scope ].');
+                    return done(err)
+                }
+
+                // has local scope ?
+                if (
+                    typeof(main['local_scope']) == 'undefined'
+                    ||
+                    typeof(main['local_scope']) != 'undefined'
+                    && typeof(main['local_scope'][self.release]) != 'undefined'
+                    && main.scopes[self.release].indexOf(main['local_scope'][self.release]) < 0
+                ) {
+                    // process.exit(1)
+                    err = new Error('the framework has no local scope linked to any ' +
+                                    'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
+
+                    return done(err)
+                }
+                break;
+        }
+        err                 = null;
+        main                = null;
+        readFromMainConf    = null;
+        scope               = null;
+
 
         done()
     }

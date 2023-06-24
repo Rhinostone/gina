@@ -279,7 +279,10 @@ function Set(opt){
                 err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
             }
             if ( typeof(type) != 'undefined' ) {
-                console[type](output)
+                console[type](output);
+                if ( messageOnly && type != 'log') {
+                    console.log(output);
+                }
             } else {
                 console.log(output);
             }

@@ -19,130 +19,159 @@ window['ginaToolbar']       = null;
 window['onGinaLoaded']      = function(gina) {
 
     if (!gina) {
-        //console.log('gina not ready yet');
+        //console.debug('gina not ready yet');
         return false
+    }
 
-    } else {
-        if ( gina["isFrameworkLoaded"] ) {
-            return true
-        }
-
-        var options = gina['config'] = {
-            /**@js_externs bundle*/
-            'bundle': '{{ page.environment.bundle }}',
-            /**@js_externs env*/
-            'env'     : '{{ page.environment.env }}',
-            /**@js_externs envIsDev*/
-            'envIsDev' : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
-            /**@js_externs hostname*/
-            'hostname': '{{ page.environment.hostname }}',
-            /**@js_externs routing*/
-            'routing': JSON.parse(decodeURIComponent('{{ page.environment.routing }}')),
-            /**@js_externs reverseRouting*/
-            'reverseRouting': JSON.parse(decodeURIComponent('{{ page.environment.reverseRouting }}')),
-            /**@js_externs forms*/
-            //'forms': JSON.parse(decodeURIComponent('{{ page.environment.forms }}')),
-            /**@js_externs version*/
-            version : '{{ page.environment.version }}',
-            /**@js_externs webroot*/
-            'webroot' : '{{ page.environment.webroot }}',
-            /**@js_externs protocol*/
-            'protocol' : '{{ page.environment.protocol }}'
-        };
-
-
-        /**
-         * getRouting
-         *
-         * @param {string} [bundle]
-         *
-         * @returns {Object} routing
-         *
-        */
-        gina['config']['getRouting'] = function(bundle) {
-
-            if ( typeof(bundle) == 'undefined' ) {
-                return gina['config']['routing']
-            }
-
-            var routes      = {};
-            var routing     = gina['config']['routing'];
-            var re = new RegExp("\\@" + bundle + String.fromCharCode(36)); // Closure compiler requirements: $ -> String.fromCharCode(36)
-
-            var route       = null;
-            for (route in routing) {
-                if ( re.test(route) )
-                   routes[route] = routing[route]
-            }
-
-            return (routes['count']() > 0) ? routes : null
-        };
-
-        // globals
-        window['GINA_ENV']              = '{{ page.environment.env }}';
-        window['GINA_ENV_IS_DEV']       = /^true$/i.test('{{ page.environment.envIsDev }}') ? true: false;
-        if (
-            typeof(location.search) != 'undefined' && /debug\=/i.test(location.search)
-            ||
-            !location.search && /\?/.test(location.href)
-        ) {
-            // deep copy
-            var search = (' ' + location.search).slice(1);
-            if (!search && /\?/.test(location.href) ) {
-                search = location.href.match(/\?.*/);
-                if (Array.isArray(search) && search.length > 0) {
-                    search = search[0]
-                }
-            }
-            var matched = search.match(/debug=(true|false)/);
-            if (matched)
-                window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = ( /^true$/i.test(matched[0].split(/\=/)[1]) ) ? true: false;
-        }
-
-        gina["isFrameworkLoaded"]       = true;
-        gina["setOptions"](options);
-
-        try {
-            gina["forms"]               = JSON.parse(decodeURIComponent('{{ page.environment.forms }}'));
-        } catch (err) {
-            throw err
-        }
-
-
-        // making adding css to the head
-        var link        = null, cssPath = "css/vendor/gina/gina.min.css";
-
-        // check if css has not been added yet
-        var links       = document.head.getElementsByTagName('link')
-            , i         = 0
-            , len       = links.length
-            , found     = false
-            , re        = new RegExp(cssPath)
-        ;
-
-        for (; i < len; ++i ) {
-            if ( re.test(links[i].href) ) {
-                found = true;
-                break
-            }
-        }
-
-        if (!found) { // add css
-            link            = document.createElement('link');
-            link.href       = options['webroot'] + cssPath;
-            link.media      = "screen";
-            link.rel        = "stylesheet";
-            link.type       = "text/css";
-
-            document.getElementsByTagName('head')[0].appendChild(link);
-        }
-
-        // all required must be listed in `src/gina.js` defined modules list
-        if ( /^true$/i.test(options['envIsDev']) ) {
-            var Toolbar             = window['require']('gina/toolbar');
-            window['ginaToolbar']   = new Toolbar();
-        }
-
+    if ( gina["isFrameworkLoaded"] ) {
         return true
     }
+
+    var options = gina['config'] = {
+        /**@js_externs bundle*/
+        'bundle': '{{ page.environment.bundle }}',
+        /**@js_externs env*/
+        'env'     : '{{ page.environment.env }}',
+        /**@js_externs envIsDev*/
+        'envIsDev' : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+        /**@js_externs scope*/
+        'scope'     : '{{ page.environment.scope }}',
+        /**@js_externs scopeIsLocal*/
+        'scopeIsLocal' : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+        /**@js_externs hostname*/
+        'hostname': '{{ page.environment.hostname }}',
+        /**@js_externs routing*/
+        'routing': JSON.parse(decodeURIComponent('{{ page.environment.routing }}')),
+        /**@js_externs reverseRouting*/
+        'reverseRouting': JSON.parse(decodeURIComponent('{{ page.environment.reverseRouting }}')),
+        /**@js_externs forms*/
+        //'forms': JSON.parse(decodeURIComponent('{{ page.environment.forms }}')),
+        /**@js_externs version*/
+        version : '{{ page.environment.version }}',
+        /**@js_externs webroot*/
+        'webroot' : '{{ page.environment.webroot }}',
+        /**@js_externs protocol*/
+        'protocol' : '{{ page.environment.protocol }}'
+    };
+
+
+    /**
+     * getRouting
+     *
+     * @param {string} [bundle]
+     *
+     * @returns {Object} routing
+     *
+    */
+    gina['config']['getRouting'] = function(bundle) {
+
+        if ( typeof(bundle) == 'undefined' ) {
+            return gina['config']['routing']
+        }
+
+        var routes      = {};
+        var routing     = gina['config']['routing'];
+        var re = new RegExp("\\@" + bundle + String.fromCharCode(36)); // Closure compiler requirements: $ -> String.fromCharCode(36)
+
+        // var route       = null;
+        for (var route in routing) {
+            if ( re.test(route) )
+                routes[route] = routing[route]
+        }
+        re = null;
+
+        return (routes['count']() > 0) ? routes : null
+    };
+
+    // Globals
+    window['GINA_ENV']              = '{{ page.environment.env }}';
+    window['GINA_ENV_IS_DEV']       = /^true$/i.test('{{ page.environment.envIsDev }}') ? true: false;
+    if (
+        typeof(location.search) != 'undefined' && /debug\=/i.test(location.search)
+        ||
+        !location.search && /\?/.test(location.href)
+    ) {
+        // Deep copy
+        var search = (' ' + location.search).slice(1);
+        if (!search && /\?/.test(location.href) ) {
+            search = location.href.match(/\?.*/);
+            if (Array.isArray(search) && search.length > 0) {
+                search = search[0]
+            }
+        }
+        var matched = search.match(/debug=(true|false)/);
+        if (matched) {
+            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = ( /^true$/i.test(matched[0].split(/\=/)[1]) ) ? true: false;
+        }
+        matched = null;
+        search  = null;
+    }
+
+    gina["isFrameworkLoaded"]       = true;
+    gina["setOptions"](options);
+
+    try {
+        gina["forms"]               = JSON.parse(decodeURIComponent('{{ page.environment.forms }}'));
+    } catch (err) {
+        throw err
+    }
+
+
+    // Adding css to the head
+    var link        = null
+        , cssPath   = "css/vendor/gina/gina.min.css"
+    ;
+
+    // check if css has not been added yet
+    var links       = document.head.getElementsByTagName('link')
+        , i         = 0
+        , len       = links.length
+        , found     = false
+        , re        = new RegExp(cssPath)
+    ;
+
+    for (; i < len; ++i ) {
+        if ( re.test(links[i].href) ) {
+            found = true;
+            break
+        }
+    }
+    links   = null;
+    i       = null;
+    len     = null;
+    re      = null;
+
+    if (!found) { // add css
+        link            = document.createElement('link');
+        link.href       = options['webroot'] + cssPath;
+        link.media      = "screen";
+        link.rel        = "stylesheet";
+        link.type       = "text/css";
+
+        // document.getElementsByTagName('head')[0].appendChild(link);
+        var headEls = document.getElementsByTagName('head')[0];
+        var existingLinks = headEls.getElementsByTagName('link');
+        if (
+            existingLinks
+            && typeof(existingLinks.length) != 'undefined'
+            && existingLinks.length > 0
+        ) {
+            // Must be the first link
+            console.log("placed before");
+            headEls.insertBefore(link, existingLinks[0]);
+        } else {
+            console.log("placed after");
+            headEls.appendChild(link);
+        }
+        existingLinks = null;
+        headEls = null;
+    }
+
+    // all required must be listed in `src/gina.js` defined modules list
+    if ( /^true$/i.test(options['envIsDev']) ) {
+        var Toolbar             = window['require']('gina/toolbar');
+        window['ginaToolbar']   = new Toolbar();
+    }
+
+    return true;
 }

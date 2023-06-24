@@ -92,6 +92,8 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
             tmp[4] = importedContext.bundle;
 
             setContext('env', importedContext.env);
+            setContext('scope', importedContext.scope);
+
             setContext('bundles', importedContext.bundles);
             setContext('debugPort', importedContext.debugPort);
 
@@ -129,7 +131,7 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
 
         if ( typeof(obj) != 'undefined') {
 
-            for (var a in obj) {
+            for (let a in obj) {
 
                 if (
                     a.substr(0, 5) === 'GINA_'
@@ -201,15 +203,17 @@ setContext('gina.plugins', plugins);
 //Setting env.
 var env             = process.env.NODE_ENV || projects[projectName]['def_env']
     , isDev         = (env === projects[projectName]['dev_env']) ? true: false
-    , isLocalScope  = (projects[projectName]['local_scope'] === projects[projectName]['def_scope']) ? true: false
+    , scope         = process.env.NODE_SCOPE || projects[projectName]['def_scope']
+    , isLocalScope  = (scope === projects[projectName]['local_scope']) ? true : false
 ;
 
 gna.env = process.env.NODE_ENV = env;
+gna.scope = process.env.NODE_SCOPE = scope;
 gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
-process.env.NODE_SCOPE = projects[projectName]['def_scope'];
+//process.env.NODE_SCOPE = projects[projectName]['def_scope'];
 process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
 
 
@@ -277,12 +281,14 @@ gna.started = false;
 var isBundleMounted = function(projects, bundlesPath, bundle, cb) {
     var isMounted       = false
         , env           = process.env.NODE_ENV
+        , scope         = process.env.NODE_SCOPE
         , manisfestPath = null
         , manifest      = null
         , project       = projects[projectName]
     ;
     // supported envs
     setContext('envs', project.envs);
+    setContext('scopes', project.scopes);
 
     // skip this step for workers
     if (isLoadedThroughWorker) {
@@ -361,7 +367,7 @@ gna.getProjectConfiguration = function (callback){
                 && typeof(project['bundles']) != "undefined"
             ) {
 
-                for (var d in dep) {
+                for (let d in dep) {
 
                     if (d == 'bundles') {
                         for (var p in dep[d]) {
@@ -387,6 +393,7 @@ gna.getProjectConfiguration = function (callback){
             }
 
             setContext('env', env);
+            setContext('scope', scope);
             setContext('bundles', bundles);
             setPath('bundle', _(bundlePath, true));
             setPath('helpers', _(bundlePath+'/helpers', true));
@@ -541,7 +548,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                         joinContext(conf.contexts);
                         gna.getConfig = function(name){
-                            var tmp = '';
+                            // var tmp = '';
                             if ( typeof(name) != 'undefined' ) {
                                 try {
                                     //Protect it.
@@ -779,6 +786,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                 if (!Config.instance) {
                     config = new Config({
                         env             : env,
+                        scope           : scope,
                         executionPath   : core.executionPath,
                         projectName     : core.projectName,
                         startingApp     : core.startingApp,
@@ -876,7 +884,10 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                                     setTimeout( async function onStarted() {
 
-                                        if ( conf.server.scheme == 'https' && /true/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) {
+                                        if (
+                                            conf.server.scheme == 'https'
+                                            && /true/i.test(process.env.NODE_SCOPE_IS_LOCAL)
+                                        ) {
                                             try {
                                                 await server.verifyCertificate(conf.host, conf.server.port);
                                             } catch (err) {
@@ -888,6 +899,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         console.info('is now online V(-.o)V',
                                         '\nbundle: [ ' + conf.bundle +' ]',
                                         '\nenv: [ '+ conf.env +' ]',
+                                        '\nscope: [ '+ conf.scope +' ]',
                                         '\nengine: ' + conf.server.engine,
                                         '\nprotocol: ' + conf.server.protocol,
                                         '\nscheme: ' + conf.server.scheme,
@@ -938,6 +950,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                         bundles         : obj.bundles,
                         allBundles      : obj.allBundles,
                         env             : obj.env,
+                        scope           : obj.scope,
                         isStandalone    : isStandalone,
                         executionPath   : core.executionPath,
                         conf            : obj.conf
@@ -997,10 +1010,11 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
         }
 
         path = path.replace(root + '/', '');
-        var search = null;
+
         if ((/index.js/).test(path) || p[p.length - 1] == 'index') {
             var self = null;
-            path = (self = path.split('/')).splice(0, self.length - 1).join('/')
+            path = (self = path.split('/')).splice(0, self.length - 1).join('/');
+            self = null;
         }
 
         try {
@@ -1009,10 +1023,10 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
             var bundleProcess   = null;
             //finding app.
             if (!isLoadedThroughWorker) {
-                var target, source, tmp;
+
                 for (let bundle in packs) {
                     //is bundle ?
-                    tmp = '';
+                    let tmp = '';
                     // For all but dev
                     if (
                         typeof (packs[bundle].releases) != 'undefined' && !isDev

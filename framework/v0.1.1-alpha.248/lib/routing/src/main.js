@@ -165,6 +165,10 @@ function Routing() {
                 ++i;
             }
 
+            i       = null;
+            urls    = null;
+            len     = null;
+
             return foundRoute;
         } else {
             return await parseRouting(params, url, request, response, next);
@@ -202,7 +206,15 @@ function Routing() {
         //     console.debug('passed '+ params.rule);
         // }
 
-        var uRe             = params.url.split(/\//)
+        var paramUrlSplit = null;
+        try {
+            paramUrlSplit = params.url.split(/\//);
+        } catch (paramUrlSplitErr) {
+            console.warn(paramUrlSplitErr);
+            paramUrlSplit = ['']
+        }
+
+        var uRe             = paramUrlSplit
             , uRo           = url.split(/\//)
             , uReCount      = 0
             , uRoCount      = 0
@@ -1200,6 +1212,7 @@ function Routing() {
         if (
             arguments.length == 2
             && typeof(arguments[1]) != 'undefined'
+            && arguments[1]
             && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1
         ) {
             method = arguments[1];
