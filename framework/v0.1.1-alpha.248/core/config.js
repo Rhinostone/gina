@@ -46,6 +46,7 @@ function Config(opt, contextResetNeeded) {
     ) {
         // requirements
         setContext('env', opt.env);
+        setContext('scope', opt.scope);
         setContext('projectName', opt.projectName || getContext('projectName'));
         setContext('bundle', opt.startingApp);
         // reset context
@@ -62,7 +63,8 @@ function Config(opt, contextResetNeeded) {
 
     this.bundles = [];
     this.allBundles = [];
-    this.allEnvs = getContext('envs');
+    this.allEnvs    = getContext('envs');
+    this.allScopes  = getContext('scopes');
 
     /**
      * Config Constructor
@@ -71,7 +73,9 @@ function Config(opt, contextResetNeeded) {
     var init =  function(opt, contextResetNeeded) {
 
         if ( !Config.initialized) {
-            var env = opt.env;
+            var env     = opt.env;
+            var scope   = opt.scope;
+
             self.projectName    = opt.projectName || getContext('projectName');
 
             self.startingApp    = opt.startingApp;
@@ -90,6 +94,9 @@ function Config(opt, contextResetNeeded) {
             self.Env.parent = self;
             if (env != 'undefined') self.Env.set(env);
 
+            self.Scope.parent = self;
+            if (scope != 'undefined') self.Scope.set(scope);
+
             self.Host.parent = self;
 
             //Do some checking please.. like already has a PID ?.
@@ -97,7 +104,7 @@ function Config(opt, contextResetNeeded) {
             self.Host.setMaster(opt.startingApp);
 
 
-            getConf(env)
+            getConf(env, scope);
         } else {
             if (!opt) {
                 return Config.instance
@@ -108,15 +115,16 @@ function Config(opt, contextResetNeeded) {
     }
 
 
-    var getConf = function(env) {
+    var getConf = function(env, scope) {
 
-        self.env = env;
+        self.env    = env;
+        self.scope  = scope;
         console.debug('[ config ] Loading conf...');
 
         // framework settings
         var filename = null, content = null;
 
-        for (var file in framework) {
+        for (let file in framework) {
 
             filename = framework[file];
 
@@ -191,6 +199,7 @@ function Config(opt, contextResetNeeded) {
                     //logger.debug('gina', 'CONFIG:DEBUG:42', 'CONF LOADED 43', __stack);
                     self.bundlesConfiguration = {
                         env             : self.Env.get(),
+                        scope           : self.Scope.get(),
                         version         : self.version,
                         conf            : self.getInstance(),
                         bundles         : self.getBundles(),
@@ -203,8 +212,9 @@ function Config(opt, contextResetNeeded) {
                     //TODO - Don't override if syntax is ok - no mixed paths.
                     //Set paths for lib. Override for now.
                     //To reset it, just delete the hidden folder.
-                    var ginaPath = opt.ginaPath;
-                    var libConfig = new lib.Config();
+                    var ginaPath    = opt.ginaPath
+                        , libConfig = new lib.Config()
+                    ;
 
                     libConfig.set('gina', 'locals.json', {
                         project : libConfig.getProjectName(),
@@ -250,11 +260,15 @@ function Config(opt, contextResetNeeded) {
         var configuration = Config.instance.envConf;
 
         var env = self.env || Config.instance.env;
+        var scope = self.scope || Config.instance.scope;
 
         Config.instance.Env.parent = Config.instance;
 
         if (env != 'undefined')
             Config.instance.Env.set(Config.instance.env);
+
+        if (scope != 'undefined')
+            Config.instance.Scope.set(Config.instance.scope);
 
         Config.instance.Host.parent = Config.instance;
 
@@ -285,8 +299,10 @@ function Config(opt, contextResetNeeded) {
      *
      * Status Code, Mime Types etc ...
      * */
-    this.setServerCoreConf = function(bundle, env, conf) {
-        self.envConf[bundle][env].server['coreConfiguration'] = conf
+    this.setServerCoreConf = function(bundle, env, scope, conf) {
+        self.env    = env;
+        self.scope  = scope;
+        self.envConf[bundle][env].server['coreConfiguration'] = conf;
     }
 
     this.getServerCoreConf = function(bundle, env) {
@@ -295,7 +311,7 @@ function Config(opt, contextResetNeeded) {
         } catch(err) {
             console.debug('Could not get server core configuration for <'+ bundle +'>:<'+ env +'>');
             console.error(err.stack||err.message);
-            process.exit(1)
+            process.exit(1);
         }
     }
 
@@ -313,6 +329,7 @@ function Config(opt, contextResetNeeded) {
             loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                 self.envConf            = envConf;
                 envConf.env             = self.env;
+                envConf.scope           = self.scope;
                 envConf.isStandalone    = self.isStandalone;
 
                 callback(false, envConf);
@@ -371,8 +388,8 @@ function Config(opt, contextResetNeeded) {
 
                 if ( typeof(self.envConf) != 'undefined' ) {
 
-                    var protocol    = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
-                    var scheme      = self.envConf[self.startingApp][env].content.settings.server.scheme || self.envConf[self.startingApp][env].server.scheme;
+                    var protocol    = self.envConf[self.startingApp][env].content.settings.server.protocol || self.envConf[self.startingApp][env].server.protocol;
+                    var scheme      = self.envConf[self.startingApp][env].content.settings.server.scheme || self.envConf[self.startingApp][env].server.scheme;
 
                     self.envConf[self.startingApp][env].hostname = scheme + '://' + self.envConf[self.startingApp][env].host + ':' + self.envConf[self.startingApp][env].server.port;
 
@@ -394,11 +411,35 @@ function Config(opt, contextResetNeeded) {
         getDefault : function() {
             return {
                 "env" : this.template.defEnv,
+                "scope" : this.template.defScope,
                 "ext" : this.template.defExt,
                 "registeredEnvs" : this.template.registeredEnvs
             }
         }
     }
+    /**
+     * @class Env Sub class
+     *
+     *
+     * @package     Gina.Config
+     * @namespace   Gina.Config.Env
+     * @author      Rhinostone <contact@gina.io>
+     */
+    this.Scope = {
+        template : requireJSON( getEnvVar('GINA_FRAMEWORK_DIR') +'/core/template/conf/env.json'),
+        set : function(scope) {
+            this.current = scope || this.template.defScope;
+        },
+
+        /**
+         * Get active scope
+         * @returns {String} scope
+         **/
+        get : function() {
+            return this.current
+        }
+    }
+
     /**
      * Host Class
      *
@@ -509,6 +550,7 @@ function Config(opt, contextResetNeeded) {
             masterPort      = null,
             appPort         = null,
             env             = self.Env.get(),
+            scope           = self.Scope.get(),
             appsPath        = '',
             modelsPath      = '',
             projectPath     = '',
@@ -850,21 +892,22 @@ function Config(opt, contextResetNeeded) {
                 newContent[app][env].rootDomain = rootDomain;
 
                 let reps = {
-                    "frameworkDir"  : getEnvVar('GINA_FRAMEWORK_DIR'),
-                    "executionPath" : root,
-                    "projectPath"   : projectPath,
-                    "bundlesPath" : appsPath,
-                    "modelsPath" : modelsPath,
-                    "tmpPath" : newContent[app][env].tmpPath,
-                    "scope"     : newContent[app][env].server.scope,
-                    "rootDomain"     : rootDomain,
-                    "projectVersion"   : manifest,
+                    "frameworkDir"          : getEnvVar('GINA_FRAMEWORK_DIR'),
+                    "executionPath"         : root,
+                    "projectPath"           : projectPath,
+                    "bundlesPath"           : appsPath,
+                    "modelsPath"            : modelsPath,
+                    "tmpPath"               : newContent[app][env].tmpPath,
+                    "scope"                 : newContent[app][env].server.scope,
+                    "rootDomain"            : rootDomain,
+                    "projectVersion"        : manifest,
                     "projectVersionMajor"   : manifest.version.split(/\./g)[0],
-                    "host"     : newContent[app][env].host,
-                    "scheme"    : newContent[app][env].server.scheme,
-                    "env" : env,
-                    "bundle" : app,
-                    "version" : version
+                    "host"                  : newContent[app][env].host,
+                    "scheme"                : newContent[app][env].server.scheme,
+                    "env"                   : env,
+                    "scope"                 : scope,
+                    "bundle"                : app,
+                    "version"               : version
                 };
 
                 // replacement for {bundle}@{project}
@@ -898,7 +941,6 @@ function Config(opt, contextResetNeeded) {
     }
 
     var isFileInProject = function(file) {
-
         try {
             var usrConf = require(self.executionPath +'/'+ file +'.json');
             return true
@@ -928,6 +970,11 @@ function Config(opt, contextResetNeeded) {
         return self.allEnvs
     }
 
+    this.getAllScopes = function() {
+        //Registered apps only.
+        return self.allScopes
+    }
+
     /**
      * Get original rule
      *
@@ -940,7 +987,7 @@ function Config(opt, contextResetNeeded) {
 
         var currentRouting  = routing[rule];
 
-        for (var f in routing) {
+        for (let f in routing) {
             if (
                 routing[f].param.action == currentRouting.param.action
                 && routing[f].bundle == currentRouting.bundle
@@ -1038,8 +1085,7 @@ function Config(opt, contextResetNeeded) {
         }
 
 
-        for (var k in obj) {
-
+        for (let k in obj) {
             if (k == key) {
                 ++i;
                 return parseFileConf(root, arr, obj[key], len, i, content, pathname);
@@ -1052,7 +1098,8 @@ function Config(opt, contextResetNeeded) {
         if (!matched || !Array.isArray(matched) || Array.isArray(matched) && matched.length == 0 ) {
             return name
         }
-        var env = self.envConf.env;
+        var env     = self.envConf.env;
+        var scope   = self.envConf.scope;
 
         for (let i=0, len=matched.length; i<len; ++i) {
             let oldHost = matched[i];
@@ -1075,6 +1122,7 @@ function Config(opt, contextResetNeeded) {
         }
         matched = null;
         env = null;
+        scope = null;
 
         return name;
     }
@@ -1092,13 +1140,14 @@ function Config(opt, contextResetNeeded) {
         // environment
         var cacheless       = self.isCacheless()
             , isStandalone  = self.Host.isStandalone()
-            , env           = self.env || self.Env.get() // env
+            , env           = self.env || self.Env.get() // env
+            , scope         = self.scope || self.Scope.get() // scope
             , conf          = self.envConf // env conf
         ;
         console.debug('[ CONFIG ] loading `'+ bundle +'/'+ env +'` configuration, please wait ...');
 
 
-        self.setServerCoreConf(bundle, env, conf.core);
+        self.setServerCoreConf(bundle, env, scope, conf.core);
 
         // bundle paths, ports, protocols
         var appPath         = ''
@@ -1268,7 +1317,7 @@ function Config(opt, contextResetNeeded) {
                 }
             }
             // loading main
-            filename = _(appPath + '/config/' + main);
+            filename = _(appPath + '/config/' + main, true);
             //Can't do anything without.
             try {
                 exists = fs.existsSync(_(filename, true));
@@ -1322,6 +1371,14 @@ function Config(opt, contextResetNeeded) {
         } else if (hasViews) {
             conf[bundle][env].template = true;
         }
+
+        // routing.global.json
+        let globalMiddlewares = null;
+        let globalMiddlewaresPathObj = new _(appPath + '/config/routing.global.json', true);
+        if ( globalMiddlewaresPathObj.existsSync() ) {
+            globalMiddlewares = requireJSON(globalMiddlewaresPathObj.toUnixStyle()).middleware;
+        }
+        globalMiddlewaresPathObj = null;
 
 
         name = 'routing';
@@ -1474,8 +1531,15 @@ function Config(opt, contextResetNeeded) {
             if ( typeof(routing[rule].middleware) == 'undefined' || !routing[rule].middleware )
                 routing[rule].middleware = [];
 
-            if ( typeof(commonMiddlewares) != 'undefined' ) {
-                routing[rule].middleware = merge(commonMiddlewares.slice(), routing[rule].middleware)
+            if (
+                globalMiddlewares
+                && Array.isArray(globalMiddlewares)
+                && globalMiddlewares.length > 0
+            ) {
+                if ( typeof(routing[rule].middleware) == 'undefined' ) {
+                    routing[rule].middleware = [];
+                }
+                routing[rule].middleware = merge(globalMiddlewares.slice(), routing[rule].middleware);
             }
 
             // default url
@@ -1539,7 +1603,7 @@ function Config(opt, contextResetNeeded) {
             }
         }
 
-        self.setRouting(bundle, env, routing);
+        self.setRouting(bundle, env, scope, routing);
         // reverse routing
         for (let rule in routing) {
 
@@ -1553,7 +1617,7 @@ function Config(opt, contextResetNeeded) {
                 reverseRouting[ routing[rule].url ] = rule
             }
         }
-        self.setReverseRouting(bundle, env, reverseRouting);
+        self.setReverseRouting(bundle, env, scope, reverseRouting);
 
         if (!conf[bundle][env].executionPath) {
             conf[bundle][env].executionPath = self.executionPath
@@ -1564,8 +1628,9 @@ function Config(opt, contextResetNeeded) {
             "gina"              : getPath('gina').root,
             "frameworkDir"      : getEnvVar('GINA_FRAMEWORK_DIR'),
             "scope"             : conf[bundle][env].server.scope,
-            "host"             : conf[bundle][env].host,
+            "host"              : conf[bundle][env].host,
             "env"               : env,
+            "scope"             : scope,
             "bundle"            : bundle,
             // "server.engine"     : conf[bundle][env].engine,
             // "server.protocol"   : conf[bundle][env].protocol,
@@ -1606,7 +1671,7 @@ function Config(opt, contextResetNeeded) {
         }
 
         var ports = conf[bundle][env].port;
-        for (var p in ports) {
+        for (let p in ports) {
             reps[p+'Port'] = ports[p]
         }
 
@@ -1615,7 +1680,7 @@ function Config(opt, contextResetNeeded) {
             conf[bundle][env] = merge(conf[bundle][env], requireJSON(localEnv), true);
         }
         var envKeys = conf[bundle][env];
-        for (var k in envKeys) {
+        for (let k in envKeys) {
             if ( typeof(envKeys[k]) != 'object' && typeof(envKeys[k]) != 'array' ) {
                 reps[k] = envKeys[k]
             }
@@ -1706,6 +1771,8 @@ function Config(opt, contextResetNeeded) {
                     }
                     ++d
                 }
+                d           = null;
+                dirsOrFiles = null;
 
                 if (hasWebRoot) {
                     var staticToPublicPath = null;
@@ -1718,6 +1785,7 @@ function Config(opt, contextResetNeeded) {
                         if ( publicResources.indexOf(staticToPublicPath) < 0 )
                             publicResources.push( staticToPublicPath )
                     }
+                    staticToPublicPath = null;
                 }
 
                 conf[bundle][env].publicResources = publicResources
@@ -1968,7 +2036,7 @@ function Config(opt, contextResetNeeded) {
 
                                 if (/^(\*|\*\*|all)$/i.test(files['templates'][section][excludedStr])) {
                                     //currentCollection = allFilesCollection.notIn({ name: 'gina'}, 'name').toRaw();
-                                    currentCollection = allFilesCollection.toRaw();
+                                    currentCollection = new Collection(allFilesCollection.toRaw());
 
                                     excluded = [];
                                     for (let e = 0, eLen = currentCollectionRaw.length; e < eLen; e++) {
@@ -2138,6 +2206,7 @@ function Config(opt, contextResetNeeded) {
             conf[bundle][env].bundles   = self.getBundles();
 
         conf[bundle][env].env       = env;
+        conf[bundle][env].scope     = scope;
 
         // this setting is replace on http requests by the value extracted form the request header
         if (
@@ -2312,20 +2381,22 @@ function Config(opt, contextResetNeeded) {
     this.refreshModels = function(bundle, env, callback) {
         var conf            = self.envConf[bundle][env]
             //Reload models.
-            , modelsPath    = _(conf.modelsPath);
+            , modelsPath    = _(conf.modelsPath, true)
+            , modelsPathObj = new _(modelsPath, true)
+        ;
 
-
-        fs.exists(modelsPath, function(exists){
-            if (exists && self.startingApp == conf.bundle) {
-                modelUtil.reloadModels(
-                    conf,
-                    function doneReloadingModel(err) {
-                        callback(err)
-                    })
-            } else {
-                callback(false)
-            }
-        })
+        if (
+            modelsPathObj.existsSync()
+            && self.startingApp == conf.bundle
+        ) {
+            modelUtil.reloadModels(
+                conf,
+                function doneReloadingModel(err) {
+                    callback(err)
+                })
+        } else {
+            callback(false)
+        }
     }
 
     /**
@@ -2333,7 +2404,7 @@ function Config(opt, contextResetNeeded) {
      *
      * @param {object} routing
      * */
-    this.setRouting = function(bundle, env, routing) {
+    this.setRouting = function(bundle, env, scope, routing) {
 
         if (!self.envConf.routing)
             self.envConf.routing = {};
@@ -2355,7 +2426,7 @@ function Config(opt, contextResetNeeded) {
     this.getRouting = function(bundle, env) {
 
         if (typeof(env) == 'undefined') {
-            env = self.env || self.Env.get()
+            env = self.env || self.Env.get()
         }
 
         if ( typeof(bundle) != 'undefined' ) {
@@ -2365,7 +2436,7 @@ function Config(opt, contextResetNeeded) {
         return self.envConf.routing;
     }
 
-    this.setReverseRouting = function(bundle, env, reverseRouting) {
+    this.setReverseRouting = function(bundle, env, scope, reverseRouting) {
 
         if (!self.envConf.reverseRouting)
             self.envConf.reverseRouting = {};

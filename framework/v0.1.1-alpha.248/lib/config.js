@@ -135,7 +135,8 @@ function ConfigUtil() {
     this.getSync = function(project, file, i){
         i = i || 0;
         var maxRetry    = 7
-            , delay     = 300;
+            , delay     = 300
+        ;
 
         if (typeof(file) == 'undefined') {
             file = 'locals.json'

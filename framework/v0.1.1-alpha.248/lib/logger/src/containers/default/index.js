@@ -34,6 +34,7 @@ function DefaultContainer(opt, loggers) {
                 content     : '`'+ self.name +'` logger container loaded !'
             }));
         }
+        level = null;
         // ------------------------------------------------------------------------
     }
 
@@ -56,6 +57,7 @@ function DefaultContainer(opt, loggers) {
                 process.stdout.write( format('', '', payload, true) );
             }
 
+            payloadObj = null;
         });
     }
 

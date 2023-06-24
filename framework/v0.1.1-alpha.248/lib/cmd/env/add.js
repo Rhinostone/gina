@@ -1,8 +1,8 @@
 var fs      = require('fs');
 
 var CmdHelper   = require('./../helper');
-var console = lib.logger;
-var scan    = require('../port/inc/scan.js');
+var console     = lib.logger;
+var scan        = require('../port/inc/scan.js');
 
 /**
  * Add new environment for a given project
@@ -19,7 +19,7 @@ function Add(opt, cmd) {
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
 
-        self.projects = requireJSON(_(GINA_HOMEDIR + '/projects.json'));
+        self.projects = requireJSON(_(GINA_HOMEDIR + '/projects.json', true));
         self.bundles = [];
         self.portsAvailable = {};
 
@@ -31,8 +31,10 @@ function Add(opt, cmd) {
                     process.exit(1);
                 }
 
-            } else if (/^[a-z0-9_.]/.test(process.argv[i])) {
-                envs.push(process.argv[i])
+            }
+            else if (/^[a-z0-9_.]/.test(process.argv[i])) {
+                local.env = process.argv[i];
+                envs.push(process.argv[i]);
             }
         }
 
@@ -405,6 +407,22 @@ function Add(opt, cmd) {
 
     var updateManifest = function() {
         // projectManifestPath
+        var env             = local.env
+            , projectData   = JSON.clone(self.projectData)
+        ;
+
+        // for (let bundle in projectData.bundles) {
+        //     if (
+        //         typeof(projectData.bundles[bundle].releases[env]) != 'undefined'
+        //         && typeof(projectData.bundles[bundle].releases[env].target) != 'undefined'
+        //     ) {
+        //         delete projectData.bundles[bundle].releases[env].target
+        //     }
+        // }
+
+        // lib.generator.createFileFromDataSync(projectData, self.projectManifestPath);
+
+        end()
 
     }
 
@@ -430,6 +448,25 @@ function Add(opt, cmd) {
 
         writeFiles()
     };
+
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
+            if ( typeof(type) != 'undefined' ) {
+                console[type](output);
+                if ( messageOnly && type != 'log') {
+                    console.log(output);
+                }
+            } else {
+                console.log(output);
+            }
+        }
+
+        process.exit( err ? 1:0 )
+    }
 
     init()
 };

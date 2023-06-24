@@ -5762,14 +5762,16 @@ function Collection(content, options) {
      * */
     instance['toRaw'] = function() {
 
-        var result = ( Array.isArray(this) ) ? this : content;
+        var result = ( Array.isArray(this) ) ? this.slice() : content.slice();
         // cleanup
         for (var i = 0, len = result.length; i < len; ++i) {
             if (result[i]._uuid)
                 delete result[i]._uuid;
+
         }
 
-        return JSON.clone(result);
+        // return JSON.clone(result);
+        return result
     }
 
     /**
@@ -7869,6 +7871,10 @@ function Routing() {
                 ++i;
             }
 
+            i       = null;
+            urls    = null;
+            len     = null;
+
             return foundRoute;
         } else {
             return await parseRouting(params, url, request, response, next);
@@ -7906,7 +7912,15 @@ function Routing() {
         //     console.debug('passed '+ params.rule);
         // }
 
-        var uRe             = params.url.split(/\//)
+        var paramUrlSplit = null;
+        try {
+            paramUrlSplit = params.url.split(/\//);
+        } catch (paramUrlSplitErr) {
+            console.warn(paramUrlSplitErr);
+            paramUrlSplit = ['']
+        }
+
+        var uRe             = paramUrlSplit
             , uRo           = url.split(/\//)
             , uReCount      = 0
             , uRoCount      = 0
@@ -8904,6 +8918,7 @@ function Routing() {
         if (
             arguments.length == 2
             && typeof(arguments[1]) != 'undefined'
+            && arguments[1]
             && self.allowedMethods.indexOf(arguments[1].toLowerCase()) > -1
         ) {
             method = arguments[1];
@@ -18297,10 +18312,10 @@ define('gina/toolbar', ['require', 'jquery', 'vendor/uuid'/**, 'lib/merge'*/, 'l
 
                 if ( /^action$/.test(key) ) {
 
-                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : undefined;
+                    formMethod  = ( typeof(attributes['method']) != 'undefined' ) ? attributes['method'].nodeValue : null;
 
                     if (!formMethod) {
-                        console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ attributes['id'].nodeValue +'` method attribute cannot be left undefined !');
+                        console.warn('[ ToolbarFormHelper::UndefinedMethod : form `'+ (id||undefined) +'` method attribute cannot be left undefined !');
                     }
 
                     routeObj    = routing.getRouteByUrl(val, formMethod);
@@ -22048,13 +22063,17 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
                         var options = gina['config'] = {
                             /**@js_externs env*/
-                            env     : '{{ page.environment.env }}',
+                            env             : '{{ page.environment.env }}',
                             /**@js_externs envIsDev*/
-                            envIsDev : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+                            envIsDev        : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+                            /**@js_externs scope*/
+                            scope           : '{{ page.environment.scope }}',
+                            /**@js_externs scopeIsLocal*/
+                            scopeIsLocal    : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
                             /**@js_externs version*/
-                            //version : '{{ page.environment.version }}',
+                            //version       : '{{ page.environment.version }}',
                             /**@js_externs webroot*/
-                            'webroot' : '{{ page.environment.webroot }}',
+                            'webroot'       : '{{ page.environment.webroot }}',
                         };
 
 
@@ -22073,6 +22092,10 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             if (matched)
                                 window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
                         }
+
+                        window['GINA_SCOPE']          = '{{ page.environment.scope }}';
+                        window['GINA_SCOPE_IS_LOCAL']   = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+
 
                         gina["setOptions"](options);
                         gina["isFrameworkLoaded"]       = true;

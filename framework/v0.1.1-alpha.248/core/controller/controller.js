@@ -137,6 +137,33 @@ function SuperController(options) {
         return /https/.test(local.options.conf.server.scheme)
     }
 
+    /**
+     * freeMemory
+     *
+     * @param {array} variables
+     * @param {boolean} isGlobalModeNeeded
+     */
+    var freeMemory = function(variables, isGlobalModeNeeded) {
+        if ( !Array.isArray(variables) || !variables.length ) {
+            return;
+        }
+        if ( typeof(isGlobalModeNeeded) == 'undefined' ) {
+            isGlobalModeNeeded = true;
+        }
+        var i = 0, len = variables.length;
+        while (i<len) {
+            if ( typeof(variables[i]) != 'undefined' ) {
+                variables[i] = null;
+            }
+            ++i;
+        }
+
+        if (/^true$/i.test(isGlobalModeNeeded) ) {
+            // all but local.options becasue of `self.requireController('namespace', self._options)` calls
+            // local = null;
+        }
+    }
+
     this.getRequestObject = function() {
         return local.req;
     }
@@ -195,11 +222,11 @@ function SuperController(options) {
                 , p = options.conf.content.routing[options.rule].param
             ;
 
-            for (var key in p) {
+            for (let key in p) {
                 if ( p.hasOwnProperty(key) && !/^(control)$/.test(key) ) {
                     str += key + '.';
-                    var obj = p[key], value = '';
-                    for (var prop in obj) {
+                    let obj = p[key], value = '';
+                    for (let prop in obj) {
                         if (obj.hasOwnProperty(prop)) {
                             value += obj[prop]
                         } else {
@@ -219,6 +246,8 @@ function SuperController(options) {
                     }
                 }
             }
+
+            freeMemory([str, p], false);
         }
 
         local.req = req;
@@ -234,6 +263,8 @@ function SuperController(options) {
                 , ext               = 'html' // by default
                 , isWithoutLayout   = false // by default
                 , namespace         = local.options.namespace || '';
+
+
 
 
             if ( typeof(local.options.template) != 'undefined' && local.options.template ) {
@@ -399,6 +430,7 @@ function SuperController(options) {
         if ( !getContext('isProxyHost') ) {
             var isProxyHost = ( typeof(req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers.host != local.options.conf.hostname || typeof(req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
             setContext('isProxyHost', isProxyHost);
+            isProxyHost = null;
         }
 
         //TODO - detect when to use swig
@@ -426,9 +458,16 @@ function SuperController(options) {
             // preserve the same timezone as the system
             var defaultTZOffset = new Date().getTimezoneOffset();
             swig.setDefaultTZOffset(defaultTZOffset);
+            defaultTZOffset = null;
 
             self.engine = swig;
+
+            dir = null;
+            swigOptions = null;
+
         }
+
+        freeMemory([action, rule, ext, isWithoutLayout, namespace, ctx, version, routing, reverseRouting, forms, parameters, acceptLanguage, userCulture, userCultureCode, userLangCode, userCountryCode, locales, userLocales], false);
     }
 
     this.renderWithoutLayout = function (data, displayToolbar) {
@@ -474,7 +513,7 @@ function SuperController(options) {
         localOptions.renderingStack.push( self.name );
         // preventing multiple call of self.render() when controller is rendering from another required controller
         if ( localOptions.renderingStack.length > 1 && !isRenderingCustomError ) {
-            return false
+            return false;
         }
 
 
@@ -484,8 +523,73 @@ function SuperController(options) {
             , file              = null
             , path              = null
             , plugin            = null
+            // By default
             , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
         ;
+
+        try {
+            data = getData();
+            file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
+            // making path thru [namespace &] file
+            if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
+                // excepted for custom paths
+                var fileNamingConvention = file.replace(localOptions.namespace+'-', '');
+                if ( !/^(\.|\/|\\)/.test(file) && file != fileNamingConvention ) {
+                    var _ext = data.page.view.ext;
+
+                    console.warn('file `'+ file +'` used in routing `'+ localOptions.rule +'` does not respect gina naming convention ! You should rename the file `'+ file + _ext +'` to `'+ ''+ fileNamingConvention + _ext +'`');
+                    console.warn('The reason you are getting this message is because your filename begeins with `<namespace>-`\n If you don\‘t want to rename, use template path like ./../'+ localOptions.namespace +'/'+file);
+                    file = ''+ file.replace(localOptions.namespace+'-', '');
+                }
+                fileNamingConvention = null;
+                _ext = null;
+
+
+                // means that rule name === namespace -> pointing to root namespace dir
+                if (!file || file === localOptions.namespace) {
+                    file = 'index'
+                }
+                path = (isRenderingCustomError) ? _(file) : _(localOptions.template.html +'/'+ localOptions.namespace + '/' + file)
+            } else {
+                if ( localOptions.path && !/(\?|\#)/.test(localOptions.path) ) {
+                    path = _(localOptions.path);
+                    var re = new RegExp( data.page.view.ext+'$');
+                    if ( data.page.view.ext && re.test(data.page.view.file) ) {
+                        data.page.view.path = path.replace('/'+ data.page.view.file, '');
+
+                        path            = path.replace(re, '');
+                        data.page.view.file  = data.page.view.file.replace(re, '');
+
+                    } else {
+                        data.page.view.path = path.replace('/'+ data.page.view.file, '');
+                    }
+                    re = null;
+                } else {
+                     path = (!isRenderingCustomError && !/^(\.|\/|\\)/.test(file))
+                            ? _(localOptions.template.html +'/'+ file)
+                            : file
+                }
+            }
+
+            if (data.page.view.ext && !new RegExp(data.page.view.ext+ '$').test(file) /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
+                path += data.page.view.ext
+            }
+
+            data.page.view.path = path;
+        } catch (dataErr) {
+            return self.throwError(dataErr);
+        }
+
+        // isWithoutLayout from content
+        var pageContentObj = new _(data.page.view.path);
+        if (
+            !isWithoutLayout
+            && pageContentObj.existsSync()
+            && !/\{\%(\s+extends|extends)/.test(fs.readFileSync(path).toString())
+        ) {
+            isWithoutLayout = true;
+        }
+        pageContentObj = null;
 
         localOptions.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
 
@@ -513,7 +617,6 @@ function SuperController(options) {
         }
 
         try {
-            data = getData();
 
             if (!userData) {
                 userData = { page: { view: {}}}
@@ -535,6 +638,8 @@ function SuperController(options) {
                 localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets).find({ isCommon: false}, { isCommon: true, name: 'gina' });
             }
             setResources(localTemplateConf);
+            // localTemplateConf = null;
+
             // Allowing file & ext override
             if (
                 typeof(local.req.routing.param.file) != 'undefined'
@@ -549,7 +654,7 @@ function SuperController(options) {
                 data.page.view.ext = localOptions.template.ext = local.req.routing.param.ext
             }
 
-            file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
+            // file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
 
             // pre-compiling variables
             data = merge(data, getData()); // needed !!
@@ -565,7 +670,7 @@ function SuperController(options) {
                 && !/^2/.test(data.page.data.status)
                 && typeof(data.page.data.error) != 'undefined'
             ) {
-                var statusCode = localOptions.conf.server.coreConfiguration.statusCodes;
+                // var statusCode = localOptions.conf.server.coreConfiguration.statusCodes;
                 var errorObject = {
                     status: data.page.data.status,
                     //errors: msg.error || msg.errors || msg,
@@ -576,57 +681,57 @@ function SuperController(options) {
                 if ( typeof(data.page.data.session) != 'undefined' ) {
                     errorObject.session = data.page.data.session;
                 }
-                self.throwError(errorObject);
-                return;
+
+                return self.throwError(errorObject);
             }
 
-            // making path thru [namespace &] file
-            if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
-                // excepted for custom paths
-                var fileNamingConvention = file.replace(localOptions.namespace+'-', '');
-                if ( !/^(\.|\/|\\)/.test(file) && file != fileNamingConvention ) {
-                    var _ext = data.page.view.ext;
+            // // making path thru [namespace &] file
+            // if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
+            //     // excepted for custom paths
+            //     var fileNamingConvention = file.replace(localOptions.namespace+'-', '');
+            //     if ( !/^(\.|\/|\\)/.test(file) && file != fileNamingConvention ) {
+            //         var _ext = data.page.view.ext;
 
-                    console.warn('file `'+ file +'` used in routing `'+ localOptions.rule +'` does not respect gina naming convention ! You should rename the file `'+ file + _ext +'` to `'+ ''+ fileNamingConvention + _ext +'`');
-                    console.warn('The reason you are getting this message is because your filename begeins with `<namespace>-`\n If you don\‘t want to rename, use template path like ./../'+ localOptions.namespace +'/'+file);
-                    file = ''+ file.replace(localOptions.namespace+'-', '');
-                }
+            //         console.warn('file `'+ file +'` used in routing `'+ localOptions.rule +'` does not respect gina naming convention ! You should rename the file `'+ file + _ext +'` to `'+ ''+ fileNamingConvention + _ext +'`');
+            //         console.warn('The reason you are getting this message is because your filename begeins with `<namespace>-`\n If you don\‘t want to rename, use template path like ./../'+ localOptions.namespace +'/'+file);
+            //         file = ''+ file.replace(localOptions.namespace+'-', '');
+            //     }
 
 
-                // means that rule name === namespace -> pointing to root namespace dir
-                if (!file || file === localOptions.namespace) {
-                    file = 'index'
-                }
-                path = (isRenderingCustomError) ? _(file) : _(localOptions.template.html +'/'+ localOptions.namespace + '/' + file)
-            } else {
-                if ( localOptions.path && !/(\?|\#)/.test(localOptions.path) ) {
-                    path = _(localOptions.path);
-                    var re = new RegExp( data.page.view.ext+'$');
-                    if ( data.page.view.ext && re.test(data.page.view.file) ) {
-                        data.page.view.path = path.replace('/'+ data.page.view.file, '');
+            //     // means that rule name === namespace -> pointing to root namespace dir
+            //     if (!file || file === localOptions.namespace) {
+            //         file = 'index'
+            //     }
+            //     path = (isRenderingCustomError) ? _(file) : _(localOptions.template.html +'/'+ localOptions.namespace + '/' + file)
+            // } else {
+            //     if ( localOptions.path && !/(\?|\#)/.test(localOptions.path) ) {
+            //         path = _(localOptions.path);
+            //         var re = new RegExp( data.page.view.ext+'$');
+            //         if ( data.page.view.ext && re.test(data.page.view.file) ) {
+            //             data.page.view.path = path.replace('/'+ data.page.view.file, '');
 
-                        path            = path.replace(re, '');
-                        data.page.view.file  = data.page.view.file.replace(re, '');
+            //             path            = path.replace(re, '');
+            //             data.page.view.file  = data.page.view.file.replace(re, '');
 
-                    } else {
-                        data.page.view.path = path.replace('/'+ data.page.view.file, '');
-                    }
+            //         } else {
+            //             data.page.view.path = path.replace('/'+ data.page.view.file, '');
+            //         }
 
-                } else {
-                     path = (!isRenderingCustomError && !/^(\.|\/|\\)/.test(file))
-                            ? _(localOptions.template.html +'/'+ file)
-                            : file
-                }
-            }
+            //     } else {
+            //          path = (!isRenderingCustomError && !/^(\.|\/|\\)/.test(file))
+            //                 ? _(localOptions.template.html +'/'+ file)
+            //                 : file
+            //     }
+            // }
 
-            if (data.page.view.ext && !new RegExp(data.page.view.ext+ '$').test(file) /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
-                path += data.page.view.ext
-            }
+            // if (data.page.view.ext && !new RegExp(data.page.view.ext+ '$').test(file) /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
+            //     path += data.page.view.ext
+            // }
 
-            data.page.view.path = path;
+            // data.page.view.path = path;
 
             var dic = {}, msg = '';
-            for (var d in data.page) {
+            for (let d in data.page) {
                 dic['page.'+d] = data.page[d]
             }
 
@@ -817,11 +922,14 @@ function SuperController(options) {
                 }
                 //dic['page.content'] = layout;
 
+                tpl = null;
+
             } catch(err) {
                 err.stack = 'Exception, bad syntax or undefined data found: start investigating in '+ mapping.filename +'\n' + err.stack;
-                self.throwError(local.res, 500, err);
-                return
+                return self.throwError(local.res, 500, err);
             }
+            mapping = null;
+            filename = null;
 
             isLoadingPartial = (
                 !/\<html/i.test(layout)
@@ -859,6 +967,7 @@ function SuperController(options) {
                     var webroot = data.page.environment.webroot;
                     scripts = scripts.replace(/src\=\"\/(.*)\"/g, 'src="'+ webroot +'$1"');
                     //stylesheets = stylesheets.replace(/href\=\"\/(.*)\"/g, 'href="'+ webroot +'$1"')
+                    webroot = null;
                 }
 
                 // iframe case - without HTML TAG
@@ -1078,6 +1187,7 @@ function SuperController(options) {
                     filename = localOptions.template.html;
                     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                     self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
+                    filename = null;
                     return;
                 }
 
@@ -1122,17 +1232,25 @@ function SuperController(options) {
 
                 console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
 
-            } else if (typeof(local.next) != 'undefined') {
-                // local.next();
-                return local.next();
-            } else {
-                if ( typeof(local.req.params.errorObject) != 'undefined' ) {
-                    self.throwError(local.req.params.errorObject);
-                    return;
+                if ( typeof(local.next) != 'undefined' ) {
+                    return local.next();
                 }
-                local.res.end('Unexpected controller error while trying to render.');
                 return;
             }
+
+
+            if ( typeof(local.req.params.errorObject) != 'undefined' ) {
+                self.throwError(local.req.params.errorObject);
+                return;
+            }
+            local.res.end('Unexpected controller error while trying to render.');
+
+            if (typeof(local.next) != 'undefined') {
+                return local.next();
+            }
+
+            return;
+
         } catch (err) {
             self.throwError(local.res, 500, err);
             return;
@@ -1183,6 +1301,12 @@ function SuperController(options) {
         //     stream = response.stream;
         // }
 
+        // Added on 2023-06-12
+        if ( headersSent(response) ) {
+            freeMemory([jsonObj, request, response, next]);
+            return;
+        }
+
         if (!jsonObj) {
             jsonObj = {}
         }
@@ -1192,6 +1316,7 @@ function SuperController(options) {
             if ( typeof(jsonObj) == 'string') {
                 jsonObj = JSON.parse(jsonObj)
             }
+            var data = JSON.stringify(jsonObj);
 
             // if( typeof(local.options) != "undefined" && typeof(local.options.charset) != "undefined" ){
             //     response.setHeader("charset", local.options.charset);
@@ -1201,7 +1326,9 @@ function SuperController(options) {
             //catching errors
             if (
                 typeof(jsonObj.errno) != 'undefined' && response.statusCode == 200
-                || typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200 && typeof(local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status]) != 'undefined'
+                ||
+                typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200
+                    && typeof(local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status]) != 'undefined'
             ) {
 
                 try {
@@ -1221,73 +1348,61 @@ function SuperController(options) {
                 response.setHeader('content-type', local.options.conf.server.coreConfiguration.mime['json'] + '; charset='+ local.options.conf.encoding)
             }
 
-            if ( !headersSent(response) ) {
+            // if ( !headersSent(response) ) {
                 console.info(request.method +' ['+ response.statusCode +'] '+ request.url);
+
 
                 if ( local.options.isXMLRequest && self.isWithCredentials() )  {
 
-                    var data = JSON.stringify(jsonObj);
-                    var len = 0;
                     // content length must be the right size !
-                    if ( typeof(data) === 'string') {
-                        len = Buffer.byteLength(data, 'utf8')
-                    } else {
-                        len = data.length
+                    var len = Buffer.byteLength(data, 'utf8') || 0;
+                    if ( !headersSent(response) ) {
+                        response.setHeader("content-length", len);
                     }
 
-                    if (!headersSent(response))
-                        response.setHeader("content-length", len);
+                    response.write(data);
 
-
-                    // if (stream && !stream.destroyed) {
-                    //     //stream.respond(header);
-                    //     stream.end(data);
-                    // } else {
-                        response.write(data);
-
-                        // required to close connection
-                        setTimeout(function () {
-                            response.end();
-                            try {
-                                response.headersSent = true;
-                            } catch(err) {
-                                // Ignoring warning
-                                //console.warn(err);
-                            }
-
-                            if ( next ) {
-                                next()
-                            }
-                        }, 200);
-
-
-
-                        return // force completion
-                    // }
-
-
-                } else { // normal case
-                    response.end(JSON.stringify(jsonObj));
-                    if (!headersSent(response)) {
+                    // required to close connection
+                    setTimeout(function () {
+                        response.end();
                         try {
                             response.headersSent = true;
                         } catch(err) {
                             // Ignoring warning
                             //console.warn(err);
                         }
-                    }
-                    if ( next ) {
-                        return next()
-                    }
 
-                    return;
+                        if ( next ) {
+                            next()
+                        }
+
+                        freeMemory([jsonObj, data, request, response, next]);
+                    }, 200);
+
+                    // force completion
+                    return
                 }
-            }
-        } catch (err) {
-            self.throwError(response, 500, err);
-            return;
-        }
+                // normal case
+                response.end(JSON.stringify(jsonObj));
+                if (!headersSent(response)) {
+                    try {
+                        response.headersSent = true;
+                    } catch(err) {
+                        // Ignoring warning
+                        //console.warn(err);
+                    }
+                }
+                if ( next ) {
+                    return next()
+                }
 
+                freeMemory([jsonObj, data, request, response, next]);
+
+                return;
+            // }
+        } catch (err) {
+            return self.throwError(response, 500, err);
+        }
     }
 
 
@@ -1297,33 +1412,52 @@ function SuperController(options) {
         if (local.options.renderingStack.length > 1) {
             return false
         }
+        if ( self.isProcessingError ) {
+           return;
+        }
+
+        var request     = local.req;
+        var response    = local.res;
+        var next        = local.next || null;
+        // var stream      = null;
+        // if ( /http\/2/.test(local.options.conf.server.protocol) ) {
+        //     stream = response.stream;
+        // }
+
+        // Added on 2023-06-12
+        if ( headersSent(response) ) {
+            freeMemory([content, request, response, next]);
+            return;
+        }
 
         if ( typeof(content) != "string" ) {
             content = content.toString();
         }
 
         // if (typeof(options) != "undefined" && typeof(options.charset) !="undefined") {
-        //     local.res.setHeader("charset", options.charset);
+        //     response.setHeader("charset", options.charset);
         // }
-        if ( !local.res.getHeaders()['content-type'] ) {
-            local.res.setHeader('content-type', 'text/plain' + '; charset='+ local.options.conf.encoding);
+        if ( !response.getHeaders()['content-type'] ) {
+            response.setHeader('content-type', 'text/plain' + '; charset='+ local.options.conf.encoding);
         }
 
         if ( !headersSent() ) {
-            console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
-            local.res.end(content);
+            console.info(request.method +' ['+response.statusCode +'] '+ request.url);
+            response.end(content);
             try {
-                local.res.headersSent = true
+                response.headersSent = true
             } catch(err) {
                 // Ignoring warning
                 //console.warn(err);
             }
+
+            freeMemory([jsonObj, data, request, response, next]);
         }
     }
 
     var parseDataObject = function(o, obj, override) {
 
-        for (var i in o) {
+        for (let i in o) {
             if ( o[i] !== null && typeof(o[i]) == 'object' || override && o[i] !== null && typeof(o[i]) == 'object' ) {
                 parseDataObject(o[i], obj);
             } else if (o[i] == '_content_'){
@@ -1353,14 +1487,14 @@ function SuperController(options) {
                 , str       = '{'
                 , _count    = 0;
 
-            for (var k = 0, len = keys.length; k<len; ++k) {
+            for (let k = 0, len = keys.length; k<len; ++k) {
                 str +=  "\""+ keys.splice(0,1)[0] + "\":{";
 
                 ++_count;
                 if (k == len-1) {
                     str = str.substr(0, str.length-1);
                     str += "\"_content_\"";
-                    for (var c = 0; c<_count; ++c) {
+                    for (let c = 0; c<_count; ++c) {
                         str += "}"
                     }
                 }
@@ -1369,8 +1503,11 @@ function SuperController(options) {
             newObj = parseDataObject(JSON.parse(str), value, override);
             local.userData = merge(local.userData, newObj);
 
+            freeMemory([name, value, keys, newObj, str, _count], false);
+
         } else if ( typeof(local.userData[name]) == 'undefined' ) {
-            local.userData[name] = value.replace(/\\/g, '')
+            local.userData[name] = value.replace(/\\/g, '');
+            freeMemory([name, value], false)
         }
     }
 
@@ -1391,8 +1528,7 @@ function SuperController(options) {
      * */
     var setResources = function(viewConf) {
         if (!viewConf) {
-            self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina view:add '+ options.conf.bundle +' @'+ options.conf.projectName));
-            return;
+            return self.throwError(500, new Error('No views configuration found. Did you try to add views before using Controller::render(...) ? Try to run: gina view:add '+ options.conf.bundle +' @'+ options.conf.projectName));
         }
 
         var authority = ( typeof(local.req.headers['x-forwarded-proto']) != 'undefined' ) ? local.req.headers['x-forwarded-proto'] : local.options.conf.server.scheme;
@@ -1401,6 +1537,7 @@ function SuperController(options) {
         if ( !/^\/$/.test(local.options.conf.server.webroot) && local.options.conf.server.webroot.length > 0 && local.options.conf.hostname.replace(/\:\d+$/, '') == authority ) {
             useWebroot = true
         }
+        authority = null;
 
         var reURL = new RegExp('^'+ local.options.conf.server.webroot);
 
@@ -1417,6 +1554,10 @@ function SuperController(options) {
 
         set('page.view.stylesheets', cssStr);
         set('page.view.scripts', jsStr);
+
+        reURL   = null;
+        cssStr  = null;
+        jsStr   = null;
     }
 
     /**
@@ -1455,9 +1596,7 @@ function SuperController(options) {
                     else
                         str += '\n\t\t<link href="'+ obj.url +'" rel="'+ obj.rel +'" type="'+ obj.type +'">';
                 }
-
-                return str;
-            break;
+                break;
 
             case 'js':
                 var deferMode = (local.options.template.javascriptsDeferEnabled) ? ' defer' : '';
@@ -1473,10 +1612,14 @@ function SuperController(options) {
                     }
                     str += '\n\t\t<script'+ deferMode +' type="'+ obj.type +'" src="'+ obj.url +'"></script>'
                 }
-
-                return str;
-            break;
+                break;
         }
+        r       = null;
+        rLen    = null;
+        obj     = null;
+
+
+        return str;
     }
 
     /**
@@ -1492,8 +1635,8 @@ function SuperController(options) {
 
 
     var isValidURL = function(url){
-        var re = /(http|ftp|https|sftp):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/;
-        return (re.test(url)) ? true : false
+        // var re = /(http|ftp|https|sftp):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/;
+        return (/(http|ftp|https|sftp):\/\/[\w-]+(\.[\w-]+)+([\w.,@?^=%&amp;:\/~+#-]*[\w@?^=%&amp;\/~+#-])?/.test(url)) ? true : false;
     }
 
     /**
@@ -1556,8 +1699,9 @@ function SuperController(options) {
         if ( staticProps.isStaticFilename && conf[bundle][env].server.webroot != '/' && staticProps.firstLevel == conf[bundle][env].server.webroot ) {
             var matchedFirstInUrl = url.replace(conf[bundle][env].server.webroot, '').match(/[A-Za-z0-9_-]+\/?/);
             if ( matchedFirstInUrl && matchedFirstInUrl.length > 0 ) {
-                staticProps.firstLevel = conf[bundle][env].server.webroot + matchedFirstInUrl[0]
+                staticProps.firstLevel = conf[bundle][env].server.webroot + matchedFirstInUrl[0];
             }
+            matchedFirstInUrl = null;
         }
 
         if (
@@ -1565,8 +1709,10 @@ function SuperController(options) {
             || staticProps.isStaticFilename && staticsArr.indexOf( url.replace(url.substr(url.lastIndexOf('/')+1), '') ) > -1
             || staticProps.isStaticFilename && staticsArr.indexOf(staticProps.firstLevel) > -1
         ) {
+            staticProps = null;
             return true
         }
+        staticProps = null;
 
         return false;
     }

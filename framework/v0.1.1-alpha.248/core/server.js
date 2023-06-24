@@ -55,10 +55,7 @@ function Server(options) {
 
         var filters = SwigFilters({
             options     : conf,
-            isProxyHost : getContext('isProxyHost'),
-            // throwError  : self.throwError,
-            // req         : local.req,
-            // res         : local.res
+            isProxyHost : getContext('isProxyHost')
         });
 
         try {
@@ -91,8 +88,9 @@ function Server(options) {
         //Starting app.
         self.appName        = options.bundle;
         self.env            = options.env;
+        self.scope          = options.scope;
         self.version        = options.version;
-        local.router        = new Router(self.env);
+        local.router        = new Router(self.env, self.scope);
 
         //True => multiple bundles sharing the same server (port).
         self.isStandalone   = options.isStandalone;
@@ -109,10 +107,10 @@ function Server(options) {
             self.conf[self.appName][self.env].executionPath = options.conf[self.appName][self.env].executionPath = self.executionPath;
         } else {
 
-            //console.log("Running mode not handled yet..", self.appName, " VS ", self.bundles);
+            //console.debug("Running mode not handled yet..", self.appName, " VS ", self.bundles);
             //Load all conf for the related apps & env.
             var apps = self.bundles;
-            for (var i=0; i<apps.length; ++i) {
+            for (let i=0; i<apps.length; ++i) {
                 self.conf[apps[i]] = {};
                 self.conf[apps[i]][self.env] = options.conf[apps[i]][self.env];
                 self.conf[apps[i]][self.env].bundlesPath = options.conf[apps[i]][self.env].bundlesPath;
@@ -141,7 +139,8 @@ function Server(options) {
 
             serverOpt = merge({
                         bundle  : self.appName,
-                        env     : self.env
+                        env     : self.env,
+                        scope   : self.scope
                     },
                     serverOpt,
                     {
@@ -155,11 +154,12 @@ function Server(options) {
             console.debug('[ BUNDLE ][ server ][ init ] Initializing [ '+ self.appName +' ] server with `'+ serverOpt.engine +'`engine');
 
             // controlling one last time protocol & ports
-            var ctx         = getContext('gina'),
-            projectConf     = ctx.project,
-            //protocols       = projectConf.protocols,
-            // TODO - check if the user prefered protocol is register in projectConf
-            portsReverse    = ctx.portsReverse;
+            var ctx             = getContext('gina')
+                , projectConf   = ctx.project
+                // TODO - check if the user prefered protocol is register in projectConf
+                , protocols       = projectConf.protocols
+                , portsReverse    = ctx.portsReverse
+            ;
 
             // locking port & protocol so it can't be changed by the user's settings
             self.conf[self.appName][self.env].server.protocol = serverOpt.protocol;
@@ -194,7 +194,6 @@ function Server(options) {
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {
-
             console.emerg('[ BUNDLE ] [ '+ self.appName +' ] ServerEngine ' + err.stack)
             process.exit(1)
         }
@@ -309,7 +308,7 @@ function Server(options) {
             router.setServerInstance(instance);
         }
 
-        onRequest()
+        return onRequest()
     }
 
 
@@ -328,7 +327,8 @@ function Server(options) {
             , reverseRouting        = {}
             , cacheless             = config.isCacheless()
             , env                   = self.env
-            , apps                  = conf.allBundles//conf.bundles
+            , scope                 = self.scope
+            , apps                  = conf.allBundles // conf.bundles
             , filename              = ''
             , appName               = ''
             , tmp                   = {}
@@ -342,22 +342,23 @@ function Server(options) {
             , webrootAutoredirect   = null
             , localWroot            = null
             , originalRules         = []
-            , oRuleCount            = 0;
+            , oRuleCount            = 0
+        ;
 
         //Standalone or shared instance mode. It doesn't matter.
         for (; i<apps.length; ++i) {
-            config.setServerCoreConf(apps[i], self.env, serverCoreConf);
+            config.setServerCoreConf(apps[i], env, scope, serverCoreConf);
 
-            var appPath = _(conf.envConf[apps[i]][self.env].bundlesPath+ '/' + apps[i]);
+            var appPath = _(conf.envConf[apps[i]][env].bundlesPath+ '/' + apps[i]);
             appName     =  apps[i];
 
             //Specific case.
             if (!self.isStandalone && i == 0) appName = apps[i];
 
             try {
-                main        = _(appPath + '/config/' + conf.envConf[apps[i]][self.env].configFiles.routing);
+                main        = _(appPath + '/config/' + conf.envConf[apps[i]][env].configFiles.routing);
                 filename    = main;//by default
-                filename    = conf.envConf[apps[i]][self.env].configFiles.routing.replace(/.json/, '.' +env + '.json');
+                filename    = conf.envConf[apps[i]][env].configFiles.routing.replace(/.json/, '.' +env + '.json');
                 filename    = _(appPath + '/config/' + filename);
                 //Can't do a thing without.
                 if ( !fs.existsSync(filename) ) {
@@ -383,12 +384,12 @@ function Server(options) {
 
                 try {
 
-                    wroot               = conf.envConf[apps[i]][self.env].server.webroot;
-                    webrootAutoredirect = conf.envConf[apps[i]][self.env].server.webrootAutoredirect;
+                    wroot               = conf.envConf[apps[i]][env].server.webroot;
+                    webrootAutoredirect = conf.envConf[apps[i]][env].server.webrootAutoredirect;
                     // renaming rule for standalone setup
                     if ( self.isStandalone && apps[i] != self.appName && wroot == '/') {
                         wroot = '/'+ apps[i];
-                        conf.envConf[apps[i]][self.env].server.webroot = wroot
+                        conf.envConf[apps[i]][env].server.webroot = wroot
                     }
 
                     if (wroot.length >1) {
@@ -419,9 +420,11 @@ function Server(options) {
                         if (typeof(tmp[rule].url) != 'object') {
                             if (tmp[rule].url.length > 1 && tmp[rule].url.substr(0,1) != '/') {
                                 tmp[rule].url = '/'+tmp[rule].url
-                            }/** else if (tmp[rule].url.length > 1 && conf.envConf[apps[i]][self.env].server.webroot.substr(conf.envConf[apps[i]][self.env].server.webroot.length-1,1) == '/') {
+                            }
+                            /** else if (tmp[rule].url.length > 1 && conf.envConf[apps[i]][env].server.webroot.substr(conf.envConf[apps[i]][env].server.webroot.length-1,1) == '/') {
                                 tmp[rule].url = tmp[rule].url.substr(1)
-                            }*/ else {
+                            }*/
+                            else {
                                 if (wroot.substr(wroot.length-1,1) == '/') {
                                     wroot = wroot.substr(wroot.length-1,1).replace('/', '')
                                 }
@@ -433,11 +436,11 @@ function Server(options) {
                                 originalRules[oRuleCount] = ( self.isStandalone && tmp[rule] && apps[i] != self.appName) ? apps[i] + '-' + rule : rule;
                                 ++oRuleCount;
 
-                                localWroot = conf.envConf[tmp[rule].bundle][self.env].server.webroot;
+                                localWroot = conf.envConf[tmp[rule].bundle][env].server.webroot;
                                 // standalone setup
                                 if ( self.isStandalone && tmp[rule].bundle != self.appName && localWroot == '/') {
                                     localWroot = '/'+ routing[rule].bundle;
-                                    conf.envConf[tmp[rule].bundle][self.env].server.webroot = localWroot
+                                    conf.envConf[tmp[rule].bundle][env].server.webroot = localWroot
                                 }
                                 if (localWroot.substr(localWroot.length-1,1) == '/') {
                                     localWroot = localWroot.substr(localWroot.length-1,1).replace('/', '')
@@ -472,7 +475,7 @@ function Server(options) {
                             // This is only an issue when it comes to the frontend dev
                             // views.routeNameAsFilenameEnabled is set to true by default
                             // IF [ false ] the action is used as filename
-                            if ( !conf.envConf[apps[i]][self.env].content.templates['_common'].routeNameAsFilenameEnabled && tmp[rule].param.bundle != 'framework') {
+                            if ( !conf.envConf[apps[i]][env].content.templates['_common'].routeNameAsFilenameEnabled && tmp[rule].param.bundle != 'framework') {
                                 var tmpRouting = [];
                                 for (var r = 0, len = tmp[rule].param.file.length; r < len; ++r) {
                                     if (/[A-Z]/.test(tmp[rule].param.file.charAt(r))) {
@@ -483,6 +486,7 @@ function Server(options) {
                                         ++r
                                     }
                                 }
+                                tmpRouting = null;
                             }
                         }
 
@@ -507,7 +511,9 @@ function Server(options) {
             routing = merge(routing, ((self.isStandalone && apps[i] != self.appName ) ? standaloneTmp : tmp), true);
             // originalRule is used to facilitate cross bundles (hypertext)linking
             for (let r = 0, len = originalRules.length; r < len; r++) { // for each rule ( originalRules[r] )
-                routing[originalRules[r]].originalRule = (routing[originalRules[r]].bundle === self.appName ) ?  config.getOriginalRule(originalRules[r], routing) : config.getOriginalRule(routing[originalRules[r]].bundle +'-'+ originalRules[r], routing)
+                routing[originalRules[r]].originalRule = (routing[originalRules[r]].bundle === self.appName )
+                    ?  config.getOriginalRule(originalRules[r], routing)
+                    : config.getOriginalRule(routing[originalRules[r]].bundle +'-'+ originalRules[r], routing)
             }
 
             // reverse routing
@@ -521,8 +527,8 @@ function Server(options) {
                 }
             }
 
-            config.setRouting(apps[i], self.env, routing);
-            config.setReverseRouting(apps[i], self.env, reverseRouting);
+            config.setRouting(apps[i], env, scope, routing);
+            config.setReverseRouting(apps[i], env, scope, reverseRouting);
 
             if (apps[i] == self.appName) {
                 self.routing        = routing;
@@ -536,7 +542,9 @@ function Server(options) {
     }
 
     var hasViews = function(bundle) {
-        var _hasViews = false, conf = new Config().getInstance(bundle);
+        var _hasViews   = false
+            , conf      = new Config().getInstance(bundle)
+        ;
         if (typeof(local.hasViews[bundle]) != 'undefined') {
             _hasViews = local.hasViews[bundle];
         } else {
@@ -547,149 +555,6 @@ function Server(options) {
         return _hasViews
     }
 
-    // var parseCollection = function (collection, obj) {
-
-    //     for(var i = 0, len = collection.length; i<len; ++i) {
-    //         obj[i] = parseObject(collection[i], obj);
-    //     }
-
-    //     return obj
-    // }
-
-    // var parseObject = function (tmp, obj) {
-    //     var el      = []
-    //         , key   = null
-    //     ;
-
-    //     for (var o in tmp) {
-
-    //         el[0]   = o;
-    //         el[1]   = tmp[o];
-
-    //         if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
-    //             key = el[0].replace(/\]/g, '').split(/\[/g);
-    //             obj = parseLocalObj(obj, key, 0, el[1])
-    //         } else {
-    //             obj[ el[0] ] = el[1]
-    //         }
-    //     }
-
-    //     return obj
-    // }
-
-    // var parseBody = function(body) {
-    //     var obj = null, tmp = null, arr = null;
-    //     if ( /^(\{|\[|\%7B|\%5B)/.test(body) ) {
-    //         try {
-    //             obj = ( /^(\{|\%7B)/.test() ) ? {} : [];
-
-    //             if ( /^(\%7B|\%5B)/.test(body) ) {
-    //                 tmp = JSON.parse(decodeURIComponent(body))
-    //             } else {
-    //                 tmp = JSON.parse(body)
-    //             }
-
-    //             if ( Array.isArray(tmp) ) {
-    //                 obj = parseCollection(tmp, obj)
-    //             } else {
-    //                 obj = parseObject(tmp, obj)
-    //             }
-
-    //             return obj
-    //         } catch (err) {
-    //             console.error('[365] could not parse body:\n' + body)
-    //         }
-
-    //     } else {
-    //         obj = {};
-    //         arr = body.split(/&/g);
-    //         if ( /(\"false\"|\"true\"|\"on\")/.test(body) )
-    //             body = body.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-
-
-    //         var el      = {}
-    //             , value = null
-    //             , key   = null;
-
-    //         for (var i = 0, len = arr.length; i < len; ++i) {
-    //             if (!arr[i]) continue;
-
-    //             arr[i] = decodeURIComponent(arr[i]);
-
-    //             if ( /^\{/.test(arr[i]) || /\=\{/.test(arr[i]) || /\=\[/.test(arr[i]) ) {
-    //                 //if ( /^\{/.test(arr[i]) ) { // is a json string
-    //                 try {
-    //                     if (/^\{/.test(arr[i])) {
-    //                         obj = JSON.parse(arr[i]);
-    //                         break;
-    //                     } else {
-    //                         el = arr[i].match(/\=(.*)/);
-    //                         el[0] =  arr[i].split(/\=/)[0];
-    //                         obj[ el[0] ] = JSON.parse( el[1] );
-    //                     }
-
-
-    //                 } catch (err) {
-    //                     console.error('[parseBody#1] could not parse body:\n' + arr[i])
-    //                 }
-    //             } else {
-    //                 el = arr[i].split(/=/);
-    //                 if ( /\{\}\"\:/.test(el[1]) ) { //might be a json
-    //                     try {
-    //                         el[1] = JSON.parse(el[1])
-    //                     } catch (err) {
-    //                         console.error('[parseBody#2] could not parse body:\n' + el[1])
-    //                     }
-    //                 }
-
-    //                 if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
-    //                     key     = null;
-    //                     el[0]   = decodeURIComponent(el[0]);
-    //                     el[1]   = decodeURIComponent(el[1]);
-
-    //                     if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
-    //                         key = el[0].replace(/\]/g, '').split(/\[/g);
-    //                         obj = parseLocalObj(obj, key, 0, el[1])
-    //                     } else {
-    //                         obj[ el[0] ] = el[1]
-    //                     }
-    //                 }
-    //             }
-    //         }
-
-    //         return obj
-    //     }
-
-
-    // }
-
-    // var parseLocalObj = function(obj, key, k, value) {
-
-    //     if ( typeof(obj[ key[k] ]) == 'undefined' ) {
-    //         obj[ key[k] ] = {};
-    //     }
-
-    //     for (var prop in obj) {
-
-    //         if (k == key.length-1) {
-
-    //             if (prop == key[k]) {
-    //                 obj[prop] = ( typeof(value) != 'undefined' ) ? value : '';
-    //             }
-
-    //         } else if ( key.indexOf(prop) > -1 ) {
-    //             ++k;
-    //             if ( !obj[prop][ key[k] ] )
-    //                 obj[prop][ key[k] ] = {};
-
-
-    //             parseLocalObj(obj[prop], key, k, value)
-
-    //         }
-    //     }
-
-    //     return obj;
-    // }
 
     var getAssetFilenameFromUrl = function(bundleConf, url) {
 
@@ -939,13 +804,13 @@ function Server(options) {
 
             // parsing css files
             i = 0, len = cssFiles.length;
-            var cssContent = null
-                , hasUrls   = null
-                , definition = null
-                , defName   = null
-                , d = null
-                , dLen = null
-                , cssMatched = null
+            var cssContent      = null
+                , hasUrls       = null
+                , definition    = null
+                , defName       = null
+                , d             = null
+                , dLen          = null
+                , cssMatched    = null
             ;
             var cssArr = null, classNames = null, assetsInClassFound = {};
             for (; i < len; ++i) {
@@ -1105,7 +970,7 @@ function Server(options) {
             , conf          = self.conf[self.appName][self.env]
         ;
 
-        if ( typeof(responseHeaders) == 'undefined' || !responseHeaders) {
+        if ( typeof(responseHeaders) == 'undefined' || !responseHeaders) {
             responseHeaders = {};
         }
 
@@ -1113,7 +978,7 @@ function Server(options) {
         resHeaders  = JSON.clone(conf.server.response.header);
         if ( typeof(request.routing) == 'undefined' ) {
             request.routing = {
-                'url': request.url,
+                'url'   : request.url,
                 'method': request.method
             }
         }
@@ -1126,8 +991,8 @@ function Server(options) {
         if ( typeof(request.headers.origin) != 'undefined' ) {
             authority = request.headers.origin;
         } else if (request.headers.referer) {
-            referer = request.headers.referer.match(/[^http://|^https://|][a-z0-9-_.:]+\//)[0];
-            referer = request.headers.referer.match(/^(http|https)\:\/\/?/)[0] + referer.substring(0, referer.length-1);
+            referer = request.headers.referer.match(/^[http://|https://][a-z0-9-_.:/]+\//)[0];
+            referer = referer.substring(0, referer.length-1);
         }
 
         // access-control-allow-origin settings
@@ -1156,33 +1021,16 @@ function Server(options) {
             re = new RegExp(authority);
             allowedOrigin = ( typeof(conf.server.response.header['access-control-allow-origin']) != 'undefined' && conf.server.response.header['access-control-allow-origin'] != '' ) ? conf.server.response.header['access-control-allow-origin'] : authority;
             var found = null, origin = null, origins = null; // to handles multiple origins
-            // var originHostReplacement = function(name) {
-            //     name = name.replace(/\{|\}/g, '');
-            //     name = name.split(/\@/);
-            //     var bundle      = name[0]
-            //         , project   = name[1]
-            //         , arr       = null
-            //         , domain    = null
-            //     ;
-            //     var env     = conf.env; // current env by default
-            //     if ( /\//.test(name[1]) ) {
-            //         arr     = name[1].split(/\//);
-            //         project = arr[0];
-            //         env     = (arr[1]) ? arr[1] : env;
-            //     }
-
-            //     domain      = ( !/^http/.test(self.conf[bundle][env].hostname) || /^\/\//.test(self.conf[bundle][env].hostname) ) ? scheme +'://'+ self.conf[bundle][env].hostname.replace(/^\/\//, '') : self.conf[bundle][env].hostname;
-            //     // sameOrigin  = (domain == self.conf[bundle][env].hostname) ? self.conf[bundle][env].hostname : false;
-
-            //     return domain
-            // }
 
             var originHostReplacement = function(name) {
                 var matched = name.match(/{([-_A-z]+?@[-_A-z]+?)}/g);
                 if (!matched || !Array.isArray(matched) || Array.isArray(matched) && matched.length == 0 ) {
                     return name
                 }
-                var env = self.conf.env;
+
+                var env     = self.conf.env
+                    , scope = self.conf.scope
+                ;
 
                 for (let i=0, len=matched.length; i<len; ++i) {
                     let oldHost = matched[i];
@@ -1210,7 +1058,7 @@ function Server(options) {
             }
 
             var headerValue = null, re = new RegExp('\{\s*(.*)\s*\}', 'g');
-            for (var h in resHeaders) {
+            for (let h in resHeaders) {
                 if (
                     !response.headersSent
                 ) {
@@ -1368,32 +1216,20 @@ function Server(options) {
             // || headers[':path'] == this._options.conf.server.webroot
             /^true$/i.test(isWebroot)
         ) {
+            header = {
+                ':status': 301
+            };
 
-            // if (
-            //     this._options.conf.server.webroot != headers[':path']
-            //     && this._options.conf.server.webrootAutoredirect
-            //     || headers[':path'] == this._options.conf.server.webroot
-            //         && this._options.conf.server.webrootAutoredirect
-            // ) {
+            if (cacheless) {
+                header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                header['pragma'] = 'no-cache';
+                header['expires'] = '0';
+            }
+            header['location'] = this._options.conf.server.webroot;
 
-                header = {
-                    ':status': 301
-                };
-
-                if (cacheless) {
-                    header['cache-control'] = 'no-cache, no-store, must-revalidate';
-                    header['pragma'] = 'no-cache';
-                    header['expires'] = '0';
-                }
-                header['location'] = this._options.conf.server.webroot;
-
-                stream.respond(header);
-                stream.end();
-                return;
-            // }
-            // else {
-            //     isWebroot = true;
-            // }
+            stream.respond(header);
+            stream.end();
+            return;
         }
 
         if (
@@ -1406,10 +1242,7 @@ function Server(options) {
             header = {
                 ':status': 200
             };
-            // var assets = this._options.template.assets;
-            // var url = (isWebroot) ? this._referrer : headers[':path'];
             var responseHeaders = ( typeof(this._responseHeaders) != 'undefined') ? this._responseHeaders : null;
-            // var conf = this._options.conf;
             asset = {
                 url         : url,
                 filename    : assets[ url ].filename,
@@ -1422,7 +1255,7 @@ function Server(options) {
 
             console.debug('h2 pushing: '+ headers[':path'] + ' -> '+ asset.filename);
 
-            // adding handler `gina.ready(...)` wrapper
+            // Adding handler `gina.ready(...)` wrapper
             if ( new RegExp('^'+ conf.handlersPath).test(asset.filename) ) {
 
                 if ( !fs.existsSync(asset.filename) ) {
@@ -1501,7 +1334,7 @@ function Server(options) {
 
         var protocol    = 'http/'+ local.request.httpVersion; // inheriting request protocol version by default
         var bundleConf  = self.conf[self.appName][self.env];
-        // switching protocol to h2 when possible
+        // Switching protocol to h2 when possible
         if ( /http\/2/.test(bundleConf.server.protocol) && response.stream ) {
             protocol    = bundleConf.server.protocol;
         }
@@ -1572,6 +1405,8 @@ function Server(options) {
                     break;
                 }
             }
+            s       = null;
+            sLen    = null;
         }
 
         filename = decodeURIComponent(filename);
@@ -1950,6 +1785,7 @@ function Server(options) {
                 var rule = request.headers['x-gina-form-rule'].split(/\@/);
                 ginaHeaders.form.rule = rule[0];
                 ginaHeaders.form.bundle = rule[1];
+                rule = null;
             }
             request.ginaHeaders = ginaHeaders;
 
@@ -1987,7 +1823,9 @@ function Server(options) {
                     if ( urls.indexOf('/') > -1 ) {
                         isWebrootHandledByRouting = true;
                     }
+                    urls = null;
                 }
+                routing = null;
             }
 
             // priority to statics - this portion of code has been duplicated to SuperController : see `isStaticRoute` method
@@ -2023,6 +1861,9 @@ function Server(options) {
                 ) {
                     staticProps.isStaticFilename = true
                 }
+
+                ext = null;
+                isImage = null;
             }
 
 
@@ -2033,6 +1874,7 @@ function Server(options) {
                 if ( matchedFirstInUrl && matchedFirstInUrl.length > 0 ) {
                     staticProps.firstLevel = self.conf[self.appName][self.env].server.webroot + matchedFirstInUrl[0]
                 }
+                matchedFirstInUrl = null;
             }
 
             if (
@@ -2043,13 +1885,12 @@ function Server(options) {
             ) {
                 self._isStatic  = true;
 
-
                 self._referrer  = request.url;
                 // by default - used in `composeHeadersMiddleware`: see Default Global Middlewares (gna.js)
                 request.routing = {
-                    'url': request.url,
-                    'method': 'GET',
-                    'bundle' : self.appName
+                    'url'       : request.url,
+                    'method'    : 'GET',
+                    'bundle'    : self.appName
                 };
                 request = checkPreflightRequest(request, response);
                 local.request = request; // update request
@@ -2163,7 +2004,7 @@ function Server(options) {
                         //var buf = new ArrayBuffer(str.length * 2); // 2 bytes for each char when using Uint16Array(buf)
                         //var buf = new ArrayBuffer(str.length); // Uint8Array
                         //var bufView = new Uint8Array(buf);
-                        for (var i = 0, strLen = str.length; i < strLen; i++) {
+                        for (let i = 0, strLen = str.length; i < strLen; i++) {
                             bufView[i] = str.charCodeAt(i);
                         }
 
@@ -2364,7 +2205,8 @@ function Server(options) {
         });//EO this.instance
 
         self.instance.listen(self.conf[self.appName][self.env].server.port);//By Default 3100
-        self.instance.timeout = (1000 * 300); // e.g.: 1000x60 => 60 sec
+        // Timeout in milliseconds - e.g.: (1000x60)x2 => 2 min
+        self.instance.timeout = 0; // zero for unlimited
 
 
         self.emit('started', self.conf[self.appName][self.env], true);
@@ -2511,7 +2353,9 @@ function Server(options) {
                     obj = formatDataFromString(decodeURIComponent(bodyStr));
 
                     request.query = merge(obj, inheritedDataObj);
-                    delete obj;
+                    // delete obj;
+                    obj = null;
+                    inheritedDataObj = null;
 
                     request.get = request.query;
                 }
@@ -2645,7 +2489,7 @@ function Server(options) {
             } else {
                 console.warn('[ '+filename+' ] extension: `'+s[2]+'` not supported by gina: `core/mime.types`. Pathname must be a directory. Replacing with `plain/text` ')
             }
-            return type || 'plain/text'
+            return type || 'plain/text';
         } catch (err) {
             console.error('Error while trying to getContentTypeByFilename('+ filename +') extention. Replacing with `plain/text` '+ err.stack);
             return 'plain/text'
@@ -2669,10 +2513,10 @@ function Server(options) {
         if (self.isStandalone) {
 
         end:
-            for (var b in conf) {
+            for (let b in conf) {
                 if (self.bundles.indexOf(b) < 0) continue;
                 if ( typeof(conf[b][self.env].content) != 'undefined' && typeof(conf[b][self.env].content.statics) != 'undefined' && conf[b][self.env].content.statics.count() > 0 ) {
-                    for (var s in conf[b][self.env].content.statics) {
+                    for (let s in conf[b][self.env].content.statics) {
                         s = (s.substr(0,1) == '/') ? s.substr(1) : s;
                         if ( (new RegExp('^/'+s)).test(pathname) ) {
                             bundle = b;
@@ -2715,7 +2559,8 @@ function Server(options) {
             , res       = options.res
             , config    = options.conf
             , next      = options.next
-            , callback  = options.callback;
+            , callback  = options.callback
+        ;
 
         //Reloading assets & files.
         // if (!cacheless) { // all but dev & debug
@@ -2941,51 +2786,51 @@ function Server(options) {
                             throwError(res, 405, 'Method Not Allowed.\n'+ ' `'+req.url+'` is expecting `' + _routing.method.toUpperCase() +'` method but got `'+ req.method.toUpperCase() +'` instead');
                             break;
                         }
-                    }// else {
+                    }
 
-                        // handling GET method exception - if no param found
-                        var methods = ['get', 'delete'], method = req.method.toLowerCase();
-                        var p = null;
-                        if (
-                            methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
-                            || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
-                        ) {
-                            //req.params = parseObject(req.params);
-                            p = 0;
-                            for (let parameter in req.params) {
-                                if (p > 0) {
-                                    // false & true case
-                                    if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
-                                        req.params[parameter] = ( /^(true|on)$/.test( req.params[parameter] ) ) ? true : false;
+                    // handling GET method exception - if no param found
+                    var methods = ['get', 'delete'], method = req.method.toLowerCase();
+                    var p = null;
+                    if (
+                        methods.indexOf(method) > -1 && typeof(req.query) != 'undefined' && req.query.count() == 0
+                        || methods.indexOf(method) > -1 && typeof(req.query) == 'undefined' && typeof(req.params) != 'undefined' && req.params.count() > 1
+                    ) {
+                        //req.params = parseObject(req.params);
+                        p = 0;
+                        for (let parameter in req.params) {
+                            if (p > 0) {
+                                // false & true case
+                                if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
+                                    req.params[parameter] = ( /^(true|on)$/.test( req.params[parameter] ) ) ? true : false;
 
-                                    req[method][parameter] = req.params[parameter]
-                                }
-                                ++p
+                                req[method][parameter] = req.params[parameter]
                             }
-
-                        } else if ( method == 'put' ) { // merging req.params with req.put (passed through URI)
-                            p = 0;
-                            for (let parameter in req.params) {
-                                if (p > 0) {
-                                    // false & true case
-                                    if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
-                                        req.params[parameter] = ( /^(true|on)$/.test( req.params[parameter] ) ) ? true : false;
-
-                                    req[method][parameter] = req.params[parameter]
-                                }
-                                ++p
-                            }
+                            ++p
                         }
 
+                    } else if ( method == 'put' ) { // merging req.params with req.put (passed through URI)
+                        p = 0;
+                        for (let parameter in req.params) {
+                            if (p > 0) {
+                                // false & true case
+                                if ( /^(false|true|on)$/.test( req.params[parameter] ) && typeof(req.params[parameter]) == 'string' )
+                                    req.params[parameter] = ( /^(true|on)$/.test( req.params[parameter] ) ) ? true : false;
 
-                        // onRouting Event ???
-                        if (isRoute.past) {
-                            matched = true;
-                            isRoute = {};
-
-                            break;
+                                req[method][parameter] = req.params[parameter]
+                            }
+                            ++p
                         }
-                    //}
+                    }
+
+
+                    // onRouting Event ???
+                    if (isRoute.past) {
+                        matched = true;
+                        isRoute = {};
+
+                        break;
+                    }
+
                 }
             }
 
@@ -3000,15 +2845,15 @@ function Server(options) {
                 nextMiddleware._next         = next;
                 nextMiddleware._nextAction   = 'route'
 
-                nextMiddleware()
-            } else {
-                router._server = self.instance;
-                router.route(req, res, next, req.routing)
+                return nextMiddleware()
             }
-        } else {
-            throwError(res, 404, 'Page not found: \n' + pathname, next);
-            return;
+
+            router._server = self.instance;
+
+            return router.route(req, res, next, req.routing);
         }
+
+        return throwError(res, 404, 'Page not found: \n' + pathname, next);
     }
 
 
@@ -3027,8 +2872,8 @@ function Server(options) {
 
         if ( typeof(msg) != 'object' ) {
             err = {
-                code: code,
-                message: msg
+                code    : code,
+                message : msg
             }
         } else {
             err = JSON.clone(msg);
@@ -3081,8 +2926,8 @@ function Server(options) {
 
                 } else {
                     res.end(JSON.stringify({
-                        status: code,
-                        error: msg
+                        status  : code,
+                        error   : msg
                     }));
                 }
                 return;
@@ -3186,8 +3031,8 @@ function Server(options) {
 
                 if ( /http\/2/.test(protocol) && stream ) {
                     header = {
-                        ':status': code,
-                        'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
+                        ':status'       : code,
+                        'content-type'  : bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
                     };
                 } else {
                     res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding });

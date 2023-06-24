@@ -26,24 +26,28 @@ function Use(opt, cmd) {
         }
 
         if ( typeof(self.name) == 'undefined' ) {
-            console.error('Project name is required: @<project_name>');
-            process.exit(1)
-        } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
+            // console.error('Project name is required: @<project_name>');
+            // process.exit(1);
+            return end( new Error('Project name is required: @<project_name>'));
+        }
+        else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
             if ( typeof(process.argv[3]) != 'undefined' ) {
 
                 if ( !self.projects[self.name].envs.inArray(process.argv[3]) ) {
-                    console.error('Environment [ '+process.argv[3]+' ] not found');
-                    process.exit(1)
+                    // console.error('Environment [ '+process.argv[3]+' ] not found');
+                    // process.exit(1)
+                    return end(new Error('Environment [ '+process.argv[3]+' ] not found'))
                 }
             } else {
-                console.error('Missing argument in [ gina env:use <environment> ]');
-                process.exit(1)
+                // console.error('Missing argument in [ gina env:use <environment> ]');
+                // process.exit(1);
+                return end(new Error('Missing argument in [ gina env:use <environment> ]'))
             }
-            useEnv(process.argv[3], self.projects, self.target)
-        } else {
-            console.error('[ '+self.name+' ] is not a valid project name.');
-            process.exit(1)
+
+            return useEnv(process.argv[3], self.projects, self.target);
         }
+
+        end(new Error('[ '+self.name+' ] is not a valid project name.'))
 
     }
 
@@ -65,7 +69,7 @@ function Use(opt, cmd) {
     var useEnv = function(env, projects, target) {
         // console.debug('proj.: ', self.name, projects[self.name] , '\nEnv:' + env);
         if (env !== projects[self.name]['def_env']) {
-            console.log('Project [ '+ self.name+' ] env `'+ projects[self.name]['def_env'] +'` set to '+ env);
+            // console.log('Project [ '+ self.name+' ] env `'+ projects[self.name]['def_env'] +'` set to '+ env);
             projects[self.name]['def_env'] = env;
             lib.generator.createFileFromDataSync(
                 projects,
@@ -74,23 +78,26 @@ function Use(opt, cmd) {
         }
 
 
-        end();
+        end('Project [ '+ self.name+' ] env `'+ projects[self.name]['def_env'] +'` set to '+ env);
     };
 
-    var end = function(err) {
-        if (err) {
-            if (GINA_ENV_IS_DEV) {
-                console.error(err.stack);
-            } else {
-                console.error(err.message);
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
             }
-
-            return process.exit(1);
+            if ( typeof(type) != 'undefined' ) {
+                console[type](output);
+                if ( messageOnly && type != 'log') {
+                    console.log(output);
+                }
+            } else {
+                console.log(output);
+            }
         }
 
-
-
-        return process.exit(0)
+        process.exit( err ? 1:0 )
     }
 
     init()

@@ -1,6 +1,8 @@
-//var fs          = require('fs');
+var fs          = require('fs');
+
 var CmdHelper   = require('./../helper');
 var console = lib.logger;
+
 /**
  * Remove existing environment
  * TODO - Prompt for confirmation: "This will remove [ environment ] for the whole project. Proceed ? Y/n: "
@@ -15,8 +17,8 @@ function Remove(opt, cmd) {
         // check CMD configuration
         if ( !isCmdConfigured() ) return false;
 
-        self.target = _(GINA_HOMEDIR + '/projects.json');
-        self.projects   = require(self.target);
+        self.target = _(GINA_HOMEDIR + '/projects.json', true);
+        self.projects   = requireJSON(self.target);
         var env = local.env = process.argv[3];
         if ( typeof(env) == 'undefined' || /^\@/.test(env) ) {
             end( new Error('Missing argument in [ gina env:rm <environment> @<project> ]') )
@@ -70,8 +72,8 @@ function Remove(opt, cmd) {
         // clean ports & reverse ports registered for the project
         var portsPath = _(GINA_HOMEDIR + '/ports.json')
             , portsReversePath = _(GINA_HOMEDIR + '/ports.reverse.json')
-            , ports = require(portsPath)
-            , portsReverse = require(portsReversePath)
+            , ports = requireJSON(portsPath)
+            , portsReverse = requireJSON(portsReversePath)
             , envsPath = _(projects[self.projectName].path +'/env.json')
             , envs = requireJSON(envsPath);
 
@@ -117,7 +119,10 @@ function Remove(opt, cmd) {
         var env = local.env;
         var projectData    = JSON.clone(self.projectData);
         for (let bundle in projectData.bundles) {
-            if ( typeof(projectData.bundles[bundle].releases[env].target) != 'undefined' ) {
+            if (
+                typeof(projectData.bundles[bundle].releases[env]) != 'undefined'
+                && typeof(projectData.bundles[bundle].releases[env].target) != 'undefined'
+            ) {
                 delete projectData.bundles[bundle].releases[env].target
             }
         }

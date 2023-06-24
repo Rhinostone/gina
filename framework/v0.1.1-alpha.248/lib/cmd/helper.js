@@ -310,6 +310,8 @@ function CmdHelper(cmd, client, debug) {
                             "envs": cmd.envs,
                             "def_env": cmd.defaultEnv,
                             "dev_env": cmd.devEnv,
+                            "def_scope": cmd.defaultScope,
+                            "local_scope": cmd.localScope,
                             "protocols": cmd.protocolsAvailable,
                             "def_protocol": cmd.defaultProtocol,
                             "schemes": cmd.schemesAvailable,
@@ -568,7 +570,7 @@ function CmdHelper(cmd, client, debug) {
                             && typeof(cmd.projects[cmd.projectName]['def_scope']) != 'undefined'
                             && cmd.projects[cmd.projectName]['def_scope']
                         ) ? cmd.projects[cmd.projectName]['def_scope'] : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ];
-            // getting dev scope
+            // getting local scope
             cmd.localScope = (
                                 cmd.projectName != null
                                 && typeof(cmd.projects[cmd.projectName]) != 'undefined'
@@ -620,6 +622,16 @@ function CmdHelper(cmd, client, debug) {
                     return false;
                 }
                 cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
+
+                console.debug('Overriding default project scope: '+ cmd.defaultScope +' => '+ cmd.params.scope);
+                if (cmd.scopes.indexOf(cmd.params.scope) < 0) {
+                    errMsg = 'Scope `'+ cmd.params.scope +'` not found in your project ['+ cmd.projectName +']';
+                    console.emerg(errMsg);
+                    return false;
+                }
+                cmd.defaultScope = process.env.NODE_SCOPE = cmd.params.scope;
+
+
                 // override
                 //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
             } else {
@@ -1234,6 +1246,7 @@ function CmdHelper(cmd, client, debug) {
                 allProjectEnvs.push(newEnv);
             }
         }
+
         // getting available all protocols
         for (let p in cmd.protocols) {
             let newProtocol = allProjectProtocols[p];

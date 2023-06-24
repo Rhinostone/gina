@@ -14,7 +14,7 @@ module.exports = function Scanner(opt, cb){
     var defaultOptions = {
         // default binding for localhost
         // remote scan can be added later if needed (e.g: for remote setup)
-        host: 'localhost',
+        host: '127.0.0.1',
         // --start-port-from
         startFrom: null,
         start: 3100,
@@ -27,7 +27,7 @@ module.exports = function Scanner(opt, cb){
     };
 
     if ( arguments.length < 2 ) {
-        console.warn('no options defined for your scan');
+        console.warn('[SCAN] No options defined for your scan');
         cb  = opt;
         opt = defaultOptions;
     } else {
@@ -39,13 +39,13 @@ module.exports = function Scanner(opt, cb){
             opt.start = opt.startFrom;
         }
     }
-    opt.end = (~~(opt.start)+899) // shouldn't it be opt.limit+1 ?
+    opt.end = (~~(opt.start)+899) // Shouldn't it be opt.limit+1 ?
 
-    // just in caes
+    // Just in case
     opt.end = ~~(opt.end);
     opt.ignore.sort();
 
-    console.debug('scan init with options: ', opt);
+    console.debug('[SCAN] Init with options: ', opt);
 
     var self    = opt
         , port  = ~~self.start
@@ -55,29 +55,30 @@ module.exports = function Scanner(opt, cb){
 
     var find = function(port, cb) {
 
-        if (port > self.end) { // not available port found
-            console.warn('found '+ ports.length +'/'+ total);
-            var err = new Error('maximum port number reached: '+ self.end);
+        // Not available port found
+        if (port > self.end) {
+            console.warn('[SCAN] Found '+ ports.length +'/'+ total);
+            var err = new Error('[SCAN] Maximum port number reached: '+ self.end);
             cb(err);
             return;
         }
 
-        // skip port present in the `ignore list`
+        // Skip port present in the `ignore list`
         if ( opt.ignore.length > 0 && opt.ignore.indexOf( ''+port ) > -1 ) {
             port++;
-            return find(port);
+            return find(port, cb);
         }
 
-        // creating socket
+        // Creating socket
         var s = new net.Socket();
 
-        // starting connection
+        // Starting connection
         s.connect(port, self.host);
 
-        // just in case
+        // Just in case
         s.setTimeout(opt.timeout);
         s.on('timeout', function() {
-            var err = new Error(self.timeout +' timeout reached');
+            var err = new Error('[SCAN] '+ self.timeout +' timeout reached');
             s.destroy(err);
             cb(err)
         });
@@ -86,13 +87,13 @@ module.exports = function Scanner(opt, cb){
         // No one is listening ... port is available
         s.on('error', function(err) {
             s.destroy();
-            // silently catch all errors - assume the port is closed => available for use
+            // Silently catch all errors - assume the port is closed => available for use
             if ( /ECONNREFUSED/i.test(err.message) ) {
                 if ( !opt.ignore.length || opt.ignore.length > 0 && opt.ignore.indexOf( port ) == -1 ) {
                     // ports.push(''+port);
                     ports.push(port);
                     ports.sort();
-                    console.debug('available port found '+ port +' ['+ ports.length +'/'+ total +']');
+                    console.debug('[SCAN] Available port found '+ port +' ['+ ports.length +'/'+ total +']');
                     opt.limit--;
                 }
 
@@ -103,15 +104,32 @@ module.exports = function Scanner(opt, cb){
                     find(port, cb);
                 }
                 return;
-            } else if (err) {
-                // error not handled - not connection to the network ?
-                console.warn('exeption not handled: '+ err);
-                cb(err);
+            }
+
+            if ( err instanceof AggregateError ) {
+                var error = '', errors = err.errors;
+                for (let i=0, len=errors.length; i<len; i++) {
+                    if (/\:\:1/.test(errors[0]) ) {
+                        error = '\n[SCAN] You shoud check your host definition: use local IP like `127.0.0.1` instead of `localhost`'
+                        break;
+                    }
+                    error += '\n[SCAN] '+ errors[0].stack;
+                }
+                // console.warn('[SCAN] Errors:\n'+ error);
+
+                cb( new Error(error) );
+
+                error = null;
                 return;
             }
+
+            console.warn('[SCAN] Exeption not handled: '+ err);
+            cb(err);
+
+            return;
         });
 
-        // if connection is made, this only means that service is using it
+        // If connection is made, this only means that service is using it
         s.on('connect', function() {
             s.destroy();
 

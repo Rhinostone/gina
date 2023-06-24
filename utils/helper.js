@@ -86,10 +86,10 @@ function MainHelper(opt) {
         }
 
         var newArgv = {};
-        for (var a in process.argv) {
+        for (let a in process.argv) {
             if ( /\-\-/.test(process.argv[a]) && process.argv[a].indexOf('=') > -1 ) {
-
-                if (/\-\-prefix/.test(process.argv[a])) {
+                // special cases
+                if (/\-\-(prefix|env|scope)/.test(process.argv[a])) {
                     continue;
                 }
 
@@ -133,7 +133,7 @@ function MainHelper(opt) {
             process.argv = newArgv;
 
         //Cleaning the rest.
-        for (var e in process.env) {
+        for (let e in process.env) {
             if (
                 e.substr(0, 5) === 'GINA_' || // 6?
                 e.substr(0, 7) === 'VENDOR_' ||

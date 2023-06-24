@@ -54,6 +54,7 @@ function Restart(opt, cmd) {
 
         // console.debug('bundle -> ', bundle);
         var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
+        var scope = ( typeof(self.bundlesByProject[self.projectName][bundle].def_scope) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_scope : self.defaultScope;
         // console.debug('env -> ', env);
         var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
         // console.debug('protocol -> ', protocol);
@@ -158,6 +159,8 @@ function Restart(opt, cmd) {
             , d             = null
             , env           = self.projects[self.projectName]['def_env']
             , isDev         = GINA_ENV_IS_DEV
+            , scope         = self.projects[self.projectName]['def_scope']
+            , isLocal         = GINA_SCOPE_IS_LOCAL
             , root          = self.projects[self.projectName].path
             , bundleDir     = null
             , bundlesPath   = null

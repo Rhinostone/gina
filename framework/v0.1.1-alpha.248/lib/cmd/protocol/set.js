@@ -501,6 +501,7 @@ function Set(opt, cmd) {
 
         //var bundles = self.bundles;
         var envs            = self.envs;
+        var scopes          = self.scopes;
         var re              = new RegExp('\@'+ self.projectName +'$', '');
         var ports           = JSON.clone(local.ports);
         var portsReverse    = JSON.clone(local.portsReverse);
@@ -513,8 +514,6 @@ function Set(opt, cmd) {
 
         var bundleConfig = self.bundlesByProject[self.projectName][self.name];
         var settingsPath = _(bundleConfig.configPaths.settings, true);
-        //var envSettingsPath = _(settingsPath.replace(/\.json/, '.'+ env +'.json'), true);
-        //var env = bundleConfig.defaultEnv;
 
         var settings = {};
 
@@ -664,7 +663,10 @@ function Set(opt, cmd) {
                 err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
             }
             if ( typeof(type) != 'undefined' ) {
-                console[type](output)
+                console[type](output);
+                if ( messageOnly && type != 'log') {
+                    console.log(output);
+                }
             } else {
                 console.log(output);
             }

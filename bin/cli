@@ -37,7 +37,7 @@ async function onExec() {
     ;
     try {
         var packObj         = require(pack);
-        var version         = getEnvVar('GINA_VERSION') || packObj.version;// jshint ignore:line
+        var version         = getEnvVar('GINA_VERSION') || packObj.version;// jshint ignore:line
         frameworkPath   = ginaPath + '/framework/v' + version;
         var generator   = require(frameworkPath + '/lib/generator');
 
@@ -48,7 +48,7 @@ async function onExec() {
         //process.stdout.write('params '+ params.join(', ') + '\n');
 
         if ( params.length > 0 ) {
-            for (var p = 0, len = params.length; p < len; ++p) {
+            for (let p = 0, len = params.length; p < len; ++p) {
 
                 if ( /^\-\-port/.test(params[p]) ) {
                     let port = params[p].split(/\=/)[1];
@@ -89,7 +89,7 @@ async function onExec() {
                     debugBrkEnabled = ( /\-brk/.test(params[p]) ) ? true : false;
                     debugPort       = params[p].split(/\=/)[1];
                     params.splice(p,1);
-                    break;
+                    continue;
                 }
             }
         }
@@ -127,6 +127,7 @@ async function onExec() {
         setEnvVar('GINA_LOGDIR', settings['logdir']);// jshint ignore:line
         setEnvVar('GINA_TMPDIR', settings['tmpdir']);// jshint ignore:line
         setEnvVar('GINA_ENV', settings['env']);// jshint ignore:line
+        setEnvVar('GINA_SCOPE', settings['scope']);// jshint ignore:line
 
         // prior to what settings says
         if ( !settings['arch'] ) {
@@ -250,12 +251,12 @@ async function onExec() {
         'bundle:',
         'dev:',
         'env:',
+        'scope:',
         'framework:',
         'port:',
         'project:',
         'protocol:',
         'scheme:',
-        'scope:',
         'view:',
         '--', //options or other aliases.
         '-' //options or other aliases.

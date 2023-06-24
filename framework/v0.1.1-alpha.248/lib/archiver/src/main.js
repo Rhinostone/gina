@@ -91,8 +91,20 @@ function Archiver() {
      *      level: 7    // `0` for no compression; `1` for best speed; `9` for best compression
      *  }
      *
+     * @callback [cb] - Used for `promisify`
+     *
      */
     this.compress = function(src, target, options) {
+
+        // Used for `promisify`
+        var cb = null;
+        if ( typeof(arguments[arguments.length-1]) == 'function' ){
+            cb = arguments[arguments.length-1];
+            self.once('archiver-'+ options.method +'#complete', function(err, target){
+                zip = null;
+                return cb(err, target)
+            })
+        }
 
         options = ( typeof(options) != 'undefined' ) ? merge(options, defaultCompressionOptions) : defaultCompressionOptions;
 
@@ -114,6 +126,9 @@ function Archiver() {
         if ( self.allowedCompressionMethods.indexOf(options.method.toLowerCase()) < 0 ) {
             throw new Error('compression methode `'+ options.method +'` not supported !');
         }
+
+
+
         local.options = options;
         zip = new JSZip(); // zipInstance
 

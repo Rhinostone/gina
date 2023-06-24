@@ -335,7 +335,7 @@ function ContextHelper(contexts) {
 
                 ctx.gina.config = merge(ctx.config, ctx.gina.Config);
             }
-            for (var name in ctx) {
+            for (let name in ctx) {
                 setContext(name, ctx[name], false)
             }
 
@@ -411,11 +411,11 @@ function ContextHelper(contexts) {
         } else {
 
             try {
-                conf.bundlesConfiguration.conf.bundle = bundle;
-                conf.bundlesConfiguration.conf.env = env;
-                conf.bundlesConfiguration.conf.scope = scope;
-                conf.bundlesConfiguration.conf.projectName = getContext('projectName');
-                conf.bundlesConfiguration.conf.bundles = getContext('bundles');
+                conf.bundlesConfiguration.conf.bundle       = bundle;
+                conf.bundlesConfiguration.conf.env          = env;
+                conf.bundlesConfiguration.conf.scope        = scope;
+                conf.bundlesConfiguration.conf.projectName  = getContext('projectName');
+                conf.bundlesConfiguration.conf.bundles      = getContext('bundles');
 
                 if ( typeof(ctxFilename) != 'undefined' ) {
                     //process.stdout.write('TYPEOF ' + typeof( conf.getRouting ) )
@@ -492,7 +492,8 @@ function ContextHelper(contexts) {
         var envIsDev        = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
         var scope           = process.env.NODE_SCOPE || GINA_SCOPE;
         var scopeIsLocal    = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
-        var Config      = ctx.gina.Config;
+        var Config          = ctx.gina.Config;
+
         var conf = new Config({
             env             : env,
             scope             : scope,
