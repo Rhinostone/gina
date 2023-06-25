@@ -2951,8 +2951,6 @@ function SuperController(options) {
         //cleanup
         options[':authority'] = options.hostname;
 
-        delete options.host;
-
         if ( typeof(options[':path']) == 'undefined' ) {
             options[':path'] = options.path;
             delete options.path;
@@ -2973,8 +2971,21 @@ function SuperController(options) {
         // }
 
         if ( typeof(options[':scheme']) == 'undefined' ) {
-            options[':scheme'] = options.scheme ;
+            options[':scheme'] = options.scheme;
         }
+
+        if ( typeof(options[':hostname']) == 'undefined' ) {
+            options[':hostname'] = options.hostname;
+        }
+        if (
+            typeof(options[':port']) == 'undefined'
+            && typeof(options.port) != 'undefined'
+            && options.port
+        ) {
+            options[':port'] = options.port;
+            options[':hostname'] = options.host;
+        }
+        delete options.host;
 
         if ( typeof(options.ca) != 'undefined' ) {
             try {

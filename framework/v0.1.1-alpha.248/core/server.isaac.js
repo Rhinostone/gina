@@ -249,6 +249,50 @@ function ServerEngineClass(options) {
                     request.params[0] = request.url
                 }
 
+                var referer     = null
+                    , host      = null
+                    , authority = request.scheme + '://'+ request.authority
+                ;
+                if ( typeof(request.headers.origin) != 'undefined' ) {
+                    referer = request.headers.origin;
+                } else if (request.headers.referer || request.authority) {
+                    referer = request.headers.referer || authority;
+                }
+                if (referer) {
+                    if ( /^(https\:\/\/|http\:\/\/)/.test(referer) ) {
+                        if (referer != authority ) {
+                            var a = referer.match(/^[https://|http://][a-z0-9-_.:/]+\//)[0].split(/\//g);
+                            a.splice(3);
+                            referer = a.join('/');
+                            a = null;
+                        }
+                    }
+                    request.origin = referer;
+                    host = referer;
+                    var port = referer.match(/\:\d+/);
+                    if (port) {
+                        host = referer.replace(port[0], '');
+                        port = ~~(port[0].substring(1));
+                    } else {
+                        port = 80;
+                    }
+                    host = host.replace(/^(https\:\/\/|http\:\/\/)/, '');
+
+                    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin
+                    if ( /^http\/2/.test(options.protocol) ) {
+                        request.headers[':host']    = host;
+                        request.headers[':port']    = port;
+                    } else if ( typeof(request.headers.hostname) == 'undefined') {
+                        request.headers.host = host;
+                        request.headers.port     = port;
+                    }
+
+                    request.port    = port;
+                    request.host    = host;
+
+                    port    = null;
+                    referer = null;
+                }
 
                 cb(request, response);
             }
@@ -331,7 +375,7 @@ function ServerEngineClass(options) {
 
             var clients = null;
 
-            for (var id in this.clients) {
+            for (let id in this.clients) {
 
                 if ( typeof(this.clients[id].sessionId) == 'undefined' )
                     continue;
