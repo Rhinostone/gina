@@ -12,40 +12,6 @@ function Use(opt, cmd) {
         self.target = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
 
-        // if ( typeof(process.argv[4]) != 'undefined') {
-        //     if ( !isValidName(process.argv[4]) ) {
-        //         err = new Error('[ '+process.argv[4]+' ] is not a valid project name. Please, try something else: @[a-z0-9_.].');
-        //         return end(err, 'log', true);
-        //     }
-        // } else {
-        //     // is current path == project path ?
-        //     var root = process.cwd();
-        //     var name = new _(root).toArray().last();
-        //     if ( isDefined(name) ) {
-        //         self.name = name
-        //     }
-        // }
-
-        // if ( typeof(self.name) == 'undefined' ) {
-        //     err = new Error('Project name is required: @<project_name>');
-        //     end(err, 'log', true);
-        // } else if ( typeof(self.name) != 'undefined' && isDefined(self.name) ) {
-        //     if ( typeof(process.argv[3]) != 'undefined' ) {
-
-        //         if ( !self.projects[self.name].scopes.inArray(process.argv[3]) ) {
-        //             err = new Error('Scope [ '+process.argv[3]+' ] not found');
-        //             return end(err, 'log', true);
-        //         }
-        //     } else {
-        //         err = new Error('Missing argument in [ gina scope:use <scope> ]');
-        //         end(err, 'log', true);
-        //     }
-        //     useScope(process.argv[3], self.projects, self.target)
-        // } else {
-        //     err = new Error('[ '+self.name+' ] is not a valid project name.');
-        //     end(err, 'log', true);
-        // }
-
         // Import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 

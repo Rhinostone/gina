@@ -132,7 +132,10 @@ function Router(env, scope) {
         /**
         * BO Passport JS HTTP2 fix : taken from passport/request.js
         */
-       if ( typeof(request._passport) != 'undefined' && typeof(request.isAuthenticated) == 'undefined' ) {
+       if (
+            typeof(request._passport) != 'undefined'
+            && typeof(request.isAuthenticated) == 'undefined'
+       ) {
             request.isAuthenticated = function() {
                 var property = 'user';
                 if (this._passport && this._passport.instance) {
@@ -149,7 +152,29 @@ function Router(env, scope) {
             };
         }
 
-        if ( typeof(request._passport) != 'undefined' && (typeof(request.logIn) == 'undefined' || typeof(request.login) == 'undefined') ) {
+        if (
+            typeof(request._passport) != 'undefined'
+            && typeof(request.isScopeAllowed) == 'undefined'
+        ) {
+            request.isScopeAllowed = function() {
+                var property = 'scope';
+                if (this._passport && this._passport.instance) {
+                    property = this._passport.instance._scopeProperty || 'scope';
+                }
+                var isScopeAllowed = (this[property]) ? true : false;
+                if (isScopeAllowed) {
+                    request.session.scope = this[property]
+                }
+                return isScopeAllowed;
+            };
+        }
+
+        if (
+            typeof(request._passport) != 'undefined'
+            && (typeof(request.logIn) == 'undefined'
+            ||
+            typeof(request.login) == 'undefined')
+        ) {
             request.login =
             request.logIn = function(user, options, done) {
                 if (typeof options == 'function') {
