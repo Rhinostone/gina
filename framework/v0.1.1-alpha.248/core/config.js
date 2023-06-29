@@ -1401,6 +1401,7 @@ function Config(opt, contextResetNeeded) {
             url: '/custom-error',
             method: 'GET',
             middleware: [],
+            middlewareIgnored: ['shared.middlewares.global.checkScope'],
             param: {
                 control: 'renderCustomError',
                 // default data : will be fed on error

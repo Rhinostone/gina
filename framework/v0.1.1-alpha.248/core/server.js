@@ -2936,7 +2936,8 @@ function Server(options) {
             } else {
 
                 //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
-                console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
+                // console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
+                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] \n'+ msg);
                 // intercept none HTML mime types
                 var url                     = decodeURI(local.request.url) /// avoid %20
                     , ext                   = null
@@ -3010,24 +3011,30 @@ function Server(options) {
 
                     local.request.routing = routeObj;
 
-                    // if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
-                    //     nextMiddleware._index        = 0;
-                    //     nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
-                    //     nextMiddleware._request      = local.request;
-                    //     nextMiddleware._response     = res;
-                    //     nextMiddleware._next         = next;
-                    //     nextMiddleware._nextAction   = 'route'
-
-                    //     nextMiddleware()
-                    // } else {
+                    var hasMiddlewareException = null;
+                    for (let i=0, len = __stack.length; i<len; i++) {
+                        let c = __stack[i].getFunctionName() || null;
+                        if ( /processMiddlewares/.test(c) ) {
+                            hasMiddlewareException = true;
+                            break;
+                        }
+                    }
+                    if ( !hasMiddlewareException ) {
                         var router = local.router;
                         if ( typeof(router._server) == 'undefined' ) {
                             router._server = self.instance;
                         }
                         router.route(local.request, res, next, local.request.routing);
-                    // }
 
-                    return;
+                        return;
+                    }
+                    hasMiddlewareException = null;
+                    // TODO - Instead of setting `hasCustomErrorFile` to false, compile custom error page with:
+                    // JSON.stringify({
+                    //     status  : code,
+                    //     error   : msg
+                    // })
+                    hasCustomErrorFile = false;
                 }
 
                 if ( /http\/2/.test(protocol) && stream ) {
@@ -3047,7 +3054,10 @@ function Server(options) {
                     if ( isHtmlContent && !hasCustomErrorFile ) {
                         stream.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body></html>');
                     } else {
-                        stream.end();
+                        stream.end(JSON.stringify({
+                            status  : code,
+                            error   : msg
+                        }));
                     }
 
                     // }
@@ -3055,7 +3065,10 @@ function Server(options) {
                     if ( isHtmlContent && !hasCustomErrorFile ) {
                         res.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body><html>');
                     } else {
-                        res.end()
+                        res.end(JSON.stringify({
+                            status  : code,
+                            error   : msg
+                        }))
                     }
                 }
                 return;

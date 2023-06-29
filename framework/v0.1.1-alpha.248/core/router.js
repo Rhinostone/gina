@@ -43,10 +43,10 @@ function Router(env, scope) {
 
         if ( typeof(Router.initialized) != "undefined" ) {
             return self.getInstance()
-        } else {
-            self.initialized = true;
-            self.hasCompletedControlllerSetup = false;
         }
+
+        self.initialized = true;
+        self.hasCompletedControlllerSetup = false;
     }
 
     var isSetupRequired = function(control) {
@@ -135,39 +135,51 @@ function Router(env, scope) {
        if (
             typeof(request._passport) != 'undefined'
             && typeof(request.isAuthenticated) == 'undefined'
+            ||
+            typeof(request.session) != 'undefined'
+            && typeof(request.session.user) != 'undefined'
+            && typeof(request.isAuthenticated) == 'undefined'
        ) {
             request.isAuthenticated = function() {
                 var property = 'user';
-                if (this._passport && this._passport.instance) {
-                    property = this._passport.instance._userProperty || 'user';
+                // by default
+                var sess = this;
+                if (sess._passport && sess._passport.instance) {
+                    property = sess._passport.instance._userProperty || 'user';
                 }
-                var isAuthenticated = (this[property]) ? true : false;
+                if ( !sess._passport
+                    && typeof(sess.session) != 'undefined'
+                ) {
+                    sess = sess.session;
+                }
+
+                var isAuthenticated = (sess[property]) ? true : false;
                 if (isAuthenticated) {
-                    request.session.user = this[property]
+                    request.session.user = sess[property]
                 }
-                if (isAuthenticated && typeof(request.session.user.cached) == 'undefined' ) {
-                    request.session.user.cached = {}
-                }
+                // if (isAuthenticated && typeof(request.session.user.cached) == 'undefined' ) {
+                //     request.session.user.cached = {}
+                // }
                 return isAuthenticated;
             };
         }
 
-        if (
-            typeof(request._passport) != 'undefined'
-            && typeof(request.isScopeAllowed) == 'undefined'
-        ) {
-            request.isScopeAllowed = function() {
-                var property = 'scope';
-                if (this._passport && this._passport.instance) {
-                    property = this._passport.instance._scopeProperty || 'scope';
-                }
-                var isScopeAllowed = (this[property]) ? true : false;
-                if (isScopeAllowed) {
-                    request.session.scope = this[property]
-                }
-                return isScopeAllowed;
-            };
-        }
+        // if (
+        //     typeof(request._passport) != 'undefined'
+        //     && typeof(request.isScopeAllowed) == 'undefined'
+        // ) {
+        //     request.isScopeAllowed = function() {
+        //         var property = 'scope';
+        //         if (this._passport && this._passport.instance) {
+        //             property = this._passport.instance._scopeProperty || 'scope';
+        //         }
+        //         var isScopeAllowed = (this[property]) ? true : false;
+        //         if (isScopeAllowed) {
+        //             request.session.scope = this[property]
+        //         }
+        //         return isScopeAllowed;
+        //     };
+        // }
 
         if (
             typeof(request._passport) != 'undefined'
@@ -568,7 +580,7 @@ function Router(env, scope) {
 
 
             if (middleware.length > 0) {
-                processMiddlewares(middleware, controller, action, request, response, next,
+                processMiddlewares(serverInstance, middleware, controller, action, request, response, next,
                     function onDone(action, request, response, next){
                         // handle superController events
                         for (let e=0; e<reservedActions.length; ++e) {
@@ -632,7 +644,7 @@ function Router(env, scope) {
         action = null
     };//EO route()
 
-    var processMiddlewares = function(middlewares, controller, action, req, res, next, cb){
+    var processMiddlewares = function(serverInstance, middlewares, controller, action, req, res, next, cb){
 
         var filename        = _(local.conf.bundlePath)
             , middleware    = null
@@ -702,7 +714,7 @@ function Router(env, scope) {
                         function onMiddlewareProcessed(req, res, next){
                             middlewares.splice(m, 1);
                             if (middlewares.length > 0) {
-                                processMiddlewares(middlewares, controller, action,  req, res, next, cb)
+                                processMiddlewares(serverInstance, middlewares, controller, action,  req, res, next, cb)
                             } else {
                                 cb(action, req, res, next)
                             }
