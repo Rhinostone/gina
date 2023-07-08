@@ -260,10 +260,13 @@ function ServerEngineClass(options) {
                 }
                 var a = null;
                 if (authority) {
-                    a = authority.match(/^[https://|http://][a-z0-9-_.:/]+/)[0].split(/\//g);
-                    a.splice(3);
-                    authority = a.join('/');
-                    host = authority;
+                    a = authority.match(/^[https://|http://][a-z0-9-_.:/]+/);
+                    if (a) {
+                        a[0].split(/\//g);
+                        a.splice(3);
+                        authority = a.join('/');
+                        host = authority;
+                    }
                 }
 
                 if ( referer && /^(https\:\/\/|http\:\/\/)/.test(referer) ) {
@@ -276,32 +279,44 @@ function ServerEngineClass(options) {
                     a = null;
                 }
                 request.origin = referer;
-                if (!host) {
+                if (!host && referer) {
                     host = referer;
+                } else if (!host && typeof(request.headers.host) != 'undefined' ) {
+                    host = request.headers.host;
                 }
-                var port = host.match(/\:\d+/);
+
+                var port = null;
+                try {
+                    port = host.match(/\:\d+/);
+                } catch (portError) {
+                    console.warn('[SERVER] Port not in string for host `'+ host +'`.\nSetting default port to 80.');
+                }
                 if (port) {
                     host = host.replace(port[0], '');
                     port = ~~(port[0].substring(1));
                 } else {
                     port = 80;
                 }
-                host = host.replace(/^(https\:\/\/|http\:\/\/)/, '');
 
-                // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin
-                if ( /^http\/2/.test(options.protocol) ) {
-                    request.headers[':host']    = host;
-                    request.headers[':port']    = port;
-                } else if ( typeof(request.headers.hostname) == 'undefined') {
-                    request.headers.host = host;
-                    request.headers.port = port;
+                if (host) {
+                    host = host.replace(/^(https\:\/\/|http\:\/\/)/, '');
+
+                    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Origin
+                    if ( /^http\/2/.test(options.protocol) ) {
+                        request.headers[':host']    = host;
+                        request.headers[':port']    = port;
+                    } else if ( typeof(request.headers.hostname) == 'undefined') {
+                        request.headers.host = host;
+                        request.headers.port = port;
+                    }
+
+                    request.port    = port;
+                    request.host    = host;
+
+                    port    = null;
+                    referer = null;
                 }
 
-                request.port    = port;
-                request.host    = host;
-
-                port    = null;
-                referer = null;
 
                 cb(request, response);
             }

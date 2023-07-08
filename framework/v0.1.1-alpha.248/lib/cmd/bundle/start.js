@@ -480,6 +480,9 @@ function Start(opt, cmd) {
                         // if (/(SIGKILL|SIGSTOP)/i.test(signal)) {
                         // Fixed on 2023-03-23 - Allowing docker to catch exit signal on `SIGABRT`
                         if (/^(SIGKILL|SIGSTOP|SIGABRT)$/i.test(signal)) {
+                            if (error) {
+                                terminal.error('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` : ', error);
+                            }
                             terminal.emerg('[' + this.pid + '] `'+ self.name +'@'+ self.projectName +'` exiting with signal: ', signal);
                             cmd.proc.dismiss(this.pid, signal);
                             return;

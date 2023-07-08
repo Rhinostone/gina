@@ -54,6 +54,52 @@ window['onGinaLoaded']      = function(gina) {
         'protocol' : '{{ page.environment.protocol }}'
     };
 
+    /**
+     * getTimeout
+     * Get session timeout
+     *
+     * @param {object} _this - `gina.session`
+     *
+     * @returns {date} extpiresAt
+    */
+    var getTimeout = function(_this) {
+        if (!_this['lastModified']) {
+            return null;
+        }
+        if ( _this['lastModified'] && typeof(_this['lastModified']) == 'string' ) {
+            _this['lastModified'] = new Date(_this['lastModified']);
+        }
+        if ( _this['createdAt'] && typeof(_this['createdAt']) == 'string' ) {
+            _this['createdAt'] = new Date(_this['createdAt']);
+        }
+        if ( _this['originalTimeout'] && typeof(_this['originalTimeout']) == 'string' ) {
+            _this['originalTimeout'] = parseInt(_this['originalTimeout']);
+        }
+        _this['expiresAt'] = new Date(new Date(_this['lastModified']).getTime() + _this['originalTimeout'])
+
+        return _this['expiresAt'] - new Date();
+    }
+
+    gina['session'] = {
+        /**@js_externs id*/
+        'id'                    : '{{ page.data.session.id }}' || null,
+        /**@js_externs originalTimeout*/
+        'originalTimeout'       : '{{ page.data.session.timeout }}' || (1000 * 60 * 5),
+        /**@js_externs createdAt*/
+        'createdAt'             : '{{ page.data.session.createdAt }}' || null,
+        /**@js_externs lastModified*/
+        'lastModified'          : '{{ page.data.session.lastModified }}' || null,
+        /**@js_externs expiresAt*/
+        'expiresAt'             : null
+    };
+
+    gina['session'].__defineGetter__("timeout", function () {
+        return getTimeout(this);
+    });
+    // trigger timeout assignment - will trigger a compilation warning
+    gina['session'].timeout;
+
+
 
     /**
      * getRouting
@@ -61,7 +107,6 @@ window['onGinaLoaded']      = function(gina) {
      * @param {string} [bundle]
      *
      * @returns {Object} routing
-     *
     */
     gina['config']['getRouting'] = function(bundle) {
 
@@ -157,10 +202,10 @@ window['onGinaLoaded']      = function(gina) {
             && existingLinks.length > 0
         ) {
             // Must be the first link
-            console.log("placed before");
+            console.debug("placed before");
             headEls.insertBefore(link, existingLinks[0]);
         } else {
-            console.log("placed after");
+            console.debug("placed after");
             headEls.appendChild(link);
         }
         existingLinks = null;

@@ -27,7 +27,6 @@ define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers
          * @this {Window}
          * @returns {ComputedStyle}
          */
-
         window.getComputedStyle = function(el, pseudo) {
             this.el = el;
             this.getPropertyValue = function(prop) {
@@ -62,7 +61,8 @@ define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers
             proto.config = merge(proto.config, options, true)
         }
 
-        var proto           = { // instance proto
+        // instance proto
+        var proto           = {
             'id'                : 'gina-' + uuid.v1(),
 
             'plugin'            : this.plugin,
@@ -79,7 +79,8 @@ define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers
             'isFrameworkLoaded' : false,
             'hasValidator'      : false,
             'hasPopinHandler'   : false,
-            'config'           : {},
+            'config'            : {},
+            'session'           : null,
             'registeredEvents'  : {},
             'events'            : {},
 

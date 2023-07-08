@@ -18647,7 +18647,6 @@ define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers
          * @this {Window}
          * @returns {ComputedStyle}
          */
-
         window.getComputedStyle = function(el, pseudo) {
             this.el = el;
             this.getPropertyValue = function(prop) {
@@ -18682,7 +18681,8 @@ define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers
             proto.config = merge(proto.config, options, true)
         }
 
-        var proto           = { // instance proto
+        // instance proto
+        var proto           = {
             'id'                : 'gina-' + uuid.v1(),
 
             'plugin'            : this.plugin,
@@ -18699,7 +18699,8 @@ define('gina', [ 'require', 'vendor/uuid', 'lib/merge', 'utils/events', 'helpers
             'isFrameworkLoaded' : false,
             'hasValidator'      : false,
             'hasPopinHandler'   : false,
-            'config'           : {},
+            'config'            : {},
+            'session'           : null,
             'registeredEvents'  : {},
             'events'            : {},
 
@@ -22056,61 +22057,84 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
                     if (!gina) {
                         return false
-                    } else {
-                        if ( gina["isFrameworkLoaded"] ) {
-                            return true
-                        }
+                    }
 
-                        var options = gina['config'] = {
-                            /**@js_externs env*/
-                            env             : '{{ page.environment.env }}',
-                            /**@js_externs envIsDev*/
-                            envIsDev        : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
-                            /**@js_externs scope*/
-                            scope           : '{{ page.environment.scope }}',
-                            /**@js_externs scopeIsLocal*/
-                            scopeIsLocal    : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
-                            /**@js_externs version*/
-                            //version       : '{{ page.environment.version }}',
-                            /**@js_externs webroot*/
-                            'webroot'       : '{{ page.environment.webroot }}',
-                        };
-
-
-                        // globals
-                        window['GINA_ENV']          = '{{ page.environment.env }}';
-                        window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ page.environment.envIsDev }}') ? true : false;
-                        if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
-                            var search = (' ' + window.location.search).slice(1);
-                            if (!search && /\?/.test(window.location.href) ) {
-                                search = window.location.href.match(/\?.*/);
-                                if (Array.isArray(search) && search.length > 0) {
-                                    search = search[0]
-                                }
-                            }
-                            var matched = search.match(/debug=(true|false)/);
-                            if (matched)
-                                window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
-                        }
-
-                        window['GINA_SCOPE']          = '{{ page.environment.scope }}';
-                        window['GINA_SCOPE_IS_LOCAL']   = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
-
-
-                        gina["setOptions"](options);
-                        gina["isFrameworkLoaded"]       = true;
-
-                        // making adding css to the head
-                        var link    = null;
-                        link        = document.createElement('link');
-                        link.href   = options.webroot + "css/vendor/gina/gina.min.css";
-                        link.media  = "screen";
-                        link.rel    = "stylesheet";
-                        link.type   = "text/css";
-                        document.getElementsByTagName('head')[0].appendChild(link);
-
+                    if ( gina["isFrameworkLoaded"] ) {
                         return true
                     }
+
+                    var options = gina['config'] = {
+                        /**@js_externs env*/
+                        env             : '{{ page.environment.env }}',
+                        /**@js_externs envIsDev*/
+                        envIsDev        : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+                        /**@js_externs scope*/
+                        scope           : '{{ page.environment.scope }}',
+                        /**@js_externs scopeIsLocal*/
+                        scopeIsLocal    : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+                        /**@js_externs version*/
+                        //version       : '{{ page.environment.version }}',
+                        /**@js_externs webroot*/
+                        'webroot'       : '{{ page.environment.webroot }}',
+                    };
+
+                    if ( !gina['session'] ) {
+                        gina['session'] = {
+                            /**@js_externs id*/
+                            'id'                    : '{{ page.data.session.id }}' || null,
+                            /**@js_externs originalTimeout*/
+                            'originalTimeout'       : '{{ page.data.session.timeout }}' || (1000 * 60 * 5),
+                            /**@js_externs createdAt*/
+                            'createdAt'             : '{{ page.data.session.createdAt }}' || null,
+                            /**@js_externs lastModified*/
+                            'lastModified'          : '{{ page.data.session.lastModified }}' || null,
+                            /**@js_externs expiresAt*/
+                            'expiresAt'             : null
+                        };
+
+                        gina['session'].__defineGetter__("timeout", function () {
+                            return getTimeout(this);
+                        });
+                        // trigger timeout assignment - will trigger a compilation warning
+                        gina['session'].timeout;
+                    }
+
+
+
+                    // globals
+                    window['GINA_ENV']          = '{{ page.environment.env }}';
+                    window['GINA_ENV_IS_DEV']   = /^true$/i.test('{{ page.environment.envIsDev }}') ? true : false;
+                    if ( typeof(location.search) != 'undefined' && /debug\=/i.test(window.location.search) ) {
+                        var search = (' ' + window.location.search).slice(1);
+                        if (!search && /\?/.test(window.location.href) ) {
+                            search = window.location.href.match(/\?.*/);
+                            if (Array.isArray(search) && search.length > 0) {
+                                search = search[0]
+                            }
+                        }
+                        var matched = search.match(/debug=(true|false)/);
+                        if (matched)
+                            window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
+                    }
+
+                    window['GINA_SCOPE']          = '{{ page.environment.scope }}';
+                    window['GINA_SCOPE_IS_LOCAL']   = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+
+
+                    gina["setOptions"](options);
+                    gina["isFrameworkLoaded"]       = true;
+
+                    // making adding css to the head
+                    var link    = null;
+                    link        = document.createElement('link');
+                    link.href   = options.webroot + "css/vendor/gina/gina.min.css";
+                    link.media  = "screen";
+                    link.rel    = "stylesheet";
+                    link.type   = "text/css";
+                    document.getElementsByTagName('head')[0].appendChild(link);
+                    link = null;
+
+                    return true;
                 }
             }
 
