@@ -137,7 +137,6 @@ function Router(env, scope) {
             && typeof(request.isAuthenticated) == 'undefined'
             ||
             typeof(request.session) != 'undefined'
-            && typeof(request.session.user) != 'undefined'
             && typeof(request.isAuthenticated) == 'undefined'
        ) {
             request.isAuthenticated = function() {
@@ -183,9 +182,9 @@ function Router(env, scope) {
 
         if (
             typeof(request._passport) != 'undefined'
-            && (typeof(request.logIn) == 'undefined'
+            && typeof(request.logIn) == 'undefined'
             ||
-            typeof(request.login) == 'undefined')
+            typeof(request.login) == 'undefined'
         ) {
             request.login =
             request.logIn = function(user, options, done) {
@@ -203,36 +202,68 @@ function Router(env, scope) {
 
                 this[property] = user;
 
-                if (session) {
-                    if (!this._passport) { throw new Error('passport.initialize() middleware not in use'); }
-                    if (typeof done != 'function') { throw new Error('req#login requires a callback function'); }
+                if (!session) {
+                    done && done();
+                    return;
+                }
+
+                // if (session) {
+                    if (!this._passport) {
+                        throw new Error('passport.initialize() middleware not in use');
+                    }
+                    if (typeof done != 'function') {
+                        throw new Error('req#login requires a callback function');
+                    }
 
                     var self = this;
                     this._passport.instance._sm.logIn(this, user, function(err) {
-                    if (err) {
-                        self[property] = null;
-                        return done(err);
-                    }
-                    done();
+                        if (err) {
+                            self[property] = null;
+                            return done(err);
+                        }
+                        done();
                     });
-                } else {
-                    done && done();
-                }
+                // } else {
+                //     done && done();
+                // }
             };
         }
 
-        if ( typeof(request._passport) != 'undefined' && (typeof(request.logOut) == 'undefined' ||  typeof(request.logout) == 'undefined') ) {
+        if (
+            typeof(request._passport) != 'undefined'
+            && typeof(request.logOut) == 'undefined'
+            ||
+            typeof(request.session) != 'undefined'
+            && typeof(request.logout) == 'undefined'
+        ) {
             request.logout =
             request.logOut = function() {
                 var property = 'user';
-                if (this._passport && this._passport.instance) {
-                    property = this._passport.instance._userProperty || 'user';
+
+                // by default
+                var sess = this;
+                if (sess._passport && sess._passport.instance) {
+                    property = sess._passport.instance._userProperty || 'user';
+                }
+                if ( !sess._passport
+                    && typeof(sess.session) != 'undefined'
+                ) {
+                    sess = sess.session;
                 }
 
-                this[property] = null;
-                if (this._passport) {
-                    this._passport.instance._sm.logOut(this);
+                sess[property] = null;
+                if (sess._passport) {
+                    sess._passport.instance._sm.logOut(sess);
                 }
+
+
+                // if (this._passport && this._passport.instance) {
+                //     property = this._passport.instance._userProperty || 'user';
+                // }
+                // this[property] = null;
+                // if (this._passport) {
+                //     this._passport.instance._sm.logOut(this);
+                // }
             };
         }
 
@@ -345,7 +376,7 @@ function Router(env, scope) {
             , hasControllerNamespace    = (namespace) ? true : false
         ;
 
-        // TODO -  ?? merge all controllers into a single file while building for other env than `dev`
+        // TODO -  ?? Merge all controllers into a single file while building for other env than `dev`
 
         setupFile = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
         var filename = '';

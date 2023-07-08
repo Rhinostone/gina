@@ -228,21 +228,22 @@ function SuperController(options) {
                     let obj = p[key], value = '';
                     for (let prop in obj) {
                         if (obj.hasOwnProperty(prop)) {
-                            value += obj[prop]
-                        } else {
-
-                            if ( /^:/.test(value) ) {
-                                str = 'page.view.params.'+ key + '.';
-                                set(str.substr(0, str.length-1), req.params[value.substr(1)]);
-                            } else if (/^(file|title)$/.test(key)) {
-                                str = 'page.view.'+ key + '.';
-                                set(str.substr(0, str.length-1), value);
-                            } else {
-                                set(str.substr(0, str.length-1), value)
-                            }
-
-                            str = 'page.'
+                            value += obj[prop];
+                            continue;
                         }
+
+                        if ( /^:/.test(value) ) {
+                            str = 'page.view.params.'+ key + '.';
+                            set(str.substr(0, str.length-1), req.params[value.substr(1)]);
+                        } else if (/^(file|title)$/.test(key)) {
+                            str = 'page.view.'+ key + '.';
+                            set(str.substr(0, str.length-1), value);
+                        } else {
+                            set(str.substr(0, str.length-1), value)
+                        }
+
+                        str = 'page.'
+
                     }
                 }
             }
@@ -255,19 +256,21 @@ function SuperController(options) {
         local.next = next;
 
         getParams(req);
-        if ( typeof(local.options.template) != 'undefined' && typeof(local.options.control) != 'undefined' ) {
-
-
+        if (
+            typeof(local.options.template) != 'undefined'
+            && typeof(local.options.control) != 'undefined'
+        ) {
             var  action             = local.options.control
                 , rule              = local.options.rule
                 , ext               = 'html' // by default
                 , isWithoutLayout   = false // by default
-                , namespace         = local.options.namespace || '';
+                , namespace         = local.options.namespace || ''
+            ;
 
-
-
-
-            if ( typeof(local.options.template) != 'undefined' && local.options.template ) {
+            if (
+                typeof(local.options.template) != 'undefined'
+                && local.options.template
+            ) {
                 if (
                     typeof(local.options.template.ext) != 'undefined'
                     && local.options.template.ext
@@ -529,6 +532,52 @@ function SuperController(options) {
 
         try {
             data = getData();
+            // Display session
+            if (
+                typeof(local.req.session) != 'undefined'
+            ) {
+                if ( typeof(data.page.data) == 'undefined' ) {
+                    data.page.data = {};
+                }
+
+                if ( typeof(local.req.session.cookie._expires) != 'undefined' ) {
+                    var dateEnd = local.req.session.cookie._expires;
+                    var dateStart = ( typeof(local.req.session.lastModified) != 'undefined')
+                                    ? new Date(local.req.session.lastModified)
+                                    : new Date()
+                    ;
+                    var elapsed = dateEnd - dateStart;
+                    // var expiresAt =
+                    if ( typeof(data.page.data.session) == 'undefined' ) {
+                        data.page.data.session = {
+                            id          : local.req.session.id,
+                            lastModified: local.req.session.lastModified
+                        };
+                    }
+                    // In milliseconds
+                    data.page.data.session.createdAt    = local.req.session.createdAt;
+                    data.page.data.session.expiresAt    = dateEnd.format('isoDateTime');
+                    data.page.data.session.timeout      = elapsed;
+
+                    dateEnd     = null;
+                    dateStart   = null;
+                    elapsed     = null;
+                }
+            }
+
+            // in case `local.req.routing.param.file` has been changed on the fly
+            if (
+                local.req.routing.param.file
+                && local.req.routing.param.file != data.page.view.file
+            ) {
+                data.page.view.file = local.req.routing.param.file;
+            }
+            if (
+                local.req.routing.param.ext
+                && local.req.routing.param.ext != data.page.view.ext
+            ) {
+                data.page.view.ext = local.req.routing.param.ext;
+            }
             file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
             // making path thru [namespace &] file
             if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
@@ -571,7 +620,7 @@ function SuperController(options) {
                 }
             }
 
-            if (data.page.view.ext && !new RegExp(data.page.view.ext+ '$').test(file) /** && hasViews() && fs.existsSync(_(path + data.page.view.ext, true))*/ ) {
+            if (data.page.view.ext && !new RegExp(data.page.view.ext+ '$').test(file) ) {
                 path += data.page.view.ext
             }
 
@@ -584,6 +633,7 @@ function SuperController(options) {
         var pageContentObj = new _(data.page.view.path);
         if (
             !isWithoutLayout
+            && !isRenderingCustomError
             && pageContentObj.existsSync()
             && !/\{\%(\s+extends|extends)/.test(fs.readFileSync(path).toString())
         ) {

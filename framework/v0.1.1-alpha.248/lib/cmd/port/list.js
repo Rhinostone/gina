@@ -173,8 +173,7 @@ function List(opt, cmd) {
                 var filename = targetObj.toString();
                 // save to ~/.gina/ports.reverse.json
                 lib.generator.createFileFromDataSync( data, filename );
-                console.log('Saved to `'+ filename +'`');
-                return;
+                return end('Saved to `'+ filename +'`');
             }
 
             return process.stdout.write(data);

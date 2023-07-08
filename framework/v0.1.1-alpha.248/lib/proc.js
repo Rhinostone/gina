@@ -190,6 +190,11 @@ function Proc(bundle, proc, usePidFile){
                     return false;
                 }
 
+                // if ( /ECONNRESET/.test(err.code) ) {
+                //     console.warn('[ SERVER ][ ECONNRESET UNCAUGHT EXCEPTION ]', err.stack);
+                //     return false;
+                // }
+
                 //console.debug("[ PROC ] @=>", self.args);
                 var bundle = self.bundle;
                 var pid = self.getPidByBundleName(bundle);
