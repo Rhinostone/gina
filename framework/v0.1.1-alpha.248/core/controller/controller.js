@@ -630,16 +630,41 @@ function SuperController(options) {
         }
 
         // isWithoutLayout from content
-        var pageContentObj = new _(data.page.view.path);
+        var pageContentObj  = new _(data.page.view.path);
+        var _templateContent = fs.readFileSync(path).toString() || null;
+        var hasLayoutInPath = /\{\%(\s+extends|extends)/.test(_templateContent) || false;
+        var layoutPath      = null;
+
         if (
             !isWithoutLayout
             && !isRenderingCustomError
             && pageContentObj.existsSync()
-            && !/\{\%(\s+extends|extends)/.test(fs.readFileSync(path).toString())
+            && !hasLayoutInPath
         ) {
             isWithoutLayout = true;
         }
         pageContentObj = null;
+
+        // Retrieve layoutPath from content
+        if (hasLayoutInPath && _templateContent) {
+            var extendFound = _templateContent.match(/\{\%(\s+extends|extends)(.*)\%}/);
+            if (extendFound && Array.isArray(extendFound)) {
+                var extendPath = null;
+                try {
+                    // localOptions.template.templates +'/'+
+                    layoutPath = extendFound[0].match(/(\"|\')(.*)(\"|\')/)[0].replace(/(\"|\')/g, '');
+                    data.page.view.layout = layoutPath;
+                    layoutPath = localOptions.template.templates +'/'+ layoutPath;
+                    localOptions.template.layout = layoutPath;
+                } catch (extendErr) {
+                    // nothing to do
+                }
+                extendPath = null;
+            }
+            extendFound = null;
+        }
+        hasLayoutInPath     = null;
+        _templateContent    = null;
 
         localOptions.debugMode = ( typeof(displayToolbar) == 'undefined' ) ? undefined : ( (/true/i.test(displayToolbar)) ? true : false ); // only active for dev env
 
@@ -846,8 +871,7 @@ function SuperController(options) {
 
 
 
-            var layoutPath              = null
-                , assets                = null
+            var  assets                 = null
                 , mapping               = null
                 , XHRData               = null
                 , XHRView               = null
