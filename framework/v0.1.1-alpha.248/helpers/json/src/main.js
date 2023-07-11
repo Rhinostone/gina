@@ -38,8 +38,11 @@ module.exports = function(){
         ;
 
         try {
-            if ( typeof(process.env.NODE_ENV_IS_DEV) != 'undefined' && /true/i.test(process.env.NODE_ENV_IS_DEV) ) {
-                delete require.cache[filename];
+            if (
+                typeof(process.env.NODE_ENV_IS_DEV) != 'undefined'
+                && /true/i.test(process.env.NODE_ENV_IS_DEV)
+            ) {
+                delete require.cache[require.resolve(filename)];
             }
             jsonStr = fs.readFileSync(filename).toString();
         } catch (err) {

@@ -1232,18 +1232,21 @@ function SuperController(options) {
                     // DO NOT REPLACE IT BY JSON.clone() !!!!
 
                     data.page.data = JSON.parse(JSON.stringify(data.page.data).replace(blacklistRe, '\$&'));
-
+                    blacklistRe = null;
                 } catch (err) {
                     filename = localOptions.template.html;
                     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
                     self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
                     filename = null;
+                    blacklistRe = null;
                     return;
                 }
 
 
+
                 // Only available for http/2.0 for now
                 if ( !self.isXMLRequest() && /http\/2/.test(localOptions.conf.server.protocol) ) {
+                    var assets = null;
                     try {
                         // TODO - button in toolbar to empty url assets cache
                         if ( /**  self.isCacheless() ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
@@ -1261,8 +1264,10 @@ function SuperController(options) {
                         ) {
                             layout = layout.replace('{"assets":"${assets}"}', assets );
                         }
+                        assets = null;
 
                     } catch (err) {
+                        assets = null;
                         self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
                         return;
                     }
@@ -1278,6 +1283,7 @@ function SuperController(options) {
                     }
 
                     local.res.end(layout);
+                    layout = null;
                 }
 
                 console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
@@ -1290,8 +1296,7 @@ function SuperController(options) {
 
 
             if ( typeof(local.req.params.errorObject) != 'undefined' ) {
-                self.throwError(local.req.params.errorObject);
-                return;
+                return self.throwError(local.req.params.errorObject);
             }
             local.res.end('Unexpected controller error while trying to render.');
 
@@ -1302,8 +1307,7 @@ function SuperController(options) {
             return;
 
         } catch (err) {
-            self.throwError(local.res, 500, err);
-            return;
+            return self.throwError(local.res, 500, err);
         }
     }
 
@@ -3867,12 +3871,14 @@ function SuperController(options) {
                 self.isPopinContext()
                 && self.isXMLRequest()
             ) {
-                return self.renderJSON({
-                    isXhrRedirect: true,
-                    popin: {
-                        url: url
-                    }
-                })
+                // return self.renderJSON({
+                //     isXhrRedirect: true,
+                //     popin: {
+                //         location: url
+                //     }
+                // })
+                self.redirect(url, true);
+                return;
             }
             else if (self.isXMLRequest() ) {
                 return self.renderJSON({
