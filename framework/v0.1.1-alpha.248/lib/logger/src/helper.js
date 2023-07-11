@@ -67,6 +67,7 @@
                     s +=' ';
                 }
             }
+            sCount = null;
 
             var repl = {
                 '%a': group, // application or service name

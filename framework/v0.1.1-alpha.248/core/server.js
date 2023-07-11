@@ -1400,340 +1400,353 @@ function Server(options) {
         } else {
             var s = 0, sLen = bundleConf.staticResources.length;
             for ( ; s < sLen; ++s ) {
-                //if ( new RegExp('^'+ bundleConf.staticResources[s]).test(pathname) ) {
                 if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(pathname) ) {
                     filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ pathname.replace(bundleConf.staticResources[s], '');
                     break;
                 }
             }
+
+            // try local
+            if ( !fs.existsSync(filename) ) {
+                var key = pathname.replace(pathname.split('/').splice(-1), '');
+                for ( ; s < sLen; ++s ) {
+                    if ( bundleConf.staticResources[s] == key ) {
+                    // if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(pathname) ) {
+                        filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ pathname.replace(bundleConf.staticResources[s], '');
+                        break;
+                    }
+                }
+                key = null;
+            }
             s       = null;
             sLen    = null;
+
         }
+
 
         filename = decodeURIComponent(filename);
         fs.exists(filename, function onStaticExists(exist) {
 
             if (!exist) {
-                throwError(response, 404, 'Page not found: \n' + pathname, next);
-                return;
-            } else {
+                return throwError(response, 404, 'Page not found: \n' + pathname, next);
+            }
 
-                isFilenameDir = fs.statSync(filename).isDirectory();
-                if ( isFilenameDir ) {
-                    dirname = request.url;
-                    filename += 'index.html';
-                    request.url += 'index.html';
+            isFilenameDir = fs.statSync(filename).isDirectory();
+            if ( isFilenameDir ) {
+                dirname = request.url;
+                filename += 'index.html';
+                request.url += 'index.html';
 
-                    if ( !fs.existsSync(filename) ) {
-                        throwError(response, 403, 'Forbidden: \n' + pathname, next);
-                        return;
-                    } else {
-                        var ext = 'html';
-                        if ( /http\/2/.test(protocol) ) {
-                            header = {
-                                ':status': 301,
-                                'location': request.url,
-                                'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
-                            };
+                if ( !fs.existsSync(filename) ) {
+                    throwError(response, 403, 'Forbidden: \n' + pathname, next);
+                    return;
+                } else {
+                    var ext = 'html';
+                    if ( /http\/2/.test(protocol) ) {
+                        header = {
+                            ':status': 301,
+                            'location': request.url,
+                            'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
+                        };
 
-                            if (cacheless) {
-                                header['cache-control'] = 'no-cache, no-store, must-revalidate';
-                                header['pragma'] = 'no-cache';
-                                header['expires'] = '0';
-                            }
-                            request = checkPreflightRequest(request, response);
-                            header  = completeHeaders(header, request, response);
-
-                            if (!stream.destroyed) {
-                                stream.respond(header);
-                                stream.end();
-                            }
-
-                        } else {
-                            response.setHeader('location', request.url);
-                            request = checkPreflightRequest(request, response);
-                            completeHeaders(null, request, response);
-                            if (cacheless) {
-                                response.writeHead(301, {
-                                    'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                                    'pragma': 'no-cache',
-                                    'expires': '0',
-                                    'content-type': bundleConf.server.coreConfiguration.mime[ext]
-                                });
-                            }
-                            response.end()
+                        if (cacheless) {
+                            header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                            header['pragma'] = 'no-cache';
+                            header['expires'] = '0';
                         }
+                        request = checkPreflightRequest(request, response);
+                        header  = completeHeaders(header, request, response);
+
+                        if (!stream.destroyed) {
+                            stream.respond(header);
+                            stream.end();
+                        }
+
+                    } else {
+                        response.setHeader('location', request.url);
+                        request = checkPreflightRequest(request, response);
+                        completeHeaders(null, request, response);
+                        if (cacheless) {
+                            response.writeHead(301, {
+                                'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                                'pragma': 'no-cache',
+                                'expires': '0',
+                                'content-type': bundleConf.server.coreConfiguration.mime[ext]
+                            });
+                        }
+                        response.end()
                     }
+                }
+                return;
+            }
+
+
+            if (cacheless) {
+                delete require.cache[require.resolve(filename)];
+            }
+
+            if (response.headersSent) {
+                // May be sent by http/2 push
+                return
+            }
+            fs.readFile(filename, bundleConf.encoding, function onStaticFileRead(err, file) {
+                if (err) {
+                    throwError(response, 404, 'Page not found: \n' + pathname, next);
                     return;
                 }
 
+                if (!response.headersSent) {
 
-                if (cacheless) {
-                    delete require.cache[require.resolve(filename)];
-                }
+                    isBinary    = true;
+                    isHandler   = false;
 
-                if (response.headersSent) {
-                    // May be sent by http/2 push
-                    return
-                }
-                fs.readFile(filename, bundleConf.encoding, function onStaticFileRead(err, file) {
-                    if (err) {
-                        throwError(response, 404, 'Page not found: \n' + pathname, next);
-                        return;
-                    }
+                    try {
+                        contentType = getContentTypeByFilename(filename);
 
-                    if (!response.headersSent) {
-
-                        isBinary    = true;
-                        isHandler   = false;
-
-                        try {
-                            contentType = getContentTypeByFilename(filename);
-
-                            // adding gina loader
-                            if ( /text\/html/i.test(contentType) && self.isCacheless() ) {
-                                isBinary = false;
-                                // javascriptsDeferEnabled
-                                if  (bundleConf.content.templates._common.javascriptsDeferEnabled ) {
-                                    file = file.replace(/\<\/head\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</head>');
-                                } else {
-                                    file = file.replace(/\<\/body\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</body>');
-                                }
-
+                        // adding gina loader
+                        if ( /text\/html/i.test(contentType) && self.isCacheless() ) {
+                            isBinary = false;
+                            // javascriptsDeferEnabled
+                            if  (bundleConf.content.templates._common.javascriptsDeferEnabled ) {
+                                file = file.replace(/\<\/head\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</head>');
                             } else {
-                                // adding handler `gina.ready(...)` wrapper
-                                hanlersPath = bundleConf.handlersPath;
+                                file = file.replace(/\<\/body\>/i, '\t'+ bundleConf.content.templates._common.ginaLoader +'\n</body>');
+                            }
 
-                                if ( new RegExp('^'+ hanlersPath).test(filename) ) {
-                                    isBinary    = false;
-                                    isHandler   = true;
-                                    file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
+                        } else {
+                            // adding handler `gina.ready(...)` wrapper
+                            hanlersPath = bundleConf.handlersPath;
+
+                            if ( new RegExp('^'+ hanlersPath).test(filename) ) {
+                                isBinary    = false;
+                                isHandler   = true;
+                                file = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));'
+                            }
+                        }
+
+                        if ( /http\/2/.test(protocol) ) {
+                            self._isStatic      = true;
+                            self._referrer      = request.url;
+                            var ext = request.url.match(/\.([A-Za-z0-9]+)$/);
+                            request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
+
+                            self._responseHeaders         = response.getHeaders();
+                            if (!isBinary && typeof(self._options.template.assets[request.url]) == 'undefined')
+                                self._options.template.assets = getAssets(bundleConf, file);
+
+                            if (
+                                typeof(self._options.template.assets[request.url]) == 'undefined'
+                                || isBinary
+                            ) {
+
+                                self._options.template.assets[request.url] = {
+                                    ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
+                                    isAvailable: true,
+                                    mime: contentType,
+                                    url: request.url,
+                                    filename: filename,
+                                    isBinary: isBinary,
+                                    isHandler: isHandler
                                 }
                             }
 
-                            if ( /http\/2/.test(protocol) ) {
-                                self._isStatic      = true;
-                                self._referrer      = request.url;
-                                var ext = request.url.match(/\.([A-Za-z0-9]+)$/);
-                                request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
+                            self.instance._isXMLRequest    = request.isXMLRequest;
+                            self.instance._getAssetFilenameFromUrl = getAssetFilenameFromUrl;
 
-                                self._responseHeaders         = response.getHeaders();
-                                if (!isBinary && typeof(self._options.template.assets[request.url]) == 'undefined')
-                                    self._options.template.assets = getAssets(bundleConf, file);
+                            var isPathMatchingUrl = null;
+                            if ( !self.instance._http2streamEventInitalized ) {
+                                self.instance._http2streamEventInitalized = true;
+                                self.instance.on('stream', function onHttp2Strem(stream, headers) {
 
-                                if (
-                                    typeof(self._options.template.assets[request.url]) == 'undefined'
-                                    || isBinary
-                                ) {
+                                    if (!self._isStatic) return;
 
-                                    self._options.template.assets[request.url] = {
-                                        ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
-                                        isAvailable: true,
-                                        mime: contentType,
-                                        url: request.url,
-                                        filename: filename,
-                                        isBinary: isBinary,
-                                        isHandler: isHandler
-                                    }
-                                }
-
-                                self.instance._isXMLRequest    = request.isXMLRequest;
-                                self.instance._getAssetFilenameFromUrl = getAssetFilenameFromUrl;
-
-                                var isPathMatchingUrl = null;
-                                if ( !self.instance._http2streamEventInitalized ) {
-                                    self.instance._http2streamEventInitalized = true;
-                                    self.instance.on('stream', function onHttp2Strem(stream, headers) {
-
-                                        if (!self._isStatic) return;
-
-                                        if (!this._isXMLRequest) {
-                                            isPathMatchingUrl = true;
-                                            if (headers[':path'] != request.url) {
-                                                request.url         = headers[':path'];
-                                                isPathMatchingUrl   = false;
-                                            }
-
-                                            // for new requests
-                                            if (!isPathMatchingUrl) {
-                                                pathname        = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;
-                                                isFilenameDir   = (webroot == request.url) ? true: false;
-
-                                                if ( !isFilenameDir && !/404\.html/.test(filename) && fs.existsSync(filename) )
-                                                    isFilenameDir = fs.statSync(filename).isDirectory();
-                                                if (!isFilenameDir) {
-                                                    filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
-                                                }
-
-                                                if ( !isFilenameDir && !fs.existsSync(filename) ) {
-                                                    throwError(response, 404, 'Page not found: \n' + pathname, next);
-                                                    return;
-                                                }
-
-
-                                                if ( isFilenameDir ) {
-                                                    dirname = bundleConf.publicPath + pathname;
-                                                    filename =  dirname + 'index.html';
-                                                    request.url += 'index.html';
-                                                    if ( !fs.existsSync(filename) ) {
-                                                        throwError(response, 403, 'Forbidden: \n' + pathname, next);
-                                                        return;
-                                                    } else {
-                                                        header = {
-                                                            ':status': 301,
-                                                            'location': request.url
-                                                        };
-
-                                                        if (cacheless) {
-                                                            header['cache-control'] = 'no-cache, no-store, must-revalidate';
-                                                            header['pragma'] = 'no-cache';
-                                                            header['expires'] = '0';
-                                                        }
-
-
-                                                        stream.respond(header);
-                                                        stream.end();
-                                                    }
-                                                }
-                                            }
-
-                                            contentType = getContentTypeByFilename(filename);
-                                            contentType = contentType +'; charset='+ bundleConf.encoding;
-                                            ext = request.url.match(/\.([A-Za-z0-9]+)$/);
-                                            request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
-                                            if (
-                                                !isPathMatchingUrl
-                                                && typeof(self._options.template.assets[request.url]) == 'undefined'
-                                            ) {
-
-                                                self._options.template.assets[request.url] = {
-                                                    ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
-                                                    //isAvailable: true,
-                                                    isAvailable: (!/404\.html/.test(filename)) ? true : false,
-                                                    mime: contentType,
-                                                    url: request.url,
-                                                    filename: filename,
-                                                    isBinary: isBinary,
-                                                    isHandler: isHandler
-                                                }
-                                            }
-
-                                            if (!fs.existsSync(filename)) return;
-                                            isBinary    = ( /text\/html/i.test(contentType) ) ? false : true;
-                                            isHandler   = ( new RegExp('^'+ bundleConf.handlersPath).test(filename) ) ? true : false;
-                                            if ( isBinary ) {
-                                                // override
-                                                self._options.template.assets[request.url] = {
-                                                    ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
-                                                    isAvailable: true,
-                                                    mime: contentType,
-                                                    url: request.url,
-                                                    filename: filename,
-                                                    isBinary: isBinary,
-                                                    isHandler: isHandler
-                                                }
-                                            }
-
-                                            if ( isHandler ) {
-                                                // adding handler `gina.ready(...)` wrapper
-                                                var file = null;
-                                                if (!self._options.template.assets[request.url].file) {
-                                                    file      = fs.readFileSync(filename, bundleConf.encoding).toString();
-                                                    file      = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));';
-                                                    self._options.template.assets[request.url].file = file;
-                                                }
-                                            }
-                                            self.onHttp2Stream(stream, headers, response);
+                                    if (!this._isXMLRequest) {
+                                        isPathMatchingUrl = true;
+                                        if (headers[':path'] != request.url) {
+                                            request.url         = headers[':path'];
+                                            isPathMatchingUrl   = false;
                                         }
 
-                                    }); // EO self.instance.on('stream' ..
-                                }
+                                        // for new requests
+                                        if (!isPathMatchingUrl) {
+                                            pathname        = ( webroot.length > 1 && re.test(request.url) ) ? request.url.replace(re, '/') : request.url;
+                                            isFilenameDir   = (webroot == request.url) ? true: false;
+
+                                            if ( !isFilenameDir && !/404\.html/.test(filename) && fs.existsSync(filename) )
+                                                isFilenameDir = fs.statSync(filename).isDirectory();
+                                            if (!isFilenameDir) {
+                                                filename = this._getAssetFilenameFromUrl(bundleConf, pathname);
+                                            }
+
+                                            if ( !isFilenameDir && !fs.existsSync(filename) ) {
+                                                throwError(response, 404, 'Page not found: \n' + pathname, next);
+                                                return;
+                                            }
 
 
-                                header = {
-                                    ':status': 200,
-                                    'content-type': contentType + '; charset='+ bundleConf.encoding
-                                };
+                                            if ( isFilenameDir ) {
+                                                dirname = bundleConf.publicPath + pathname;
+                                                filename =  dirname + 'index.html';
+                                                request.url += 'index.html';
+                                                if ( !fs.existsSync(filename) ) {
+                                                    throwError(response, 403, 'Forbidden: \n' + pathname, next);
+                                                    return;
+                                                } else {
+                                                    header = {
+                                                        ':status': 301,
+                                                        'location': request.url
+                                                    };
 
-                                if (cacheless) {
-                                    // source maps integration for javascript & css
-                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
-                                        //pathname = pathname +'.map';
-                                        pathname = webroot + pathname.substr(1) +'.map';
-                                        // serve without cache
-                                        header['X-SourceMap'] = pathname;
-                                        header['cache-control'] = 'no-cache, no-store, must-revalidate';
-                                        header['pragma'] = 'no-cache';
-                                        header['expires'] = '0';
+                                                    if (cacheless) {
+                                                        header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                                                        header['pragma'] = 'no-cache';
+                                                        header['expires'] = '0';
+                                                    }
+
+
+                                                    stream.respond(header);
+                                                    stream.end();
+                                                }
+                                            }
+                                        }
+
+                                        contentType = getContentTypeByFilename(filename);
+                                        contentType = contentType +'; charset='+ bundleConf.encoding;
+                                        ext = request.url.match(/\.([A-Za-z0-9]+)$/);
+                                        request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
+                                        if (
+                                            !isPathMatchingUrl
+                                            && typeof(self._options.template.assets[request.url]) == 'undefined'
+                                        ) {
+
+                                            self._options.template.assets[request.url] = {
+                                                ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
+                                                //isAvailable: true,
+                                                isAvailable: (!/404\.html/.test(filename)) ? true : false,
+                                                mime: contentType,
+                                                url: request.url,
+                                                filename: filename,
+                                                isBinary: isBinary,
+                                                isHandler: isHandler
+                                            }
+                                        }
+
+                                        if (!fs.existsSync(filename)) return;
+                                        isBinary    = ( /text\/html/i.test(contentType) ) ? false : true;
+                                        isHandler   = ( new RegExp('^'+ bundleConf.handlersPath).test(filename) ) ? true : false;
+                                        if ( isBinary ) {
+                                            // override
+                                            self._options.template.assets[request.url] = {
+                                                ext: ( ext != null && typeof(ext[0]) != 'undefined' ) ? ext[0] : null,
+                                                isAvailable: true,
+                                                mime: contentType,
+                                                url: request.url,
+                                                filename: filename,
+                                                isBinary: isBinary,
+                                                isHandler: isHandler
+                                            }
+                                        }
+
+                                        if ( isHandler ) {
+                                            // adding handler `gina.ready(...)` wrapper
+                                            var file = null;
+                                            if (!self._options.template.assets[request.url].file) {
+                                                file      = fs.readFileSync(filename, bundleConf.encoding).toString();
+                                                file      = '(gina.ready(function onGinaReady($){\n'+ file + '\n},window["originalContext"]));';
+                                                self._options.template.assets[request.url].file = file;
+                                            }
+                                        }
+                                        self.onHttp2Stream(stream, headers, response);
                                     }
-                                }
 
-                                header  = completeHeaders(header, request, response);
-                                if (isBinary) {
-                                    stream.respondWithFile(filename, header)
-                                } else {
-                                    stream.respond(header);
-                                    stream.end(file);
-                                }
-                                // Fixed on march 15 2021 by removing the return
-                                // Could be the cause why the push is pending
-                                //return;
-                            } else {
-
-                                completeHeaders(null, request, response);
-                                response.setHeader('content-type', contentType +'; charset='+ bundleConf.encoding);
-                                // if (/\.(woff|woff2)$/i.test(filename) )  {
-                                //     response.setHeader("Transfer-Encoding", 'Identity')
-                                // }
-                                if (isBinary) {
-                                    response.setHeader('content-length', fs.statSync(filename).size);
-                                }
-
-                                if (cacheless) {
-                                    // source maps integration for javascript & css
-                                    if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
-                                        //pathname = pathname +'.map'
-                                        pathname = webroot + pathname.substr(1) +'.map';
-                                        response.setHeader("X-SourceMap", pathname)
-                                    }
-
-                                    // serve without cache
-                                    response.writeHead(200, {
-                                        'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
-                                        'pragma': 'no-cache',
-                                        'expires': '0'
-                                    });
-
-                                } else {
-                                    response.writeHead(200)
-                                }
-
-
-                                if (isBinary) { // images, javascript, pdf ....
-                                    fs.createReadStream(filename)
-                                        .on('end', function onResponse(){
-                                            console.info(request.method +' [200] '+ pathname);
-                                        })
-                                        .pipe(response);
-                                } else {
-                                    response.write(file, bundleConf.encoding);
-                                    response.end();
-                                    console.info(request.method +' [200] '+ pathname);
-                                }
-
-                                return;
+                                }); // EO self.instance.on('stream' ..
                             }
 
-                        } catch(err) {
-                            throwError(response, 500, err.stack);
+
+                            header = {
+                                ':status': 200,
+                                'content-type': contentType + '; charset='+ bundleConf.encoding
+                            };
+
+                            if (cacheless) {
+                                // source maps integration for javascript & css
+                                if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
+                                    //pathname = pathname +'.map';
+                                    pathname = webroot + pathname.substr(1) +'.map';
+                                    // serve without cache
+                                    header['X-SourceMap'] = pathname;
+                                    header['cache-control'] = 'no-cache, no-store, must-revalidate';
+                                    header['pragma'] = 'no-cache';
+                                    header['expires'] = '0';
+                                }
+                            }
+
+                            header  = completeHeaders(header, request, response);
+                            if (isBinary) {
+                                stream.respondWithFile(filename, header)
+                            } else {
+                                stream.respond(header);
+                                stream.end(file);
+                            }
+                            // Fixed on march 15 2021 by removing the return
+                            // Could be the cause why the push is pending
+                            //return;
+                        } else {
+
+                            completeHeaders(null, request, response);
+                            response.setHeader('content-type', contentType +'; charset='+ bundleConf.encoding);
+                            // if (/\.(woff|woff2)$/i.test(filename) )  {
+                            //     response.setHeader("Transfer-Encoding", 'Identity')
+                            // }
+                            if (isBinary) {
+                                response.setHeader('content-length', fs.statSync(filename).size);
+                            }
+
+                            if (cacheless) {
+                                // source maps integration for javascript & css
+                                if ( /(.js|.css)$/.test(filename) && fs.existsSync(filename +'.map') && !/sourceMappingURL/.test(file) ) {
+                                    //pathname = pathname +'.map'
+                                    pathname = webroot + pathname.substr(1) +'.map';
+                                    response.setHeader("X-SourceMap", pathname)
+                                }
+
+                                // serve without cache
+                                response.writeHead(200, {
+                                    'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from caching it
+                                    'pragma': 'no-cache',
+                                    'expires': '0'
+                                });
+
+                            } else {
+                                response.writeHead(200)
+                            }
+
+
+                            if (isBinary) { // images, javascript, pdf ....
+                                fs.createReadStream(filename)
+                                    .on('end', function onResponse(){
+                                        console.info(request.method +' [200] '+ pathname);
+                                    })
+                                    .pipe(response);
+                            } else {
+                                response.write(file, bundleConf.encoding);
+                                response.end();
+                                console.info(request.method +' [200] '+ pathname);
+                            }
+
                             return;
                         }
+
+                    } catch(err) {
+                        throwError(response, 500, err.stack);
+                        return;
                     }
+                }
 
-                    return
-                });
+                return
+            });
 
-            }
+
         })
     }
 

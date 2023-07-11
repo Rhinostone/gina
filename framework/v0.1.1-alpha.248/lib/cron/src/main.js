@@ -54,13 +54,17 @@ function Cron(opt) {
                 conf = {};
 
                 filename = _(path + '/' +files[f], true);
-                if (cacheless) delete require.cache[filename];
+                if (cacheless) {
+                    delete require.cache[require.resolve(filename)];
+                }
 
                 if ( fs.statSync(filename).isDirectory() ) {
                     // catalog or set of crons
                     if ( fs.existsSync(_(filename + '/index.js', true)) ) {
                         filename = _(filename + '/index.js', true);
-                        if (cacheless) delete require.cache[filename];
+                        if (cacheless) {
+                            delete require.cache[require.resolve(filename)];
+                        }
                     }
 
                     if ( typeof(opt[ files[f] ]) != 'undefined' )
