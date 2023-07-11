@@ -333,7 +333,11 @@ function Routing() {
         // }
 
         // attaching routing description for this request
-        var paramMethod = params.method.toLowerCase();
+        var paramMethod = 'get'; // by default
+        try {
+            paramMethod = params.method.toLowerCase();
+        } catch(methodErr) {}
+
 
         var hasAlreadyBeenScored = false;
         if (
