@@ -24,6 +24,7 @@ function Couchbase(conn, infos) {
     var EntitySuperClass    = null, EntityN1qlClass = null;
     var envIsDev            = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
     var scopeIsLocal        = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
+    var scopeIsProduction   = ( /^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION) ) ? true : false;
 
     /**
      * Init

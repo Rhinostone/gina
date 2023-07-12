@@ -94,7 +94,7 @@ function Initialize(opt) {
         var path = getPath('gina').lib + filename;
 
         try {
-            if ( GINA_ENV_IS_DEV || GINA_SCOPE_IS_LOCAL) {
+            if ( GINA_ENV_IS_DEV || process.env.NODE_ENV_IS_DEV ) {
                 delete require.cache[require.resolve(path)];
             }
             require(path)(opt, cmd)
@@ -503,8 +503,10 @@ function Initialize(opt) {
                 'env_is_dev' : (main['dev_env'][self.release] == env) ? true : false,
                 'dev_env' : main['dev_env'][self.release],
                 'scope' : scope,
-                'scope_is_local' : (main['local_scope'][self.release] == scope) ? true : false,
                 'local_scope': main['local_scope'][self.release],
+                'scope_is_local' : (main['local_scope'][self.release] == scope) ? true : false,
+                'scope_is_production' : (main['production_scope'][self.release] == scope) ? true : false,
+                'production_scope': main['production_scope'][self.release],
                 'culture' : getEnvVar('GINA_CULTURE'),
                 'iso_short': main['def_iso_short'][self.release],
                 'date' : main['def_date'][self.release],
@@ -537,6 +539,7 @@ function Initialize(opt) {
             // setEnvVar('GINA_HOSTNAME', settings['hostname']);
             setEnvVar('GINA_ENV_IS_DEV', settings['env_is_dev']);
             setEnvVar('GINA_SCOPE_IS_LOCAL', settings['scope_is_local']);
+            setEnvVar('GINA_SCOPE_IS_PRODUCTION', settings['scope_is_production']);
 
             console.debug('Framework env is: ', env);
 
@@ -721,9 +724,24 @@ function Initialize(opt) {
                     && typeof(projectData['local_scope']) != 'undefined'
                     && projectData.scopes.indexOf(scope) < 0
                 ) {
-                    // process.exit(1)
+
                     err = new Error('the framework has no local scope linked to any ' +
                                     'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
+
+                    return done(err)
+                }
+
+                // has production scope ?
+                if (
+                    typeof(projectData['production_scope']) == 'undefined'
+                    ||
+                    typeof(projectData['production_scope']) != 'undefined'
+                    && typeof(projectData['production_scope']) != 'undefined'
+                    && projectData.scopes.indexOf(scope) < 0
+                ) {
+
+                    err = new Error('the framework has no production scope linked to any ' +
+                                    'scope to gina\'s.\nUse: $ gina scope:link-production <your_new_production_scope>');
 
                     return done(err)
                 }
@@ -748,6 +766,20 @@ function Initialize(opt) {
                     // process.exit(1)
                     err = new Error('the framework has no local scope linked to any ' +
                                     'scope to gina\'s.\nUse: $ gina scope:link-local <your_new_local_scope>');
+
+                    return done(err)
+                }
+                // has production scope ?
+                if (
+                    typeof(main['production_scope']) == 'undefined'
+                    ||
+                    typeof(main['production_scope']) != 'undefined'
+                    && typeof(main['production_scope'][self.release]) != 'undefined'
+                    && main.scopes[self.release].indexOf(main['production_scope'][self.release]) < 0
+                ) {
+                    // process.exit(1)
+                    err = new Error('the framework has no production scope linked to any ' +
+                                    'scope to gina\'s.\nUse: $ gina scope:link-production <your_new_production_scope>');
 
                     return done(err)
                 }

@@ -1,7 +1,6 @@
 var fs          = require('fs');
-
 var CmdHelper   = require('./../helper');
-var console = lib.logger;
+var console     = lib.logger;
 
 /**
  * Remove existing scope
@@ -53,20 +52,24 @@ function Remove(opt, cmd) {
 
     var removeScope = function(projects, target) {
         var err = null, scope = local.scope;
-        // default `dev scope` cannot be removed
+        // default `local scope` or default `production scope` cannot be removed
         if(
             scope === projects[self.projectName]['local_scope']
+            ||
+            scope === projects[self.projectName]['production_scope']
             ||
             scope === projects[self.projectName]['def_scope']
         ) {
             if (scope === projects[self.projectName]['def_scope']) {
                 err = new Error('Scope [ '+scope+' ] is set as "default scope" and cannot be removed until you `use` another default scope')
-            } else {
+            }
+            else {
                 err = new Error('Scope [ '+scope+' ] is linked as "local scope" and cannot be removed until you `link` another local scope')
             }
 
             return end(err, 'error', true);
         }
+
 
         projects[self.projectName]['scopes'].splice(projects[self.projectName]['scopes'].indexOf(scope), 1);
         lib.generator.createFileFromDataSync(

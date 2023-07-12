@@ -188,6 +188,12 @@ function SuperController(options) {
     this.isLocalScope = function() {
         return (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false;
     }
+    /**
+     * Check if the project scope is set for production
+     * */
+    this.isProductionScope = function() {
+        return (/^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION)) ? true : false;
+    }
 
     this.setOptions = function(req, res, next, options) {
         local.options = SuperController.instance._options = options;
@@ -334,6 +340,7 @@ function SuperController(options) {
             set('page.environment.envIsDev', self.isCacheless());
             set('page.environment.scope', process.env.NODE_SCOPE);
             set('page.environment.scopeIsLocal', process.env.NODE_SCOPE_IS_LOCAL);
+            set('page.environment.scopeIsProduction', process.env.NODE_SCOPE_IS_PRODUCTION);
             set('page.environment.date.now', new Date().format("isoDateTime"));
 
 

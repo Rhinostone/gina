@@ -294,17 +294,19 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
                     var options = gina['config'] = {
                         /**@js_externs env*/
-                        env             : '{{ page.environment.env }}',
+                        env                 : '{{ page.environment.env }}',
                         /**@js_externs envIsDev*/
-                        envIsDev        : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+                        envIsDev            : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
                         /**@js_externs scope*/
-                        scope           : '{{ page.environment.scope }}',
+                        scope               : '{{ page.environment.scope }}',
                         /**@js_externs scopeIsLocal*/
-                        scopeIsLocal    : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+                        scopeIsLocal        : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+                        /**@js_externs scopeIsProduction*/
+                        scopeIsProduction   : ( /^true$/.test('{{ page.environment.scopeIsProduction }}') ) ? true : false,
                         /**@js_externs version*/
-                        //version       : '{{ page.environment.version }}',
+                        //version           : '{{ page.environment.version }}',
                         /**@js_externs webroot*/
-                        'webroot'       : '{{ page.environment.webroot }}',
+                        'webroot'           : '{{ page.environment.webroot }}',
                     };
 
                     if ( !gina['session'] ) {
@@ -346,8 +348,9 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
                     }
 
-                    window['GINA_SCOPE']          = '{{ page.environment.scope }}';
-                    window['GINA_SCOPE_IS_LOCAL']   = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+                    window['GINA_SCOPE']                = '{{ page.environment.scope }}';
+                    window['GINA_SCOPE_IS_LOCAL']       = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+                    window['GINA_SCOPE_IS_PRODUCTION']  = /^true$/i.test('{{ page.environment.scopeIsProduction }}') ? true : false;
 
 
                     gina["setOptions"](options);

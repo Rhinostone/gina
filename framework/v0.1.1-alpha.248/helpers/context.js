@@ -201,7 +201,7 @@ function ContextHelper(contexts) {
         var env         = getContext('env');
         var isDev       = (env === projects[projectName]['dev_env']) ? true: false;
         var bundlesPath = projects[projectName]['path'] + '/bundles'; // by default
-        var isProductionScope = ('production' === projects[projectName]['def_scope']) ? true: false;
+        var isProductionScope = (projects[projectName]['production_scope'] === projects[projectName]['def_scope']) ? true: false;
         if (isDev) {
             bundlesPath = projects[projectName]['path'] + '/src'
         } else if (isProductionScope) {
@@ -379,23 +379,26 @@ function ContextHelper(contexts) {
             }
         }
 
-        var env = ctx.env || getEnvVar('GINA_ENV');
-        var envIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
-        var scope = ctx.scope || getEnvVar('GINA_SCOPE');
-        var scopeIsLocal = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
-        var Config = ctx.gina.Config;
-        var conf = null;
+        var env                 = ctx.env || getEnvVar('GINA_ENV');
+        var envIsDev            = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+        var scope               = ctx.scope || getEnvVar('GINA_SCOPE');
+        var scopeIsLocal        = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
+        var scopeIsProduction   = ( /^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION) ) ? true : false;
+        var Config              = ctx.gina.Config;
+        var conf                = null;
 
         if (Config.instance && typeof(Config.instance.env) != 'undefined') {
             conf = Config.instance
         } else {
             conf = new Config({
-                env: env,
-                scope: scope,
-                projectName: getContext('projectName'),
-                executionPath: getPath('project'),
-                startingApp: bundle,
-                ginaPath: getPath('gina').core
+                env                 : env,
+                scope               : scope,
+                scopeIsLocal        : scopeIsLocal,
+                scopeIsProduction   : scopeIsProduction,
+                projectName         : getContext('projectName'),
+                executionPath       : getPath('project'),
+                startingApp         : bundle,
+                ginaPath            : getPath('gina').core
             }).getInstance(bundle);
         }
 
@@ -488,19 +491,22 @@ function ContextHelper(contexts) {
             }
         }
 
-        var env             = process.env.NODE_ENV || GINA_ENV;
-        var envIsDev        = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
-        var scope           = process.env.NODE_SCOPE || GINA_SCOPE;
-        var scopeIsLocal    = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
-        var Config          = ctx.gina.Config;
+        var env                 = process.env.NODE_ENV || GINA_ENV;
+        var envIsDev            = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+        var scope               = process.env.NODE_SCOPE || GINA_SCOPE;
+        var scopeIsLocal        = ( /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL) ) ? true : false;
+        var scopeIsProduction   = ( /^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION) ) ? true : false;
+        var Config              = ctx.gina.Config;
 
         var conf = new Config({
-            env             : env,
-            scope             : scope,
-            projectName     : getContext('projectName'),
-            executionPath   : getPath('project'),
-            startingApp     : bundle,
-            ginaPath        : getPath('gina').core
+            env                 : env,
+            scope               : scope,
+            scopeIsLocal        : scopeIsLocal,
+            scopeIsProduction   : scopeIsProduction,
+            projectName         : getContext('projectName'),
+            executionPath       : getPath('project'),
+            startingApp         : bundle,
+            ginaPath            : getPath('gina').core
         }).getInstance(bundle);
 
         if ( typeof(lib) != 'undefined' ) {
@@ -533,12 +539,13 @@ function ContextHelper(contexts) {
                     };
 
                     return new LibClass ({
-                        bundle          : bundle,
-                        env             : env,
-                        cacheless       : envIsDev,
-                        scope           : scope,
-                        scopeIsLocal    : scopeIsLocal,
-                        libPath         : libPath
+                        bundle              : bundle,
+                        env                 : env,
+                        cacheless           : envIsDev,
+                        scope               : scope,
+                        scopeIsLocal        : scopeIsLocal,
+                        scopeIsProduction   : scopeIsProduction,
+                        libPath             : libPath
                     })
 
                 } catch(err) {
@@ -585,66 +592,65 @@ function ContextHelper(contexts) {
                 // .replace(/\{(\w+)\}/g, function(s, key) {
                 //     return dictionary[key] || s;
                 // })
-        } else {
+        }
 
-            if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' ) { // /Object/.test(replaceable.constructor)
-                for (let attr in replaceable) {
-                    if ( typeof(replaceable[attr]) != 'function') {
-                        replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
-                        if (replaceable[attr] && typeof(replaceable[attr]) != 'object') {
-                            replaceable[attr] = replaceable[attr]
-                                .replace(/\"\{(\w+)\}\"/g, function(s, key) {
-                                    if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
-                                        return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
-                                    }
-                                    return '"'+ (dictionary[key] || s) +'"';
-                                })
-                                .replace(/\{(\w+)\}/g, function(s, key) {
-                                    return dictionary[key] || s;
-                                })
-                        }
+        if ( typeof(replaceable) == 'object' &&  !/\[native code\]/.test(replaceable.constructor) ||  typeof(replaceable) == 'function' ) { // /Object/.test(replaceable.constructor)
+            for (let attr in replaceable) {
+                if ( typeof(replaceable[attr]) != 'function') {
+                    replaceable[attr] = (typeof(replaceable[attr]) != 'string' && typeof(replaceable[attr]) != 'object') ? JSON.stringify(replaceable[attr], null, 2) : replaceable[attr];
+                    if (replaceable[attr] && typeof(replaceable[attr]) != 'object') {
+                        replaceable[attr] = replaceable[attr]
+                            .replace(/\"\{(\w+)\}\"/g, function(s, key) {
+                                if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                                    return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
+                                }
+                                return '"'+ (dictionary[key] || s) +'"';
+                            })
+                            .replace(/\{(\w+)\}/g, function(s, key) {
+                                return dictionary[key] || s;
+                            })
                     }
                 }
-                return replaceable
-            } else { // mixing with classes
-                replaceable = JSON.stringify(replaceable, null, 2);
-
-                return JSON.parse(
-                    replaceable
-                        .replace(/\"\{(\w+)\}\"/g, function(s, key) {
-                            if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
-                                return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
-                            }
-                            // When "{single}" and not "{sigle}/something"
-                            if ( /^\"\{(\w+)\}\"$/i.test(s) && !dictionary[key]) {
-                                //return ('"'+ dictionary[key] +'"' || s);
-                                return '"'+ (dictionary[key] || s.replace(/\"/g, '')) +'"';
-                            }
-                            return '"'+ (dictionary[key] || s) +'"';
-                        })
-                        .replace(/\{(\w+)\}/g, function(s, key) {
-                            return dictionary[key] || s;
-                        })
-                        // OS Environment Variables
-                        .replace(/\"\~\/\"|\"\$([_A-Z0-9]+)\"/g, function(s, key) {
-                            if ( /^(true|false|null)$/i.test(self.contexts['sysEnvVars'][s]) ) {
-                                return (/^(true|false|null)$/i.test(self.contexts['sysEnvVars'][s])) ? self.contexts['sysEnvVars'][s] : null
-                            }
-                            // When "$SINGLE" and not "$SINGLE/something"
-                            if ( /^\"\$([_A-Z0-9]+)\"$/i.test(s) && !self.contexts['sysEnvVars'][s]) {
-                                return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
-                            }
-                            if ( /^\"\~\/\"$/i.test(s) && !self.contexts['sysEnvVars'][s]) {
-                                return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
-                            }
-                            return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
-                        })
-                        .replace(/\~\/|\$([_A-Z0-9]+)/g, function(s, key) {
-                            return self.contexts['sysEnvVars'][s] || null;
-                        })
-                )
             }
+            return replaceable
         }
+        // mixing with classes
+        replaceable = JSON.stringify(replaceable, null, 2);
+
+        return JSON.parse(
+            replaceable
+                .replace(/\"\{(\w+)\}\"/g, function(s, key) {
+                    if ( /^(true|false|null)$/i.test(dictionary[key]) ) {
+                        return (/^(true|false|null)$/i.test(dictionary[key])) ? dictionary[key] : s
+                    }
+                    // When "{single}" and not "{sigle}/something"
+                    if ( /^\"\{(\w+)\}\"$/i.test(s) && !dictionary[key]) {
+                        //return ('"'+ dictionary[key] +'"' || s);
+                        return '"'+ (dictionary[key] || s.replace(/\"/g, '')) +'"';
+                    }
+                    return '"'+ (dictionary[key] || s) +'"';
+                })
+                .replace(/\{(\w+)\}/g, function(s, key) {
+                    return dictionary[key] || s;
+                })
+                // OS Environment Variables
+                .replace(/\"\~\/\"|\"\$([_A-Z0-9]+)\"/g, function(s, key) {
+                    if ( /^(true|false|null)$/i.test(self.contexts['sysEnvVars'][s]) ) {
+                        return (/^(true|false|null)$/i.test(self.contexts['sysEnvVars'][s])) ? self.contexts['sysEnvVars'][s] : null
+                    }
+                    // When "$SINGLE" and not "$SINGLE/something"
+                    if ( /^\"\$([_A-Z0-9]+)\"$/i.test(s) && !self.contexts['sysEnvVars'][s]) {
+                        return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
+                    }
+                    if ( /^\"\~\/\"$/i.test(s) && !self.contexts['sysEnvVars'][s]) {
+                        return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
+                    }
+                    return '"'+ (self.contexts['sysEnvVars'][s] || null) +'"';
+                })
+                .replace(/\~\/|\$([_A-Z0-9]+)/g, function(s, key) {
+                    return self.contexts['sysEnvVars'][s] || null;
+                })
+        );
     }
 
     /**
@@ -659,9 +665,9 @@ function ContextHelper(contexts) {
         }
         try {
             Object.defineProperty(global, name.toUpperCase(), {
-                value: value,
-                writable: false,
-                enumerable: true,
+                value       : value,
+                writable    : false,
+                enumerable  : true,
                 configurable: false
             })
         } catch (err) {
@@ -675,12 +681,13 @@ function ContextHelper(contexts) {
      * @returns {array} constants
      * */
     getDefined = function(){
-        var a = [];
-        for (var n in global) {
+        var a = [], n = null;
+        for (n in global) {
             if (n.indexOf('GINA_') > -1 || n.indexOf('USER_') > -1) {
                 a[n] = global[n]
             }
         }
+        n = null;
         return a
     }
 

@@ -207,25 +207,22 @@ function Router(env, scope) {
                     return;
                 }
 
-                // if (session) {
-                    if (!this._passport) {
-                        throw new Error('passport.initialize() middleware not in use');
-                    }
-                    if (typeof done != 'function') {
-                        throw new Error('req#login requires a callback function');
-                    }
 
-                    var self = this;
-                    this._passport.instance._sm.logIn(this, user, function(err) {
-                        if (err) {
-                            self[property] = null;
-                            return done(err);
-                        }
-                        done();
-                    });
-                // } else {
-                //     done && done();
-                // }
+                if (!this._passport) {
+                    throw new Error('passport.initialize() middleware not in use');
+                }
+                if (typeof done != 'function') {
+                    throw new Error('req#login requires a callback function');
+                }
+
+                var self = this;
+                this._passport.instance._sm.logIn(this, user, function(err) {
+                    if (err) {
+                        self[property] = null;
+                        return done(err);
+                    }
+                    done();
+                });
             };
         }
 

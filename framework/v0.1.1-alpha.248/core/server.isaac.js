@@ -13,10 +13,11 @@ const merge             = lib.merge;
 const console           = lib.logger;
 
 
-const env       = process.env.NODE_ENV
-    , isDev     = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
-    , scope         = process.env.NODE_SCOPE
-    , isLocalScope  = (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false
+const env               = process.env.NODE_ENV
+    , isDev             = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
+    , scope             = process.env.NODE_SCOPE
+    , isLocalScope      = (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false
+    , isProductionScope = (/^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION)) ? true : false
 ;
 
 var refreshCore = function() {

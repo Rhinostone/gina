@@ -246,20 +246,21 @@ function Add(opt, cmd) {
         ;
 
         projects[self.projectName] = {
-            "path": self.projectLocation,
-            "homedir": self.projectHomedir,
-            "def_prefix": GINA_PREFIX,
-            "framework": "v" + GINA_VERSION,
-            "envs": self.envs,
-            "def_env": self.defaultEnv,
-            "dev_env": self.devEnv,
-            "scopes": self.scopes,
-            "def_scope": self.defaultScope,
-            "local_scope": self.localScope,
-            "protocols": (created) ? self.protocolsAvailable : self.protocols,
-            "def_protocol": self.defaultProtocol,
-            "schemes": (created) ? self.schemesAvailable : self.schemes,
-            "def_scheme": self.defaultScheme
+            "path"              : self.projectLocation,
+            "homedir"           : self.projectHomedir,
+            "def_prefix"        : GINA_PREFIX,
+            "framework"         : "v" + GINA_VERSION,
+            "envs"              : self.envs,
+            "def_env"           : self.defaultEnv,
+            "dev_env"           : self.devEnv,
+            "scopes"            : self.scopes,
+            "def_scope"         : self.defaultScope,
+            "local_scope"       : self.localScope,
+            "production_scope"  : self.productionScope,
+            "protocols"         : (created) ? self.protocolsAvailable : self.protocols,
+            "def_protocol"      : self.defaultProtocol,
+            "schemes"           : (created) ? self.schemesAvailable : self.schemes,
+            "def_scheme"        : self.defaultScheme
         };
 
         // On import only
