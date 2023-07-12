@@ -210,6 +210,12 @@ function Server(options) {
     this.isLocalScope = function() {
         return (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false;
     }
+    /**
+     * Check if the project scope is set for production
+     * */
+    this.isProductionScope = function() {
+        return (/^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION)) ? true : false;
+    }
 
     this.onConfigured = function(callback) {
         self.once('configured', function(err, instance, middleware, conf) {

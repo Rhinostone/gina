@@ -50,10 +50,10 @@ function Start(opt, cmd) {
         opt.notStarted = [];
 
         if (!self.name) {
-            start(opt, cmd, 0);
-        } else {
-            start(opt, cmd);
+            return start(opt, cmd, 0);
         }
+
+        start(opt, cmd);
     }
 
     var checkArchAgainstNodeModules = function(opt, cb) {

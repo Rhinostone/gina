@@ -201,10 +201,11 @@ setContext('gina.plugins', plugins);
 
 
 //Setting env.
-var env             = process.env.NODE_ENV || projects[projectName]['def_env']
-    , isDev         = (env === projects[projectName]['dev_env']) ? true: false
-    , scope         = process.env.NODE_SCOPE || projects[projectName]['def_scope']
-    , isLocalScope  = (scope === projects[projectName]['local_scope']) ? true : false
+var env                     = process.env.NODE_ENV || projects[projectName]['def_env']
+    , isDev                 = (env === projects[projectName]['dev_env']) ? true: false
+    , scope                 = process.env.NODE_SCOPE || projects[projectName]['def_scope']
+    , isLocalScope          = (scope === projects[projectName]['local_scope']) ? true : false
+    , isProductionScope     = (scope === projects[projectName]['production_scope']) ? true : false
 ;
 
 gna.env = process.env.NODE_ENV = env;
@@ -213,8 +214,8 @@ gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
 //Cahceless is also defined in the main config : Config::isCacheless().
 process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
-//process.env.NODE_SCOPE = projects[projectName]['def_scope'];
 process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
+process.env.NODE_SCOPE_IS_PRODUCTION = (/^true$/i.test(isProductionScope)) ? true : false;
 
 
 var bundlesPath = (isDev) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';
@@ -886,7 +887,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                                         if (
                                             conf.server.scheme == 'https'
-                                            && /true/i.test(process.env.NODE_SCOPE_IS_LOCAL)
+                                            && !/^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION)
                                         ) {
                                             try {
                                                 await server.verifyCertificate(conf.host, conf.server.port);

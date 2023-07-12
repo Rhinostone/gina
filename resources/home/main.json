@@ -40,11 +40,14 @@
             "production"
         ]
     },
+    "def_scope": {
+        "{release}": "local"
+    },
     "local_scope": {
         "{release}": "local"
     },
-    "def_scope": {
-        "{release}": "local"
+    "production_scope": {
+        "{release}": "production"
     },
     "envs": {
         "{release}": [ "dev", "prod" ]
@@ -71,7 +74,7 @@
         "{release}": "http"
     },
     "cultures": {
-        "_comment": "e.g.:  en_US, fr_FR ... available for the framework then used to translate the admin dashboard",
+        "_comment": "e.g.:  en_US, fr_FR etc. available for the framework then used to translate the admin dashboard",
         "{release}": [  "en_CM", "fr_CM" ]
     },
     "def_culture": {

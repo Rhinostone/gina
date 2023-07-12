@@ -65,6 +65,7 @@ function CmdHelper(cmd, client, debug) {
         scopes : [], // all gina envs defined by loadAssets()
         defaultScope : null, // defined by loadAssets()
         localScope : null, // defined by loadAssets()
+        productionScope : null, // defined by loadAssets()
         envs : [], // all gina envs defined by loadAssets()
         defaultEnv : null, // defined by loadAssets()
         devEnv : null, // defined by loadAssets()
@@ -312,6 +313,7 @@ function CmdHelper(cmd, client, debug) {
                             "dev_env": cmd.devEnv,
                             "def_scope": cmd.defaultScope,
                             "local_scope": cmd.localScope,
+                            "production_scope": cmd.productionScope,
                             "protocols": cmd.protocolsAvailable,
                             "def_protocol": cmd.defaultProtocol,
                             "schemes": cmd.schemesAvailable,
@@ -556,28 +558,35 @@ function CmdHelper(cmd, client, debug) {
 
 
 
-            // getting default scopes list
+            // Getting default scopes list
             cmd.scopes = (
                             cmd.projectName != null
                             && typeof(cmd.projects[cmd.projectName]) != 'undefined'
                             && Array.isArray(cmd.projects[cmd.projectName]['scopes'])
                             && cmd.projects[cmd.projectName]['scopes'].length > 0
                         ) ? cmd.projects[cmd.projectName]['scopes'] : cmd.mainConfig['scopes'][ GINA_SHORT_VERSION ];
-            // getting default scope
+            // Getting default scope
             cmd.defaultScope = (
                             cmd.projectName != null
                             && typeof(cmd.projects[cmd.projectName]) != 'undefined'
                             && typeof(cmd.projects[cmd.projectName]['def_scope']) != 'undefined'
                             && cmd.projects[cmd.projectName]['def_scope']
                         ) ? cmd.projects[cmd.projectName]['def_scope'] : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ];
-            // getting local scope
+            // Getting local scope
             cmd.localScope = (
                                 cmd.projectName != null
                                 && typeof(cmd.projects[cmd.projectName]) != 'undefined'
                                 && typeof(cmd.projects[cmd.projectName]['local_scope']) != 'undefined'
                                 && cmd.projects[cmd.projectName]['local_scope']
                             ) ? cmd.projects[cmd.projectName]['local_scope'] : cmd.mainConfig['local_scope'][ GINA_SHORT_VERSION ];
-            // project or bundle scope override through : --scope=<some scope>
+            // Getting production scope
+            cmd.productionScope = (
+                                cmd.projectName != null
+                                && typeof(cmd.projects[cmd.projectName]) != 'undefined'
+                                && typeof(cmd.projects[cmd.projectName]['production_scope']) != 'undefined'
+                                && cmd.projects[cmd.projectName]['production_scope']
+                            ) ? cmd.projects[cmd.projectName]['production_scope'] : cmd.mainConfig['production_scope'][ GINA_SHORT_VERSION ];
+            // Project or bundle scope override through : --scope=<some scope>
             if ( typeof(cmd.params.scope) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
                 console.debug('Overriding default project scope: '+ cmd.defaultScope +' => '+ cmd.params.scope);
                 if (cmd.scopes.indexOf(cmd.params.scope) < 0) {

@@ -88,9 +88,10 @@ function List(opt, cmd){
     }
 
     var listProjectOnly = function (){
-        var projects = self.projects
-            , p = self.name
-            , str = '';
+        var projects    = self.projects
+            , p         = self.name
+            , str       = ''
+        ;
         console.debug('scopes ', projects[p].scopes);
         str += '------------------------------------\n\r';
         if ( !fs.existsSync(projects[p].path) ) {

@@ -155,16 +155,17 @@ function Restart(opt, cmd) {
 
     var isRealApp = function(bundle, callback) {
 
-        var p               = null
-            , d             = null
-            , env           = self.projects[self.projectName]['def_env']
-            , isDev         = GINA_ENV_IS_DEV
-            , scope         = self.projects[self.projectName]['def_scope']
-            , isLocal         = GINA_SCOPE_IS_LOCAL
-            , root          = self.projects[self.projectName].path
-            , bundleDir     = null
-            , bundlesPath   = null
-            , bundleInit    = null
+        var p                   = null
+            , d                 = null
+            , env               = self.projects[self.projectName]['def_env']
+            , isDev             = process.env.NODE_ENV_IS_DEV || GINA_ENV_IS_DEV
+            , scope             = self.projects[self.projectName]['def_scope']
+            , isLocalScope      = process.env.NODE_SCOPE_IS_LOCAL || GINA_SCOPE_IS_LOCAL
+            , isProductionScope = process.env.NODE_SCOPE_IS_PRODUCTION || GINA_SCOPE_IS_PRODUCTION
+            , root              = self.projects[self.projectName].path
+            , bundleDir         = null
+            , bundlesPath       = null
+            , bundleInit        = null
         ;
 
         try {

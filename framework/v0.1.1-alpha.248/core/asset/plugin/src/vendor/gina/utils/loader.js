@@ -38,6 +38,8 @@ window['onGinaLoaded']      = function(gina) {
         'scope'     : '{{ page.environment.scope }}',
         /**@js_externs scopeIsLocal*/
         'scopeIsLocal' : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+        /**@js_externs scopeIsProduction*/
+        'scopeIsProduction' : ( /^true$/.test('{{ page.environment.scopeIsProduction }}') ) ? true : false,
         /**@js_externs hostname*/
         'hostname': '{{ page.environment.hostname }}',
         /**@js_externs routing*/

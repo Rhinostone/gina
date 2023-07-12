@@ -805,8 +805,10 @@ function Config(opt, contextResetNeeded) {
                 // by default
                 if ( typeof(newContent[app][env].server.scope) == 'undefined' ) {
                     newContent[app][env].server.scope = projectConf.def_scope; // from ~/.gina/projects.json
-                    newContent[app][env].server.scopeIsLocal = (projectConf.def_scope == projectConf.local_scope) ? true : false; // from ~/.gina/projects.json
                 }
+                newContent[app][env].server.scopeIsLocal = (projectConf.def_scope == projectConf.local_scope) ? true : false; // from ~/.gina/projects.json
+                newContent[app][env].server.scopeIsProduction = (projectConf.def_scope == projectConf.production_scope) ? true : false; // from ~/.gina/projects.json
+
                 if ( typeof(newContent[app][env].server.protocol) == 'undefined' ) {
                     //newContent[app][env].server.protocol = ( bundHasSettings && typeof(bundleSettings.server) != 'undefined' && typeof(bundleSettings.server.protocol) != 'undefined' ) ? bundleSettings.server.protocol : projectConf.def_protocol; // from ~/.gina/projects.json
                     newContent[app][env].server.protocol = projectConf.def_protocol; // from ~/.gina/projects.json
@@ -2349,6 +2351,12 @@ function Config(opt, contextResetNeeded) {
      * */
     this.isLocalScope = function() {
         return (/^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)) ? true : false;
+    }
+    /**
+     * Check if the project scope is set for production
+     * */
+    this.isProductionScope = function() {
+        return (/^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION)) ? true : false;
     }
     /**
      * Refresh for cachless mode
