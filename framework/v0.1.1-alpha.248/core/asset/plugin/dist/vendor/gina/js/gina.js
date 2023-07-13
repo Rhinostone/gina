@@ -7876,9 +7876,9 @@ function Routing() {
             len     = null;
 
             return foundRoute;
-        } else {
-            return await parseRouting(params, url, request, response, next);
         }
+
+        return await parseRouting(params, url, request, response, next);
     };
 
     /**
@@ -7931,114 +7931,7 @@ function Routing() {
             , method        = request.method.toLowerCase()
         ;
 
-        // TODO - remove comments
-        // when requirement is not listed but still validated
-        // if (
-        //     typeof(params.requirements) != 'undefined'
-        //     && method == params.method.toLowerCase()
-        //     //&& /validator\:\:/.test(JSON.stringify(params.requirements))
-        // ) {
-
-        //     var requiremements = Object.getOwnPropertyNames(params.requirements);
-        //     var r = 0;
-        //     // In order to filter variables
-        //     var uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
-        //     // var uRoVarCount = (uRoVars) ? uRoVars.length : 0;
-        //     while ( r < requiremements.length ) {
-
-        //         // if not listed, but still needing validation
-        //         if (
-        //             typeof(params.param[ requiremements[r] ]) == 'undefined'
-        //             && /^validator\:\:/i.test(params.requirements[ requiremements[r] ])
-        //             && typeof(request[method][ requiremements[r] ])
-        //         ) {
-        //             if (uRo.length != uRe.length) {
-        //                 // r++;
-        //                 // continue;
-        //                 break;
-        //             }
-        //             // updating uRoVars
-        //             uRoVars = uRo.join(',').match(/\:[-_a-z0-9]+/g);
-        //             /**
-        //              * "requirements" : {
-        //              *      "email": "validator::{ isEmail: true, isString: [7] }"
-        //              *  }
-        //              *
-        //              * e.g.: result = new Validator('routing', _data, null, {email: {isEmail: true, subject: \"Anything\"}} ).isEmail().valid;
-        //              */
-        //             let regex = params.requirements[ requiremements[r] ];
-        //             let _data = {}, _ruleObj = {}, _rule = {};
-
-        //             try {
-        //                 _ruleObj    = JSON.parse(
-        //                 regex.split(/::/).splice(1)[0]
-        //                     .replace(/([^\:\"\s+](\w+))\:/g, '"$1":') // { query: { validIf: true }} => { "query": { "validIf": true }}
-        //                     .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":') // note the space between `validIf` & `:` { query: { validIf : true }} => { "query": { "validIf": true }}
-        //                 );
-        //             } catch (err) {
-        //                 throw err;
-        //             }
-
-        //             let key     = requiremements[r];
-        //             // validator.query case
-        //             if (typeof(_ruleObj.query) != 'undefined' && typeof(_ruleObj.query.data) != 'undefined') {
-        //                 _data = _ruleObj.query.data;
-        //                 // filter _data vs uRoVars by removing from data those not present in uRoVars
-        //                 for (let k in _data) {
-        //                     if ( uRoVars.indexOf(_data[k]) < 0 ) {
-        //                         delete _data[k]
-        //                     }
-        //                 }
-        //                 for (let p = 0, pLen = uRo.length; p < pLen; p++) {
-        //                     // :variable only
-        //                     if (!/^\:/.test(uRo[p])) continue;
-
-        //                     let pName = uRo[p].replace(/^\:/, '');
-        //                     if ( pName != '' && typeof(uRe[p]) != 'undefined' ) {
-        //                         _data[ pName ] = uRe[p];
-        //                         // Updating params
-        //                         if ( typeof(request.params[pName]) == 'undefined' ) {
-        //                             // Set in case it is not found
-        //                             request.params[pName] = uRe[p];
-        //                         }
-        //                     }
-        //                 }
-        //             }
-        //             // normal case
-        //             _data = merge(_data, request[method]);
-
-        //             if ( typeof(_data[key]) == 'undefined' ) {
-        //                 // init default value for unlisted variable/param
-        //                 _data[key] = null;
-        //             }
-
-        //             _rule[key]  = _ruleObj;
-        //             _validator  = new Validator('routing', _data, null, _rule );
-
-        //             if (_ruleObj.count() == 0 ) {
-        //                 console.error('Route validation failed '+ params.rule);
-        //                 return false;
-        //             }
-
-        //             for (let rule in _ruleObj) {
-        //                 let _result = null;
-        //                 if (Array.isArray(_ruleObj[rule])) { // has args
-        //                     _result = await _validator[key][rule].apply(_validator[key], _ruleObj[rule]);
-        //                 } else {
-        //                     _result = await _validator[key][rule](_ruleObj[rule], request, response, next);
-        //                 }
-        //                 //let condition = _ruleObj[rule].validIf.replace(new RegExp('\\$isValid'), _result.isValid);
-        //                 // if ( eval(condition)) {
-        //                 if ( !_result.isValid ) {
-        //                     --score;
-        //                 }
-        //             }
-        //         }
-        //         r++
-        //     }
-        // }
-
-        // attaching routing description for this request
+        // Attaching routing description for this request
         var paramMethod = 'get'; // by default
         try {
             paramMethod = params.method.toLowerCase();
@@ -8105,8 +7998,9 @@ function Routing() {
 
                     uRe[uReCount] = request[method][p];
                     ++uReCount;
-                    if (!hasAlreadyBeenScored && uRe.length === uRo.length)
+                    if (!hasAlreadyBeenScored && uRe.length === uRo.length) {
                         ++maxLen;
+                    }
                 }
             }
         }
@@ -8124,7 +8018,10 @@ function Routing() {
                 if (uRe[i] === uRo[i]) {
                     ++score;
                 }
-                else if (score == i && hasParams(uRo[i]) && await fitsWithRequirements(uRo[i], uRe[i], params, request, response, next)) {
+                else if (
+                    score == i && hasParams(uRo[i])
+                    && await fitsWithRequirements(uRo[i], uRe[i], params, request, response, next)
+                ) {
                     ++score;
                 }
             }
@@ -8204,7 +8101,7 @@ function Routing() {
                     }
 
                     // If validator.query has data, _data should inherit from request data
-                    _data = merge(_data, JSON.clone(request[method]) || {} );
+                    _data = merge(_data, JSON.clone(request[method]) || {} );
                     // This test is to initialize query.data[key] to null by default
                     if ( typeof(_data[key]) == 'undefined' ) {
                         // init default value for unlisted variable/param
@@ -8249,6 +8146,10 @@ function Routing() {
                 }
                 r++
             }
+
+            r               = null;
+            uRoVars         = null;
+            requiremements  = null;
         }
 
         foundRoute.past     = (score === maxLen) ? true : false;
@@ -8323,12 +8224,14 @@ function Routing() {
             var _regex = new RegExp('(:'+urlVar+'/|:'+urlVar+'$)', 'g');
             replacement.variable = urlVal;
             params.param.file = params.param.file.replace( _regex, replacement );
+            _regex = null;
         }
 
         //  if custom title, title rewrite
         if (params.param.title && regex.test(params.param.title)) {
             params.param.title = params.param.title.replace(regex, urlVal);
         }
+
 
         if (_param.length == 1) { // fast one
 
@@ -8806,62 +8709,68 @@ function Routing() {
 
             if (isGFFCtx) {
                 var target = ( typeof(options) != 'undefined' && typeof(options.target) != 'undefined' ) ? options.target : "_self";
-                window.open(url, target)
-            } else {
-                if ( typeof(options.agent) == 'undefined' ) {
-                    // See.: https://nodejs.org/api/http.html#http_class_http_agent
-                    // create an agent just for this request
-                    options.agent = false;
-                }
-                var agent = require(''+scheme);
-                var onAgentResponse = function(res) {
+                window.open(url, target);
+                return;
+            }
 
-                    var data = '', err = false;
+            if ( typeof(options.agent) == 'undefined' ) {
+                // See.: https://nodejs.org/api/http.html#http_class_http_agent
+                // create an agent just for this request
+                options.agent = false;
+            }
+            var agent = require(''+scheme);
+            var onAgentResponse = function(res) {
 
-                    res.on('data', function (chunk) {
-                        data += chunk;
-                    });
-                    res.on('error', function (error) {
-                        err = 'Failed to get mail content';
-                        if (error && typeof(error.stack) != 'undefined' ) {
-                            err += error.stack;
-                        } else if ( typeof(error) == 'string' ) {
-                            err += '\n' + error;
-                        }
-                    });
-                    res.on('end', function () {
-                        if (/^\{/.test(data) ) {
-                            try {
-                                data = JSON.parse(data);
-                                if (typeof(data.error) != 'undefined') {
-                                    err = JSON.clone(data);
-                                    data = null;
-                                }
-                            } catch(parseError) {
-                                err = parseError
+                var data = '', err = false;
+
+                res.on('data', function (chunk) {
+                    data += chunk;
+                });
+                res.on('error', function (error) {
+                    err = 'Failed to get mail content';
+                    if (error && typeof(error.stack) != 'undefined' ) {
+                        err += error.stack;
+                    } else if ( typeof(error) == 'string' ) {
+                        err += '\n' + error;
+                    }
+                });
+                res.on('end', function () {
+                    if (/^\{/.test(data) ) {
+                        try {
+                            data = JSON.parse(data);
+                            if (typeof(data.error) != 'undefined') {
+                                err = JSON.clone(data);
+                                data = null;
                             }
+                        } catch(parseError) {
+                            err = parseError
                         }
-                        if (err) {
-                            cb(err);
-                            return;
-                        }
-
-                        cb(false, data);
+                    }
+                    if (err) {
+                        cb(err);
                         return;
-                    });
-                }
-                if (cb) {
-                    agent.get(url, options, onAgentResponse);
-                } else {
-                    // just throw the request without waiting/handling response
-                    agent.get(url, options);
-                }
+                    }
+
+                    cb(false, data);
+                    return;
+                });
+            }
+            if (cb) {
+                agent.get(url, options, onAgentResponse);
+            } else {
+                // just throw the request without waiting/handling response
+                agent.get(url, options);
             }
             return;
 
         } // EO route.request()
 
-        if ( /\:/.test(route.url) ) {
+        if (
+            /\:/.test(route.url)
+            // Avoiding : `/bundle/path?redirect=https://bundle-dev-scope-v1.docmain.com:3132/bundle/referrer-path`
+            && !/\:d+\//.test(route.url)
+            && !/\:\/\//.test(route.url)
+        ) {
             var paramList = route.url
                                 .match(/(\:(.*)\/|\:(.*)$)/g)
                                 .map(function(el){  return el.replace(/\//g, ''); }).join(', ');
@@ -8869,6 +8778,9 @@ function Routing() {
             msg = msg.replace(/\%r/, rule);
             var err = new Error(msg);
             console.warn( err );
+            paramList = null;
+            err = null;
+            msg = null;
             // Do not throw error nor return here !!!
         }
 
@@ -22069,17 +21981,19 @@ for (var t = 0, len = tags.length; t < len; ++t) {
 
                     var options = gina['config'] = {
                         /**@js_externs env*/
-                        env             : '{{ page.environment.env }}',
+                        env                 : '{{ page.environment.env }}',
                         /**@js_externs envIsDev*/
-                        envIsDev        : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
+                        envIsDev            : ( /^true$/.test('{{ page.environment.envIsDev }}') ) ? true : false,
                         /**@js_externs scope*/
-                        scope           : '{{ page.environment.scope }}',
+                        scope               : '{{ page.environment.scope }}',
                         /**@js_externs scopeIsLocal*/
-                        scopeIsLocal    : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+                        scopeIsLocal        : ( /^true$/.test('{{ page.environment.scopeIsLocal }}') ) ? true : false,
+                        /**@js_externs scopeIsProduction*/
+                        scopeIsProduction   : ( /^true$/.test('{{ page.environment.scopeIsProduction }}') ) ? true : false,
                         /**@js_externs version*/
-                        //version       : '{{ page.environment.version }}',
+                        //version           : '{{ page.environment.version }}',
                         /**@js_externs webroot*/
-                        'webroot'       : '{{ page.environment.webroot }}',
+                        'webroot'           : '{{ page.environment.webroot }}',
                     };
 
                     if ( !gina['session'] ) {
@@ -22121,8 +22035,9 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                             window['GINA_ENV_IS_DEV'] = gina['config']['envIsDev'] = options['envIsDev'] = /^true$/i.test(matched[0].split(/\=/)[1]) ? true: false;
                     }
 
-                    window['GINA_SCOPE']          = '{{ page.environment.scope }}';
-                    window['GINA_SCOPE_IS_LOCAL']   = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+                    window['GINA_SCOPE']                = '{{ page.environment.scope }}';
+                    window['GINA_SCOPE_IS_LOCAL']       = /^true$/i.test('{{ page.environment.scopeIsLocal }}') ? true : false;
+                    window['GINA_SCOPE_IS_PRODUCTION']  = /^true$/i.test('{{ page.environment.scopeIsProduction }}') ? true : false;
 
 
                     gina["setOptions"](options);
