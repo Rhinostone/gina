@@ -442,7 +442,7 @@ function MainHelper(opt) {
         key = key.toUpperCase();
         var err                     = null
             // related task `framework:set` & framework/v.xxx/lib/cmd/framework/init.js
-            , specialCases          = ['GINA_PORT', 'GINA_DEBUG_PORT', 'GINA_CULTURE', 'GINA_TIMEZONE']
+            , specialCases          = ['GINA_PORT', 'GINA_DEBUG_PORT', 'GINA_CULTURE', 'GINA_TIMEZONE', 'GINA_PREFIX']
             , isOverrrideAllowed    = (specialCases.indexOf(key) > -1) ? true : false
         ;
 
