@@ -395,7 +395,7 @@ function Routing() {
                     }
 
                     // If validator.query has data, _data should inherit from request data
-                    _data = merge(_data, JSON.clone(request[method]) || {} );
+                    _data = merge(_data, JSON.clone(request[method]) || {} );
                     // This test is to initialize query.data[key] to null by default
                     if ( typeof(_data[key]) == 'undefined' ) {
                         // init default value for unlisted variable/param
@@ -518,12 +518,14 @@ function Routing() {
             var _regex = new RegExp('(:'+urlVar+'/|:'+urlVar+'$)', 'g');
             replacement.variable = urlVal;
             params.param.file = params.param.file.replace( _regex, replacement );
+            _regex = null;
         }
 
         //  if custom title, title rewrite
         if (params.param.title && regex.test(params.param.title)) {
             params.param.title = params.param.title.replace(regex, urlVal);
         }
+
 
         if (_param.length == 1) { // fast one
 
@@ -1001,62 +1003,68 @@ function Routing() {
 
             if (isGFFCtx) {
                 var target = ( typeof(options) != 'undefined' && typeof(options.target) != 'undefined' ) ? options.target : "_self";
-                window.open(url, target)
-            } else {
-                if ( typeof(options.agent) == 'undefined' ) {
-                    // See.: https://nodejs.org/api/http.html#http_class_http_agent
-                    // create an agent just for this request
-                    options.agent = false;
-                }
-                var agent = require(''+scheme);
-                var onAgentResponse = function(res) {
+                window.open(url, target);
+                return;
+            }
 
-                    var data = '', err = false;
+            if ( typeof(options.agent) == 'undefined' ) {
+                // See.: https://nodejs.org/api/http.html#http_class_http_agent
+                // create an agent just for this request
+                options.agent = false;
+            }
+            var agent = require(''+scheme);
+            var onAgentResponse = function(res) {
 
-                    res.on('data', function (chunk) {
-                        data += chunk;
-                    });
-                    res.on('error', function (error) {
-                        err = 'Failed to get mail content';
-                        if (error && typeof(error.stack) != 'undefined' ) {
-                            err += error.stack;
-                        } else if ( typeof(error) == 'string' ) {
-                            err += '\n' + error;
-                        }
-                    });
-                    res.on('end', function () {
-                        if (/^\{/.test(data) ) {
-                            try {
-                                data = JSON.parse(data);
-                                if (typeof(data.error) != 'undefined') {
-                                    err = JSON.clone(data);
-                                    data = null;
-                                }
-                            } catch(parseError) {
-                                err = parseError
+                var data = '', err = false;
+
+                res.on('data', function (chunk) {
+                    data += chunk;
+                });
+                res.on('error', function (error) {
+                    err = 'Failed to get mail content';
+                    if (error && typeof(error.stack) != 'undefined' ) {
+                        err += error.stack;
+                    } else if ( typeof(error) == 'string' ) {
+                        err += '\n' + error;
+                    }
+                });
+                res.on('end', function () {
+                    if (/^\{/.test(data) ) {
+                        try {
+                            data = JSON.parse(data);
+                            if (typeof(data.error) != 'undefined') {
+                                err = JSON.clone(data);
+                                data = null;
                             }
+                        } catch(parseError) {
+                            err = parseError
                         }
-                        if (err) {
-                            cb(err);
-                            return;
-                        }
-
-                        cb(false, data);
+                    }
+                    if (err) {
+                        cb(err);
                         return;
-                    });
-                }
-                if (cb) {
-                    agent.get(url, options, onAgentResponse);
-                } else {
-                    // just throw the request without waiting/handling response
-                    agent.get(url, options);
-                }
+                    }
+
+                    cb(false, data);
+                    return;
+                });
+            }
+            if (cb) {
+                agent.get(url, options, onAgentResponse);
+            } else {
+                // just throw the request without waiting/handling response
+                agent.get(url, options);
             }
             return;
 
         } // EO route.request()
 
-        if ( /\:/.test(route.url) ) {
+        if (
+            /\:/.test(route.url)
+            // Avoiding : `/bundle/path?redirect=https://bundle-dev-scope-v1.docmain.com:3132/bundle/referrer-path`
+            && !/\:d+\//.test(route.url)
+            && !/\:\/\//.test(route.url)
+        ) {
             var paramList = route.url
                                 .match(/(\:(.*)\/|\:(.*)$)/g)
                                 .map(function(el){  return el.replace(/\//g, ''); }).join(', ');
@@ -1064,6 +1072,9 @@ function Routing() {
             msg = msg.replace(/\%r/, rule);
             var err = new Error(msg);
             console.warn( err );
+            paramList = null;
+            err = null;
+            msg = null;
             // Do not throw error nor return here !!!
         }
 
