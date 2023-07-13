@@ -97,6 +97,11 @@ var console        = lib.logger;
                 }
             }
 
+            if (!source.existsSync()) {
+                err = new Error('Link '+ source + ' not existing !!');
+                return end(err, 'error');
+            }
+
             err = source.symlinkSync(destination.toString());
 
             if (err instanceof Error) {
