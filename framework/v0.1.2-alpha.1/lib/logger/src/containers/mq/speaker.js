@@ -135,7 +135,7 @@ function MQSpeaker(opt, loggers, cb) {
 
         });
         client.on('end', () => {
-            console.log('[MQSpeaker] disconnected from server');
+            console.debug('[MQSpeaker] disconnected from server');
         });
 
         return client;

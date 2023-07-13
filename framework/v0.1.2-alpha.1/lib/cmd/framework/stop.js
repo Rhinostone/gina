@@ -125,8 +125,19 @@ function Stop(opt, cmd) {
                     }
                 }
 
-                console.log('Gina v'+ self.version + ' has been stopped');
-                return
+                // console.log('Gina v'+ self.version + ' has been stopped');
+                // return end('Gina v'+ self.version + ' has been stopped');
+                return setTimeout(() => {
+                    out = execSync("ps -ef | grep -v grep | grep 'gina-v"+ self.version +"' | awk '{print $2}'").toString() || null;
+                    if ( out && typeof(out) == 'string' && out.trim().length > 0) {
+                        pid = out.trim();
+                        process.kill(pid, 'SIGKILL');
+                    }
+
+                    return setTimeout(() => {
+                        end('Gina v'+ self.version + ' has been stopped')
+                    }, 100);
+                }, 200);
             }
         }
 
@@ -142,8 +153,8 @@ function Stop(opt, cmd) {
                     console.debug('Found unlinked process ['+ pid +']\nNow trying to kill it ...');
 
                     process.kill(pid, 'SIGKILL');
-                    console.log('Gina v'+ self.version + ' has been stopped');
-                    return
+                    // console.log('Gina v'+ self.version + ' has been stopped');
+                    return end('Gina v'+ self.version + ' has been stopped');
                 }
             } catch(execErr) {
                 // Silence is golden ...
