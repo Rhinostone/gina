@@ -63,7 +63,21 @@ function Restart(opt, cmd) {
         stop();
         // if previous debug session
         setTimeout(() => {
-            start(opt);
+
+            // METHOD #1
+            // start(opt);
+
+
+            // METHOD #2
+            // TODO - retrieve & add `opt`
+            var out = null;
+            try {
+                out = execSync('gina start @'+self.version).toString();
+                console.debug('out => ', out);
+                // TODO - retrieve running bundles with its options & restart
+            } catch (err) {
+                throw err;
+            }
         }, 100);
 
     }
