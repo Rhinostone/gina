@@ -98,6 +98,7 @@ var console        = lib.logger;
             }
 
             if (!source.existsSync()) {
+                console.error('Link Error: Source `'+ source +'` [VS] npm prefix `'+ execSync('npm config get prefix').toString().replace(/\n$/g, '') +'`');
                 err = new Error('Link '+ source + ' not existing !!');
                 return end(err, 'error');
             }

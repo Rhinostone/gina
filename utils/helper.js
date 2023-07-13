@@ -460,7 +460,7 @@ function MainHelper(opt) {
             // exceptions
             !isOverrrideAllowed
         ) {
-            err = new Error('Env variable [ '+ key + ' ] is already set');
+            err = new Error('Env variable [ '+ key + ' ] is already set to `'+ process['gina'][key] +'`');
             console.warn(err.message);
             return
         } else {
