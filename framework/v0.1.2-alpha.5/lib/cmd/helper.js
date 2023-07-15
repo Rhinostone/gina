@@ -124,7 +124,7 @@ function CmdHelper(cmd, client, debug) {
         }
 
         console.debug('process.argv: ', process.argv);
-        for (var a in process.argv) {
+        for (let a in process.argv) {
 
 
             if ( /^\-\-(inspect|debug)\-brk/.test(process.argv[a]) ) {
@@ -621,6 +621,8 @@ function CmdHelper(cmd, client, debug) {
                             && typeof(cmd.projects[cmd.projectName]['dev_env']) != 'undefined'
                             && cmd.projects[cmd.projectName]['dev_env']
                         ) ? cmd.projects[cmd.projectName]['dev_env'] : cmd.mainConfig['dev_env'][ GINA_SHORT_VERSION ];
+
+
             //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.defaultEnv; // by default
             // project or bundle environment override through : --env=<some env>
             if ( typeof(cmd.params.env) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
@@ -631,7 +633,15 @@ function CmdHelper(cmd, client, debug) {
                     return false;
                 }
                 cmd.defaultEnv = process.env.NODE_ENV = cmd.params.env;
+                // override
+                //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
+            } else {
+                delete process.env.NODE_ENV
+            }
+            cmd.envs.sort();
 
+            // project or bundle scope override through : --scope=<some scope>
+            if ( typeof(cmd.params.scope) != 'undefined' && /\:(start|stop|restart|build|deploy)/i.test(cmd.task) ) {
                 console.debug('Overriding default project scope: '+ cmd.defaultScope +' => '+ cmd.params.scope);
                 if (cmd.scopes.indexOf(cmd.params.scope) < 0) {
                     errMsg = 'Scope `'+ cmd.params.scope +'` not found in your project ['+ cmd.projectName +']';
@@ -639,14 +649,13 @@ function CmdHelper(cmd, client, debug) {
                     return false;
                 }
                 cmd.defaultScope = process.env.NODE_SCOPE = cmd.params.scope;
-
-
                 // override
-                //cmd.bundlesByProject[cmd.projectName][cmd.name].def_env = cmd.params.env;
+                //cmd.bundlesByProject[cmd.projectName][cmd.name].def_scope = cmd.params.scope;
             } else {
-                delete process.env.NODE_ENV
+                delete process.env.NODE_SCOPE
             }
-            cmd.envs.sort();
+            cmd.scopes.sort();
+
 
 
             // updating default protocols list

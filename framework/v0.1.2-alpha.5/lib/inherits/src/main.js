@@ -21,6 +21,8 @@ function Inherits(a, b) {
     /**
      * init
      * @constructor
+     * @param {class} child class
+     * @param {class} super class
      * */
     var init = function(a, b) {
         var err = check(a, b);

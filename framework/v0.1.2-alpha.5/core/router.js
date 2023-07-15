@@ -9,7 +9,7 @@
 
 
 //Imports.
-var fs                = require('fs')
+var fs                  = require('fs')
     , lib               = require('./../lib')
     , console           = lib.logger
     , inherits          = lib.inherits
@@ -81,6 +81,8 @@ function Router(env, scope) {
         require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
 
         SuperController = require.cache[_(corePath +'/controller/index.js', true)];
+
+        corePath = null;
     }
 
     this.setServerInstance = function(serverInstance) {
@@ -350,7 +352,7 @@ function Router(env, scope) {
 
         setContext('router', routerObj);
 
-        var middleware      = params.middleware || [];
+        var middleware      = params.middleware || [];
         var actionFile      = params.param.file || null; // matches rule name
         var namespace       = params.namespace;
         var routeHasViews   = routerObj.hasViews;
@@ -367,24 +369,25 @@ function Router(env, scope) {
         //Getting superCleasses & extending it with super Models.
         var mainControllerFile          = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js'
             , controllerFile            = null
-            , setupFile                 = null
             , MainController            = {} // controller.js
             , Controller                = {} // controller.namespace.js
             , hasControllerNamespace    = (namespace) ? true : false
         ;
 
         // TODO -  ?? Merge all controllers into a single file while building for other env than `dev`
-
-        setupFile = conf.bundlesPath +'/'+ bundle + '/controllers/setup.js';
-        var filename = '';
+        var filename        = ''
+            , filenameObj   = null
+        ;
         if (hasControllerNamespace) {
-            filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js';
-            if ( !fs.existsSync(filename) ) {
+            filenameObj = new _(conf.bundlesPath +'/'+ bundle + '/controllers/controller.'+ namespace +'.js', true);
+            filename    = filenameObj.toString();
+            if ( !filenameObj.existsSync() ) {
                 hasControllerNamespace = false;
                 console.warn('Namespace `'+ namespace +'` found, but no related controller file found at `'+filename+'` to load: just ignore this message if this is ok with you');
                 filename = conf.bundlesPath +'/'+ bundle + '/controllers/controller.js';
                 console.info('Switching to default controller: '+ mainControllerFile);
             }
+            filenameObj = null;
         } else {
             filename = mainControllerFile;
         }
@@ -443,11 +446,15 @@ function Router(env, scope) {
         /**
          * EO routing configuration
          */
-
+        var setupFileObj    = new _(conf.bundlesPath +'/'+ bundle + '/controllers/setup.js', true)
+            , setupFile     = setupFileObj.toString()
+        ;
         try {
 
-            if ( fs.existsSync(_(setupFile, true)) )
+            if ( setupFileObj.existsSync() ) {
                 hasSetup = true;
+            }
+            setupFileObj = null;
 
             if (cacheless) {
                 if (hasControllerNamespace) {
@@ -467,8 +474,7 @@ function Router(env, scope) {
             // means that you have a syntax errors in you controller file
             // TODO - increase `stack-trace` from 10 (default value) to 500 or more to get the exact error --stack-trace-limit=1000
             // TODO - also check `stack-size` why not set it to at the same time => --stack-size=1024
-            serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
-            return;
+            return serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (err.stack || err.message) );
         }
 
 
@@ -623,14 +629,13 @@ function Router(env, scope) {
                             var superController = new SuperController(options);
                             superController.setOptions(request, response, next, options);
                             if (typeof (controller) != 'undefined' && typeof (controller[action]) == 'undefined') {
-                                serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json ('+ options.rule +') or the related control in your `' + controllerFile + '`.')).stack);
-                            } else {
-                                serverInstance.throwError(response, 500, err.stack);
+                                return serverInstance.throwError(response, 500, (new Error('control not found: `' + action + '`. Please, check your routing.json ('+ options.rule +') or the related control in your `' + controllerFile + '`.')).stack);
                             }
-                            return;
+
+                            return serverInstance.throwError(response, 500, err.stack);
                         }
 
-                    })
+                    });
             } else {
                 // handle superController events
                 // e.g.: inside your controller, you can defined: `this.onReady = function(){...}` which will always be called before the main action
@@ -674,87 +679,106 @@ function Router(env, scope) {
 
     var processMiddlewares = function(serverInstance, middlewares, controller, action, req, res, next, cb){
 
-        var filename        = _(local.conf.bundlePath)
+
+        if (!middlewares || middlewares.length == 0) {
+            return cb(action, req, res, next);
+        }
+
+        var bundlePath      = _(local.conf.bundlePath, true)
+            , sharedPath    = _(local.conf.sharedPath, true)
             , middleware    = null
             , constructor   = null
-            , re            = new RegExp('^'+filename);
+            , re            = new RegExp('^'+bundlePath)
+        ;
 
-        if ( middlewares.length > 0 ) {
-            for (let m=0; m<middlewares.length; ++m) {
-                constructor = middlewares[m].split(/\./g);
-                constructor = constructor
-                    .splice(constructor.length-1,1)
-                    .toString();
-                middleware = middlewares[m].split(/\./g);
-                middleware.splice(middleware.length-1);
-                middleware = middleware.join('/');
-                filename = _(filename +'/'+ middleware + '/index.js');
-                if ( !fs.existsSync( filename ) ) {
+        for (let m=0; m<middlewares.length; ++m) {
+            constructor = middlewares[m].split(/\./g);
+            constructor = constructor
+                .splice(constructor.length-1,1)
+                .toString();
+            middleware = middlewares[m].split(/\./g);
+            middleware.splice(middleware.length-1);
+            middleware = middleware.join('/');
+
+            let filenameObj         = new _(bundlePath +'/'+ middleware + '/index.js', true);
+            let filename            = filenameObj.toString();
+            let sharedFilenameObj   = new _(sharedPath +'/'+ middleware + '/index.js', true);
+            let sharedFilename      = sharedFilenameObj.toString();
+            if ( !filenameObj.existsSync() ) {
+                if ( !sharedFilenameObj.existsSync() ) {
                     // no middleware found with this alias
-                    serverInstance.throwError(res, 501, new Error('middleware not found '+ middleware).stack);
-                    return;
+                    return serverInstance.throwError(res, 501, new Error('middleware not found '+ middleware).stack);
                 }
 
-                if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
-
-                var MiddlewareClass = function(req, res, next) {
-
-                    return function () { // getting rid of the middleware context
-
-                        var Middleware = require(_(filename, true));
-                        // TODO - loop on a defined SuperController property like SuperController._allowedForExport
-
-
-                        // Exporting config & common methods
-                        Middleware.prototype.checkBundleStatus      = controller.checkBundleStatus;
-                        Middleware.prototype.getConfig              = controller.getConfig;
-                        Middleware.prototype.getFormsRules          = controller.getFormsRules;
-                        Middleware.prototype.getLocales             = controller.getLocales;
-                        Middleware.prototype.isCacheless            = controller.isCacheless;
-                        Middleware.prototype.isHaltedRequest        = controller.isHaltedRequest;
-                        Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
-                        Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
-                        Middleware.prototype.pauseRequest           = controller.pauseRequest;
-                        Middleware.prototype.query                  = controller.query;
-                        Middleware.prototype.redirect               = controller.redirect;
-                        Middleware.prototype.render                 = controller.render;
-                        Middleware.prototype.renderJSON             = controller.renderJSON;
-                        Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout;
-                        Middleware.prototype.resumeRequest          = controller.resumeRequest;
-                        Middleware.prototype.requireController      = controller.requireController;
-                        Middleware.prototype.throwError             = controller.throwError;
-
-                        return Middleware;
-                    }(req, res, next)
-                }(req, res, next);
-
-                middleware = new MiddlewareClass();
-
-
-                if ( !middleware[constructor] ) {
-                    serverInstance.throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
-                    return;
-                }
-
-                if ( typeof(middleware[constructor]) != 'undefined') {
-
-                    middleware[constructor](req, res, next,
-                        function onMiddlewareProcessed(req, res, next){
-                            middlewares.splice(m, 1);
-                            if (middlewares.length > 0) {
-                                processMiddlewares(serverInstance, middlewares, controller, action,  req, res, next, cb)
-                            } else {
-                                cb(action, req, res, next)
-                            }
-                        }
-                    );
-
-                    break
-                }
+                filename = sharedFilename;
             }
 
-        } else {
-            cb(action, req, res, next)
+            if (local.cacheless) delete require.cache[require.resolve(_(filename, true))];
+
+            var MiddlewareClass = function(req, res, next) {
+                // getting rid of the middleware context
+                return function () {
+
+                    var Middleware = require(_(filename, true));
+                    // LOCAL vs GLOBAL
+                    if (
+                        sharedFilenameObj.existsSync()
+                        && filename != sharedFilename
+                    ) {
+                        if (local.cacheless) delete require.cache[require.resolve(_(sharedFilename, true))];
+                        // sharedFilename as SuperClass
+                        Middleware = inherits(require(_(filename, true)), require(_(sharedFilename, true)));
+                    }
+
+                    // TODO - loop on a defined SuperController property like SuperController._allowedForExport
+
+
+                    // Exporting config & common methods
+                    Middleware.prototype.checkBundleStatus      = controller.checkBundleStatus;
+                    Middleware.prototype.getConfig              = controller.getConfig;
+                    Middleware.prototype.getFormsRules          = controller.getFormsRules;
+                    Middleware.prototype.getLocales             = controller.getLocales;
+                    Middleware.prototype.isCacheless            = controller.isCacheless;
+                    Middleware.prototype.isHaltedRequest        = controller.isHaltedRequest;
+                    Middleware.prototype.isWithCredentials      = controller.isWithCredentials;
+                    Middleware.prototype.isXMLRequest           = controller.isXMLRequest;
+                    Middleware.prototype.pauseRequest           = controller.pauseRequest;
+                    Middleware.prototype.query                  = controller.query;
+                    Middleware.prototype.redirect               = controller.redirect;
+                    Middleware.prototype.render                 = controller.render;
+                    Middleware.prototype.renderJSON             = controller.renderJSON;
+                    Middleware.prototype.renderWithoutLayout    = controller.renderWithoutLayout;
+                    Middleware.prototype.resumeRequest          = controller.resumeRequest;
+                    Middleware.prototype.requireController      = controller.requireController;
+                    Middleware.prototype.throwError             = controller.throwError;
+
+                    return Middleware;
+                }(req, res, next)
+            }(req, res, next);
+
+            middleware = new MiddlewareClass();
+
+
+            if ( !middleware[constructor] ) {
+                return serverInstance.throwError(res, 501, new Error('contructor [ '+constructor+' ] not found @'+ middlewares[m]).stack);
+            }
+
+            if ( typeof(middleware[constructor]) != 'undefined') {
+
+                middleware[constructor](req, res, next,
+                    function onMiddlewareProcessed(req, res, next){
+                        middlewares.splice(m, 1);
+                        if (middlewares.length > 0) {
+                            return processMiddlewares(serverInstance, middlewares, controller, action,  req, res, next, cb)
+                        }
+                        // else {
+                            cb(action, req, res, next)
+                        // }
+                    }
+                );
+
+                break
+            }
         }
     };
 

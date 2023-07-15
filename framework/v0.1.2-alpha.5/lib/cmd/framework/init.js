@@ -119,7 +119,7 @@ function Initialize(opt) {
 
         if ( !fs.existsSync(path) ) {
             try {
-                fs.mkdirSync(path, 0775)
+                fs.mkdirSync(path, '0775')
             } catch (err) {
                 // console.error(err.stack);
                 // process.exit(1)
@@ -158,7 +158,7 @@ function Initialize(opt) {
 
         if ( !fs.existsSync(releasePath) ) {
             try {
-                fs.mkdirSync(releasePath, 0775)
+                fs.mkdirSync(releasePath, '0775')
             } catch (err) {
                 // console.error(err.stack);
                 // process.exit(1)

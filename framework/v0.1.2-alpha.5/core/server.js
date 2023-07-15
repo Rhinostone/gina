@@ -2606,36 +2606,33 @@ function Server(options) {
         var expressMiddlewares  = self.instance._expressMiddlewares;
 
         if (err) {
-            throwError(nextMiddleware._response, 500, (err.stack|err.message|err), nextMiddleware._next, nextMiddleware._nextAction);
-            return;
+            return throwError(nextMiddleware._response, 500, (err.stack|err.message|err), nextMiddleware._next, nextMiddleware._nextAction);
         }
 
         expressMiddlewares[nextMiddleware._index](nextMiddleware._request, nextMiddleware._response, function onNextMiddleware(err, request, response) {
 
             if (err) {
-                throwError(nextMiddleware._response, 500, (err.stack||err.message||err), nextMiddleware._next, nextMiddleware._nextAction);
-                return;
+                return throwError(nextMiddleware._response, 500, (err.stack||err.message||err), nextMiddleware._next, nextMiddleware._nextAction);
             }
 
             ++nextMiddleware._index;
-            if (request)
+            if (request) {
                 nextMiddleware._request  = request;
+            }
 
-            if (response)
+            if (response) {
                 nextMiddleware._response = response;
+            }
 
             if (nextMiddleware._index > nextMiddleware._count) {
 
                 if ( nextMiddleware._nextAction == 'route' ) {
-
                     router._server = self.instance;
-                    router.route(nextMiddleware._request, nextMiddleware._response, nextMiddleware._next, nextMiddleware._request.routing)
-
+                    router.route(nextMiddleware._request, nextMiddleware._response, nextMiddleware._next, nextMiddleware._request.routing);
                 } else { // handle statics
                     self._responseHeaders = nextMiddleware._response.getHeaders();
                     handleStatics(nextMiddleware._staticProps, nextMiddleware._request, nextMiddleware._response, nextMiddleware._next);
                 }
-
             } else {
                 nextMiddleware.call(this, err, true)
             }
@@ -2764,14 +2761,16 @@ function Server(options) {
                     method = req.method
                 }
 
-                //Preparing params to relay to the router.
+                // Preparing params to relay to the router.
                 params = {
                     method              : method,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
                     url                 : decodeURI(pathname), /// avoid %20
                     rule                : routing[name].originalRule || name,
+                    // We clone because we are going to modify it while comparing urls
                     param               : JSON.clone(routing[name].param),
+                    // We clone because we are going to modify it while routing (.splice(..))
                     middleware          : JSON.clone(routing[name].middleware),
                     bundle              : routing[name].bundle,
                     isXMLRequest        : req.isXMLRequest,
