@@ -50,7 +50,7 @@ function Config(opt, contextResetNeeded) {
         setContext('projectName', opt.projectName || getContext('projectName'));
         setContext('bundle', opt.startingApp);
         // reset context
-        resetContext()
+        resetContext();
     }
 
     // framework settings from homedir
@@ -81,15 +81,18 @@ function Config(opt, contextResetNeeded) {
             self.startingApp    = opt.startingApp;
             self.executionPath  = opt.executionPath; // project path
 
-            self.task = opt.task || 'run'; // to be aible to filter later on non run task
+            self.task = opt.task || 'run'; // to be aible to filter later on non run task
 
             self.userConf = false;
-            var path = _(self.executionPath + '/env.json');
+            var pathObj = new _(self.executionPath + '/env.json', true);
+            var path    = pathObj.toString();
 
-            if ( fs.existsSync(path) ) {
+            if ( pathObj.existsSync() ) {
                 self.userConf = requireJSON(path);
                 console.debug('Application config file loaded [' + path + ']');
             }
+            path    = null;
+            pathObj = null;
 
             self.Env.parent = self;
             if (env != 'undefined') self.Env.set(env);
@@ -410,10 +413,10 @@ function Config(opt, contextResetNeeded) {
         },
         getDefault : function() {
             return {
-                "env" : this.template.defEnv,
-                "scope" : this.template.defScope,
-                "ext" : this.template.defExt,
-                "registeredEnvs" : this.template.registeredEnvs
+                "env"               : this.template.defEnv,
+                "scope"             : this.template.defScope,
+                "ext"               : this.template.defExt,
+                "registeredEnvs"    : this.template.registeredEnvs
             }
         }
     }
@@ -544,7 +547,8 @@ function Config(opt, contextResetNeeded) {
 
         var content     = userConf,
             //if nothing to merge.
-            newContent = JSON.parse( JSON.stringify(content) );
+            newContent = JSON.parse( JSON.stringify(content) )
+        ;
 
         var isStandalone    = true,
             masterPort      = null,
@@ -563,10 +567,12 @@ function Config(opt, contextResetNeeded) {
             self.projectName = ctx.config.projectName
         }
 
-        //Pushing default app first.
+        // Pushing default app first.
         self.bundles.push(self.startingApp);//This is a JSON.push.
-        var root = new _(self.executionPath).toUnixStyle();
-        var manifest = null, pkg  = null;
+        var root        = new _(self.executionPath).toUnixStyle()
+            , manifest  = null
+            , pkg       = null
+        ;
         try {
             manifest = require(_(root + '/manifest.json', true));
             pkg = manifest.bundles;
@@ -575,11 +581,11 @@ function Config(opt, contextResetNeeded) {
         } catch (err) {
             console.error(err.stack);
 
-            callback(err);
-        } //bundlesPath will be default.
+            return callback(err);
+        }
 
 
-        //For each app.
+        // For each app.
         var cacheless           = self.isCacheless()
             , bundleSettings    = null
             , bundHasSettings   = true
@@ -589,8 +595,7 @@ function Config(opt, contextResetNeeded) {
             , p                 = null
         ;
 
-        // getting bundle config files
-
+        // Getting bundle config files
         var configFiles     = null
             , appPath       = null
             , jsonFile      = null
@@ -682,9 +687,10 @@ function Config(opt, contextResetNeeded) {
                     files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
                     let fileContent = files[name];
                     // let filename = _(appPath + '/config/' + tmp);
-                    let filename = _(appPath + '/config/' + main);
+                    let filenameObj = new _(appPath + '/config/' + main, true);
+                    let filename    = filenameObj.toString();
 
-                    exists = fs.existsSync(_(filename, true));
+                    exists = filenameObj.existsSync();
                     // loading env if exists
                     if ( self.isCacheless() ) {
                         if (exists) {
@@ -705,16 +711,17 @@ function Config(opt, contextResetNeeded) {
                         }
                     } catch (_err) {
                         if (exists) {
-                            callback(new Error('[ ' + filename + ' ] is malformed !!'))
-                        } else {
-                            fileContent = undefined
+                            return callback(new Error('[ ' + filename + ' ] is malformed !!'))
                         }
+                        fileContent = undefined;
                     }
                     // loading main
-                    filename = _(appPath + '/config/' + main);
+                    filenameObj = new _(appPath + '/config/' + main, true);
+                    filename    = filenameObj.toString();
+                    exists      = filenameObj.existsSync();
                     //Can't do anything without.
                     try {
-                        exists = fs.existsSync(_(filename, true));
+
                         if (cacheless && exists) {
                             delete require.cache[require.resolve(_(filename, true))];
                         }
@@ -732,13 +739,13 @@ function Config(opt, contextResetNeeded) {
                         }
                     } catch (_err) {
 
-                        if (fs.existsSync(filename)) {
+                        if ( exists ) {
                             let e = '[ ' + filename + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
                             console.error(e);
-                            callback(new Error(e))
-                        } else {
-                            fileContent = undefined
+                            return callback(new Error(e))
                         }
+
+                        fileContent = undefined;
                     }
 
                     // tmp settings - because we need it now
@@ -842,12 +849,13 @@ function Config(opt, contextResetNeeded) {
                 }
                 //I had to for this one...
                 appsPath = appsPath.replace(/\{executionPath\}/g, root);
-
+                let appsPathObj = new _(appsPath, true);
                 //console.log("My env ", env, self.executionPath, JSON.stringify(template, null, '\t') );
                 //Existing app and port sharing => != isStandalone.
-                if ( !fs.existsSync(appsPath) ) {
-                    new _(appsPath).mkdirSync()
+                if ( !appsPathObj.existsSync() ) {
+                    appsPathObj.mkdirSync()
                 }
+                appsPathObj = null;
 
 
                 newContent[app][env].port[ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ] = appPort;
@@ -923,7 +931,8 @@ function Config(opt, contextResetNeeded) {
                 try {
                     newContent = whisper(reps, newContent);
                 } catch(contentErr) {
-                    console.emerg(contentErr.stack)
+                    console.emerg(contentErr.stack);
+                    return;
                 }
 
             }
@@ -1227,18 +1236,46 @@ function Config(opt, contextResetNeeded) {
 
         var fileContent         = null
             , allEnvs           = self.getAllEnvs()
-            , foundEnvVersion   = null
         ;
 
         // getting bundle config files
-        var configFiles = fs.readdirSync(_(appPath + '/config'))
-            , c         = 0
-            , cLen      = configFiles.length
-            , jsonFile  = null
-            , e         = null
+        var configFiles             = fs.readdirSync(_(appPath + '/config', true))
+            , e                     = null
+            , sharedConfigPathObj   = new _(conf[bundle][env].sharedPath + '/config', true)
+            , sharedconfigPath      = null
+            , sharedConfigFiles     = []
+        ;
+
+        if ( sharedConfigPathObj.existsSync() ) {
+            sharedconfigPath = sharedConfigPathObj.toString();
+            sharedConfigFiles = fs.readdirSync(sharedconfigPath);
+            for (let i=0, len = sharedConfigFiles.length; i<len; i++) {
+                let file = sharedConfigFiles[i];
+
+                if (
+                    /^\./.test(file)
+                    || /\s+copy$/i.test(file)
+                ) {
+                    sharedConfigFiles.splice(i,1);
+                    i --;
+                    len--;
+                    continue;
+                }
+                // sharedConfigFiles[i] = _(sharedconfigPath +'/'+ file, true);
+                // completing `configFiles` when file is listed in `sharedConfigFiles` but not in `configFiles`
+                if ( configFiles.indexOf(file) < 0 ) {
+                    configFiles.push(file);
+                }
+            }
+        }
+        sharedConfigPathObj = null;
+
+        var c       = 0
+            , cLen  = configFiles.length
         ;
         for (; c < cLen; ++c) {
-            foundEnvVersion = false;
+            let jsonFile = null;
+
             fName = configFiles[c];
             fNameWithNoExt  = fName.replace(/.json/, '');
 
@@ -1249,6 +1286,7 @@ function Config(opt, contextResetNeeded) {
 
             // e.g: if env == `dev` and we have app.prod.json, we should skip it
             let skipIt = false;
+            let foundEnvVersion = false;
             for (let e = 0, eLen = allEnvs.length; e < eLen; e++) {
                 // *.dev.json or *.global.json
                 let re = new RegExp('\.('+ allEnvs[e] +'|global)\.json$');
@@ -1269,7 +1307,7 @@ function Config(opt, contextResetNeeded) {
                 continue;
 
             // e.g: if env == `dev` and we have app.dev.json
-            if (new RegExp('\.'+ env +'\.json$').test(fName)  ) {
+            if ( new RegExp('\.'+ env +'\.json$').test(fName)  ) {
                 foundEnvVersion = true;
             }
             //name            = fName.replace(/\.json$/, '');
@@ -1288,13 +1326,26 @@ function Config(opt, contextResetNeeded) {
 
             filesList[name] = fName;
             // handle registered config files
+            // Loading dev version
             main = fName;
             tmp = fName.replace(/.json/, '.' + env + '.json'); // dev
 
             files[name] = ( typeof(files[name]) != 'undefined' ) ? files[name] : {};
             fileContent = files[name];
-            filename = _(appPath + '/config/' + tmp);
-            exists = fs.existsSync(_(filename, true));
+            let filenameObj = new _(appPath + '/config/' + tmp, true);
+            filename    = filenameObj.toString();
+            exists      = filenameObj.existsSync();
+
+            // In case the config is not found in the bundle, but exists in shared config
+            let sharedFilesIndex = sharedConfigFiles.indexOf(tmp);
+            if (!exists && sharedFilesIndex > -1) {
+                filenameObj = new _( sharedconfigPath +'/'+ tmp, true);
+                filename    = filenameObj.toString();
+                exists      = filenameObj.existsSync();
+                // remove entry from `sharedConfigFiles` list
+                sharedConfigFiles.splice(sharedFilesIndex,1);
+            }
+            filenameObj = null;
             // loading dev if exists
             if ( self.isCacheless() ) {
                 if (exists) {
@@ -1303,50 +1354,80 @@ function Config(opt, contextResetNeeded) {
             }
 
             try {
-                if (exists) {
+
+                if (!exists) {
+                    jsonFile = null;
+                } else {
                     jsonFile = requireJSON(_(filename, true));
+
                     if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
                         fileContent = []
                     }
                     // Fixed priority to env version and/or extended.description if found
                     fileContent = merge(jsonFile, fileContent);
                 }
+
             } catch (_err) {
                 if (exists) {
-                    callback(new Error('[ ' + filename + ' ] is malformed !!'))
-                } else {
-                    fileContent = undefined
+                    return callback(new Error('[ ' + filename + ' ] is malformed !!'))
                 }
+                fileContent = undefined
             }
             // loading main
-            filename = _(appPath + '/config/' + main, true);
+            filenameObj = new _(appPath + '/config/' + main, true);
+            filename    = filenameObj.toString();
+            exists      = filenameObj.existsSync();
+
+            // In case the config is not found in the bundle, but exists in shared config
+            sharedFilesIndex = sharedConfigFiles.indexOf(main);
+            if (!exists && sharedFilesIndex > -1) {
+                filenameObj = new _( sharedconfigPath +'/'+ main, true);
+                filename    = filenameObj.toString();
+                exists      = filenameObj.existsSync();
+                // remove entry from `sharedConfigFiles` list
+                // sharedConfigFiles.splice(sharedFilesIndex,1);
+            }
+            filenameObj = null;
+
+
             //Can't do anything without.
             try {
-                exists = fs.existsSync(_(filename, true));
                 if (cacheless && exists) {
                     delete require.cache[require.resolve(_(filename, true))];
                 }
 
-                if (exists) {
-                    jsonFile = requireJSON(_(filename, true));
-                    if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
-                        fileContent = []
-                    }
-                    //fileContent = merge(fileContent, jsonFile);
-                    // Fixed priority to env version and/or extended.description if found
-                    fileContent = merge(jsonFile, fileContent);
-                } else {
+                if (!exists) {
                     console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
+                } else {
+                    jsonFile = requireJSON(_(filename, true));
                 }
+
+                // sharedFilesIndex = sharedConfigFiles.indexOf(main);
+                if ( sharedFilesIndex > -1) {
+                    let sharedMain = requireJSON(_( sharedconfigPath +'/'+ main, true));
+                    jsonFile = merge(jsonFile, sharedMain);
+                    sharedMain = null;
+                    sharedConfigFiles.splice(sharedFilesIndex, 1);
+                }
+                sharedFilesIndex = null;
+
+                if (Array.isArray(jsonFile) && !Array.isArray(fileContent) && !Object.keys(fileContent).length) {
+                    fileContent = []
+                }
+                //fileContent = merge(fileContent, jsonFile);
+                // Fixed priority to env version and/or extended.description if found
+                fileContent = merge(jsonFile, fileContent);
+
+
             } catch (_err) {
 
-                if (fs.existsSync(filename)) {
+                if (exists) {
                     e = '[ ' + filename + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
                     console.error(e);
-                    callback(new Error(e))
-                } else {
-                    fileContent = undefined
+                    return callback(new Error(e))
                 }
+
+                fileContent = undefined
             }
 
             if (section != '' ) {
@@ -1375,19 +1456,41 @@ function Config(opt, contextResetNeeded) {
         }
 
         // routing.global.json
-        let globalMiddlewares = null;
+        let globalMiddlewares = [];
         let globalMiddlewaresPathObj = new _(appPath + '/config/routing.global.json', true);
         if ( globalMiddlewaresPathObj.existsSync() ) {
             globalMiddlewares = requireJSON(globalMiddlewaresPathObj.toUnixStyle()).middleware;
         }
-        globalMiddlewaresPathObj = null;
+        sharedFilesIndex = sharedConfigFiles.indexOf('routing.global.json');
+        if ( sharedFilesIndex > -1) {
+            let sharedGlobalMiddlewaresPathObj = new _(sharedconfigPath + '/routing.global.json', true);
+            let sharedGlobalMiddlewares = null;
+            try {
+                sharedGlobalMiddlewares = requireJSON(sharedGlobalMiddlewaresPathObj.toUnixStyle());
+                globalMiddlewares = merge(globalMiddlewares, sharedGlobalMiddlewares.middleware);
+                sharedConfigFiles.splice(sharedFilesIndex, 1);
+                sharedGlobalMiddlewaresPathObj = null;
+                sharedGlobalMiddlewares = null;
+            } catch (_err) {
+
+                if ( sharedGlobalMiddlewaresPathObj.existsSync() ) {
+                    e = '[ ' + sharedGlobalMiddlewaresPathObj.toUnixStyle() + ' ] is malformed !!\n\r' + (_err.stack || _err.message);
+                    console.error(e);
+                    return callback(new Error(e))
+                }
+            }
+        }
+        sharedFilesIndex = null;
 
 
         name = 'routing';
         routing = files[name];
-        var r = null, rLen = null;
-        //setting app param
-        var urls = null;
+        var r       = null
+            , rLen  = null
+            , urls  = null
+        ;
+
+        // Setting app param
         // bundle status
         routing['bundle-status'] = {
             url: '/_status',
@@ -1403,7 +1506,7 @@ function Config(opt, contextResetNeeded) {
             url: '/custom-error',
             method: 'GET',
             middleware: [],
-            middlewareIgnored: ['shared.middlewares.global.checkScope'],
+            middlewareIgnored: [],
             param: {
                 control: 'renderCustomError',
                 // default data : will be fed on error
@@ -1663,7 +1766,8 @@ function Config(opt, contextResetNeeded) {
 
         var corePath = getPath('gina').core;
         var settingsPath = _(corePath +'/template/conf/settings.json', true);
-        var staticsPath = _(corePath +'/template/conf/statics.json', true);
+        var staticsPathObj  = new _(corePath +'/template/conf/statics.json', true);
+        var staticsPath     = staticsPathObj.toString();
         var viewsPath = _(corePath +'/template/conf/templates.json', true);
 
         var defaultViews = requireJSON(viewsPath);
@@ -1678,10 +1782,13 @@ function Config(opt, contextResetNeeded) {
             reps[p+'Port'] = ports[p]
         }
 
-        var localEnv = conf[bundle][env].executionPath + '/env.local.json';
-        if ( self.isCacheless() && fs.existsSync(localEnv) ) {
-            conf[bundle][env] = merge(conf[bundle][env], requireJSON(localEnv), true);
+        var localEnvPathObj = new _(conf[bundle][env].executionPath + '/env.local.json', true);
+        var localEnvPath    = localEnvPathObj.toString();
+        if ( self.isCacheless() && localEnvPathObj.existsSync() ) {
+            conf[bundle][env] = merge(conf[bundle][env], requireJSON(localEnvPath), true);
         }
+        localEnvPath    = null;
+        localEnvPathObj = null;
         var envKeys = conf[bundle][env];
         for (let k in envKeys) {
             if ( typeof(envKeys[k]) != 'object' && typeof(envKeys[k]) != 'array' ) {
@@ -1704,8 +1811,9 @@ function Config(opt, contextResetNeeded) {
                 // files['settings'] = merge(files['settings'], defaultSettings)
             }
 
-            if (fs.existsSync(staticsPath))
+            if ( staticsPathObj.existsSync() ) {
                 delete require.cache[require.resolve(staticsPath)];
+            }
 
 
             if (hasViews && typeof(files['statics']) == 'undefined') {
@@ -1731,14 +1839,20 @@ function Config(opt, contextResetNeeded) {
                 , dirsOrFiles   = null
                 , pCount        = 0
                 , sCount        = 0
+                , publicPathObj = (conf[bundle][env].publicPath) ? new _(conf[bundle][env].publicPath, true) : null
+                , publicPath    = (publicPathObj) ? publicPathObj.toString() : null
             ;
-            if (conf[bundle][env].publicPath && fs.existsSync(conf[bundle][env].publicPath) ) {
+            if (
+                publicPath
+                && publicPathObj
+                && publicPathObj.existsSync()
+            ) {
                 var publicResources = []
-                    , lStat = null
+                    , lStat         = null
                 ;
 
                 d = 0;
-                dirsOrFiles = fs.readdirSync(conf[bundle][env].publicPath);
+                dirsOrFiles = fs.readdirSync(publicPath);
                 // ignoring html (template files) directory
                 //dirsOrFiles.splice(dirsOrFiles.indexOf(new _(reps.html, true).toArray().last()), 1);
 
@@ -1748,7 +1862,7 @@ function Config(opt, contextResetNeeded) {
                         ++d;
                         continue;
                     }
-                    lStat = fs.lstatSync(_(conf[bundle][env].publicPath +'/'+ dirsOrFiles[d], true));
+                    lStat = fs.lstatSync(_(publicPath +'/'+ dirsOrFiles[d], true));
                     if ( lStat.isDirectory() ) {
                         // regular path
                         publicResources[pCount] = '/'+ dirsOrFiles[d] +'/';
@@ -1791,10 +1905,12 @@ function Config(opt, contextResetNeeded) {
                     staticToPublicPath = null;
                 }
 
-                conf[bundle][env].publicResources = publicResources
+                conf[bundle][env].publicResources = publicResources;
             } else if (hasViews) {
                 console.warn('['+bundle+'] No public dir to scan...')
             }
+            publicPathObj   = null;
+            publicPath      = null;
 
 
             if (hasViews && typeof(files['templates']) == 'undefined') {
@@ -2083,7 +2199,7 @@ function Config(opt, contextResetNeeded) {
             pCount = conf[bundle][env].publicResources.length || 0;
             sCount = conf[bundle][env].staticResources.length || 0;
 
-            for (var i in files['statics']) {
+            for (let i in files['statics']) {
                 if (!/^\//.test(i) ) {
                     files['statics'][ '/'+ i ] = files['statics'][i];
                     delete files['statics'][i];
@@ -2114,24 +2230,13 @@ function Config(opt, contextResetNeeded) {
 
         files = whisper(reps, files);
 
-        // favicons rewrite - Not needed anymore
-        // var faviconsPath = files['statics'][  ( (_wroot) ? _wroot +'/' : '' ) + 'favicons'];
-        // if ( hasViews && typeof(files['statics']) != 'undefiened' && fs.existsSync( faviconsPath ) ) {
-        //     var favFiles = fs.readdirSync(faviconsPath);
-        //     for (var f = 0, fLen = favFiles.length; f < fLen; ++f) {
-        //         if ( !/^\./.test(favFiles[f]) )
-        //             files['statics'][ ( (_wroot) ? _wroot +'/' : '' ) + favFiles[f] ] = faviconsPath +'/'+ favFiles[f];
-        //     }
-        // }
-
-
         if (hasViews) {
             // loading forms rules
             if (typeof(files['templates']._common.forms) != 'undefined') {
                 try {
-                    files['forms'] = loadForms(files['templates']._common.forms)
+                    files['forms'] = loadForms(files['templates']._common.forms);
                 } catch (err) {
-                    callback(err)
+                    return callback(err);
                 }
             }
 
@@ -2168,7 +2273,6 @@ function Config(opt, contextResetNeeded) {
                 htmlErrorsFromPath(files['templates']._common.html+ '/errors');
                 // Then, look into shared without overriding existing
                 htmlErrorsFromPath(conf[bundle][env].sharedPath + '/errors');
-
             }
         }
 
@@ -2190,8 +2294,6 @@ function Config(opt, contextResetNeeded) {
                     + '\n\t\t</script>';
 
                 files['templates']._common.ginaLoader = scriptTag;
-
-                // files['templates']._common.ginaLoader = whisper(reps, files['templates']._common.ginaLoader);
 
             } catch (err) {
                 callback(err)
@@ -2246,41 +2348,23 @@ function Config(opt, contextResetNeeded) {
         }
     }
 
-    // Todo - browseDirectory -> returns a collection of files & folders paths, unless it is handled by http/2
-    // Will be useful to generate cache
-    // var browseDirectory = function(filename, list, i, len) {
-
-    //     var name = filename.substring(filename.lastIndexOf('/') +1)
-    //         , location = filename.replace( new RegExp(name+'$'))
-    //         , obj = {
-    //             name: name,
-    //             location: location,
-    //             isDir: fs.statSync(filename).isDirectory()
-    //         }
-    //         , list = (typeof(list) != 'undefined') ? list : []
-    //         , i = (typeof(i) != 'undefined') ? i : 0
-    //         , len = (typeof(len) != 'undefined') ? len : 0
-    //     ;
-
-    //     if (i == 0 && obj.isDir) { //root
-    //         var files = fs.readdirSync(filename);
-    //         len = files.length;
-    //     }
-
-    // }
 
     var loadForms = function(formsDir) {
-        var forms = { rules: {}}, cacheless = self.isCacheless(), root = '';
+        var forms       = { rules: {}}
+            , cacheless = self.isCacheless()
+            , root      = ''
+        ;
 
-        if ( fs.existsSync(formsDir) ) {
+        if ( new _(formsDir, true).existsSync() ) {
             root = ''+formsDir;
             // browsing dir
             var readDir = function (dir, forms, key, previousKey) {
                 var files       = fs.readdirSync(dir)
                     , filename  = ''
-                    , k         = null;
+                    , k         = null
+                ;
 
-                for (var i = 0, len = files.length; i < len; ++i) {
+                for (let i = 0, len = files.length; i < len; ++i) {
                     if ( !/^\./.test(files[i]) ) {
                         filename = _(dir + '/' + files[i], true);
 
