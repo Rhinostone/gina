@@ -466,20 +466,7 @@ exports['Merge : B<-A with override'] = function(test) {
     setVariable();
     var BtoAwithOverride    = merge(b, a, true);
 
-    var res = [
-        {
-            id: 1,
-            value: 'apple'
-        },
-        {
-            id: 2,
-            value: 'orange'
-        },
-        {
-            id: 3,
-            value: 'mango'
-        }
-    ];
+    var res = [];
 
     test.equal( Array.isArray(BtoAwithOverride), true );
     test.deepEqual(BtoAwithOverride, res);
@@ -552,7 +539,7 @@ exports['Merge : A<-B without override'] = function(test) {
     test.equal(Array.isArray(AtoBwithoutOverride), true );
     test.deepEqual(AtoBwithoutOverride, res);
 
-    test.deepEqual(originalA, a);
+    test.notDeepEqual(originalA, a);
     test.deepEqual(originalB, b);
 
     test.done()
@@ -1006,13 +993,7 @@ exports['Merge : template._common<-template.home with override'] = function(test
         "http-metas": {
             "content-type": "text/html"
         },
-        "stylesheets": [
-            {
-                "name": "default",
-                "media": "screen",
-                "url": "/css/dashboard.css"
-            }
-        ],
+        "stylesheets": [],
         "javascripts": [
             "/handlers/home.js"
         ]

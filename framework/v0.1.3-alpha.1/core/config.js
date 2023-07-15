@@ -2061,6 +2061,7 @@ function Config(opt, contextResetNeeded) {
                     if (!files['templates'][section].javascriptsExcluded) {
                         // merging with common javascript def
                         // noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                        // Fixed on 2023-07-15 - after mergeArray() fix.
                         noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
                     }
                     // adding gina def
@@ -2072,6 +2073,7 @@ function Config(opt, contextResetNeeded) {
                     if (!files['templates'][section].stylesheetsExcluded) {
                         // merging with common stylesheets def
                         // noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
+                        // Fixed on 2023-07-15 - after mergeArray() fix.
                         noneDefaultCss = merge.setKeyComparison('url')(noneDefaultCss, files['templates']._common.stylesheets);
                     }
                     // adding gina def
