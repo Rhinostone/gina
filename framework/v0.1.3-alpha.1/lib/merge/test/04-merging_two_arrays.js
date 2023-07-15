@@ -76,7 +76,7 @@ exports['Merge : A<-B with override'] = function(test) {
     test.done()
 }
 exports['Merge : B<-A with override'] = function(test) {
-    var res = [ 'apple', 'orange', 'mango' ];
+    var res = [];
 
     test.equal( typeof(BtoAwithOverride), 'object' );
     test.deepEqual(BtoAwithOverride, res);
@@ -152,7 +152,7 @@ exports['Compare : A<-B with override & B<-A without override'] = function(test)
     test.done()
 }
 exports['Compare : B<-A with override & A<-B without override'] = function(test) {
-    test.deepEqual(AtoBwithoutOverride, BtoAwithOverride);
+    test.notDeepEqual(AtoBwithoutOverride, BtoAwithOverride);
 
     test.done()
 }

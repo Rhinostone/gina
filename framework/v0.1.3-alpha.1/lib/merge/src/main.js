@@ -299,6 +299,9 @@ function Merge() {
                     // means that we are trying to replace with an empty array/collection
                     // this does not make any sense, so we just return the target as if the merge had no effect
                     // DO NOT CHANGE THIS, it affects gina merging config
+                    if ( /^true$/i.test(override) ) {
+                        return options
+                    }
                     return target;
                 }
                 return options;
@@ -388,7 +391,9 @@ function Merge() {
                 return newTarget;
 
 
-            } else { // normal case `arrays`
+            }
+            // normal case `arrays`
+            else {
                 a = 0;
                 // in case there is no keyComparison in options[*].props
                 var localKeyComparison = null, ownPropertyNames = null;

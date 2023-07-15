@@ -1405,7 +1405,7 @@ function Config(opt, contextResetNeeded) {
                 // sharedFilesIndex = sharedConfigFiles.indexOf(main);
                 if ( sharedFilesIndex > -1) {
                     let sharedMain = requireJSON(_( sharedconfigPath +'/'+ main, true));
-                    jsonFile = merge(jsonFile, sharedMain);
+                    jsonFile = merge(sharedMain, jsonFile, true);
                     sharedMain = null;
                     sharedConfigFiles.splice(sharedFilesIndex, 1);
                 }
@@ -1956,7 +1956,7 @@ function Config(opt, contextResetNeeded) {
                     if (!/^_common$/.test(section) ) continue;
 
                     // inheriting from defaultViews - gina _common
-                    files['templates'][section] = merge(files['templates'][section], defaultViews[section]);
+                    files['templates'][section] = merge.setKeyComparison('name')(files['templates'][section], defaultViews[section]);
                     // updating javascripts & css order
                     noneDefaultJs   = (files['templates'][section].javascripts) ? JSON.clone(files['templates'][section].javascripts) : [];
                     noneDefaultCss  = (files['templates'][section].stylesheets) ? JSON.clone(files['templates'][section].stylesheets) : [];
@@ -2060,7 +2060,8 @@ function Config(opt, contextResetNeeded) {
 
                     if (!files['templates'][section].javascriptsExcluded) {
                         // merging with common javascript def
-                        noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                        // noneDefaultJs = merge.setKeyComparison('url')(files['templates']._common.javascripts, noneDefaultJs, true);
+                        noneDefaultJs = merge.setKeyComparison('url')(noneDefaultJs, files['templates']._common.javascripts);
                     }
                     // adding gina def
                     if ( !files['templates'][section].javascriptsExcluded || files['templates'][section].javascriptsExcluded != '**' ) {
@@ -2070,7 +2071,8 @@ function Config(opt, contextResetNeeded) {
 
                     if (!files['templates'][section].stylesheetsExcluded) {
                         // merging with common stylesheets def
-                        noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
+                        // noneDefaultCss = merge.setKeyComparison('url')(files['templates']._common.stylesheets, noneDefaultCss, true);
+                        noneDefaultCss = merge.setKeyComparison('url')(noneDefaultCss, files['templates']._common.stylesheets);
                     }
                     // adding gina def
                     if ( !files['templates'][section].stylesheetsExcluded || files['templates'][section].stylesheetsExcluded != '**' ) {

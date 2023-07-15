@@ -16,7 +16,9 @@ var {bundle} = require('gina');
 // var Domain          = lib.Domain;
 
 
-// do whatever things you need to do before server starts
+// Do whatever things you need to do before server starts
+// e.g.: register session, set a shared path for your template engine ...
+// This is mostly pre-start configuration
 //{bundle}.onInitialize( function(event, app, express){//
 //    var self = {bundle};
 //    // getting config/app.json would be: self.getConfig('app')
@@ -30,14 +32,15 @@ var {bundle} = require('gina');
 //});
 
 // If you need to do something once the server has started
+// e.g.: start a cron or a watcher
 // {bundle}.onStarted(function(){
 //     console.info('{bundle} has started ! ');
 // });
 
 // Catch unhandled errors
-// {bundle}.onError(function(err, req, res, next){
-//     console.error('<{bundle}> fatal error: ' + err.message + '\nstack:\n'+ err.stack);
-//     next(err);
-// });
+{bundle}.onError(function(err, req, res, next){
+    console.error('[ BOOTSTRAP ] <{bundle}> fatal error: ' + err.message + '\nstack:\n'+ err.stack);
+    next(err);
+});
 
 {bundle}.start();
