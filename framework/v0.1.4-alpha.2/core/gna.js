@@ -21,8 +21,8 @@ var e               = new EventEmitter();
 
 // by default
 var gna         = {
-    core:{},
-    os:{}
+    core    : {},
+    os      : {}
 };
 var Config      = require('./config');
 var config      = null;
@@ -844,39 +844,33 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                             }
 
                                             if (error) {
-                                                e.emit('error', error, request, response, next)
-                                            } else {
-
-                                                instance.completeHeaders(null, request, response);
-
-                                                if ( typeof(request.isPreflightRequest) != 'undefined' && request.isPreflightRequest ) {
-                                                    var ext = 'html';
-                                                    var headers = {
-                                                        // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7
-                                                        //'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                                                        'cache-control': 'no-cache',
-                                                        'pragma': 'no-cache',
-                                                        'expires': '0',
-                                                        'content-type': conf.server.coreConfiguration.mime[ext]
-                                                    };
-
-                                                    // if ( /http\/2/.test(conf.server.protocol) ) {
-                                                    //     if (!response.stream.destroyed) {
-                                                    //         headers[':status'] = 200;
-                                                    //         headers[':authority'] = request.headers[':authority'];
-                                                    //         response.stream.respond(headers);
-                                                    //         response.stream.end();
-                                                    //         return;
-                                                    //     }
-                                                    // } else {
-                                                        response.writeHead(200, headers);
-                                                        response.end();
-                                                    //}
-
-                                                } else {
-                                                    next(false, request, response)
-                                                }
+                                                return e.emit('error', error, request, response, next);
                                             }
+
+                                            instance.completeHeaders(null, request, response);
+
+                                            if (
+                                                typeof(request.isPreflightRequest) != 'undefined'
+                                                && request.isPreflightRequest
+                                            ) {
+                                                var ext = 'html';
+                                                var headers = {
+                                                    // Responses to the OPTIONS method are not cacheable. - https://tools.ietf.org/html/rfc7231#section-4.3.7
+                                                    //'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
+                                                    'cache-control': 'no-cache',
+                                                    'pragma': 'no-cache',
+                                                    'expires': '0',
+                                                    'content-type': conf.server.coreConfiguration.mime[ext]
+                                                };
+
+                                                response.writeHead(200, headers);
+                                                response.end();
+
+                                            }
+                                            else {
+                                                next(false, request, response)
+                                            }
+
                                         })
                                     }
 
@@ -911,7 +905,7 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         );
                                         // placing end:flag to allow the CLI to retrieve bundl info from here
                                         console.notice('[ FRAMEWORK ] Bundle started !');
-                                    }, 500); // 1000 - Wait to make sure that the bundle is mounted on the file system
+                                    }, 700); // 1000 - Wait to make sure that the bundle is mounted on the file system
                                 });
 
                                 // placing strat:flag to allow the CLI to retrieve bundl info from here
@@ -920,23 +914,13 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                             });
 
-
-
-                            // if (!mountErr) {
-                                // -- BO
-                                e.emit('init', instance, middleware, conf);
-                                //In case there is no user init.
-                                if (!gna.initialized) {
-                                    e.emit('complete', instance);
-                                }
-
-
-                                // -- EO
-                            // } else {
-                            //     errMsg = new Error('[ FRAMEWORK ] Could not mount bundle ' + core.startingApp + '. ' + 'Could not mount bundle ' + core.startingApp + '. ' + (err.stack||err.message));
-                            //     //console.error(errMsg);
-                            //     abort(errMsg)
-                            // }
+                            // -- BO
+                            e.emit('init', instance, middleware, conf);
+                            //In case there is no user init.
+                            if (!gna.initialized) {
+                                e.emit('complete', instance);
+                            }
+                            // -- EO
 
                         } else {
                             errMsg = new Error('[ FRAMEWORK ] '+ (err.stack||err.message));
@@ -959,8 +943,6 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                     var server = new Server(opt);
                     server.onConfigured(initialize);
-
-
                 })//EO config.
             //})//EO mount.
         }

@@ -22003,7 +22003,36 @@ for (var t = 0, len = tags.length; t < len; ++t) {
                         'webroot'           : '{{ page.environment.webroot }}',
                     };
 
+                    if ( typeof(getTimeout) == 'undefined' ) {
+                        /**
+                         * getTimeout
+                         * Get session timeout
+                         *
+                         * @param {object} _this - `gina.session`
+                         *
+                         * @returns {date} extpiresAt
+                        */
+                        var getTimeout = function(_this) {
+                            if (!_this['lastModified']) {
+                                return null;
+                            }
+                            if ( _this['lastModified'] && typeof(_this['lastModified']) == 'string' ) {
+                                _this['lastModified'] = new Date(_this['lastModified']);
+                            }
+                            if ( _this['createdAt'] && typeof(_this['createdAt']) == 'string' ) {
+                                _this['createdAt'] = new Date(_this['createdAt']);
+                            }
+                            if ( _this['originalTimeout'] && typeof(_this['originalTimeout']) == 'string' ) {
+                                _this['originalTimeout'] = parseInt(_this['originalTimeout']);
+                            }
+                            _this['expiresAt'] = new Date(new Date(_this['lastModified']).getTime() + _this['originalTimeout'])
+
+                            return _this['expiresAt'] - new Date();
+                        }
+                    }
+
                     if ( !gina['session'] ) {
+
                         gina['session'] = {
                             /**@js_externs id*/
                             'id'                    : '{{ page.data.session.id }}' || null,
