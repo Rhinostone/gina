@@ -463,7 +463,7 @@ function MainHelper(opt) {
             // exceptions
             !isOverrrideAllowed
         ) {
-            if (key !== process['gina'][key]) {
+            if (val !== process['gina'][key]) {
                 err = new Error('Cannot override Env variable [ '+ key + ' ] with `'+ val +'`, it is already set to `'+ process['gina'][key] +'`');
                 console.warn(err.message);
             }
