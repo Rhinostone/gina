@@ -430,11 +430,14 @@ function MainHelper(opt) {
         } else {
             var files = fs.readdirSync(dir), filename = "";
             var file = '', a = [];
-            for (var f = 0; f < files.length; ++f) {
+            for (let f = 0; f < files.length; ++f) {
                 filename = dir + '/' + files[f];
                 file = ( a = files[f].split('.'), a.splice(0, a.length-1)).join('.');
                 self.config[file] = require(filename)
             }
+            files   = null;
+            file    = null;
+            a       = null;
         }
     }
 
@@ -464,18 +467,25 @@ function MainHelper(opt) {
                 err = new Error('Cannot override Env variable [ '+ key + ' ] with `'+ val +'`, it is already set to `'+ process['gina'][key] +'`');
                 console.warn(err.message);
             }
+            err                 = null;
+            specialCases        = null;
+            isOverrrideAllowed  = null;
 
             return
-        } else {
-            //Write env var.
-            if ( typeof(process['gina']) == 'undefined') {
-                process['gina'] = {}
-            }
-            process['gina'][key] = val;
-            if ( typeof(isProtected) != 'undefined' && isProtected == true) {
-                self.protectedVars.push(key)
-            }
         }
+
+        //Write env var.
+        if ( typeof(process['gina']) == 'undefined') {
+            process['gina'] = {}
+        }
+        process['gina'][key] = val;
+        if ( typeof(isProtected) != 'undefined' && isProtected == true) {
+            self.protectedVars.push(key)
+        }
+
+        err                 = null;
+        specialCases        = null;
+        isOverrrideAllowed  = null;
     }
 
     defineDefault = function(obj) {
