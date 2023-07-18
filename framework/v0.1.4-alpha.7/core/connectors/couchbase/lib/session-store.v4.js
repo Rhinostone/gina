@@ -165,45 +165,45 @@ module.exports = function(session, bundle){
 
 
         var err = false, result = null, data = null;
-        this.client.get(sid, function(err, data){
-            //Handle Key Not Found error
-            if (err && err.code == 13) {
-                return fn();
-            }
-            if (err) return fn(err);
-            if (!data || !data.value) return fn();
-            var result;
-            data = data.value.toString();
-            debug('GOT %s', data);
-            try {
-                result = JSON.parse(data);
-            } catch (err) {
-                return fn(err);
-            }
-            return fn(null, result);
-        });
+        // this.client.get(sid, function(err, data){
+        //     //Handle Key Not Found error
+        //     if (err && err.code == 13) {
+        //         return fn();
+        //     }
+        //     if (err) return fn(err);
+        //     if (!data || !data.value) return fn();
+        //     var result;
+        //     data = data.value.toString();
+        //     debug('GOT %s', data);
+        //     try {
+        //         result = JSON.parse(data);
+        //     } catch (err) {
+        //         return fn(err);
+        //     }
+        //     return fn(null, result);
+        // });
 
 
-        // try {
-        //     data = await this.client.get(sid)
-        // } catch (_err) {
-        //     err = _err;
-        //     if (!err.code)
-        //         err.code = 'ENOENT';
-        // }
-        // if (err && err.code == 13) {
-        //     return fn();
-        // }
-        // if (err) return fn(err);
-        // if (!data || !data.value) return fn();
-        // data = data.value.toString();
-        // console.debug('[SessionStore v4] GOT %s', data);
-        // try {
-        //     result = JSON.parse(data);
-        // } catch (err) {
-        //     return fn(err);
-        // }
-        // return fn(null, result);
+        try {
+            data = await this.client.get(sid)
+        } catch (_err) {
+            err = _err;
+            if (!err.code)
+                err.code = 'ENOENT';
+        }
+        if (err && err.code == 13) {
+            return fn();
+        }
+        if (err) return fn(err);
+        if (!data || !data.value) return fn();
+        data = data.value.toString();
+        console.debug('[SessionStore v4] GOT %s', data);
+        try {
+            result = JSON.parse(data);
+        } catch (err) {
+            return fn(err);
+        }
+        return fn(null, result);
 
 
         // this.client
