@@ -5,8 +5,6 @@ var util            = require('util');
 var gina            = require('../../../../core/gna');
 var lib             = gina.lib;
 var console         = lib.logger;
-var helpers         = lib.helpers;
-var dateFormat      = helpers.dateFormat;
 
 /*!
  * Connect - Couchbase
@@ -116,8 +114,8 @@ module.exports = function(session, bundle){
         }
 
         if ( typeof(connectOptions.db) != 'undefined' ) {
-            // var conn = connectOptions.db;
-            // var scope = conn.scope(conn.name);
+            var conn = connectOptions.db;
+            var scope = conn.scope(conn.name);
             // var coll  = ( typeof(bundle) != 'undefined' ) ? scope.collection(bundle) :  scope._bucket.defaultCollection();
             //var coll = connectOptions.db.collection(bundle);
             var coll = connectOptions.db.defaultCollection();
@@ -158,7 +156,7 @@ module.exports = function(session, bundle){
      * @api public
      */
 
-    CouchbaseStore.prototype.get = async function(sid, fn){
+    CouchbaseStore.prototype.get = function(sid, fn){
         if ('function' !== typeof fn) { fn = noop; }
         sid = this.prefix + sid;
         console.debug('GET "%s"', sid);
@@ -182,19 +180,21 @@ module.exports = function(session, bundle){
         //     }
         //     return fn(null, result);
         // });
+        this.client
+            .get(sid)
+            .then(function onData(_data) {
+                data = _data;
+            })
+            .catch(function onErr(_err){
+                err = _err;
+            });
 
-
-        try {
-            data = await this.client.get(sid)
-        } catch (_err) {
-            err = _err;
-            if (!err.code)
-                err.code = 'ENOENT';
-        }
+        //Handle Key Not Found error
         if (err && err.code == 13) {
             return fn();
         }
         if (err) return fn(err);
+
         if (!data || !data.value) return fn();
         data = data.value.toString();
         console.debug('GOT %s', data);
@@ -204,36 +204,6 @@ module.exports = function(session, bundle){
             return fn(err);
         }
         return fn(null, result);
-
-
-        // this.client
-        //     .get(sid)
-        //     .then(function onData(_data) {
-        //         data = _data;
-        //     })
-        //     .catch(function onErr(_err){
-        //         err = _err;
-        //     });
-
-        // //Handle Key Not Found error
-        // if (err && err.code == 13) {
-        //     return fn();
-        // }
-        // if (err) return fn(err);
-
-        // if (!data || !data.value) return fn();
-        // data = data.value.toString();
-        // console.debug('GOT %s', data);
-        // try {
-        //     result = JSON.parse(data);
-        // } catch (err) {
-        //     return fn(err);
-        // }
-        // return fn(null, result);
-
-
-
-
         // if (!result || !result.value) return fn();
         // try {
         //     var data = result.value.toString();
@@ -266,29 +236,34 @@ module.exports = function(session, bundle){
                 ;
 
             if (ttl > 0) {
-                sess.lastModified = new Date().format('isoDateTime');
+                sess.lastModified = new Date();
             }
 
             sess = JSON.stringify(sess);
 
-            console.debug('SETEX "%s" ttl:%s %s', sid, ttl, sess);
+            console.debug('[SessionStore v3] SETEX "%s" ttl:%s %s', sid, ttl, sess);
+            // this.client.upsert(sid, sess, {expiry:ttl}, function(err){
+            //     err || debug('Session Set complete');
+            //     fn && fn.apply(this, arguments);
+            // });
             var err = false, result = null;
-            this.client.upsert(sid, sess, {expiry:ttl})
-                .then(function onResult(_result){
-                    result = _result;
-                    //fn && fn.apply(this, arguments);
-                })
-                .catch(function onError(_err) {
-                    err = _err
-                    // if(err)
-                    //     debug('Session Set complete', err.stack || err.message || err);
+            this.client
+                .upsert(sid, sess, {expiry:ttl})
+                    .then(function onResult(_result){
+                        result = _result;
+                        //fn && fn.apply(this, arguments);
+                    })
+                    .catch(function onError(_err) {
+                        err = _err
+                        // if(err)
+                        //     debug('Session Set complete', err.stack || err.message || err);
 
-                    //fn && fn.apply(this, arguments);
-                })
+                       //fn && fn.apply(this, arguments);
+                    })
             if (err) {
                  fn && fn(err);
             }
-             fn && fn(err, result);
+            fn && fn(err, result);
 
         } catch (err) {
             fn && fn(err);
@@ -325,8 +300,8 @@ module.exports = function(session, bundle){
     CouchbaseStore.prototype.touch = function (sid, sess, fn) {
         if ('function' !== typeof fn) { fn = noop; }
 
-        sid = this.prefix + sid;
-        var maxAge = sess.cookie.maxAge
+        var sid = this.prefix + sid
+            , maxAge = sess.cookie.maxAge
             , ttl = this.ttl || ('number' == typeof maxAge
                 ? maxAge / 1000 | 0
                 : oneDay)
@@ -341,12 +316,17 @@ module.exports = function(session, bundle){
             var timeElapsed = currentDate.getTime() - lastModified;
 
             if (timeElapsed > ttl) {
-                sess.lastModified = currentDate.format('isoDateTime');
+                sess.lastModified = currentDate;
             }
         }
 
         sess = JSON.stringify(sess);
-        this.client.upsert(sid, sess, {expiry:ttl})
+        // this.client.upsert(sid, sess, {expiry:ttl}, function(err){
+        //     err || debug('Session Touch complete');
+        //     fn && fn.apply(this, arguments);
+        // });
+        this.client
+            .upsert(sid, sess, {expiry:ttl})
             .then(function onResult() {
                 fn && fn.apply(this, arguments);
             })
