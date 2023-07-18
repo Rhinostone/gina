@@ -165,45 +165,45 @@ module.exports = function(session, bundle){
 
 
         var err = false, result = null, data = null;
-        // this.client.get(sid, function(err, data){
-        //     //Handle Key Not Found error
-        //     if (err && err.code == 13) {
-        //         return fn();
-        //     }
-        //     if (err) return fn(err);
-        //     if (!data || !data.value) return fn();
-        //     var result;
-        //     data = data.value.toString();
-        //     debug('GOT %s', data);
-        //     try {
-        //         result = JSON.parse(data);
-        //     } catch (err) {
-        //         return fn(err);
-        //     }
-        //     return fn(null, result);
-        // });
+        this.client.get(sid, function(err, data){
+            //Handle Key Not Found error
+            if (err && err.code == 13) {
+                return fn();
+            }
+            if (err) return fn(err);
+            if (!data || !data.value) return fn();
+            var result;
+            data = data.value.toString();
+            debug('GOT %s', data);
+            try {
+                result = JSON.parse(data);
+            } catch (err) {
+                return fn(err);
+            }
+            return fn(null, result);
+        });
 
 
-        try {
-            data = await this.client.get(sid)
-        } catch (_err) {
-            err = _err;
-            if (!err.code)
-                err.code = 'ENOENT';
-        }
-        if (err && err.code == 13) {
-            return fn();
-        }
-        if (err) return fn(err);
-        if (!data || !data.value) return fn();
-        data = data.value.toString();
-        console.debug('[SessionStore v4] GOT %s', data);
-        try {
-            result = JSON.parse(data);
-        } catch (err) {
-            return fn(err);
-        }
-        return fn(null, result);
+        // try {
+        //     data = await this.client.get(sid)
+        // } catch (_err) {
+        //     err = _err;
+        //     if (!err.code)
+        //         err.code = 'ENOENT';
+        // }
+        // if (err && err.code == 13) {
+        //     return fn();
+        // }
+        // if (err) return fn(err);
+        // if (!data || !data.value) return fn();
+        // data = data.value.toString();
+        // console.debug('[SessionStore v4] GOT %s', data);
+        // try {
+        //     result = JSON.parse(data);
+        // } catch (err) {
+        //     return fn(err);
+        // }
+        // return fn(null, result);
 
 
         // this.client
@@ -273,25 +273,28 @@ module.exports = function(session, bundle){
 
             console.debug('[SessionStore v4] SETEX "%s" ttl:%s %s', sid, ttl, sess);
             debug('[SessionStore v4] SETEX "%s" ttl:%s %s', sid, ttl, sess);
-            // this.client.upsert(sid, sess, {expiry:ttl}, function(err){
-            //     err || debug('Session Set complete');
-            //     fn && fn.apply(this, arguments);
-            // });
-            var err = false, result = null;
-            this.client.upsert(sid, sess, {expiry:ttl})
-                .then(function onResult(_result){
-                    result = _result;
-                    //fn && fn.apply(this, arguments);
-                    fn && fn(err, result);
-                })
-                .catch(function onError(_err) {
-                    err = _err
-                    // if(err)
-                    //     debug('Session Set complete', err.stack || err.message || err);
+            this.client.upsert(sid, sess, {expiry:ttl}, function(err){
+                err || debug('Session Set complete');
+                if (err) {
+                    console.error('[SessionStore v4] ', err.stack || err.message || err);
+                }
+                fn && fn.apply(this, arguments);
+            });
+            // var err = false, result = null;
+            // this.client.upsert(sid, sess, {expiry:ttl})
+            //     .then(function onResult(_result){
+            //         result = _result;
+            //         //fn && fn.apply(this, arguments);
+            //         fn && fn(err, result);
+            //     })
+            //     .catch(function onError(_err) {
+            //         err = _err
+            //         // if(err)
+            //         //     debug('Session Set complete', err.stack || err.message || err);
 
-                    //fn && fn.apply(this, arguments);
-                    fn && fn(err);
-                });
+            //         //fn && fn.apply(this, arguments);
+            //         fn && fn(err);
+            //     });
             // if (err) {
             //      fn && fn(err);
             // }
