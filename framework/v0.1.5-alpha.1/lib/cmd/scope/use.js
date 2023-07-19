@@ -9,7 +9,7 @@ function Use(opt, cmd) {
     console.debug('scope:use called');
 
     var init = function() {
-        self.target = _(GINA_HOMEDIR + '/projects.json');
+        self.target     = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
 
         // Import CMD helpers
@@ -30,6 +30,14 @@ function Use(opt, cmd) {
         console.debug('proj.: ', scope, self.projectName, projects[self.projectName].scopes);
         if ( !self.projects[self.projectName].scopes.inArray(scope) ) {
             end( new Error('Scope [ '+scope+' ] not found for project `'+ self.projectName +'`'), 'error', true )
+        }
+
+        if (scope !== projects[self.projectName]['def_scope']) {
+            projects[self.projectName]['def_scope'] = scope;
+            lib.generator.createFileFromDataSync(
+                projects,
+                target
+            )
         }
 
         updateManifest(scope, projects);
