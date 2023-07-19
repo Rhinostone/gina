@@ -201,9 +201,9 @@ setContext('gina.plugins', plugins);
 
 
 //Setting env.
-var env                     = process.env.NODE_ENV || projects[projectName]['def_env']
+var env                     = projects[projectName]['def_env'] || process.env.NODE_ENV
     , isDev                 = (env === projects[projectName]['dev_env']) ? true: false
-    , scope                 = process.env.NODE_SCOPE || projects[projectName]['def_scope']
+    , scope                 = projects[projectName]['def_scope'] || process.env.NODE_SCOPE
     , isLocalScope          = (scope === projects[projectName]['local_scope']) ? true : false
     , isProductionScope     = (scope === projects[projectName]['production_scope']) ? true : false
 ;
