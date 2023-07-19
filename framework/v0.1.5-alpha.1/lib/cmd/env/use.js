@@ -6,7 +6,7 @@ function Use(opt, cmd) {
     var self = {};
 
     var init = function() {
-        self.target = _(GINA_HOMEDIR + '/projects.json');
+        self.target     = _(GINA_HOMEDIR + '/projects.json');
         self.projects   = require(self.target);
 
 
