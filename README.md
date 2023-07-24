@@ -1,6 +1,6 @@
-# Gina
+# Gina <img src="https://gina.io/favicon-16x16.png"  alt="Gina icon" style="position: absolute; top:10px; margin-right: 10px;" />
 
-[![GitHub version](https://badge.fury.io/gh/Rhinostone%2Fgina.svg)](https://badge.fury.io/gh/Rhinostone%2Fgina) [![npm version](https://badge.fury.io/js/gina.svg)](https://badge.fury.io/js/gina) [![node version](https://badge.fury.io/node/v/gina.svg)](https://badge.fury.io/node/v/gina)
+[![GitHub version](https://badge.fury.io/gh/Rhinostone%2Fgina.svg)](https://badge.fury.io/gh/Rhinostone%2Fgina) [![npm version](https://badge.fury.io/js/gina.svg)](https://badge.fury.io/js/gina) 
 
 <strong>Gina I/O</strong> - Node.js MVC and Event Driven framework
 
@@ -136,7 +136,7 @@ A project is a collection of bundles (applicaitons or services). See it as a rep
 Let's create our first project and install Gina.
 
 ```tty
-cd ~/.Sites
+cd ~/Sites
 ```
 
 
@@ -177,6 +177,10 @@ __NB.:__ If you are launching the command from the project directory, you don't 
 We have just created a frontend application that will host our homepage.
 You will find all bundle sources under `myproject/src`.
 
+__Important:__ Since you are not running a local DNS Server, you have to change the host informations. Go to `myproject/env.json` & replace `dev` hostname from `frontend-{env}-{scope}-v{projectVersionMajor}.{rootDomain}` to `localhost`.
+This is a tempory hack and gina will soon be provided with its own local DNS Server
+
+
 You can start the bundle with the following command:
 
 ```tty
@@ -191,7 +195,7 @@ gina bundle:start frontend @myproject
 > ```
 
 
-Now, visit http://127.0.0.1:3100/  to check your homepage.
+Now, visit http://localhost:3100/  to check your homepage.
 Isn't it sexy !?
 
 If you need to stop your bundle
@@ -263,11 +267,18 @@ __NB.:__ Omitting `--env=<env>` will fallback to your project default environmen
 #### Setting your project or your application default environment
 
 For the entire project & for all bundles inside by default
+
 ```tty
 gina env:use prod @myproject
 ```
+
 __NB.:__ If you need to change it for a particular bundle, you still can do it at runtime using `--env=<your env>` to override the default settings. This will not set `<your env>`as the default environment for the whole project.
 
+__Attention:__ None-development `env` must be built before starting or restarting the bundle
+
+```tty
+gina project:build prod @myproject
+```
 
 
 #### Other operations you can apply to your environment:
@@ -288,7 +299,7 @@ gina env:link-dev <your new dev env>
 __Benefits from using a `development` environment__
 You will not have to restart your bundle anytime you modify files inside directories like :
 - /controllers
-- /piblic
+- /public
 - /templates
 
 ### Region
