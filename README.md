@@ -381,7 +381,7 @@ You might need to restart the gina :
 gina restart
 ```
 
-__NB.: __  For development purposes, using the CLI `gina tail` is still a better option because you will have a better overview of what is really going on for all your application at once & for the framework.
+__NB.:__ For development purposes, using the CLI `gina tail` is still a better option because you will have a better overview of what is really going on for all your application at once & for the framework.
 
 #### Setting default log level
 
