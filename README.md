@@ -127,6 +127,7 @@ By starting the framework, you will also start the server.
 ``` tty
 gina start
 ```
+
 __NB.:__ This is an alias for `gina framework:start`
 
 
@@ -154,6 +155,7 @@ gina project:add @myproject
 ```
 
 If you need to remove this project later
+
 ```  tty
 gina project:rm @myproject
 ```
@@ -172,6 +174,7 @@ Ok ! Let's do it !
 ``` tty
 gina bundle:add frontend @myproject
 ```
+
 __NB.:__ If you are launching the command from the project directory, you don't need to add `@myproject`. The same goes for all bundles commands.
 
 We have just created a frontend application that will host our homepage.
@@ -204,6 +207,7 @@ gina bundle:stop frontend @myproject
 ```
 
 If you need to restart you bundle
+
 ```tty
 gina bundle:restart frontend @myproject
 ```
@@ -217,7 +221,9 @@ Let's add a view on our frontend
 ```tty
 gina view:add frontend @myproject
 ```
+
 Then restart your bundle
+
 ```tty
 gina bundle:restart frontend @myproject
 ```
@@ -247,12 +253,14 @@ You can check which are the environments set for your projects
 ```tty
 gina env:list
 ```
+
 __or for a particular project__
+
 ```tty
 gina env:list @myproject
 ```
 
-__NB.:__ when adding an environement, you will do so for the entire project.
+__NB.:__ When adding an environement, you will do so for the entire project.
 
 #### Setting your application starting environment on runtime
 > This method does not memorize the selected environment as the default one for your application
@@ -282,21 +290,27 @@ gina project:build prod @myproject
 
 
 #### Other operations you can apply to your environment:
+
 __Adding a new environment for your project__
+
 ```tty
 gina env:add staging @myproject
 ```
+
 __Removing an existing environment for your project__
+
 ```tty
 gina env:rm staging @myproject
 ```
 
 __Defining an existing environment as `development` (you can only have one like this)__
+
 ```tty
 gina env:link-dev <your new dev env>
 ```
 
 __Benefits from using a `development` environment__
+
 You will not have to restart your bundle anytime you modify files inside directories like :
 - /controllers
 - /public
@@ -392,7 +406,7 @@ gina framework:set --log-level=debug
 ### Installing a certificate
 
 > __Attention__
-> ==One certificate per bundle/service==
+> <mark>One certificate per bundle/service</mark>
 
 You now want to install a certificate for your project in order to run your project with HTTPS scheme or with HTTP/2 protocol ?
 At this moment, Gina does not generate a cetificate for you, but you can use a service like [sslforfree](https://www.sslforfree.com) to genreate a free 90 days certificate, then install it into your Gina home directory depending on the scope of your host (targeted machine: local or production).
