@@ -32,7 +32,7 @@ Gina aims to be at the same time a framework, a deployment and monitoring enviro
 
 | versions | description |
 |--------|--------|
-| alpha       | Preview release: ==not recomanded for production==      |
+| alpha       | Preview release: <mark>not recomanded for production</mark>      |
 | latest       | Latest stable relase        |
 
 #### 1st method (prefered) - Custom PREFIX
@@ -257,7 +257,7 @@ __NB.:__ when adding an environement, you will do so for the entire project.
 #### Setting your application starting environment on runtime
 > This method does not memorize the selected environment as the default one for your application
 
-You can have multiple environments for your project and decide to pick one as the starting env by using `--env=your_env` every time you have to run a bundle.
+You can have multiple environments for your project and decide to pick one as the starting env by using `--env=<your_env>` every time you have to run a bundle.
 
 ```tty
 gina bundle:start frontend @myproject --env=prod
@@ -342,7 +342,7 @@ So to handle log storage for your application, you have 2 options: see 2nd & 3rd
 
 __2nd Method - Old school way__
 
-> __Attention: __ You will have to handle yourself [log rotation](https://linux.die.net/man/8/logrotate)
+> With this method, you will have to handle yourself [log rotation](https://linux.die.net/man/8/logrotate)
 
 ```tty
 gina bundle:start frontend @myproject --log > /usr/local/var/log/gina/frontend.myproject.app.log 2>&1
@@ -367,7 +367,7 @@ You might need to restart the gina :
 gina restart
 ```
 
-__NB.: __For development purposes, using the CLI `gina tail` is still a better option because you will have a better overview of what is really going on for all your application at once & for the framework.
+__NB.: __  For development purposes, using the CLI `gina tail` is still a better option because you will have a better overview of what is really going on for all your application at once & for the framework.
 
 #### Setting default log level
 
