@@ -377,7 +377,8 @@ function Config(opt, contextResetNeeded) {
                         , a         = file.replace('.js', '').split('/')
                         , i         = a.length-1
                         , bundles   = getContext('gina').config.bundles
-                        , index     = 0;
+                        , index     = 0
+                    ;
 
                     for (; i >= 0; --i) {
                         index = bundles.indexOf(a[i]);
@@ -554,6 +555,7 @@ function Config(opt, contextResetNeeded) {
             masterPort      = null,
             appPort         = null,
             env             = self.Env.get(),
+            envIsDev        = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false
             scope           = self.Scope.get(),
             appsPath        = '',
             modelsPath      = '',
@@ -574,7 +576,7 @@ function Config(opt, contextResetNeeded) {
             , pkg       = null
         ;
         try {
-            manifest = require(_(root + '/manifest.json', true));
+            manifest = requireJSON(_(root + '/manifest.json', true));
             pkg = manifest.bundles;
             // by default but may be overriden
             masterPort = portsReverse[self.startingApp+'@'+self.projectName][env][projectConf.def_protocol][projectConf.def_scheme]
@@ -622,7 +624,28 @@ function Config(opt, contextResetNeeded) {
             //Checking if genuine app.
             console.debug('Checking if application [ '+ app +' ] is registered ');
 
-            appPath = _(bundlesPath + '/' + app);
+            appPath = _(root +'/'+ pkg[app].link, true);
+            // cleanup symlinks
+            let targetAppPathObj = new _(appPath, true);
+            if ( targetAppPathObj.existsSync() ) {
+                targetAppPathObj.rmSync()
+            }
+            try {
+                if (envIsDev) {
+                    targetAppPathObj = new _(root +'/'+ pkg[app].src, true);
+                    targetAppPathObj.symlinkSync(appPath);
+                } else {
+                    targetAppPathObj = new _(root +'/'+ pkg[app].releases[scope][env].target, true);
+                    targetAppPathObj.symlinkSync(appPath);
+                }
+            } catch (releaseError) {
+                console.error('[ releaseError ] ', releaseError);
+                let _releaseError = new Error('[ releaseError ] path: '+ targetAppPathObj.toString() );
+                return callback(_releaseError);
+            }
+            targetAppPathObj = null;
+
+
 
 
 
@@ -1178,12 +1201,22 @@ function Config(opt, contextResetNeeded) {
         conf[bundle][env].isStandalone  = isStandalone;
         conf[bundle][env].executionPath = getContext('paths').root;
 
-        if ( self.task == 'run' && !self.isCacheless() ) {
-            appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
-        } else { //getting src path instead
-            appPath = _(conf[bundle][env].sources + '/' + bundle);
-            conf[bundle][env].bundlesPath = conf[bundle][env].sources;
-        }
+        // By default
+        appPath = _(conf[bundle][env].bundlesPath + '/' + bundle);
+
+        // var appPathObj = new _(conf[bundle][env].releases +'/'+ bundle +'/'+ scope +'/'+ env +'/'+ conf[bundle][env].projectVersion, true);
+        // if (!appPathObj.existsSync() || self.isCacheless() ) {
+        //     //getting src path instead
+        //     appPath = _(conf[bundle][env].sources + '/' + bundle);
+        //     conf[bundle][env].bundlesPath = conf[bundle][env].sources;
+        // }
+
+        // if ( self.task == 'run' && !self.isCacheless() ) {
+        //     appPath = _(conf[bundle][env].bundlesPath + '/' + bundle)
+        // } else {
+        //     appPath = _(conf[bundle][env].sources + '/' + bundle);
+        //     conf[bundle][env].bundlesPath = conf[bundle][env].sources;
+        // }
 
 
         // bundle web root
@@ -1617,8 +1650,11 @@ function Config(opt, contextResetNeeded) {
 
             // default hostname
             if (
-                typeof(routing[rule].hostname) == 'undefined' && !/^redirect$/.test(routing[rule].param.control)
-                || !routing[rule].hostname && !/^redirect$/.test(routing[rule].param.control)
+                typeof(routing[rule].hostname) == 'undefined'
+                    && !/^redirect$/.test(routing[rule].param.control)
+                ||
+                !routing[rule].hostname
+                    && !/^redirect$/.test(routing[rule].param.control)
             ) {
                 routing[rule].host      = conf[routing[rule].bundle][env].host
                 routing[rule].hostname  = conf[routing[rule].bundle][env].server.scheme +'://'+ routing[rule].host +':'+ conf[routing[rule].bundle][env].port[conf[routing[rule].bundle][env].server.protocol][conf[routing[rule].bundle][env].server.scheme];
@@ -1678,16 +1714,29 @@ function Config(opt, contextResetNeeded) {
             // route file
             if (!routing[rule].param) continue;
             //routing[rule].param.file = ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' ) ? routing[rule].param.file: file; // get template file
-            if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) != 'undefined' && /delete/i.test(routing[rule].method )) {
+            if (
+                typeof(routing[rule].param) != 'undefined'
+                && typeof(routing[rule].param.file) != 'undefined'
+                && /delete/i.test(routing[rule].method )
+            ) {
                 console.warn('`DELETE` method result should not be rendered into a file');
-            } else if ( typeof(routing[rule].param) != 'undefined' && typeof(routing[rule].param.file) == 'undefined' /**&& !/delete/i.test(routing[rule].method)*/) {
+            } else if (
+                typeof(routing[rule].param) != 'undefined'
+                && typeof(routing[rule].param.file) == 'undefined'
+                /**&& !/delete/i.test(routing[rule].method)*/
+            ) {
                 routing[rule].param.file = file
             }
 
             // by default, method is inherited from the request.method
             if (
-                localHasWebRoot && typeof(routing[rule].param.path) != 'undefined' && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
-                || localHasWebRoot && typeof(routing[rule].param.path) != 'undefined' && !routing[rule].param.ignoreWebRoot
+                localHasWebRoot
+                    && typeof(routing[rule].param.path) != 'undefined'
+                    && typeof(routing[rule].param.ignoreWebRoot) == 'undefined'
+                ||
+                localHasWebRoot
+                    && typeof(routing[rule].param.path) != 'undefined'
+                    && !routing[rule].param.ignoreWebRoot
             ) {
                 routing[rule].param.path = localWroot + ( /^\//.test(routing[rule].param.path) ) ? routing[rule].param.path.substr(1) : routing[rule].param.path
             }

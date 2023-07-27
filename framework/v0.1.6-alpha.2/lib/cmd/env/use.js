@@ -78,7 +78,7 @@ function Use(opt, cmd) {
         }
 
 
-        end('Project [ '+ self.name+' ] env `'+ projects[self.name]['def_env'] +'` set to '+ env);
+        end('Env [ '+ env +' ] selected with success');
     };
 
     var end = function (output, type, messageOnly) {
