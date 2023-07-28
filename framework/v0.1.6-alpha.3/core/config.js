@@ -1324,7 +1324,11 @@ function Config(opt, contextResetNeeded) {
             for (let e = 0, eLen = allEnvs.length; e < eLen; e++) {
                 // *.dev.json or *.global.json
                 let re = new RegExp('\.('+ allEnvs[e] +'|global)\.json$');
-                if ( re.test(fName) && allEnvs[e] != env ) {
+                if (
+                    re.test(fName)
+                    // 2023-07-28 - Fixed this by commenting the rest of the test to avoid routing.global.json to be included in list
+                    //&& allEnvs[e] != env
+                ) {
                     // we should skip it
                     skipIt = true;
                     break;
