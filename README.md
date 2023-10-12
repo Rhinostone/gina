@@ -136,22 +136,13 @@ A project is a collection of bundles (applicaitons or services). See it as a rep
 
 Let's create our first project and install Gina.
 
-```tty
-cd ~/Sites
-```
 
-
-``` tty
-mkdir myproject && cd myproject
-```
-
-
-Then you need to __initialize your project__
+We will __initialize our project__ under `~/Sites`
 
 > On Windows from the Windows CLI, you might need admin privileges.
 
 ```  tty
-gina project:add @myproject
+gina project:add @myproject --path=~/Sites/myproject
 ```
 
 If you need to remove this project later

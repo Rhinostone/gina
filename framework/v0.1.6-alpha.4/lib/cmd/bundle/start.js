@@ -255,7 +255,7 @@ function Start(opt, cmd) {
             , len       = null
         ;
 
-        isRealApp(bundle, function(err, appPath){
+        isRealApp(bundle, function(err, appPath, bundleDir){
 
             if (err) {
                 terminal.error(err.stack||err.message)
@@ -288,6 +288,8 @@ function Start(opt, cmd) {
                     setContext('debugPort', opt.debugPort);
                     setContext('debugBrkEnabled', opt.debugBrkEnabled);
 
+                    // setPath('node_modules', _(self.projectLocation + '/node_modules', true));
+
                     params = [
                         // node arguments will be passed by gina
                         appPath,
@@ -312,9 +314,9 @@ function Start(opt, cmd) {
                         }
                     }
 
-
                     var child = spawn(opt.argv[0], params,
                         {
+                            // cwd: bundleDir,
                             detached: true
                         }
                     );
@@ -611,7 +613,7 @@ function Start(opt, cmd) {
                 } else {
 
                     if (stats.isDirectory()) {
-                        callback(false, d)
+                        callback(false, d, p)
                     } else {
                         callback(new Error('[ ' + d + ' ] is not a directory'))
                     }

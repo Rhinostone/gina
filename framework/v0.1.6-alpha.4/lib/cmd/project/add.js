@@ -95,8 +95,8 @@ function Add(opt, cmd) {
 
         console.debug('Starting import mode @'+ self.projectName );
         if (!self.projects[self.projectName ]) {
-            console.error('[ '+ self.projectName  +' ] is not an existing project. Instead, use gina projet:add @'+ self.projectName +' --path=/your/project_location');
-            process.exit(1)
+            console.error('[ '+ self.projectName  +' ] is not an existing project. Instead, use gina projet:add @'+ self.projectName +' --path='+ self.projectLocation);
+            process.exit(1);
         }
 
         if ( typeof(self.projects[self.projectName ]) != 'undefined' ) {
@@ -250,6 +250,10 @@ function Add(opt, cmd) {
         projects[self.projectName] = {
             "path"              : self.projectLocation,
             "homedir"           : self.projectHomedir || _(getUserHome() +'/.'+ self.projectName, true),
+            "bundles_path"      : self.projectBundlesPath || _(getUserHome() +'/.'+ self.projectName +'/bunldes', true),
+            "releases_path"     : self.projectReleasesPath || _(getUserHome() +'/.'+ self.projectName +'/releases', true),
+            "logs_path"         : self.projectLogsPath || _(getUserHome() +'/.'+ self.projectName +'/var/logs', true),
+            "tmp_path"          : self.projectTmpPath || _(getUserHome() +'/.'+ self.projectName +'/tmp', true),
             "def_prefix"        : GINA_PREFIX,
             "framework"         : "v" + GINA_VERSION,
             "envs"              : (self.envs && self.envs.length) ? self.envs : self.mainConfig['envs'][ GINA_SHORT_VERSION ],
@@ -660,12 +664,12 @@ function Add(opt, cmd) {
             var scopes  = self.projects[self.projectName].scopes;
             var envs    = self.projects[self.projectName].envs;
             data.bundles[local.bundle] = {
-                "_comment" : "Your comment goes here.",
+                "_comment"  : "Your comment goes here.",
                 "version"   : version,
-                "tag" : ( version.split('.') ).join(''),
-                "src" : "src/" + local.bundle,
+                "tag"       : ( version.split('.') ).join(''),
+                "src"       : "src/" + local.bundle,
                 "link"      : "bundles/"+ local.bundle,
-                "releases" : {}
+                "releases"  : {}
             };
             //"release/"+ local.bundle +"/local/prod/" + version
             for (let s = 0, sLen = scopes.length; s < sLen; ++s) {

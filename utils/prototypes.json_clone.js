@@ -48,12 +48,19 @@ function JSONClone(source, target) {
             continue;
         }
         if (source[key] === undefined) {
+            let warnStr = '';
             warn = new Error('JSON.clone(...) possible error detected: source['+key+'] is undefined !! Key `'+ key +'` should not be left `undefined`. Assigning to `null`');
             warn.stack = warn.stack.replace(/^Error\:\s+/g, '');
             if ( typeof(warn.message) != 'undefined' ) {
                 warn.message = warn.message.replace(/^Error\:\s+/g, '');
+                warnStr += warn.message +'\n';
             }
-            console.warn(warn);
+
+            warnStr += warn.stack;
+            console.warn(warnStr);
+
+            warn        = null;
+            warnStr     = null;
             target[key] = null
         } else {
             // try {

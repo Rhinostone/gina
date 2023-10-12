@@ -105,6 +105,7 @@ var console     = lib.logger;
 
         var manifest        = local.manifest
             , releasePath   = self.projectLocation +'/'+ manifest.bundles[bundle].releases[scope][env].target
+            // , releasePath   = self.projectReleasesPath +'/'+ manifest.bundles[bundle].releases[scope][env].target
             , release       = new _(releasePath, true)
             , srcPath       = _(self.bundlesLocation +'/'+ bundle, true)
         ;
@@ -119,6 +120,14 @@ var console     = lib.logger;
             if (err) {
                 return end(err)
             }
+
+            // creating internal node_modules symlink
+            var internalNodeModulesPathObj = new _( self.projectLocation +'/node_modules', true);
+            if (internalNodeModulesPathObj.existsSync() ) {
+                console.debug('Linking node_modules to from `'+ internalNodeModulesPathObj.toString() +'` to `'+ destination +'/node_modules' +'`');
+                internalNodeModulesPathObj.symlinkSync(_(destination +'/node_modules', true));
+            }
+            internalNodeModulesPathObj = null;
 
             buildEnv(scope, b, e+1);
         })

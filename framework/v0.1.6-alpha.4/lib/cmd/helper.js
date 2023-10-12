@@ -1,5 +1,6 @@
 const { execSync } = require('child_process');
 var fs          = require('fs');
+const { promisify } = require('util');
 var console     = lib.logger;
 var merge       = lib.merge;
 var inherits    = lib.inherits;
@@ -51,12 +52,16 @@ function CmdHelper(cmd, client, debug) {
         projectManifestPath : null, // local project/manifest.json - defined by filterArgs()
         projectConfigPath: null, // path to .gina/projects.json
         projectHomedir: null, // path to ~/.<my-project> ( project $home), defined by loadAssets()
+        projectBundlesPath: null, // real project bundles path
+        projectReleasesPath: null, // real project releases path
+        projectLogsPath: null, // real project logs path
+        projectTmpPath: null, // real project tmp path
         projectData: {}, // Project manifest object
         // current project bundles list {array}
         bundles : [], // defined by filterArgs()
         // don't use this collection to store into files
         bundlesByProject: {}, // bundles collection will be loaded into cmd.projects[$project].bundles
-        bundlesLocation : null,
+        bundlesLocation : null, // symlink to cmd.projects[$project].bundles_path
 
         // current project env.json path
         envPath : null, // path to env.json - defined by filterArgs()
@@ -85,7 +90,6 @@ function CmdHelper(cmd, client, debug) {
 
 
     // merging with default
-    // cmd = merge(cmd, self);
     var _cmd = JSON.clone(cmd);
     _cmd = merge(_cmd, self);
     for (let prop in _cmd) {
@@ -173,7 +177,7 @@ function CmdHelper(cmd, client, debug) {
      *
      * @returns {boolean} isConfigured
      * */
-    isCmdConfigured = function() {
+    isCmdConfigured = async function() {
 
         cmd.configured = ( typeof(cmd.configured) != 'undefined' ) ? cmd.configured : false;
 
@@ -290,7 +294,14 @@ function CmdHelper(cmd, client, debug) {
 
                             if ( folder.toArray().last() == cmd.projectName ) {
                                 cmd.projectLocation = _( folder.toString(), true );
-                            } else {
+                            }
+                            else if (
+                                typeof(cmd.projects[cmd.projectName]) !=  'undefined'
+                                && typeof(cmd.projects[cmd.projectName].path) !=  'undefined'
+                            ) {
+                                cmd.projectLocation = _(cmd.projects[cmd.projectName].path, true);
+                            }
+                            else {
                                 cmd.projectLocation = _( folder.toString(), true );
                             }
 
@@ -304,22 +315,28 @@ function CmdHelper(cmd, client, debug) {
 
                     if ( cmd.projectName && !cmd.projects.count() ) {
                         cmd.projects[cmd.projectName] = {
-                            "path": cmd.projectLocation,
-                            "homedir": cmd.projectHomedir,
-                            "def_prefix": GINA_PREFIX,
-                            "framework": "v" + GINA_VERSION,
-                            "envs": cmd.envs,
-                            "def_env": cmd.defaultEnv,
-                            "dev_env": cmd.devEnv,
-                            "def_scope": cmd.defaultScope,
-                            "local_scope": cmd.localScope,
-                            "production_scope": cmd.productionScope,
-                            "protocols": cmd.protocolsAvailable,
-                            "def_protocol": cmd.defaultProtocol,
-                            "schemes": cmd.schemesAvailable,
-                            "def_scheme": cmd.defaultScheme
+                            "path"              : cmd.projectLocation,
+                            "homedir"           : cmd.projectHomedir,
+                            "bundles_path"      : cmd.projectBundlesPath,
+                            "releases_path"     : cmd.projectReleasesPath,
+                            "logs_path"         : cmd.projectLogsPath,
+                            "tmp_path"          : cmd.projectTmpPath,
+                            "def_prefix"        : GINA_PREFIX,
+                            "framework"         : "v" + GINA_VERSION,
+                            "envs"              : cmd.envs,
+                            "def_env"           : cmd.defaultEnv,
+                            "dev_env"           : cmd.devEnv,
+                            "def_scope"         : cmd.defaultScope,
+                            "local_scope"       : cmd.localScope,
+                            "production_scope"  : cmd.productionScope,
+                            "protocols"         : cmd.protocolsAvailable,
+                            "def_protocol"      : cmd.defaultProtocol,
+                            "schemes"           : cmd.schemesAvailable,
+                            "def_scheme"        : cmd.defaultScheme
                         }
                     }
+
+
 
                     cmd.projectArgvList.push( argv[i].replace('@', '') )
 
@@ -521,6 +538,71 @@ function CmdHelper(cmd, client, debug) {
             ) {
                 cmd.projects[cmd.projectName].homedir = projectHomedirObject.toString()
             }
+
+            // bundles
+            var projectBundlesPathObj = new _(cmd.projects[cmd.projectName].homedir +'/bundles', true);
+            if (!projectBundlesPathObj.existsSync() ) {
+                projectBundlesPathObj.mkdirSync();
+            }
+            cmd.projectBundlesPath = projectBundlesPathObj.toString();
+            // bundles symlink
+            var bundlesLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/bundles', true);
+            if ( bundlesLinkPathObj.existsSync() && !bundlesLinkPathObj.isSymlinkSync() ) {
+                bundlesLinkPathObj.rmSync();
+            }
+            if (!bundlesLinkPathObj.existsSync()) {
+                projectBundlesPathObj.symlinkSync(bundlesLinkPathObj.toString());
+            }
+            projectBundlesPathObj = null;
+
+            // releases
+            var projectReleasesPathObj = new _(cmd.projects[cmd.projectName].homedir +'/releases', true);
+            if (!projectReleasesPathObj.existsSync() ) {
+                projectReleasesPathObj.mkdirSync();
+            }
+            cmd.projectReleasesPath = projectReleasesPathObj.toString();
+            // releases symlink
+            var releaseLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/releases', true);
+            if ( releaseLinkPathObj.existsSync() && !releaseLinkPathObj.isSymlinkSync() ) {
+                releaseLinkPathObj.rmSync();
+            }
+            if (!releaseLinkPathObj.existsSync()) {
+                projectReleasesPathObj.symlinkSync(releaseLinkPathObj.toString());
+            }
+
+            projectReleasesPathObj = null;
+
+            // logs
+            var projectLogsPathObj = new _(cmd.projects[cmd.projectName].homedir +'/var/logs', true);
+            if (!projectLogsPathObj.existsSync() ) {
+                projectLogsPathObj.mkdirSync();
+            }
+            cmd.projectLogsPath = projectLogsPathObj.toString();
+            // logs symlink
+            var logLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/logs', true);
+            if ( logLinkPathObj.existsSync() && !logLinkPathObj.isSymlinkSync() ) {
+                logLinkPathObj.rmSync();
+            }
+            if (!logLinkPathObj.existsSync()) {
+                projectLogsPathObj.symlinkSync(logLinkPathObj.toString());
+            }
+            projectLogsPathObj = null;
+
+            // tmp
+            var projectTmpPathObj = new _(cmd.projects[cmd.projectName].homedir +'/tmp', true);
+            if (!projectTmpPathObj.existsSync() ) {
+                projectTmpPathObj.mkdirSync();
+            }
+            cmd.projectTmpPath = projectTmpPathObj.toString();
+            // tmp symlink
+            var tmpLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/tmp', true);
+            if ( tmpLinkPathObj.existsSync() && !tmpLinkPathObj.isSymlinkSync() ) {
+                tmpLinkPathObj.rmSync();
+            }
+            if (!tmpLinkPathObj.existsSync()) {
+                projectTmpPathObj.symlinkSync(tmpLinkPathObj.toString());
+            }
+            projectTmpPathObj = null;
 
 
             cmd.projectLocation     = _(cmd.projects[cmd.projectName].path, true);
