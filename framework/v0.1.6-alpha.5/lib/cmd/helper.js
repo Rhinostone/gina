@@ -547,7 +547,12 @@ function CmdHelper(cmd, client, debug) {
             cmd.projectBundlesPath = projectBundlesPathObj.toString();
             // bundles symlink
             var bundlesLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/bundles', true);
-            if ( bundlesLinkPathObj.existsSync() && !bundlesLinkPathObj.isSymlinkSync() ) {
+            if (
+                bundlesLinkPathObj.existsSync()
+                && !bundlesLinkPathObj.isSymlinkSync()
+                ||
+                fs.readlinkSync(bundlesLinkPathObj.toString()) != cmd.projectBundlesPath
+            ) {
                 bundlesLinkPathObj.rmSync();
             }
             if (!bundlesLinkPathObj.existsSync()) {
@@ -563,7 +568,12 @@ function CmdHelper(cmd, client, debug) {
             cmd.projectReleasesPath = projectReleasesPathObj.toString();
             // releases symlink
             var releaseLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/releases', true);
-            if ( releaseLinkPathObj.existsSync() && !releaseLinkPathObj.isSymlinkSync() ) {
+            if (
+                releaseLinkPathObj.existsSync()
+                && !releaseLinkPathObj.isSymlinkSync()
+                ||
+                fs.readlinkSync(releaseLinkPathObj.toString()) != cmd.projectReleasesPath
+            ) {
                 releaseLinkPathObj.rmSync();
             }
             if (!releaseLinkPathObj.existsSync()) {
@@ -580,7 +590,12 @@ function CmdHelper(cmd, client, debug) {
             cmd.projectLogsPath = projectLogsPathObj.toString();
             // logs symlink
             var logLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/logs', true);
-            if ( logLinkPathObj.existsSync() && !logLinkPathObj.isSymlinkSync() ) {
+            if (
+                logLinkPathObj.existsSync()
+                && !logLinkPathObj.isSymlinkSync()
+                ||
+                fs.readlinkSync(logLinkPathObj.toString()) != cmd.projectLogsPath
+            ) {
                 logLinkPathObj.rmSync();
             }
             if (!logLinkPathObj.existsSync()) {
@@ -596,7 +611,12 @@ function CmdHelper(cmd, client, debug) {
             cmd.projectTmpPath = projectTmpPathObj.toString();
             // tmp symlink
             var tmpLinkPathObj = new _(cmd.projects[cmd.projectName].path +'/tmp', true);
-            if ( tmpLinkPathObj.existsSync() && !tmpLinkPathObj.isSymlinkSync() ) {
+            if (
+                tmpLinkPathObj.existsSync()
+                && !tmpLinkPathObj.isSymlinkSync()
+                ||
+                fs.readlinkSync(tmpLinkPathObj.toString()) != cmd.projectTmpPath
+            ) {
                 tmpLinkPathObj.rmSync();
             }
             if (!tmpLinkPathObj.existsSync()) {

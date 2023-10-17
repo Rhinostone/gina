@@ -463,7 +463,12 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
     // hack to test none-dev env without building: in case you did not build your bundle, but you have the src available
     if (!isSourceFound && !isDev) {
-        var srcPathObj = new _( root +'/'+ gna.project.bundles[gna.core.startingApp].src);
+        var srcPathObj = null;
+        try {
+            srcPathObj = new _( root +'/'+ gna.project.bundles[gna.core.startingApp].src);
+        } catch (buildError) {
+            return callback( new Error('Built not found for your selected scope !'));
+        }
         if ( srcPathObj.existsSync() ) {
             var d =(d = _(source).split(/\//g)).splice(0, d.length-1).join('/');
             var destinationObj = new _(d);
