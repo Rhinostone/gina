@@ -551,7 +551,8 @@ function CmdHelper(cmd, client, debug) {
                 bundlesLinkPathObj.existsSync()
                 && !bundlesLinkPathObj.isSymlinkSync()
                 ||
-                fs.readlinkSync(bundlesLinkPathObj.toString()) != cmd.projectBundlesPath
+                bundlesLinkPathObj.existsSync()
+                && fs.readlinkSync(bundlesLinkPathObj.toString()) != cmd.projectBundlesPath
             ) {
                 bundlesLinkPathObj.rmSync();
             }
