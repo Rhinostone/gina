@@ -573,7 +573,8 @@ function CmdHelper(cmd, client, debug) {
                 releaseLinkPathObj.existsSync()
                 && !releaseLinkPathObj.isSymlinkSync()
                 ||
-                fs.readlinkSync(releaseLinkPathObj.toString()) != cmd.projectReleasesPath
+                releaseLinkPathObj.existsSync()
+                && fs.readlinkSync(releaseLinkPathObj.toString()) != cmd.projectReleasesPath
             ) {
                 releaseLinkPathObj.rmSync();
             }
@@ -595,7 +596,8 @@ function CmdHelper(cmd, client, debug) {
                 logLinkPathObj.existsSync()
                 && !logLinkPathObj.isSymlinkSync()
                 ||
-                fs.readlinkSync(logLinkPathObj.toString()) != cmd.projectLogsPath
+                logLinkPathObj.existsSync()
+                && fs.readlinkSync(logLinkPathObj.toString()) != cmd.projectLogsPath
             ) {
                 logLinkPathObj.rmSync();
             }
@@ -616,7 +618,8 @@ function CmdHelper(cmd, client, debug) {
                 tmpLinkPathObj.existsSync()
                 && !tmpLinkPathObj.isSymlinkSync()
                 ||
-                fs.readlinkSync(tmpLinkPathObj.toString()) != cmd.projectTmpPath
+                tmpLinkPathObj.existsSync()
+                && fs.readlinkSync(tmpLinkPathObj.toString()) != cmd.projectTmpPath
             ) {
                 tmpLinkPathObj.rmSync();
             }
