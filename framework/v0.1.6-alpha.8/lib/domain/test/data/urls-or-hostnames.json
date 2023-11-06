@@ -94,5 +94,13 @@
             "isSLD": false,
             "isRegisteredTldOrSld": false
         }
+    },
+    {
+        "request": "public-prod-local.v3.freelancer.svc.cluster.local",
+        "expected": {
+            "value": "cluster.local",
+            "isSLD": false,
+            "isRegisteredTldOrSld": false
+        }
     }
 ]

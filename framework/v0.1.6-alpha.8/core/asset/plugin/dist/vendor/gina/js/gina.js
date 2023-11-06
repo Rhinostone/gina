@@ -18752,6 +18752,8 @@ define( 'helpers/binding',[],function() { return BindingHelper });
 // nodejs dependencies
 if ( typeof(module) !== 'undefined' && module.exports) {
     var fs              = require('fs');
+    var os              = require('os');
+    var dns             = require('dns');
     var execSync        = require('child_process').execSync;
     var util            = require('util');
     var promisify       = util.promisify;
@@ -19028,6 +19030,59 @@ function Domain(options, cb) {
         loadPSL(self.options, cb);
     }
 
+    /**
+     * Usage : await domainInstance.getFQDN()
+     * @param {string} hostname (one that can be resolved)
+     *
+     * @return {string} fqdn
+     */
+    var getFQDN = async function(hostname) {
+        var host = (
+            typeof(hostname) != 'undefined'
+            && hostname != ''
+        ) ? hostname : os.hostname();
+        if ( /\./.test(host) ) {
+            return host
+        }
+
+        console.debug('[DOMAIN][getFQDN] UQDN: ' + host);
+        var ipObj       = null
+            , err       = null
+        ;
+        ipObj = await promisify(dns.lookup)(host, { hints: dns.ADDRCONFIG || dns.V4MAPPED })
+                    .then( function onIP(result) {
+                        console.debug('[DOMAIN][getFQDN] IP: ' + result.address);
+                        console.debug('[DOMAIN][getFQDN] FAMILY: ' + result.family);
+
+                        return result;
+                    })
+                    .catch( function onIPErr(_err) {
+                        err = _err;
+                    });
+        if (err) {
+            throw err;
+        }
+        host = await promisify(dns.lookupService)(ipObj.address, 0)
+                    .then( function onLookupService(result) {
+                        console.debug('[DOMAIN][getFQDN] FQDN: ' + result.hostname);
+                        console.debug('[DOMAIN][getFQDN] Service: ' + result.service);
+
+                        return result.hostname;
+                    })
+                    .catch( function onLookupServiceErr(err) {
+                        err = _err;
+                    });
+        if (err) {
+            throw err;
+        }
+
+        if ( !/\./.test(host) ) {
+            throw new Error('[DOMAIN][getFQDN] `'+ host +'` is not a FQDN !');
+        }
+
+        return host;
+    }
+
 
     /**
      * Load a json file and removing comments if found
@@ -19138,7 +19193,8 @@ function Domain(options, cb) {
     };
     // Backend proto only
     if (!isGFFCtx) {
-        _proto.updatePSL = updatePSL;
+        _proto.updatePSL    = updatePSL;
+        _proto.getFQDN      = getFQDN;
     }
     // Frontend only
     else {

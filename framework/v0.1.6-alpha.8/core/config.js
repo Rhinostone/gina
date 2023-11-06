@@ -544,7 +544,7 @@ function Config(opt, contextResetNeeded) {
      * @param {String} template Path of the template to merge with
      * @returns {Oject} JSON of the merged config
      **/
-    var loadWithTemplate = function(userConf, template, callback) {
+    var loadWithTemplate = async function(userConf, template, callback) {
 
         var content     = userConf,
             //if nothing to merge.
@@ -911,6 +911,23 @@ function Config(opt, contextResetNeeded) {
                 // Defining root domain (TLD or SLD)
                 // by default
                 var rootDomain = domainLib.getRootDomain(os.hostname()).value;
+                if (
+                    typeof(newContent[app][env].host) == 'undefined'
+                    ||
+                    typeof(newContent[app][env].host) != 'undefined'
+                    && newContent[app][env].host == ''
+                    ||
+                    typeof(newContent[app][env].host) != 'undefined'
+                    && newContent[app][env].host == 'auto'
+                ) {
+                    // Get fqdn (equivalent of `hostname --fqdn` command line)
+                    try {
+                        newContent[app][env].host = await domainLib.getFQDN() || os.hostname();
+                    } catch (fqdnErr) {
+                        console.emerg('[ config ][ FQDN ] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
+                        process.exit(1)
+                    }
+                }
                 // if overrided by the project `manifest.json`: meaning all bundles belong to the same TLD or SLD
                 if ( typeof(manifest.rootDomain) != 'undefined' ) {
                     rootDomain = manifest.rootDomain;
