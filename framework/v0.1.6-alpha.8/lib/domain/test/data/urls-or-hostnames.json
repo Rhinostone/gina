@@ -94,5 +94,13 @@
             "isSLD": false,
             "isRegisteredTldOrSld": false
         }
+    },
+    {
+        "request": "api.default.svc.cluster.local",
+        "expected": {
+            "value": "cluster.local",
+            "isSLD": false,
+            "isRegisteredTldOrSld": false
+        }
     }
 ]

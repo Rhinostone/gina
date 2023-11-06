@@ -48,6 +48,16 @@ new Domain( function onReady(err, _domainInstance) {
     domainInstance = _domainInstance;
 
     runTests(0, exports);
+
+    exports['Domain->getFQDN(): '] = async function(test) {
+        var res = await domainInstance.getFQDN();
+
+        test.equal( typeof(res), 'string' );
+        test.deepEqual(true, /\./.test(res));
+
+        test.done();
+    }
+
 });
 
 
