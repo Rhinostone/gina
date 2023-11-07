@@ -330,8 +330,8 @@ function Config(opt, contextResetNeeded) {
      */
     this.Env = {
         template : requireJSON( getEnvVar('GINA_FRAMEWORK_DIR') +'/core/template/conf/env.json'),
-        load : async function(callback) {
-            await loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
+        load : function(callback) {
+            loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                 self.envConf            = envConf;
                 envConf.env             = self.env;
                 envConf.scope           = self.scope;
@@ -546,7 +546,7 @@ function Config(opt, contextResetNeeded) {
      * @param {String} template Path of the template to merge with
      * @returns {Oject} JSON of the merged config
      **/
-    var loadWithTemplate = async function(userConf, template, callback) {
+    var loadWithTemplate = function(userConf, template, callback) {
 
         var content     = userConf,
             //if nothing to merge.
@@ -913,7 +913,7 @@ function Config(opt, contextResetNeeded) {
                 // Defining root domain (TLD or SLD)
                 // by default
                 // var hostFQDN = await domainLib.getFQDN() || os.hostname();
-                // console.debug('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Setting Host FQDN from `'+ newContent[app][env].host +'` => `'+ hostFQDN);
+                console.debug('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Setting Host FQDN from `'+ newContent[app][env].host +'` => `'+ self.hostFQDN);
                 var rootDomain = domainLib.getRootDomain(self.hostFQDN).value;
                 if (
                     typeof(newContent[app][env].host) != 'undefined'
@@ -925,7 +925,7 @@ function Config(opt, contextResetNeeded) {
                     // Get fqdn (equivalent of `hostname --fqdn` command line)
                     try {
                         newContent[app][env].host = hostFQDN;
-                        console.info('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Host set as `'+ hostFQDN +'`');
+                        console.info('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Host set as `'+ self.hostFQDN +'`');
                     } catch (fqdnErr) {
                         console.emerg('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
                         process.exit(1)
