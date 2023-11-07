@@ -920,9 +920,11 @@ function Config(opt, contextResetNeeded) {
                     typeof(newContent[app][env].host) != 'undefined'
                     && newContent[app][env].host == 'auto'
                 ) {
+                    console.debug('[CONFIG][loadWithTemplate] Auto HOST MODE ON: retrieving current host FQDN.');
                     // Get fqdn (equivalent of `hostname --fqdn` command line)
                     try {
                         newContent[app][env].host = await domainLib.getFQDN() || os.hostname();
+                        console.debug('[CONFIG][loadWithTemplate] FQDN Host set as `'+ newContent[app][env].host +'`');
                     } catch (fqdnErr) {
                         console.emerg('[ config ][ FQDN ] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
                         process.exit(1)
