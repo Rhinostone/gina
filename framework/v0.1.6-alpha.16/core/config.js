@@ -70,9 +70,8 @@ function Config(opt, contextResetNeeded) {
      * Config Constructor
      * @constructor
      * */
-    var init =  async function(opt, contextResetNeeded) {
+    var init =  function(opt, contextResetNeeded) {
 
-        self.hostFQDN = await domainLib.getFQDN() || os.hostname();
 
         if ( !Config.initialized) {
             var env     = opt.env;
@@ -913,24 +912,24 @@ function Config(opt, contextResetNeeded) {
                 // Defining root domain (TLD or SLD)
                 // by default
                 // var hostFQDN = await domainLib.getFQDN() || os.hostname();
-                console.debug('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Setting Host FQDN from `'+ newContent[app][env].host +'` => `'+ self.hostFQDN);
-                var rootDomain = domainLib.getRootDomain(self.hostFQDN).value;
-                if (
-                    typeof(newContent[app][env].host) != 'undefined'
-                    && self.startingApp == app
-                    && new RegExp('^'+ app + '-').test(newContent[app][env].host)
-                    && newContent[app][env].host != hostFQDN
-                ) {
-                    console.debug('[CONFIG]['+ app +'][loadWithTemplate] Auto HOST MODE ON: retrieving current host FQDN.');
-                    // Get fqdn (equivalent of `hostname --fqdn` command line)
-                    try {
-                        newContent[app][env].host = hostFQDN;
-                        console.info('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Host set as `'+ self.hostFQDN +'`');
-                    } catch (fqdnErr) {
-                        console.emerg('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
-                        process.exit(1)
-                    }
-                }
+                // console.debug('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Setting Host FQDN from `'+ newContent[app][env].host +'` => `'+ self.hostFQDN);
+                var rootDomain = domainLib.getRootDomain(os.hostname()).value;
+                // if (
+                //     typeof(newContent[app][env].host) != 'undefined'
+                //     && self.startingApp == app
+                //     && new RegExp('^'+ app + '-').test(newContent[app][env].host)
+                //     && newContent[app][env].host != hostFQDN
+                // ) {
+                //     console.debug('[CONFIG]['+ app +'][loadWithTemplate] Auto HOST MODE ON: retrieving current host FQDN.');
+                //     // Get fqdn (equivalent of `hostname --fqdn` command line)
+                //     try {
+                //         newContent[app][env].host = hostFQDN;
+                //         console.info('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Host set as `'+ self.hostFQDN +'`');
+                //     } catch (fqdnErr) {
+                //         console.emerg('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
+                //         process.exit(1)
+                //     }
+                // }
                 // if overrided by the project `manifest.json`: meaning all bundles belong to the same TLD or SLD
                 if ( typeof(manifest.rootDomain) != 'undefined' ) {
                     rootDomain = manifest.rootDomain;
