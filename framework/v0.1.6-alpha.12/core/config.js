@@ -911,26 +911,20 @@ function Config(opt, contextResetNeeded) {
                 // Defining root domain (TLD or SLD)
                 // by default
                 var currentHostFQDN = await domainLib.getFQDN() || os.hostname();
-                console.debug('[CONFIG][loadWithTemplate] FQDN Host set as `'+ currentHostFQDN +'` VS `'+ newContent[app][env].host +'`');
+                // console.debug('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Setting Host FQDN from `'+ newContent[app][env].host +'` => `'+ currentHostFQDN);
                 var rootDomain = domainLib.getRootDomain(currentHostFQDN).value;
                 if (
-                    // typeof(newContent[app][env].host) == 'undefined'
-                    // ||
-                    // typeof(newContent[app][env].host) != 'undefined'
-                    // && newContent[app][env].host == ''
-                    // ||
-                    // typeof(newContent[app][env].host) != 'undefined'
-                    // && newContent[app][env].host == 'auto'
                     typeof(newContent[app][env].host) != 'undefined'
+                    && new RegExp('^'+ app + '-').test(newContent[app][env].host)
                     && newContent[app][env].host != currentHostFQDN
                 ) {
-                    console.debug('[CONFIG][loadWithTemplate] Auto HOST MODE ON: retrieving current host FQDN.');
+                    console.debug('[CONFIG]['+ app +'][loadWithTemplate] Auto HOST MODE ON: retrieving current host FQDN.');
                     // Get fqdn (equivalent of `hostname --fqdn` command line)
                     try {
                         newContent[app][env].host = currentHostFQDN;
-                        console.debug('[CONFIG][loadWithTemplate] FQDN Host set as `'+ currentHostFQDN +'`');
+                        console.info('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Host set as `'+ currentHostFQDN +'`');
                     } catch (fqdnErr) {
-                        console.emerg('[ config ][ FQDN ] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
+                        console.emerg('[CONFIG]['+ app +'][loadWithTemplate][FQDN] Check you `/etc/hosts` or check your hostname by running `hostname --fqdn` \n\r'+ fqdnErr.stack);
                         process.exit(1)
                     }
                 }
