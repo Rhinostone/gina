@@ -328,8 +328,8 @@ function Config(opt, contextResetNeeded) {
      */
     this.Env = {
         template : requireJSON( getEnvVar('GINA_FRAMEWORK_DIR') +'/core/template/conf/env.json'),
-        load : function(callback) {
-            loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
+        load : async function(callback) {
+            await loadWithTemplate(this.parent.userConf, this.template, function(err, envConf) {
                 self.envConf            = envConf;
                 envConf.env             = self.env;
                 envConf.scope           = self.scope;
