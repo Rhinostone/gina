@@ -910,8 +910,9 @@ function Config(opt, contextResetNeeded) {
                 // Variables replace. Compare with gina/core/template/conf/env.json.
                 // Defining root domain (TLD or SLD)
                 // by default
-                var rootDomain = domainLib.getRootDomain(os.hostname()).value;
                 var currentHostFQDN = await domainLib.getFQDN() || os.hostname();
+                console.debug('[CONFIG][loadWithTemplate] FQDN Host set as `'+ currentHostFQDN +'` VS `'+ newContent[app][env].host +'`');
+                var rootDomain = domainLib.getRootDomain(currentHostFQDN).value;
                 if (
                     // typeof(newContent[app][env].host) == 'undefined'
                     // ||
