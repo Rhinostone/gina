@@ -354,7 +354,35 @@ function SuperController(options) {
             set('page.environment.forms', encodeRFC5987ValueChars(JSON.stringify(forms))); // export for GFF
             set('page.forms', options.conf.content.forms);
 
-            set('page.environment.hostname', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname);
+            var isProxyHost = (
+                typeof(req.headers.host) != 'undefined'
+                && typeof(req.headers.port) != 'undefined'
+                &&  /^(80|443)$/.test(req.headers.port)
+                && local.options.conf.server.scheme +'://'+ req.headers.host +':'+ req.headers.port != local.options.conf.hostname.replace(/\:\d+$/, '') +':'+ local.options.conf.server.port
+                ||
+                typeof(req.headers[':authority']) != 'undefined'
+                && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname
+                ||
+                typeof(req.headers.host) != 'undefined'
+                && typeof(req.headers.port) != 'undefined'
+                && /^(80|443)$/.test(req.headers.port)
+                && req.headers.host == local.options.conf.host
+            ) ? true : false;
+            setContext('isProxyHost', isProxyHost);
+
+            // if ( !getContext('isProxyHost') ) {
+            //     setContext('isProxyHost', isProxyHost);
+            //     isProxyHost = null;
+            // }
+            var hostname = ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname;
+            if ( getContext('isProxyHost') ) {
+                hostname = hostname.replace(/\:\d+$/, '');
+            }
+            // else {
+            //     hostname = hostname.replace(/\:\d+$/, '') +':'+ ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].server.port;
+            // }
+
+            set('page.environment.hostname', hostname);
             set('page.environment.rootDomain', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].rootDomain);
             set('page.environment.webroot', options.conf.server.webroot);
             set('page.environment.bundle', options.conf.bundle);
@@ -437,11 +465,11 @@ function SuperController(options) {
             set('page.view.lang', userCulture);
         }
 
-        if ( !getContext('isProxyHost') ) {
-            var isProxyHost = ( typeof(req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers.host != local.options.conf.hostname || typeof(req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
-            setContext('isProxyHost', isProxyHost);
-            isProxyHost = null;
-        }
+        // if ( !getContext('isProxyHost') ) {
+        //     var isProxyHost = ( typeof(req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers.host != local.options.conf.hostname || typeof(req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
+        //     setContext('isProxyHost', isProxyHost);
+        //     isProxyHost = null;
+        // }
 
         //TODO - detect when to use swig
         var dir = null;
@@ -841,10 +869,20 @@ function SuperController(options) {
 
             var isProxyHost = (
                 typeof(local.req.headers.host) != 'undefined'
-                    && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname
-                || typeof(local.req.headers[':authority']) != 'undefined'
-                    && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname
+                && typeof(local.req.headers.port) != 'undefined'
+                &&  /^(80|443)$/.test(local.req.headers.port)
+                && localOptions.conf.server.scheme +'://'+ local.req.headers.host+':'+ local.req.headers.port != localOptions.conf.hostname.replace(/\:\d+$/, '') +':'+ localOptions.conf.server.port
+                ||
+                typeof(local.req.headers[':authority']) != 'undefined'
+                && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname
+                ||
+                typeof(local.req.headers.host) != 'undefined'
+                && typeof(local.req.headers.port) != 'undefined'
+                && /^(80|443)$/.test(local.req.headers.port)
+                && local.req.headers.host == localOptions.conf.host
             ) ? true : false;
+
+
             // setup swig default filters
             var filters = SwigFilters({
                 options     : JSON.clone(localOptions),
@@ -1670,6 +1708,11 @@ function SuperController(options) {
                     ? local.options.conf.server.scheme +'://'+ requestHost + ':'+ local.options.conf.server.port
                     : local.options.conf.hostname
         ;
+
+        if ( getContext('isProxyHost') ) {
+            hostname = hostname.replace(/\:\d+$/, '');
+        }
+
         switch(type){
             case 'css':
                 for (; r < rLen; ++r) {
@@ -2015,8 +2058,26 @@ function SuperController(options) {
 
         if ( !self.forward404Unless(condition, req, res) ) { // forward to 404 if bad route
 
-            var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers.host != local.options.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname  ) ? true : false;
-            var hostname = (isProxyHost) ? ctx.config.envConf[bundle][env].hostname.replace(/\:\d+$/, '') : ctx.config.envConf[bundle][env].hostname;
+            var isProxyHost = (
+                typeof(local.req.headers.host) != 'undefined'
+                && typeof(local.req.headers.port) != 'undefined'
+                &&  /^(80|443)$/.test(local.req.headers.port)
+                && local.options.conf.server.scheme +'://'+ local.req.headers.host +':'+ local.req.headers.port != local.options.conf.hostname.replace(/\:\d+$/, '') +':'+ local.options.conf.server.port
+                ||
+                typeof(local.req.headers[':authority']) != 'undefined'
+                && local.options.conf.server.scheme +'://'+ local.req.headers[':authority'] != local.options.conf.hostname
+                ||
+                typeof(local.req.headers.host) != 'undefined'
+                && typeof(local.req.headers.port) != 'undefined'
+                && /^(80|443)$/.test(local.req.headers.port)
+                && req.headers.host == local.options.conf.host
+            ) ? true : false;
+
+
+
+            var hostname = (isProxyHost)
+                    ? ctx.config.envConf[bundle][env].hostname.replace(/\:\d+$/, '')
+                    : ctx.config.envConf[bundle][env].hostname;
 
             // if ( !/\:\d+$/.test(req.headers.host) )
             //     hostname = hostname.replace(/\:\d+$/, '');

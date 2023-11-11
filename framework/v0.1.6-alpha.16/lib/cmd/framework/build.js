@@ -21,7 +21,7 @@ function Build(opt, cmd){
     var self    = {};
 
     var init = function(opt, cmd) {
-        console.debug('Building framework...');
+        console.log('Building framework, please wait ...');
 
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });

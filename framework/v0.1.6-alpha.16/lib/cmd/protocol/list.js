@@ -13,12 +13,12 @@ var console = lib.logger;
  *
  * */
 function List(opt, cmd) {
-    
+
     // self will be pre filled if you call `new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled })`
     var self = {}, local = {};
 
-    var init = function() {      
-        //debugger;  
+    var init = function() {
+        //debugger;
         // import CMD helpers
         new CmdHelper(self, opt.client, { port: opt.debugPort, brkEnabled: opt.debugBrkEnabled });
 
@@ -56,7 +56,7 @@ function List(opt, cmd) {
 
 
     var listAllByProject = function() {
-        
+
         var protocols       = null
             , schemes       = null
             , projects      = self.projects
@@ -78,7 +78,7 @@ function List(opt, cmd) {
 
         p = 0;
         for (; p < list.length; ++p) {
-                           
+
             str += '------------------------------------\n\r';
             if (!projects[list[p]].exists) {
                 str += '?! '
@@ -87,61 +87,62 @@ function List(opt, cmd) {
             str += '------------------------------------\n\r';
             protocols = projects[list[p]].protocols;
             schemes = projects[list[p]].schemes;
-            
+
             if (!protocols) continue;
-            
+
             str += '      Protocol(s)        Scheme(s)\n\r';
-            
-            
+
+
             indexObj = {}; index = 2;
             i = 0; len = protocols.length;
             for (; i < len; ++i) {
-                protocolStr = '';               
-                if (self.defaultProtocol == protocols[i]) {
+                protocolStr = '';
+                if (projects[list[p]].def_protocol == protocols[i]) {
                     protocolStr += '[ * ] ' + protocols[i]
                 } else {
                     protocolStr += '[   ] ' + protocols[i]
-                }                
-                
+                }
+
                 if ( (index % 2) == 0 ){
                     indexObj[index] = protocolStr;
                     index += 2
                 }
             }
-            
-            
+
+
             index = 3;
             i = 0; len = schemes.length;
             for (; i < len; ++i) {
                 schemeStr = '';
-                if (self.defaultScheme == schemes[i]) {
+                if (projects[list[p]].def_scheme == schemes[i]) {
                     schemeStr += '           [ * ] ' + schemes[i]
                 } else {
                     schemeStr += '           [   ] ' + schemes[i]
                 }
-                      
+
                 if ( (index % 2) != 0 ){
                     indexObj[index] = schemeStr;
-                    index += 2               
-                }                   
+                    index += 2
+                }
             }
-            
+
             i = null;
             for (i in indexObj) {
                 str += indexObj[i];
                 if ( (~~i % 3) == 0 ){
                     str += '\n\r'
-                }                
-            }            
-            
+                }
+            }
+
             str += '\n\r'
         }
-        
-        console.log(str)
+
+        console.log(str);
+        end();
     }
 
     var listByBundle = function(bundleName) {
-        
+
         var protocols       = null
             , schemes       = null
             , bundles       = self.bundlesByProject[self.projectName]
@@ -155,7 +156,7 @@ function List(opt, cmd) {
             , indexObj      = null
             , index         = null
         ;
-        
+
         if ( typeof(bundleName) != 'undefined' ) {
             list.push(bundleName)
         } else {
@@ -165,44 +166,44 @@ function List(opt, cmd) {
             list.sort();
         }
 
-        
+
 
         p = 0;
         for (; p < list.length; ++p) {
-                        
-            
+
+
             str += '------------------------------------\n\r';
             if (!bundles[list[p]].exists) {
                 str += '?! '
             }
             str += list[p] + '\n\r';
             str += '------------------------------------\n\r';
-            
+
             protocols = bundles[list[p]].protocols;
-            schemes = bundles[list[p]].schemes;            
+            schemes = bundles[list[p]].schemes;
             if (!protocols || protocols.length == 0) continue;
-            
-            
+
+
             str += '      Protocol(s)        Scheme(s)\n\r';
-            
-            
+
+
             indexObj = {}; index = 2;
             i = 0; len = protocols.length;
             for (; i < len; ++i) {
-                protocolStr = '';               
+                protocolStr = '';
                 if (bundles[list[p]].def_protocol == protocols[i]) {
                     protocolStr += '[ * ] ' + protocols[i]
                 } else {
                     protocolStr += '[   ] ' + protocols[i]
-                }                
-                
+                }
+
                 if ( (index % 2) == 0 ){
                     indexObj[index] = protocolStr;
                     index += 2
                 }
             }
-            
-            
+
+
             index = 3;
             i = 0; len = schemes.length;
             for (; i < len; ++i) {
@@ -212,26 +213,46 @@ function List(opt, cmd) {
                 } else {
                     schemeStr += '           [   ] ' + schemes[i]
                 }
-                      
+
                 if ( (index % 2) != 0 ){
                     indexObj[index] = schemeStr;
-                    index += 2               
-                }                   
+                    index += 2
+                }
             }
-            
+
             i = null;
             for (i in indexObj) {
                 str += indexObj[i];
                 if ( (~~i % 3) == 0 ){
                     str += '\n\r'
-                }                
-            }            
-            
+                }
+            }
+
             str += '\n\r'
         }
-        
-        console.log(str)
+
+        console.log(str);
+        end();
     };
+
+    var end = function (output, type, messageOnly) {
+        var err = false;
+        if ( typeof(output) != 'undefined') {
+            if ( output instanceof Error ) {
+                err = output = ( typeof(messageOnly) != 'undefined' && /^true$/i.test(messageOnly) ) ? output.message : (output.stack||output.message);
+            }
+            if ( typeof(type) != 'undefined' ) {
+                console[type](output);
+                if ( messageOnly && type != 'log') {
+                    console.log(output);
+                }
+            } else {
+                console.log(output);
+            }
+        }
+
+        process.exit( err ? 1:0 )
+    }
 
     init()
 };
