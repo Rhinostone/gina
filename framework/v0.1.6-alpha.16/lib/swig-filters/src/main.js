@@ -79,7 +79,9 @@ function SwigFilters(conf) {
 
     // Allows you to get a bundle web root
     self.getWebroot = function (input, obj) {
-        var url = null, prop = self.options.envObj.getConf(obj, options.conf.env);
+        var url     = null
+            , prop  = self.options.envObj.getConf(obj, options.conf.env)
+        ;
         if ( isProxyHost ) {
             url = prop.server.scheme + '://'+ prop.host;
         } else {
@@ -231,6 +233,11 @@ function SwigFilters(conf) {
         //var ruleObj = getRouteDefinition(routingRules, rule, method);
         try {
             url = routing.getRoute(route +'@'+ config.bundle, params).toUrl();
+            if (isProxyHost) {
+                url = url.replace(/\:\d+/, '');
+            }
+            // this one is better because of the reverse proxy
+            // url = hostname + routing.getRoute(route +'@'+ config.bundle, params).url;
         } catch (routingErr) {
             url = '404:['+ ctx.req.method +']'+rule
         }

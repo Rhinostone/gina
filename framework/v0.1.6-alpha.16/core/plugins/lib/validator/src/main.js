@@ -1276,6 +1276,13 @@
                             // } else { // external - need to remove `X-Requested-With` from `options.headers`
                                 result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
                             //}
+                            // isProxyHost ?
+                            if (
+                                result.location.replace(/^http(.*)\:\d+/, '$1').replace(/^\:\/\//, '').split(/\//g)[0] == gina.config.hostname
+                                && gina.config.hostname == window.location.host
+                            ) {
+                                result.location = location.protocol  + result.location.replace(/^http(.*)\:\d+/, '$1').replace(/^\:/, '')
+                            }
 
                             return setTimeout(() => {
                                 window.location.href = result.location;

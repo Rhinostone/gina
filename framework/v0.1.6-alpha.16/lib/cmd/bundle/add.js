@@ -368,7 +368,8 @@ function Add(opt, cmd) {
                 content[local.bundle] = {}
             }
             content[local.bundle][ self.envs[e] ] = {
-                "host" : local.bundle + "-{env}-{scope}-v{projectVersionMajor}.{rootDomain}"
+                "host_if_dns_resolution" : "{rootDomain}",
+                "host" : "localhost"
             };
 
         }

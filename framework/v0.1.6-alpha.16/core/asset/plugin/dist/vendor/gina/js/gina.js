@@ -8553,10 +8553,18 @@ function Routing() {
      * */
     self.getRoute = function(rule, params, urlIndex) {
 
-        var config = null;
+        var config = null, isProxyHost = null;
         if (isGFFCtx) {
+            if (
+                !window.location.port
+                && window.location.hostname == window.gina.config.hostname.replace(/^(https|http|wss|ws)\:\/\//, '').replace(/\:\d+$/, '')
+            ) {
+                isProxyHost = true;
+                window.gina.config.hostname = window.gina.config.hostname.replace(/^(https|http|wss|ws)\:\/\//, '').replace(/\:\d+$/, '')
+            }
             config = window.gina.config;
         } else {
+            isProxyHost = getContext('isProxyHost');
             config = getContext('gina').config;
             if ( typeof(getContext('argvFilename')) != 'undefined' ) {
                 config.getRouting = getContext('gina').Config.instance.getRouting;
@@ -8604,6 +8612,10 @@ function Routing() {
         var route   = JSON.clone(routing[rule]);
         var msg     = null;
         route = checkRouteParams(route, params);
+
+        if (isProxyHost) {
+            route.hostname = route.hostname.replace(/\:\d+/, '');
+        }
 
         if ( /\,/.test(route.url) ) {
             if ( typeof(route.urlIndex) != 'undefined' ) {
@@ -8679,6 +8691,7 @@ function Routing() {
             ;
 
             this.url = ( typeof(ignoreWebRoot) != 'undefined' && ignoreWebRoot == true ) ? path.replace(wroot, '/') : path;
+
 
             return hostname + this.url
         };
@@ -8792,6 +8805,7 @@ function Routing() {
         return route
     };
 
+    // TODO - Remove this : deprecated && not used
     var getFormatedRoute = function(route, url, hash) {
         // fix url in case of empty param value allowed by the routing rule
         // to prevent having a folder.
@@ -11260,6 +11274,13 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
                             // } else { // external - need to remove `X-Requested-With` from `options.headers`
                                 result.location = (!/^http/.test(result.location) && !/^\//.test(result.location) ) ? location.protocol +'//' + result.location : result.location;
                             //}
+                            // isProxyHost ?
+                            if (
+                                result.location.replace(/^http(.*)\:\d+/, '$1').replace(/^\:\/\//, '').split(/\//g)[0] == gina.config.hostname
+                                && gina.config.hostname == window.location.host
+                            ) {
+                                result.location = location.protocol  + result.location.replace(/^http(.*)\:\d+/, '$1').replace(/^\:/, '')
+                            }
 
                             return setTimeout(() => {
                                 window.location.href = result.location;
