@@ -2391,7 +2391,7 @@ function Config(opt, contextResetNeeded) {
         conf[bundle][env].env       = env;
         conf[bundle][env].scope     = scope;
 
-        // this setting is replace on http requests by the value extracted form the request header
+        // this setting is replaced on http requests by the value extracted form the request header
         if (
             typeof(conf[bundle][env].content.settings) != 'undefined'
             && typeof(conf[bundle][env].content.settings.server) != 'undefined'
