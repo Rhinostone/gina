@@ -200,7 +200,10 @@ function SwigFilters(conf) {
                     hostname        = config.hostname + config.server.webroot;
                     // rewrite hostname vs ctx.req.headers.host
                     if ( isProxyHost ) {
-                        hostname = hostname.replace(/\:\d+/, '');
+                        hostname    = (ctx.req.headers.host||ctx.req.headers[':host']);
+                        if ( /!^(80|443)$/.test((ctx.req.headers.port||ctx.req.headers[':port'])) ) {
+                            hostname += ':'+ (ctx.req.headers.port||ctx.req.headers[':port'])
+                        }
                     }
 
                     config.bundle   = base;
@@ -232,12 +235,11 @@ function SwigFilters(conf) {
         rule = route + '@' + config.bundle;
         //var ruleObj = getRouteDefinition(routingRules, rule, method);
         try {
-            url = routing.getRoute(route +'@'+ config.bundle, params).toUrl();
+            url = routing.getRoute(route +'@'+ config.bundle, params);
             if (isProxyHost) {
-                url = url.replace(/\:\d+/, '');
+                url.hostname = (hostname) ? url.hostname.replace(/(https|http)\:\/\/.*/, '$1://'+hostname) : url.hostname;
             }
-            // this one is better because of the reverse proxy
-            // url = hostname + routing.getRoute(route +'@'+ config.bundle, params).url;
+            url = url.toUrl();
         } catch (routingErr) {
             url = '404:['+ ctx.req.method +']'+rule
         }
