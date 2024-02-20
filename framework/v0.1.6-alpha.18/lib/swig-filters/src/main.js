@@ -138,6 +138,7 @@ function SwigFilters(conf) {
         var ctx  = SwigFilters.instance._options || self.options;
 
         var config              = null
+            , scheme            = null
             , hostname          = null
             , wroot             = null
             , wrootRe           = null
@@ -198,13 +199,15 @@ function SwigFilters(conf) {
 
                     // retrieve hostname, webroot & routingRules
                     hostname        = config.hostname + config.server.webroot;
+                    scheme          = hostname.match(/^(https|http)/)[0];
                     // rewrite hostname vs ctx.req.headers.host
                     if ( isProxyHost ) {
-                        hostname    = (ctx.req.headers.host||ctx.req.headers[':host']);
+                        hostname    = scheme + '://'+ (ctx.req.headers.host||ctx.req.headers[':host']);
                         if ( /!^(80|443)$/.test((ctx.req.headers.port||ctx.req.headers[':port'])) ) {
                             hostname += ':'+ (ctx.req.headers.port||ctx.req.headers[':port'])
                         }
                     }
+
 
                     config.bundle   = base;
                     isStandalone    = (mainConf.bundles.length > 1) ? true : false;
@@ -213,6 +216,8 @@ function SwigFilters(conf) {
                 } else {
                     ctx.throwError(ctx.res, 500, new Error('bundle `'+ base +'` not found: Swig.getUrl() filter encountered a problem while trying to compile base `'+base+'` and route `'+route+'`').stack)
                 }
+            } else {
+                scheme = base.match(/^(https|http)/)[0];
             }
         }
 
@@ -237,7 +242,7 @@ function SwigFilters(conf) {
         try {
             url = routing.getRoute(route +'@'+ config.bundle, params);
             if (isProxyHost) {
-                url.hostname = (hostname) ? url.hostname.replace(/(https|http)\:\/\/.*/, '$1://'+hostname) : url.hostname;
+                url.hostname = (hostname) ? url.hostname.replace(/(https|http)\:\/\/.*/, hostname) : url.hostname;
             }
             url = url.toUrl();
         } catch (routingErr) {

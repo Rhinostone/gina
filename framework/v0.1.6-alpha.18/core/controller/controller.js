@@ -373,18 +373,25 @@ function SuperController(options) {
                 && /^true$/i.test(req.headers['x-nginx-proxy'])
             ) ? true : false;
             setContext('isProxyHost', isProxyHost);
+            set('page.environment.isProxyHost', isProxyHost);
 
             // if ( !getContext('isProxyHost') ) {
             //     setContext('isProxyHost', isProxyHost);
             //     isProxyHost = null;
             // }
-            var hostname = ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname;
+            // by default
+            var hostname    = ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].hostname;
+            var scheme      = hostname.match(/^(https|http)/)[0];
             if ( getContext('isProxyHost') ) {
-                hostname = hostname.replace(/\:\d+$/, '');
+
+                // rewrite hostname vs req.headers.host
+                hostname    = scheme + '://'+ (local.req.headers.host||local.req.headers[':host']);
+                if ( /!^(80|443)$/.test((local.req.headers.port||local.req.headers[':port'])) ) {
+                    hostname += ':'+ (local.req.headers.port||local.req.headers[':port'])
+                }
+
+                // hostname = hostname.replace(/\:\d+$/, '');
             }
-            // else {
-            //     hostname = hostname.replace(/\:\d+$/, '') +':'+ ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].server.port;
-            // }
 
             set('page.environment.hostname', hostname);
             set('page.environment.rootDomain', ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV].rootDomain);
@@ -1704,16 +1711,24 @@ function SuperController(options) {
             , rLen          = resArr.length
             , obj           = null
             , str           = ''
+            , isProxyHost   = getContext('isProxyHost')
             , requestHost   = ( /http\/2/.test(local.options.conf.server.protocol) )
                     ? local.req.headers[':host']
                     : local.req.headers.host
             , hostname      = ( typeof(requestHost) != 'undefined' && local.options.conf.host != requestHost)
-                    ? local.options.conf.server.scheme +'://'+ requestHost + ':'+ local.options.conf.server.port
+                    ? local.options.conf.server.scheme +'://'+ requestHost
                     : local.options.conf.hostname
+            // , hostname      = ( typeof(requestHost) != 'undefined' && local.options.conf.host != requestHost)
+            //         ? local.options.conf.server.scheme +'://'+ requestHost + ':'+ local.options.conf.server.port
+            //         : local.options.conf.hostname
         ;
+        if ( /!^(80|443)$/.test((local.req.headers.port||local.req.headers[':port'])) ) {
+            hostname += ':'+ (local.req.headers.port||local.req.headers[':port'])
+        }
 
-        if ( getContext('isProxyHost') ) {
-            hostname = hostname.replace(/\:\d+$/, '');
+        if ( isProxyHost ) {
+            // hostname = hostname.replace(/\:\d+$/, '');
+            hostname += local.options.conf.server.webroot.replace(/\/$/g, '');
         }
 
         switch(type){
