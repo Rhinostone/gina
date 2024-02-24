@@ -140,11 +140,12 @@ function SwigFilters(conf) {
         var config              = null
             , scheme            = null
             , hostname          = null
+            , requestPort       = null
             , wroot             = null
             , wrootRe           = null
             , isStandalone      = null
             , isMaster          = null
-            , isProxyHost       = ctx.isProxyHost
+            , isProxyHost       = ( ctx.isProxyHost && /^true$/i.test(ctx.isProxyHost) ) ? true : (( typeof(process.env.PROXY_HOSTNAME) != 'undefined' ) ? true : false)
             , routingRules      = null
             , rule              = null
             , url               = NaN
@@ -174,7 +175,9 @@ function SwigFilters(conf) {
             ) {
                 base = config.bundle = ctx.options.conf.bundle;
             }
-            route = route.toLowerCase();
+            // eg.: "/assets/img/common/header@2x.png"
+            // Added comment on 2024-02-23
+            // route = route.toLowerCase();
         }
 
         // setting default config
@@ -199,12 +202,35 @@ function SwigFilters(conf) {
 
                     // retrieve hostname, webroot & routingRules
                     hostname        = config.hostname + config.server.webroot;
+
                     scheme          = hostname.match(/^(https|http)/)[0];
+                    requestPort = (ctx.req.headers.port||ctx.req.headers[':port']||process.env.PROXY_PORT);
+                    var hostPort = config.hostname.match(/(\:d+\/|\:\d+)$/);
+                    hostPort = (hostPort) ? ~~(hostPort[0].replace(/\:/g, '')) : config.port[config.server.protocol][config.server.scheme];
+                    // Linking bundle B from bundle A wihtout proxy
+                    var isSpecialCase = (
+                            getContext('bundle') != config.bundle
+                            && requestPort != hostPort
+                            && ctx.req.headers[':host'] != process.env.PROXY_HOST
+                    ) ? true : false;
+
+                    if (isSpecialCase) {
+                        hostname = config.hostname
+                    }
+
                     // rewrite hostname vs ctx.req.headers.host
-                    if ( isProxyHost ) {
-                        hostname    = scheme + '://'+ (ctx.req.headers.host||ctx.req.headers[':host']);
-                        if ( /!^(80|443)$/.test((ctx.req.headers.port||ctx.req.headers[':port'])) ) {
-                            hostname += ':'+ (ctx.req.headers.port||ctx.req.headers[':port'])
+                    if (
+                        isProxyHost
+                        && !isSpecialCase
+                    ) {
+
+                        hostname    = scheme + '://'+ (ctx.req.headers.host||ctx.req.headers[':host']||process.env.PROXY_HOST);
+
+                        if (
+                            !/^(80|443)$/.test(requestPort)
+                            && !new RegExp(requestPort+'$').test(hostname)
+                        ) {
+                            hostname += ':'+ requestPort;
                         }
                     }
 
@@ -228,8 +254,11 @@ function SwigFilters(conf) {
 
             if ( !wrootRe.test(route) ) {
                 route = config.server.webroot + route.substr(1);
-                hostname = hostname.replace(new RegExp( config.server.webroot +'$'), '')
-            } else {
+                hostname =   hostname.replace(new RegExp( config.server.webroot +'$'), '')
+            } else if (
+                config.server.webroot != '/'
+                && config.server.webroot != ''
+            ) {
                 route = route.substr(1)
             }
 

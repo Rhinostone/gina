@@ -217,6 +217,48 @@ process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
 process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
 process.env.NODE_SCOPE_IS_PRODUCTION = (/^true$/i.test(isProductionScope)) ? true : false;
 
+var proxyPathObj    = new _(projects[projectName].path + '/proxy.json', true);
+var proxy           = null;
+if ( proxyPathObj.existsSync() ) {
+    try {
+        var proxyColl   = requireJSON(proxyPathObj.toString());
+        proxy       = new lib.Collection(proxyColl).findOne({ scope: process.env.NODE_SCOPE, env: process.env.NODE_ENV });
+        proxyColl   = null;
+    } catch (proxyErr) {
+        console.error('[ FRAMEWORK ][ configurationError ] ', proxyErr.stack || proxyErr.message || proxyErr);
+    }
+
+    if (proxy) {
+        gna.proxyHostname   = process.env.PROXY_HOSTNAME    = proxy.hostname;
+        gna.proxyHost       = process.env.PROXY_HOST        = proxy.hostname
+                                                                    .replace(/^(https|http)\:\/\//g, '')
+                                                                    .replace(/\:\d+\/$|\:\d+$/, '')
+        ;
+        var proxyPort = gna.proxyHostname.match(/\:\d+\/$|\:\d+$/) || null;
+        if (proxyPort) {
+            proxyPort = parseInt(proxyPort[0].match(/\d+/));
+        } else {
+            var foundScheme = gna.proxyHostname.match(/^(https|http)\:\/\//g)[0].replace(/\:\/\//g, '');
+            switch (foundScheme) {
+                case 'https':
+                    proxyPort = 443;
+                    break;
+                case 'ftp':
+                    proxyPort = 21;
+                    break;
+                case 'sftp':
+                    proxyPort = 22;
+                    break;
+                default:
+                    proxyPort = 80;
+                    break;
+            }
+            foundScheme = null;
+        }
+        gna.proxyPort       = process.env.PROXY_PORT        = proxyPort
+    }
+}
+
 
 var bundlesPath = (isDev) ? projects[projectName]['path'] + '/src' : projects[projectName]['path'] + '/bundles';
 setPath('bundles', _(bundlesPath, true));
