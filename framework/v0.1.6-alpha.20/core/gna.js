@@ -255,7 +255,7 @@ if ( proxyPathObj.existsSync() ) {
             }
             foundScheme = null;
         }
-        gna.proxyPort       = process.env.PROXY_PORT        = proxyPort
+        gna.proxyPort       = process.env.PROXY_PORT        = parseInt(proxyPort)
     }
 }
 

@@ -8566,13 +8566,31 @@ function Routing() {
             }
             config = window.gina.config;
         } else {
-            // isProxyHost = getContext('isProxyHost');
-            var _isProxyHost = getContext('isProxyHost')
-            isProxyHost = ( _isProxyHost && /^true$/i.test(_isProxyHost) ) ? true : (( typeof(process.env.PROXY_HOSTNAME) != 'undefined' ) ? true : false);
+
             config = getContext('gina').config;
             if ( typeof(getContext('argvFilename')) != 'undefined' ) {
                 config.getRouting = getContext('gina').Config.instance.getRouting;
             }
+
+            isProxyHost = getContext('isProxyHost');
+            // Double check
+            if (
+                !isProxyHost
+                && typeof(process.env.PROXY_REQUEST_HOST) != 'undefined'
+                && process.env.PROXY_REQUEST_HOST === process.env.PROXY_HOST
+                ||
+                !isProxyHost
+                && typeof(process.env.PROXY_REQUEST_HOST) == 'undefined'
+                && typeof(process.env.PROXY_HOST) != 'undefined'
+            ) {
+                isProxyHost = true;
+            }
+            // isProxyHost = ( _isProxyHost && /^true$/i.test(_isProxyHost) ) ? true : (( typeof(process.env.PROXY_HOSTNAME) != 'undefined' ) ? true : false);
+
+
+
+
+
         }
 
         var env         = config.env || GINA_ENV  // by default, takes the current bundle
