@@ -118,6 +118,114 @@ function Router(env, scope) {
         // }
         // return ;
 
+
+       var serverInstance   = self.getServerInstance();
+       var config               = null
+            , conf              = null
+            , bundle            = null
+            , env               = null
+            , scope             = null
+            , cacheless         = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
+       ;
+        try {
+            config      = new Config().getInstance();
+            if (!params.bundle) {
+                try {
+                    //params.bundle = config.bundle;
+                    //params.param = config.routing[config.reverseRouting[params.param.url]];
+                    var _rule = config.reverseRouting[params.param.url];
+                    params = merge(params, config.routing[_rule]);
+                    params.rule = _rule;
+                } catch(reverseRoutingError) {
+                    serverInstance.throwError(response, 500, reverseRoutingError);
+                    return;
+                }
+            }
+            bundle      = local.bundle = params.bundle;
+            env         = config.env;
+            scope       = config.scope;
+            conf        = config[bundle][env];
+        } catch (configErr) {
+            serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
+            return;
+        }
+
+        local.cacheless     = cacheless;
+        local.request       = request;
+        local.next          = next;
+        local.conf          = conf;
+        local.isStandalone  = conf.isStandalone;
+
+
+        /**
+         * Reverse proxy check
+         */
+        process.env.PROXY_REQUEST_HOST = request.headers.host || request.headers[':host'] || request.host;
+        var requestPort = request.headers.port || request.headers[':port'];
+        var isProxyHost = (
+            typeof(request.headers.host) != 'undefined'
+            && typeof(requestPort) != 'undefined'
+            &&  /^(80|443)$/.test(requestPort)
+            && conf.server.scheme +'://'+ request.headers.host +':'+ requestPort != conf.hostname.replace(/\:\d+$/, '') +':'+ conf.server.port
+            ||
+            typeof(request.headers[':authority']) != 'undefined'
+            && conf.server.scheme +'://'+ request.headers[':authority'] != conf.hostname
+            ||
+            typeof(request.headers.host) != 'undefined'
+            && typeof(requestPort) != 'undefined'
+            && /^(80|443)$/.test(requestPort)
+            && request.headers.host == conf.host
+            ||
+            typeof(request.headers['x-nginx-proxy']) != 'undefined'
+            && /^true$/i.test(request.headers['x-nginx-proxy'])
+        ) ? true : false;
+
+        if (
+            !isProxyHost
+            && typeof(process.env.PROXY_REQUEST_HOST) != 'undefined'
+            && process.env.PROXY_REQUEST_HOST === process.env.PROXY_HOST
+        ) {
+            isProxyHost = true;
+        }
+
+        setContext('isProxyHost', isProxyHost);
+
+        // var _config = ctx.config.envConf[conf.bundle][process.env.NODE_ENV];
+        // // by default
+        // var hostname    = _config.hostname + _config.server.webroot;
+        // var scheme      = hostname.match(/^(https|http)/)[0];
+        // requestPort = (request.headers.port||request.headers[':port']);
+
+        // var hostPort = hostname.match(/(\:d+\/|\:\d+)$/);
+        // hostPort = (hostPort) ? ~~(hostPort[0].replace(/\:/g, '')) : _config.port[_config.server.protocol][_config.server.scheme];
+        // // Linking bundle B from bundle A wihtout proxy
+        // var isSpecialCase = (
+        //         getContext('bundle') != _config.bundle
+        //         && requestPort != hostPort
+        //         && request.headers[':host'] != process.env.PROXY_HOST
+        // ) ? true : false;
+
+        // if (isSpecialCase) {
+        //     hostname = _config.hostname;
+        // }
+
+        // if (
+        //     isProxyHost
+        //     && !isSpecialCase
+        // ) {
+        //     // rewrite hostname vs req.headers.host
+        //     hostname    = scheme + '://'+ (request.headers.host||request.headers[':host']);
+
+        //     if (
+        //         !/^(80|443)$/.test(requestPort)
+        //         && !new RegExp(requestPort+'$').test(hostname)
+        //     ) {
+        //         hostname += ':'+ requestPort;
+        //     }
+        // }
+
+
+
         /**
         * ExpressJS modules + HTTP2 fix
         * Hack required until `express-<plugin>` get support for http2 `express-session`
@@ -287,42 +395,6 @@ function Router(env, scope) {
         * EO Passport JS HTTP2 fix
         */
 
-       var serverInstance   = self.getServerInstance();
-       var config               = null
-            , conf              = null
-            , bundle            = null
-            , env               = null
-            , scope             = null
-            , cacheless         = (/^true$/i.test(process.env.NODE_ENV_IS_DEV)) ? true : false
-       ;
-        try {
-            config      = new Config().getInstance();
-            if (!params.bundle) {
-                try {
-                    //params.bundle = config.bundle;
-                    //params.param = config.routing[config.reverseRouting[params.param.url]];
-                    var _rule = config.reverseRouting[params.param.url];
-                    params = merge(params, config.routing[_rule]);
-                    params.rule = _rule;
-                } catch(reverseRoutingError) {
-                    serverInstance.throwError(response, 500, reverseRoutingError);
-                    return;
-                }
-            }
-            bundle      = local.bundle = params.bundle;
-            env         = config.env;
-            scope       = config.scope;
-            conf        = config[bundle][env];
-        } catch (configErr) {
-            serverInstance.throwError(response, 500, new Error('syntax error(s) found in `'+ controllerFile +'` \nTrace: ') + (configErr.stack || configErr.message) );
-            return;
-        }
-
-        local.cacheless     = cacheless;
-        local.request       = request;
-        local.next          = next;
-        local.conf          = conf;
-        local.isStandalone  = conf.isStandalone;
 
         if (cacheless) {
             refreshCoreDependencies();
@@ -419,10 +491,10 @@ function Router(env, scope) {
             rootPath        : conf.executionPath || null,
             executionPath   : conf.executionPath || null,
             //instance: self.serverInstance,
-            isUsingTemplate: local.isUsingTemplate,
-            cacheless: cacheless,
-            path: params.param.path || null, // user custom path : namespace should be ignored or left blank
-            assets: {}
+            isUsingTemplate : local.isUsingTemplate,
+            cacheless       : cacheless,
+            path            : params.param.path || null, // user custom path : namespace should be ignored or left blank
+            assets          : {}
         };
 
         if (routeHasViews) {

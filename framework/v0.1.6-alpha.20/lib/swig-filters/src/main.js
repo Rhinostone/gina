@@ -153,6 +153,13 @@ function SwigFilters(conf) {
             , method            = 'GET'
         ;
 
+        if (
+            typeof(process.env.PROXY_REQUEST_HOST) != 'undefined'
+            && process.env.PROXY_REQUEST_HOST === process.env.PROXY_HOST
+        ) {
+            isProxyHost = true;
+        }
+
         if (ctx.options.method != 'undefined') {
             method = ctx.options.method
         }
@@ -204,7 +211,7 @@ function SwigFilters(conf) {
                     hostname        = config.hostname + config.server.webroot;
 
                     scheme          = hostname.match(/^(https|http)/)[0];
-                    requestPort = (ctx.req.headers.port||ctx.req.headers[':port']||process.env.PROXY_PORT);
+                    requestPort = (ctx.req.headers.port||ctx.req.headers[':port']||parseInt(process.env.PROXY_PORT));
                     var hostPort = config.hostname.match(/(\:d+\/|\:\d+)$/);
                     hostPort = (hostPort) ? ~~(hostPort[0].replace(/\:/g, '')) : config.port[config.server.protocol][config.server.scheme];
                     // Linking bundle B from bundle A wihtout proxy

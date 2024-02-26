@@ -343,25 +343,26 @@ function SuperController(options) {
             set('page.environment.scopeIsProduction', /^true$/i.test(process.env.NODE_SCOPE_IS_PRODUCTION) );
             set('page.environment.date.now', new Date().format("isoDateTime"));
 
-            var requestPort = req.headers.port || req.headers[':port'];
-            var isProxyHost = (
-                typeof(req.headers.host) != 'undefined'
-                && typeof(requestPort) != 'undefined'
-                &&  /^(80|443)$/.test(requestPort)
-                && local.options.conf.server.scheme +'://'+ req.headers.host +':'+ requestPort != local.options.conf.hostname.replace(/\:\d+$/, '') +':'+ local.options.conf.server.port
-                ||
-                typeof(req.headers[':authority']) != 'undefined'
-                && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname
-                ||
-                typeof(req.headers.host) != 'undefined'
-                && typeof(requestPort) != 'undefined'
-                && /^(80|443)$/.test(requestPort)
-                && req.headers.host == local.options.conf.host
-                ||
-                typeof(req.headers['x-nginx-proxy']) != 'undefined'
-                && /^true$/i.test(req.headers['x-nginx-proxy'])
-            ) ? true : false;
-            setContext('isProxyHost', isProxyHost);
+            // var requestPort = req.headers.port || req.headers[':port'];
+            // var isProxyHost = (
+            //     typeof(req.headers.host) != 'undefined'
+            //     && typeof(requestPort) != 'undefined'
+            //     &&  /^(80|443)$/.test(requestPort)
+            //     && local.options.conf.server.scheme +'://'+ req.headers.host +':'+ requestPort != local.options.conf.hostname.replace(/\:\d+$/, '') +':'+ local.options.conf.server.port
+            //     ||
+            //     typeof(req.headers[':authority']) != 'undefined'
+            //     && local.options.conf.server.scheme +'://'+ req.headers[':authority'] != local.options.conf.hostname
+            //     ||
+            //     typeof(req.headers.host) != 'undefined'
+            //     && typeof(requestPort) != 'undefined'
+            //     && /^(80|443)$/.test(requestPort)
+            //     && req.headers.host == local.options.conf.host
+            //     ||
+            //     typeof(req.headers['x-nginx-proxy']) != 'undefined'
+            //     && /^true$/i.test(req.headers['x-nginx-proxy'])
+            // ) ? true : false;
+            // setContext('isProxyHost', isProxyHost);
+            var isProxyHost = getContext('isProxyHost');
             set('page.environment.isProxyHost', isProxyHost);
             var _config = ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV];
             // by default
@@ -383,7 +384,7 @@ function SuperController(options) {
             }
 
             if (
-                getContext('isProxyHost')
+                isProxyHost
                 && !isSpecialCase
             ) {
                 // rewrite hostname vs req.headers.host
@@ -1725,7 +1726,11 @@ function SuperController(options) {
         var authority = ( typeof(local.req.headers['x-forwarded-proto']) != 'undefined' ) ? local.req.headers['x-forwarded-proto'] : local.options.conf.server.scheme;
         authority += '://'+ local.req.headers.host;
         var useWebroot = false;
-        if ( !/^\/$/.test(local.options.conf.server.webroot) && local.options.conf.server.webroot.length > 0 && local.options.conf.hostname.replace(/\:\d+$/, '') == authority ) {
+        if (
+            !/^\/$/.test(local.options.conf.server.webroot)
+            && local.options.conf.server.webroot.length > 0
+            // && local.options.conf.hostname.replace(/\:\d+$/, '') == authority
+        ) {
             useWebroot = true
         }
         authority = null;
@@ -2941,9 +2946,10 @@ function SuperController(options) {
             }
         }
 
-        var ctx         = getContext()
-            , protocol  = null
-            , scheme    = null
+        var ctx             = getContext()
+            , protocol      = null
+            , scheme        = null
+            , isProxyHost   = getContext('isProxyHost')
         ;
         // cleanup options.path
         if (/\:\/\//.test(options.path)) {
@@ -2976,9 +2982,14 @@ function SuperController(options) {
             var bundle = ( options.hostname.replace(/(.*)\:\/\//, '') ).split(/\@/)[0];
 
             // No shorcut possible because conf.hostname might differ from user inputs
-            options.host        = ctx.gina.config.envConf[bundle][ctx.env].host.replace(/(.*)\:\/\//, '').replace(/\:\d+/, '');
-            options.hostname    = ctx.gina.config.envConf[bundle][ctx.env].hostname;
-            options.port        = ctx.gina.config.envConf[bundle][ctx.env].server.port;
+
+            options.host        = (isProxyHost) ? process.env.PROXY_HOST : ctx.gina.config.envConf[bundle][ctx.env].host.replace(/(.*)\:\/\//, '').replace(/\:\d+/, '');
+            options.hostname    = (isProxyHost) ? process.env.PROXY_HOSTNAME +':'+ parseInt(process.env.PROXY_PORT) : ctx.gina.config.envConf[bundle][ctx.env].hostname;
+            options.port        = (isProxyHost) ? parseInt(process.env.PROXY_PORT) : ctx.gina.config.envConf[bundle][ctx.env].server.port;
+
+            // options.host        = ctx.gina.config.envConf[bundle][ctx.env].host.replace(/(.*)\:\/\//, '').replace(/\:\d+/, '');
+            // options.hostname    = ctx.gina.config.envConf[bundle][ctx.env].hostname;
+            // options.port        = ctx.gina.config.envConf[bundle][ctx.env].server.port;
 
             options.protocol    = ctx.gina.config.envConf[bundle][ctx.env].server.protocol;
             options.scheme      = ctx.gina.config.envConf[bundle][ctx.env].server.scheme;
