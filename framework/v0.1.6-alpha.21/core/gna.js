@@ -212,11 +212,11 @@ gna.env = process.env.NODE_ENV = env;
 gna.scope = process.env.NODE_SCOPE = scope;
 gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
-//Cahceless is also defined in the main config : Config::isCacheless().
+//Cacheless is also defined in the main config : Config::isCacheless().
 process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
 process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
 process.env.NODE_SCOPE_IS_PRODUCTION = (/^true$/i.test(isProductionScope)) ? true : false;
-
+// Proxy check
 var proxyPathObj    = new _(projects[projectName].path + '/proxy.json', true);
 var proxy           = null;
 if ( proxyPathObj.existsSync() ) {

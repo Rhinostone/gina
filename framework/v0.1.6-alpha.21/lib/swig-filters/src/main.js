@@ -79,8 +79,12 @@ function SwigFilters(conf) {
 
     // Allows you to get a bundle web root
     self.getWebroot = function (input, obj) {
+
+        var ctx  = SwigFilters.instance._options || self.options;
+
         var url     = null
             , prop  = self.options.envObj.getConf(obj, options.conf.env)
+            , isProxyHost  = ( ctx.isProxyHost && /^true$/i.test(ctx.isProxyHost) ) ? true : (( typeof(process.env.PROXY_HOSTNAME) != 'undefined' ) ? true : false)
         ;
         if ( isProxyHost ) {
             url = prop.server.scheme + '://'+ prop.host;
@@ -153,12 +157,6 @@ function SwigFilters(conf) {
             , method            = 'GET'
         ;
 
-        if (
-            typeof(process.env.PROXY_REQUEST_HOST) != 'undefined'
-            && process.env.PROXY_REQUEST_HOST === process.env.PROXY_HOST
-        ) {
-            isProxyHost = true;
-        }
 
         if (ctx.options.method != 'undefined') {
             method = ctx.options.method
