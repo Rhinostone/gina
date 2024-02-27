@@ -160,7 +160,6 @@ function Router(env, scope) {
         /**
          * Reverse proxy check
          */
-        process.env.PROXY_REQUEST_HOST = request.headers.host || request.headers[':host'] || request.host;
         var requestPort = request.headers.port || request.headers[':port'];
         var isProxyHost = (
             typeof(request.headers.host) != 'undefined'
@@ -178,51 +177,11 @@ function Router(env, scope) {
             ||
             typeof(request.headers['x-nginx-proxy']) != 'undefined'
             && /^true$/i.test(request.headers['x-nginx-proxy'])
+            ||
+            typeof(process.env.PROXY_HOSTNAME) != 'undefined'
         ) ? true : false;
 
-        if (
-            !isProxyHost
-            && typeof(process.env.PROXY_REQUEST_HOST) != 'undefined'
-            && process.env.PROXY_REQUEST_HOST === process.env.PROXY_HOST
-        ) {
-            isProxyHost = true;
-        }
-
         setContext('isProxyHost', isProxyHost);
-
-        // var _config = ctx.config.envConf[conf.bundle][process.env.NODE_ENV];
-        // // by default
-        // var hostname    = _config.hostname + _config.server.webroot;
-        // var scheme      = hostname.match(/^(https|http)/)[0];
-        // requestPort = (request.headers.port||request.headers[':port']);
-
-        // var hostPort = hostname.match(/(\:d+\/|\:\d+)$/);
-        // hostPort = (hostPort) ? ~~(hostPort[0].replace(/\:/g, '')) : _config.port[_config.server.protocol][_config.server.scheme];
-        // // Linking bundle B from bundle A wihtout proxy
-        // var isSpecialCase = (
-        //         getContext('bundle') != _config.bundle
-        //         && requestPort != hostPort
-        //         && request.headers[':host'] != process.env.PROXY_HOST
-        // ) ? true : false;
-
-        // if (isSpecialCase) {
-        //     hostname = _config.hostname;
-        // }
-
-        // if (
-        //     isProxyHost
-        //     && !isSpecialCase
-        // ) {
-        //     // rewrite hostname vs req.headers.host
-        //     hostname    = scheme + '://'+ (request.headers.host||request.headers[':host']);
-
-        //     if (
-        //         !/^(80|443)$/.test(requestPort)
-        //         && !new RegExp(requestPort+'$').test(hostname)
-        //     ) {
-        //         hostname += ':'+ requestPort;
-        //     }
-        // }
 
 
 
