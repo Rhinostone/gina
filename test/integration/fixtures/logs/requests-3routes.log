@@ -1,0 +1,7 @@
+[2026 Mar 06 21:02:40] [debug  ][auth@myproject] `auth@myproject `Logger instance already exists: reusing it ;)
+[2026 Mar 06 21:02:40] [info   ][auth@myproject] GET [200] /auth/status 
+[2026 Mar 06 21:02:41] [debug  ][auth@myproject] `auth@myproject `Logger instance already exists: reusing it ;)
+[2026 Mar 06 21:02:41] [error  ][auth@myproject] [ BUNDLE ][ auth ] POST [ 500 ] 
+[2026 Mar 06 21:02:42] [debug  ][auth@myproject] `auth@myproject `Logger instance already exists: reusing it ;)
+[2026 Mar 06 21:02:42] [error  ][auth@myproject] [ BUNDLE ][ auth ] GET [ 500 ] 
+[2026 Mar 06 21:02:42] [info   ][auth@myproject] GET [500] /auth/no-such-route-xyz 
