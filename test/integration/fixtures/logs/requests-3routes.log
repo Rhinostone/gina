@@ -1,0 +1,5 @@
+[2026 Mar 06 21:46:12] [info   ][auth@myproject] GET [200] /auth/status
+[2026 Mar 06 21:46:12] [error  ][auth@myproject] [ BUNDLE ][ auth ] POST [ 404 ]
+[2026 Mar 06 21:46:12] [info   ][auth@myproject] POST [404] /account/reset
+[2026 Mar 06 21:46:12] [error  ][auth@myproject] [ BUNDLE ][ auth ] GET [ 500 ]
+[2026 Mar 06 21:46:12] [info   ][auth@myproject] GET [500] /auth/no-such-route-xyz
