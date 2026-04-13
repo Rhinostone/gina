@@ -226,10 +226,22 @@ function PostPublish() {
         try {
             execSync('$(which git) checkout develop');
 
+            // Bump devDependencies.gina and regenerate package-lock.json so the docs
+            // CI run on develop / main does not fail with "lock file does not satisfy".
+            // Failures here are non-fatal — a stale lockfile can be patched manually
+            // post-publish, but a thrown error would block tagAndMerge / bumpVersion /
+            // publishAlpha and leave the release half-shipped.
+            try {
+                execSync('$(which npm) pkg set devDependencies.gina="^' + self.publishedVersion + '"');
+                execSync('$(which npm) install --package-lock-only --ignore-scripts');
+            } catch (lockErr) {
+                console.warn('[syncDocs] devDep / lockfile sync failed (non-fatal — fix manually): ' + (lockErr.message || lockErr));
+            }
+
             // Commit + push develop — tolerate "nothing to commit" locally so
             // the merge-to-main step below still runs when there is no config diff.
             try {
-                execSync('$(which git) add docusaurus.config.js');
+                execSync('$(which git) add docusaurus.config.js package.json package-lock.json');
                 execSync("$(which git) commit -m'Updated gina version to " + self.publishedVersion + "'");
                 execSync('$(which git) push origin develop');
             } catch (commitErr) {
