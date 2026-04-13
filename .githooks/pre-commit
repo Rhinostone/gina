@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+#
+# This file is part of the gina package.
+# Copyright (c) 2009-2026 Rhinostone <contact@gina.io>
+#
+# For the full copyright and license information, please view the LICENSE
+# file that was distributed with this source code.
+#
+# Pre-commit guard: fail-closed defense against local-tool configuration paths (#S5).
+#
+# Paired with:
+#   - .gitignore / .npmignore entries (passive)
+#   - prepare_version.js "checkNoLocalLeakage" gate (#S3)
+#   - prepack check_no_claude_leak.js (#S3)
+#   - CI security.yml (#S6)
+#
+# Pattern must stay in sync with those four locations:
+#   (^|/)(CLAUDE\.md|\.claude[a-z]*)
+
+set -eu
+
+matches=$(git diff --cached --name-only --diff-filter=AM | grep -iE '(^|/)(CLAUDE\.md|\.claude[a-z]*)' || true)
+
+if [ -n "$matches" ]; then
+    echo "[pre-commit] ERROR: local-tool configuration paths staged for commit:" >&2
+    while IFS= read -r line; do
+        echo "  - $line" >&2
+    done <<EOF
+$matches
+EOF
+    echo "" >&2
+    echo "[pre-commit] These paths must never be tracked in git." >&2
+    echo "[pre-commit] Unstage with: git restore --staged <path>" >&2
+    exit 1
+fi
+
+exit 0

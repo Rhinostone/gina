@@ -45,6 +45,9 @@ README-4Contributors.md
 .changes/
 .changie.yaml
 
+# Git hooks (contributor tooling — not shipped to npm consumers)
+.githooks/
+
 # Framework services (WIP — not ready for distribution)
 services/
 

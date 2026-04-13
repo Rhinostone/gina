@@ -1,0 +1,3 @@
+kind: Security
+body: 'Added pre-commit hook (.githooks/pre-commit) that blocks local-tool configuration paths (CLAUDE.md, .claude*) from entering git history. post_install.js installs core.hooksPath=.githooks for contributor clones only (gated on .git presence in gina repo root). #S5 follow-up to #S3.'
+time: 2026-04-13T04:34:28.75879+01:00

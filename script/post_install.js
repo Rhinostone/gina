@@ -717,6 +717,21 @@ function PostInstall() {
 
         restoreSymlinks();
 
+        // #S5 — install gina's pre-commit hook for contributor clones.
+        // `.git` exists at self.gina root only in a clone/worktree of the gina
+        // repo, not inside `node_modules/gina` on a consumer install. We gate on
+        // its presence so end-user `npm install gina` is a no-op here.
+        // `fs.existsSync(.git)` matches both main repo (.git dir) and linked
+        // worktrees (.git file pointing at ../.git/worktrees/<name>).
+        try {
+            if ( fs.existsSync( _(self.gina + '/.git', true) ) ) {
+                execSync('git -C "' + self.gina + '" config core.hooksPath .githooks');
+                console.debug('Installed gina git hooks path (core.hooksPath=.githooks)');
+            }
+        } catch (_hooksErr) {
+            console.warn('Could not install gina git hooks path: ' + (_hooksErr.message || _hooksErr));
+        }
+
         // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
         if (!self.isCustomPrefix && self.isGlobalInstall) {
