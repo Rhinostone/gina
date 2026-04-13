@@ -1,0 +1,3 @@
+kind: Security
+body: 'Added GitHub Actions workflow (.github/workflows/security.yml) that greps the git index on every push/PR to develop and master for Claude-related paths (CLAUDE.md, .claude*). Fails the build if any are tracked. Backs up the local pre-commit hook (#S5) and publish-boundary gate (#S3). #S6 follow-up to #S3.'
+time: 2026-04-13T04:35:55.557642+01:00
