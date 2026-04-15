@@ -1454,6 +1454,19 @@ function Server(options) {
                         }
                         sameOrigin = false;
                     } else {
+                        // #B13 — preserve preflight echo of access-control-allow-headers.
+                        // checkPreflightRequest() echoes back the browser's
+                        // access-control-request-headers list so the preflight passes even
+                        // when the bundle's static ACAH config does not list every header
+                        // the client sends (e.g. Content-Type). Without this guard, the
+                        // static value below would overwrite that echo and break CORS.
+                        if (
+                            /^access\-control\-allow\-headers$/i.test(h)
+                            && request.isPreflightRequest
+                            && response.getHeader('access-control-allow-headers')
+                        ) {
+                            continue;
+                        }
                         headerValue = resHeaders[h];
                         try {
                             response.setHeader(h, headerValue);
