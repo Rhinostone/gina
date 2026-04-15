@@ -13,6 +13,7 @@ Gina follows a BDFL governance model — see [GOVERNANCE.md](./GOVERNANCE.md) fo
 - [Debugging](#debugging)
 - [Coding conventions](#coding-conventions)
 - [Branch model](#branch-model)
+- [Local git hooks (opt-in)](#local-git-hooks-opt-in)
 - [Commit style](#commit-style)
 - [Changelog](#changelog)
 - [Pull request checklist](#pull-request-checklist)
@@ -141,6 +142,23 @@ Please read it before submitting your first pull request.
 | `develop` | Working branch — all PRs target this branch |
 
 Always branch from `develop` and open your PR against `develop`.
+
+---
+
+## Local git hooks (opt-in)
+
+If you have multiple git identities on one machine (work, personal, internal hostname), it is easy to commit under the wrong `user.email` and leak a private domain into the public git log. This repo ships an opt-in `pre-commit` hook that refuses commits authored under a private-domain identity.
+
+Install it once from the repo root:
+
+```bash
+cp resources/git-hooks/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+The hook checks `git config user.email` against a short list of private-domain patterns (e.g. `.local` hostnames, `rhinostone.com`, `example.com`, `freelancer-app.fr`) and exits with an error message if any match — letting you switch identity (`git config user.email you@public-domain.example`) before retrying.
+
+Edit `resources/git-hooks/pre-commit` and extend the `BLOCKED_PATTERNS` regex to cover any additional private domain or hostname suffix you want to guard against. The hook is local to your clone — it is not shared across contributors, so each contributor installs it independently.
 
 ---
 
