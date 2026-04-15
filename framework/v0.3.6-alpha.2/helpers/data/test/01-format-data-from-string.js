@@ -260,7 +260,7 @@ exports['formatDataFromString: body_string2.json case'] = function(test) {
             "ext": ".svg",
             "encoding": "7bit",
             "size": "4374",
-            "location": "/Users/martinlutheretouman/tmp/tmp/uploads/logo.svg",
+            "location": "/tmp/uploads/logo.svg",
             "mime": "image/svg+xml"
           }
         ],
