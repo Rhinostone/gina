@@ -536,12 +536,12 @@ function Initialize(opt) {
         var main            = require( _(self.opt.homedir + '/main.json', true) )
             , version       = getEnvVar('GINA_VERSION')
             , defFramework  = getEnvVar('GINA_DEF_FRAMEWORK') || main['def_framework']
-            , prefix        = getEnvVar('GINA_PREFIX') || main['def_prefix'][self.release]
-            , globalMode    = getEnvVar('GINA_GLOBAL_MODE') || main['def_global_mode'][self.release]
-            , arch          = getEnvVar('GINA_ARCH') || main['def_arch'][self.release]
-            , platform      = getEnvVar('GINA_PLATFORM') || main['def_platform'][self.release]
-            , env           = getEnvVar('GINA_ENV') || main['def_env'][self.release]
-            , scope         = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release]
+            , prefix        = getEnvVar('GINA_PREFIX') || (main['def_prefix'] && main['def_prefix'][self.release])
+            , globalMode    = getEnvVar('GINA_GLOBAL_MODE') || (main['def_global_mode'] && main['def_global_mode'][self.release])
+            , arch          = getEnvVar('GINA_ARCH') || (main['def_arch'] && main['def_arch'][self.release])
+            , platform      = getEnvVar('GINA_PLATFORM') || (main['def_platform'] && main['def_platform'][self.release])
+            , env           = getEnvVar('GINA_ENV') || (main['def_env'] && main['def_env'][self.release])
+            , scope         = getEnvVar('GINA_SCOPE') || (main['def_scope'] && main['def_scope'][self.release])
             , settings      = requireJSON( _( getPath('gina').root + '/resources/home/settings.json', true ) )
             , userSettings  = {}
             , target        = _(self.opt.homedir +'/'+ self.release +'/settings.json', true)
@@ -690,7 +690,7 @@ function Initialize(opt) {
                 'run_dir' : _( getRunDir(), true ),
                 'tmp_dir' : _( getTmpDir(), true ),
                 'log_dir' : _( getLogDir(), true ),
-                'log_level' : getEnvVar('GINA_LOG_LEVEL') || main['def_log_level'][self.release] || 'info'
+                'log_level' : getEnvVar('GINA_LOG_LEVEL') || (main['def_log_level'] && main['def_log_level'][self.release]) || 'info'
             };
 
             settings = whisper(dic, settings);
@@ -803,7 +803,7 @@ function Initialize(opt) {
         var main    = require( self.opt.homedir + '/main.json' );
         //has registered env ?
         // dev by default
-        var env     = getEnvVar('GINA_ENV') || main['def_env'][self.release];
+        var env     = getEnvVar('GINA_ENV') || (main['def_env'] && main['def_env'][self.release]);
         var readFromMainConf = true;
         if ( typeof(local.projectData) != 'undefined' && local.env) {
             readFromMainConf = false;
@@ -871,7 +871,7 @@ function Initialize(opt) {
         var main    = require( self.opt.homedir + '/main.json' );
         //has registered scope ?
         // scope by default
-        var scope   = getEnvVar('GINA_SCOPE') || main['def_scope'][self.release];
+        var scope   = getEnvVar('GINA_SCOPE') || (main['def_scope'] && main['def_scope'][self.release]);
         var readFromMainConf = true;
         if ( typeof(local.projectData) != 'undefined' && local.scope) {
             readFromMainConf = false;
