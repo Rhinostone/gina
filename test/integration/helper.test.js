@@ -622,17 +622,19 @@ describe('15 - lib global', function () {
 });
 
 
-// 16 — whisper error message format: missing key prints ${key} not {key}
-describe('16 - whisper: error message for missing key uses ${key} syntax', function () {
+// 16 — whisper silent on missing keys (#B12): no console.error, returns original string.
+describe('16 - whisper: silent on missing keys (#B12)', function () {
 
-    it('context.js whisper error uses \\${key} template literal syntax', function () {
+    it('context.js whisper no longer emits a [Whisper Error] on missing keys', function () {
         var src = fs.readFileSync(CONTEXT_SOURCE, 'utf8');
-        // The log line must contain the literal characters \${ so the output
-        // shows "${key}" (not "{key}") in the console.error message.
-        // In a regex: \\\$ = literal \$, so \\\$\{ matches the 3-char sequence \${
-        assert.ok(
-            /\[Whisper Error\].*\\\$\{/.test(src),
-            'expected whisper error message to contain `\\${key}` syntax (not `{key}`)'
+        // Before #B12, the third replace pass logged a red "[Whisper Error]"
+        // console.error every time a ${key} token had no matching dictionary
+        // entry — surfacing on every first-run `gina --version` after a fresh
+        // install. The fix removes the error; the token is returned as-is.
+        assert.equal(
+            /\[Whisper Error\]/.test(src),
+            false,
+            'context.js still contains [Whisper Error] text — #B12 regressed'
         );
     });
 
