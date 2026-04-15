@@ -1,0 +1,3 @@
+kind: Security
+body: 'Added private-token leak gate (script/check_no_claude_leak.js) wired into the npm prepack hook and the prepare_version.js self.* chain before any git add --all. Fails the publish if the tarball listing contains local-tool configuration paths OR if pack contents contain private-token patterns (phone, private email, private address, private domain, co-author legal name). #G1 follow-up to #S3/#S4.'
+time: 2026-04-15T20:00:39.720373+01:00
