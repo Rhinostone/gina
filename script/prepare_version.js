@@ -465,6 +465,21 @@ function PrepareVersion() {
     self.setupScriptCWD = function(done) {
         var currentWorkingDir = process.cwd();
         if ( self.ginaPath != currentWorkingDir ) {
+            // Verify target is a git repo before chdir — a stale ~/.gina/<release>/settings.json
+            // `dir` field (e.g. pointing at a vanished smoke-test path) would otherwise wedge the
+            // publish at pushChangesToGitIfNeeded with a misleading "No branch selected" error.
+            if ( !fs.existsSync(self.ginaPath) ) {
+                return done( new Error(
+                    '[CWD] gina path `'+ self.ginaPath +'` (from ~/.gina/'+ self.release +'/settings.json `dir` field) '
+                    + 'does not exist. Reset it to the canonical gina install path and retry.'
+                ));
+            }
+            if ( !fs.existsSync(self.ginaPath + '/.git') ) {
+                return done( new Error(
+                    '[CWD] gina path `'+ self.ginaPath +'` (from ~/.gina/'+ self.release +'/settings.json `dir` field) '
+                    + 'is not a git repository. Reset it to the canonical gina install path and retry.'
+                ));
+            }
             console.debug('Changing current working dir from `'+ currentWorkingDir +'` to `'+ self.ginaPath +'`');
             process.chdir(self.ginaPath);
         }
