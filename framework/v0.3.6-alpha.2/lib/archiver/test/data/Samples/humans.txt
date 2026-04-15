@@ -1,9 +1,9 @@
 # TEAM
 
-    Fabrice delaneau
+    John Doe
         Interface designer
-	    fabrice.delaneau [at] gina.io
+	    john.doe [at] example.com
 
-    Martin-Luther Etouman
+    Jane Smith
         Developper
-        martin.etouman [at] gina.io
+        jane.smith [at] example.com

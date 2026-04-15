@@ -126,7 +126,7 @@ describe('getModel — __mock__ override', function() {
             model: function() { return mockEntities; }
         });
 
-        var result = getModel('anyBundle', 'freelancer');
+        var result = getModel('anyBundle', 'invoicing');
         assert.strictEqual(result, mockEntities);
         assert.ok(typeof result.Invoice === 'function');
     });
@@ -149,7 +149,7 @@ describe('getModel — __mock__ override', function() {
 
     it('mock can return different entity sets per connector', function() {
         var models = {
-            freelancer: { Invoice: function Invoice() {} },
+            invoicing: { Invoice: function Invoice() {} },
             auth:       { Session: function Session() {} }
         };
 
@@ -157,7 +157,7 @@ describe('getModel — __mock__ override', function() {
             model: function(bundle, connector) { return models[connector] || {}; }
         });
 
-        assert.ok(typeof getModel('b', 'freelancer').Invoice === 'function');
+        assert.ok(typeof getModel('b', 'invoicing').Invoice === 'function');
         assert.ok(typeof getModel('b', 'auth').Session === 'function');
         assert.deepStrictEqual(getModel('b', 'unknown'), {});
     });
