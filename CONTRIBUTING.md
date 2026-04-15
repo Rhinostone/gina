@@ -156,7 +156,7 @@ cp resources/git-hooks/pre-commit .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
-The hook checks `git config user.email` against a short list of private-domain patterns (e.g. `.local` hostnames, `rhinostone.com`, `example.com`, `freelancer-app.fr`) and exits with an error message if any match — letting you switch identity (`git config user.email you@public-domain.example`) before retrying.
+The hook checks `git config user.email` against a short list of private-domain patterns (see the `BLOCKED_PATTERNS` regex inside `resources/git-hooks/pre-commit` for the current list) and exits with an error message if any match — letting you switch identity (`git config user.email you@public-domain.example`) before retrying.
 
 Edit `resources/git-hooks/pre-commit` and extend the `BLOCKED_PATTERNS` regex to cover any additional private domain or hostname suffix you want to guard against. The hook is local to your clone — it is not shared across contributors, so each contributor installs it independently.
 
