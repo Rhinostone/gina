@@ -1,0 +1,3 @@
+kind: Security
+body: 'Added opt-in pre-commit hook (resources/git-hooks/pre-commit) that blocks commits authored under a private-domain git identity (.local hostnames, internal domains). Contributors install it once via cp resources/git-hooks/pre-commit .git/hooks/pre-commit. Complements the CI-side Claude-path guard (#S5/#S6). #G5.'
+time: 2026-04-15T20:00:42.065063+01:00
