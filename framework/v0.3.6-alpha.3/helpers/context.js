@@ -691,6 +691,27 @@ function ContextHelper(contexts) {
     //     );
     // }
 
+    /**
+     * Interpolates `${key}` tokens in `replaceable` using values from `dictionary`.
+     *
+     * Handles three passes:
+     *  1. Quoted boolean/null shapes: `"${key}"` → unquoted literal when the value is a boolean or null.
+     *  2. Bare tokens: `${key}` → string value.
+     *  3. Embedded tokens inside a larger string (e.g. `~/.${projectName}`) via a manual
+     *     replace to avoid infinite recursion on the regex engine.
+     *
+     * Unknown keys are left untouched silently — earlier revisions logged a
+     * "Whisper Error" on every first-run CLI command when a default had not yet
+     * been seeded (see #B12). Callers that need strict-mode behaviour must
+     * validate their dictionaries before the call.
+     *
+     * @global
+     * @function whisper
+     * @param {Object} dictionary - Map of `key → replacement` values.
+     * @param {Object|string} replaceable - Object or JSON-serialisable value containing `${key}` tokens.
+     * @param {RegExp} [rule] - Optional custom replace rule; when provided, short-circuits the three-pass logic.
+     * @returns {Object|string} The interpolated object or string. Unknown tokens are preserved verbatim.
+     */
     global.whisper = function(dictionary, replaceable, rule) {
         // 1. Inline rule
         if (typeof(rule) != 'undefined') {
@@ -736,17 +757,12 @@ function ContextHelper(contexts) {
                 if (dictionary[key] !== undefined) {
                     // Manual replace to avoid infinite recursion.
                     return s.replace(new RegExp('\\$\\{' + key + '\\}'), dictionary[key]);
-                } else {
-                    // Generate stack trace to identify the caller
-                    const stack = new Error().stack;
-
-                    console.error(
-                        `[Whisper Error]: The key \${${key}} was not found in the dictionary.\n` +
-                        `Skipping replacement to prevent infinite loop.\n` +
-                        `Stack Trace:\n${stack}`
-                    );
-                    return s;
                 }
+                // Key not in dictionary — leave the token in place silently.
+                // Earlier branches already handled the common shapes; reaching here
+                // means no seeded default exists yet. Emitting an error on every
+                // first-run CLI command was noisy and misleading (see #B12).
+                return s;
             })
             // OS Environment Variables
             .replace(/\"\~\/\"|\"\$([_A-Z0-9]+)\"/g, function(s, key) {
