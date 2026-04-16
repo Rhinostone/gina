@@ -9,6 +9,96 @@
     var envName = env.env     || '?';
     var dot     = data.error  ? '#e74c3c' : '#2ecc71';
 
+    // ── Inspector secret redaction (#R7) ──────────────────────────────────
+    // Matches the server-side rules in lib/inspector-redact. Strips secret-
+    // looking fields from anything passed to ginaToolbar.update() before it
+    // touches window.__ginaData or localStorage. Patterns/types/replacement
+    // come from window.__ginaData.gina.inspectorRedact (server-injected).
+    var _rdc      = (d.gina && d.gina.inspectorRedact) || {};
+    var _rdcRepl  = (typeof _rdc.replacement === 'string') ? _rdc.replacement : '[redacted]';
+    var _rdcTypes = {};
+    if (Array.isArray(_rdc.types)) {
+        for (var _ti = 0; _ti < _rdc.types.length; _ti++) {
+            _rdcTypes[String(_rdc.types[_ti]).toLowerCase()] = true;
+        }
+    } else {
+        _rdcTypes['password'] = true;
+    }
+    var _rdcRe = [];
+    var _rdcSrc = Array.isArray(_rdc.patterns) ? _rdc.patterns
+        : ['password','passwd','pwd','secret','token','apikey','api[_-]?key','cvv','cvc','ccv','pan','ssn','authorization','credentials','private[_-]?key'];
+    for (var _ri = 0; _ri < _rdcSrc.length; _ri++) {
+        try { _rdcRe.push(new RegExp(_rdcSrc[_ri], 'i')); } catch (e) { /* skip */ }
+    }
+    // Keys ending in rule/policy/config/validator suffixes describe validation
+    // metadata, not user input — must not be redacted even when the name
+    // contains a secret keyword (e.g. `passwordRule`). Mirrors the server-side
+    // NON_SECRET_SUFFIX regex in lib/inspector-redact.
+    var _rdcNonSecret = /(rule|rules|policy|policies|validator|config|configuration|settings|setting|meta|metadata|format|requirements|strength|constraint|constraints|options|option|schema|definition|definitions|spec|specs)$/i;
+    function _rdcKeyHit(k) {
+        if (typeof k !== 'string') return false;
+        if (_rdcNonSecret.test(k)) return false;
+        for (var i = 0; i < _rdcRe.length; i++) {
+            if (_rdcRe[i].test(k)) return true;
+        }
+        return false;
+    }
+    // Build a Set of secret field names from the form DOM (input[type=password]
+    // etc.). Lets us redact by actual input type, not just by field-name regex.
+    function _rdcDomSecrets(formId) {
+        var hits = {};
+        try {
+            var doc = (window.opener && window.opener.document) || document;
+            var form = formId ? doc.getElementById(formId) : null;
+            var els  = form ? form.querySelectorAll('input,select,textarea') : doc.querySelectorAll('input');
+            for (var i = 0; i < els.length; i++) {
+                var t = (els[i].type || '').toLowerCase();
+                var n = els[i].name || els[i].id || '';
+                if (n && _rdcTypes[t]) hits[n] = true;
+            }
+        } catch (e) { /* cross-origin or detached opener */ }
+        return hits;
+    }
+    function _rdcWalk(v, depth, seen, domHits) {
+        if (depth > 50) return v;
+        if (v === null || typeof v !== 'object') return v;
+        if (seen.indexOf(v) !== -1) return '[circular]';
+        seen.push(v);
+        if (Array.isArray(v)) {
+            var arr = new Array(v.length);
+            for (var i = 0; i < v.length; i++) arr[i] = _rdcWalk(v[i], depth + 1, seen, domHits);
+            return arr;
+        }
+        var out = {};
+        var ks  = Object.keys(v);
+        for (var k = 0; k < ks.length; k++) {
+            var key = ks[k];
+            var val = v[key];
+            if (_rdcKeyHit(key) || (domHits && domHits[key])) {
+                // Only primitive leaf values are redacted. Object/array values
+                // under a secret-like key are metadata (validation rules, error
+                // maps, validator specs keyed by form field name like
+                // `account[password]`) — walk into them so nested primitive
+                // secrets still get caught, but the rule structure itself
+                // passes through.
+                if (val === null || typeof val === 'undefined') {
+                    out[key] = val;
+                } else if (typeof val === 'object') {
+                    out[key] = _rdcWalk(val, depth + 1, seen, domHits);
+                } else {
+                    out[key] = _rdcRepl;
+                }
+            } else {
+                out[key] = _rdcWalk(val, depth + 1, seen, domHits);
+            }
+        }
+        return out;
+    }
+    function _rdc_redact(value, formId) {
+        var domHits = formId ? _rdcDomSecrets(formId) : null;
+        return _rdcWalk(value, 0, [], domHits);
+    }
+
     // ── ginaToolbar shim ──────────────────────────────────────────────────
     // gina.min.js is a stale build that creates its own window.ginaToolbar
     // with a loadData function that accesses removed DOM elements
@@ -29,23 +119,25 @@
 
             if (section === 'data-xhr' || section === 'view-xhr') {
                 if (sectionData) {
-                    u[section] = sectionData;
-                    g[section] = sectionData;
+                    var _safe = _rdc_redact(sectionData, null);
+                    u[section] = _safe;
+                    g[section] = _safe;
                 } else {
                     delete u[section];
                     delete g[section];
                 }
             } else if (section === 'el-xhr') {
-                u['el-xhr'] = sectionData;
+                u['el-xhr'] = _rdc_redact(sectionData, null);
             } else if (section === 'forms') {
                 if (typeof sectionData === 'object' && sectionData !== null && sectionData.id) {
                     if (!u.forms) u.forms = {};
                     if (!u.forms[sectionData.id]) u.forms[sectionData.id] = {};
                     var fd = u.forms[sectionData.id];
-                    var fk = Object.keys(sectionData);
+                    var _safeForm = _rdc_redact(sectionData, sectionData.id);
+                    var fk = Object.keys(_safeForm);
                     for (var i = 0; i < fk.length; i++) {
                         if (fk[i] === 'id') continue;
-                        fd[fk[i]] = sectionData[fk[i]];
+                        fd[fk[i]] = _safeForm[fk[i]];
                     }
                 }
             }

@@ -5,6 +5,8 @@ const lib             = require('./../../lib') || require.cache[require.resolve(
 const Collection      = lib.Collection;
 const cache           = new lib.Cache();
 var statusCodes       = requireJSON( _( getPath('gina').core + '/status.codes') );
+// Inspector secret redaction (dev-mode only — never touches the actual response body)
+var inspectorRedact   = require('lib/inspector-redact');
 // Precompiled regex — avoids per-request RegExp allocation (#P3)
 var blacklistRe       = /[<>]/g;
 
@@ -1046,7 +1048,24 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             __gdUser.view.stylesheets = 'ignored-by-toolbar';
             __gdUser.view.assets      = assets;
 
+            // Inspector secret redaction (#R7) — strip secret-looking fields from
+            // the Inspector clone before any sink (HTML script tag, engine.io push,
+            // /_gina/agent SSE). The actual template `data` is never touched.
+            // Inject the resolved redact config so the statusbar shim can apply
+            // the same rules to validator `ginaToolbar.update()` calls client-side.
+            var _redactConf = inspectorRedact.getConfig(local.options.conf);
+            __gdGina.inspectorRedact = {
+                patterns    : _redactConf.patterns,
+                types       : _redactConf.types,
+                replacement : _redactConf.replacement
+            };
+
             var __gdPayload = { gina: __gdGina, user: __gdUser };
+            __gdPayload = inspectorRedact.redact(__gdPayload, {
+                compiledPatterns : _redactConf.compiledPatterns,
+                replacement      : _redactConf.replacement
+            });
+
             var __gdScript = '<script>window.__ginaData = '
                 + JSON.stringify(__gdPayload)
                     .replace(/<\/script>/gi, '<\\/script>')
