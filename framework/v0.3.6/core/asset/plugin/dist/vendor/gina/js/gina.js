@@ -21435,16 +21435,21 @@ function getDependencies(gina, cb) {
     }
 
     // Gina madatory dependencies are handled here
+    // Webroot is resolved at runtime from `gina.config` (populated by gina.onload.min.js,
+    // which IS whispered server-side). `core.js` ships in `gina.min.js`, which is served
+    // as a static asset without a swig pass — so `{{ page.environment.webroot }}` tokens
+    // embedded here would reach the browser un-interpolated and break the fetch.
+    var _webroot = (gina && gina.config && gina.config.webroot) || '/';
     var arr = [
         // Get routing to populate `window.gina.config.routing`
         // Now fetching routing from gina
         {
             func: loadRoutingConf,
-            args: [ 'routing', {url:  '{{ page.environment.webroot }}_gina/assets/routing.json'} ]
+            args: [ 'routing', {url:  _webroot + '_gina/assets/routing.json'} ]
         }
         // {
         //     func: loadRoutingConf,
-        //     args: [ 'reverseRouting', {url:  '{{ page.environment.webroot }}_gina/assets/reverse-routing.json'} ]
+        //     args: [ 'reverseRouting', {url:  _webroot + '_gina/assets/reverse-routing.json'} ]
         // }
     ];
     depsEventBus.addEventListener('deps.loaded', (event) => {
