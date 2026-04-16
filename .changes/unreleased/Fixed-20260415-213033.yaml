@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Hardening framework:init against missing or mistyped `def_*` keys in ~/.gina/main.json (#B13 — blast-radius follow-up to #B12). `main[''def_prefix'']`, `def_global_mode`, `def_arch`, `def_platform`, `def_env`, `def_scope`, `def_log_level` reads now short-circuit to undefined instead of throwing TypeError when the key is entirely absent.'
-time: 2026-04-15T21:30:33.643368+01:00

@@ -1,3 +1,0 @@
-kind: Changed
-body: syncDocs now regenerates the docs-site package-lock.json after bumping devDependencies.gina — prevents CI / Vercel / Worker deploy failures on every stable release.
-time: 2026-04-13T14:53:44.13021+01:00
