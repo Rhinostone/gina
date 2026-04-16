@@ -1,3 +1,0 @@
-kind: Fixed
-body: Surfacing the real cause when `prepare_version.js` is run against a stale `~/.gina/<release>/settings.json` `dir` field. Publish now fails fast with an actionable message instead of wedging at `pushChangesToGitIfNeeded` with a misleading "No branch selected" error.
-time: 2026-04-15T21:30:39.540378+01:00

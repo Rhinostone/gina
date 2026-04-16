@@ -1,3 +1,0 @@
-kind: Fixed
-body: Prevented spurious Whisper Error on the first CLI command after a fresh install (#B12). `gina --version` and `gina framework:*` commands no longer emit a red error stack trace before their output on a brand-new install.
-time: 2026-04-15T20:45:47.878971+01:00

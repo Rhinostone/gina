@@ -1,3 +1,0 @@
-kind: Fixed
-body: Preventing CORS preflight failure when a bundle's env.json `access-control-allow-headers` list omits a header the client actually sends. `completeHeaders()` no longer overwrites the echo that `checkPreflightRequest()` sets from the incoming `access-control-request-headers` (#B13).
-time: 2026-04-15T23:47:31.007126+01:00
