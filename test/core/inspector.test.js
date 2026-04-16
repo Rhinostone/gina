@@ -5566,7 +5566,7 @@ describe('47 - render-json.js emits inspector#data for JSON API responses', func
     it('builds __gdPayload with gina and user sections', function() {
         var src = getRJsonSrc47();
         assert.ok(
-            /\{\s*gina\s*:.*user\s*:/.test(src),
+            /\{\s*gina\s*:[\s\S]*user\s*:/.test(src),
             'expected __gdPayload = { gina: ..., user: ... } structure'
         );
     });

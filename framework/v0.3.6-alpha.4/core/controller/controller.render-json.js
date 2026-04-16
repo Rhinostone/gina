@@ -4,6 +4,8 @@ const lib               = require('./../../lib') || require.cache[require.resolv
 const Collection        = lib.Collection;
 const cache             = new lib.Cache();
 var statusCodes         = requireJSON( _( getPath('gina').core + '/status.codes') );
+// Inspector secret redaction (dev-mode only — never touches the actual response body)
+var inspectorRedact     = require('lib/inspector-redact');
 
 // Inherited from controller
 var self                = null
@@ -270,7 +272,24 @@ module.exports = function renderJSON(jsonObj, deps) {
                     entries      : local._timeline.entries
                 };
             }
-            var __gdPayload = { gina: { environment: _env }, user: _gdUser };
+            // #R7 — redact secret-looking fields from the Inspector clone before
+            // any sink (engine.io push, /_gina/agent SSE). The actual response
+            // body `jsonObj` is never touched — `redact()` returns a deep clone.
+            // The resolved redact config is exposed under `gina.inspectorRedact`
+            // so the standalone Inspector can mirror the same rules client-side.
+            var _jsonRedactConf = inspectorRedact.getConfig(local.options.conf);
+            var __gdPayload = {
+                gina : { environment: _env, inspectorRedact: {
+                    patterns    : _jsonRedactConf.patterns,
+                    types       : _jsonRedactConf.types,
+                    replacement : _jsonRedactConf.replacement
+                }},
+                user : _gdUser
+            };
+            __gdPayload = inspectorRedact.redact(__gdPayload, {
+                compiledPatterns : _jsonRedactConf.compiledPatterns,
+                replacement      : _jsonRedactConf.replacement
+            });
             self.serverInstance._lastGinaData = __gdPayload;
             process.emit('inspector#data', __gdPayload);
         }
