@@ -1,0 +1,3 @@
+kind: Removed
+body: Removed the unused vendored swig-client browser bundle (core/deps/swig-client/). The client-side Swig bundle is produced at build time from @rhinostone/swig (Phase 7) — the vendored copy had zero runtime or build-time references.
+time: 2026-04-16T11:24:05.53251+01:00
