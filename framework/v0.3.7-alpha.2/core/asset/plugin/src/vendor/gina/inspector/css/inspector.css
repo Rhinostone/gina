@@ -830,6 +830,8 @@ body {
   cursor: pointer;
   padding: 4px;
   transition: border-color 0.15s, background 0.15s;
+  /* Reveal toggle — red tint when active so the unredacted state is visually
+     distinct from the regular amber `.active` state used by RAW / fold-all. */
 }
 .bm-icon-btn svg {
   width: 14px;
@@ -849,6 +851,16 @@ body {
 }
 .bm-icon-btn.active svg {
   fill: var(--accent);
+}
+.bm-icon-btn.bm-hidden {
+  display: none;
+}
+.bm-icon-btn#bm-reveal.active {
+  border-color: var(--err);
+  background: rgba(231, 76, 60, 0.12);
+}
+.bm-icon-btn#bm-reveal.active svg {
+  fill: var(--err);
 }
 
 /* ── Data search bar ─────────────────────────────────────────────────────── */
@@ -3591,5 +3603,3 @@ details[open] > summary.bm-summary::before {
     text-align: left;
   }
 }
-
-/*# sourceMappingURL=inspector.css.map */

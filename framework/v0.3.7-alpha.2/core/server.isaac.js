@@ -862,6 +862,49 @@ function ServerEngineClass(options) {
                 return;
             }
 
+            // ── Inspector reveal — JSON at /_gina/reveal in dev mode ──
+            // #R7 reveal — returns the unredacted snapshot of the most recent
+            // __ginaData payload, but ONLY when the bundle is running in the
+            // `local` scope. Production / beta / testing bundles never expose
+            // raw secrets through this endpoint, even in dev mode. The
+            // unredacted snapshot itself is only stored when scope === 'local'
+            // (see render-swig.js / render-json.js #R7 reveal block); other
+            // scopes leave _lastGinaDataUnredacted as null.
+            if (
+                isCacheless
+                && request.method.toUpperCase() === 'GET'
+                && /\/_gina\/reveal$/.test(request.url)
+            ) {
+                var _rvHeaders = {
+                    'content-type': 'application/json; charset=utf8',
+                    'cache-control': 'no-cache, no-store',
+                    'access-control-allow-origin': '*',
+                    'X-Powered-By': 'Gina/' + GINA_VERSION
+                };
+
+                var _rvSend = function(status, body) {
+                    var _rvBody = JSON.stringify(body);
+                    if (response.stream) {
+                        if (response.stream.destroyed || response.stream.closed) return;
+                        response.stream.respond({ ':status': status, ..._rvHeaders });
+                        return response.stream.end(_rvBody);
+                    }
+                    response.writeHead(status, _rvHeaders);
+                    console.info(request.method + ' [' + status + '] ' + request.url);
+                    response.end(_rvBody);
+                };
+
+                if (process.env.NODE_SCOPE !== 'local') {
+                    return _rvSend(403, { error: 'reveal forbidden in non-local scope' });
+                }
+
+                if (!server._lastGinaDataUnredacted) {
+                    return _rvSend(404, { error: 'no snapshot available' });
+                }
+
+                return _rvSend(200, server._lastGinaDataUnredacted);
+            }
+
             // Proxy detection - Needs to be place after /_gina/health/*
             isProxyHost = getContext('isProxyHost') || false;
             requestHost = request.headers.host || request.headers[':authority'];

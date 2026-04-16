@@ -17,34 +17,65 @@
  *       }
  *   }
  *
+ * Matching strategy:
+ *   The key is tokenized on `_-.[]:/whitespace` and camelCase boundaries, then
+ *   each anchored pattern is tested against (a) every individual token, and
+ *   (b) the joined-tokens form. So `apiKey`, `api_key`, and `apikey` all match
+ *   the pattern `apikey`, while `companyName` and `lastCompanyUsedId` no longer
+ *   false-positive on `pan` / `ssn` / `cvv` substrings.
+ *
  * When `patterns` or `types` is omitted, the defaults below are used.
  */
 
 'use strict';
 
+// Patterns are matched against individual tokens or the joined-tokens form,
+// not raw key substrings. `apikey` covers `apiKey` / `api_key` / `apikey`
+// because `tokenize` strips separators and case before matching.
 var DEFAULT_PATTERNS = [
     'password', 'passwd', 'pwd',
     'secret',
-    'token', 'apikey', 'api[_-]?key',
+    'token', 'apikey',
     'cvv', 'cvc', 'ccv',
     'pan', 'ssn',
     'authorization', 'credentials',
-    'private[_-]?key'
+    'privatekey'
 ];
 
 var DEFAULT_TYPES = ['password'];
 var REPLACEMENT   = '[redacted]';
 
-// Keys ending with these suffixes describe validation rules, policies, or
-// config metadata — they do not hold user input. A key like `passwordRule`
-// or `passwordPolicy` must pass through untouched even though it contains
-// the substring "password". Matched case-insensitively at the very end of
-// the key name.
-var NON_SECRET_SUFFIX = /(rule|rules|policy|policies|validator|config|configuration|settings|setting|meta|metadata|format|requirements|strength|constraint|constraints|options|option|schema|definition|definitions|spec|specs)$/i;
+// Anchored at both ends so a single token equal to the suffix word triggers
+// the carve-out (e.g. last token `rule` in `passwordRule`). Prevents false
+// positives like `overrules` (one token, not exactly `rules`).
+var NON_SECRET_SUFFIX = /^(rule|rules|policy|policies|validator|config|configuration|settings|setting|meta|metadata|format|requirements|strength|constraint|constraints|options|option|schema|definition|definitions|spec|specs)$/i;
 
 /**
- * Compile an array of regex source strings into RegExp objects. Invalid
- * entries are dropped silently so a bad config key cannot crash a render.
+ * Split a key into lowercase tokens. Separators (`_-.[]:/whitespace`) and
+ * camelCase boundaries both produce token breaks.
+ * @param {string} key
+ * @returns {string[]}
+ */
+function tokenize(key) {
+    if (typeof key !== 'string' || key.length === 0) return [];
+    // Insert spaces at camelCase boundaries: `apiKey` → `api Key`,
+    // `XMLParser` → `XML Parser`, `lastCompanyUsedId` → `last Company Used Id`.
+    var spaced = key
+        .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+        .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+    var parts = spaced.split(/[\s_\-.\[\]:\/]+/);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+        if (parts[i].length > 0) out.push(parts[i].toLowerCase());
+    }
+    return out;
+}
+
+/**
+ * Compile an array of regex source strings into anchored RegExp objects.
+ * Each pattern is wrapped as `^(?:<source>)$` so it must match the whole
+ * token (or whole joined-tokens string), never a substring. Invalid entries
+ * are dropped silently so a bad config key cannot crash a render.
  * @param {string[]} patterns
  * @returns {RegExp[]}
  */
@@ -52,7 +83,7 @@ function compile(patterns) {
     var out = [];
     if (!Array.isArray(patterns)) return out;
     for (var i = 0; i < patterns.length; i++) {
-        try { out.push(new RegExp(patterns[i], 'i')); } catch (e) { /* skip */ }
+        try { out.push(new RegExp('^(?:' + patterns[i] + ')$', 'i')); } catch (e) { /* skip */ }
     }
     return out;
 }
@@ -64,11 +95,18 @@ function compile(patterns) {
  */
 function keyMatches(key, compiled) {
     if (typeof key !== 'string') return false;
-    // Rule/policy/config keys describe validation, not user input — skip them
-    // even when the name contains a secret keyword (e.g. `passwordRule`).
-    if (NON_SECRET_SUFFIX.test(key)) return false;
+    var tokens = tokenize(key);
+    if (tokens.length === 0) return false;
+    // Suffix carve-out: keys whose last token is a metadata word describe
+    // validation rules / config / schema, not user input — pass through.
+    if (NON_SECRET_SUFFIX.test(tokens[tokens.length - 1])) return false;
+    var joined = tokens.join('');
     for (var i = 0; i < compiled.length; i++) {
-        if (compiled[i].test(key)) return true;
+        var re = compiled[i];
+        if (re.test(joined)) return true;
+        for (var t = 0; t < tokens.length; t++) {
+            if (re.test(tokens[t])) return true;
+        }
     }
     return false;
 }
@@ -177,6 +215,7 @@ module.exports = {
     DEFAULT_TYPES       : DEFAULT_TYPES,
     REPLACEMENT         : REPLACEMENT,
     NON_SECRET_SUFFIX   : NON_SECRET_SUFFIX,
+    tokenize            : tokenize,
     compile             : compile,
     keyMatches          : keyMatches,
     redact              : redact,

@@ -112,9 +112,12 @@ describe('03 — redact() — secret keys', function () {
     });
 
     it('honours custom patterns (replacing defaults)', function () {
+        // Patterns are matched against tokens or the joined-tokens form, so the
+        // token-style form (no separators, lowercase) is the canonical spelling.
+        // `custom_secret` → tokens ['custom','secret'] → joined 'customsecret'.
         var out = redactor.redact(
             { password: 'pw', custom_secret: 'cs', email: 'x@y.z' },
-            { patterns: ['custom_secret'] }
+            { patterns: ['customsecret'] }
         );
         // 'password' is no longer a secret because patterns replaced defaults
         assert.equal(out.password, 'pw');
@@ -334,10 +337,10 @@ describe('08 — NON_SECRET_SUFFIX carve-out — rule/policy/config keys', funct
             path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/statusbar.html'),
             'utf8'
         );
-        assert.ok(/_rdcNonSecret\s*=\s*\/\(rule\|rules\|policy\|policies\|validator\|config/.test(src),
+        assert.ok(/_rdcNonSecret\s*=\s*\/\^\(rule\|rules\|policy\|policies\|validator\|config/.test(src),
             'statusbar shim missing _rdcNonSecret regex');
-        assert.ok(/_rdcNonSecret\.test\(k\)/.test(src),
-            'statusbar shim missing _rdcNonSecret guard in _rdcKeyHit');
+        assert.ok(/_rdcNonSecret\.test\(tokens\[tokens\.length\s*-\s*1\]\)/.test(src),
+            'statusbar shim missing _rdcNonSecret guard on last token');
     });
 
     it('statusbar dist copy carries the NON_SECRET_SUFFIX carve-out', function () {
@@ -412,5 +415,147 @@ describe('09 — Primitive-only redaction under secret-like keys', function () {
         );
         assert.ok(/typeof val === 'object'/.test(dist),
             'dist statusbar.html missing primitive-only rule — rebuild plugin');
+    });
+});
+
+describe('10 — Tokenize semantics (regression: real-world false positives)', function () {
+    var compiled = redactor.compile(redactor.DEFAULT_PATTERNS);
+
+    it('tokenize() splits camelCase boundaries', function () {
+        assert.deepEqual(redactor.tokenize('apiKey'),           ['api', 'key']);
+        assert.deepEqual(redactor.tokenize('companyName'),      ['company', 'name']);
+        assert.deepEqual(redactor.tokenize('lastCompanyUsedId'), ['last', 'company', 'used', 'id']);
+        assert.deepEqual(redactor.tokenize('XMLParser'),        ['xml', 'parser']);
+    });
+
+    it('tokenize() splits on separators _ - . [ ] : / whitespace', function () {
+        assert.deepEqual(redactor.tokenize('api_key'),     ['api', 'key']);
+        assert.deepEqual(redactor.tokenize('api-key'),     ['api', 'key']);
+        assert.deepEqual(redactor.tokenize('api.key'),     ['api', 'key']);
+        assert.deepEqual(redactor.tokenize('user[token]'), ['user', 'token']);
+        assert.deepEqual(redactor.tokenize('auth/scope'),  ['auth', 'scope']);
+        assert.deepEqual(redactor.tokenize('auth:scope'),  ['auth', 'scope']);
+        assert.deepEqual(redactor.tokenize('api key'),     ['api', 'key']);
+    });
+
+    it('tokenize() lowercases every token', function () {
+        var out = redactor.tokenize('PasswordRule');
+        assert.deepEqual(out, ['password', 'rule']);
+    });
+
+    it('tokenize() returns [] for empty / non-string input', function () {
+        assert.deepEqual(redactor.tokenize(''),        []);
+        assert.deepEqual(redactor.tokenize(null),      []);
+        assert.deepEqual(redactor.tokenize(undefined), []);
+        assert.deepEqual(redactor.tokenize(42),        []);
+    });
+
+    it('does NOT false-positive on companyName (contains "pan" substring)', function () {
+        // Pre-fix: /password|pwd|token|.../i.test('companyName') matched because
+        // "compa[ny]" contains "pan" as a 3-char substring. Tokenize anchors on
+        // whole tokens ("company", "name") so "pan" never matches.
+        assert.equal(redactor.keyMatches('companyName',  compiled), false);
+        assert.equal(redactor.keyMatches('CompanyName',  compiled), false);
+        assert.equal(redactor.keyMatches('company_name', compiled), false);
+        assert.equal(redactor.keyMatches('company-name', compiled), false);
+    });
+
+    it('does NOT false-positive on lastCompanyUsedId', function () {
+        // Real-world Freelancer key that was being redacted pre-fix.
+        assert.equal(redactor.keyMatches('lastCompanyUsedId',  compiled), false);
+        assert.equal(redactor.keyMatches('LastCompanyUsedId',  compiled), false);
+        assert.equal(redactor.keyMatches('last_company_used_id', compiled), false);
+    });
+
+    it('does NOT false-positive on other keys containing "pan" / "ssn" / "cvv" as substrings', function () {
+        // Anchored tokens mean these keys pass through — only standalone tokens match.
+        assert.equal(redactor.keyMatches('expansionPanel',    compiled), false);
+        assert.equal(redactor.keyMatches('dessiner',          compiled), false);
+        assert.equal(redactor.keyMatches('passenger',         compiled), false);
+        assert.equal(redactor.keyMatches('lifespan',          compiled), false);
+        assert.equal(redactor.keyMatches('lessons',           compiled), false);
+        assert.equal(redactor.keyMatches('impression',        compiled), false);
+    });
+
+    it('does NOT false-positive on keys ending in "id" / "name" that do not contain a secret token', function () {
+        assert.equal(redactor.keyMatches('userId',        compiled), false);
+        assert.equal(redactor.keyMatches('firstName',     compiled), false);
+        assert.equal(redactor.keyMatches('lastName',      compiled), false);
+        assert.equal(redactor.keyMatches('emailAddress',  compiled), false);
+        assert.equal(redactor.keyMatches('phoneNumber',   compiled), false);
+    });
+
+    it('STILL redacts bare secret tokens (control)', function () {
+        assert.equal(redactor.keyMatches('password',       compiled), true);
+        assert.equal(redactor.keyMatches('token',          compiled), true);
+        assert.equal(redactor.keyMatches('secret',         compiled), true);
+        assert.equal(redactor.keyMatches('apikey',         compiled), true);
+        assert.equal(redactor.keyMatches('cvv',            compiled), true);
+        assert.equal(redactor.keyMatches('ssn',            compiled), true);
+        assert.equal(redactor.keyMatches('pan',            compiled), true);
+        assert.equal(redactor.keyMatches('authorization',  compiled), true);
+        assert.equal(redactor.keyMatches('credentials',    compiled), true);
+    });
+
+    it('STILL redacts camelCase / snake_case / kebab-case secret compounds (joined-tokens match)', function () {
+        // apiKey → tokens ['api','key'] → joined 'apikey' → matches pattern 'apikey'
+        assert.equal(redactor.keyMatches('apiKey',     compiled), true);
+        assert.equal(redactor.keyMatches('api_key',    compiled), true);
+        assert.equal(redactor.keyMatches('api-key',    compiled), true);
+        assert.equal(redactor.keyMatches('API_KEY',    compiled), true);
+        // privateKey → tokens ['private','key'] → joined 'privatekey' → matches pattern 'privatekey'
+        assert.equal(redactor.keyMatches('privateKey',  compiled), true);
+        assert.equal(redactor.keyMatches('private_key', compiled), true);
+    });
+
+    it('STILL redacts when a single token matches (mixed-compound case)', function () {
+        // userPassword → tokens ['user','password'] → 'password' matches on per-token pass
+        assert.equal(redactor.keyMatches('userPassword',    compiled), true);
+        assert.equal(redactor.keyMatches('adminToken',      compiled), true);
+        assert.equal(redactor.keyMatches('sharedSecret',    compiled), true);
+        assert.equal(redactor.keyMatches('user_password',   compiled), true);
+        assert.equal(redactor.keyMatches('auth[token]',     compiled), true);
+    });
+
+    it('redact() end-to-end — Freelancer bundle-like payload passes through non-secrets and redacts secrets', function () {
+        var input = {
+            user: {
+                companyName       : 'ACME Corp',
+                lastCompanyUsedId : 42,
+                firstName         : 'Jane',
+                emailAddress      : 'jane@acme.example',
+                password          : 'hunter2',
+                apiKey            : 'sk_live_xxx',
+                preferences       : {
+                    companyLogoUrl : 'https://cdn.example/logo.png',
+                    passwordRule   : { minLength: 8 }
+                }
+            }
+        };
+        var out = redactor.redact(input);
+        // Non-secret passthrough
+        assert.equal(out.user.companyName,       'ACME Corp');
+        assert.equal(out.user.lastCompanyUsedId, 42);
+        assert.equal(out.user.firstName,         'Jane');
+        assert.equal(out.user.emailAddress,      'jane@acme.example');
+        assert.equal(out.user.preferences.companyLogoUrl, 'https://cdn.example/logo.png');
+        // Secrets still redacted
+        assert.equal(out.user.password, '[redacted]');
+        assert.equal(out.user.apiKey,   '[redacted]');
+        // NON_SECRET_SUFFIX carve-out kept intact
+        assert.deepEqual(out.user.preferences.passwordRule, { minLength: 8 });
+    });
+
+    it('compiled patterns are anchored with ^(?:…)$ (whole-token match, no substring bleed)', function () {
+        // Manually inspect a compiled RegExp to confirm anchoring.
+        var c = redactor.compile(['password']);
+        assert.equal(c.length, 1);
+        // RegExp source should contain both anchors
+        assert.ok(/\^/.test(c[0].source), 'pattern missing ^ anchor');
+        assert.ok(/\$/.test(c[0].source), 'pattern missing $ anchor');
+        // Substring of "password" must not match on its own (no bleed)
+        assert.equal(c[0].test('pass'),      false);
+        assert.equal(c[0].test('password'),  true);
+        assert.equal(c[0].test('passwords'), false);
     });
 });

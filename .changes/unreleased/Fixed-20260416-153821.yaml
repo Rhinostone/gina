@@ -1,0 +1,3 @@
+kind: Fixed
+body: Inspector payload redactor no longer false-positively redacts non-secret identifiers that happen to contain secret substrings (e.g. `companyName`, `lastCompanyUsedId`, `passportRequired`). The key matcher now tokenizes on camelCase and punctuation boundaries and compares anchored tokens, so only genuine secret-named fields are redacted.
+time: 2026-04-16T15:38:21.556522+01:00

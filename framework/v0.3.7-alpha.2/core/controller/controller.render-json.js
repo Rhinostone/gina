@@ -286,11 +286,21 @@ module.exports = function renderJSON(jsonObj, deps) {
                 }},
                 user : _gdUser
             };
+            // Snapshot the unredacted payload BEFORE the redact pass, gated on
+            // bundle scope. Production / beta / testing never store this — the
+            // /_gina/reveal endpoint will 403 with no snapshot to leak.
+            var __gdPayloadUnredacted = (process.env.NODE_SCOPE === 'local')
+                ? JSON.parse(JSON.stringify(__gdPayload)) : null;
             __gdPayload = inspectorRedact.redact(__gdPayload, {
                 compiledPatterns : _jsonRedactConf.compiledPatterns,
                 replacement      : _jsonRedactConf.replacement
             });
             self.serverInstance._lastGinaData = __gdPayload;
+            if (__gdPayloadUnredacted) {
+                self.serverInstance._lastGinaDataUnredacted = __gdPayloadUnredacted;
+            } else {
+                self.serverInstance._lastGinaDataUnredacted = null;
+            }
             process.emit('inspector#data', __gdPayload);
         }
 

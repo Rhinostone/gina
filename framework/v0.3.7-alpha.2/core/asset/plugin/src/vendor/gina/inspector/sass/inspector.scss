@@ -789,6 +789,16 @@ body {
         background: rgba(242,175,13,.1);
         svg { fill: var(--accent); }
     }
+
+    &.bm-hidden { display: none; }
+
+    /* Reveal toggle — red tint when active so the unredacted state is visually
+       distinct from the regular amber `.active` state used by RAW / fold-all. */
+    &#bm-reveal.active {
+        border-color: var(--err);
+        background: rgba(231, 76, 60, .12);
+        svg { fill: var(--err); }
+    }
 }
 
 /* ── Data search bar ─────────────────────────────────────────────────────── */

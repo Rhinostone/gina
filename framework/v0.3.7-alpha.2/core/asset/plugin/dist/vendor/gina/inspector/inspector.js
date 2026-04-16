@@ -100,6 +100,8 @@
     var CUSTOM_ORDER_KEY = '__gina_inspector_tab_layout_custom';
     /** @constant {string} localStorage key — hidden tabs in custom layout (JSON array of tab names) */
     var HIDDEN_TABS_KEY = '__gina_inspector_tab_layout_hidden';
+    /** @constant {string} localStorage key — Reveal toggle state for Data tab (#R7 reveal) */
+    var REVEAL_STORAGE_KEY = '__gina_inspector_reveal';
 
     /**
      * Tab order definitions for each layout preset.
@@ -164,6 +166,10 @@
     var autoExpand = false;
     /** @type {?number} Timeout ID for the coalesced log render timer */
     var _renderTimer = null;
+    /** @type {boolean} When true, the Data tab uses the unredacted snapshot fetched from `/_gina/reveal` (#R7 reveal) */
+    var _revealActive = false;
+    /** @type {?Object} Cached unredacted Inspector payload from `/_gina/reveal` (local scope only) */
+    var _revealedData = null;
 
     // ── Log row selection ──────────────────────────────────────────────────
     /** @type {Set<number>} IDs of currently selected log rows */
@@ -1666,8 +1672,12 @@
 
         captureFoldState(name);
 
-        var u = ginaData.user || {};
-        var g = ginaData.gina || {};
+        // #R7 reveal — when active, swap in the unredacted payload fetched from
+        // /_gina/reveal. Only Data/View/Forms/Query/Flow render from `u`/`g`,
+        // so a single source swap covers every visible field.
+        var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
+        var u = src.user || {};
+        var g = src.gina || {};
         var content = '';
         var hasXhr = typeof u['data-xhr'] !== 'undefined';
 
@@ -1731,7 +1741,8 @@
      */
     function renderRaw(treeEl) {
         if (!ginaData) { treeEl.innerHTML = '<span class="bm-hint">No data to display</span>'; return; }
-        var u = ginaData.user || {};
+        var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
+        var u = src.user || {};
         var data = u['data-xhr'] || u.data;
         treeEl.innerHTML = '<pre class="bm-raw-view">' + escHtml(JSON.stringify(data, null, 2)) + '</pre>';
     }
@@ -2866,6 +2877,93 @@
         captureFoldState('data');
     }
 
+    // ── Reveal toggle (Data tab only — local scope only) ──────────────────
+
+    /**
+     * Show or hide the Reveal button based on the current scope. The button is
+     * only available when the source bundle is running in `local` scope — the
+     * server-side endpoint enforces the same gate, this is just the UI mirror.
+     * Called after every data poll since scope can change when switching
+     * sources via the standalone Inspector `?target=` mode.
+     * @inner
+     */
+    function updateRevealVisibility() {
+        var btn = qs('#bm-reveal');
+        if (!btn) return;
+        var scope = (ginaData && ginaData.gina && ginaData.gina.environment)
+            ? ginaData.gina.environment.scope : null;
+        if (scope === 'local') {
+            btn.classList.remove('bm-hidden');
+        } else {
+            btn.classList.add('bm-hidden');
+            // If we previously revealed in local and the source flipped to a
+            // non-local scope, drop the cache and visual state immediately.
+            if (_revealActive) {
+                _revealActive = false;
+                _revealedData = null;
+                btn.classList.remove('active');
+                try { localStorage.removeItem(REVEAL_STORAGE_KEY); } catch (e) {}
+            }
+        }
+    }
+
+    /**
+     * Toggle the Data tab reveal state. When activated, fetches the unredacted
+     * payload from `/_gina/reveal` and re-renders the Data tab. The endpoint
+     * is scope-gated server-side — a 403 means the bundle is no longer in
+     * local scope and the toggle is forced off.
+     * @inner
+     */
+    function toggleReveal() {
+        var btn = qs('#bm-reveal');
+        if (!btn) return;
+        if (_revealActive) {
+            _revealActive = false;
+            _revealedData = null;
+            btn.classList.remove('active');
+            try { localStorage.removeItem(REVEAL_STORAGE_KEY); } catch (e) {}
+            renderTab('data');
+            return;
+        }
+        // Resolve the reveal URL. Standalone Inspector mode routes through
+        // `?target=<bundle_url>` so the request goes to the bundle that
+        // produced the snapshot. In opener/localStorage mode it's same-origin.
+        var base = '';
+        try {
+            var params = new URLSearchParams(window.location.search);
+            base = (params.get('target') || '').replace(/\/+$/, '');
+        } catch (e) {}
+        var url = base + '/_gina/reveal';
+        var xhr  = new XMLHttpRequest();
+        try {
+            xhr.open('GET', url, true);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState !== 4) return;
+                if (xhr.status === 200) {
+                    try {
+                        _revealedData = JSON.parse(xhr.responseText);
+                        _revealActive = true;
+                        btn.classList.add('active');
+                        try { localStorage.setItem(REVEAL_STORAGE_KEY, '1'); } catch (e) {}
+                        renderTab('data');
+                    } catch (e) {
+                        _revealedData = null;
+                        _revealActive = false;
+                        btn.classList.remove('active');
+                    }
+                } else if (xhr.status === 403) {
+                    // Scope flipped server-side — sync the UI.
+                    btn.classList.add('bm-hidden');
+                    btn.classList.remove('active');
+                    _revealActive = false;
+                    _revealedData = null;
+                    try { localStorage.removeItem(REVEAL_STORAGE_KEY); } catch (e) {}
+                }
+            };
+            xhr.send();
+        } catch (e) { /* network error — leave state untouched */ }
+    }
+
     // ── Download modal ────────────────────────────────────────────────────
 
     /**
@@ -2875,7 +2973,8 @@
      */
     function openDownloadModal() {
         if (!ginaData || !ginaData.user) return;
-        var u = ginaData.user;
+        var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
+        var u = src.user || {};
         var dataObj = u['data-xhr'] || u.data;
         if (!dataObj || typeof dataObj !== 'object') return;
 
@@ -2902,7 +3001,8 @@
      */
     function doDownload() {
         if (!ginaData || !ginaData.user) return;
-        var u = ginaData.user;
+        var src = (_revealActive && _revealedData) ? _revealedData : ginaData;
+        var u = src.user || {};
         var dataObj = u['data-xhr'] || u.data;
         var checks = qsa('#bm-dl-checks input:checked');
         var result = {};
@@ -3080,6 +3180,7 @@
             }
             qs('#bm-no-source').classList.add('hidden');
             renderEnvironmentInfo();
+            updateRevealVisibility();
             var tab = activeTab();
             if (tab !== 'logs') renderTab(tab);
             // Always update query tab badge regardless of active tab
@@ -3536,6 +3637,7 @@
                     document.title = 'Inspector — ' + (env.bundle || '?') + '@' + (env.env || '?');
                     qs('#bm-no-source').classList.add('hidden');
                     renderEnvironmentInfo();
+                    updateRevealVisibility();
                     var tab = activeTab();
                     if (tab !== 'logs') renderTab(tab);
                     if (tab !== 'query') {
@@ -4117,6 +4219,23 @@
         }
         var dlBtn = qs('#bm-download');
         if (dlBtn) dlBtn.addEventListener('click', openDownloadModal);
+        var revealBtn = qs('#bm-reveal');
+        if (revealBtn) {
+            revealBtn.addEventListener('click', toggleReveal);
+            // Restore the previously-saved Reveal state on init: if it was on
+            // and the source is still local, fetch the unredacted snapshot.
+            try {
+                if (localStorage.getItem(REVEAL_STORAGE_KEY) === '1') {
+                    // Defer one tick so ginaData is populated by the first poll.
+                    setTimeout(function () {
+                        var scope = (ginaData && ginaData.gina && ginaData.gina.environment)
+                            ? ginaData.gina.environment.scope : null;
+                        if (scope === 'local') toggleReveal();
+                        else { try { localStorage.removeItem(REVEAL_STORAGE_KEY); } catch (e) {} }
+                    }, 250);
+                }
+            } catch (e) {}
+        }
         var dlCancel = qs('#bm-dl-cancel');
         if (dlCancel) dlCancel.addEventListener('click', function () { qs('#bm-dl-modal').classList.add('hidden'); });
         var dlConfirm = qs('#bm-dl-confirm');

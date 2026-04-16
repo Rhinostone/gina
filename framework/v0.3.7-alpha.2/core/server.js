@@ -2544,6 +2544,39 @@ function Server(options) {
                 return;
             }
 
+            // ── Inspector reveal — JSON at /_gina/reveal in dev mode ──
+            // #R7 reveal — returns the unredacted snapshot of the most recent
+            // __ginaData payload, but ONLY when the bundle is running in the
+            // `local` scope. Production / beta / testing bundles never expose
+            // raw secrets through this endpoint, even in dev mode. The
+            // unredacted snapshot itself is only stored when scope === 'local'
+            // (see render-swig.js / render-json.js #R7 reveal block); other
+            // scopes leave _lastGinaDataUnredacted as null.
+            if (
+                process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true'
+                && request.method.toUpperCase() === 'GET'
+                && /\/_gina\/reveal$/.test(request.url)
+            ) {
+                response.setHeader('content-type', 'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store');
+                response.setHeader('access-control-allow-origin', '*');
+
+                if (process.env.NODE_SCOPE !== 'local') {
+                    response.statusCode = 403;
+                    console.info(request.method + ' [403] ' + request.url);
+                    return response.end(JSON.stringify({ error: 'reveal forbidden in non-local scope' }));
+                }
+
+                if (!self.instance || !self.instance._lastGinaDataUnredacted) {
+                    response.statusCode = 404;
+                    console.info(request.method + ' [404] ' + request.url);
+                    return response.end(JSON.stringify({ error: 'no snapshot available' }));
+                }
+
+                console.info(request.method + ' [200] ' + request.url);
+                return response.end(JSON.stringify(self.instance._lastGinaDataUnredacted));
+            }
+
             // Fixing an express js bug :(
             // express is trying to force : /path/dir => /path/dir/
             // which causes : /path/dir/path/dir/  <---- by trying to add a slash in the end

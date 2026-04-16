@@ -24,22 +24,45 @@
     } else {
         _rdcTypes['password'] = true;
     }
+    // Patterns are anchored (`^(?:...)$`) and tested against tokens, not raw
+    // substrings. So `apikey` covers `apiKey` / `api_key` / `apikey` while
+    // `companyName` no longer false-positives on `pan`. Mirrors the server-side
+    // DEFAULT_PATTERNS in lib/inspector-redact — keep both in sync.
     var _rdcRe = [];
     var _rdcSrc = Array.isArray(_rdc.patterns) ? _rdc.patterns
-        : ['password','passwd','pwd','secret','token','apikey','api[_-]?key','cvv','cvc','ccv','pan','ssn','authorization','credentials','private[_-]?key'];
+        : ['password','passwd','pwd','secret','token','apikey','cvv','cvc','ccv','pan','ssn','authorization','credentials','privatekey'];
     for (var _ri = 0; _ri < _rdcSrc.length; _ri++) {
-        try { _rdcRe.push(new RegExp(_rdcSrc[_ri], 'i')); } catch (e) { /* skip */ }
+        try { _rdcRe.push(new RegExp('^(?:' + _rdcSrc[_ri] + ')$', 'i')); } catch (e) { /* skip */ }
     }
-    // Keys ending in rule/policy/config/validator suffixes describe validation
-    // metadata, not user input — must not be redacted even when the name
-    // contains a secret keyword (e.g. `passwordRule`). Mirrors the server-side
+    // Anchored both ends — applied against the LAST token, not the raw key.
+    // Keys whose final token is a metadata word (rule/policy/config/etc.)
+    // describe validation, not user input. Mirrors the server-side
     // NON_SECRET_SUFFIX regex in lib/inspector-redact.
-    var _rdcNonSecret = /(rule|rules|policy|policies|validator|config|configuration|settings|setting|meta|metadata|format|requirements|strength|constraint|constraints|options|option|schema|definition|definitions|spec|specs)$/i;
+    var _rdcNonSecret = /^(rule|rules|policy|policies|validator|config|configuration|settings|setting|meta|metadata|format|requirements|strength|constraint|constraints|options|option|schema|definition|definitions|spec|specs)$/i;
+    function _rdcTokenize(k) {
+        if (typeof k !== 'string' || k.length === 0) return [];
+        var spaced = k
+            .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+            .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+        var parts = spaced.split(/[\s_\-.\[\]:\/]+/);
+        var out = [];
+        for (var i = 0; i < parts.length; i++) {
+            if (parts[i].length > 0) out.push(parts[i].toLowerCase());
+        }
+        return out;
+    }
     function _rdcKeyHit(k) {
         if (typeof k !== 'string') return false;
-        if (_rdcNonSecret.test(k)) return false;
+        var tokens = _rdcTokenize(k);
+        if (tokens.length === 0) return false;
+        if (_rdcNonSecret.test(tokens[tokens.length - 1])) return false;
+        var joined = tokens.join('');
         for (var i = 0; i < _rdcRe.length; i++) {
-            if (_rdcRe[i].test(k)) return true;
+            var re = _rdcRe[i];
+            if (re.test(joined)) return true;
+            for (var t = 0; t < tokens.length; t++) {
+                if (re.test(tokens[t])) return true;
+            }
         }
         return false;
     }

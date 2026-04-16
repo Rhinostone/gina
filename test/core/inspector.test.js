@@ -4216,11 +4216,15 @@ describe('38 - render-swig.js emits inspector#data event', function() {
     it('render-swig.js emits inspector#data alongside _lastGinaData storage', function() {
         var src = getRSwigSrc38();
         var emitIdx = src.indexOf("process.emit('inspector#data'");
-        var lastGdIdx = src.indexOf('_lastGinaData');
-        assert.ok(emitIdx > -1 && lastGdIdx > -1, 'both inspector#data emit and _lastGinaData must exist');
-        // They should be within ~200 chars of each other
+        // Anchor on the actual assignment, not the first bare "_lastGinaData"
+        // substring (which may appear earlier in comments mentioning the
+        // _lastGinaDataUnredacted scope-gate block).
+        var lastGdIdx = src.indexOf('self.serverInstance._lastGinaData = ');
+        assert.ok(emitIdx > -1 && lastGdIdx > -1, 'both inspector#data emit and _lastGinaData assignment must exist');
+        // ~400 chars allows for the #R7 unredacted snapshot defensive-clear
+        // block that legitimately sits between them.
         assert.ok(
-            Math.abs(emitIdx - lastGdIdx) < 200,
+            Math.abs(emitIdx - lastGdIdx) < 400,
             'inspector#data emit should be near _lastGinaData assignment'
         );
     });
@@ -5531,8 +5535,10 @@ describe('47 - render-json.js emits inspector#data for JSON API responses', func
         var emitIdx = src.indexOf("process.emit('inspector#data'");
         var lastGdIdx = src.indexOf('self.serverInstance._lastGinaData');
         assert.ok(emitIdx > -1 && lastGdIdx > -1, 'both must exist');
+        // ~400 chars allows for the #R7 unredacted snapshot defensive-clear block
+        // that sits between _lastGinaData assignment and inspector#data emit.
         assert.ok(
-            Math.abs(emitIdx - lastGdIdx) < 200,
+            Math.abs(emitIdx - lastGdIdx) < 400,
             'inspector#data emit should be near _lastGinaData assignment (got ' + Math.abs(emitIdx - lastGdIdx) + ')'
         );
     });
@@ -6017,4 +6023,376 @@ describe('49 - explainForIndexes: dual conn shape and error safety', function() 
             'should use resolved cluster variable, not conn._cluster.query() directly'
         );
     });
+});
+
+
+// ── 50 — /_gina/reveal handler in server.js (engine-agnostic) ────────────────
+
+describe('50 - /_gina/reveal handler is in server.js (engine-agnostic)', function() {
+
+    function getBlock() {
+        var src = getServerSrc();
+        var start = src.indexOf('Inspector reveal');
+        assert.ok(start > -1, 'expected "Inspector reveal" anchor comment in server.js');
+        var end = src.indexOf('Fixing an express js bug', start);
+        assert.ok(end > -1, 'expected end anchor after reveal block');
+        return src.substring(start, end);
+    }
+
+    it('server.js contains the /_gina/reveal regex', function() {
+        assert.ok(
+            getBlock().indexOf('/_gina\\/reveal') > -1,
+            'expected /_gina/reveal regex in server.js'
+        );
+    });
+
+    it('server.js checks NODE_ENV_IS_DEV for the reveal endpoint', function() {
+        assert.ok(
+            getBlock().indexOf('NODE_ENV_IS_DEV') > -1,
+            'expected NODE_ENV_IS_DEV guard near the reveal handler'
+        );
+    });
+
+    it('server.js restricts reveal to GET requests', function() {
+        var block = getBlock();
+        assert.ok(
+            /request\.method\.toUpperCase\(\)\s*===\s*'GET'/.test(block),
+            'expected GET-only guard in reveal handler'
+        );
+    });
+
+    it('server.js sets content-type application/json for reveal', function() {
+        assert.ok(
+            /setHeader\('content-type',\s*'application\/json/.test(getBlock()),
+            'expected application/json content-type in reveal handler'
+        );
+    });
+
+    it('server.js sets cache-control no-cache, no-store for reveal', function() {
+        assert.ok(
+            /setHeader\('cache-control',\s*'no-cache,\s*no-store'\)/.test(getBlock()),
+            'expected no-cache, no-store cache-control header'
+        );
+    });
+
+    it('server.js sets access-control-allow-origin CORS header for reveal', function() {
+        assert.ok(
+            /setHeader\('access-control-allow-origin',\s*'\*'\)/.test(getBlock()),
+            'expected CORS header in reveal handler'
+        );
+    });
+
+    it('server.js returns 403 when NODE_SCOPE is not local', function() {
+        var block = getBlock();
+        assert.ok(
+            block.indexOf("process.env.NODE_SCOPE !== 'local'") > -1,
+            'expected NODE_SCOPE !== local guard'
+        );
+        assert.ok(
+            /statusCode\s*=\s*403/.test(block),
+            'expected statusCode 403 for non-local scope'
+        );
+        assert.ok(
+            /reveal forbidden in non-local scope/.test(block),
+            'expected 403 error body'
+        );
+    });
+
+    it('server.js returns 404 when no unredacted snapshot is available', function() {
+        var block = getBlock();
+        assert.ok(
+            block.indexOf('_lastGinaDataUnredacted') > -1,
+            'expected _lastGinaDataUnredacted reference in reveal handler'
+        );
+        assert.ok(
+            /statusCode\s*=\s*404/.test(block),
+            'expected statusCode 404 when snapshot missing'
+        );
+        assert.ok(
+            /no snapshot available/.test(block),
+            'expected 404 error body'
+        );
+    });
+
+    it('server.js returns the unredacted snapshot on success', function() {
+        var block = getBlock();
+        assert.ok(
+            /JSON\.stringify\(self\.instance\._lastGinaDataUnredacted\)/.test(block),
+            'expected JSON.stringify(self.instance._lastGinaDataUnredacted) on success path'
+        );
+    });
+
+});
+
+
+// ── 51 — /_gina/reveal handler in server.isaac.js (Isaac fast-path) ──────────
+
+describe('51 - /_gina/reveal handler is in server.isaac.js (Isaac fast-path)', function() {
+
+    var _isaacSrc51;
+    function getIsaacSrc51() { return _isaacSrc51 || (_isaacSrc51 = fs.readFileSync(ISAAC_SOURCE, 'utf8')); }
+
+    function getBlock() {
+        var src = getIsaacSrc51();
+        var start = src.indexOf('Inspector reveal');
+        assert.ok(start > -1, 'expected "Inspector reveal" anchor comment in server.isaac.js');
+        var end = src.indexOf('Proxy detection', start);
+        assert.ok(end > -1, 'expected end anchor after reveal block');
+        return src.substring(start, end);
+    }
+
+    it('server.isaac.js contains the /_gina/reveal regex', function() {
+        assert.ok(
+            getBlock().indexOf('/_gina\\/reveal') > -1,
+            'expected /_gina/reveal regex in server.isaac.js'
+        );
+    });
+
+    it('server.isaac.js uses the isCacheless dev-mode guard', function() {
+        assert.ok(
+            /if\s*\(\s*isCacheless/.test(getBlock()),
+            'expected isCacheless guard on the reveal handler'
+        );
+    });
+
+    it('server.isaac.js restricts reveal to GET requests', function() {
+        assert.ok(
+            /request\.method\.toUpperCase\(\)\s*===\s*'GET'/.test(getBlock()),
+            'expected GET-only guard in Isaac reveal handler'
+        );
+    });
+
+    it('server.isaac.js sets application/json content-type for reveal', function() {
+        assert.ok(
+            /'content-type':\s*'application\/json/.test(getBlock()),
+            'expected application/json content-type header'
+        );
+    });
+
+    it('server.isaac.js sets no-cache cache-control for reveal', function() {
+        assert.ok(
+            /'cache-control':\s*'no-cache,\s*no-store'/.test(getBlock()),
+            'expected no-cache, no-store cache-control header'
+        );
+    });
+
+    it('server.isaac.js sets CORS header for cross-origin reveal access', function() {
+        assert.ok(
+            /'access-control-allow-origin':\s*'\*'/.test(getBlock()),
+            'expected CORS header in Isaac reveal handler'
+        );
+    });
+
+    it('server.isaac.js supports HTTP/2 via response.stream.respond()', function() {
+        var block = getBlock();
+        assert.ok(
+            block.indexOf('response.stream') > -1,
+            'expected response.stream check in Isaac reveal handler'
+        );
+        assert.ok(
+            /response\.stream\.respond\(/.test(block),
+            'expected response.stream.respond() HTTP/2 path'
+        );
+        assert.ok(
+            /response\.stream\.destroyed\s*\|\|\s*response\.stream\.closed/.test(block),
+            'expected destroyed/closed guard on response.stream'
+        );
+    });
+
+    it('server.isaac.js returns 403 when NODE_SCOPE is not local', function() {
+        var block = getBlock();
+        assert.ok(
+            block.indexOf("process.env.NODE_SCOPE !== 'local'") > -1,
+            'expected NODE_SCOPE !== local guard in Isaac'
+        );
+        assert.ok(
+            /_rvSend\(403,/.test(block),
+            'expected _rvSend(403, ...) call for non-local scope'
+        );
+        assert.ok(
+            /reveal forbidden in non-local scope/.test(block),
+            'expected 403 error body'
+        );
+    });
+
+    it('server.isaac.js returns 404 when no unredacted snapshot is available', function() {
+        var block = getBlock();
+        assert.ok(
+            block.indexOf('server._lastGinaDataUnredacted') > -1,
+            'expected server._lastGinaDataUnredacted reference'
+        );
+        assert.ok(
+            /_rvSend\(404,/.test(block),
+            'expected _rvSend(404, ...) call for missing snapshot'
+        );
+        assert.ok(
+            /no snapshot available/.test(block),
+            'expected 404 error body'
+        );
+    });
+
+    it('server.isaac.js returns the unredacted snapshot on success', function() {
+        var block = getBlock();
+        assert.ok(
+            /_rvSend\(200,\s*server\._lastGinaDataUnredacted\)/.test(block),
+            'expected _rvSend(200, server._lastGinaDataUnredacted) on success path'
+        );
+    });
+
+});
+
+
+// ── 52 — /_gina/reveal URL pattern matching ──────────────────────────────────
+
+describe('52 - /_gina/reveal URL pattern matching', function() {
+
+    var pattern = /\/_gina\/reveal$/;
+
+    it('matches /_gina/reveal', function() {
+        assert.ok(pattern.test('/_gina/reveal'));
+    });
+
+    it('matches /webroot/_gina/reveal', function() {
+        assert.ok(pattern.test('/myapp/_gina/reveal'));
+    });
+
+    it('does not match /_gina/reveal/', function() {
+        assert.ok(!pattern.test('/_gina/reveal/'));
+    });
+
+    it('does not match /_gina/reveal/foo', function() {
+        assert.ok(!pattern.test('/_gina/reveal/foo'));
+    });
+
+    it('does not match /_gina/reveals', function() {
+        assert.ok(!pattern.test('/_gina/reveals'));
+    });
+
+    it('does not match /_gina/revealx', function() {
+        assert.ok(!pattern.test('/_gina/revealx'));
+    });
+
+    it('does not match /_gina/agent', function() {
+        assert.ok(!pattern.test('/_gina/agent'));
+    });
+
+    it('does not match /_gina/logs', function() {
+        assert.ok(!pattern.test('/_gina/logs'));
+    });
+
+    it('does not match /_gina/inspector', function() {
+        assert.ok(!pattern.test('/_gina/inspector'));
+    });
+
+});
+
+
+// ── 53 — unredacted snapshot scope gate (render-swig.js + render-json.js) ────
+
+describe('53 - unredacted snapshot is only stored when scope === local', function() {
+
+    var RENDER_SWIG_53 = path.join(FW, 'core/controller/controller.render-swig.js');
+    var RENDER_JSON_53 = path.join(FW, 'core/controller/controller.render-json.js');
+    var _rSwigSrc53, _rJsonSrc53;
+    function getRSwigSrc53() { return _rSwigSrc53 || (_rSwigSrc53 = fs.readFileSync(RENDER_SWIG_53, 'utf8')); }
+    function getRJsonSrc53() { return _rJsonSrc53 || (_rJsonSrc53 = fs.readFileSync(RENDER_JSON_53, 'utf8')); }
+
+    // ── render-swig.js ──
+
+    it('render-swig.js gates the unredacted snapshot on NODE_SCOPE === local', function() {
+        var src = getRSwigSrc53();
+        assert.ok(
+            /__gdPayloadUnredacted\s*=\s*\(process\.env\.NODE_SCOPE\s*===\s*'local'\)/.test(src),
+            'expected scope-gated ternary assigning __gdPayloadUnredacted in render-swig.js'
+        );
+    });
+
+    it('render-swig.js uses a deep clone (JSON.parse + JSON.stringify) for the snapshot', function() {
+        var src = getRSwigSrc53();
+        assert.ok(
+            /__gdPayloadUnredacted\s*=\s*\(process\.env\.NODE_SCOPE\s*===\s*'local'\)\s*\?\s*JSON\.parse\(JSON\.stringify\(__gdPayload\)\)\s*:\s*null/.test(src),
+            'expected JSON.parse(JSON.stringify(__gdPayload)) deep clone, null otherwise'
+        );
+    });
+
+    it('render-swig.js snapshots BEFORE the redact pass', function() {
+        var src = getRSwigSrc53();
+        var snapIdx = src.indexOf('__gdPayloadUnredacted');
+        var redactIdx = src.indexOf('inspectorRedact.redact(__gdPayload', snapIdx);
+        assert.ok(snapIdx > -1 && redactIdx > -1, 'both snapshot and redact call must exist');
+        assert.ok(
+            snapIdx < redactIdx,
+            'unredacted snapshot must be taken BEFORE the redact() call'
+        );
+    });
+
+    it('render-swig.js assigns the snapshot to serverInstance._lastGinaDataUnredacted', function() {
+        var src = getRSwigSrc53();
+        assert.ok(
+            /self\.serverInstance\._lastGinaDataUnredacted\s*=\s*__gdPayloadUnredacted/.test(src),
+            'expected assignment to self.serverInstance._lastGinaDataUnredacted'
+        );
+    });
+
+    it('render-swig.js defensively clears _lastGinaDataUnredacted when snapshot is null', function() {
+        var src = getRSwigSrc53();
+        assert.ok(
+            /self\.serverInstance\._lastGinaDataUnredacted\s*=\s*null/.test(src),
+            'expected defensive null assignment when snapshot is null'
+        );
+    });
+
+    it('render-swig.js exposes bundle scope on __gdGina.environment.scope', function() {
+        var src = getRSwigSrc53();
+        assert.ok(
+            /__gdGina\.environment\.scope\s*=\s*process\.env\.NODE_SCOPE\s*\|\|\s*null/.test(src),
+            'expected __gdGina.environment.scope exposure'
+        );
+    });
+
+    // ── render-json.js ──
+
+    it('render-json.js gates the unredacted snapshot on NODE_SCOPE === local', function() {
+        var src = getRJsonSrc53();
+        assert.ok(
+            /__gdPayloadUnredacted\s*=\s*\(process\.env\.NODE_SCOPE\s*===\s*'local'\)/.test(src),
+            'expected scope-gated ternary assigning __gdPayloadUnredacted in render-json.js'
+        );
+    });
+
+    it('render-json.js uses a deep clone for the snapshot', function() {
+        var src = getRJsonSrc53();
+        assert.ok(
+            /__gdPayloadUnredacted\s*=\s*\(process\.env\.NODE_SCOPE\s*===\s*'local'\)\s*\?\s*JSON\.parse\(JSON\.stringify\(__gdPayload\)\)\s*:\s*null/.test(src),
+            'expected JSON.parse(JSON.stringify(__gdPayload)) deep clone, null otherwise'
+        );
+    });
+
+    it('render-json.js snapshots BEFORE the redact pass', function() {
+        var src = getRJsonSrc53();
+        var snapIdx = src.indexOf('__gdPayloadUnredacted');
+        var redactIdx = src.indexOf('inspectorRedact.redact(__gdPayload', snapIdx);
+        assert.ok(snapIdx > -1 && redactIdx > -1, 'both snapshot and redact call must exist');
+        assert.ok(
+            snapIdx < redactIdx,
+            'unredacted snapshot must be taken BEFORE the redact() call'
+        );
+    });
+
+    it('render-json.js assigns the snapshot to serverInstance._lastGinaDataUnredacted', function() {
+        var src = getRJsonSrc53();
+        assert.ok(
+            /self\.serverInstance\._lastGinaDataUnredacted\s*=\s*__gdPayloadUnredacted/.test(src),
+            'expected assignment to self.serverInstance._lastGinaDataUnredacted'
+        );
+    });
+
+    it('render-json.js defensively clears _lastGinaDataUnredacted when snapshot is null', function() {
+        var src = getRJsonSrc53();
+        assert.ok(
+            /self\.serverInstance\._lastGinaDataUnredacted\s*=\s*null/.test(src),
+            'expected defensive null assignment when snapshot is null'
+        );
+    });
+
 });

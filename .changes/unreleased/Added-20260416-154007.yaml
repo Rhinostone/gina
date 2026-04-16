@@ -1,0 +1,3 @@
+kind: Added
+body: Inspector reveal toggle — dev-mode `/_gina/reveal` JSON endpoint returns the unredacted `__ginaData` snapshot when the bundle scope is `local`; bundles running in beta/production/testing return 403 and never store a raw snapshot. The Inspector Data tab has a matching red-tinted Reveal toggle that calls the endpoint and replaces the redacted payload client-side. Persisted in `localStorage.__gina_inspector_reveal`; automatically disabled and cleared when the bundle scope flips away from local.
+time: 2026-04-16T15:40:07.001733+01:00

@@ -1059,8 +1059,19 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 types       : _redactConf.types,
                 replacement : _redactConf.replacement
             };
+            // Expose bundle scope so the Inspector knows whether to offer the
+            // Reveal toggle (only local-scope bundles ship the unredacted snapshot
+            // via /_gina/reveal — see serverInstance._lastGinaDataUnredacted below).
+            if (__gdGina.environment) {
+                __gdGina.environment.scope = process.env.NODE_SCOPE || null;
+            }
 
             var __gdPayload = { gina: __gdGina, user: __gdUser };
+            // Snapshot the unredacted payload BEFORE the redact pass, gated on
+            // bundle scope. Production / beta / testing never store this — the
+            // /_gina/reveal endpoint will 403 with no snapshot to leak.
+            var __gdPayloadUnredacted = (process.env.NODE_SCOPE === 'local')
+                ? JSON.parse(JSON.stringify(__gdPayload)) : null;
             __gdPayload = inspectorRedact.redact(__gdPayload, {
                 compiledPatterns : _redactConf.compiledPatterns,
                 replacement      : _redactConf.replacement
@@ -1074,6 +1085,12 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
             // Expose last snapshot for engine.io push and /_gina/agent SSE
             self.serverInstance._lastGinaData = __gdPayload;
+            if (__gdPayloadUnredacted) {
+                self.serverInstance._lastGinaDataUnredacted = __gdPayloadUnredacted;
+            } else {
+                // Defensive: clear any stale unredacted snapshot if scope changed mid-process.
+                self.serverInstance._lastGinaDataUnredacted = null;
+            }
             process.emit('inspector#data', __gdPayload);
 
             var __logsScript = '<script>'
