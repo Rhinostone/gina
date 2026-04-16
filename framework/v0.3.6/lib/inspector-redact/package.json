@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-inspector-redact",
+  "version": "1.0.0",
+  "description": "Redacts secret-looking fields from Inspector payloads (dev-mode only).",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+#
+# pre-commit — block commits authored under a private identity.
+#
+# Opt-in install (run once from the repo root):
+#
+#     cp resources/git-hooks/pre-commit .git/hooks/pre-commit
+#     chmod +x .git/hooks/pre-commit
+#
+# Purpose:
+#   Contributors sometimes have multiple git identities on one machine
+#   (work, personal, internal hostname). Committing to a public project
+#   with the wrong identity leaks private info into the public git log.
+#   This hook checks the currently-configured user.email against a list
+#   of private-domain patterns and aborts the commit if any match.
+#
+# Extend BLOCKED_PATTERNS below for any additional private domain or
+# hostname suffix you want to guard against. The default list reflects
+# the identities that have historically leaked into this repo.
+
+set -e
+
+BLOCKED_PATTERNS='freelancer\.app|\.local$|rhinostone\.com|freelancer-app\.fr'
+
+email="$(git config user.email || true)"
+
+if [ -z "$email" ]; then
+    echo "[pre-commit] No user.email configured — set one with 'git config user.email you@example.com'." >&2
+    exit 1
+fi
+
+if echo "$email" | grep -Eq "$BLOCKED_PATTERNS"; then
+    echo "[pre-commit] ERROR: commit blocked — user.email '$email' matches a private-identity pattern." >&2
+    echo "[pre-commit] Switch identity before committing:" >&2
+    echo "    git config user.email you@public-domain.example" >&2
+    echo "[pre-commit] Then retry the commit." >&2
+    exit 1
+fi
+
+exit 0

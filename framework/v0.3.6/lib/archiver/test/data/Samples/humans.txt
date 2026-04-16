@@ -1,0 +1,9 @@
+# TEAM
+
+    John Doe
+        Interface designer
+	    john.doe [at] example.com
+
+    Jane Smith
+        Developper
+        jane.smith [at] example.com

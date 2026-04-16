@@ -717,6 +717,21 @@ function PostInstall() {
 
         restoreSymlinks();
 
+        // #S5 — install gina's pre-commit hook for contributor clones.
+        // `.git` exists at self.gina root only in a clone/worktree of the gina
+        // repo, not inside `node_modules/gina` on a consumer install. We gate on
+        // its presence so end-user `npm install gina` is a no-op here.
+        // `fs.existsSync(.git)` matches both main repo (.git dir) and linked
+        // worktrees (.git file pointing at ../.git/worktrees/<name>).
+        try {
+            if ( fs.existsSync( _(self.gina + '/.git', true) ) ) {
+                execSync('git -C "' + self.gina + '" config core.hooksPath .githooks');
+                console.debug('Installed gina git hooks path (core.hooksPath=.githooks)');
+            }
+        } catch (_hooksErr) {
+            console.warn('Could not install gina git hooks path: ' + (_hooksErr.message || _hooksErr));
+        }
+
         // configuring Gina
         var ginaBinanry = _(self.gina + '/bin/gina', true);
         if (!self.isCustomPrefix && self.isGlobalInstall) {
@@ -766,6 +781,43 @@ function PostInstall() {
             } catch(e) {
                 console.warn('Could not sync def_framework in main.json: ' + (e.message || e));
             }
+        }
+
+        // Seed def_global_mode[shortVersion] from packObj.config.globalMode (#B12).
+        // The resources/home/main.json template carries a ${global_mode} placeholder that
+        // is only resolved when checkIfMain runs with GINA_GLOBAL_MODE already in the env.
+        // On a fresh `npm install gina`, that env var isn't set yet — the token persists
+        // into ~/.gina/main.json, and the first `gina --version` surfaces a Whisper error.
+        // Reading packObj.config.globalMode here honours `npm config set gina:globalMode <v>`
+        // overrides (npm rewrites package.json.config at install time when that is set).
+        try {
+            var _packObj = require(pack);
+            var _gmRaw = ( _packObj.config && typeof(_packObj.config.globalMode) != 'undefined' )
+                ? _packObj.config.globalMode
+                : true;
+            var _gmResolved = ( typeof(_gmRaw) == 'string' ) ? /^true$/i.test(_gmRaw) : !!_gmRaw;
+
+            if ( fs.existsSync(_mainJsonPath) ) {
+                var _rootData = JSON.parse( fs.readFileSync(_mainJsonPath, 'utf8') );
+                if ( !_rootData.def_global_mode ) { _rootData.def_global_mode = {}; }
+                if ( _rootData.def_global_mode[self.shortVersion] !== _gmResolved ) {
+                    _rootData.def_global_mode[self.shortVersion] = _gmResolved;
+                    fs.writeFileSync(_mainJsonPath, JSON.stringify(_rootData, null, 4));
+                }
+            }
+
+            var _versionMainPath = _(getUserHome() + '/.gina/' + self.shortVersion + '/main.json', true);
+            if ( fs.existsSync(_versionMainPath) ) {
+                var _verData = JSON.parse( fs.readFileSync(_versionMainPath, 'utf8') );
+                if ( !_verData.def_global_mode ) { _verData.def_global_mode = {}; }
+                var _existing = _verData.def_global_mode[self.shortVersion];
+                if ( typeof(_existing) != 'boolean' || _existing !== _gmResolved ) {
+                    _verData.def_global_mode[self.shortVersion] = _gmResolved;
+                    fs.writeFileSync(_versionMainPath, JSON.stringify(_verData, null, 4));
+                }
+            }
+        } catch(e) {
+            console.warn('Could not seed def_global_mode in main.json: ' + (e.message || e));
         }
 
         // Update middleware file

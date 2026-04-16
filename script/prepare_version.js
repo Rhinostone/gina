@@ -184,6 +184,104 @@ function PrepareVersion() {
         done();
     };
 
+    /**
+     * Fail-closed gate: abort the release if any tracked or untracked-not-
+     * ignored file contains a private-token pattern (phone, private email,
+     * private address, private domain, co-author legal name).
+     *
+     * Runs after the Claude path gate and before `getSelectedVersion` so
+     * the `git add --all` sweep at `pushChangesToGitIfNeeded` cannot sweep
+     * dirty content into a release commit.
+     *
+     * Mirrors `script/check_no_claude_leak.js` (the prepack gate) — both
+     * must stay in sync so a leak is caught at either boundary.
+     */
+    self.checkPrivateTokenLeakage = function(done) {
+        console.debug('[prepare] Checking for private-token leakage ...');
+
+        var TOKENS = [
+            { name: 'private phone',   pattern: /0618178647/ },
+            { name: 'private email',   pattern: /[\w.+-]*etouman@rhinostone/i },
+            { name: 'private address', pattern: /Boulevard\s+Arago/i },
+            { name: 'private domain',  pattern: /freelancer\.app/i },
+            { name: 'co-author legal name (use "John Doe" pseudonym)',
+                                       pattern: /Fabrice\s+Delaneau/i }
+        ];
+
+        var TEXT_EXT = /\.(md|txt|json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|sass|scss|less|sh|bash|zsh|yaml|yml|xml|svg|csv|mapping|conf|ini|toml|env|template)$/i;
+        var TEXT_BASENAME = /^(AUTHORS|LICENSE|COPYING|CHANGELOG|README|NOTICE|CONTRIBUTING|GOVERNANCE|Makefile|\.npmignore|\.gitignore|\.eslintrc|\.editorconfig)(\.[^.]+)?$/;
+        var MAX_SCAN_BYTES = 2 * 1024 * 1024;
+
+        // Scanner scripts contain the token patterns themselves — skip them to
+        // avoid self-matches. Mirrors `SELF_EXCLUDE` in check_no_claude_leak.js.
+        var SELF_EXCLUDE = {
+            'script/check_no_claude_leak.js': true,
+            'script/prepare_version.js':      true
+        };
+
+        var listFiles = function(cmd) {
+            var out;
+            try {
+                out = execSync(cmd, { maxBuffer: 64 * 1024 * 1024 }).toString();
+            } catch (err) {
+                throw new Error('[prepare] `' + cmd + '` failed: ' + (err.message || err));
+            }
+            return out.split('\n').filter(function(line) { return line; });
+        };
+
+        var isTextPath = function(p) {
+            if (TEXT_EXT.test(p)) return true;
+            var base = p.split('/').pop();
+            return TEXT_BASENAME.test(base);
+        };
+
+        var scanFile = function(p) {
+            var stat;
+            try { stat = fs.statSync(p); } catch (e) { return []; }
+            if (!stat.isFile() || stat.size > MAX_SCAN_BYTES) return [];
+            var content;
+            try { content = fs.readFileSync(p, 'utf8'); } catch (e) { return []; }
+            var hits = [];
+            for (var i = 0; i < TOKENS.length; i++) {
+                if (TOKENS[i].pattern.test(content)) {
+                    hits.push(TOKENS[i].name);
+                }
+            }
+            return hits;
+        };
+
+        var files;
+        try {
+            files = listFiles('git ls-files')
+                .concat(listFiles('git ls-files --others --exclude-standard'));
+        } catch (err) {
+            return done(err);
+        }
+
+        var matches = [];
+        for (var i = 0; i < files.length; i++) {
+            var p = files[i];
+            if (!isTextPath(p)) continue;
+            if (SELF_EXCLUDE[p]) continue;
+            var hits = scanFile(p);
+            for (var j = 0; j < hits.length; j++) {
+                matches.push(p + ' — ' + hits[j]);
+            }
+        }
+
+        if (matches.length > 0) {
+            console.error('[prepare] ERROR: Private tokens detected — aborting to prevent leak:');
+            for (var k = 0; k < matches.length; k++) {
+                console.error('  ' + matches[k]);
+            }
+            console.error('[prepare] Scrub these files before publishing.');
+            return done(new Error('Private-token leakage detected'));
+        }
+
+        console.debug('[prepare] OK: no private tokens detected.');
+        done();
+    };
+
     self.getSelectedVersion = async function(done) {
         var homeDir = getUserHome() || null;
         var frameworkPath = null;
@@ -367,6 +465,21 @@ function PrepareVersion() {
     self.setupScriptCWD = function(done) {
         var currentWorkingDir = process.cwd();
         if ( self.ginaPath != currentWorkingDir ) {
+            // Verify target is a git repo before chdir — a stale ~/.gina/<release>/settings.json
+            // `dir` field (e.g. pointing at a vanished smoke-test path) would otherwise wedge the
+            // publish at pushChangesToGitIfNeeded with a misleading "No branch selected" error.
+            if ( !fs.existsSync(self.ginaPath) ) {
+                return done( new Error(
+                    '[CWD] gina path `'+ self.ginaPath +'` (from ~/.gina/'+ self.release +'/settings.json `dir` field) '
+                    + 'does not exist. Reset it to the canonical gina install path and retry.'
+                ));
+            }
+            if ( !fs.existsSync(self.ginaPath + '/.git') ) {
+                return done( new Error(
+                    '[CWD] gina path `'+ self.ginaPath +'` (from ~/.gina/'+ self.release +'/settings.json `dir` field) '
+                    + 'is not a git repository. Reset it to the canonical gina install path and retry.'
+                ));
+            }
             console.debug('Changing current working dir from `'+ currentWorkingDir +'` to `'+ self.ginaPath +'`');
             process.chdir(self.ginaPath);
         }

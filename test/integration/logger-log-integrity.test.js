@@ -3,7 +3,7 @@
  * Logger log integrity — baseline patterns from v3 Docker logs
  *
  * Fixture files in fixtures/logs/ were captured from the running Docker
- * containers (auth bundle, freelancer project) to anchor the expected
+ * containers (auth bundle, example project) to anchor the expected
  * log output. All groups must stay green. The group 04 fixture was
  * re-captured after commit 05f88dc3 fixed the per-request Logger
  * re-instantiation noise (issue #4).
