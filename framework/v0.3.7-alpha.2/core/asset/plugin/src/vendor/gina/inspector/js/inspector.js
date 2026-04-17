@@ -152,6 +152,10 @@
     var logs    = [];
     /** @type {number} Read offset into `source.__ginaLogs` for client-side polling */
     var logsOff = 0;
+    /** @type {?Array} Last-seen `source.__ginaLogs` array reference — used to detect
+     *  opener navigation, which replaces the array with a fresh empty one. When the
+     *  reference changes, {@link logsOff} must be reset to 0. */
+    var _lastLogsRef = null;
     /** @type {boolean} When true, new log entries are not appended */
     var paused  = false;
     /** @type {string} JSON.stringify of last processed ginaData — for change detection */
@@ -2925,14 +2929,29 @@
             renderTab('data');
             return;
         }
-        // Resolve the reveal URL. Standalone Inspector mode routes through
-        // `?target=<bundle_url>` so the request goes to the bundle that
-        // produced the snapshot. In opener/localStorage mode it's same-origin.
+        // Resolve the reveal URL. Three modes:
+        //   1. Standalone (`?target=<bundle_url>`) — route to the explicit target.
+        //   2. Opener (same-origin) — use the opener's pathname as the prefix so
+        //      the request routes to the bundle that rendered the current page.
+        //      Critical in proxy-routed multi-bundle setups where bare
+        //      `/_gina/reveal` hits the proxy's default bundle instead of the
+        //      one that produced the snapshot.
+        //   3. Fallback — strip `_gina/inspector` from the Inspector's own
+        //      pathname (same approach as tryServerLogs).
         var base = '';
         try {
             var params = new URLSearchParams(window.location.search);
-            base = (params.get('target') || '').replace(/\/+$/, '');
-        } catch (e) {}
+            var target = (params.get('target') || '').replace(/\/+$/, '');
+            if (target) {
+                base = target;
+            } else if (window.opener && window.opener.location) {
+                base = (window.opener.location.pathname || '').replace(/\/+$/, '');
+            } else {
+                base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+            }
+        } catch (e) {
+            base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+        }
         var url = base + '/_gina/reveal';
         var xhr  = new XMLHttpRequest();
         try {
@@ -3315,7 +3334,16 @@
         try {
             if (source === 'localStorage' || !source) return;
             var src = source.__ginaLogs;
-            if (!src || !Array.isArray(src) || src.length <= logsOff) return;
+            if (!src || !Array.isArray(src)) return;
+            // Detect opener navigation: the new page installs a fresh __ginaLogs
+            // array, so the array identity differs from the one we last polled
+            // (or its length is smaller than our offset). Reset the offset so
+            // new entries on the new page are picked up.
+            if (src !== _lastLogsRef || src.length < logsOff) {
+                _lastLogsRef = src;
+                logsOff = 0;
+            }
+            if (src.length <= logsOff) return;
         } catch (e) { return; }
 
         var fresh = src.slice(logsOff);

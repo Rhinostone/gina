@@ -1,0 +1,3 @@
+kind: Fixed
+body: Inspector tab content now refreshes automatically when the opener page navigates. The client-side log poller (`pollLogs` in `inspector.js`) tracked `logsOff` against the opener's `__ginaLogs` array but never detected that the array itself is replaced on navigation — the new page's `statusbar.html` inline script re-runs and installs a fresh empty array, so the old `logsOff` offset would be larger than the new array length and the guard `src.length <= logsOff` returned early forever. New `_lastLogsRef` holds the last-polled array reference; when it changes (or the array length shrinks below the offset), `logsOff` is reset to 0 so the new page's entries are picked up on the next poll cycle.
+time: 2026-04-16T19:30:00.000000+01:00

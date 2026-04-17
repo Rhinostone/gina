@@ -114,7 +114,7 @@ function Add(opt, cmd) {
             createPackageFile( file.toString() )
         } else {
             console.warn('[ package.json ] already exists in this location: '+ file + '\nUpdating package.json...');
-            createPackageFile( file.toString(), true )
+            // dont' add shit here
         }
 
         if ( self.scope && !isDefined('scope', self.scope) ) {

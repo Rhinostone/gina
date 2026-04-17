@@ -3196,30 +3196,64 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             client.setTimeout(0); // disable the default timeout to keep session active
 
             client.on('error', (error) => {
-                if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
-                console.error( '`'+ options[':path']+ '` : '+ error.stack||error.message);
-                cache.delete(sessKey);
-                var _errIdx = self.serverInstance._http2Sessions.indexOf(sessKey);
-                if (_errIdx !== -1) self.serverInstance._http2Sessions.splice(_errIdx, 1);
-                _errIdx = null;
-                if (
-                    typeof(error.cause) != 'undefined' && typeof(error.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(error.cause.code)
-                    || /ECONNREFUSED|ECONNRESET/.test(error.code)
-                ) {
-
-                    var port = getContext('gina').ports[options.protocol][options.scheme.replace(/\:/, '')][ options.port ];
-                    if ( typeof(port) != 'undefined' ) {
-                        error.accessPoint = port;
-                        error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\nThe `'+port.split(/\@/)[0]+'` bundle is offline or unreachable.\n';
+                // #H9 — the whole listener body is wrapped in try/catch so that a throw
+                // from enhancement (undefined options.protocol/scheme), cache mutation,
+                // or self.throwError cannot escape an 'error' event and become an
+                // uncaughtException that crashes the bundle.
+                try {
+                    if (_pingInterval) { clearInterval(_pingInterval); _pingInterval = null; }
+                    try { console.error( '`'+ (options && options[':path']) +'` : '+ (error && (error.stack || error.message) || error)); } catch (_logErr) {}
+                    try {
+                        cache.delete(sessKey);
+                        var _errIdx = self.serverInstance._http2Sessions.indexOf(sessKey);
+                        if (_errIdx !== -1) self.serverInstance._http2Sessions.splice(_errIdx, 1);
+                        _errIdx = null;
+                    } catch (_cleanupErr) {
+                        console.error('[HTTP2] Session cleanup failed in error handler: ' + (_cleanupErr.stack || _cleanupErr.message));
                     }
+                    if (
+                        error && (
+                            (typeof(error.cause) != 'undefined' && typeof(error.cause.code) != 'undefined' && /ECONNREFUSED|ECONNRESET/.test(error.cause.code))
+                            || /ECONNREFUSED|ECONNRESET/.test(error.code)
+                        )
+                    ) {
+                        // #H9 — safe-navigate the port lookup; callers sometimes pass a bare
+                        // hostname so options.protocol/options.scheme are undefined and the
+                        // original `ports[undefined][undefined.replace(...)]` chain threw a
+                        // TypeError from inside this error listener.
+                        try {
+                            var _ginaCtx = (typeof getContext === 'function') ? getContext('gina') : null;
+                            var _portsMap = (_ginaCtx && _ginaCtx.ports && options && options.protocol)
+                                ? _ginaCtx.ports[options.protocol] : null;
+                            var _schemeKey = (options && options.scheme && typeof options.scheme.replace === 'function')
+                                ? options.scheme.replace(/\:/, '') : null;
+                            var _schemeMap = (_portsMap && _schemeKey) ? _portsMap[_schemeKey] : null;
+                            var port = (_schemeMap && options) ? _schemeMap[options.port] : undefined;
+                            if ( typeof(port) != 'undefined' && port !== null ) {
+                                error.accessPoint = port;
+                                var _bundleName = (typeof port === 'string') ? port.split(/\@/)[0] : String(port);
+                                error.message = 'Could not connect to [ ' + error.accessPoint + ' ].\nThe `'+ _bundleName +'` bundle is offline or unreachable.\n';
+                            }
+                        } catch (_enhErr) {
+                            console.error('[HTTP2] Error while enhancing connect-error message: ' + (_enhErr.stack || _enhErr.message));
+                        }
+                    }
+                    // local.req/res may be null when the error fires outside a request context
+                    // (background socket event) — log and return instead of crashing
+                    if (!local.req || !local.res) {
+                        console.error('[HTTP2] Session error outside request context — cannot send error response.\n' + (error && (error.stack || error.message) || error));
+                        return;
+                    }
+                    try {
+                        self.throwError(error);
+                    } catch (_throwErr) {
+                        console.error('[HTTP2] self.throwError failed in error handler: ' + (_throwErr.stack || _throwErr.message));
+                    }
+                } catch (_handlerErr) {
+                    // Last-resort swallow — throwing from an 'error' listener crashes the
+                    // process. Log and return so the session failure stays contained.
+                    try { console.error('[HTTP2] Uncaught failure inside error listener: ' + (_handlerErr.stack || _handlerErr.message)); } catch (_) {}
                 }
-                // local.req/res may be null when the error fires outside a request context
-                // (background socket event) — log and return instead of crashing
-                if (!local.req || !local.res) {
-                    console.error('[HTTP2] Session error outside request context — cannot send error response.\n' + (error.stack || error.message));
-                    return;
-                }
-                self.throwError(error);
                 return;
             });
 

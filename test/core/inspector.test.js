@@ -6350,48 +6350,121 @@ describe('53 - unredacted snapshot is only stored when scope === local', functio
         );
     });
 
-    // ── render-json.js ──
+    // ── render-json.js — MUST NOT write the unredacted snapshot ──
+    // Reveal unmasks the Data tab, which is sourced from the HTML render's
+    // window.opener.__ginaData. If JSON responses wrote _lastGinaDataUnredacted,
+    // a background session poll or ping XHR between page load and Reveal click
+    // would clobber the HTML snapshot (78B session blob vs 88KB invoice page).
+    // Observed 2026-04-16, fixed by making render-swig.js the sole writer.
 
-    it('render-json.js gates the unredacted snapshot on NODE_SCOPE === local', function() {
+    it('render-json.js does NOT reference __gdPayloadUnredacted', function() {
         var src = getRJsonSrc53();
         assert.ok(
-            /__gdPayloadUnredacted\s*=\s*\(process\.env\.NODE_SCOPE\s*===\s*'local'\)/.test(src),
-            'expected scope-gated ternary assigning __gdPayloadUnredacted in render-json.js'
+            !/__gdPayloadUnredacted/.test(src),
+            'render-json.js must not build an unredacted snapshot — only render-swig.js does'
         );
     });
 
-    it('render-json.js uses a deep clone for the snapshot', function() {
+    it('render-json.js does NOT write _lastGinaDataUnredacted', function() {
         var src = getRJsonSrc53();
+        // Strip comments before checking — comments may reference the slot
+        // to explain why it isn't written. Only real code assignments matter.
+        var stripped = src
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/[^\n]*/g, '');
         assert.ok(
-            /__gdPayloadUnredacted\s*=\s*\(process\.env\.NODE_SCOPE\s*===\s*'local'\)\s*\?\s*JSON\.parse\(JSON\.stringify\(__gdPayload\)\)\s*:\s*null/.test(src),
-            'expected JSON.parse(JSON.stringify(__gdPayload)) deep clone, null otherwise'
+            !/_lastGinaDataUnredacted\s*=/.test(stripped),
+            'render-json.js must not write the unredacted slot — JSON polls would clobber the HTML render snapshot'
         );
     });
 
-    it('render-json.js snapshots BEFORE the redact pass', function() {
+    it('render-json.js still writes the redacted _lastGinaData and emits inspector#data', function() {
         var src = getRJsonSrc53();
-        var snapIdx = src.indexOf('__gdPayloadUnredacted');
-        var redactIdx = src.indexOf('inspectorRedact.redact(__gdPayload', snapIdx);
-        assert.ok(snapIdx > -1 && redactIdx > -1, 'both snapshot and redact call must exist');
         assert.ok(
-            snapIdx < redactIdx,
-            'unredacted snapshot must be taken BEFORE the redact() call'
+            /self\.serverInstance\._lastGinaData\s*=\s*__gdPayload/.test(src),
+            'render-json.js must still write the redacted _lastGinaData slot for SSE/engine.io'
+        );
+        assert.ok(
+            /process\.emit\(\s*['"]inspector#data['"]/.test(src),
+            'render-json.js must still emit inspector#data for SSE streaming'
         );
     });
 
-    it('render-json.js assigns the snapshot to serverInstance._lastGinaDataUnredacted', function() {
-        var src = getRJsonSrc53();
+});
+
+
+// ── 54 — toggleReveal URL resolution (cross-bundle proxy routing) ──────────
+// Proxy-routed multi-bundle setups (e.g. Freelancer v3) mount bundles under
+// path prefixes on a single host. A bare fetch to `/_gina/reveal` from the
+// Inspector window lands on the proxy's default bundle, not the one that
+// rendered the current page — so the snapshot returned is wrong (or 404).
+// Fix: derive the URL prefix from `window.opener.location.pathname` so the
+// request routes through the same bundle that produced the snapshot.
+
+describe('54 - toggleReveal resolves /_gina/reveal via opener pathname for proxy routing', function() {
+
+    var INSPECTOR_JS_54 = path.join(BM_DIR, 'inspector.js');
+    var _inspSrc54;
+    function getInspSrc54() { return _inspSrc54 || (_inspSrc54 = fs.readFileSync(INSPECTOR_JS_54, 'utf8')); }
+
+    it('toggleReveal prefers ?target= when present (standalone mode)', function() {
+        var src = getInspSrc54();
         assert.ok(
-            /self\.serverInstance\._lastGinaDataUnredacted\s*=\s*__gdPayloadUnredacted/.test(src),
-            'expected assignment to self.serverInstance._lastGinaDataUnredacted'
+            /new URLSearchParams\(window\.location\.search\)/.test(src),
+            'expected URLSearchParams read of window.location.search'
+        );
+        assert.ok(
+            /params\.get\(\s*['"]target['"]\s*\)/.test(src),
+            'expected params.get("target") lookup'
         );
     });
 
-    it('render-json.js defensively clears _lastGinaDataUnredacted when snapshot is null', function() {
-        var src = getRJsonSrc53();
+    it('toggleReveal falls back to window.opener.location.pathname when no target', function() {
+        var src = getInspSrc54();
         assert.ok(
-            /self\.serverInstance\._lastGinaDataUnredacted\s*=\s*null/.test(src),
-            'expected defensive null assignment when snapshot is null'
+            /window\.opener\s*&&\s*window\.opener\.location/.test(src),
+            'expected guard on window.opener + window.opener.location'
+        );
+        assert.ok(
+            /window\.opener\.location\.pathname/.test(src),
+            'expected read of window.opener.location.pathname for bundle-scoped prefix'
+        );
+    });
+
+    it('toggleReveal final fallback strips /_gina/inspector from own pathname', function() {
+        var src = getInspSrc54();
+        assert.ok(
+            /window\.location\.pathname\.replace\(\/\\\/_gina\\\/inspector\.\*\$\//.test(src),
+            'expected /_gina/inspector.*$/ strip as final fallback'
+        );
+    });
+
+    it('toggleReveal strips trailing slashes from every base path source', function() {
+        var src = getInspSrc54();
+        var stripCount = (src.match(/\.replace\(\/\\\/\+\$\//g) || []).length;
+        assert.ok(
+            stripCount >= 3,
+            'expected at least 3 trailing-slash strips (target, opener pathname, own pathname fallback); found ' + stripCount
+        );
+    });
+
+    it('toggleReveal builds the final URL as base + /_gina/reveal', function() {
+        var src = getInspSrc54();
+        assert.ok(
+            /var url\s*=\s*base\s*\+\s*['"]\/_gina\/reveal['"]/.test(src),
+            'expected `var url = base + "/_gina/reveal"` construction'
+        );
+    });
+
+    it('toggleReveal wraps the resolver in try/catch so a cross-origin opener cannot crash it', function() {
+        var src = getInspSrc54();
+        // Find the toggleReveal function body, ensure it contains try/catch around base resolution
+        var idx = src.indexOf('function toggleReveal');
+        assert.ok(idx > -1, 'toggleReveal function must exist');
+        var body = src.slice(idx, idx + 3000);
+        assert.ok(
+            /try\s*\{[\s\S]*?URLSearchParams[\s\S]*?\}\s*catch\s*\(/.test(body),
+            'expected try/catch wrapping the URLSearchParams + opener.location read'
         );
     });
 

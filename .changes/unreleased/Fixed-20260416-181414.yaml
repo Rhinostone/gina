@@ -1,0 +1,3 @@
+kind: Fixed
+body: Inspector Reveal toggle now reliably shows the full HTML page payload instead of tiny session data from background JSON polls. The unredacted snapshot is only written by HTML renders — JSON polling endpoints no longer clobber the slot between page load and click.
+time: 2026-04-16T18:14:14.822793+01:00

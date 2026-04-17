@@ -1,0 +1,3 @@
+kind: Fixed
+body: Bundle startup no longer crashes with `EINVAL: invalid argument, readlink` when loading config files in dev mode. The `require.cache` eviction calls in `config.js` `loadWithTemplate` are now wrapped in try/catch — `requireJSON` reads config via `fs.readFileSync` and evicts its own cache, so filesystem races (observed on OrbStack/Docker bind mounts after the bundles symlink is re-created) are non-fatal.
+time: 2026-04-16T18:30:51.000000+01:00

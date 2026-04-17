@@ -1,0 +1,3 @@
+kind: Fixed
+body: Inspector Reveal toggle now routes to the correct bundle in proxy-routed multi-bundle setups. `toggleReveal()` derives the `/_gina/reveal` URL from the opener window's pathname (or the standalone `?target=` param) so the request hits the bundle that rendered the current page, not the front proxy's default bundle.
+time: 2026-04-16T18:20:00.000000+01:00

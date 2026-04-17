@@ -2412,10 +2412,16 @@ function Server(options) {
                     } catch (e) { /* connection may be closing */ }
                 };
 
-                process.on('logger#default', _sseLogListener);
-                request.on('close', function() {
+                if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+                var _sseClose = function() {
                     process.removeListener('logger#default', _sseLogListener);
-                });
+                    process.gina._sseConnections.delete(_sseClose);
+                    try { response.end(); } catch (e) {}
+                };
+
+                process.on('logger#default', _sseLogListener);
+                process.gina._sseConnections.add(_sseClose);
+                request.on('close', _sseClose);
 
                 console.info(request.method + ' [200] ' + request.url + ' (SSE)');
                 return; // keep the connection open — do not call response.end()
@@ -2483,12 +2489,18 @@ function Server(options) {
                     } catch (e) {}
                 };
 
-                process.on('inspector#data', _agDataListener);
-                process.on('logger#default', _agLogListener);
-                request.on('close', function() {
+                if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+                var _agClose = function() {
                     process.removeListener('inspector#data', _agDataListener);
                     process.removeListener('logger#default', _agLogListener);
-                });
+                    process.gina._sseConnections.delete(_agClose);
+                    try { response.end(); } catch (e) {}
+                };
+
+                process.on('inspector#data', _agDataListener);
+                process.on('logger#default', _agLogListener);
+                process.gina._sseConnections.add(_agClose);
+                request.on('close', _agClose);
 
                 console.info(request.method + ' [200] ' + request.url + ' (SSE agent)');
                 return;

@@ -181,6 +181,15 @@ function Proc(bundle, proc, usePidFile){
                     // unref: do not keep the event loop alive for the timer alone —
                     // if the server drains before the timeout, the process can exit cleanly.
                     if (typeof _shutdownTimer.unref === 'function') _shutdownTimer.unref();
+                    // Drain long-lived Inspector SSE connections (/_gina/logs, /_gina/agent).
+                    // closeIdleConnections() does not close active streams, so open SSE
+                    // responses would block _httpServer.close() until the hard timeout.
+                    if (process.gina && process.gina._sseConnections && process.gina._sseConnections.size > 0) {
+                        var _sseClosers = Array.from(process.gina._sseConnections);
+                        for (var _si = 0; _si < _sseClosers.length; _si++) {
+                            try { _sseClosers[_si](); } catch (_sseErr) {}
+                        }
+                    }
                     // Close idle keep-alive connections immediately (Node 18.2+ http.Server).
                     // Avoids waiting for client-side keep-alive timeouts (up to 60-120s).
                     // No-op on http2.Server and older Node versions where the method is absent.
@@ -249,6 +258,21 @@ function Proc(bundle, proc, usePidFile){
                 }
                 if ( /EPIPE/.test(err.code) ) {
                     proc.stdout.write('[ SERVER ][ EPIPE UNCAUGHT EXCEPTION ] ' + err.message + '\n');
+                    return false;
+                }
+                // #H9 — ECONNREFUSED from a TCP connect attempt (http2/https/tls/net)
+                // is a normal dial failure — the peer is offline or the URL is wrong.
+                // Never kill the bundle over it. The stack must trace back to a TCP
+                // connect frame so we don't silence application-level bugs that reuse
+                // the same error code.
+                if (
+                    err && /ECONNREFUSED/.test(err.code)
+                    && (
+                        /TCPConnectWrap\.afterConnect/.test(err.stack || '')
+                        || /at\s+(Http2Session|ClientHttp2Session|TLSSocket|Socket)\./.test(err.stack || '')
+                    )
+                ) {
+                    console.warn('[ SERVER ][ ECONNREFUSED UNCAUGHT EXCEPTION ]', err.message || err.stack);
                     return false;
                 }
 

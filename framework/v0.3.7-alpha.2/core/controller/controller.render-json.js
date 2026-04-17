@@ -286,21 +286,17 @@ module.exports = function renderJSON(jsonObj, deps) {
                 }},
                 user : _gdUser
             };
-            // Snapshot the unredacted payload BEFORE the redact pass, gated on
-            // bundle scope. Production / beta / testing never store this — the
-            // /_gina/reveal endpoint will 403 with no snapshot to leak.
-            var __gdPayloadUnredacted = (process.env.NODE_SCOPE === 'local')
-                ? JSON.parse(JSON.stringify(__gdPayload)) : null;
+            // #R7 — JSON renders do NOT write _lastGinaDataUnredacted. The
+            // Reveal UX unmasks the Data tab, which always shows the HTML
+            // render payload (sourced from window.opener.__ginaData). JSON
+            // polling endpoints would otherwise clobber the HTML snapshot
+            // with tiny session/ping payloads between page load and click.
+            // Only render-swig.js writes the unredacted slot.
             __gdPayload = inspectorRedact.redact(__gdPayload, {
                 compiledPatterns : _jsonRedactConf.compiledPatterns,
                 replacement      : _jsonRedactConf.replacement
             });
             self.serverInstance._lastGinaData = __gdPayload;
-            if (__gdPayloadUnredacted) {
-                self.serverInstance._lastGinaDataUnredacted = __gdPayloadUnredacted;
-            } else {
-                self.serverInstance._lastGinaDataUnredacted = null;
-            }
             process.emit('inspector#data', __gdPayload);
         }
 

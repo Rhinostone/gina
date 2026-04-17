@@ -810,7 +810,13 @@ function Config(opt, contextResetNeeded) {
                     // loading env if exists
                     if ( self.isCacheless() ) {
                         if (exists) {
-                            delete require.cache[require.resolve(_(filename, true))];
+                            try {
+                                delete require.cache[require.resolve(_(filename, true))];
+                            } catch (_cacheErr) {
+                                // requireJSON reads via fs.readFileSync and evicts its own cache.
+                                // Filesystem races (e.g. OrbStack bind mount) can make require.resolve()
+                                // throw EINVAL on readlink for freshly re-symlinked bundles dirs — non-fatal.
+                            }
                         }
                     }
                     // if (new RegExp('\.'+ env +'\.json$').test(fName)) {
@@ -839,7 +845,11 @@ function Config(opt, contextResetNeeded) {
                     try {
 
                         if (isCacheless && exists) {
-                            delete require.cache[require.resolve(_(filename, true))];
+                            try {
+                                delete require.cache[require.resolve(_(filename, true))];
+                            } catch (_cacheErr) {
+                                // See note above — EINVAL/ENOENT on require.resolve from symlink races is non-fatal.
+                            }
                         }
 
                         if (exists) {
