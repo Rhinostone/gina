@@ -380,3 +380,128 @@ describe('init.js checkIfSettings migration — behaviour', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 04 — checkIfProjects heal: null-valued project fields must be re-healed
+// ---------------------------------------------------------------------------
+//
+// Bug: `typeof null === 'object'`, so the original guard
+//        `if (typeof(project[prop]) != 'undefined') continue;`
+//      passed for null fields and skipped the heal branch, leaving
+//      def_scope/local_scope/production_scope/dev_env permanently null
+//      once a previous run had written them that way.
+// Fix:   also require `project[prop] !== null` before skipping.
+//
+// In-container symptom: `isRealApp` resolved to
+//   `releases/<bundle>/null/<env>/<ver>/index.js` → ENOENT.
+// ---------------------------------------------------------------------------
+
+/**
+ * Pure-function replica of the checkIfProjects heal loop (lines ~742-763
+ * in lib/cmd/framework/init.js). Mirrors the fixed guard exactly.
+ */
+function runProjectsHeal(projects, main, release) {
+    var newProjects = clone(projects);
+    for (var name in projects) {
+        var project = projects[name];
+        for (var prop in main) {
+            // #fix — include null in the "needs heal" condition
+            if (typeof(project[prop]) !== 'undefined' && project[prop] !== null) continue;
+
+            if (!newProjects[name][prop]) {
+                newProjects[name][prop] = null;
+            }
+
+            if (typeof(main[prop][release]) !== 'undefined' && !/string/i.test(main[prop][release])) {
+                newProjects[name][prop] = clone(main[prop][release]);
+            } else if (typeof(main[prop]) !== 'undefined') {
+                newProjects[name][prop] = main[prop];
+            }
+        }
+    }
+    return newProjects;
+}
+
+/**
+ * Pre-fix replica — kept to assert the bug would regress without the guard.
+ */
+function runProjectsHealLegacy(projects, main, release) {
+    var newProjects = clone(projects);
+    for (var name in projects) {
+        var project = projects[name];
+        for (var prop in main) {
+            if (typeof(project[prop]) !== 'undefined') continue; // pre-fix (buggy)
+            if (!newProjects[name][prop]) newProjects[name][prop] = null;
+            if (typeof(main[prop][release]) !== 'undefined' && !/string/i.test(main[prop][release])) {
+                newProjects[name][prop] = clone(main[prop][release]);
+            } else if (typeof(main[prop]) !== 'undefined') {
+                newProjects[name][prop] = main[prop];
+            }
+        }
+    }
+    return newProjects;
+}
+
+describe('04 - checkIfProjects: null-valued fields must be healed', function() {
+
+    it('source: heal guard also excludes null via `project[prop] !== null`', function() {
+        assert.ok(
+            /if\s*\(\s*typeof\(project\[prop\]\)\s*!=\s*['"]undefined['"]\s*&&\s*project\[prop\]\s*!==\s*null\s*\)\s*continue;/.test(src),
+            'init.js must guard against null as well as undefined before skipping heal'
+        );
+    });
+
+    it('heals def_scope when projects.json has null and main has a release-scoped value', function() {
+        var projects = { freelancer: { path: '/app', def_scope: null } };
+        var main     = { def_scope: { '0.3': 'local', '0.2': 'local' } };
+        var out      = runProjectsHeal(projects, main, '0.3');
+        assert.equal(out.freelancer.def_scope, 'local');
+    });
+
+    it('heals multiple null fields in one pass (def_scope, local_scope, production_scope, dev_env)', function() {
+        var projects = {
+            freelancer: {
+                def_scope:        null,
+                local_scope:      null,
+                production_scope: null,
+                dev_env:          null
+            }
+        };
+        var main = {
+            def_scope:        { '0.3': 'local' },
+            local_scope:      { '0.3': 'local' },
+            production_scope: { '0.3': 'production' },
+            dev_env:          { '0.3': 'dev' }
+        };
+        var out = runProjectsHeal(projects, main, '0.3');
+        assert.equal(out.freelancer.def_scope,        'local');
+        assert.equal(out.freelancer.local_scope,      'local');
+        assert.equal(out.freelancer.production_scope, 'production');
+        assert.equal(out.freelancer.dev_env,          'dev');
+    });
+
+    it('does NOT overwrite a live (non-null) field', function() {
+        var projects = { freelancer: { def_scope: 'beta' } };
+        var main     = { def_scope: { '0.3': 'local' } };
+        var out      = runProjectsHeal(projects, main, '0.3');
+        assert.equal(out.freelancer.def_scope, 'beta',
+            'heal must not overwrite fields that already carry a real value');
+    });
+
+    it('heals undefined fields just like before (no regression)', function() {
+        var projects = { freelancer: { path: '/app' } }; // def_scope undefined
+        var main     = { def_scope: { '0.3': 'local' } };
+        var out      = runProjectsHeal(projects, main, '0.3');
+        assert.equal(out.freelancer.def_scope, 'local');
+    });
+
+    it('regression check: legacy (pre-fix) replica leaves null as null', function() {
+        var projects = { freelancer: { def_scope: null } };
+        var main     = { def_scope: { '0.3': 'local' } };
+        var out      = runProjectsHealLegacy(projects, main, '0.3');
+        assert.equal(out.freelancer.def_scope, null,
+            'without the fix, null would remain null forever — this asserts the bug was real');
+    });
+
+});

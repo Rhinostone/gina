@@ -1,0 +1,3 @@
+kind: Fixed
+body: "`gina framework:init` now re-heals project fields that have been saved as `null` in `projects.json`. The integrity loop in `checkIfProjects` used `typeof(project[prop]) != 'undefined'` to decide whether a field needed refreshing from `main.json`; because `typeof null === 'object'`, a field that had been written as `null` in a previous run (for example because its per-release entry was not yet defined) was permanently skipped. The guard now also requires `project[prop] !== null`, so `def_scope`, `local_scope`, `production_scope`, `dev_env` and similar namespaced fields recover on the next framework start."
+time: 2026-04-17T02:51:10.000000+01:00

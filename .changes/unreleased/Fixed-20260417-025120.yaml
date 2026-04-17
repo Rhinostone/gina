@@ -1,0 +1,3 @@
+kind: Fixed
+body: "`gina bundle:start` no longer hangs indefinitely when the resolved bundle entry point does not exist on disk. The `isRealApp` callback in `lib/cmd/bundle/start.js` used to log the error via `terminal.error()` and then return without closing the CLI socket or calling `end()` — the connected `gina` CLI would wait forever for output that could not arrive. The error branch now mirrors the sibling `nodeModulesErr` path: `opt.msg` is set to the error message and `end(opt, cmd, isBulkStart, bundleIndex, true)` is called, so the CLI receives the error and the process exits cleanly."
+time: 2026-04-17T02:51:20.000000+01:00

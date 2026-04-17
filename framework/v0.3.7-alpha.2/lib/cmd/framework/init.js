@@ -742,7 +742,11 @@ function Initialize(opt) {
         for (let name in projects) {
             let project = projects[name];
             for (let prop in main) {
-                if ( typeof(project[prop]) != 'undefined' ) continue;
+                // Skip only when the project already has a live value.
+                // `typeof null === 'object'`, so null must be tested explicitly —
+                // without this, a project saved with a null field (from a previous
+                // run where main[prop][self.release] was undefined) never gets healed.
+                if ( typeof(project[prop]) != 'undefined' && project[prop] !== null ) continue;
                 //if ( !Array.isArray(main[prop][self.release]) ) continue;
 
                 if ( !newProjects[name][prop] /**&& Array.isArray(main[prop][self.release])*/ ) {

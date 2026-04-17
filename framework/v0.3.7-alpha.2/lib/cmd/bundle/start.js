@@ -296,7 +296,14 @@ function Start(opt, cmd) {
         isRealApp(bundle, function(err, appPath, bundleDir){
 
             if (err) {
-                terminal.error(err.stack||err.message)
+                // Surface the error to the terminal AND close the CLI socket.
+                // Previously this branch only called terminal.error() — the connected
+                // `gina bundle:start` client would then wait forever on a daemon that
+                // had already given up. end() writes `opt.msg` back to the client and
+                // ends the connection so the CLI process can exit cleanly.
+                terminal.error(err.stack||err.message);
+                opt.msg = err.stack || err.message;
+                return end(opt, cmd, isBulkStart, bundleIndex, true);
             } else {
                 if (isStarting)
                     return;
