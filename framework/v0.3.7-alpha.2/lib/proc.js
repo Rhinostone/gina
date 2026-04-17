@@ -159,6 +159,23 @@ function Proc(bundle, proc, usePidFile){
             proc.dismiss = dismiss;
             proc.isMaster = isMaster;
 
+            // Detached daemons inherit stdio sockets whose peer (the launching CLI)
+            // has exited. Any subsequent write triggers EPIPE, which without a listener
+            // escalates to uncaughtException — and the EPIPE handler below itself writes
+            // to stdout, forming an infinite loop. A no-op 'error' listener absorbs the
+            // EPIPE silently before it can reach the uncaughtException path.
+            if (proc.stdout && typeof proc.stdout.on === 'function' && !proc.stdout.listenerCount('error')) {
+                proc.stdout.on('error', function() {});
+            }
+            if (proc.stderr && typeof proc.stderr.on === 'function' && !proc.stderr.listenerCount('error')) {
+                proc.stderr.on('error', function() {});
+            }
+
+            // Re-entry guard for the EPIPE uncaughtException branch — protects against
+            // the loop in case the silent listeners above are bypassed (e.g. stream
+            // replaced after init).
+            var _inEpipeHandler = false;
+
 
             // Fixed: signal handlers receive the signal name (string), not a numeric code.
             // Node.js 25+ enforces process.exit() argument as number.
@@ -257,7 +274,12 @@ function Proc(bundle, proc, usePidFile){
                     return false;
                 }
                 if ( /EPIPE/.test(err.code) ) {
-                    proc.stdout.write('[ SERVER ][ EPIPE UNCAUGHT EXCEPTION ] ' + err.message + '\n');
+                    if (_inEpipeHandler) return false;
+                    _inEpipeHandler = true;
+                    try {
+                        proc.stdout.write('[ SERVER ][ EPIPE UNCAUGHT EXCEPTION ] ' + err.message + '\n');
+                    } catch (_epipeWriteErr) { /* stdio is dead — swallow */ }
+                    _inEpipeHandler = false;
                     return false;
                 }
                 // #H9 — ECONNREFUSED from a TCP connect attempt (http2/https/tls/net)
@@ -282,7 +304,12 @@ function Proc(bundle, proc, usePidFile){
                 // Do not dissmis the framework
                 if ( /^gina\-v/.test(bundle) ) {
                     if ( err.code == 'EPIPE' ) {
-                        proc.stdout.write(err.stack);
+                        if (_inEpipeHandler) return;
+                        _inEpipeHandler = true;
+                        try {
+                            proc.stdout.write(err.stack);
+                        } catch (_epipeStackErr) { /* stdio is dead — swallow */ }
+                        _inEpipeHandler = false;
                         return;
                     }
                     console.warn('[ FRAMEWORK ][ uncaughtException ] ', err.stack);

@@ -1,0 +1,3 @@
+kind: Fixed
+body: Detached daemon processes no longer spin at 100% CPU when their launching CLI exits and leaves an orphaned stdio pipe. Writing to the dead pipe triggered `EPIPE`, which escalated to `uncaughtException`; the existing handler then wrote the error back to the same dead stdout, producing another `EPIPE` — an infinite loop. `proc.js` now installs silent `error` listeners on `proc.stdout`/`proc.stderr` at init, guards the uncaughtException EPIPE branch with a re-entry flag, and wraps the diagnostic `stdout.write()` calls in `try/catch` so a subsequent write failure is swallowed instead of re-thrown.
+time: 2026-04-17T02:51:00.000000+01:00

@@ -265,3 +265,129 @@ describe('04 - graceful shutdown: shutdown sequence logic', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 — EPIPE uncaughtException loop: re-entry guard
+// ---------------------------------------------------------------------------
+//
+// Bug: detached daemons inherit stdio pipes whose peer (the launching CLI)
+//      has exited. Any write triggers EPIPE; without a listener on the
+//      stream, it escalates to uncaughtException. The uncaughtException
+//      EPIPE branch itself wrote to stdout → recursive EPIPE → CPU pegged
+//      at 100% forever.
+// Fix (proc.js): install silent stdout/stderr error listeners at init,
+//      add a `_inEpipeHandler` re-entry guard, wrap the stdout writes in
+//      try/catch so a still-dead stream is swallowed rather than re-thrown.
+// ---------------------------------------------------------------------------
+
+/**
+ * Replica of the EPIPE branch with the re-entry guard. Returns the number
+ * of write attempts that reached the inner `stdout.write` call.
+ */
+function runEpipeBranch(invocations) {
+    var _inEpipeHandler = false;
+    var writes = 0;
+    var proc = { stdout: { write: function() { writes++; } } };
+
+    for (var i = 0; i < invocations; i++) {
+        // Replicates the uncaughtException EPIPE branch:
+        //   if (_inEpipeHandler) return false;
+        //   _inEpipeHandler = true;
+        //   try { proc.stdout.write(...); } catch (_) {}
+        //   _inEpipeHandler = false;
+        if (_inEpipeHandler) continue;
+        _inEpipeHandler = true;
+        try { proc.stdout.write('x'); } catch (_) {}
+        _inEpipeHandler = false;
+    }
+    return writes;
+}
+
+/**
+ * Simulate the re-entrant failure mode: stdout.write throws EPIPE, which
+ * (in pre-fix code) would recursively re-enter the handler. With the guard,
+ * the second call is suppressed; the try/catch swallows the throw.
+ */
+function runEpipeBranchWithThrowingStdout() {
+    var _inEpipeHandler = false;
+    var attempts = 0;
+
+    function handler() {
+        if (_inEpipeHandler) return 'reentrant-suppressed';
+        _inEpipeHandler = true;
+        try {
+            attempts++;
+            if (attempts <= 3) {
+                // Re-enter recursively — simulates stdout.write triggering another EPIPE
+                handler();
+            }
+            throw Object.assign(new Error('write EPIPE'), { code: 'EPIPE' });
+        } catch (_) { /* swallow */ }
+        _inEpipeHandler = false;
+        return 'first-call';
+    }
+
+    var outcome = handler();
+    return { outcome: outcome, attempts: attempts };
+}
+
+describe('03 - EPIPE uncaughtException loop: re-entry guard', function() {
+
+    var procSrc = fs.readFileSync(PROC_SOURCE, 'utf8');
+
+    it('source: silent stdout.on(error) listener is installed at init', function() {
+        assert.ok(
+            /proc\.stdout[\s\S]*?\.on\(\s*['"]error['"]\s*,\s*function\(\s*\)\s*\{\s*\}\s*\)/.test(procSrc),
+            'proc.js must install a no-op error listener on proc.stdout to absorb EPIPE'
+        );
+    });
+
+    it('source: silent stderr.on(error) listener is installed at init', function() {
+        assert.ok(
+            /proc\.stderr[\s\S]*?\.on\(\s*['"]error['"]\s*,\s*function\(\s*\)\s*\{\s*\}\s*\)/.test(procSrc),
+            'proc.js must install a no-op error listener on proc.stderr to absorb EPIPE'
+        );
+    });
+
+    it('source: re-entry guard variable `_inEpipeHandler` is declared', function() {
+        assert.ok(
+            /var\s+_inEpipeHandler\s*=\s*false\s*;/.test(procSrc),
+            'proc.js must declare the _inEpipeHandler re-entry guard'
+        );
+    });
+
+    it('source: uncaughtException EPIPE branch short-circuits on re-entry', function() {
+        // Both EPIPE branches (err.code EPIPE) should gate their stdout.write
+        // on _inEpipeHandler. Assert the pattern appears at least twice.
+        var matches = procSrc.match(/if\s*\(\s*_inEpipeHandler\s*\)\s*return/g) || [];
+        assert.ok(
+            matches.length >= 2,
+            'expected at least two `if (_inEpipeHandler) return` guards in the EPIPE branches'
+        );
+    });
+
+    it('source: stdout.write inside EPIPE branch is wrapped in try/catch', function() {
+        // A bare proc.stdout.write() that throws would re-enter uncaughtException.
+        // Require the write to sit inside a try block that catches.
+        assert.ok(
+            /try\s*\{\s*proc\.stdout\.write\([^\)]*\);\s*\}\s*catch\s*\(\s*_[\w]*\s*\)/.test(procSrc),
+            'proc.stdout.write inside the EPIPE branch must be wrapped in try/catch'
+        );
+    });
+
+    it('replica: re-entry guard prevents the inner write from firing twice in one call', function() {
+        var result = runEpipeBranchWithThrowingStdout();
+        assert.equal(result.outcome, 'first-call', 'outer call should complete normally after guarding');
+        // attempts starts at 1 (first call); every recursive call is blocked by the guard.
+        assert.equal(result.attempts, 1,
+            'nested re-entry must be suppressed — expected exactly one attempt to reach the write');
+    });
+
+    it('replica: guard still allows sequential (non-nested) EPIPEs to each write once', function() {
+        var writes = runEpipeBranch(5);
+        assert.equal(writes, 5,
+            'five sequential EPIPE events should each produce exactly one write — the guard is per-event, not one-shot');
+    });
+
+});
