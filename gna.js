@@ -30,12 +30,14 @@ module.exports = {
 
     get setContext()   { return global.setContext; },
     get getContext()   { return global.getContext; },
+    get joinContext()  { return global.joinContext; },
     get resetContext() { return global.resetContext; },
     get getConfig()    { return global.getConfig; },
     get getLib()       { return global.getLib; },
     get whisper()      { return global.whisper; },
     get define()       { return global.define; },
     get getDefined()   { return global.getDefined; },
+    get isWin32()      { return global.isWin32; },
 
     // ── Path helpers ─────────────────────────────────────────────────────
 
@@ -55,21 +57,40 @@ module.exports = {
 
     get requireJSON() { return global.requireJSON; },
 
+    // ── Data helpers ─────────────────────────────────────────────────────
+
+    get encodeRFC5987ValueChars() { return global.encodeRFC5987ValueChars; },
+    get formatDataFromString()    { return global.formatDataFromString; },
+
+    // ── Text helper ──────────────────────────────────────────────────────
+
+    get __() { return global.__; },
+
+    // ── Console helper ───────────────────────────────────────────────────
+
+    get log() { return global.log; },
+
     // ── Task helper ──────────────────────────────────────────────────────
 
     get run() { return global.run; },
 
     // ── Env helpers ──────────────────────────────────────────────────────
 
-    get getUserHome()  { return global.getUserHome; },
-    get getEnvVar()    { return global.getEnvVar; },
-    get getEnvVars()   { return global.getEnvVars; },
-    get setEnvVar()    { return global.setEnvVar; },
-    get getLogDir()    { return global.getLogDir; },
-    get getRunDir()    { return global.getRunDir; },
-    get getTmpDir()    { return global.getTmpDir; },
-    get parseTimeout() { return global.parseTimeout; },
-    get isWin32()      { return global.isWin32; },
+    get getUserHome()           { return global.getUserHome; },
+    get getEnvVar()             { return global.getEnvVar; },
+    get getEnvVars()            { return global.getEnvVars; },
+    get setEnvVar()             { return global.setEnvVar; },
+    get getProtected()          { return global.getProtected; },
+    get filterArgs()            { return global.filterArgs; },
+    get getLogDir()             { return global.getLogDir; },
+    get getRunDir()             { return global.getRunDir; },
+    get getTmpDir()             { return global.getTmpDir; },
+    get getBundleStartingArgv() { return global.getBundleStartingArgv; },
+    get getVendorsConfig()      { return global.getVendorsConfig; },
+    get setVendorsConfig()      { return global.setVendorsConfig; },
+    get defineDefault()         { return global.defineDefault; },
+    get parseTimeout()          { return global.parseTimeout; },
+    get merge()                 { return global.merge; },
 
     // ── Classes ──────────────────────────────────────────────────────────
 

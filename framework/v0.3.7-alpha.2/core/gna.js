@@ -1554,4 +1554,480 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 });
 
 
+// -------------------------------------------------------------------------
+// #M8 / #AI3 — Explicit exports for injected globals (0.4.0).
+//
+// Every helper function below is also installed on the global object at
+// framework boot time (via framework/v*/helpers/* and utils/helper.js,
+// both loaded transitively through `require('./../lib')` on line 85).
+//
+// These explicit re-exports let IDEs, TypeScript, and AI assistants resolve
+// `require('gina').setContext` and friends statically — no runtime magic
+// required. The globals themselves are unchanged: existing call sites that
+// use `setContext(...)` without importing anything keep working as before.
+//
+// Intentional omission — `getConfig`:
+//   The bundle-aware `gna.getConfig` instance method is assigned later by
+//   `onInitialize` (and by the no-onInitialize fallback). Exposing the
+//   context-helper global of the same name here would be overwritten at
+//   runtime and confuse users who destructure. The global `getConfig`
+//   remains accessible via the package-root `gina/gna` barrel (getter),
+//   which cannot collide with the instance method.
+// -------------------------------------------------------------------------
+
+// ── Context helpers (framework/v*/helpers/context.js) ────────────────────
+
+/**
+ * Store a value in the framework context registry under `name`.
+ * Supports dotted keys (e.g. `gina.lib`) which create nested objects.
+ *
+ * @param {string|object} name  - Context key, dotted path, or full contexts object
+ * @param {*}             [obj] - Value to store
+ * @param {boolean}       [force] - Deep-merge instead of replace
+ * @returns {void}
+ * @example
+ *   setContext('bundle', 'myApp');
+ *   setContext('gina.lib', lib);
+ */
+gna.setContext = setContext;
+
+/**
+ * Read a value from the framework context registry.
+ *
+ * @param {string} [name] - Context key; omit to return the full context object
+ * @returns {*} The stored value, or the full context map when `name` is omitted
+ * @example
+ *   var bundle = getContext('bundle');
+ *   var all    = getContext();
+ */
+gna.getContext = getContext;
+
+/**
+ * Merge an additional contexts object into the current registry.
+ *
+ * @param {object} context - Partial contexts to merge in
+ * @returns {void}
+ * @example
+ *   joinContext({ env: 'dev', scope: 'local' });
+ */
+gna.joinContext = joinContext;
+
+/**
+ * Rebuild the context registry from `GINA_*` environment variables and the
+ * current project manifest. Mostly used by worker threads and the logger.
+ *
+ * @returns {void}
+ * @example
+ *   resetContext();
+ */
+gna.resetContext = resetContext;
+
+/**
+ * Load a bundle library by name and return an instantiated class.
+ *
+ * @param {string} [bundle] - Bundle name; inferred from the call site when omitted
+ * @param {string} lib      - Library file name (without `.js`)
+ * @returns {object} Library instance
+ * @example
+ *   var mailer = getLib('myBundle', 'Mailer');
+ */
+gna.getLib = getLib;
+
+/**
+ * Replace `${key}` tokens in a string or object using a dictionary.
+ * Leaves unknown tokens untouched silently.
+ *
+ * @param {object}        dictionary  - Key → replacement map
+ * @param {object|string} replaceable - Object or JSON-serialisable value
+ * @param {RegExp}        [rule]      - Optional custom match rule
+ * @returns {object|string} Interpolated value
+ * @example
+ *   whisper({ projectName: 'demo' }, '~/.${projectName}');
+ *   // → '~/.demo'
+ */
+gna.whisper = whisper;
+
+/**
+ * Define a read-only constant on the global object. Auto-prefixes `USER_`
+ * when the name does not already start with `GINA_` or `USER_`.
+ *
+ * @param {string} name  - Constant name (case-insensitive, uppercased)
+ * @param {*}      value - Constant value
+ * @returns {void}
+ * @example
+ *   define('MY_FLAG', true);
+ *   // later: console.log(USER_MY_FLAG);
+ */
+gna.define = define;
+
+/**
+ * List all `GINA_*` and `USER_*` constants currently defined on the global
+ * object.
+ *
+ * @returns {object} Array-like map of `name → value`
+ * @example
+ *   var constants = getDefined();
+ */
+gna.getDefined = getDefined;
+
+/**
+ * Check whether the current platform is Windows.
+ *
+ * @returns {boolean} `true` on win32
+ * @example
+ *   if (isWin32()) { /* windows-specific fallback *\/ }
+ */
+gna.isWin32 = isWin32;
+
+// ── Path helpers (framework/v*/helpers/path.js) ──────────────────────────
+
+/**
+ * Normalise a path string or construct a PathObject for a directory.
+ * With `force = true` returns a normalised string; otherwise a PathObject
+ * exposing `existsSync()`, `mkdirSync()`, `cp()`, etc.
+ *
+ * @param {string}  path    - Path to convert (supports `~` expansion)
+ * @param {boolean} [force] - Force plain-string normalisation
+ * @returns {string|object} Normalised path or PathObject
+ * @example
+ *   _('~/.gina/log', true);             // string
+ *   new _('~/.gina/log').existsSync();  // boolean
+ */
+gna._ = _;
+
+/**
+ * Register a named path in the context paths registry.
+ * Supports dotted keys (e.g. `gina.core`) for nested buckets.
+ *
+ * @param {string} name - Path name, optionally dotted
+ * @param {string} path - Absolute path value
+ * @returns {void}
+ * @example
+ *   setPath('project', '/var/www/demo');
+ *   setPath('gina.core', __dirname);
+ */
+gna.setPath = setPath;
+
+/**
+ * Read a named path from the context paths registry.
+ *
+ * @param {string} name - Path name (top-level bucket for dotted paths)
+ * @returns {string|object} Stored path, or nested object for dotted roots
+ * @throws {Error} When the path has not been registered
+ * @example
+ *   var root = getPath('project');
+ *   var core = getPath('gina').core;
+ */
+gna.getPath = getPath;
+
+/**
+ * Replace the whole paths registry in one call.
+ *
+ * @param {object} paths - Map of `name → path`
+ * @returns {void}
+ * @example
+ *   setPaths({ project: '/var/www/demo', bundles: '/var/www/demo/bundles' });
+ */
+gna.setPaths = setPaths;
+
+/**
+ * Read the full paths registry.
+ *
+ * @returns {object} The complete paths map
+ * @example
+ *   var all = getPaths();
+ */
+gna.getPaths = getPaths;
+
+/**
+ * Promisify an `.onComplete(cb)` EventEmitter from PathObject / Shell ops.
+ *
+ * @param {EventEmitter} emitter - Any object exposing `.onComplete(cb)`
+ * @returns {Promise<*>} Resolves with the operation result
+ * @example
+ *   await onCompleteCall( _(dir).mkdir() );
+ */
+gna.onCompleteCall = onCompleteCall;
+
+// ── Model helpers (framework/v*/lib/model.js) ────────────────────────────
+
+/**
+ * Load a bundle model and return its entity map.
+ *
+ * @param {string} [bundle] - Bundle name; inferred from the call site when omitted
+ * @param {string} model    - Model name (without `.js`)
+ * @returns {object} Entities keyed by name
+ * @example
+ *   var users = getModel('myBundle', 'User');
+ */
+gna.getModel = getModel;
+
+/**
+ * Instantiate a bundle model entity with an optional connection.
+ *
+ * @param {string} [bundle]          - Bundle name; inferred when omitted
+ * @param {string} model             - Model name
+ * @param {string} entityClassName   - Entity class name inside the model
+ * @param {object} [conn]            - DB connector instance
+ * @returns {object} Entity instance
+ * @example
+ *   var user = getModelEntity('myBundle', 'User', 'UserEntity');
+ */
+gna.getModelEntity = getModelEntity;
+
+// ── JSON helper (framework/v*/helpers/json/src/main.js) ──────────────────
+
+/**
+ * Read a JSON file, strip `//` and `/* ... *\/` comments, tolerate trailing
+ * commas, and return the parsed object.
+ *
+ * @param {string} filename - Absolute path to the JSON file
+ * @returns {object} Parsed content
+ * @throws {Error} When the file cannot be read or the JSON is malformed
+ * @example
+ *   var cfg = requireJSON(_(root + '/manifest.json'));
+ */
+gna.requireJSON = requireJSON;
+
+// ── Task helper (framework/v*/helpers/task.js) ───────────────────────────
+
+/**
+ * Run a shell command via `child_process.spawn` with a Promise-friendly
+ * `onComplete` / `onData` EventEmitter API.
+ *
+ * @param {string|string[]} cmdline - Command as string or argv array
+ * @param {object}          [opt]   - Options (`cwd`, `tmp`, `outToProcessSTD`)
+ * @param {function}        [cb]    - Optional callback `(err, stdout)`
+ * @returns {EventEmitter} Emitter with `onData(cb)` and `onComplete(cb)` helpers
+ * @example
+ *   run('ls -la', { cwd: process.cwd() }).onComplete(function(err, out) {
+ *       console.log(out);
+ *   });
+ */
+gna.run = run;
+
+// ── Data helpers (framework/v*/helpers/data/src/main.js) ─────────────────
+
+/**
+ * URL-encode a string per RFC 5987 (adds `!` handling and `*` → `%2A`).
+ *
+ * @param {string} str - Raw string
+ * @returns {string} RFC-5987-encoded value
+ * @example
+ *   encodeRFC5987ValueChars("O'Brien (1)"); // "O%27Brien%20%281%29"
+ */
+gna.encodeRFC5987ValueChars = encodeRFC5987ValueChars;
+
+/**
+ * Parse a form/body string (`application/x-www-form-urlencoded` or JSON) into
+ * a nested object. Recognises PHP-style `foo[bar][0]` keys.
+ *
+ * @param {string|object} bodyStr - Body string; objects are `JSON.stringify`-ed first
+ * @returns {object} Parsed object
+ * @example
+ *   formatDataFromString('user[name]=Ada&user[age]=37');
+ *   // → { user: { name: 'Ada', age: '37' } }
+ */
+gna.formatDataFromString = formatDataFromString;
+
+// ── Text helper (framework/v*/helpers/text.js) ───────────────────────────
+
+/**
+ * i18n placeholder — currently a no-op, preserved for forward compatibility.
+ *
+ * @param {string} str - Source string
+ * @returns {string} Translated string (identity today)
+ * @example
+ *   __('Hello');
+ */
+gna.__ = __;
+
+// ── Console helper (framework/v*/helpers/console.js) ─────────────────────
+
+/**
+ * Write arguments to `process.stdout` followed by a newline. Objects are
+ * JSON-stringified with tab indentation.
+ *
+ * @param {...*} args - Values to print
+ * @returns {void}
+ * @example
+ *   log('debug', { a: 1 });
+ */
+gna.log = log;
+
+// ── Env helpers (utils/helper.js) ────────────────────────────────────────
+
+/**
+ * Read a `GINA_*` / `VENDOR_*` / `USER_*` env var from `process.gina`.
+ *
+ * @param {string} key - Variable name
+ * @returns {*|undefined} Stored value, or `undefined` when not set
+ * @example
+ *   var dir = getEnvVar('GINA_HOMEDIR');
+ */
+gna.getEnvVar = getEnvVar;
+
+/**
+ * Return the entire `process.gina` env-var map.
+ *
+ * @returns {object} All gina-scoped env vars
+ * @example
+ *   for (var k in getEnvVars()) { console.log(k, getEnvVars()[k]); }
+ */
+gna.getEnvVars = getEnvVars;
+
+/**
+ * Set a `GINA_*` / `VENDOR_*` / `USER_*` env var in `process.gina`.
+ * Auto-prefixes `USER_` when the key is unprefixed.
+ *
+ * @param {string}  key           - Variable name
+ * @param {*}       val           - Value
+ * @param {boolean} [isProtected] - When `true`, later `setEnvVar` calls cannot override it
+ * @returns {void}
+ * @example
+ *   setEnvVar('GINA_CULTURE', 'en-US');
+ */
+gna.setEnvVar = setEnvVar;
+
+/**
+ * List keys that were marked protected via `setEnvVar(..., true)`.
+ *
+ * @returns {string[]} Array of protected env-var names
+ * @example
+ *   getProtected(); // ['GINA_CULTURE', ...]
+ */
+gna.getProtected = getProtected;
+
+/**
+ * Scan `process.argv` for `--key=value` flags, promote them to `process.gina`
+ * env vars, then strip them from `argv`. Runs once during CLI bootstrap.
+ *
+ * @returns {void}
+ * @example
+ *   filterArgs(); // after: process.gina.GINA_ENV === 'dev'
+ */
+gna.filterArgs = filterArgs;
+
+/**
+ * Resolve the log directory — `GINA_LOGDIR` / `LOGDIR` / prefix `var/log`
+ * with fallback to `~/.gina/log`. Creates it if missing.
+ *
+ * @returns {string} Absolute log-dir path
+ * @example
+ *   var dir = getLogDir();
+ */
+gna.getLogDir = getLogDir;
+
+/**
+ * Resolve the run/lock directory — prefix `var/lock` with fallback to
+ * `~/.gina/run`. Creates it if missing.
+ *
+ * @returns {string} Absolute run-dir path
+ * @example
+ *   var dir = getRunDir();
+ */
+gna.getRunDir = getRunDir;
+
+/**
+ * Resolve the tmp directory — `GINA_TMPDIR` / `os.tmpdir()` with fallback to
+ * prefix `var/tmp`.
+ *
+ * @returns {string} Absolute tmp-dir path
+ * @example
+ *   var dir = getTmpDir();
+ */
+gna.getTmpDir = getTmpDir;
+
+/**
+ * Read the saved startup argv for a given bundle@project — used by
+ * `gina bundle:restart` to re-issue the exact same start command.
+ *
+ * @param {string} bundle  - Bundle name
+ * @param {string} project - Project name
+ * @returns {string|null} Space-separated argv, or `null` when no file exists
+ * @example
+ *   var argv = getBundleStartingArgv('myApp', 'demo');
+ */
+gna.getBundleStartingArgv = getBundleStartingArgv;
+
+/**
+ * Resolve the user's home directory (`USERPROFILE` on win32, `HOME`
+ * elsewhere). Validates writability.
+ *
+ * @returns {string} Home-directory path
+ * @throws {Error} When the home dir is missing or not writable
+ * @example
+ *   var home = getUserHome();
+ */
+gna.getUserHome = getUserHome;
+
+/**
+ * Read a vendor config loaded via `setVendorsConfig`.
+ *
+ * @param {string} [vendor] - Vendor key; omit for the whole map
+ * @returns {object|undefined} Vendor config, or full map
+ * @example
+ *   var aws = getVendorsConfig('aws');
+ */
+gna.getVendorsConfig = getVendorsConfig;
+
+/**
+ * Load every `*.json` file in `dir` as a vendor config keyed by filename.
+ *
+ * @param {string} dir - Directory containing vendor config files
+ * @returns {void}
+ * @example
+ *   setVendorsConfig(_(getPath('project') + '/config/vendors', true));
+ */
+gna.setVendorsConfig = setVendorsConfig;
+
+/**
+ * Bulk-register an object of env vars as `USER_*` defaults via `define`.
+ *
+ * @param {object} obj - Map of `name → value`
+ * @returns {void}
+ * @example
+ *   defineDefault({ MY_FLAG: true });
+ */
+gna.defineDefault = defineDefault;
+
+/**
+ * Convert a user-facing timeout ("30s", "500ms", "1m", "2h", `number`, `false`)
+ * to milliseconds. Returns `null` when the timeout is disabled/invalid.
+ *
+ * @param {string|number|boolean|null} value - Raw value
+ * @returns {number|null} Milliseconds, or `null`
+ * @example
+ *   parseTimeout('30s'); // 30000
+ *   parseTimeout(false); // null
+ */
+gna.parseTimeout = parseTimeout;
+
+/**
+ * Framework's deep-merge helper — loaded via `utils/helper.js` and also
+ * available as `lib.merge`.
+ *
+ * @param {object}  target   - Destination object (mutated)
+ * @param {object}  source   - Source object
+ * @param {boolean} [force]  - Overwrite primitives when both sides define them
+ * @returns {object} The merged target
+ * @example
+ *   var out = merge({ a: 1 }, { b: 2 });
+ */
+gna.merge = merge;
+
+// ── Plugin helpers (framework/v*/helpers/plugins/src/main.js) ────────────
+
+/**
+ * Validation/API-error class used by controller actions and the Validator
+ * plugin. Falls back to the framework built-in even when Validator is not
+ * loaded (see helpers/index.js).
+ *
+ * @class
+ * @example
+ *   throw new ApiError('Invalid payload', 400);
+ */
+gna.ApiError = (typeof ApiError !== 'undefined') ? ApiError : undefined;
+
+
 module.exports = gna
