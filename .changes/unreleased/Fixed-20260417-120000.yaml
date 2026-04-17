@@ -1,0 +1,3 @@
+kind: Fixed
+body: "Inspector popup now stays in sync during SPA (pushState/XHR) navigation inside the inspected page. Opener polling alone could not pick up SPA renders because those paths do not rewrite `window.__ginaData`. The Inspector now opens a parallel `/_gina/agent` SSE subscription alongside the existing opener source and receives pushed `data`/`log` frames from `render-json.js` whenever `process.gina._inspectorActive` is true. Multi-bundle proxy setups are handled by deriving the stream URL from the opener pathname. Manual refresh after each page change is no longer required."
+time: 2026-04-17T12:00:00.000000+01:00

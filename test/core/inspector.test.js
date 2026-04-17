@@ -6469,3 +6469,157 @@ describe('54 - toggleReveal resolves /_gina/reveal via opener pathname for proxy
     });
 
 });
+
+
+// ── 55 — Inspector passive /_gina/agent subscription (opener mode SPA fix) ──
+
+describe('55 - Inspector passive /_gina/agent subscription alongside opener', function() {
+
+    var INSPECTOR_55 = path.join(BM_DIR, 'inspector.js');
+    var _inspSrc55;
+    function getInspSrc55() { return _inspSrc55 || (_inspSrc55 = fs.readFileSync(INSPECTOR_55, 'utf8')); }
+
+    it('inspector.js defines tryAgentPassive function', function() {
+        assert.ok(
+            getInspSrc55().indexOf('function tryAgentPassive') > -1,
+            'expected tryAgentPassive() function definition'
+        );
+    });
+
+    it('tryAgentPassive skips when source is already agent', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        assert.ok(idx > -1);
+        var body = src.slice(idx, idx + 2000);
+        assert.ok(
+            /source\s*===\s*'agent'/.test(body),
+            'expected guard skipping passive subscription when source === "agent"'
+        );
+    });
+
+    it('tryAgentPassive derives the bundle URL from window.opener.location.pathname', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 2500);
+        assert.ok(
+            /window\.opener\s*&&\s*window\.opener\.location/.test(body),
+            'expected opener.location read for URL derivation'
+        );
+        assert.ok(
+            /window\.opener\.location\.pathname/.test(body),
+            'expected opener pathname used as base'
+        );
+    });
+
+    it('tryAgentPassive falls back to inspector path when opener is unavailable', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 2500);
+        assert.ok(
+            /_gina\\\/inspector\.\*\$/.test(body) || /\/_gina\/inspector/.test(body),
+            'expected fallback stripping the inspector path'
+        );
+    });
+
+    it('tryAgentPassive opens an EventSource to /_gina/agent', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 2500);
+        assert.ok(
+            body.indexOf('/_gina/agent') > -1,
+            'expected /_gina/agent URL construction'
+        );
+        assert.ok(
+            body.indexOf('new EventSource') > -1,
+            'expected new EventSource() call'
+        );
+    });
+
+    it('tryAgentPassive does NOT mutate the primary source', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 6000);
+        // The primary source must stay on opener — never reassigned to 'agent'
+        assert.ok(
+            !/source\s*=\s*'agent'/.test(body),
+            'tryAgentPassive must NOT reassign source = "agent" (breaks opener-driven behaviour)'
+        );
+    });
+
+    it('tryAgentPassive listens for named data events', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 6000);
+        assert.ok(
+            body.indexOf("addEventListener('data'") > -1,
+            'expected es.addEventListener("data") in tryAgentPassive'
+        );
+    });
+
+    it('tryAgentPassive listens for named log events', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 6000);
+        assert.ok(
+            body.indexOf("addEventListener('log'") > -1,
+            'expected es.addEventListener("log") in tryAgentPassive'
+        );
+    });
+
+    it('tryAgentPassive diffs JSON via lastGdStr (no redundant re-renders)', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 6000);
+        assert.ok(
+            /lastGdStr/.test(body),
+            'expected lastGdStr compared to stringified payload'
+        );
+    });
+
+    it('tryAgentPassive wraps URL derivation in try/catch for cross-origin safety', function() {
+        var src = getInspSrc55();
+        var idx = src.indexOf('function tryAgentPassive');
+        var body = src.slice(idx, idx + 6000);
+        assert.ok(
+            /try\s*\{[\s\S]*?window\.opener[\s\S]*?\}\s*catch\s*\(/.test(body),
+            'expected try/catch around opener.location read'
+        );
+    });
+
+    it('init wires tryAgentPassive inside the !isAgent branch', function() {
+        var src = getInspSrc55();
+        var isAgentIdx = src.indexOf('var isAgent = tryAgent()');
+        assert.ok(isAgentIdx > -1);
+        // grep forward through the !isAgent block — tryAgentPassive should be
+        // called there, not inside the agent branch
+        var block = src.slice(isAgentIdx, isAgentIdx + 2500);
+        assert.ok(
+            block.indexOf('if (!isAgent)') > -1,
+            'expected if (!isAgent) guard'
+        );
+        assert.ok(
+            block.indexOf('tryAgentPassive()') > -1,
+            'expected tryAgentPassive() call inside the !isAgent branch'
+        );
+    });
+
+    it('init skips tryServerLogs when passive agent succeeds (no duplicate log entries)', function() {
+        var src = getInspSrc55();
+        var isAgentIdx = src.indexOf('var isAgent = tryAgent()');
+        var block = src.slice(isAgentIdx, isAgentIdx + 2500);
+        // Expect the call sequence: tryAgentPassive(), then conditional tryServerLogs()
+        assert.ok(
+            /tryAgentPassive\(\)[\s\S]*?if\s*\(\s*!_passiveAgentActive[\s\S]*?tryServerLogs\(\)/.test(block),
+            'expected tryServerLogs() to be gated on !_passiveAgentActive'
+        );
+    });
+
+    it('_passiveAgentEs state variable is declared in the state block', function() {
+        var src = getInspSrc55();
+        assert.ok(
+            /var\s+_passiveAgentEs\s*=\s*null\s*;/.test(src),
+            'expected _passiveAgentEs state variable declaration'
+        );
+    });
+
+});

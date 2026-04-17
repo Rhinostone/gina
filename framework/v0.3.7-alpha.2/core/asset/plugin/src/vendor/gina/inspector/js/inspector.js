@@ -174,6 +174,11 @@
     var _revealActive = false;
     /** @type {?Object} Cached unredacted Inspector payload from `/_gina/reveal` (local scope only) */
     var _revealedData = null;
+    /** @type {?EventSource} Passive `/_gina/agent` subscription used alongside opener
+     *  polling to receive pushed data/log frames from SPA (pushState/XHR) navigations
+     *  that do not rewrite `window.__ginaData`. Null when no opener is available
+     *  or when agent mode (`?target=`) is the primary source. */
+    var _passiveAgentEs = null;
 
     // ── Log row selection ──────────────────────────────────────────────────
     /** @type {Set<number>} IDs of currently selected log rows */
@@ -3717,6 +3722,125 @@
         return true;
     }
 
+    // ── Passive /_gina/agent subscription (opener mode) ──────────────────
+
+    /**
+     * Open a parallel `/_gina/agent` SSE subscription alongside opener polling.
+     *
+     * Opener polling alone misses SPA (pushState) and XHR navigations because
+     * those paths do not rewrite `window.__ginaData` — only full HTML renders
+     * do. `render-json.js` however emits `process.emit('inspector#data', ...)`
+     * on every JSON render when `process.gina._inspectorActive` is true, and
+     * `/_gina/agent` forwards those emits as `event: data` SSE frames.
+     *
+     * This function subscribes to that same stream in the background while
+     * `source` stays set to the opener window. The data handler updates the
+     * Inspector UI but does NOT change `source`, so opener-driven behaviour
+     * (reveal URL derivation, pollData fallback, log polling) is unchanged.
+     *
+     * Server-side logs arrive on this stream too (`event: log`), so when
+     * passive mode succeeds `tryServerLogs()` is skipped to avoid duplicates.
+     *
+     * @inner
+     * @returns {boolean} `true` when a subscription was opened, `false` when
+     *   the environment is unsupported or the URL cannot be derived.
+     */
+    function tryAgentPassive() {
+        if (typeof EventSource === 'undefined') return false;
+        // Agent mode already covers data + logs via the primary tryAgent stream.
+        if (source === 'agent') return false;
+
+        // Derive the bundle URL the same way toggleReveal() does: prefer the
+        // opener's pathname so multi-bundle proxy setups route to the bundle
+        // that rendered the current page, falling back to stripping the
+        // inspector path.
+        var base = '';
+        try {
+            if (window.opener && window.opener.location) {
+                base = (window.opener.location.pathname || '').replace(/\/+$/, '');
+            } else {
+                base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+            }
+        } catch (e) {
+            base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+        }
+        var url = base + '/_gina/agent';
+
+        try {
+            var es = new EventSource(url);
+            _passiveAgentEs = es;
+
+            es.addEventListener('data', function (ev) {
+                try {
+                    var gd = JSON.parse(ev.data);
+                    if (!gd) return;
+                    var str = JSON.stringify(gd);
+                    if (str === lastGdStr) return;
+                    showLoader();
+                    lastGdStr = str;
+                    ginaData = gd;
+                    var env = (gd.user && gd.user.environment) || {};
+                    qs('#bm-label').textContent = (env.bundle || '?') + '@' + (env.env || '?');
+                    qs('#bm-dot').className = 'bm-dot ok';
+                    try {
+                        var _pageUrl = (window.opener && window.opener.location)
+                            ? window.opener.location.pathname + window.opener.location.search
+                            : null;
+                        document.title = _pageUrl
+                            ? 'Inspector — ' + _pageUrl
+                            : 'Inspector — ' + (env.bundle || '?') + '@' + (env.env || '?');
+                    } catch (e) {
+                        document.title = 'Inspector — ' + (env.bundle || '?') + '@' + (env.env || '?');
+                    }
+                    qs('#bm-no-source').classList.add('hidden');
+                    renderEnvironmentInfo();
+                    updateRevealVisibility();
+                    var tab = activeTab();
+                    if (tab !== 'logs') renderTab(tab);
+                    if (tab !== 'query') {
+                        var _u = gd.user || {};
+                        var _hasXhr = typeof _u['data-xhr'] !== 'undefined';
+                        var _qd = _hasXhr && _u['data-xhr'] && _u['data-xhr'].queries
+                            ? _u['data-xhr'].queries : _u.queries;
+                        updateQueryToolbar(_qd || null);
+                    }
+                    if (tab !== 'view') {
+                        var _u2 = gd.user || {};
+                        var _isXhr2 = typeof _u2['view-xhr'] !== 'undefined';
+                        var _vm = getPageMetrics(_isXhr2);
+                        var _dxhr = typeof _u2['data-xhr'] !== 'undefined';
+                        var _vq = _dxhr && _u2['data-xhr'] && _u2['data-xhr'].queries
+                            ? _u2['data-xhr'].queries : _u2.queries;
+                        updateViewDot(checkPerfAnomalies(_vm, _vq || []));
+                    }
+                    hideLoader();
+                } catch (e) {}
+            });
+
+            es.addEventListener('log', function (ev) {
+                if (paused) return;
+                try {
+                    var entry = JSON.parse(ev.data);
+                    entry._id = ++_logIdCounter;
+                    logs.push(entry);
+                    if (logs.length > MAX_LOG_ENTRIES) logs.shift();
+                    updateLogDot([entry]);
+                    scheduleRender();
+                } catch (e) {}
+            });
+
+            es.onerror = function () {
+                // EventSource reconnects automatically. Opener polling is the
+                // primary source here, so no UI state change is needed.
+            };
+        } catch (e) {
+            _passiveAgentEs = null;
+            return false;
+        }
+
+        return true;
+    }
+
     // ── Copy to clipboard ──────────────────────────────────────────────────
 
     /**
@@ -4637,7 +4761,13 @@
             }
 
             tryEngineIO();
-            tryServerLogs();
+            // Subscribe to /_gina/agent in parallel with opener polling. Opener
+            // polling alone misses SPA (pushState) and XHR renders because
+            // those paths never rewrite window.__ginaData. The passive agent
+            // stream delivers pushed data + log frames from those renders.
+            // It also supersedes tryServerLogs() (same `event: log` frames).
+            var _passiveAgentActive = tryAgentPassive();
+            if (!_passiveAgentActive) tryServerLogs();
         }
 
         // ── Persist window geometry on resize/move ──────────────────────────
