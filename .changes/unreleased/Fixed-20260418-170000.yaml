@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina bundle:openapi` no longer crashes on `routing.json` files that contain `//` or `/* */` comments. The command used plain `require(routingPath)` which hands the file to Node''s JSON loader, and that loader throws `SyntaxError` on any comment — including the `// bundle needs to be restarted on changes !!` header that real `routing.json` files routinely carry. Swapped to `requireJSON`, which strips comments before parsing. The new `bundle:mcp` command already used `requireJSON`; this aligns `bundle:openapi` with it.'
+time: 2026-04-18T17:00:00.000000+01:00

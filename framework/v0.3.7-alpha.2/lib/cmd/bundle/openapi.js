@@ -82,9 +82,12 @@ function OpenAPI(opt, cmd) {
                 delete require.cache[require.resolve(routingPath)];
             }
 
+            // requireJSON strips `//` and `/* */` comments that routing.json
+            // files routinely carry (e.g. `// bundle needs to be restarted`).
+            // Plain `require()` would throw SyntaxError on these.
             var routing = null;
             try {
-                routing = require(routingPath);
+                routing = requireJSON(routingPath);
             } catch(parseErr) {
                 return end( new Error('Failed to parse routing.json for bundle [ '+ bundle +' ]: '+ parseErr.message) );
             }
