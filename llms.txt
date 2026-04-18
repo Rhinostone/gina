@@ -62,6 +62,8 @@ Previously vendored at `core/deps/swig-1.4.2/` — removed in the migration to t
 
 **TypeScript declarations** — `types/index.d.ts`, `types/globals.d.ts`, `types/gna.d.ts`. Covers `SuperController`, `EntitySuper`, all global helpers, `PathObject`, `uuid`, `ApiError`, config file interfaces (`RoutingConfig`, `ConnectorsConfig`, `AppConfig`, `SettingsConfig`, `ManifestConfig`, `WatchersConfig`, `CronsConfig`), `GinaRequest`/`GinaResponse`, and the `Gna` lifecycle module. `package.json` has `"types": "./types/index.d.ts"` and `"typesVersions"` for `gina/gna`.
 
+`types/gna.d.ts` is **auto-generated** from JSDoc via `script/generate_gna_types.js` (#M9). The generator reads the authoritative `GLOBAL_EXPORTS` inventory from `framework/v*/test/unit/gna-exports.test.js` and the per-export JSDoc blocks on `framework/v*/core/gna.js`, then emits either `typeof globalThis.<name>` (when `globals.d.ts` declares the global) or a synthesized function signature. Zero non-core deps. Two npm scripts: `npm run types:gen` rewrites the file; `npm run types:check` exits non-zero if it drifted. A unit test (`framework/v*/test/unit/gna-types-drift.test.js`) re-runs the generator in memory on every test run and fails if the checked-in file is stale — so the JSDoc on `core/gna.js` is the single source of truth for the gna-barrel type surface. Do not hand-edit `types/gna.d.ts`.
+
 **Explicit exports** — every injected global is also a named property of both `require('gina')` (core/gna.js) and `require('gina/gna')` (root barrel):
 
 ```javascript
