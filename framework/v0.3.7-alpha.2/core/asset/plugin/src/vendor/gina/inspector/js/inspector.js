@@ -4703,12 +4703,68 @@
         setupScrollToTop();
 
         // ── Refresh button — force immediate re-poll ────────────────────────
+        // Click        = soft refresh (data, live indexes, reveal snapshot,
+        //                passive agent stream).
+        // Shift+click  = also reload the inspected page via window.opener.
         var refreshBtn = qs('#bm-refresh');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', function () {
+            refreshBtn.addEventListener('click', function (ev) {
                 lastGdStr = '';
                 refreshBtn.classList.add('spinning');
                 pollData();
+
+                // Bypass the cache guard in fetchLiveIndexes().
+                _liveIndexes = null;
+                _liveIndexesFetching = false;
+                fetchLiveIndexes();
+
+                if (_revealActive) {
+                    var base = '';
+                    try {
+                        var params = new URLSearchParams(window.location.search);
+                        var target = (params.get('target') || '').replace(/\/+$/, '');
+                        if (target) {
+                            base = target;
+                        } else if (window.opener && window.opener.location) {
+                            base = (window.opener.location.pathname || '').replace(/\/+$/, '');
+                        } else {
+                            base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+                        }
+                    } catch (e) {
+                        base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+                    }
+                    try {
+                        var xhr = new XMLHttpRequest();
+                        xhr.open('GET', base + '/_gina/reveal', true);
+                        xhr.onreadystatechange = function () {
+                            if (xhr.readyState !== 4) return;
+                            if (xhr.status === 200) {
+                                try {
+                                    _revealedData = JSON.parse(xhr.responseText);
+                                    renderTab('data');
+                                } catch (e) {}
+                            }
+                        };
+                        xhr.send();
+                    } catch (e) {}
+                }
+
+                // Reopen the passive /_gina/agent stream if it has closed.
+                if (source !== 'agent'
+                    && (!_passiveAgentEs || _passiveAgentEs.readyState === 2)) {
+                    try { if (_passiveAgentEs) _passiveAgentEs.close(); } catch (e) {}
+                    _passiveAgentEs = null;
+                    tryAgentPassive();
+                }
+
+                if (ev.shiftKey) {
+                    try {
+                        if (window.opener && !window.opener.closed && window.opener.location) {
+                            window.opener.location.reload();
+                        }
+                    } catch (e) {}
+                }
+
                 refreshBtn.addEventListener('animationend', function onEnd() {
                     refreshBtn.classList.remove('spinning');
                     refreshBtn.removeEventListener('animationend', onEnd);

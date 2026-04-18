@@ -1,0 +1,3 @@
+kind: Changed
+body: Inspector refresh button now performs a full soft refresh instead of only invalidating the data-diff cache. One click re-polls data, force-refetches the live index introspection (`/_gina/indexes`), refetches the unredacted `/_gina/reveal` snapshot when reveal mode is active, and reopens the passive `/_gina/agent` SSE stream when it has closed. Shift+click additionally reloads the inspected page via `window.opener.location.reload()`. The button's tooltip advertises the Shift+click modifier.
+time: 2026-04-18T10:00:00.000000+01:00

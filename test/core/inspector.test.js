@@ -6623,3 +6623,85 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
     });
 
 });
+
+
+// ── 56 — Refresh button: soft refresh + Shift+click hard refresh ────────────
+
+describe('56 - Refresh button soft refresh (live indexes, reveal, passive agent) + Shift+click reload', function() {
+
+    var INSPECTOR_56 = path.join(BM_DIR, 'inspector.js');
+    var INDEX_HTML_56 = path.join(BM_DIR, 'index.html');
+    var _inspSrc56, _htmlSrc56;
+    function getInspSrc56() { return _inspSrc56 || (_inspSrc56 = fs.readFileSync(INSPECTOR_56, 'utf8')); }
+    function getHtmlSrc56() { return _htmlSrc56 || (_htmlSrc56 = fs.readFileSync(INDEX_HTML_56, 'utf8')); }
+
+    function getRefreshHandler() {
+        var src = getInspSrc56();
+        var idx = src.indexOf("qs('#bm-refresh')");
+        assert.ok(idx > -1, 'expected #bm-refresh lookup');
+        return src.slice(idx, idx + 3000);
+    }
+
+    it('click handler invalidates the JSON diff cache and re-polls', function() {
+        var body = getRefreshHandler();
+        assert.ok(/lastGdStr\s*=\s*''/.test(body), 'expected lastGdStr reset');
+        assert.ok(/pollData\(\)/.test(body), 'expected pollData() call');
+    });
+
+    it('click handler forces a live indexes re-fetch (bypasses cache guard)', function() {
+        var body = getRefreshHandler();
+        assert.ok(/_liveIndexes\s*=\s*null/.test(body), 'expected _liveIndexes reset to null');
+        assert.ok(/_liveIndexesFetching\s*=\s*false/.test(body), 'expected _liveIndexesFetching reset to false');
+        assert.ok(/fetchLiveIndexes\(\)/.test(body), 'expected fetchLiveIndexes() call');
+    });
+
+    it('click handler refetches /_gina/reveal only when _revealActive', function() {
+        var body = getRefreshHandler();
+        assert.ok(/if\s*\(\s*_revealActive\s*\)/.test(body), 'expected _revealActive guard');
+        assert.ok(body.indexOf('/_gina/reveal') > -1, 'expected /_gina/reveal URL');
+        assert.ok(/new\s+XMLHttpRequest\(\)/.test(body), 'expected XMLHttpRequest for reveal refetch');
+        assert.ok(/_revealedData\s*=\s*JSON\.parse/.test(body), 'expected _revealedData reassignment on 200');
+        assert.ok(/renderTab\(\s*'data'\s*\)/.test(body), 'expected renderTab("data") on success');
+    });
+
+    it('click handler reopens the passive agent SSE stream when closed', function() {
+        var body = getRefreshHandler();
+        assert.ok(/source\s*!==\s*'agent'/.test(body), 'expected source !== "agent" guard');
+        assert.ok(
+            /!_passiveAgentEs\s*\|\|\s*_passiveAgentEs\.readyState\s*===\s*2/.test(body),
+            'expected readyState === 2 (CLOSED) or null check'
+        );
+        assert.ok(/tryAgentPassive\(\)/.test(body), 'expected tryAgentPassive() call');
+    });
+
+    it('Shift+click triggers window.opener.location.reload()', function() {
+        var body = getRefreshHandler();
+        assert.ok(/ev\.shiftKey/.test(body), 'expected ev.shiftKey check');
+        assert.ok(
+            /window\.opener\.location\.reload\(\)/.test(body),
+            'expected opener reload on shift+click'
+        );
+        assert.ok(
+            /window\.opener\s*&&\s*!window\.opener\.closed/.test(body),
+            'expected null/closed guard on opener'
+        );
+    });
+
+    it('spin animation is still wired on animationend', function() {
+        var body = getRefreshHandler();
+        assert.ok(/classList\.add\(['"]spinning['"]\)/.test(body), 'expected .spinning class add');
+        assert.ok(
+            /animationend[\s\S]*?classList\.remove\(['"]spinning['"]\)/.test(body),
+            'expected .spinning class removal on animationend'
+        );
+    });
+
+    it('index.html refresh button tooltip advertises Shift+click', function() {
+        var html = getHtmlSrc56();
+        assert.ok(
+            /id="bm-refresh"[^>]*title="[^"]*Shift\+click/.test(html),
+            'expected "Shift+click" in #bm-refresh title attribute'
+        );
+    });
+
+});
