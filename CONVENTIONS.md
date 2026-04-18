@@ -604,3 +604,21 @@ it('name', async function() {
 **Rule**
 
 > Every async `it()` block must either be declared `async` or explicitly `return` a Promise. Any test that calls an async API without doing either will silently pass without testing anything.
+
+---
+
+## Debugging — measurement gotchas
+
+Two reusable lessons that sit under the global "no fix without measurement" rule and refine *how* to measure.
+
+### `setAttribute` writes are not painting
+
+A DOM attribute mutation is only a visible change if a CSS selector or JS observer reads it. Before treating an attribute write as the user-visible bug, confirm a reader exists — grep the deployed CSS for the selector, grep the JS for `getAttribute` / `MutationObserver` / `querySelector` on the attr. If nothing reads it, the write is dead metadata and cannot be the symptom no matter how often it fires. Same applies to class additions that have no rule, dataset writes that no script consumes, and ARIA attributes with no AT in the loop.
+
+### Pre-state matters more than the action
+
+When a bug is described as "X happens when I do Y", lock the visible **pre-state of X** before running Y. The same Y can produce wildly different measurements against different pre-states.
+
+In DOM bugs especially, "errors visible" (post-paint) and "errors appearing" (paint event) look identical in a screenshot but mean opposite things in a diff. If the pre-state already contains the symptom, the action diff is silent and you'll wrongly conclude "not reproducing."
+
+Operational shortcut: ask the reporter for one sentence in user words describing the scenario before guessing the pre-state from code. A single sentence ("other fields not already filled get error messages") can disambiguate hours of wrong-pre-state runs in seconds.
