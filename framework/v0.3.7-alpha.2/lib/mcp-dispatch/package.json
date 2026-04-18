@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-mcp-dispatch",
+  "version": "1.0.0",
+  "description": "HTTP loopback dispatcher for MCP tool calls. Resolves URL templates, chooses HTTP method based on route metadata, and maps upstream responses into MCP ToolResult shape.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

@@ -85,6 +85,12 @@ function Lib() {
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.
         routingIntrospect: _require('./routing-introspect'),
+        // #AI8b — MCP server primitives (JSON-RPC 2.0 framing, lifecycle,
+        // method handlers). Transport-agnostic; wired to stdio by bundle:mcp-start.
+        mcpServer       : _require('./mcp-server'),
+        // #AI8b — HTTP loopback dispatcher. Translates MCP tools/call into a
+        // real request against the running bundle's configured port.
+        mcpDispatch     : _require('./mcp-dispatch'),
     };
 
     /**

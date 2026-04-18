@@ -439,7 +439,7 @@ To enrich the generated spec, add `_comment` (description) and `_sample` (exampl
 
 ## MCP tool manifest generation
 
-`gina bundle:mcp <bundle> @<project>` reads `routing.json` and emits a Model Context Protocol tool manifest (`mcp.json`) in the bundle's `config/` directory. Targets MCP spec revision **2025-06-18**. Static manifest only — no runtime server is started (planned for `0.4.0`).
+`gina bundle:mcp <bundle> @<project>` reads `routing.json` and emits a Model Context Protocol tool manifest (`mcp.json`) in the bundle's `config/` directory. Targets MCP spec revision **2025-06-18**. Pair with `gina bundle:mcp-start` (below) to actually serve the manifest over JSON-RPC.
 
 One Tool is emitted per (route × URL variant × HTTP method) combination. Framework-internal routes (`/_gina/*`), HEAD, and OPTIONS are skipped. Cross-bundle proxy routes outside the current emission set are warned and skipped.
 
@@ -464,6 +464,26 @@ Source-of-truth is `routing.json` directly — `bundle:mcp` does not read `opena
 Independent of `bundle:openapi`. No alias.
 
 Output path override: `--output=/path/to/mcp.json`.
+
+---
+
+## MCP runtime server (stdio)
+
+`gina bundle:mcp-start <bundle> @<project>` runs a live Model Context Protocol server for a single bundle over stdio (MCP spec revision **2025-06-18**, JSON-RPC 2.0, newline-delimited UTF-8). It reads `<bundle>/config/mcp.json` (written by `bundle:mcp`) and dispatches incoming `tools/call` requests as real HTTP requests against the running bundle's configured port on localhost.
+
+**Prerequisites.** The bundle must already be running (`gina bundle:start`) and the manifest must exist (`gina bundle:mcp`). The server is stateless — it holds no session, no auth, nothing beyond what lives in `mcp.json` and the bundle's own routing.
+
+**Stdio discipline.** An early intercept in `bin/cli` detects `bundle:mcp-start` in argv and redirects `process.stdout.write` to stderr before any framework module loads, stashing the real write on `process.__ginaMcpStdout`. The MCP wire uses the stashed write; framework logger output, bootstrap noise, and stray `console.log` calls all land on stderr, which MCP clients ignore. Without this, a single log line corrupts the JSON-RPC parser on the client side.
+
+**Methods implemented.** `initialize`, `ping`, `tools/list`, `tools/call`, `notifications/initialized`, `notifications/cancelled`. Unknown methods return `-32601` (METHOD_NOT_FOUND). Argument validation failures return `-32602` (INVALID_PARAMS). Tool execution failures (upstream 4xx/5xx, ECONNREFUSED, timeout) are returned as `{content, isError: true}` per the MCP spec — never as JSON-RPC errors.
+
+**Dispatch.** URL `:param` placeholders are substituted from tool arguments; remaining arguments become the query string for GET/DELETE/HEAD or the JSON body for POST/PUT/PATCH. `application/json` and `application/problem+json` responses become `structuredContent` + a text block. Default timeout 30 seconds.
+
+**Warnings on stderr.** Staleness — `routing.json` mtime newer than `mcp.json` mtime. Session-scoped — any tool whose `_meta["io.gina.middleware"]` contains `auth`/`session`/`login`.
+
+Baseline architecture lives in two new libs: `lib/mcp-server/` (transport-agnostic JSON-RPC + lifecycle) and `lib/mcp-dispatch/` (HTTP loopback). Both are registered in `lib.mcpServer` / `lib.mcpDispatch` — **go through the registry, bare-module resolution does not work in CLI daemon scope**.
+
+Streamable HTTP transport (MCP Phase 2b) is deferred.
 
 ---
 
@@ -529,6 +549,7 @@ gina bundle:oas <bundle> @<project>     # Alias for bundle:openapi
 gina bundle:openapi @<project> --output=/path/to/spec.json  # Custom output path
 gina bundle:mcp <bundle> @<project>     # Generate MCP tool manifest (spec 2025-06-18) from routing.json
 gina bundle:mcp @<project> --output=/path/to/mcp.json       # Custom output path
+gina bundle:mcp-start <bundle> @<project>   # Serve the manifest as a live MCP server over stdio (JSON-RPC 2.0)
 gina view:add <bundle> @<project>       # Add HTML templates to a bundle
 gina tail --follow                      # Follow logs
 gina framework:set --env=dev            # Set framework setting
@@ -702,7 +723,7 @@ Dev-mode query instrumentation captures every database query tied to the current
 14. **Sidebar icon key = `sidebar_label.toLowerCase()`** — `Root.js` `NAV_ICONS` map in the Docusaurus site uses the **lowercase** value of the page's `sidebar_label` frontmatter as the map key. If an icon doesn't render, verify the key matches exactly (e.g. `sidebar_label: Security` → key `'security'`).
 15. **Post-merge state check required after every `git merge --ff-only`** — `post_install.js` does NOT run on a git pull/merge; it only runs on `npm install`. When the version changes (especially a `shortVersion` bump like `0.2 → 0.3`), three state stores go stale simultaneously: `~/.gina/main.json` (`def_framework`, `frameworks["${shortVersion}"]`, all metadata keys), `~/.gina/${shortVersion}/settings.json` (missing entirely), and `gina.db` `kv_store` (`main` + `settings/${shortVersion}` keys). Running `npm install` from inside the repo also fails (symlink error — `node_modules/.bin/` does not exist in the worktree layout); patch the state files directly instead.
 16. **Merge frequency** — merge `dev/wip` → `develop` after every feature/fix (frequent is good). Exception: hold at version boundaries (`0.3.x → 0.4.x`, `0.x → 1.x`) until the full release is prepared, because `git mv framework/v*/` during merge is a live deployment of the globally-installed CLI.
-17. **CLI stubs** — several CLI commands appear in help.txt or docs but have empty/missing handler files and do NOT work: `bundle:status/rename/copy`, `project:status/move/backup/restore`, `protocol:remove`, `minion:kill/list`, `framework:update`, `gina --status/-t`. Never suggest these to users. Note: `port:set`, `framework:get`, and `bundle:openapi` were implemented in `0.3.3-alpha.2`. `bundle:mcp` was implemented in `0.3.7-alpha.2`.
+17. **CLI stubs** — several CLI commands appear in help.txt or docs but have empty/missing handler files and do NOT work: `bundle:status/rename/copy`, `project:status/move/backup/restore`, `protocol:remove`, `minion:kill/list`, `framework:update`, `gina --status/-t`. Never suggest these to users. Note: `port:set`, `framework:get`, and `bundle:openapi` were implemented in `0.3.3-alpha.2`. `bundle:mcp` was implemented in `0.3.7-alpha.2`. `bundle:mcp-start` was implemented in `0.3.7-alpha.3` (#AI8 Phase 2a, stdio transport).
 19. **`namespace` is required to target a namespace controller** — omitting `"namespace": "content"` from a routing rule makes the router look in `controller.js` instead of `controller.content.js`. The error surface is "control not found: `list`" pointing at `controller.js`, which is confusing. Always set `namespace` when your action lives in a namespace controller file.
 20. **URL params need `"id": ":id"` in `param` to reach `req.params`** — declaring `"url": "/notes/:id"` is not enough. You must also add `"id": ":id"` inside the `param` block so the router binds the segment to `req.params.id`. `requirements` are optional (any non-empty segment is accepted when omitted); the `param` binding is not.
 21. **`throwError(res, code, stringMsg)` preserves the status code** — calling `self.throwError(res, 404, 'Not found')` sends 404. Previously the string-message branch unconditionally replaced `code` with `res.status || 500`. Fixed in `core/controller/controller.js`. If you previously worked around this by wrapping your message in `new Error(...)`, that still works unchanged.

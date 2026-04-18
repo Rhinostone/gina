@@ -1,6 +1,17 @@
 #!/usr/bin/env node
 'use strict';
 
+// MCP stdio transport isolation (#AI8b).
+// `gina bundle:mcp-start` speaks JSON-RPC on stdout. Anything else written
+// to process.stdout (framework logger, bootstrap noise, console.log) would
+// corrupt the wire and kill the MCP client parser on the first byte.
+// Stash the real write and redirect the rest to stderr before any framework
+// module loads. The handler reads the real write from process.__ginaMcpStdout.
+if (process.argv.indexOf('bundle:mcp-start') > -1) {
+    process.__ginaMcpStdout = process.stdout.write.bind(process.stdout);
+    process.stdout.write = process.stderr.write.bind(process.stderr);
+}
+
 var fs              = require('fs');
 var net             = require('net');
 var util            = require('util');

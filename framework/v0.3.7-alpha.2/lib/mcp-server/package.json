@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-mcp-server",
+  "version": "1.0.0",
+  "description": "Model Context Protocol server primitives (spec revision 2025-06-18). Pure JSON-RPC 2.0 framing, lifecycle state machine, and MCP method handlers. Transport-agnostic — stdio wiring is opt-in via attachStdio().",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

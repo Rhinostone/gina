@@ -127,3 +127,24 @@
     Write to a custom output path
     ----------
     $ gina bundle:mcp <bundle_name> @<project_name> --output=/path/to/mcp.json
+
+
+
+[ Starting an MCP server ]
+
+    Run a live Model Context Protocol server for a single bundle over stdio
+    (MCP spec revision 2025-06-18). Tool calls are dispatched over HTTP
+    loopback to the running bundle. The bundle MUST already be started
+    ($ gina bundle:start) and a manifest generated ($ gina bundle:mcp) — the
+    server reads <bundle>/config/mcp.json to discover tools and warns on
+    stderr if the manifest is older than routing.json.
+
+    stdout is reserved for JSON-RPC frames; diagnostics are written to
+    stderr so the wire stays clean for MCP clients.
+
+    $ gina bundle:mcp-start <bundle_name> @<project_name>
+
+    The bundle port is resolved from the live ports registry. If the bundle
+    is not currently running, the server falls back to `mcp.json > server >
+    baseUrl` and dispatch will fail loudly on ECONNREFUSED until the bundle
+    comes up.
