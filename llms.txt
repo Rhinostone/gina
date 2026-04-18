@@ -437,6 +437,36 @@ To enrich the generated spec, add `_comment` (description) and `_sample` (exampl
 
 ---
 
+## MCP tool manifest generation
+
+`gina bundle:mcp <bundle> @<project>` reads `routing.json` and emits a Model Context Protocol tool manifest (`mcp.json`) in the bundle's `config/` directory. Targets MCP spec revision **2025-06-18**. Static manifest only — no runtime server is started (planned for `0.4.0`).
+
+One Tool is emitted per (route × URL variant × HTTP method) combination. Framework-internal routes (`/_gina/*`), HEAD, and OPTIONS are skipped. Cross-bundle proxy routes outside the current emission set are warned and skipped.
+
+Mapping from routing.json to MCP Tool:
+
+| routing.json field | MCP Tool equivalent |
+| --- | --- |
+| `namespace + "." + param.control` (fallback: routeName) | `name` (required, unique) |
+| `param.title` (fallback: humanised routeName) | `title` |
+| `method + " " + url` (+ `_comment` suffix) | `description` |
+| URL `:param` names | `inputSchema.properties.<name>` (required string) |
+| `requirements` (regex) | `inputSchema.properties.<name>.pattern` |
+| `requirements` (pipe-separated) | `inputSchema.properties.<name>.enum` |
+| Non-GET methods | extra `inputSchema.properties.body` (open object) |
+| HTTP method | `annotations.readOnlyHint` / `destructiveHint` / `idempotentHint` |
+| `url`, `method`, `namespace`, `param.control`, `_sample`, `scopes`, `middleware`, `middlewareIgnored`, `bundle`, `hostname`, `cache`, `requirements` | `_meta` (with `io.gina.*` prefix, for downstream dispatch) |
+
+Multi-method routes (`"method": "GET, POST"`) emit one tool per method with `#<method>` suffix on `name`. Multi-URL routes (`"url": "/a, /a/:b"`) emit one tool per URL variant with `#<n>` suffix. Redirects are surfaced as read-only tools with a description noting the target.
+
+Source-of-truth is `routing.json` directly — `bundle:mcp` does not read `openapi.json`. Both commands share `lib.routingIntrospect` for URL/method/requirement parsing.
+
+Independent of `bundle:openapi`. No alias.
+
+Output path override: `--output=/path/to/mcp.json`.
+
+---
+
 ## Project config files
 
 | File | Location | Purpose |
@@ -497,6 +527,8 @@ gina bundle:list @<project>             # List bundles
 gina bundle:openapi <bundle> @<project> # Generate OpenAPI 3.1.0 spec from routing.json
 gina bundle:oas <bundle> @<project>     # Alias for bundle:openapi
 gina bundle:openapi @<project> --output=/path/to/spec.json  # Custom output path
+gina bundle:mcp <bundle> @<project>     # Generate MCP tool manifest (spec 2025-06-18) from routing.json
+gina bundle:mcp @<project> --output=/path/to/mcp.json       # Custom output path
 gina view:add <bundle> @<project>       # Add HTML templates to a bundle
 gina tail --follow                      # Follow logs
 gina framework:set --env=dev            # Set framework setting
@@ -670,7 +702,7 @@ Dev-mode query instrumentation captures every database query tied to the current
 14. **Sidebar icon key = `sidebar_label.toLowerCase()`** — `Root.js` `NAV_ICONS` map in the Docusaurus site uses the **lowercase** value of the page's `sidebar_label` frontmatter as the map key. If an icon doesn't render, verify the key matches exactly (e.g. `sidebar_label: Security` → key `'security'`).
 15. **Post-merge state check required after every `git merge --ff-only`** — `post_install.js` does NOT run on a git pull/merge; it only runs on `npm install`. When the version changes (especially a `shortVersion` bump like `0.2 → 0.3`), three state stores go stale simultaneously: `~/.gina/main.json` (`def_framework`, `frameworks["${shortVersion}"]`, all metadata keys), `~/.gina/${shortVersion}/settings.json` (missing entirely), and `gina.db` `kv_store` (`main` + `settings/${shortVersion}` keys). Running `npm install` from inside the repo also fails (symlink error — `node_modules/.bin/` does not exist in the worktree layout); patch the state files directly instead.
 16. **Merge frequency** — merge `dev/wip` → `develop` after every feature/fix (frequent is good). Exception: hold at version boundaries (`0.3.x → 0.4.x`, `0.x → 1.x`) until the full release is prepared, because `git mv framework/v*/` during merge is a live deployment of the globally-installed CLI.
-17. **CLI stubs** — several CLI commands appear in help.txt or docs but have empty/missing handler files and do NOT work: `bundle:status/rename/copy`, `project:status/move/backup/restore`, `protocol:remove`, `minion:kill/list`, `framework:update`, `gina --status/-t`. Never suggest these to users. Note: `port:set`, `framework:get`, and `bundle:openapi` were implemented in `0.3.3-alpha.2`.
+17. **CLI stubs** — several CLI commands appear in help.txt or docs but have empty/missing handler files and do NOT work: `bundle:status/rename/copy`, `project:status/move/backup/restore`, `protocol:remove`, `minion:kill/list`, `framework:update`, `gina --status/-t`. Never suggest these to users. Note: `port:set`, `framework:get`, and `bundle:openapi` were implemented in `0.3.3-alpha.2`. `bundle:mcp` was implemented in `0.3.7-alpha.2`.
 19. **`namespace` is required to target a namespace controller** — omitting `"namespace": "content"` from a routing rule makes the router look in `controller.js` instead of `controller.content.js`. The error surface is "control not found: `list`" pointing at `controller.js`, which is confusing. Always set `namespace` when your action lives in a namespace controller file.
 20. **URL params need `"id": ":id"` in `param` to reach `req.params`** — declaring `"url": "/notes/:id"` is not enough. You must also add `"id": ":id"` inside the `param` block so the router binds the segment to `req.params.id`. `requirements` are optional (any non-empty segment is accepted when omitted); the `param` binding is not.
 21. **`throwError(res, code, stringMsg)` preserves the status code** — calling `self.throwError(res, 404, 'Not found')` sends 404. Previously the string-message branch unconditionally replaced `code` with `res.status || 500`. Fixed in `core/controller/controller.js`. If you previously worked around this by wrapping your message in `new Error(...)`, that still works unchanged.

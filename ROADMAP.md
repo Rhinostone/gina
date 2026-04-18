@@ -225,7 +225,7 @@ A cold audit of the Couchbase connector identified two critical security vulnera
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
 | ✅ | **OpenAPI spec generation** — `gina bundle:openapi @myproject` emits `openapi.json` from `routing.json`. Zero manual spec writing — route annotations become `description` fields. Makes any Gina app consumable by AI agents, API gateways, and testing tools. Alias: `bundle:oas`. Supports `--output` flag for custom path. | `0.3.3-alpha.2` | 2026-04-08 |
-| 📋 | **MCP server wrapper** — `gina bundle:mcp @myproject` exposes `routing.json` routes as MCP (Model Context Protocol) tools. Makes any Gina app a native MCP server discoverable by AI agents. | `0.4.0` | Q4 2026 |
+| 🟡 | **MCP server wrapper** — Two-phase. Phase 1 (done, `0.3.7-alpha.2`, 2026-04-18): `gina bundle:mcp @myproject` emits a static MCP tool manifest (`mcp.json`) targeting MCP spec revision 2025-06-18. One Tool per (route × URL variant × HTTP method), inputSchema derived from URL params and requirements, annotations from HTTP method, `_meta` preserves routing data for downstream dispatch. Phase 2 (planned, `0.4.0`, Q4 2026): runtime MCP server (stdio / HTTP-SSE) with `tools/call` → controller dispatch. | `0.3.7-alpha.2` / `0.4.0` | 2026-04-18 / Q4 2026 |
 
 ---
 
