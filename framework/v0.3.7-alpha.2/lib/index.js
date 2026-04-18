@@ -81,6 +81,10 @@ function Lib() {
         // connection on every HTTP request, racing with in-flight writes. Use plain
         // require() so the singleton survives refreshCore() evictions. (#CN2v3)
         State           : require('./state'),
+        // Shared semantic extractor for routing.json. Consumed by bundle:openapi
+        // and bundle:mcp to parse URL patterns, methods, requirements, and derive
+        // stable tool / operation identifiers.
+        routingIntrospect: _require('./routing-introspect'),
     };
 
     /**

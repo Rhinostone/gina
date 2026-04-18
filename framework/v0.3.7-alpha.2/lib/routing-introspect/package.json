@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-routing-introspect",
+  "version": "1.0.0",
+  "description": "Semantic extractor for routing.json. Shared by bundle:openapi and bundle:mcp to parse URL patterns, HTTP methods, requirements, and derive tool / operation identifiers from a bundle routing manifest.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

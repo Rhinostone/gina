@@ -1,5 +1,6 @@
 var fs          = require('fs');
 var CmdHelper   = require('./../helper');
+var introspect  = lib.routingIntrospect;
 var console     = lib.logger;
 
 /**
@@ -177,24 +178,10 @@ function OpenAPI(opt, cmd) {
 
         var tagSet = {};
 
-        for (var routeName in routing) {
-            if ( !routing.hasOwnProperty(routeName) ) continue;
+        introspect.eachRoute(routing, function(routeName, route) {
 
-            var route = routing[routeName];
-
-            // Skip non-route entries
-            if ( typeof(route) !== 'object' || route === null ) continue;
-
-            // Skip $schema
-            if ( routeName === '$schema' ) continue;
-
-            // Parse URL(s)
-            var urls = parseUrls(route.url || '/' + routeName);
-
-            // Parse methods
-            var methods = parseMethods(route.method);
-
-            // Extract parameters from URL pattern + requirements
+            var urls      = introspect.parseUrls(route.url || '/' + routeName);
+            var methods   = introspect.parseMethods(route.method);
             var namespace = route.namespace || null;
 
             // Collect tag
@@ -225,7 +212,7 @@ function OpenAPI(opt, cmd) {
                     spec.paths[oaPath][method] = operation;
                 }
             }
-        }
+        });
 
         // Remove tags array if empty
         if ( !spec.tags.length ) {
@@ -233,67 +220,6 @@ function OpenAPI(opt, cmd) {
         }
 
         return spec;
-    };
-
-
-    /**
-     * Parses a `url` field (string, comma-separated string, or array) into
-     * an array of { openApiPath, params } objects.
-     *
-     * @private
-     * @param {string|string[]} raw
-     * @returns {{ openApiPath: string, params: string[] }[]}
-     */
-    var parseUrls = function(raw) {
-        var patterns = [];
-
-        if ( Array.isArray(raw) ) {
-            patterns = raw;
-        } else if ( typeof(raw) === 'string' ) {
-            // Comma-separated URLs
-            patterns = raw.split(',');
-        }
-
-        var results = [];
-        for (var i = 0; i < patterns.length; i++) {
-            var p = patterns[i].trim();
-            if (!p) continue;
-
-            var params = [];
-            // Convert :param to {param} and collect parameter names
-            var oaPath = p.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, function(match, name) {
-                params.push(name);
-                return '{' + name + '}';
-            });
-
-            // Normalise trailing slashes — OpenAPI paths should not have trailing slash
-            // except for root "/"
-            if (oaPath.length > 1 && oaPath.charAt(oaPath.length - 1) === '/') {
-                oaPath = oaPath.slice(0, -1);
-            }
-
-            results.push({ openApiPath: oaPath, params: params });
-        }
-
-        return results;
-    };
-
-
-    /**
-     * Parses the `method` field into an array of lowercase HTTP method strings.
-     *
-     * @private
-     * @param {string} [raw]
-     * @returns {string[]}
-     */
-    var parseMethods = function(raw) {
-        if ( !raw || typeof(raw) !== 'string' ) return ['get'];
-
-        return raw.split(',').map(function(m) {
-            return m.trim().toLowerCase();
-        }).filter(function(m) {
-            return m.length > 0;
-        });
     };
 
 
@@ -327,7 +253,7 @@ function OpenAPI(opt, cmd) {
         if (param.title) {
             operation.summary = param.title;
         } else {
-            operation.summary = humanise(routeName);
+            operation.summary = introspect.humanise(routeName);
         }
 
         // Description from _comment
@@ -354,7 +280,7 @@ function OpenAPI(opt, cmd) {
 
                 // Apply requirement as pattern
                 if ( typeof(reqs[pName]) !== 'undefined' ) {
-                    var pattern = requirementToPattern(reqs[pName]);
+                    var pattern = introspect.requirementToPattern(reqs[pName]);
                     if (pattern.type === 'pattern') {
                         paramObj.schema.pattern = pattern.value;
                     } else if (pattern.type === 'enum') {
@@ -402,7 +328,7 @@ function OpenAPI(opt, cmd) {
 
             // Add Cache-Control header hint when cache is configured
             if (route.cache) {
-                var cacheHeader = buildCacheHeader(route.cache);
+                var cacheHeader = introspect.buildCacheHeader(route.cache);
                 if (cacheHeader) {
                     operation.responses['200'].headers = {
                         'Cache-Control': {
@@ -415,85 +341,6 @@ function OpenAPI(opt, cmd) {
         }
 
         return operation;
-    };
-
-
-    /**
-     * Converts a routing.json `requirements` value to an OpenAPI-friendly
-     * pattern or enum descriptor.
-     *
-     * @private
-     * @param {string} raw - Requirement string (regex or pipe-separated alternatives)
-     * @returns {{ type: string, value: * }}
-     */
-    var requirementToPattern = function(raw) {
-        if ( typeof(raw) !== 'string' ) return { type: 'pattern', value: '.*' };
-
-        // Validator references — pass through as extension-level info
-        if ( raw.indexOf('validator::') === 0 ) {
-            return { type: 'pattern', value: '.*' };
-        }
-
-        // Regex pattern: starts with "/"
-        if ( raw.charAt(0) === '/' ) {
-            // Strip leading "/" and trailing "/flags"
-            var lastSlash = raw.lastIndexOf('/');
-            if (lastSlash > 0) {
-                return { type: 'pattern', value: raw.substring(1, lastSlash) };
-            }
-            return { type: 'pattern', value: raw.substring(1) };
-        }
-
-        // Simple pipe-separated alternatives → enum
-        if ( raw.indexOf('|') !== -1 && !/[\\()\[\]{}^$.*+?]/.test(raw.replace(/\|/g, '')) ) {
-            return { type: 'enum', value: raw.split('|') };
-        }
-
-        // Regex without delimiters (parenthesised groups, anchors, etc.)
-        // Strip wrapping parens for cleaner pattern
-        var cleaned = raw;
-        if (cleaned.charAt(0) === '(' && cleaned.charAt(cleaned.length - 1) === ')') {
-            cleaned = cleaned.substring(1, cleaned.length - 1);
-        }
-
-        return { type: 'pattern', value: cleaned };
-    };
-
-
-    /**
-     * Builds a human-readable Cache-Control header description from a cache config.
-     *
-     * @private
-     * @param {string|object} cache
-     * @returns {string|null}
-     */
-    var buildCacheHeader = function(cache) {
-        if ( typeof(cache) === 'string' ) {
-            return 'private, cached (' + cache + ')';
-        }
-        if ( typeof(cache) === 'object' ) {
-            var parts = [];
-            parts.push(cache.visibility || 'private');
-            if ( typeof(cache.ttl) !== 'undefined' ) {
-                parts.push('max-age=' + cache.ttl);
-            }
-            return parts.join(', ');
-        }
-        return null;
-    };
-
-
-    /**
-     * Converts a hyphenated route name to a human-readable title.
-     * e.g. "user-get-profile" → "User get profile"
-     *
-     * @private
-     * @param {string} name
-     * @returns {string}
-     */
-    var humanise = function(name) {
-        var words = name.replace(/[-_]/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
-        return words.charAt(0).toUpperCase() + words.slice(1);
     };
 
 

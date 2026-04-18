@@ -105,3 +105,25 @@
     Alias
     ----------
     $ gina bundle:oas <bundle_name> @<project_name>
+
+
+
+[ Generating MCP tool manifest ]
+
+    Generate a Model Context Protocol (MCP) tool manifest from routing.json
+    for a bundle. The manifest targets MCP spec revision 2025-06-18 and is
+    written to <bundle>/config/mcp.json by default.
+
+    The emitted file is a static manifest — one tool per (route × URL
+    variant × HTTP method) combination, with inputSchema derived from URL
+    parameters and requirements. No runtime MCP server is started.
+
+    $ gina bundle:mcp <bundle_name> @<project_name>
+
+    Generate manifests for all bundles in a project
+    ----------
+    $ gina bundle:mcp @<project_name>
+
+    Write to a custom output path
+    ----------
+    $ gina bundle:mcp <bundle_name> @<project_name> --output=/path/to/mcp.json
