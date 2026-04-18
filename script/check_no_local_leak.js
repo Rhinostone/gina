@@ -17,9 +17,11 @@
  *
  *   1. Path-level: any file named `CLAUDE.md` or `.claude*`.
  *   2. Content-level: any text file containing a private-token pattern
- *      (phone, private email, private address, private domain,
- *      co-author legal name that should be scrubbed to the "John Doe"
- *      pseudonym used in README/GOVERNANCE/CONTRIBUTING).
+ *      (phone, private email, private address, private domain). The
+ *      co-author's legal name is allowed in authoring/contributing files
+ *      (README, AUTHORS, GOVERNANCE, CONTRIBUTING, package.json
+ *      contributors, scaffolding template, framework AUTHORS, framework
+ *      plugin package.json authors) — see ATTRIBUTION_PATHS.
  *
  * `--ignore-scripts` prevents recursion into the `prepare` script (which
  * would otherwise re-invoke `prepare_version.js` and commit a "Prerelease
@@ -35,6 +37,12 @@ var fs       = require('fs');
 
 var PATH_PATTERN = /(^|\/)(CLAUDE\.md|\.claude[a-z]*)/i;
 
+// Authoring/contributing context — files where the co-author's legal name
+// is allowed (public attribution: README, AUTHORS, GOVERNANCE, CONTRIBUTING,
+// package.json contributors, scaffolding template, framework AUTHORS,
+// framework plugin package.json authors).
+var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+\/package\.json)$/;
+
 // Private tokens that must not appear in published tarball contents.
 // Keep patterns narrow — bare words like "Freelancer" are too broad and
 // produce false positives on legitimate content; the domain form
@@ -44,8 +52,9 @@ var CONTENT_TOKENS = [
     { name: 'private email',   pattern: /[\w.+-]*etouman@rhinostone/i },
     { name: 'private address', pattern: /Boulevard\s+Arago/i },
     { name: 'private domain',  pattern: /freelancer\.app/i },
-    { name: 'co-author legal name (use "John Doe" pseudonym)',
-                               pattern: /Fabrice\s+Delaneau/i }
+    { name: 'co-author legal name',
+                               pattern: /Fabrice\s+Delaneau/i,
+                               allowIn: ATTRIBUTION_PATHS }
 ];
 
 // Heuristic: only read files that are likely text. Saves time on binary
@@ -81,6 +90,7 @@ function scanContent(path) {
 
     var hits = [];
     for (var i = 0; i < CONTENT_TOKENS.length; i++) {
+        if (CONTENT_TOKENS[i].allowIn && CONTENT_TOKENS[i].allowIn.test(path)) continue;
         if (CONTENT_TOKENS[i].pattern.test(content)) {
             hits.push(CONTENT_TOKENS[i].name);
         }

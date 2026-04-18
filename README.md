@@ -65,7 +65,7 @@ Full installation guide, tutorials, configuration reference, and API docs at **[
 
 ## Governance
 
-Gina is co-authored by **Martin Luther** ([Rhinostone](https://rhinostone.com)) and **John Doe** ([fdelaneau.com](https://fdelaneau.com)). Final decisions on direction, API design, and releases rest with Martin Luther. Community contributions and RFCs are welcome and taken seriously. See [GOVERNANCE.md](./GOVERNANCE.md) for details.
+Gina is co-authored by **Martin Luther** ([Rhinostone](https://rhinostone.com)) and **Fabrice DELANEAU** ([fdelaneau.com](https://fdelaneau.com)). Final decisions on direction, API design, and releases rest with Martin Luther. Community contributions and RFCs are welcome and taken seriously. See [GOVERNANCE.md](./GOVERNANCE.md) for details.
 
 ## License (MIT)
 

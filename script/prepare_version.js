@@ -199,13 +199,20 @@ function PrepareVersion() {
     self.checkPrivateTokenLeakage = function(done) {
         console.debug('[prepare] Checking for private-token leakage ...');
 
+        // Authoring/contributing context — files where the co-author's legal
+        // name is allowed (public attribution: README, AUTHORS, GOVERNANCE,
+        // CONTRIBUTING, package.json contributors, scaffolding template,
+        // framework AUTHORS, framework plugin package.json authors).
+        var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+\/package\.json)$/;
+
         var TOKENS = [
             { name: 'private phone',   pattern: /0618178647/ },
             { name: 'private email',   pattern: /[\w.+-]*etouman@rhinostone/i },
             { name: 'private address', pattern: /Boulevard\s+Arago/i },
             { name: 'private domain',  pattern: /freelancer\.app/i },
-            { name: 'co-author legal name (use "John Doe" pseudonym)',
-                                       pattern: /Fabrice\s+Delaneau/i }
+            { name: 'co-author legal name',
+                                       pattern: /Fabrice\s+Delaneau/i,
+                                       allowIn: ATTRIBUTION_PATHS }
         ];
 
         var TEXT_EXT = /\.(md|txt|json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|sass|scss|less|sh|bash|zsh|yaml|yml|xml|svg|csv|mapping|conf|ini|toml|env|template)$/i;
@@ -243,6 +250,7 @@ function PrepareVersion() {
             try { content = fs.readFileSync(p, 'utf8'); } catch (e) { return []; }
             var hits = [];
             for (var i = 0; i < TOKENS.length; i++) {
+                if (TOKENS[i].allowIn && TOKENS[i].allowIn.test(p)) continue;
                 if (TOKENS[i].pattern.test(content)) {
                     hits.push(TOKENS[i].name);
                 }
