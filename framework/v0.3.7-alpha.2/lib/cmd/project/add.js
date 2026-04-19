@@ -114,7 +114,10 @@ function Add(opt, cmd) {
             createPackageFile( file.toString() )
         } else {
             console.warn('[ package.json ] already exists in this location: '+ file + '\nUpdating package.json...');
-            // dont' add shit here
+            // Merge existing package.json with framework template; createPackageFile calls end()
+            // which writes projects.json and calls process.exit(0). Without this, the process
+            // hangs indefinitely because MQSpeaker keeps the event loop alive.
+            createPackageFile( file.toString(), true );
         }
 
         if ( self.scope && !isDefined('scope', self.scope) ) {

@@ -320,3 +320,67 @@ describe('08 - arguments.json includes expected flags', function() {
     });
 
 });
+
+
+// ── 09 — project:add terminates when package.json already exists ────────────
+// Regression guard: the `else` branch at add.js:~115 used to do nothing, so
+// the process hung forever (MQSpeaker on 8125 kept the event loop alive) when
+// running `gina project:add @foo --path=<dir with existing package.json>`.
+// Fix: call createPackageFile(target, true) to merge+rewrite+end().
+
+describe('09 - project:add handles existing package.json', function() {
+
+    var addPath = path.join(CMD_DIR, 'add.js');
+    var addSrc;
+
+    function getSrc() {
+        return addSrc || (addSrc = fs.readFileSync(addPath, 'utf8'));
+    }
+
+    it('add.js exists and is non-empty', function() {
+        assert.ok(fs.existsSync(addPath), 'add.js does not exist');
+        assert.ok(fs.statSync(addPath).size > 0, 'add.js is empty');
+    });
+
+    it('createPackageFile accepts isCreatedFromExistingPackage flag', function() {
+        assert.ok(
+            /function\s*\(\s*target\s*,\s*isCreatedFromExistingPackage\s*\)/.test(getSrc()),
+            'createPackageFile signature must accept isCreatedFromExistingPackage'
+        );
+    });
+
+    it('createPackageFile branch merges with existing and deletes old file', function() {
+        var src = getSrc();
+        assert.ok(
+            src.indexOf('existingPack = require(target)') > -1,
+            'createPackageFile must load the existing package.json via require(target)'
+        );
+        assert.ok(
+            /merge\s*\(\s*contentFile\s*,\s*existingPack\s*\)/.test(src),
+            'createPackageFile must merge framework template with existing package'
+        );
+    });
+
+    it('createPackageFile ends the process after writing (calls end)', function() {
+        var src = getSrc();
+        var fnStart = src.indexOf('var createPackageFile');
+        assert.ok(fnStart > -1, 'createPackageFile definition not found');
+        var fnBody = src.slice(fnStart, fnStart + 2000);
+        assert.ok(
+            /end\s*\(\s*true\s*\)/.test(fnBody),
+            'createPackageFile must call end(true) to exit the process'
+        );
+    });
+
+    it('package.json-already-exists branch invokes createPackageFile(target, true)', function() {
+        var src = getSrc();
+        var warnIdx = src.indexOf('already exists in this location');
+        assert.ok(warnIdx > -1, 'existing-package.json warning message not found');
+        var followUp = src.slice(warnIdx, warnIdx + 500);
+        assert.ok(
+            /createPackageFile\s*\(\s*file\.toString\(\)\s*,\s*true\s*\)/.test(followUp),
+            'else branch must call createPackageFile(file.toString(), true) to terminate the process'
+        );
+    });
+
+});
