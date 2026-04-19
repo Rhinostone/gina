@@ -278,12 +278,22 @@ module.exports = function renderJSON(jsonObj, deps) {
             // The resolved redact config is exposed under `gina.inspectorRedact`
             // so the standalone Inspector can mirror the same rules client-side.
             var _jsonRedactConf = inspectorRedact.getConfig(local.options.conf);
+            // #INS8 — expose the standalone Inspector URL (null when unset).
+            var _jsonInspUrl = null;
+            try {
+                var _jsonConfSource = local.options.conf || {};
+                if (_jsonConfSource.content && _jsonConfSource.content.settings
+                    && _jsonConfSource.content.settings.inspector
+                    && _jsonConfSource.content.settings.inspector.url) {
+                    _jsonInspUrl = _jsonConfSource.content.settings.inspector.url;
+                }
+            } catch (e) { /* leave null */ }
             var __gdPayload = {
                 gina : { environment: _env, inspectorRedact: {
                     patterns    : _jsonRedactConf.patterns,
                     types       : _jsonRedactConf.types,
                     replacement : _jsonRedactConf.replacement
-                }},
+                }, inspectorUrl: _jsonInspUrl },
                 user : _gdUser
             };
             // #R7 — JSON renders do NOT write _lastGinaDataUnredacted. The

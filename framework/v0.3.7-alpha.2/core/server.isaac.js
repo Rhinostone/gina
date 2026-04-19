@@ -635,6 +635,7 @@ function ServerEngineClass(options) {
                         'content-type': _inspMime[_inspExt] || 'application/octet-stream',
                         'cache-control': 'no-cache, no-store, must-revalidate',
                         'x-content-type-options': 'nosniff',
+                        'access-control-allow-origin': '*',
                         'X-Powered-By': 'Gina/' + GINA_VERSION
                     };
                     var _inspData = fs.readFileSync(_inspFile, _inspBinary ? undefined : 'utf8');
@@ -667,6 +668,7 @@ function ServerEngineClass(options) {
                     'cache-control': 'no-cache, no-store',
                     'connection': 'keep-alive',
                     'x-content-type-options': 'nosniff',
+                    'access-control-allow-origin': '*',
                     'X-Powered-By': 'Gina/' + GINA_VERSION
                 };
 

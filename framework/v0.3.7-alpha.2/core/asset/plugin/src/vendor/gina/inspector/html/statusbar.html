@@ -234,12 +234,25 @@
         + '<span>' + bundle + '@' + envName + '</span>'
         + '<a id="insp">Inspector &#8599;</a>'
         + '</div>';
-    var inspUrl = webroot + '_gina/inspector/';
+    // Standalone Inspector URL — set in bundle settings.json as
+    // `inspector.url` (e.g. "http://localhost:4200/inspector/"). When present,
+    // the statusbar link opens the standalone SPA in a new tab with
+    // ?target=<this-origin+webroot>. When absent, falls back to the embedded
+    // same-origin popup at {webroot}/_gina/inspector/ (legacy behaviour).
+    var _standaloneUrl = (window.__ginaData && window.__ginaData.gina
+        && window.__ginaData.gina.inspectorUrl) ? window.__ginaData.gina.inspectorUrl : null;
+    var _embeddedUrl   = webroot + '_gina/inspector/';
     function inject() {
         if (document.body) document.body.appendChild(el);
         var link = sr.getElementById('insp');
         if (link) link.addEventListener('click', function (ev) {
             ev.preventDefault();
+            if (_standaloneUrl) {
+                var _base   = _standaloneUrl.replace(/\/+$/, '') + '/';
+                var _target = location.origin + webroot.replace(/\/$/, '');
+                window.open(_base + '?target=' + encodeURIComponent(_target), '_blank');
+                return;
+            }
             var w = Math.round(screen.availWidth / 3);
             var h = screen.availHeight;
             var left = screen.availWidth - w;
@@ -251,7 +264,7 @@
                 }
             } catch (e) {}
             window.open(
-                inspUrl,
+                _embeddedUrl,
                 'gina-inspector',
                 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
                 + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'

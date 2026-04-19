@@ -1066,6 +1066,20 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 __gdGina.environment.scope = process.env.NODE_SCOPE || null;
             }
 
+            // #INS8 — expose the standalone Inspector URL so statusbar.html can
+            // prefer it over the embedded /_gina/inspector/ path. Null when
+            // unset = fall back to legacy embedded popup.
+            var _inspUrlConf = null;
+            try {
+                var _confSource = local.options.conf || {};
+                if (_confSource.content && _confSource.content.settings
+                    && _confSource.content.settings.inspector
+                    && _confSource.content.settings.inspector.url) {
+                    _inspUrlConf = _confSource.content.settings.inspector.url;
+                }
+            } catch (e) { /* leave null */ }
+            __gdGina.inspectorUrl = _inspUrlConf;
+
             var __gdPayload = { gina: __gdGina, user: __gdUser };
             // Snapshot the unredacted payload BEFORE the redact pass, gated on
             // bundle scope. Production / beta / testing never store this — the

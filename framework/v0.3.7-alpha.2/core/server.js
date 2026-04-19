@@ -2373,6 +2373,7 @@ function Server(options) {
                     response.setHeader('content-type', _bmMime[_bmExt] || 'application/octet-stream');
                     response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
                     response.setHeader('x-content-type-options', 'nosniff');
+                    response.setHeader('access-control-allow-origin', '*');
                     console.info(request.method + ' [200] ' + request.url);
                     return response.end(fs.readFileSync(_bmFile, _bmBinary ? undefined : 'utf8'));
                 }
@@ -2391,6 +2392,7 @@ function Server(options) {
                 response.setHeader('content-type', 'text/event-stream; charset=utf-8');
                 response.setHeader('cache-control', 'no-cache, no-store');
                 response.setHeader('connection', 'keep-alive');
+                response.setHeader('access-control-allow-origin', '*');
                 response.setHeader('x-content-type-options', 'nosniff');
                 // Initial SSE comment to establish the connection
                 response.write(':ok\n\n');
