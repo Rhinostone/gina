@@ -5,7 +5,7 @@ var Open;
  * Opens the dev-mode Inspector SPA in a chromeless browser window (app mode).
  *
  * Usage:
- *   gina inspector:open [<bundle>] [@<project>] [--browser=<name>] [--port=<port>]
+ *   gina inspector:open [<bundle>] [@<project>] [--browser=<name>] [--port=<port>] [--url=<url>]
  *
  * The command detects the default browser on macOS, Linux, and Windows.
  * When available, it launches in app mode (chromeless window — no address
@@ -18,7 +18,17 @@ var Open;
  *
  * `--port=<port>` overrides the bundle port (skips project config lookup).
  *
+ * `--url=<url>` overrides the Inspector base URL (standalone SPA). Takes
+ * precedence over the bundle's `settings.inspector.url`. The final URL is
+ * `<url>?target=<target-origin>`.
+ *
  * When `--port` is used, `@<project>` is optional.
+ *
+ * Inspector URL resolution order (#INS8):
+ *   1. `--url=<url>`  — explicit override.
+ *   2. Bundle `config/settings.json > inspector.url` — when a project and
+ *      bundle are resolved (i.e. `--port` was not used alone).
+ *   3. Embedded popup at `<target>/_gina/inspector/` — legacy fallback.
  *
  * @class Open
  * @constructor
@@ -366,6 +376,81 @@ function buildLaunchCmd(shortName, url) {
 }
 
 
+/**
+ * Resolves the Inspector base URL for launch (#INS8).
+ *
+ * Resolution order:
+ *   1. `urlOverride` — the `--url=<url>` CLI flag.
+ *   2. The bundle's `config/settings.json > inspector.url`, when a project
+ *      and bundle context exist (i.e. `--port` was not used alone).
+ *   3. `null` — caller should fall back to the embedded
+ *      `<target>/_gina/inspector/` path.
+ *
+ * The returned base is the raw URL; trailing-slash normalisation happens
+ * in `buildInspectorUrl()`.
+ *
+ * @inner
+ * @param {object} self - CmdHelper-populated handler state
+ * @param {string|null} bundleName - Bundle name from argv, or null
+ * @param {string|null} urlOverride - Value of `--url=`, or null
+ * @param {number|null} portOverride - Value of `--port=`, or null
+ * @returns {string|null} Base URL, or null for the embedded fallback
+ */
+function resolveInspectorBase(self, bundleName, urlOverride, portOverride) {
+    if (urlOverride) return urlOverride;
+    // --port alone skips project/bundle validation — nothing to read from.
+    if (portOverride) return null;
+    if (!bundleName || !self.projectName) return null;
+    if (!self.projects || !self.projects[self.projectName]
+        || !self.projects[self.projectName].path) return null;
+    if (!self.projectData || !self.projectData.bundles
+        || !self.projectData.bundles[bundleName]) return null;
+
+    var bundleSrc = self.projectData.bundles[bundleName].src;
+    if (!bundleSrc) return null;
+
+    var settingsPath = _(
+        self.projects[self.projectName].path + '/' + bundleSrc + '/config/settings.json'
+      , true
+    );
+    if (!fs.existsSync(settingsPath)) return null;
+
+    try {
+        // requireJSON tolerates `//` and `/* */` comments that settings.json
+        // files routinely include.
+        var settings = requireJSON(settingsPath);
+        if (settings && settings.inspector && settings.inspector.url) {
+            return settings.inspector.url;
+        }
+    } catch (e) { /* parse error — fall back to embedded */ }
+
+    return null;
+}
+
+/**
+ * Builds the final Inspector launch URL.
+ *
+ * When `inspectorBase` is set, returns `<base>/?target=<encoded-target>`
+ * (trailing slashes on the base are stripped, then exactly one is appended,
+ * matching the statusbar normalisation).
+ *
+ * When `inspectorBase` is null, returns the embedded popup URL
+ * `<target>/_gina/inspector/?target=<encoded-target>`.
+ *
+ * @inner
+ * @param {string|null} inspectorBase - Resolved base URL, or null = embedded
+ * @param {string} target - Target bundle origin (e.g. "http://localhost:3100")
+ * @returns {string}
+ */
+function buildInspectorUrl(inspectorBase, target) {
+    if (inspectorBase) {
+        var base = inspectorBase.replace(/\/+$/, '') + '/';
+        return base + '?target=' + encodeURIComponent(target);
+    }
+    return target + '/_gina/inspector/?target=' + encodeURIComponent(target);
+}
+
+
 function Open(opt, cmd) {
     var self = {};
 
@@ -382,6 +467,7 @@ function Open(opt, cmd) {
 
         var browserOverride = null;
         var portOverride    = null;
+        var urlOverride     = null;   // #INS8 — explicit Inspector base URL
         var bundleName      = null;
         var i;
 
@@ -391,6 +477,9 @@ function Open(opt, cmd) {
                 browserOverride = arg.split('=')[1].toLowerCase();
             } else if (/^--port=/.test(arg)) {
                 portOverride = parseInt(arg.split('=')[1], 10);
+            } else if (/^--url=/.test(arg)) {
+                // Take everything after the first `=` so URLs with `?a=b` survive.
+                urlOverride = arg.replace(/^--url=/, '');
             } else if (!/^--/.test(arg) && !/^@/.test(arg)) {
                 bundleName = arg;
             }
@@ -438,8 +527,10 @@ function Open(opt, cmd) {
             port = 3100;
         }
 
-        var target = 'http://localhost:' + port;
-        var url    = target + '/_gina/inspector/?target=' + encodeURIComponent(target);
+        var target        = 'http://localhost:' + port;
+        // #INS8 — dual-mode resolution: --url > settings.inspector.url > embedded.
+        var inspectorBase = resolveInspectorBase(self, bundleName, urlOverride, portOverride);
+        var url           = buildInspectorUrl(inspectorBase, target);
 
         // Resolve browser
         var shortName = browserOverride || detectDefaultBrowser();
