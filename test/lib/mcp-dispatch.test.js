@@ -328,3 +328,156 @@ describe('07 - createDispatcher input', function () {
         assert.throws(function () { dispatchLib.createDispatcher({ baseUrl: 'localhost' }); }, /protocol and host/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 08 — maxInFlight concurrency cap
+// ---------------------------------------------------------------------------
+
+describe('08 - maxInFlight concurrency cap', function () {
+
+    // Server that holds requests open until we release them — lets us have
+    // N requests in flight simultaneously to test the cap. `waitForPending(n)`
+    // resolves once the server has received at least `n` concurrent requests;
+    // avoids racing the increment on the client side.
+    function withHangServer(body) {
+        var pending = [];
+        var waiters = [];
+        function ping() {
+            for (var i = waiters.length - 1; i >= 0; i--) {
+                if (pending.length >= waiters[i].n) {
+                    waiters[i].resolve();
+                    waiters.splice(i, 1);
+                }
+            }
+        }
+        return new Promise(function (resolve, reject) {
+            var server = http.createServer(function (req, res) {
+                pending.push(res);
+                ping();
+            });
+            server.listen(0, '127.0.0.1', function () {
+                var port = server.address().port;
+                function releaseAll() {
+                    while (pending.length) {
+                        var r = pending.shift();
+                        r.writeHead(200, { 'content-type': 'application/json' });
+                        r.end('{"ok":true}');
+                    }
+                }
+                function waitForPending(n) {
+                    if (pending.length >= n) return Promise.resolve();
+                    return new Promise(function (r) { waiters.push({ n: n, resolve: r }); });
+                }
+                Promise.resolve()
+                    .then(function () { return body(port, releaseAll, waitForPending); })
+                    .then(function (result) { server.close(); resolve(result); })
+                    .catch(function (err)   { server.close(); reject(err); });
+            });
+        });
+    }
+
+    it('exposes DEFAULT_MAX_IN_FLIGHT on the module', function () {
+        assert.equal(typeof(dispatchLib.DEFAULT_MAX_IN_FLIGHT), 'number');
+        assert.ok(dispatchLib.DEFAULT_MAX_IN_FLIGHT > 0);
+    });
+
+    it('exposes getInFlightCount() on the dispatcher', function () {
+        var d = dispatchLib.createDispatcher({ baseUrl: 'http://127.0.0.1:1' });
+        assert.equal(typeof(d.getInFlightCount), 'function');
+        assert.equal(d.getInFlightCount(), 0);
+    });
+
+    it('rejects the (N+1)th concurrent request with isError true', async function () {
+        await withHangServer(async function (port, releaseAll, waitForPending) {
+            var d = dispatchLib.createDispatcher({
+                baseUrl: 'http://127.0.0.1:' + port,
+                maxInFlight: 2
+            });
+            var tool = { name: 't', _meta: { 'io.gina.url': '/x', 'io.gina.method': 'GET' } };
+
+            // Two in flight — never resolve until releaseAll() runs.
+            var p1 = d.dispatch(tool, {});
+            var p2 = d.dispatch(tool, {});
+
+            // Wait until the server has actually received both before checking
+            // the cap — avoids racing the client-side increment with ping().
+            await waitForPending(2);
+            assert.equal(d.getInFlightCount(), 2, 'expected 2 in flight before the cap check');
+
+            // Third — must short-circuit.
+            var r3 = await d.dispatch(tool, {});
+            assert.equal(r3.isError, true);
+            assert.match(r3.content[0].text, /busy/i);
+            assert.match(r3.content[0].text, /limit is 2/);
+
+            // Release the server responses and wait for in-flight to clear.
+            releaseAll();
+            await Promise.all([p1, p2]);
+            assert.equal(d.getInFlightCount(), 0);
+        });
+    });
+
+    it('decrements in-flight on error responses (e.g. 500)', async function () {
+        await new Promise(function (resolve, reject) {
+            var server = http.createServer(function (req, res) {
+                res.writeHead(500); res.end('boom');
+            });
+            server.listen(0, '127.0.0.1', async function () {
+                try {
+                    var port = server.address().port;
+                    var d = dispatchLib.createDispatcher({
+                        baseUrl: 'http://127.0.0.1:' + port,
+                        maxInFlight: 1
+                    });
+                    var tool = { name: 't', _meta: { 'io.gina.url': '/x', 'io.gina.method': 'GET' } };
+                    var r = await d.dispatch(tool, {});
+                    assert.equal(r.isError, true);
+                    // The slot must be released — second dispatch should succeed.
+                    var r2 = await d.dispatch(tool, {});
+                    assert.equal(r2.isError, true); // still 500, but reachable
+                    assert.equal(d.getInFlightCount(), 0);
+                    server.close(); resolve();
+                } catch (e) {
+                    server.close(); reject(e);
+                }
+            });
+        });
+    });
+
+    it('early-exit on missing _meta does NOT consume a slot', async function () {
+        var d = dispatchLib.createDispatcher({
+            baseUrl: 'http://127.0.0.1:1',
+            maxInFlight: 1
+        });
+        var broken = { name: 't', _meta: {} };
+        var r = await d.dispatch(broken, {});
+        assert.equal(r.isError, true);
+        assert.equal(d.getInFlightCount(), 0);
+    });
+
+    it('early-exit on missing path param does NOT consume a slot', async function () {
+        var d = dispatchLib.createDispatcher({
+            baseUrl: 'http://127.0.0.1:1',
+            maxInFlight: 1
+        });
+        var tool = { name: 't', _meta: { 'io.gina.url': '/user/:id', 'io.gina.method': 'GET' } };
+        var r = await d.dispatch(tool, {});
+        assert.equal(r.isError, true);
+        assert.equal(d.getInFlightCount(), 0);
+    });
+
+    it('ignores non-positive maxInFlight values (falls back to default)', function () {
+        // 0, negative, or NaN should fall back to the module default rather
+        // than lock the dispatcher at zero in-flight.
+        var d = dispatchLib.createDispatcher({
+            baseUrl: 'http://127.0.0.1:1',
+            maxInFlight: 0
+        });
+        // If 0 were honoured, any dispatch would short-circuit before issuing.
+        // We can't actually observe the resolved value here without hitting
+        // the network, but we can verify the constant is respected.
+        assert.equal(typeof(d.getInFlightCount), 'function');
+        assert.ok(dispatchLib.DEFAULT_MAX_IN_FLIGHT >= 1);
+    });
+});

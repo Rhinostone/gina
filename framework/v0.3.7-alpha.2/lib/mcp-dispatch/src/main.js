@@ -25,7 +25,8 @@ var http  = require('http');
 var https = require('https');
 var url   = require('url');
 
-var DEFAULT_TIMEOUT_MS = 30000;
+var DEFAULT_TIMEOUT_MS   = 30000;
+var DEFAULT_MAX_IN_FLIGHT = 16;
 
 
 /**
@@ -34,11 +35,18 @@ var DEFAULT_TIMEOUT_MS = 30000;
  * @param   {object} opts
  * @param   {string} opts.baseUrl    - e.g. "http://localhost:3106"
  * @param   {number} [opts.timeoutMs=30000]
+ * @param   {number} [opts.maxInFlight=16] - Max concurrent HTTP requests. When
+ *                                           exceeded, dispatch() short-circuits
+ *                                           with `{ isError: true }` instead of
+ *                                           queueing. Prevents pile-up behind a
+ *                                           slow upstream when multiple MCP
+ *                                           clients share one dispatcher (HTTP
+ *                                           transport in #AI8 Phase 2b).
  * @param   {object} [opts.defaultHeaders] - Extra headers added to every request
  * @returns {{ dispatch: function }}
  *
  * @example
- *   var d = createDispatcher({ baseUrl: 'http://localhost:3106' });
+ *   var d = createDispatcher({ baseUrl: 'http://localhost:3106', maxInFlight: 32 });
  *   var result = await d.dispatch(tool, { id: '42', body: { name: 'x' } });
  */
 function createDispatcher(opts) {
@@ -49,6 +57,9 @@ function createDispatcher(opts) {
 
     var baseUrl         = opts.baseUrl;
     var timeoutMs       = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
+    var maxInFlight     = (typeof(opts.maxInFlight) === 'number' && opts.maxInFlight > 0)
+                            ? opts.maxInFlight
+                            : DEFAULT_MAX_IN_FLIGHT;
     var defaultHeaders  = opts.defaultHeaders || {};
 
     var parsed = url.parse(baseUrl);
@@ -60,10 +71,19 @@ function createDispatcher(opts) {
     var httpLib = isHttps ? https : http;
     var port    = parsed.port ? ~~parsed.port : (isHttps ? 443 : 80);
 
+    // Concurrency accounting. Incremented the moment an HTTP request is about
+    // to be issued; decremented inside settle(). Early-exit paths (missing
+    // tool meta, unresolved path param, over-limit) do NOT consume a slot —
+    // they never touch the upstream.
+    var inFlightCount = 0;
+
 
     /**
      * Dispatches a single MCP tool call. Always resolves — never rejects —
      * so the caller can wrap errors uniformly as `isError: true` results.
+     *
+     * Rejects with `isError: true` (never a JSON-RPC error) when the
+     * concurrency cap is reached; see `maxInFlight` on createDispatcher.
      *
      * @param   {object} tool - The manifest entry
      * @param   {object} args - The `arguments` object from tools/call
@@ -89,6 +109,14 @@ function createDispatcher(opts) {
                 resolvedPath = resolvePath(pathTpl, paramNames, args);
             } catch (resolveErr) {
                 return resolve(errorResult(resolveErr.message));
+            }
+
+            if (inFlightCount >= maxInFlight) {
+                return resolve(errorResult(
+                    'MCP dispatcher busy — '+ inFlightCount +' request'+
+                    (inFlightCount === 1 ? '' : 's') +' in flight, limit is '+
+                    maxInFlight +'. Retry after current requests complete.'
+                ));
             }
 
             // Build query string / body from args minus path params.
@@ -138,8 +166,11 @@ function createDispatcher(opts) {
             function settle(value) {
                 if (settled) return;
                 settled = true;
+                inFlightCount--;
                 resolve(value);
             }
+
+            inFlightCount++;
 
             var req = httpLib.request(reqOpts, function(res) {
                 var chunks = [];
@@ -174,7 +205,20 @@ function createDispatcher(opts) {
     }
 
 
-    return { dispatch: dispatch };
+    /**
+     * Current in-flight request count. Exposed for tests and for ops
+     * instrumentation once the HTTP transport lands in #AI8 Phase 2b.
+     *
+     * @returns {number}
+     */
+    function getInFlightCount() {
+        return inFlightCount;
+    }
+
+    return {
+        dispatch:          dispatch,
+        getInFlightCount:  getInFlightCount
+    };
 }
 
 
@@ -357,8 +401,9 @@ function errorResult(message) {
 
 
 module.exports = {
-    createDispatcher:    createDispatcher,
-    DEFAULT_TIMEOUT_MS:  DEFAULT_TIMEOUT_MS,
+    createDispatcher:      createDispatcher,
+    DEFAULT_TIMEOUT_MS:    DEFAULT_TIMEOUT_MS,
+    DEFAULT_MAX_IN_FLIGHT: DEFAULT_MAX_IN_FLIGHT,
     // Exposed for unit testing
     _internals: {
         extractParamNames: extractParamNames,
