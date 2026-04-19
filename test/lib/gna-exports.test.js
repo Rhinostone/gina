@@ -253,8 +253,10 @@ describe('03 - TypeScript declaration files: existence and key declarations', fu
         var jsProps   = (gnajsSrc.match(/\w+\s*:\s*\w+,?\s*$/gm) || []).length;
         var jsExportCount = jsGetters + jsProps;
 
-        // Count declared keys in GinaExports interface (word: type lines)
-        var interfaceBody = gnaSrc.match(/interface\s+GinaExports\s*\{([\s\S]*?)\}/);
+        // Count declared keys in GinaExports interface (word: type lines).
+        // The non-greedy [\s\S]*? would stop at the first `}` in a JSDoc comment
+        // (e.g. `${key}`); match the closing brace on its own line instead.
+        var interfaceBody = gnaSrc.match(/interface\s+GinaExports\s*\{([\s\S]*?)\n\}/);
         assert.ok(interfaceBody, 'GinaExports interface body not found');
         var tsKeys = (interfaceBody[1].match(/^\s+\w+\s*:/gm) || []).length;
 
