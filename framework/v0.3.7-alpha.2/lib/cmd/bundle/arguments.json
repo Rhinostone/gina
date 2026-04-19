@@ -6,5 +6,6 @@
   "--replace",
   "--start-port-from",
   "--gina-version",
-  "--output"
+  "--output",
+  "--timeout-ms"
 ]

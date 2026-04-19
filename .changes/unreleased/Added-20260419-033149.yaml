@@ -1,0 +1,3 @@
+kind: Added
+body: '`gina bundle:mcp-start --timeout-ms=<n>` — overrides the HTTP dispatch timeout for a single MCP server process. Also reads `mcp.json > server > timeoutMs` when the CLI flag is absent. Precedence: `--timeout-ms` > manifest > 30 000 ms default. Non-numeric / non-positive values at any layer fall through to the next layer with a stderr warning, so a malformed override cannot silently disable the timeout. The resolved value is surfaced in the startup info line (`Dispatch target: <url> (timeout: <n> ms)`) for operator visibility. The previous hardcoded 30 s default still applies when neither override is set.'
+time: 2026-04-19T03:31:49.000000+01:00

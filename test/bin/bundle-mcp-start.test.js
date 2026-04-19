@@ -172,3 +172,48 @@ describe('07 - session-scoped tools warning', function () {
         assert.match(handlerSrc, /auth\|session\|login/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 08 — --timeout-ms CLI flag wiring
+// ---------------------------------------------------------------------------
+
+describe('08 - --timeout-ms CLI flag wiring', function () {
+
+    var argsPath = path.join(FW_PATH, 'lib/cmd/bundle/arguments.json');
+    var argsSrc  = fs.readFileSync(argsPath, 'utf8');
+
+    it('whitelists --timeout-ms in lib/cmd/bundle/arguments.json', function () {
+        assert.match(argsSrc, /"--timeout-ms"/);
+    });
+
+    it('reads self.params[\'timeout-ms\'] for the CLI override', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]timeout-ms['"]/);
+    });
+
+    it('reads mcpDoc.server.timeoutMs for the manifest fallback', function () {
+        assert.match(handlerSrc, /mcpDoc\.server\.timeoutMs/);
+    });
+
+    it('falls back to the 30 000 ms default when neither is set', function () {
+        assert.match(handlerSrc, /DEFAULT_MS\s*=\s*30000/);
+    });
+
+    it('passes the resolved timeout to createDispatcher', function () {
+        // Must pass the variable, not the hardcoded 30000.
+        assert.match(handlerSrc, /createDispatcher\(\s*\{[^}]*timeoutMs:\s*timeoutMs/);
+    });
+
+    it('validates positive-number semantics at every layer', function () {
+        // Both CLI and manifest paths must reject non-finite / non-positive values.
+        var body = handlerSrc;
+        assert.ok(/isFinite\(parsedCli\).*parsedCli\s*>\s*0/.test(body),
+            'CLI value guarded by isFinite + > 0');
+        assert.ok(/isFinite\(parsedManifest\).*parsedManifest\s*>\s*0/.test(body),
+            'manifest value guarded by isFinite + > 0');
+    });
+
+    it('surfaces the resolved timeout in the startup info line', function () {
+        assert.match(handlerSrc, /timeout:\s*'\s*\+\s*timeoutMs/);
+    });
+});

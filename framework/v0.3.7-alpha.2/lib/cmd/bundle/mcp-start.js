@@ -29,6 +29,11 @@ var mcpDispatch = lib.mcpDispatch;
  *
  * Usage:
  *  gina bundle:mcp-start <bundle_name> @<project_name>
+ *  gina bundle:mcp-start <bundle_name> @<project_name> --timeout-ms=5000
+ *
+ * Timeout precedence: `--timeout-ms` CLI flag > `mcp.json > server > timeoutMs`
+ * > 30 000 ms default. Negative / non-numeric values at any layer fall through
+ * to the next layer with a stderr warning.
  *
  * @class MCPStart
  * @constructor
@@ -137,9 +142,11 @@ function MCPStart(opt, cmd) {
             packVersion = '0.0.0';
         }
 
+        var timeoutMs = resolveTimeoutMs(mcpDoc);
+
         dispatcher = mcpDispatch.createDispatcher({
             baseUrl:   baseUrl,
-            timeoutMs: 30000
+            timeoutMs: timeoutMs
         });
 
         server = mcpServer.createServer({
@@ -171,10 +178,49 @@ function MCPStart(opt, cmd) {
             onClose: function() { gracefulExit(0); }
         });
 
-        console.info('[ '+ bundle +' ][mcp] MCP server listening on stdio. Dispatch target: '+ baseUrl +'. '+ mcpDoc.tools.length +' tool'+ (mcpDoc.tools.length === 1 ? '' : 's') +' exposed.');
+        console.info('[ '+ bundle +' ][mcp] MCP server listening on stdio. Dispatch target: '+ baseUrl +' (timeout: '+ timeoutMs +' ms). '+ mcpDoc.tools.length +' tool'+ (mcpDoc.tools.length === 1 ? '' : 's') +' exposed.');
 
         process.on('SIGTERM', function() { gracefulExit(0); });
         process.on('SIGINT',  function() { gracefulExit(0); });
+    };
+
+
+    /**
+     * Resolves the dispatch timeout in milliseconds. Precedence:
+     *   1. `--timeout-ms=<n>` CLI flag
+     *   2. `mcp.json > server > timeoutMs`
+     *   3. 30 000 ms default
+     *
+     * Non-numeric or non-positive values at any layer are rejected in favour
+     * of the next layer, so a malformed CLI flag or manifest field cannot
+     * silently disable the timeout.
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {number} Positive integer milliseconds
+     */
+    var resolveTimeoutMs = function(mcpDoc) {
+
+        var DEFAULT_MS = 30000;
+
+        var cli = self.params && self.params['timeout-ms'];
+        if (typeof(cli) !== 'undefined' && cli !== null && cli !== true && cli !== false) {
+            var parsedCli = Number(cli);
+            if (isFinite(parsedCli) && parsedCli > 0) {
+                return Math.floor(parsedCli);
+            }
+            console.warn('[mcp] Ignoring --timeout-ms='+ cli +' (must be a positive number). Falling back to manifest / default.');
+        }
+
+        if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.timeoutMs) !== 'undefined') {
+            var parsedManifest = Number(mcpDoc.server.timeoutMs);
+            if (isFinite(parsedManifest) && parsedManifest > 0) {
+                return Math.floor(parsedManifest);
+            }
+            console.warn('[mcp] Ignoring mcp.json > server > timeoutMs='+ mcpDoc.server.timeoutMs +' (must be a positive number). Falling back to default.');
+        }
+
+        return DEFAULT_MS;
     };
 
 
