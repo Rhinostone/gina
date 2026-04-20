@@ -543,7 +543,11 @@ gina project:restart @<project>         # Restart all bundles in a project
 gina bundle:add <bundle> @<project>     # Scaffold a new bundle (overwrites existing src)
 gina bundle:add <bundle> @<project> --import  # Register existing bundle (preserves src)
 gina bundle:remove <bundle> @<project>  # Remove a bundle
-gina bundle:list @<project>             # List bundles
+gina bundle:list @<project>             # List bundles (status, port summary, running state)
+gina bundle:list --all                  # List bundles for every registered project
+gina bundle:list @<project> --format=json  # JSON payload with ports, running, pid per bundle
+gina service:list                       # List framework-internal services (@gina-only)
+gina service:list --format=json         # JSON payload with ports, running, pid per service
 gina bundle:openapi <bundle> @<project> # Generate OpenAPI 3.1.0 spec from routing.json
 gina bundle:oas <bundle> @<project>     # Alias for bundle:openapi
 gina bundle:openapi @<project> --output=/path/to/spec.json  # Custom output path
