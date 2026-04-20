@@ -1,0 +1,31 @@
+
+  Usage: gina service:<action> [options]
+
+  Actions:
+
+    list [@gina]                 List framework-internal services registered
+                                 under @gina, with ports and running state.
+    help                         Show this message.
+
+  Options:
+
+    --format=json                Emit machine-readable JSON instead of the
+                                 human-readable text table.
+
+  Notes:
+
+    `@gina` is the only project currently supported by `service:list`.
+    Services live under the framework's `services/` directory and are
+    bundles of the @gina project: `proxy` and `inspector`.
+
+    Running state is derived from ~/.gina/run/<service>@gina.pid combined
+    with `process.kill(pid, 0)` — a stale pidfile (process gone) reports
+    the service as stopped.
+
+  Examples:
+
+    gina service:list            List all services with ports + running state
+    gina service:list @gina      Same (explicit @gina)
+    gina service:list --format=json
+                                 JSON output for scripting
+

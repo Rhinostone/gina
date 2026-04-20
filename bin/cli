@@ -323,6 +323,7 @@ async function onExec() {
         'project:',
         'protocol:',
         'scheme:',
+        'service:',
         'view:',
         '--', //options or other aliases.
         '-' //options or other aliases.
