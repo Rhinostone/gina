@@ -5,7 +5,13 @@ var Open;
  * Opens the dev-mode Inspector SPA in a chromeless browser window (app mode).
  *
  * Usage:
- *   gina inspector:open [<bundle>] [@<project>] [--browser=<name>] [--port=<port>] [--url=<url>]
+ *   gina inspector:open [<target>] [@<project>] [--browser=<name>] [--port=<port>] [--url=<url>]
+ *
+ * `<target>` accepts two shapes:
+ *   - `<bundle>`     — a registered bundle name; resolved to `http://localhost:<port>`
+ *   - `<url>`        — a full `http(s)://` URL; used as the target origin directly
+ *                      (useful when bundles run on Docker or a remote env while the
+ *                      Inspector SPA runs on the host).
  *
  * The command detects the default browser on macOS, Linux, and Windows.
  * When available, it launches in app mode (chromeless window — no address
@@ -22,13 +28,15 @@ var Open;
  * precedence over the bundle's `settings.inspector.url`. The final URL is
  * `<url>?target=<target-origin>`.
  *
- * When `--port` is used, `@<project>` is optional.
+ * When `--port` or a URL target is used, `@<project>` is optional.
  *
  * Inspector URL resolution order (#INS8):
  *   1. `--url=<url>`  — explicit override.
  *   2. Bundle `config/settings.json > inspector.url` — when a project and
- *      bundle are resolved (i.e. `--port` was not used alone).
- *   3. Embedded popup at `<target>/_gina/inspector/` — legacy fallback.
+ *      bundle are resolved (i.e. neither `--port` nor a URL target was used).
+ *   3. Global `~/.gina/${shortVersion}/settings.json > inspector.url` — per-user
+ *      default for the Inspector SPA origin.
+ *   4. Embedded popup at `<target>/_gina/inspector/` — legacy fallback.
  *
  * @class Open
  * @constructor
@@ -377,13 +385,39 @@ function buildLaunchCmd(shortName, url) {
 
 
 /**
+ * Reads `inspector.url` from `~/.gina/${shortVersion}/settings.json`
+ * using the `GINA_HOMEDIR` and `GINA_SHORT_VERSION` env vars set by `bin/cli`.
+ *
+ * @inner
+ * @returns {string|null} Configured URL or null
+ */
+function readGlobalInspectorUrl() {
+    try {
+        var home         = getEnvVar('GINA_HOMEDIR');
+        var shortVersion = getEnvVar('GINA_SHORT_VERSION');
+        if (!home || !shortVersion) return null;
+        var globalPath = _(home + '/' + shortVersion + '/settings.json', true);
+        if (!fs.existsSync(globalPath)) return null;
+        var globalSettings = requireJSON(globalPath);
+        if (globalSettings && globalSettings.inspector && globalSettings.inspector.url) {
+            return globalSettings.inspector.url;
+        }
+    } catch (e) { /* unreadable or malformed — fall through */ }
+    return null;
+}
+
+/**
  * Resolves the Inspector base URL for launch (#INS8).
  *
  * Resolution order:
  *   1. `urlOverride` — the `--url=<url>` CLI flag.
  *   2. The bundle's `config/settings.json > inspector.url`, when a project
- *      and bundle context exist (i.e. `--port` was not used alone).
- *   3. `null` — caller should fall back to the embedded
+ *      and bundle context exist (i.e. neither `--port` nor a URL target was
+ *      used alone).
+ *   3. Global `~/.gina/${shortVersion}/settings.json > inspector.url` — per-user
+ *      default, useful when the Inspector SPA runs on the host and bundles run
+ *      on Docker or remote envs.
+ *   4. `null` — caller should fall back to the embedded
  *      `<target>/_gina/inspector/` path.
  *
  * The returned base is the raw URL; trailing-slash normalisation happens
@@ -394,35 +428,44 @@ function buildLaunchCmd(shortName, url) {
  * @param {string|null} bundleName - Bundle name from argv, or null
  * @param {string|null} urlOverride - Value of `--url=`, or null
  * @param {number|null} portOverride - Value of `--port=`, or null
+ * @param {string|null} targetOverride - Positional URL target, or null
  * @returns {string|null} Base URL, or null for the embedded fallback
  */
-function resolveInspectorBase(self, bundleName, urlOverride, portOverride) {
+function resolveInspectorBase(self, bundleName, urlOverride, portOverride, targetOverride) {
     if (urlOverride) return urlOverride;
-    // --port alone skips project/bundle validation — nothing to read from.
-    if (portOverride) return null;
-    if (!bundleName || !self.projectName) return null;
-    if (!self.projects || !self.projects[self.projectName]
-        || !self.projects[self.projectName].path) return null;
-    if (!self.projectData || !self.projectData.bundles
-        || !self.projectData.bundles[bundleName]) return null;
 
-    var bundleSrc = self.projectData.bundles[bundleName].src;
-    if (!bundleSrc) return null;
+    // Bundle-level settings only when we actually have a bundle context —
+    // skipped for `--port` alone and for positional URL target mode.
+    if (!portOverride && !targetOverride
+        && bundleName && self.projectName
+        && self.projects && self.projects[self.projectName]
+        && self.projects[self.projectName].path
+        && self.projectData && self.projectData.bundles
+        && self.projectData.bundles[bundleName]) {
 
-    var settingsPath = _(
-        self.projects[self.projectName].path + '/' + bundleSrc + '/config/settings.json'
-      , true
-    );
-    if (!fs.existsSync(settingsPath)) return null;
-
-    try {
-        // requireJSON tolerates `//` and `/* */` comments that settings.json
-        // files routinely include.
-        var settings = requireJSON(settingsPath);
-        if (settings && settings.inspector && settings.inspector.url) {
-            return settings.inspector.url;
+        var bundleSrc = self.projectData.bundles[bundleName].src;
+        if (bundleSrc) {
+            var settingsPath = _(
+                self.projects[self.projectName].path + '/' + bundleSrc + '/config/settings.json'
+              , true
+            );
+            if (fs.existsSync(settingsPath)) {
+                try {
+                    // requireJSON tolerates `//` and `/* */` comments that settings.json
+                    // files routinely include.
+                    var settings = requireJSON(settingsPath);
+                    if (settings && settings.inspector && settings.inspector.url) {
+                        return settings.inspector.url;
+                    }
+                } catch (e) { /* parse error — fall through */ }
+            }
         }
-    } catch (e) { /* parse error — fall back to embedded */ }
+    }
+
+    // Global per-user fallback (covers URL mode, --port mode, and bundle mode
+    // when no bundle-level override is set).
+    var globalUrl = readGlobalInspectorUrl();
+    if (globalUrl) return globalUrl;
 
     return null;
 }
@@ -468,6 +511,7 @@ function Open(opt, cmd) {
         var browserOverride = null;
         var portOverride    = null;
         var urlOverride     = null;   // #INS8 — explicit Inspector base URL
+        var targetOverride  = null;   // positional URL — arbitrary target origin
         var bundleName      = null;
         var i;
 
@@ -480,13 +524,18 @@ function Open(opt, cmd) {
             } else if (/^--url=/.test(arg)) {
                 // Take everything after the first `=` so URLs with `?a=b` survive.
                 urlOverride = arg.replace(/^--url=/, '');
+            } else if (/^https?:\/\//i.test(arg)) {
+                // Positional URL → target origin for cross-origin inspection
+                // (Inspector on host, bundles on Docker, remote envs, …).
+                // Strip trailing slashes so the SPA can append `/_gina/...` cleanly.
+                targetOverride = arg.replace(/\/+$/, '');
             } else if (!/^--/.test(arg) && !/^@/.test(arg)) {
                 bundleName = arg;
             }
         }
 
-        // When --port is given, skip project/bundle validation entirely
-        if (!portOverride) {
+        // When --port or a URL target is given, skip project/bundle validation entirely
+        if (!portOverride && !targetOverride) {
             // check CMD configuration (project existence, etc.)
             if ( !isCmdConfigured() ) return false;
 
@@ -503,9 +552,9 @@ function Open(opt, cmd) {
             }
         }
 
-        // Resolve the target port from ports.reverse.json
+        // Resolve the target port from ports.reverse.json (skipped in URL mode)
         var port = portOverride || null;
-        if (!portOverride && bundleName) {
+        if (!portOverride && !targetOverride && bundleName) {
             try {
                 var key          = bundleName + '@' + self.projectName;
                 var portsReverse = self.portsReverseData || {};
@@ -523,13 +572,13 @@ function Open(opt, cmd) {
                 }
             } catch (e) { /* use fallback */ }
         }
-        if (!port) {
+        if (!port && !targetOverride) {
             port = 3100;
         }
 
-        var target        = 'http://localhost:' + port;
-        // #INS8 — dual-mode resolution: --url > settings.inspector.url > embedded.
-        var inspectorBase = resolveInspectorBase(self, bundleName, urlOverride, portOverride);
+        var target        = targetOverride || ('http://localhost:' + port);
+        // #INS8 — dual-mode resolution: --url > bundle settings > global settings > embedded.
+        var inspectorBase = resolveInspectorBase(self, bundleName, urlOverride, portOverride, targetOverride);
         var url           = buildInspectorUrl(inspectorBase, target);
 
         // Resolve browser
