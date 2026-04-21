@@ -542,6 +542,40 @@ var bundles = [
 
 ---
 
+## 18. CLI Command Conventions
+
+### Scope grammar — positional-absence, not flags
+
+Gina CLI commands that apply to either a single bundle or the whole project use positional-absence to signal scope — **never** a flag like `--scope=bundle` or `--shared`:
+
+| Command form | Scope |
+|---|---|
+| `gina <group>:<action> <bundle> @<project>` | Bundle-only |
+| `gina <group>:<action> @<project>` | Project-wide (all bundles + any `shared/config/` overlay) |
+
+Precedents: `bundle:list`, `service:list`, `inspector:open`, `connector:list` / `add` / `rm` / `migrate` (#CN10).
+
+**Why no `--scope`:** the word `scope` is reserved in gina for data isolation (`local` / `beta` / `production` / `testing`) — mixing CLI-scope meaning into the same word is ambiguous.
+
+**Why no `--shared`:** positional-absence is shorter, consistent with the existing grammar, and doesn't invent a new flag surface. If a command needs to address the `shared/config/` file specifically (vs. "all bundles"), document the semantics on that command instead of adding a flag.
+
+**Rule:** when a new CLI command needs a bundle-or-project distinction, follow the `[<bundle>] @<project>` pattern. Do not reintroduce flag-based scope selection.
+
+### Reserved CLI flags — `--port` and `--version`
+
+Two flag names are reserved by the framework's global CLI parser and must **not** be used as subcommand-specific flags:
+
+| Reserved flag | Framework meaning |
+|---|---|
+| `--port` | Runtime bundle port (consumed by `bundle:start` and related runtime commands) |
+| `--version` | Global gina version request (handled before subcommand dispatch) |
+
+**If a subcommand genuinely needs one of these semantics for a different purpose, rename with a qualified prefix.** Precedent set by #CN10 session 2 (`connector:add`): `--connector-port=` for the connector-entry port, `--driver-version=` for the npm driver version range. The un-prefixed forms are swallowed by the framework parser and the subcommand never sees them.
+
+**Rule:** at design time for any new CLI command, grep `lib/cmd/**/arguments.json` and the global parser for reserved names before settling on flag names. If a candidate name collides, prefix it with the subcommand's domain (`--connector-port`, `--driver-version`, etc.) instead of hoping the parser will route it correctly.
+
+---
+
 ## Known Anti-Patterns
 
 | Anti-pattern | Location | Risk | Roadmap item |

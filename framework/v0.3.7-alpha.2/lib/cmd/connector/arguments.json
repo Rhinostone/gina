@@ -13,5 +13,6 @@
   "--api-key",
   "--base-url",
   "--driver-version",
-  "--force"
+  "--force",
+  "--dry-run"
 ]

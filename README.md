@@ -37,12 +37,14 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.3.6
+## What's in 0.3.7
 
-- **Inspector payload redaction** — passwords, tokens, API keys, and secret-like fields are automatically stripped from all four Inspector data sinks (`window.__ginaData`, `localStorage`, `/_gina/agent` SSE, `ginaToolbar.update`). Configurable patterns via `inspector.redact` in bundle settings. Metadata carve-outs preserve validation rules and object-valued config under secret keys
-- **CORS preflight fix** — `completeHeaders()` no longer overwrites the echoed `access-control-allow-headers` on preflight responses, fixing browser CORS errors when the bundle's static ACAH list didn't include all client-sent headers
-- **Whisper silent-pass** — `whisper()` no longer emits a red stack trace on missing dictionary keys (first-install UX fix); `post_install.js` now seeds `def_global_mode` so the key is always present
-- See 0.3.5 for the swig 1.5.0 security extension, and 0.3.4 for the `require('gina/gna')` stale-path fix
+- **Model Context Protocol (MCP) support** — `gina bundle:mcp` generates an MCP tool manifest (`mcp.json`) from `routing.json`. `gina bundle:mcp-start` runs a live MCP server over stdio (JSON-RPC 2.0) that dispatches `tools/call` as real HTTP requests against the running bundle. Any Gina app is now consumable by Claude Code, Cursor, and other MCP-compatible agents out of the box. MCP spec revision 2025-06-18
+- **Standalone Inspector SPA + dual-mode resolution** — Inspector can now run as a separate single-page app served from its own origin, with the target bundle passed as `?target=<origin>`. The dev-mode statusbar and `gina inspector:open` both resolve the URL via a 4-level fallback (`--url=` → bundle `config/settings.json > inspector.url` → `~/.gina/<shortVersion>/settings.json > inspector.url` → embedded `<target>/_gina/inspector/`), covering host-SPA + Docker-bundle splits
+- **Inspector Reveal toggle** — dev-mode red-tinted toggle that swaps the redacted `__ginaData` for the unredacted snapshot via `/_gina/reveal`; only bundles running in `local` scope serve it, beta/production/testing return 403. Redactor now tokenizes camelCase so identifiers like `companyName` / `passportRequired` are no longer false-positive-redacted
+- **`service:list` + `bundle:list` port and running-state columns** — both commands now show each bundle's preferred dev port and whether the process is alive, read from `~/.gina/ports.reverse.json` and `~/.gina/run/<bundle>@<project>.pid`
+- **Explicit exports from `require('gina')`** — every framework-injected global (`getContext`, `_`, `requireJSON`, `merge`, …) is now also reachable as a named property on `require('gina')` / `require('gina/gna')`, with JSDoc and auto-generated `types/gna.d.ts`. Runtime globals unchanged
+- See 0.3.6 for Inspector payload redaction + CORS preflight fix, and 0.3.5 for the swig 1.5.0 security extension
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 

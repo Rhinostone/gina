@@ -14,6 +14,12 @@
     add <name> <bundle> @<project>
                                  Add a connector entry to the bundle's
                                  config/connectors.json.
+    rm <name> @<project>         Remove a connector entry from
+                                 shared/config/connectors.json.
+    rm <name> <bundle> @<project>
+                                 Remove a connector entry from the bundle's
+                                 config/connectors.json.
+    remove                       Alias for rm.
     help                         Show this message.
 
   Options (list):
@@ -59,6 +65,15 @@
     --force                      Overwrite an existing entry with the
                                  same <name>.
 
+  Options (rm):
+
+    --dry-run                    Print what would be removed without
+                                 touching any file. Includes the sibling-
+                                 usage hint.
+    --force                      Skip the project-level guard that refuses
+                                 to remove a shared connector while other
+                                 bundles still reference it.
+
   Output columns (list, text mode):
 
     [ ok ]  driver installed, or built-in (node:sqlite).
@@ -95,9 +110,21 @@
     from `--version=` when supplied, otherwise from the framework's
     peerDependencies declaration.
 
+    `connector:rm` writes to the same two targets (shared vs bundle) per
+    positional-absence. It never uninstalls the npm driver — another
+    bundle may still need it. After removal, `connector:rm` prints a
+    driver-retention hint naming any siblings that still reference the
+    same driver.
+
+    Project-level `connector:rm` (no <bundle>) refuses to proceed when
+    any bundle still declares the same logical name — pass --force to
+    remove anyway. Bundle-level `connector:rm` always proceeds and
+    leaves shared untouched.
+
     `connectors.json` files are parsed with `//` and `/* */` comment
-    tolerance. `connector:add` preserves any comment header above the
-    first `{`, but mid-body comments are lost on rewrite.
+    tolerance. Both `connector:add` and `connector:rm` preserve any
+    comment header above the first `{`, but mid-body comments are lost
+    on rewrite.
 
     Driver resolution follows the framework's `peerDependencies` declared
     in the root `package.json`:
@@ -129,4 +156,9 @@
                                                                        AI connector with env-var secret
     gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
                                                                        Pin driver version, overwrite existing
+
+    gina connector:rm session @myproject                               Remove shared entry (fails if any bundle uses it)
+    gina connector:rm session api @myproject                           Remove from api bundle only
+    gina connector:rm session @myproject --dry-run                     Preview removal + usage warnings
+    gina connector:rm session @myproject --force                       Remove shared entry even if bundles still use it
 
