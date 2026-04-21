@@ -94,9 +94,12 @@ function MainHelper(opt) {
                 }
 
 
-                evar = ( (process.argv[a].replace(/--/, ''))
-                    .replace(/-/, '_') )
-                    .split(/=/);
+                // Split on the first `=` only. Values with `=` (e.g.
+                // `--driver-version=">=5.3.0 <6.0.0"`, base64-ish passwords,
+                // api keys) would otherwise be silently truncated.
+                var _raw = (process.argv[a].replace(/--/, '')).replace(/-/, '_');
+                var _eq  = _raw.indexOf('=');
+                evar     = (_eq > -1) ? [ _raw.substring(0, _eq), _raw.substring(_eq + 1) ] : [ _raw ];
 
                 evar[0] = evar[0].toUpperCase();
                 if (

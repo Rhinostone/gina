@@ -180,7 +180,12 @@ function CmdHelper(cmd, client, debug) {
 
             if ( process.argv[a].indexOf('--') > -1 && process.argv[a].indexOf('=') > -1) {
 
-                arr = (process.argv[a].replace(/--/, '')).split(/=/);
+                // Split on the first `=` only. Values with `=` (e.g.
+                // `--driver-version=">=5.3.0 <6.0.0"`, base64-ish passwords,
+                // api keys) would otherwise be silently truncated.
+                var _raw = process.argv[a].replace(/--/, '');
+                var _eq  = _raw.indexOf('=');
+                arr      = (_eq > -1) ? [ _raw.substring(0, _eq), _raw.substring(_eq + 1) ] : [ _raw ];
 
                 arr[0] = arr[0].toLowerCase();
 
