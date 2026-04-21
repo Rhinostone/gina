@@ -29,6 +29,13 @@
  *   (l) error paths — missing project, unregistered project, invalid bundle,
  *       existing entry without --force, invalid scope/type
  *   (m) help.txt + arguments.json — `add` section, all flags registered
+ *   (n) --install (Session 5) — PACKAGE_MANAGERS lockfile-probe table,
+ *       detectPackageManager (bun → pnpm → yarn → npm, npm fallback),
+ *       resolveInstallRange (entry.version → project deps → framework range),
+ *       runInstall (spawnSync, stdio inherit, ENOENT 127), dispatch for
+ *       sqlite (no-op) and AI with unknown protocol (exit 1),
+ *       opt-in wiring in init(), negative invariant that --install is not
+ *       a default path
  */
 
 'use strict';
@@ -566,7 +573,8 @@ describe('15 - help.txt + arguments.json', function () {
         [
             '--format', '--connector', '--driver', '--protocol', '--host',
             '--connector-port', '--database', '--username', '--password', '--scope',
-            '--model', '--api-key', '--base-url', '--driver-version', '--force'
+            '--model', '--api-key', '--base-url', '--driver-version', '--force',
+            '--install'
         ].forEach(function (flag) {
             assert.ok(argsArr.indexOf(flag) > -1, flag + ' must be registered in arguments.json');
         });
@@ -579,5 +587,236 @@ describe('15 - help.txt + arguments.json', function () {
 
     it('bin/cli registers `connector:` in allowedOffline (add inherits from list)', function () {
         assert.match(cliSrc, /allowedOffline\s*=\s*\[[\s\S]*?'connector:'[\s\S]*?\]/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 16 — --install (Session 5): lockfile detection, range resolution, spawn
+// ---------------------------------------------------------------------------
+
+describe('16 - PACKAGE_MANAGERS table', function () {
+
+    it('declares an ordered PACKAGE_MANAGERS probe list', function () {
+        assert.match(src, /var PACKAGE_MANAGERS\s*=\s*\[/);
+    });
+
+    it('bun is probed first with bun.lockb → `bun add`', function () {
+        assert.match(src, /\{\s*pm:\s*'bun',\s*lockfile:\s*'bun\.lockb',\s*add:\s*'add'\s*\}/);
+    });
+
+    it('pnpm is probed second with pnpm-lock.yaml → `pnpm add`', function () {
+        assert.match(src, /\{\s*pm:\s*'pnpm',\s*lockfile:\s*'pnpm-lock\.yaml',\s*add:\s*'add'\s*\}/);
+    });
+
+    it('yarn is probed third with yarn.lock → `yarn add`', function () {
+        assert.match(src, /\{\s*pm:\s*'yarn',\s*lockfile:\s*'yarn\.lock',\s*add:\s*'add'\s*\}/);
+    });
+
+    it('npm is the last entry with package-lock.json → `npm install`', function () {
+        assert.match(src, /\{\s*pm:\s*'npm',\s*lockfile:\s*'package-lock\.json',\s*add:\s*'install'\s*\}/);
+    });
+
+    it('bun precedes pnpm precedes yarn precedes npm in source order', function () {
+        var bunIdx  = src.indexOf("pm: 'bun'");
+        var pnpmIdx = src.indexOf("pm: 'pnpm'");
+        var yarnIdx = src.indexOf("pm: 'yarn'");
+        var npmIdx  = src.indexOf("pm: 'npm'");
+        assert.ok(bunIdx  > 0, 'bun entry must appear');
+        assert.ok(pnpmIdx > bunIdx,  'pnpm must follow bun');
+        assert.ok(yarnIdx > pnpmIdx, 'yarn must follow pnpm');
+        assert.ok(npmIdx  > yarnIdx, 'npm must be the last probe (fallback)');
+    });
+});
+
+
+describe('17 - detectPackageManager', function () {
+
+    it('declares detectPackageManager(projectPath)', function () {
+        assert.match(src, /var detectPackageManager\s*=\s*function \(projectPath\) \{/);
+    });
+
+    it('iterates PACKAGE_MANAGERS in order', function () {
+        assert.match(src, /for \(var i = 0; i < PACKAGE_MANAGERS\.length; i\+\+\)/);
+    });
+
+    it('probes each lockfile via fs.existsSync on <projectPath>/<lockfile>', function () {
+        assert.match(src, /var lockPath = _\(projectPath \+ '\/' \+ PACKAGE_MANAGERS\[i\]\.lockfile, true\);/);
+        assert.match(src, /if \(\s*fs\.existsSync\(lockPath\)\s*\)/);
+    });
+
+    it('returns the first matching PM with its lockfile and add subcommand', function () {
+        assert.match(src, /return \{[\s\S]*?pm\s*:\s*PACKAGE_MANAGERS\[i\]\.pm[\s\S]*?lockfile\s*:\s*PACKAGE_MANAGERS\[i\]\.lockfile[\s\S]*?add\s*:\s*PACKAGE_MANAGERS\[i\]\.add[\s\S]*?\};/);
+    });
+
+    it('falls back to npm with lockfile=null when nothing matches', function () {
+        assert.match(src, /return \{\s*pm:\s*'npm',\s*lockfile:\s*null,\s*add:\s*'install'\s*\};/);
+    });
+});
+
+
+describe('18 - resolveInstallRange', function () {
+
+    it('declares resolveInstallRange(entry, projectPath, pkgName, frameworkRange)', function () {
+        assert.match(src, /var resolveInstallRange\s*=\s*function \(entry, projectPath, pkgName, frameworkRange\) \{/);
+    });
+
+    it('returns entry.version with source=entry when the pin is set', function () {
+        assert.match(src, /if \(entry && entry\.version\) \{\s*return \{ range: String\(entry\.version\), source: 'entry' \};/);
+    });
+
+    it('reads <projectPath>/package.json via requireJSON', function () {
+        assert.match(src, /var pkgPath = _\(projectPath \+ '\/package\.json', true\);/);
+        assert.match(src, /var pkg = requireJSON\(pkgPath\);/);
+    });
+
+    it('prefers dependencies over devDependencies', function () {
+        assert.match(src, /var deps\s*=\s*pkg\.dependencies\s*\|\|\s*\{\};/);
+        assert.match(src, /var devDeps\s*=\s*pkg\.devDependencies\s*\|\|\s*\{\};/);
+        var depsIdx    = src.indexOf('if (deps[pkgName])');
+        var devDepsIdx = src.indexOf('if (devDeps[pkgName])');
+        assert.ok(depsIdx > 0 && devDepsIdx > depsIdx, 'deps[] must be checked before devDependencies[]');
+    });
+
+    it('returns source=project when the package is pinned in package.json', function () {
+        assert.match(src, /return \{ range: String\(deps\[pkgName\]\),\s*source: 'project' \};/);
+        assert.match(src, /return \{ range: String\(devDeps\[pkgName\]\), source: 'project' \};/);
+    });
+
+    it('falls back to frameworkRange with source=framework', function () {
+        assert.match(src, /return \{ range: frameworkRange, source: 'framework' \};/);
+    });
+
+    it('swallows requireJSON errors and falls through to framework', function () {
+        assert.match(src, /try \{[\s\S]*?requireJSON\(pkgPath\)[\s\S]*?\} catch \(e\) \{[\s\S]*?\}\s*\n\s*return \{ range: frameworkRange/);
+    });
+});
+
+
+describe('19 - runInstall', function () {
+
+    it('declares runInstall(pmInfo, pkg, range, projectPath)', function () {
+        assert.match(src, /var runInstall\s*=\s*function \(pmInfo, pkg, range, projectPath\) \{/);
+    });
+
+    it('requires child_process lazily inside the function', function () {
+        assert.match(src, /var child_process = require\('child_process'\);/);
+    });
+
+    it('builds args as [pmInfo.add, pkg + "@" + range]', function () {
+        assert.match(src, /var args\s*=\s*\[pmInfo\.add, pkg \+ '@' \+ range\];/);
+    });
+
+    it('spawns with cwd=projectPath and stdio inherited', function () {
+        assert.match(src, /child_process\.spawnSync\(pmInfo\.pm, args, \{ cwd: projectPath, stdio: 'inherit' \}\)/);
+    });
+
+    it('returns 127 on ENOENT (PM binary missing on PATH)', function () {
+        assert.match(src, /if \(result\.error && result\.error\.code === 'ENOENT'\)/);
+        assert.match(src, /return 127;/);
+    });
+
+    it('logs the PM + command + cwd before spawning', function () {
+        assert.match(src, /running: ' \+ pmInfo\.pm \+ ' ' \+ args\.join\(' '\) \+ ' \(cwd: ' \+ projectPath/);
+    });
+
+    it('propagates result.status as the exit code', function () {
+        assert.match(src, /return \(typeof result\.status === 'number'\) \? result\.status : 1;/);
+    });
+});
+
+
+describe('20 - runInstallForConnector dispatch', function () {
+
+    it('declares runInstallForConnector(projectPath, connectorType, entry)', function () {
+        assert.match(src, /var runInstallForConnector\s*=\s*function \(projectPath, connectorType, entry\) \{/);
+    });
+
+    it('AI branch resolves scheme from entry.protocol', function () {
+        assert.match(src, /if \(connectorType === 'ai'\) \{[\s\S]*?var scheme = entry\.protocol \? String\(entry\.protocol\)\.split\(':'\)\[0\]\.toLowerCase\(\) : null;/);
+    });
+
+    it('AI branch exits 1 when scheme is missing or unknown', function () {
+        assert.match(src, /if \(!scheme \|\| !AI_DRIVER_MAP\[scheme\]\) \{[\s\S]*?Cannot auto-install[\s\S]*?return 1;/);
+    });
+
+    it('sqlite short-circuits to exit 0 with a "no install needed" note', function () {
+        assert.match(src, /if \(info\.builtin\) \{[\s\S]*?no install needed[\s\S]*?return 0;/);
+    });
+
+    it('errors out cleanly for unknown connector types with return 1', function () {
+        assert.match(src, /if \(!info\) \{[\s\S]*?no driver mapping for connector type[\s\S]*?return 1;/);
+    });
+
+    it('logs the detected PM before install (with lockfile name or fallback note)', function () {
+        var matches = src.match(/detected package manager:/g) || [];
+        assert.ok(matches.length >= 2, 'expected ≥2 "detected package manager:" logs (AI + driver paths), got ' + matches.length);
+        assert.match(src, /fallback — no lockfile found/);
+    });
+
+    it('logs the resolved range + source tier before install', function () {
+        var matches = src.match(/resolving driver range: /g) || [];
+        assert.ok(matches.length >= 2, 'expected ≥2 "resolving driver range:" logs (AI + driver paths), got ' + matches.length);
+    });
+
+    it('dispatches to runInstall with resolved range and detected PM', function () {
+        assert.match(src, /return runInstall\(aiPm, ai\.npm, aiResolv\.range, projectPath\);/);
+        assert.match(src, /return runInstall\(pmInfo, info\.npm, resolv\.range, projectPath\);/);
+    });
+});
+
+
+describe('21 - --install wiring in init()', function () {
+
+    it('init() honors p[\'install\'] after writing the entry', function () {
+        assert.match(src, /if \(p\['install'\]\) \{[\s\S]*?runInstallForConnector\(projectPath, connectorType, entry\);/);
+    });
+
+    it('propagates the runInstallForConnector return as process.exit()', function () {
+        assert.match(src, /var installExit = runInstallForConnector\(projectPath, connectorType, entry\);\s*process\.exit\(installExit\);/);
+    });
+
+    it('suppresses the "Next: run npm install …" hint when --install runs', function () {
+        // The install branch must return before buildInstallHint() — the
+        // hint is misleading when the install has already started.
+        var installBranch = src.match(/if \(p\['install'\]\) \{[\s\S]*?\}/);
+        assert.ok(installBranch, '--install branch must exist in init()');
+        assert.ok(!/buildInstallHint/.test(installBranch[0]), 'buildInstallHint must not run inside the --install branch');
+    });
+
+    it('negative invariant — --install is NOT a default (no "true" default, no auto-install)', function () {
+        // A common regression would be to flip the default by checking
+        // `p['install'] !== false` or by inverting `--no-install`. Assert
+        // the branch uses a simple truthy check on `p['install']`.
+        assert.match(src, /if \(p\['install'\]\)/);
+        assert.ok(!/p\['install'\] !== false/.test(src), 'must not treat "missing" as true');
+        assert.ok(!/p\['no-install'\]/.test(src), '--no-install is not part of Session 5');
+        assert.ok(!/p\['yes'\]/.test(src), '--yes is not part of Session 5');
+    });
+});
+
+
+describe('22 - help.txt + examples for --install', function () {
+
+    it('help.txt documents --install as an opt-in flag', function () {
+        assert.match(helpTxt, /--install\s+After writing the entry/);
+        assert.match(helpTxt, /Opt-in; default is/);
+    });
+
+    it('help.txt documents the lockfile probe order', function () {
+        assert.match(helpTxt, /bun\.lockb/);
+        assert.match(helpTxt, /pnpm-lock\.yaml/);
+        assert.match(helpTxt, /yarn\.lock/);
+        assert.match(helpTxt, /package-lock\.json/);
+    });
+
+    it('help.txt documents the install-range resolution order', function () {
+        assert.match(helpTxt, /Install range resolution order:/);
+        assert.match(helpTxt, /--driver-version=/);
+        assert.match(helpTxt, /peerDependencies/);
+    });
+
+    it('help.txt shows an --install example', function () {
+        assert.match(helpTxt, /gina connector:add [^\n]+--install/);
     });
 });

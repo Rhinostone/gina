@@ -52,11 +52,16 @@ var CmdHelper = require('./../helper');
  *                             (Not `--version=` — `--version` is reserved
  *                              for the gina framework version override.)
  *   --force                   Overwrite an existing entry with the same name.
+ *   --install                 After writing the entry, run the detected
+ *                             package manager's install command for the
+ *                             resolved driver+range. Opt-in; default is
+ *                             "write entry, print hint".
  *
  * Usage:
  *   gina connector:add session @myproject --connector=redis --host=127.0.0.1 --connector-port=6379
  *   gina connector:add mydb api @myproject --connector=mysql --database=mydb --username=root
  *   gina connector:add claude @myproject --connector=ai --protocol=anthropic:// --api-key=\${ANTHROPIC_API_KEY}
+ *   gina connector:add redis @myproject --install
  *
  * @class Add
  * @constructor
@@ -132,6 +137,24 @@ function Add(opt, cmd) {
         xai        : { npm: 'openai',            range: '>=4.0.0' },
         perplexity : { npm: 'openai',            range: '>=4.0.0' }
     };
+
+    /**
+     * Ordered package-manager probe list for `--install`. Lockfiles are
+     * checked in this order; the first match wins; npm is the default
+     * fallback when no lockfile is found. The `add` field names the install
+     * subcommand for each manager (`npm install` / `yarn add` / `pnpm add` /
+     * `bun add`).
+     *
+     * @inner
+     * @constant
+     * @type {Array<{pm: string, lockfile: string, add: string}>}
+     */
+    var PACKAGE_MANAGERS = [
+        { pm: 'bun',  lockfile: 'bun.lockb',         add: 'add' },
+        { pm: 'pnpm', lockfile: 'pnpm-lock.yaml',    add: 'add' },
+        { pm: 'yarn', lockfile: 'yarn.lock',         add: 'add' },
+        { pm: 'npm',  lockfile: 'package-lock.json', add: 'install' }
+    ];
 
     /**
      * Parse positionals, validate scope/target, merge into the existing
@@ -216,6 +239,12 @@ function Add(opt, cmd) {
             (bundleName ? ' in bundle `' + bundleName + '`' : ' in shared scope') +
             ' at ' + target
         );
+
+        if (p['install']) {
+            var installExit = runInstallForConnector(projectPath, connectorType, entry);
+            process.exit(installExit);
+            return;
+        }
 
         var hint = buildInstallHint(connectorType, entry);
         if (hint) {
@@ -474,6 +503,141 @@ function Add(opt, cmd) {
         }
         var r = entry.version || info.range;
         return 'Next: run `npm install ' + info.npm + '@"' + r + '"` inside your project root.';
+    };
+
+    /**
+     * Detect the project's package manager by probing well-known lockfiles
+     * in PACKAGE_MANAGERS order. Returns the first hit, or npm as the
+     * fallback when no lockfile is present.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @returns {{pm: string, lockfile: string|null, add: string}}
+     */
+    var detectPackageManager = function (projectPath) {
+        for (var i = 0; i < PACKAGE_MANAGERS.length; i++) {
+            var lockPath = _(projectPath + '/' + PACKAGE_MANAGERS[i].lockfile, true);
+            if ( fs.existsSync(lockPath) ) {
+                return {
+                    pm       : PACKAGE_MANAGERS[i].pm,
+                    lockfile : PACKAGE_MANAGERS[i].lockfile,
+                    add      : PACKAGE_MANAGERS[i].add
+                };
+            }
+        }
+        return { pm: 'npm', lockfile: null, add: 'install' };
+    };
+
+    /**
+     * Resolve the install range for a driver in priority order:
+     *   1. `entry.version` — the pin just written via --driver-version=
+     *   2. project `package.json` > dependencies / devDependencies
+     *   3. framework peerDependencies range (DRIVER_MAP / AI_DRIVER_MAP)
+     *
+     * Returns both the resolved range and the source tag so the CLI can log
+     * which tier won.
+     *
+     * @inner
+     * @private
+     * @param {object} entry - Connector entry object
+     * @param {string} projectPath - Absolute project root
+     * @param {string} pkgName - npm package name (e.g. `ioredis`)
+     * @param {string} frameworkRange - Default range from the driver map
+     * @returns {{range: string, source: 'entry'|'project'|'framework'}}
+     */
+    var resolveInstallRange = function (entry, projectPath, pkgName, frameworkRange) {
+        if (entry && entry.version) {
+            return { range: String(entry.version), source: 'entry' };
+        }
+        try {
+            var pkgPath = _(projectPath + '/package.json', true);
+            if ( fs.existsSync(pkgPath) ) {
+                var pkg = requireJSON(pkgPath);
+                if (pkg) {
+                    var deps    = pkg.dependencies    || {};
+                    var devDeps = pkg.devDependencies || {};
+                    if (deps[pkgName])    return { range: String(deps[pkgName]),    source: 'project' };
+                    if (devDeps[pkgName]) return { range: String(devDeps[pkgName]), source: 'project' };
+                }
+            }
+        } catch (e) {
+            // Swallow — fall through to the framework range.
+        }
+        return { range: frameworkRange, source: 'framework' };
+    };
+
+    /**
+     * Spawn the detected package manager's install command for
+     * `pkg@range` with `cwd=projectPath` and `stdio: 'inherit'` so the user
+     * sees live install output. Returns the child's exit code (or 127 when
+     * the PM binary is missing on PATH).
+     *
+     * @inner
+     * @private
+     * @param {{pm: string, add: string}} pmInfo - detectPackageManager result
+     * @param {string} pkg - npm package name
+     * @param {string} range - Semver range (will be quoted on the command line)
+     * @param {string} projectPath - Spawn cwd
+     * @returns {number} Propagated exit code
+     */
+    var runInstall = function (pmInfo, pkg, range, projectPath) {
+        var child_process = require('child_process');
+        var args          = [pmInfo.add, pkg + '@' + range];
+        console.log('[' + pmInfo.pm + '] running: ' + pmInfo.pm + ' ' + args.join(' ') + ' (cwd: ' + projectPath + ')');
+        var result = child_process.spawnSync(pmInfo.pm, args, { cwd: projectPath, stdio: 'inherit' });
+        if (result.error && result.error.code === 'ENOENT') {
+            console.error('`' + pmInfo.pm + '` binary not found on PATH. Install it or run the command manually:');
+            console.error('  ' + pmInfo.pm + ' ' + args.join(' '));
+            return 127;
+        }
+        if (typeof result.status === 'number' && result.status !== 0) {
+            console.error('[' + pmInfo.pm + '] install exited with code ' + result.status);
+        }
+        return (typeof result.status === 'number') ? result.status : 1;
+    };
+
+    /**
+     * Dispatch `--install` to the correct driver map (DRIVER_MAP or
+     * AI_DRIVER_MAP), resolve the range and package manager, and run the
+     * install. Handles sqlite (no-op, exit 0) and AI with missing/unknown
+     * protocol (exit 1 with guidance).
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {string} connectorType
+     * @param {object} entry
+     * @returns {number} Exit code for the caller to propagate
+     */
+    var runInstallForConnector = function (projectPath, connectorType, entry) {
+        if (connectorType === 'ai') {
+            var scheme = entry.protocol ? String(entry.protocol).split(':')[0].toLowerCase() : null;
+            if (!scheme || !AI_DRIVER_MAP[scheme]) {
+                console.error('Cannot auto-install — set `protocol` to one of: ' + Object.keys(AI_DRIVER_MAP).map(function(k){ return k + '://'; }).join(', ') + ' and re-run.');
+                return 1;
+            }
+            var ai       = AI_DRIVER_MAP[scheme];
+            var aiResolv = resolveInstallRange(entry, projectPath, ai.npm, ai.range);
+            var aiPm     = detectPackageManager(projectPath);
+            console.log('[install] detected package manager: ' + aiPm.pm + (aiPm.lockfile ? ' (' + aiPm.lockfile + ')' : ' (fallback — no lockfile found)'));
+            console.log('[install] resolving driver range: ' + aiResolv.range + ' (source: ' + aiResolv.source + ')');
+            return runInstall(aiPm, ai.npm, aiResolv.range, projectPath);
+        }
+        var info = DRIVER_MAP[connectorType];
+        if (!info) {
+            console.error('Cannot auto-install — no driver mapping for connector type `' + connectorType + '`.');
+            return 1;
+        }
+        if (info.builtin) {
+            console.log('[install] no install needed — ' + (info.note || 'built-in driver') + '.');
+            return 0;
+        }
+        var resolv = resolveInstallRange(entry, projectPath, info.npm, info.range);
+        var pmInfo = detectPackageManager(projectPath);
+        console.log('[install] detected package manager: ' + pmInfo.pm + (pmInfo.lockfile ? ' (' + pmInfo.lockfile + ')' : ' (fallback — no lockfile found)'));
+        console.log('[install] resolving driver range: ' + resolv.range + ' (source: ' + resolv.source + ')');
+        return runInstall(pmInfo, info.npm, resolv.range, projectPath);
     };
 
     init();

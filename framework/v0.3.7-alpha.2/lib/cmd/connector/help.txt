@@ -68,6 +68,21 @@
                                  the connector entry under the `version` key.
     --force                      Overwrite an existing entry with the
                                  same <name>.
+    --install                    After writing the entry, run the detected
+                                 package manager's install command for the
+                                 resolved driver+range. Opt-in; default is
+                                 "write entry, print hint".
+                                 Package manager is detected by probing
+                                 lockfiles in this order: bun.lockb →
+                                 pnpm-lock.yaml → yarn.lock →
+                                 package-lock.json. npm is the fallback
+                                 when no lockfile is present.
+                                 Install range resolution order:
+                                 --driver-version= → project package.json
+                                 dep → framework peerDependencies range.
+                                 sqlite short-circuits (built-in); AI
+                                 connectors with missing/unknown protocol
+                                 exit 1 with guidance.
 
   Options (rm):
 
@@ -186,6 +201,8 @@
                                                                        AI connector with env-var secret
     gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
                                                                        Pin driver version, overwrite existing
+    gina connector:add redis @myproject --install
+                                                                       Write entry AND run `npm install ioredis@<range>` (lockfile-detected PM)
 
     gina connector:rm session @myproject                               Remove shared entry (fails if any bundle uses it)
     gina connector:rm session api @myproject                           Remove from api bundle only
