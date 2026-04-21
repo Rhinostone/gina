@@ -1,3 +1,17 @@
 [
-  "--format"
+  "--format",
+  "--connector",
+  "--driver",
+  "--protocol",
+  "--host",
+  "--connector-port",
+  "--database",
+  "--username",
+  "--password",
+  "--scope",
+  "--model",
+  "--api-key",
+  "--base-url",
+  "--driver-version",
+  "--force"
 ]

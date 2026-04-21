@@ -17,6 +17,11 @@
           "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\").",
           "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai"]
         },
+        "version": {
+          "type": "string",
+          "description": "Optional semver range for the driver npm package. Used by `connector:list` to flag cross-bundle version-pin disagreements and by `connector:add` to print the exact install command. When omitted, the framework falls back to the project's package.json dependency range, then to the framework peerDependencies range.",
+          "examples": ["^5.0.0", ">=5.3.0 <6.0.0", "5.4.1"]
+        },
         "protocol": {
           "type": "string",
           "description": "Connection protocol URI scheme. Required for Couchbase and AI connectors.",

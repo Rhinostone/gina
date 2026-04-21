@@ -9,14 +9,57 @@
                                  (shared + all bundles).
     list <bundle> @<project>     List the merged shared+bundle view that
                                  <bundle> sees at runtime.
+    add <name> @<project>        Add a connector entry to
+                                 shared/config/connectors.json.
+    add <name> <bundle> @<project>
+                                 Add a connector entry to the bundle's
+                                 config/connectors.json.
     help                         Show this message.
 
-  Options:
+  Options (list):
 
     --format=json                Emit machine-readable JSON instead of the
                                  human-readable text table.
 
-  Output columns (text mode):
+  Options (add):
+
+    --connector=<type>           Driver type. One of: couchbase, mysql,
+                                 postgresql, sqlite, redis, ai. Inferred
+                                 from <name> when <name> matches one of
+                                 those values.
+    --driver=<type>              Synonym for --connector=.
+    --protocol=<uri>             Connection protocol URI scheme
+                                 (e.g. couchbase://, anthropic://).
+                                 Required for ai connectors.
+    --host=<host>                Hostname or IP. Comma-separated for
+                                 clusters (e.g. db1.example.com,db2.example.com).
+    --connector-port=<port>      Server port. Numeric when possible. Named
+                                 `--connector-port=` (not `--port=`) because
+                                 the framework reserves `--port=` for its own
+                                 socket port. Written to the connector entry
+                                 under the `port` key.
+    --database=<name>            Database, bucket, or keyspace name.
+    --username=<name>            Authentication username.
+    --password=<value>           Authentication password. Supports
+                                 \${ENV_VAR} interpolation.
+    --scope=<scope>              Data isolation scope. One of: local,
+                                 beta, production, testing.
+    --model=<id>                 AI connector only. Default model id.
+    --api-key=<value>            AI connector only. API key. Supports
+                                 \${ENV_VAR} interpolation.
+    --base-url=<url>             AI connector only. Override the provider
+                                 base URL (OpenAI-compatible providers).
+    --driver-version=<range>     Optional semver range to pin the driver
+                                 install (e.g. ^5.0.0, >=5.3.0 <6.0.0).
+                                 Named `--driver-version=` (not `--version=`)
+                                 because the framework reserves the bare
+                                 `--version` flag (maps to GINA_VERSION and
+                                 triggers a framework migration). Written to
+                                 the connector entry under the `version` key.
+    --force                      Overwrite an existing entry with the
+                                 same <name>.
+
+  Output columns (list, text mode):
 
     [ ok ]  driver installed, or built-in (node:sqlite).
     [ ?! ]  driver declared but not found at <project>/node_modules/<driver>.
@@ -42,8 +85,19 @@
       <project>/<bundle>/config/connectors.json    (per manifest)
       <project>/node_modules/<driver>/package.json (install check)
 
+    `connector:add` writes the file at:
+
+      <project>/shared/config/connectors.json      (no <bundle> passed)
+      <project>/<bundle-src>/config/connectors.json (with <bundle>)
+
+    After writing, `connector:add` prints the exact
+    `npm install <driver>@"<range>"` command. The resolved range comes
+    from `--version=` when supplied, otherwise from the framework's
+    peerDependencies declaration.
+
     `connectors.json` files are parsed with `//` and `/* */` comment
-    tolerance.
+    tolerance. `connector:add` preserves any comment header above the
+    first `{`, but mid-body comments are lost on rewrite.
 
     Driver resolution follows the framework's `peerDependencies` declared
     in the root `package.json`:
@@ -60,8 +114,19 @@
 
   Examples:
 
-    gina connector:list                   Every project, every connector
-    gina connector:list @myproject        One project, all bundles + shared
-    gina connector:list admin @myproject  What `admin` sees at runtime
-    gina connector:list --format=json     JSON output for scripting
+    gina connector:list                                                Every project, every connector
+    gina connector:list @myproject                                     One project, all bundles + shared
+    gina connector:list admin @myproject                               What `admin` sees at runtime
+    gina connector:list --format=json                                  JSON output for scripting
+
+    gina connector:add redis @myproject --host=127.0.0.1 --connector-port=6379
+                                                                       Shared Redis, type inferred from name
+    gina connector:add session @myproject --connector=redis --host=127.0.0.1 --connector-port=6379
+                                                                       Shared Redis under a custom name
+    gina connector:add mydb api @myproject --connector=mysql --database=mydb --username=root
+                                                                       Bundle-scoped MySQL entry
+    gina connector:add claude @myproject --connector=ai --protocol=anthropic:// --api-key=\${ANTHROPIC_API_KEY}
+                                                                       AI connector with env-var secret
+    gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
+                                                                       Pin driver version, overwrite existing
 

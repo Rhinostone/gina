@@ -552,6 +552,11 @@ gina connector:list                     # List connectors across every registere
 gina connector:list @<project>          # List one project (shared + all bundles)
 gina connector:list <bundle> @<project> # List the merged shared+bundle view a bundle sees at runtime
 gina connector:list @<project> --format=json  # JSON payload with source, driver, installed/version fields
+gina connector:add <name> @<project>    # Add entry to shared/config/connectors.json, print install hint
+gina connector:add <name> <bundle> @<project>  # Add entry to <bundle>/config/connectors.json
+gina connector:add redis @<project> --host=127.0.0.1 --connector-port=6379      # Shared Redis, type inferred
+gina connector:add claude @<project> --connector=ai --protocol=anthropic:// --api-key='${ANTHROPIC_API_KEY}'  # AI with env-var secret
+gina connector:add session @<project> --connector=redis --driver-version=^5.0.0 --force                       # Pin driver, overwrite
 gina bundle:openapi <bundle> @<project> # Generate OpenAPI 3.1.0 spec from routing.json
 gina bundle:oas <bundle> @<project>     # Alias for bundle:openapi
 gina bundle:openapi @<project> --output=/path/to/spec.json  # Custom output path
