@@ -7,8 +7,8 @@ on:
     branches: [develop, master]
 
 jobs:
-  claude-leak-check:
-    name: Claude-leak scan
+  local-leak-check:
+    name: Local-tool leak scan
     runs-on: ubuntu-latest
 
     steps:
@@ -16,17 +16,17 @@ jobs:
 
       # #S6 — Backs up the local pre-commit hook (#S5) and the publish-boundary
       # gate in prepare_version.js (#S3). Fails the build if any tracked path
-      # matches (^|/)(CLAUDE\.md|\.claude[a-z]*). Also retroactively catches
+      # matches local-tool configuration paths. Also retroactively catches
       # leaks that landed before the active defenses were wired.
-      - name: Scan tracked files for local-tool configuration paths
+      - name: Scan tracked files for local-tool paths
         run: |
           matches=$(git ls-files | grep -iE '(^|/)(CLAUDE\.md|\.claude[a-z]*)' || true)
           if [ -n "$matches" ]; then
-            echo "::error::local-tool configuration paths detected in git index:"
+            echo "::error::local-tool paths detected in git index:"
             echo "$matches" | sed 's/^/  - /'
             echo ""
             echo "These paths must never be tracked. Remove with: git rm --cached <path>"
             echo "If pushed already, scrub history with git filter-repo."
             exit 1
           fi
-          echo "OK: no local-tool configuration paths in git index."
+          echo "OK: no local-tool paths in git index."

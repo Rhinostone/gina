@@ -15,7 +15,7 @@
  * this script re-runs `npm pack --dry-run --json --ignore-scripts` and fails
  * the publish if the pack listing is dirty on either of two axes:
  *
- *   1. Path-level: any file named `CLAUDE.md` or `.claude*`.
+ *   1. Path-level: any local-tool configuration file or directory.
  *   2. Content-level: any text file containing a private-token pattern
  *      (phone, private email, private address, private domain). The
  *      co-author's legal name is allowed in authoring/contributing files
@@ -66,8 +66,8 @@ var TEXT_BASENAME = /^(AUTHORS|LICENSE|COPYING|CHANGELOG|README|NOTICE|CONTRIBUT
 // Scanner scripts contain the token patterns themselves — skip them to
 // avoid self-matches. Future maintainers: add any new scanner files here.
 var SELF_EXCLUDE = {
-    'script/check_no_claude_leak.js': true,
-    'script/prepare_version.js':      true
+    'script/check_no_local_leak.js': true,
+    'script/prepare_version.js':     true
 };
 // Files larger than this are skipped — production binaries and bundles
 // don't warrant a byte-by-byte scan.
@@ -128,7 +128,7 @@ try {
     var failed = false;
 
     if (pathMatches.length > 0) {
-        console.error('[prepack] ERROR: local-tool configuration paths in pack listing:');
+        console.error('[prepack] ERROR: local-tool paths in pack listing:');
         for (var a = 0; a < pathMatches.length; a++) {
             console.error('  - ' + pathMatches[a]);
         }

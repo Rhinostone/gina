@@ -70,7 +70,7 @@
     "types:gen": "node script/generate_gna_types.js",
     "types:check": "node script/generate_gna_types.js --check",
     "prepare": "node script/prepare_version.js",
-    "prepack": "node script/check_no_claude_leak.js",
+    "prepack": "node script/check_no_local_leak.js",
     "postpublish": "node script/post_publish.js",
     "preinstall": "node script/pre_install.js",
     "postinstall": "node script/post_install.js"

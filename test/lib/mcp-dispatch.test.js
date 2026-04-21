@@ -227,13 +227,13 @@ describe('06 - dispatch end-to-end', function () {
 
     it('appends extra args as query string on GET', async function () {
         await withServer(function (req, res) {
-            assert.equal(req.url, '/search?q=claude&limit=10');
+            assert.equal(req.url, '/search?q=foo&limit=10');
             res.writeHead(200, { 'content-type': 'application/json' });
             res.end('[]');
         }, async function (port) {
             var d = dispatchLib.createDispatcher({ baseUrl: 'http://127.0.0.1:' + port });
             var tool = { name: 't', _meta: { 'io.gina.url': '/search', 'io.gina.method': 'GET' } };
-            await d.dispatch(tool, { q: 'claude', limit: 10 });
+            await d.dispatch(tool, { q: 'foo', limit: 10 });
         });
     });
 

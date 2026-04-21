@@ -130,12 +130,12 @@ function PrepareVersion() {
 
 
     /**
-     * Fail-closed gate: abort the release if any local-tool configuration path is
-     * present in the working tree (tracked or untracked-not-ignored).
+     * Fail-closed gate: abort the release if any local-tool configuration
+     * path is present in the working tree (tracked or untracked-not-ignored).
      *
      * `git add --all` runs later in this script (pushChangesToGitIfNeeded)
      * and sweeps every non-ignored path into the release commit. Without
-     * this gate, a local `.claude/` or `CLAUDE.md` that slips past
+     * this gate, a local configuration directory or file that slips past
      * `.gitignore` (e.g. force-added, or an unignored rename) lands in the
      * release commit and — via the subsequent push — ends up on the public
      * remote.
@@ -144,7 +144,7 @@ function PrepareVersion() {
      * on framework helpers or ~/.gina config.
      */
     self.checkNoLocalLeakage = function(done) {
-        console.debug('[prepare] Checking for local-tool configuration file leakage ...');
+        console.debug('[prepare] Checking for local-tool file leakage ...');
 
         var PATTERN = /(^|\/)(CLAUDE\.md|\.claude[a-z]*)/i;
         var matches = [];
@@ -172,15 +172,15 @@ function PrepareVersion() {
         }
 
         if (matches.length > 0) {
-            console.error('[prepare] ERROR: local-tool configuration paths detected — aborting to prevent leak:');
+            console.error('[prepare] ERROR: local-tool paths detected — aborting to prevent leak:');
             for (var i = 0; i < matches.length; i++) {
                 console.error('  ' + matches[i]);
             }
             console.error('[prepare] Remove or re-ignore these paths before publishing.');
-            return done(new Error('local-tool configuration file leakage detected'));
+            return done(new Error('local-tool file leakage detected'));
         }
 
-        console.debug('[prepare] OK: no local-tool configuration paths detected.');
+        console.debug('[prepare] OK: no local-tool paths detected.');
         done();
     };
 
@@ -189,11 +189,11 @@ function PrepareVersion() {
      * ignored file contains a private-token pattern (phone, private email,
      * private address, private domain, co-author legal name).
      *
-     * Runs after the Claude path gate and before `getSelectedVersion` so
+     * Runs after the local-tool path gate and before `getSelectedVersion` so
      * the `git add --all` sweep at `pushChangesToGitIfNeeded` cannot sweep
      * dirty content into a release commit.
      *
-     * Mirrors `script/check_no_claude_leak.js` (the prepack gate) — both
+     * Mirrors `script/check_no_local_leak.js` (the prepack gate) — both
      * must stay in sync so a leak is caught at either boundary.
      */
     self.checkPrivateTokenLeakage = function(done) {
@@ -220,10 +220,10 @@ function PrepareVersion() {
         var MAX_SCAN_BYTES = 2 * 1024 * 1024;
 
         // Scanner scripts contain the token patterns themselves — skip them to
-        // avoid self-matches. Mirrors `SELF_EXCLUDE` in check_no_claude_leak.js.
+        // avoid self-matches. Mirrors `SELF_EXCLUDE` in check_no_local_leak.js.
         var SELF_EXCLUDE = {
-            'script/check_no_claude_leak.js': true,
-            'script/prepare_version.js':      true
+            'script/check_no_local_leak.js': true,
+            'script/prepare_version.js':     true
         };
 
         var listFiles = function(cmd) {

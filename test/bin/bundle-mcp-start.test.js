@@ -73,9 +73,8 @@ describe('02 - handler wiring', function () {
     });
 
     it('does not use the bare-module form (which fails in CLI daemon scope)', function () {
-        // See .claude/architecture/index.md — require('lib/mcp-server') would
-        // throw MODULE_NOT_FOUND because gna.js's NODE_PATH patch only runs in
-        // bundle runtime, not in bin/cli.
+        // require('lib/mcp-server') would throw MODULE_NOT_FOUND because
+        // gna.js's NODE_PATH patch only runs in bundle runtime, not in bin/cli.
         assert.doesNotMatch(handlerSrc, /require\(['"]lib\/mcp-server['"]\)/);
         assert.doesNotMatch(handlerSrc, /require\(['"]lib\/mcp-dispatch['"]\)/);
     });

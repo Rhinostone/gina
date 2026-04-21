@@ -291,7 +291,7 @@ Declare any LLM provider in `connectors.json` via `"connector": "ai"`. Named pro
 
 | Protocol | SDK | Notes |
 |---|---|---|
-| `anthropic://` | `@anthropic-ai/sdk` | Claude models |
+| `anthropic://` | `@anthropic-ai/sdk` | Anthropic's models |
 | `openai://` | `openai` | GPT / o-series |
 | `deepseek://` | `openai` | DeepSeek-V3, DeepSeek-R1 — OpenAI-compat by design |
 | `qwen://` | `openai` | Alibaba Qwen via DashScope |
