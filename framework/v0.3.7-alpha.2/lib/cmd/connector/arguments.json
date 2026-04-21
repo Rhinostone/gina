@@ -14,5 +14,6 @@
   "--base-url",
   "--driver-version",
   "--force",
-  "--dry-run"
+  "--dry-run",
+  "--fix"
 ]

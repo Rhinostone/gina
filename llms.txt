@@ -561,6 +561,10 @@ gina connector:rm <name> @<project>     # Remove from shared/config/connectors.j
 gina connector:rm <name> <bundle> @<project>  # Remove from <bundle>/config/connectors.json (always proceeds; leaves shared)
 gina connector:rm <name> @<project> --dry-run # Preview removal + sibling usage hint without touching the file
 gina connector:rm <name> @<project> --force   # Remove shared entry even if bundles still reference it
+gina connector:migrate @<project>       # Lint every connectors.json (shared + all bundles), dry-run by default
+gina connector:migrate <bundle> @<project>    # Lint just the bundle's connectors.json
+gina connector:migrate @<project> --fix       # Apply auto-fixable issues (injects missing $schema, preserves order + header)
+gina connector:migrate @<project> --format=json  # JSON report with {project, scope, bundle, fixApplied, files[]} envelope
 gina bundle:openapi <bundle> @<project> # Generate OpenAPI 3.1.0 spec from routing.json
 gina bundle:oas <bundle> @<project>     # Alias for bundle:openapi
 gina bundle:openapi @<project> --output=/path/to/spec.json  # Custom output path

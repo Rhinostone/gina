@@ -20,6 +20,10 @@
                                  Remove a connector entry from the bundle's
                                  config/connectors.json.
     remove                       Alias for rm.
+    migrate @<project>           Scan every connectors.json (shared + all
+                                 bundles) for known issues. Dry run by
+                                 default.
+    migrate <bundle> @<project>  Scan just the bundle's connectors.json.
     help                         Show this message.
 
   Options (list):
@@ -74,6 +78,14 @@
                                  to remove a shared connector while other
                                  bundles still reference it.
 
+  Options (migrate):
+
+    --fix                        Apply auto-fixable issues to disk. Without
+                                 it, `connector:migrate` is a read-only
+                                 dry run.
+    --format=json                Emit machine-readable JSON instead of the
+                                 human-readable text summary.
+
   Output columns (list, text mode):
 
     [ ok ]  driver installed, or built-in (node:sqlite).
@@ -121,10 +133,28 @@
     remove anyway. Bundle-level `connector:rm` always proceeds and
     leaves shared untouched.
 
+    `connector:migrate` lints connectors.json for two issues:
+
+      missing-schema             Top-level `$schema` key absent. Auto-
+                                 fixable — injects
+                                 "$schema": "https://gina.io/schema/connectors.json"
+                                 at the top of the object.
+      bare-key-no-connector      Entry has no `connector` field and its
+                                 key is not in the built-in enum
+                                 (couchbase, mysql, postgresql, sqlite,
+                                 redis, ai). Warn only — the fix cannot
+                                 be inferred. Re-declare via
+                                 `gina connector:add <name> @<project>
+                                 --connector=<type> --force`.
+
+    `connector:migrate` is explicit and opt-in — the framework does NOT
+    auto-migrate connectors.json at bundle boot. Run it in CI or before
+    committing.
+
     `connectors.json` files are parsed with `//` and `/* */` comment
-    tolerance. Both `connector:add` and `connector:rm` preserve any
-    comment header above the first `{`, but mid-body comments are lost
-    on rewrite.
+    tolerance. `connector:add`, `connector:rm`, and `connector:migrate`
+    preserve any comment header above the first `{`, but mid-body
+    comments are lost on rewrite.
 
     Driver resolution follows the framework's `peerDependencies` declared
     in the root `package.json`:
@@ -161,4 +191,9 @@
     gina connector:rm session api @myproject                           Remove from api bundle only
     gina connector:rm session @myproject --dry-run                     Preview removal + usage warnings
     gina connector:rm session @myproject --force                       Remove shared entry even if bundles still use it
+
+    gina connector:migrate @myproject                                  Dry-run lint across shared + all bundles
+    gina connector:migrate api @myproject                              Dry-run lint of the api bundle only
+    gina connector:migrate @myproject --fix                            Apply auto-fixable issues (inject $schema)
+    gina connector:migrate @myproject --format=json                    JSON report for scripting / CI
 
