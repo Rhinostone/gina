@@ -313,6 +313,7 @@ async function onExec() {
         'build:',
         'bundle:',
         'cache:',
+        'connector:',
         'dev:',
         'env:',
         'inspector:',

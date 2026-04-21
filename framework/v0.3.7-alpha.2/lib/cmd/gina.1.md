@@ -22,9 +22,11 @@ env
 framework
 project
 bundle
+connector
 model
 dev
 view
+service
 
 ## ENVIRONMENT
 

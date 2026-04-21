@@ -1,0 +1,67 @@
+
+  Usage: gina connector:<action> [options]
+
+  Actions:
+
+    list                         List every connector declared by every
+                                 registered project.
+    list @<project>              List every connector for one project
+                                 (shared + all bundles).
+    list <bundle> @<project>     List the merged shared+bundle view that
+                                 <bundle> sees at runtime.
+    help                         Show this message.
+
+  Options:
+
+    --format=json                Emit machine-readable JSON instead of the
+                                 human-readable text table.
+
+  Output columns (text mode):
+
+    [ ok ]  driver installed, or built-in (node:sqlite).
+    [ ?! ]  driver declared but not found at <project>/node_modules/<driver>.
+    [ ?? ]  unknown connector type or missing/unrecognised `ai` protocol.
+    [ !! ]  version-pin disagreement — two bundles pin the same driver at
+            different versions; the first `npm install` wins.
+
+    Row shape:
+      <status> <name> <connector> [<source>] (<driver info>)
+
+    Source label:
+      [shared]                    Declared only in shared/config/connectors.json.
+      [<bundle>]                  Declared only in <bundle>/config/connectors.json.
+      [<bundle> override]         Declared in shared AND overridden by <bundle>.
+
+  Notes:
+
+    `connector:list` is read-only and offline — it does not contact the
+    framework socket and makes no network calls. It scans:
+
+      <project>/manifest.json            (bundle discovery)
+      <project>/shared/config/connectors.json
+      <project>/<bundle>/config/connectors.json    (per manifest)
+      <project>/node_modules/<driver>/package.json (install check)
+
+    `connectors.json` files are parsed with `//` and `/* */` comment
+    tolerance.
+
+    Driver resolution follows the framework's `peerDependencies` declared
+    in the root `package.json`:
+
+      couchbase     → couchbase            >= 3.0.0
+      redis         → ioredis              >= 5.0.0
+      mysql         → mysql2               >= 2.0.0
+      postgresql    → pg                   >= 8.0.0
+      mongodb       → mongodb              >= 5.0.0
+      scylladb      → @scylladb/scylla-driver >= 1.0.0
+      sqlite        → built-in (node:sqlite, Node >= 22.5.0)
+      ai            → resolved from `protocol` (anthropic:// → @anthropic-ai/sdk,
+                                                openai://, deepseek://, …  → openai)
+
+  Examples:
+
+    gina connector:list                   Every project, every connector
+    gina connector:list @myproject        One project, all bundles + shared
+    gina connector:list admin @myproject  What `admin` sees at runtime
+    gina connector:list --format=json     JSON output for scripting
+
