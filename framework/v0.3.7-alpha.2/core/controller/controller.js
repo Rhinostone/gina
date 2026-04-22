@@ -1043,12 +1043,38 @@ function SuperController(options) {
             if (_hints) self.setEarlyHints(_hints);
         }
 
+        // Dispatch to the render delegate matching the bundle's configured
+        // template engine. `settings.json > render.engine` defaults to "swig"
+        // so existing bundles see zero change; "nunjucks" routes through
+        // controller.render-nunjucks.js (MVP — see that file for the list of
+        // deferred features relative to render-swig). The render-nunjucks
+        // delegate fetches the nunjucks module itself via
+        // `lib.nunjucksResolver.get()`, so the `swig` / `SwigFilters` deps
+        // passed below are harmless when unused.
+        var _engine = 'swig';
+        try {
+            var _settings = local.options
+                && local.options.conf
+                && local.options.conf.content
+                && local.options.conf.content.settings;
+            if (_settings && _settings.render && _settings.render.engine) {
+                _engine = _settings.render.engine;
+            }
+        } catch (e) { /* fall back to default 'swig' */ }
+
+        var _delegate = (_engine === 'nunjucks')
+            ? '/controller.render-nunjucks'
+            : '/controller.render-swig';
+
         if  (this.isCacheless() ) {
             delete require.cache[require.resolve( _(__dirname + '/controller.render-v1', true))];
             delete require.cache[require.resolve( _(__dirname + '/controller.render-swig', true))];
+            try {
+                delete require.cache[require.resolve( _(__dirname + '/controller.render-nunjucks', true))];
+            } catch (e) { /* nunjucks delegate may not exist on older framework dirs */ }
         }
 
-        return require( _(__dirname + '/controller.render-swig', true) )(userData, displayInspector, errOptions, {
+        return require( _(__dirname + _delegate, true) )(userData, displayInspector, errOptions, {
             self        : self,
             local       : local,
             getData     : getData,

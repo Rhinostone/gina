@@ -145,6 +145,36 @@
           "default": "@rhinostone/swig"
         }
       }
+    },
+    "render": {
+      "type": "object",
+      "description": "Template engine dispatch. Selects which delegate file (controller.render-swig.js or controller.render-nunjucks.js) handles self.render() calls for this bundle. Switching to \"nunjucks\" requires `npm install nunjucks` in the project root — the framework does not bundle nunjucks.",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "type": "string",
+          "description": "Template engine for self.render() HTML output. \"swig\" (default) uses @rhinostone/swig via controller.render-swig.js; \"nunjucks\" uses the project-installed nunjucks package via controller.render-nunjucks.js. When set to \"nunjucks\", bundle startup fails with NUNJUCKS_NOT_INSTALLED if the package is absent from the project's node_modules.",
+          "enum": ["swig", "nunjucks"],
+          "default": "swig"
+        }
+      }
+    },
+    "nunjucks": {
+      "type": "object",
+      "description": "Configuration for the nunjucks template engine (when render.engine is \"nunjucks\"). The package is never framework-bundled — it must exist in the project's node_modules.",
+      "additionalProperties": false,
+      "properties": {
+        "package": {
+          "type": "string",
+          "description": "npm package name to resolve in <projectPath>/node_modules. Defaults to \"nunjucks\" (upstream).",
+          "default": "nunjucks"
+        },
+        "autoescape": {
+          "type": "boolean",
+          "description": "Whether the nunjucks Environment autoescapes by default. Passed to `new nunjucks.Environment(loader, { autoescape })`.",
+          "default": true
+        }
+      }
     }
   }
 }

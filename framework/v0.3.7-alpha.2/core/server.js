@@ -69,6 +69,7 @@ var Proc            = lib.Proc;
 var console         = lib.logger;
 var SwigFilters     = lib.SwigFilters;
 var swigResolver    = lib.swigResolver;
+var nunjucksResolver = lib.nunjucksResolver;
 var Domain          = lib.Domain;
 var domainLib       = new Domain();
 
@@ -100,6 +101,32 @@ function Server(options) {
      * @private
      * @param {object} conf - Bundle/env configuration object
      */
+    /**
+     * Preloads the nunjucks module for this bundle when render.engine is
+     * "nunjucks". Called once per bundle startup, before any HTTP request
+     * can reach controller.render-nunjucks.js. A missing nunjucks package
+     * throws NUNJUCKS_NOT_INSTALLED here, terminating bundle startup with
+     * a clear error — rendering with a stub would mask the misconfig.
+     *
+     * No-op when render.engine is unset or "swig" — the existing swig
+     * engine init handles that case via initSwigEngine below.
+     *
+     * @inner
+     * @private
+     * @param {object} conf - Bundle/env configuration object
+     */
+    var initNunjucksEngine = function(conf) {
+        var _settings = (conf && conf.content && conf.content.settings) || {};
+        var _engine = (_settings.render && _settings.render.engine) || 'swig';
+        if (_engine !== 'nunjucks') { return; }
+        var _nunjucksSettings = _settings.nunjucks || {};
+        // load() throws NUNJUCKS_NOT_INSTALLED if the project does not have
+        // nunjucks in its node_modules — we intentionally let that propagate
+        // so bundle startup fails with a clear message rather than
+        // deferring the failure to the first render attempt.
+        nunjucksResolver.load(self.executionPath, _nunjucksSettings);
+    };
+
     var initSwigEngine = function(conf) {
         // Resolve the swig module for this bundle. First call per process
         // honours the opt-in in conf.content.settings.swig (useProject,
@@ -251,9 +278,16 @@ function Server(options) {
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
             var engine = new Engine(serverOpt);
 
-            // swigEngine to render thrown HTML errors
+            // Swig engine is always initialised when the bundle has views —
+            // it handles both swig-rendered pages and any thrown HTML error
+            // pages (the framework error template is currently swig-only).
+            // Nunjucks is loaded in parallel when the bundle explicitly
+            // opts in via render.engine === 'nunjucks'; a missing nunjucks
+            // package throws NUNJUCKS_NOT_INSTALLED here, terminating
+            // bundle startup.
             if ( hasViews(self.appName) ) {
                 initSwigEngine(self.conf[self.appName][self.env]);
+                initNunjucksEngine(self.conf[self.appName][self.env]);
             }
 
 
