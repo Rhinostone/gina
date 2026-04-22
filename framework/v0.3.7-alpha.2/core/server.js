@@ -30,7 +30,13 @@ const fs            = require('fs');
 const os            = require('os');
 const path          = require('path');
 const EventEmitter  = require('events').EventEmitter;
-const swig          = require('@rhinostone/swig');
+// Swig is now resolved through lib.swigResolver so a project can opt into
+// a pinned @rhinostone/swig (or @rhinostone/swig-twig) via
+// settings.json > swig.useProject. Default-off: the resolver falls back to
+// the framework's require('@rhinostone/swig') whenever the flag is absent
+// or a safety gate rejects the project's pin. The module is cached on
+// process.gina._swig after the first call; `swig` below resolves to the
+// framework default when no bundle has loaded yet.
 const Busboy        = require('./deps/busboy-1.6.0');
 const Stream        = require('stream');
 const util          = require('util');
@@ -62,6 +68,7 @@ var merge           = lib.merge;
 var Proc            = lib.Proc;
 var console         = lib.logger;
 var SwigFilters     = lib.SwigFilters;
+var swigResolver    = lib.swigResolver;
 var Domain          = lib.Domain;
 var domainLib       = new Domain();
 
@@ -94,6 +101,16 @@ function Server(options) {
      * @param {object} conf - Bundle/env configuration object
      */
     var initSwigEngine = function(conf) {
+        // Resolve the swig module for this bundle. First call per process
+        // honours the opt-in in conf.content.settings.swig (useProject,
+        // package, min) and caches on process.gina._swig; subsequent calls
+        // return the cached reference. The resolver falls back to the
+        // framework copy on any safety-gate mismatch — same behaviour as
+        // the previous top-level require('@rhinostone/swig').
+        var _swigSettings = (conf && conf.content && conf.content.settings && conf.content.settings.swig) || {};
+        swigResolver.load(self.executionPath, _swigSettings);
+        var swig = swigResolver.get();
+
         // swig options
         var dir = conf.content.templates._common.html;
         var swigOptions = {

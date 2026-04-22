@@ -127,6 +127,24 @@
           ]
         }
       }
+    },
+    "swig": {
+      "type": "object",
+      "description": "Opt-in override for the swig template engine. When useProject is true the bundle loads the project-pinned package from the project's node_modules instead of the framework's bundled copy — provided the project version satisfies the framework's same-major and minimum-version constraint. A rejected override falls back to the framework copy and logs a warning at bundle startup.",
+      "additionalProperties": false,
+      "properties": {
+        "useProject": {
+          "type": "boolean",
+          "description": "When true, attempt to load the package from <projectPath>/node_modules. When false or omitted, always load the framework's bundled copy (default, current behaviour).",
+          "default": false
+        },
+        "package": {
+          "type": "string",
+          "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig to use the Twig-syntax frontend. The abandoned upstream \"swig\" name is never accepted.",
+          "enum": ["@rhinostone/swig", "@rhinostone/swig-twig"],
+          "default": "@rhinostone/swig"
+        }
+      }
     }
   }
 }

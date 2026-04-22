@@ -426,10 +426,104 @@ describe('08 - resolve() package override (swig-twig)', function () {
 
 
 // ---------------------------------------------------------------------------
-// 09 - Negative invariant — abandoned bare "swig" is never resolvable
+// 09 - load() / get() — cache on process.gina._swig
 // ---------------------------------------------------------------------------
 
-describe('09 - negative invariant', function () {
+describe('09 - load() + get() process-cache', function () {
+
+    it('exports load, get, getDecision, reset', function () {
+        assert.equal(typeof resolver.load,        'function');
+        assert.equal(typeof resolver.get,         'function');
+        assert.equal(typeof resolver.getDecision, 'function');
+        assert.equal(typeof resolver.reset,       'function');
+    });
+
+    it('reset() clears process.gina._swig / decision / package', function () {
+        if (!process.gina) { process.gina = {}; }
+        process.gina._swig         = { _sentinel: true };
+        process.gina._swigDecision = { source: 'project' };
+        process.gina._swigPackage  = '@rhinostone/swig-twig';
+        resolver.reset();
+        assert.equal(process.gina._swig,         undefined);
+        assert.equal(process.gina._swigDecision, undefined);
+        assert.equal(process.gina._swigPackage,  undefined);
+    });
+
+    it('load() with useProject:false caches the framework copy', function () {
+        resolver.reset();
+        var swig = resolver.load(FX.hasSatisfies, { useProject: false });
+        assert.ok(swig, 'load() must return something');
+        assert.equal(process.gina._swig, swig, 'cached on process.gina._swig');
+        assert.equal(resolver.getDecision().source, 'framework');
+    });
+
+    it('load() with useProject:true + satisfying pin caches the project copy', function () {
+        resolver.reset();
+        var swig = resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        assert.equal(swig._fixture, 'has-satisfies', 'returned swig is the project fixture');
+        var d = resolver.getDecision();
+        assert.equal(d.source,  'project');
+        assert.equal(d.version, '1.6.2');
+    });
+
+    it('load() is idempotent within a process — subsequent calls return the cached instance', function () {
+        resolver.reset();
+        var first  = resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        // Second call with DIFFERENT options should still return the first
+        // instance — the cache wins. This is the standalone-mode contract.
+        var second = resolver.load(FX.hasWrongMajor, { useProject: true, min: '1.6.0' });
+        assert.equal(first, second, 'second load returns the same cached instance');
+    });
+
+    it('get() falls back to framework default when nothing has been loaded', function () {
+        resolver.reset();
+        var swig = resolver.get();
+        assert.ok(swig, 'get() must never return null/undefined');
+        assert.equal(process.gina._swig, swig, 'fallback is cached too');
+        assert.equal(resolver.getDecision().source, 'framework');
+    });
+
+    it('get() after load() returns the loaded instance', function () {
+        resolver.reset();
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        var swig = resolver.get();
+        assert.equal(swig._fixture, 'has-satisfies');
+    });
+
+    it('load() with a below-floor pin caches the framework copy + records the warning', function () {
+        resolver.reset();
+        var swig = resolver.load(FX.hasTooOld, { useProject: true, min: '1.6.0' });
+        // Framework copy is a real module (no _fixture marker) — just assert
+        // the decision reflects the rejection.
+        var d = resolver.getDecision();
+        assert.equal(d.source,  'framework');
+        assert.equal(d.warning, 'version-mismatch');
+        assert.equal(d.version, '1.5.0');
+    });
+
+    it('load() honours @rhinostone/swig-twig when the project has it installed', function () {
+        resolver.reset();
+        var twig = resolver.load(FX.hasTwig, {
+            useProject: true,
+            'package':  '@rhinostone/swig-twig',
+            min:        '2.0.0'
+        });
+        assert.equal(twig._fixture, 'has-twig');
+        assert.equal(resolver.getDecision()['package'], '@rhinostone/swig-twig');
+    });
+
+    // Restore a clean cache so subsequent test files see the framework
+    // default — critical when the full suite is run via
+    // `node --test test/**/*.test.js`, since process.gina persists.
+    after(function () { resolver.reset(); });
+});
+
+
+// ---------------------------------------------------------------------------
+// 10 - Negative invariant — abandoned bare "swig" is never resolvable
+// ---------------------------------------------------------------------------
+
+describe('10 - negative invariant', function () {
 
     it('the abandoned upstream package name "swig" is not a valid default', function () {
         // Guardrail for the CVE-2023-25345 scenario: a project may still

@@ -308,8 +308,157 @@ function resolve(projectPath, options) {
     return decision;
 }
 
+/**
+ * Resolves + loads the swig module for the running bundle. Idempotent within
+ * a single process: the loaded module is cached on `process.gina._swig` so
+ * that (a) repeated calls during bundle startup return the same instance and
+ * (b) `controller.js` — which is re-required on every request in dev mode
+ * via `refreshCoreDependencies()` — always sees the same swig reference
+ * without re-running the resolver.
+ *
+ * Standalone-mode note: when multiple bundles share a process and disagree
+ * on `swig.useProject`, the first caller to reach `load()` wins. A
+ * subsequent caller with a different package/version will log a one-line
+ * `[swig-resolver]` warning and keep the already-loaded copy. Split the
+ * process (one bundle per port) if you need per-bundle swig isolation.
+ *
+ * @memberof module:gina/lib/swig-resolver
+ * @param   {string|null|undefined} projectPath
+ * @param   {ResolverOptions}       [options]
+ * @returns {*} The loaded swig module (or whatever `require()` returned for the project package).
+ *
+ * @example
+ * var swig = require('lib/swig-resolver').load('/srv/app', {
+ *     useProject: true,
+ *     package:    '@rhinostone/swig'
+ * });
+ * swig.setDefaults({ ... });
+ */
+function load(projectPath, options) {
+    options = options || {};
+    var pkgName = options['package'] || DEFAULT_PACKAGE;
+
+    if (typeof process.gina === 'undefined' || process.gina === null) {
+        process.gina = {};
+    }
+
+    if (process.gina._swig) {
+        // Already loaded. Log a warning if the new caller disagrees on the
+        // package name — that is the only shape of standalone-mode conflict
+        // worth surfacing; version drift below the floor falls back to the
+        // framework's copy, which is also what the first bundle got.
+        if (process.gina._swigPackage && process.gina._swigPackage !== pkgName) {
+            try {
+                console.warn(
+                    '[swig-resolver] second bundle requested ' + pkgName +
+                    ' but ' + process.gina._swigPackage + ' is already loaded for this process; ignoring'
+                );
+            } catch (e) { /* console may be replaced mid-bootstrap */ }
+        }
+        return process.gina._swig;
+    }
+
+    var decision = resolve(projectPath, options);
+    var swig;
+    if (decision.source === 'project') {
+        swig = require(decision.path);
+    } else {
+        swig = require(pkgName);
+    }
+
+    process.gina._swig         = swig;
+    process.gina._swigDecision = decision;
+    process.gina._swigPackage  = pkgName;
+
+    if (decision.warning) {
+        try {
+            console.warn(
+                '[swig-resolver] project override ignored (' + decision.warning + ')' +
+                (decision.version ? ' — project pinned ' + decision.version : '') +
+                '; using framework copy of ' + pkgName
+            );
+        } catch (e) { /* ignore console replacement races */ }
+    } else if (decision.source === 'project') {
+        try {
+            console.log(
+                '[swig-resolver] using project ' + pkgName + '@' + decision.version +
+                ' from ' + decision.path
+            );
+        } catch (e) { /* ignore */ }
+    }
+
+    return swig;
+}
+
+/**
+ * Returns the swig module cached by the most recent {@link load} call. When
+ * called before `load()` (tests, early bootstrap paths), falls back to the
+ * framework's default `require(DEFAULT_PACKAGE)` so callers never see null.
+ * The first fallback is memoised on `process.gina._swig` — subsequent calls
+ * return the same instance without re-requiring.
+ *
+ * @memberof module:gina/lib/swig-resolver
+ * @returns {*}
+ */
+function get() {
+    if (typeof process.gina === 'undefined' || process.gina === null) {
+        process.gina = {};
+    }
+    if (!process.gina._swig) {
+        process.gina._swig         = require(DEFAULT_PACKAGE);
+        process.gina._swigDecision = {
+            source:  'framework',
+            'package': DEFAULT_PACKAGE,
+            version: null,
+            path:    null,
+            warning: null
+        };
+        process.gina._swigPackage  = DEFAULT_PACKAGE;
+    }
+    return process.gina._swig;
+}
+
+/**
+ * Returns the decision record from the most recent {@link load} call, or a
+ * framework-default record when nothing has been loaded yet. Exposed for
+ * logging and test assertions.
+ *
+ * @memberof module:gina/lib/swig-resolver
+ * @returns {ResolverDecision}
+ */
+function getDecision() {
+    if (typeof process.gina === 'undefined' || !process.gina._swigDecision) {
+        return {
+            source:  'framework',
+            'package': DEFAULT_PACKAGE,
+            version: null,
+            path:    null,
+            warning: null
+        };
+    }
+    return process.gina._swigDecision;
+}
+
+/**
+ * Clears the cached swig module and decision. Intended for tests — callers
+ * should never need this in production code.
+ *
+ * @memberof module:gina/lib/swig-resolver
+ */
+function reset() {
+    if (typeof process.gina === 'object' && process.gina !== null) {
+        delete process.gina._swig;
+        delete process.gina._swigDecision;
+        delete process.gina._swigPackage;
+    }
+}
+
 module.exports = {
     resolve:                resolve,
+    load:                   load,
+    get:                    get,
+    getDecision:            getDecision,
+    reset:                  reset,
     compareSemver:          compareSemver,
     satisfiesMajorAndFloor: satisfiesMajorAndFloor,
     splitVersion:           splitVersion,

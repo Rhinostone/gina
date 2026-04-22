@@ -53,7 +53,13 @@ var routingLib      = lib.routing;
 // removed: Domain import + domainLib instantiation — domainLib was never used in active code
 // (only usage at line 508 is commented out); re-instantiating Domain on every dev-mode request
 // via refreshCoreDependencies() caused [DOMAIN] PSL Loaded ×2 noise per request
-var swig            = require('@rhinostone/swig');
+// Swig is resolved through lib.swigResolver (process-cached on
+// process.gina._swig). Server.js's initSwigEngine() populates the cache
+// during bundle startup; controller.js is re-required on every request
+// in dev mode via refreshCoreDependencies(), so this getter sees the
+// already-loaded instance without re-running the resolver. Falls back to
+// require('@rhinostone/swig') when no bundle has loaded yet (tests, etc).
+var swig            = lib.swigResolver.get();
 const { type }      = require('node:os');
 var SwigFilters     = lib.SwigFilters;
 var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
