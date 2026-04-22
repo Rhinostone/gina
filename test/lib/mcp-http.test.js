@@ -579,3 +579,397 @@ describe('13 - exports', function() {
         assert.equal(typeof(httpLib.DEFAULT_MAX_BODY_BYTES), 'number');
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 14 — Origin allowlist (Session 2)
+// ---------------------------------------------------------------------------
+
+describe('14 - Origin allowlist', function() {
+
+    it('accepts requests without an Origin header (non-browser clients)', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, { jsonrpc: '2.0', id: 1, method: 'ping' });
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('accepts Origin http://localhost (any port) by default', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://localhost:3000' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('accepts Origin http://127.0.0.1 by default', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://127.0.0.1:8080' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('accepts Origin http://[::1] by default', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://[::1]:8080' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('rejects a non-loopback Origin with 403 and JSON-RPC error body', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://evil.example.com' }
+            );
+            assert.equal(r.status, 403);
+            var parsed = JSON.parse(r.body);
+            assert.equal(parsed.error.code, -32600);
+            assert.match(parsed.error.message, /Origin not allowed/);
+            assert.match(parsed.error.message, /evil\.example\.com/);
+        });
+    });
+
+    it('does not echo CORS headers on a rejected Origin', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://evil.example.com' }
+            );
+            assert.equal(r.headers['access-control-allow-origin'], undefined);
+        });
+    });
+
+    it('accepts an extra origin passed in allowedOrigins', async function() {
+        await withTransport(makeStubServer(), { allowedOrigins: ['http://app.example.com'] }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://app.example.com' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('still accepts loopback when extra allowedOrigins are configured', async function() {
+        await withTransport(makeStubServer(), { allowedOrigins: ['http://app.example.com'] }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://localhost:5000' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('disables the Origin check when allowedOrigins contains "*"', async function() {
+        await withTransport(makeStubServer(), { allowedOrigins: ['*'] }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://anywhere.example.com' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('rejects a non-http(s) scheme even if the hostname is loopback', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'file://localhost' }
+            );
+            assert.equal(r.status, 403);
+        });
+    });
+
+    it('rejects a malformed Origin string', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'not a url' }
+            );
+            assert.equal(r.status, 403);
+        });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 15 — Bearer token authentication (Session 2)
+// ---------------------------------------------------------------------------
+
+describe('15 - Bearer authentication', function() {
+
+    it('passes through when no authToken is configured', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, { jsonrpc: '2.0', id: 1, method: 'ping' });
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('accepts a request with a matching Bearer token', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'authorization': 'Bearer s3cr3t' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('rejects with 401 + WWW-Authenticate when the header is missing', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port, { jsonrpc: '2.0', id: 1, method: 'ping' });
+            assert.equal(r.status, 401);
+            assert.match(r.headers['www-authenticate'], /^Bearer\s+realm="MCP"$/);
+            var parsed = JSON.parse(r.body);
+            assert.equal(parsed.error.code, -32600);
+            assert.match(parsed.error.message, /Bearer/);
+        });
+    });
+
+    it('rejects a non-Bearer Authorization scheme', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'authorization': 'Basic dXNlcjpwYXNz' }
+            );
+            assert.equal(r.status, 401);
+        });
+    });
+
+    it('rejects a wrong Bearer token', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'authorization': 'Bearer wrong' }
+            );
+            assert.equal(r.status, 401);
+        });
+    });
+
+    it('rejects a Bearer with a length-mismatched token (constant-time guard)', async function() {
+        // Length mismatch must NOT throw from timingSafeEqual — the helper
+        // short-circuits length differences before the constant-time compare.
+        await withTransport(makeStubServer(), { authToken: 'abcdef' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'authorization': 'Bearer abcdefghij' }
+            );
+            assert.equal(r.status, 401);
+        });
+    });
+
+    it('accepts case-insensitive "bearer" scheme prefix', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'authorization': 'bearer s3cr3t' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('trims trailing whitespace on the presented token', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'authorization': 'Bearer s3cr3t   ' }
+            );
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('echoes CORS headers on 401 so browser clients see the error body', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://localhost:3000' }
+            );
+            assert.equal(r.status, 401);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:3000');
+            assert.match(r.headers['vary'], /Origin/);
+        });
+    });
+
+    it('enforces Origin gate BEFORE bearer — disallowed origin → 403 even with token', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://evil.example.com', 'authorization': 'Bearer s3cr3t' }
+            );
+            assert.equal(r.status, 403);
+        });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 16 — CORS response headers on successful POST
+// ---------------------------------------------------------------------------
+
+describe('16 - CORS response headers', function() {
+
+    it('echoes allowed Origin + vary: Origin on JSON response', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://localhost:4000' }
+            );
+            assert.equal(r.status, 200);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:4000');
+            assert.match(r.headers['vary'], /Origin/);
+        });
+    });
+
+    it('echoes * when allowedOrigins is ["*"] (wildcard)', async function() {
+        await withTransport(makeStubServer(), { allowedOrigins: ['*'] }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://anywhere.example.com' }
+            );
+            assert.equal(r.headers['access-control-allow-origin'], '*');
+            // No vary: Origin when wildcard — cached responses are safe across origins.
+            assert.equal(r.headers['vary'], undefined);
+        });
+    });
+
+    it('does not add CORS headers when the request has no Origin', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, { jsonrpc: '2.0', id: 1, method: 'ping' });
+            assert.equal(r.headers['access-control-allow-origin'], undefined);
+            assert.equal(r.headers['vary'], undefined);
+        });
+    });
+
+    it('echoes Origin on SSE responses too', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://localhost:3000', 'accept': 'text/event-stream' }
+            );
+            assert.match(r.headers['content-type'], /text\/event-stream/);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:3000');
+        });
+    });
+
+    it('echoes Origin on 202 notifications responses', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', method: 'notifications/initialized' },
+                { 'origin': 'http://localhost:3000' }
+            );
+            assert.equal(r.status, 202);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:3000');
+        });
+    });
+
+    it('echoes Origin on 405 method-not-allowed', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, null,
+                { 'origin': 'http://localhost:3000' }, 'GET');
+            assert.equal(r.status, 405);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:3000');
+        });
+    });
+
+    it('echoes Origin on 413 body-overflow', async function() {
+        await withTransport(makeStubServer(), { maxBodyBytes: 64 }, async function(info) {
+            var big = { jsonrpc: '2.0', id: 1, method: 'x', params: { pad: 'a'.repeat(1024) } };
+            var r = await postRequest(info.port, big, { 'origin': 'http://localhost:3000' });
+            assert.equal(r.status, 413);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:3000');
+        });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 17 — OPTIONS preflight (Session 2 enhancements)
+// ---------------------------------------------------------------------------
+
+describe('17 - OPTIONS preflight (security)', function() {
+
+    it('lists authorization in access-control-allow-headers', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, null, null, 'OPTIONS');
+            assert.match(r.headers['access-control-allow-headers'], /authorization/);
+        });
+    });
+
+    it('echoes allowed Origin + vary on preflight', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, null,
+                { 'origin': 'http://localhost:3000' }, 'OPTIONS');
+            assert.equal(r.status, 204);
+            assert.equal(r.headers['access-control-allow-origin'], 'http://localhost:3000');
+            assert.match(r.headers['vary'], /Origin/);
+        });
+    });
+
+    it('returns 204 on preflight from a disallowed Origin but WITHOUT ACAO header', async function() {
+        await withTransport(makeStubServer(), {}, async function(info) {
+            var r = await postRequest(info.port, null,
+                { 'origin': 'http://evil.example.com' }, 'OPTIONS');
+            // Browsers still see 204 but the missing ACAO header means they
+            // reject the actual request — the correct CORS semantics.
+            assert.equal(r.status, 204);
+            assert.equal(r.headers['access-control-allow-origin'], undefined);
+        });
+    });
+
+    it('OPTIONS bypasses the bearer check (preflight cannot carry auth)', async function() {
+        await withTransport(makeStubServer(), { authToken: 's3cr3t' }, async function(info) {
+            var r = await postRequest(info.port, null,
+                { 'origin': 'http://localhost:3000' }, 'OPTIONS');
+            assert.equal(r.status, 204);
+            // No Authorization sent → still 204, not 401.
+        });
+    });
+
+    it('echoes * on preflight when wildcard is configured', async function() {
+        await withTransport(makeStubServer(), { allowedOrigins: ['*'] }, async function(info) {
+            var r = await postRequest(info.port, null,
+                { 'origin': 'http://anywhere.example.com' }, 'OPTIONS');
+            assert.equal(r.headers['access-control-allow-origin'], '*');
+        });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 18 — Input validation: new security options
+// ---------------------------------------------------------------------------
+
+describe('18 - input validation (security opts)', function() {
+
+    it('treats empty string authToken as "no auth configured"', async function() {
+        await withTransport(makeStubServer(), { authToken: '' }, async function(info) {
+            var r = await postRequest(info.port, { jsonrpc: '2.0', id: 1, method: 'ping' });
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('treats non-string authToken as "no auth configured"', async function() {
+        await withTransport(makeStubServer(), { authToken: 123 }, async function(info) {
+            var r = await postRequest(info.port, { jsonrpc: '2.0', id: 1, method: 'ping' });
+            assert.equal(r.status, 200);
+        });
+    });
+
+    it('treats non-array allowedOrigins as empty (loopback-only default)', async function() {
+        await withTransport(makeStubServer(), { allowedOrigins: 'http://x' }, async function(info) {
+            var r = await postRequest(info.port,
+                { jsonrpc: '2.0', id: 1, method: 'ping' },
+                { 'origin': 'http://x' }
+            );
+            assert.equal(r.status, 403);
+        });
+    });
+});

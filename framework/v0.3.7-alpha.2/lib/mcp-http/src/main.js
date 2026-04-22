@@ -10,11 +10,15 @@
  *  - Emit `Mcp-Session-Id` on `initialize` responses; echo when provided.
  *  - Enforce a body-size cap (413 on overflow).
  *  - Return 405 for GET / DELETE (no server-initiated streams in v1).
+ *  - Validate the `Origin` header against an allowlist (DNS rebinding
+ *    mitigation per MCP spec §Security).
+ *  - Enforce a static bearer token when `authToken` is configured.
+ *  - Emit full CORS response headers (`access-control-allow-origin` +
+ *    `vary: Origin`, or `*` when wildcard allowlist is in effect).
  *
- * Out of scope (Session 2):
- *  - Origin allowlist check
- *  - `Authorization: Bearer` enforcement
- *  - Full CORS response headers on POST
+ * Out of scope (Session 3):
+ *  - CLI wiring on `bundle:mcp-start` (`--transport=http` flag, manifest
+ *    precedence, `host_v4` fallback).
  *
  * The transport consumes an `mcpServer` instance that exposes
  * `handleMessage(raw) → Promise<string|null>`. All JSON-RPC framing and
@@ -28,6 +32,9 @@ var crypto = require('crypto');
 
 var DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 
+// Header value advertised on 401 responses and in preflight allow-headers.
+var BEARER_REALM = 'MCP';
+
 
 /**
  * Creates an HTTP transport bound to an mcp-server instance. Returns a
@@ -38,11 +45,26 @@ var DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
  * @param   {string}    [opts.host='127.0.0.1'] - Bind host
  * @param   {number}    [opts.port=0]           - Bind port (0 = OS-assigned)
  * @param   {number}    [opts.maxBodyBytes]     - Cap on POST body size
+ * @param   {string}    [opts.authToken]        - If set, `Authorization: Bearer <token>`
+ *                                                is required on every non-OPTIONS request.
+ *                                                Constant-time compared. When omitted,
+ *                                                no auth is enforced (the network bind
+ *                                                policy IS the security boundary).
+ * @param   {string[]}  [opts.allowedOrigins]   - Additional origins to accept beyond the
+ *                                                built-in loopback allowlist
+ *                                                (`http(s)://localhost`, `http(s)://127.0.0.1`,
+ *                                                `http(s)://[::1]`, any port). Use `['*']`
+ *                                                to disable the Origin check entirely.
  * @param   {function}  [opts.onError]          - (err) => void, for transport logs
  * @returns {{start: function, stop: function, address: function}}
  *
  * @example
- *   var transport = createHttpTransport({ mcpServer: server, port: 3107 });
+ *   var transport = createHttpTransport({
+ *       mcpServer: server,
+ *       port: 3107,
+ *       authToken: 'secret',
+ *       allowedOrigins: ['http://mcp-inspector.example.com']
+ *   });
  *   transport.start().then(function (info) {
  *       console.log('listening on', info.host + ':' + info.port);
  *   });
@@ -62,14 +84,107 @@ function createHttpTransport(opts) {
     var maxBodyBytes  = (typeof(opts.maxBodyBytes) === 'number' && opts.maxBodyBytes > 0)
                         ? opts.maxBodyBytes
                         : DEFAULT_MAX_BODY_BYTES;
+    var authToken     = (typeof(opts.authToken) === 'string' && opts.authToken.length) ? opts.authToken : null;
+    var extraOrigins  = Array.isArray(opts.allowedOrigins) ? opts.allowedOrigins.slice() : [];
+    var originWildcard = (extraOrigins.indexOf('*') !== -1);
     var onError       = (typeof(opts.onError) === 'function') ? opts.onError : function() {};
 
     var httpServer = null;
 
 
+    // -----------------------------------------------------------------------
+    // Security: Origin allowlist + static bearer
+    // -----------------------------------------------------------------------
+
     /**
-     * Node `request` event handler. Routes by method, delegates body handling
-     * to processBody.
+     * True when a specific origin string should be treated as allowed.
+     * Loopback hostnames (`localhost`, `127.0.0.1`, `::1`) on `http:`/`https:`
+     * schemes pass regardless of port — that covers the common dev case
+     * (MCP Inspector on `http://localhost:<random-port>`, browser dev tools).
+     *
+     * @private
+     */
+    function isOriginAllowedString(origin) {
+        if (extraOrigins.indexOf(origin) !== -1) return true;
+        var parsed;
+        try { parsed = new URL(origin); }
+        catch (e) { return false; }
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+        // WHATWG URL keeps IPv6 hostnames bracketed (`[::1]`); accept both
+        // forms so we don't drop a legitimate `http://[::1]:8080` origin.
+        var h = parsed.hostname;
+        return h === 'localhost' || h === '127.0.0.1' || h === '::1' || h === '[::1]';
+    }
+
+    /**
+     * True when the request should pass the Origin gate. No `Origin` header
+     * (non-browser clients — curl, CLI tools, desktop MCP hosts) passes.
+     * Wildcard allowlist (`*`) passes everything.
+     *
+     * @private
+     */
+    function isOriginAllowed(req) {
+        var origin = req.headers['origin'];
+        if (!origin) return true;
+        if (originWildcard) return true;
+        return isOriginAllowedString(origin);
+    }
+
+
+    /**
+     * True when the request carries a valid bearer (or no token is configured).
+     * Constant-time compares the presented token to the configured one.
+     * Length mismatch short-circuits to false WITHOUT calling
+     * `crypto.timingSafeEqual` — that API throws on length mismatch.
+     *
+     * @private
+     */
+    function isAuthed(req) {
+        if (!authToken) return true;
+        var header = req.headers['authorization'] || '';
+        var m = /^Bearer\s+(.+)$/i.exec(header);
+        if (!m) return false;
+        var presented = m[1].trim();
+        var expected  = Buffer.from(authToken, 'utf8');
+        var actual    = Buffer.from(presented,  'utf8');
+        if (expected.length !== actual.length) return false;
+        try { return crypto.timingSafeEqual(expected, actual); }
+        catch (e) { return false; }
+    }
+
+
+    /**
+     * Merges CORS response headers into a base header bag. Safe to call even
+     * when there is no `Origin` on the request — returns the base bag unchanged
+     * in that case.
+     *
+     * @private
+     */
+    function mergeCorsHeaders(req, baseHeaders) {
+        var origin = req.headers['origin'];
+        if (!origin) return baseHeaders;
+        if (originWildcard) {
+            baseHeaders['access-control-allow-origin'] = '*';
+            return baseHeaders;
+        }
+        if (isOriginAllowedString(origin)) {
+            baseHeaders['access-control-allow-origin'] = origin;
+            baseHeaders['vary'] = 'Origin';
+        }
+        return baseHeaders;
+    }
+
+
+    // -----------------------------------------------------------------------
+    // Request dispatch
+    // -----------------------------------------------------------------------
+
+    /**
+     * Node `request` event handler. Ordering:
+     *   OPTIONS preflight   → writePreflight, bypassing origin/auth gates
+     *   Origin gate         → 403 if the origin is disallowed
+     *   Bearer gate         → 401 if authToken is set and token doesn't match
+     *   Method routing      → 405 for GET/DELETE/others, POST falls through
      *
      * @private
      */
@@ -78,34 +193,122 @@ function createHttpTransport(opts) {
         var method = req.method;
 
         if (method === 'OPTIONS') {
-            // Minimal CORS preflight — full Origin/header echo lands in Session 2.
-            res.writeHead(204, {
-                'access-control-allow-methods': 'POST, OPTIONS',
-                'access-control-allow-headers': 'content-type, accept, mcp-session-id, mcp-protocol-version',
-                'access-control-max-age': '600'
-            });
-            return res.end();
+            return writePreflight(req, res);
+        }
+
+        if (!isOriginAllowed(req)) {
+            return writeForbiddenOrigin(req, res);
+        }
+
+        if (!isAuthed(req)) {
+            return writeUnauthorized(req, res);
         }
 
         if (method === 'GET' || method === 'DELETE') {
-            var msg = 'Method not allowed: ' + method + '. MCP Streamable HTTP exposes only POST in this server.';
-            res.writeHead(405, {
-                'content-type': 'application/json; charset=utf-8',
-                'allow':        'POST'
-            });
-            return res.end(JSON.stringify({
-                jsonrpc: '2.0',
-                id:      null,
-                error:   { code: -32600, message: msg }
-            }));
+            return writeMethodNotAllowed(req, res, method);
         }
 
         if (method !== 'POST') {
-            res.writeHead(405, { 'allow': 'POST' });
-            return res.end();
+            return writeMethodNotAllowed(req, res, method);
         }
 
         readBodyAndProcess(req, res);
+    }
+
+
+    /**
+     * CORS preflight response. When the request Origin is allowed (or wildcard
+     * is in effect), echoes it in `access-control-allow-origin`. When it's
+     * not, we still respond 204 with the methods / headers advertisement but
+     * omit `access-control-allow-origin` — the browser then denies the actual
+     * request, which is the correct CORS outcome. OPTIONS never enforces the
+     * bearer (preflight cannot carry auth headers).
+     *
+     * @private
+     */
+    function writePreflight(req, res) {
+        var headers = {
+            'access-control-allow-methods': 'POST, OPTIONS',
+            'access-control-allow-headers': 'content-type, accept, authorization, mcp-session-id, mcp-protocol-version',
+            'access-control-max-age':       '600'
+        };
+        var origin = req.headers['origin'];
+        if (origin) {
+            if (originWildcard) {
+                headers['access-control-allow-origin'] = '*';
+            } else if (isOriginAllowedString(origin)) {
+                headers['access-control-allow-origin'] = origin;
+                headers['vary'] = 'Origin';
+            }
+        }
+        res.writeHead(204, headers);
+        res.end();
+    }
+
+
+    /**
+     * 403 response for a disallowed Origin. Intentionally does NOT echo CORS
+     * headers — doing so would defeat the purpose of the rejection.
+     *
+     * @private
+     */
+    function writeForbiddenOrigin(req, res) {
+        var origin = req.headers['origin'] || '(none)';
+        res.writeHead(403, { 'content-type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({
+            jsonrpc: '2.0',
+            id:      null,
+            error:   {
+                code:    -32600,
+                message: 'Origin not allowed: ' + origin
+            }
+        }));
+    }
+
+
+    /**
+     * 401 response for missing or invalid bearer. Includes `WWW-Authenticate`
+     * per RFC 6750 and still echoes CORS so browser clients can read the
+     * error body. The JSON-RPC envelope gives a human-readable reason; the
+     * HTTP status + `WWW-Authenticate` gives the machine-readable one.
+     *
+     * @private
+     */
+    function writeUnauthorized(req, res) {
+        var headers = mergeCorsHeaders(req, {
+            'content-type':     'application/json; charset=utf-8',
+            'www-authenticate': 'Bearer realm="' + BEARER_REALM + '"'
+        });
+        res.writeHead(401, headers);
+        res.end(JSON.stringify({
+            jsonrpc: '2.0',
+            id:      null,
+            error:   {
+                code:    -32600,
+                message: 'Missing or invalid Bearer token'
+            }
+        }));
+    }
+
+
+    /**
+     * 405 Method Not Allowed + JSON-RPC error body. Includes CORS echo so a
+     * browser client making a mistaken GET sees the error detail.
+     *
+     * @private
+     */
+    function writeMethodNotAllowed(req, res, method) {
+        var msg = 'Method not allowed: ' + method + '. MCP Streamable HTTP exposes only POST in this server.';
+        var headers = mergeCorsHeaders(req, {
+            'content-type': 'application/json; charset=utf-8',
+            'allow':        'POST'
+        });
+        res.writeHead(405, headers);
+        res.end(JSON.stringify({
+            jsonrpc: '2.0',
+            id:      null,
+            error:   { code: -32600, message: msg }
+        }));
     }
 
 
@@ -126,7 +329,10 @@ function createHttpTransport(opts) {
             received += chunk.length;
             if (received > maxBodyBytes) {
                 aborted = true;
-                res.writeHead(413, { 'content-type': 'application/json; charset=utf-8' });
+                var headers = mergeCorsHeaders(req, {
+                    'content-type': 'application/json; charset=utf-8'
+                });
+                res.writeHead(413, headers);
                 res.end(JSON.stringify({
                     jsonrpc: '2.0',
                     id:      null,
@@ -182,9 +388,9 @@ function createHttpTransport(opts) {
                 error:   { code: -32700, message: 'Parse error: ' + parseErr.message }
             });
             if (wantsSse) {
-                return writeSseFrames(res, [errFrame], clientSessionId);
+                return writeSseFrames(req, res, [errFrame], clientSessionId);
             }
-            return writeJsonFrame(res, errFrame, clientSessionId);
+            return writeJsonFrame(req, res, errFrame, clientSessionId);
         }
 
         var isBatch = Array.isArray(parsed);
@@ -219,30 +425,33 @@ function createHttpTransport(opts) {
 
             if (nonNull.length === 0) {
                 // All frames were notifications — spec says 202 Accepted, no body.
-                var headers = {};
+                var headers = mergeCorsHeaders(req, {});
                 if (responseSessionId) headers['mcp-session-id'] = responseSessionId;
                 res.writeHead(202, headers);
                 return res.end();
             }
 
             if (wantsSse) {
-                return writeSseFrames(res, nonNull, responseSessionId);
+                return writeSseFrames(req, res, nonNull, responseSessionId);
             }
 
             if (isBatch) {
                 // JSON-RPC batch response is an array of response frames.
                 // Each frame is already a JSON string from handleMessage.
                 var arrayBody = '[' + nonNull.join(',') + ']';
-                return writeJsonFrame(res, arrayBody, responseSessionId);
+                return writeJsonFrame(req, res, arrayBody, responseSessionId);
             }
 
-            return writeJsonFrame(res, nonNull[0], responseSessionId);
+            return writeJsonFrame(req, res, nonNull[0], responseSessionId);
 
         }, function(err) {
             // handleMessage always resolves — this is defensive.
             onError(err);
             try {
-                res.writeHead(500, { 'content-type': 'application/json; charset=utf-8' });
+                var headers = mergeCorsHeaders(req, {
+                    'content-type': 'application/json; charset=utf-8'
+                });
+                res.writeHead(500, headers);
                 res.end(JSON.stringify({
                     jsonrpc: '2.0',
                     id:      null,
@@ -255,15 +464,15 @@ function createHttpTransport(opts) {
 
     /**
      * Writes a single JSON response frame (object or array-as-string) with
-     * content-length and optional session-id header.
+     * content-length, CORS, and optional session-id header.
      *
      * @private
      */
-    function writeJsonFrame(res, frameBody, sessionId) {
-        var headers = {
+    function writeJsonFrame(req, res, frameBody, sessionId) {
+        var headers = mergeCorsHeaders(req, {
             'content-type':   'application/json; charset=utf-8',
             'content-length': Buffer.byteLength(frameBody, 'utf8')
-        };
+        });
         if (sessionId) headers['mcp-session-id'] = sessionId;
         res.writeHead(200, headers);
         res.end(frameBody);
@@ -277,12 +486,12 @@ function createHttpTransport(opts) {
      *
      * @private
      */
-    function writeSseFrames(res, frames, sessionId) {
-        var headers = {
+    function writeSseFrames(req, res, frames, sessionId) {
+        var headers = mergeCorsHeaders(req, {
             'content-type':  'text/event-stream; charset=utf-8',
             'cache-control': 'no-cache, no-transform',
             'connection':    'keep-alive'
-        };
+        });
         if (sessionId) headers['mcp-session-id'] = sessionId;
         res.writeHead(200, headers);
         for (var i = 0; i < frames.length; i++) {
@@ -291,6 +500,10 @@ function createHttpTransport(opts) {
         res.end();
     }
 
+
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
 
     /**
      * Starts the HTTP listener. Rejects if called twice. Resolves with the
