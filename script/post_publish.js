@@ -376,6 +376,27 @@ function PostPublish() {
         new _(pack, true).rmSync();
         lib.generator.createFileFromDataSync(JSON.stringify(packObj, null, 2), pack);
 
+        // Update framework/v{new}/package.json version field
+        // The file is gitignored and moves with the renameSync above, so its
+        // version field stays at whatever it was last set to — drifting away
+        // from the framework dir name. Rewrite it so a local dev environment
+        // stays consistent with the root package.json after each bump.
+        var fwPackPath = _(newVersionDir + '/package.json', true);
+        try {
+            if (new _(fwPackPath).existsSync()) {
+                var fwPackSrc = fs.readFileSync(fwPackPath, 'utf8');
+                var fwPackObj = JSON.parse(fwPackSrc);
+                if (fwPackObj.version !== newVersion) {
+                    var oldFwVersion = fwPackObj.version;
+                    fwPackObj.version = newVersion;
+                    fs.writeFileSync(fwPackPath, JSON.stringify(fwPackObj, null, 2) + '\n');
+                    console.info('[bumpVersion] Updated framework/v' + newVersion + '/package.json version: ' + oldFwVersion + ' -> ' + newVersion);
+                }
+            }
+        } catch (fwErr) {
+            console.warn('[bumpVersion] Could not update framework package.json: ' + (fwErr.message || fwErr));
+        }
+
         // Update gna.js — replace all framework version path references
         var gnaJsPath = _(self.gina + '/gna.js', true);
         try {
