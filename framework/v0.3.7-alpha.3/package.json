@@ -1,0 +1,7 @@
+{
+  "name": "gina-framework",
+  "version": "0.3.7-alpha.3",
+  "dependencies": {
+    "@rhinostone/swig": "^1.6.0"
+  }
+}

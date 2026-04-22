@@ -58,7 +58,6 @@ src.old
 
 # Framework
 framework/v*/package-lock.json
-framework/v*/package.json
 framework/v*/core/deps/*/package.json.dist
 # framework/v*/
 framework/v*/test/workspace
