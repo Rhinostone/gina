@@ -34,4 +34,29 @@ EOF
     exit 1
 fi
 
+# ---------------------------------------------------------------------------
+# Changie entry validation (llms.txt lesson #66)
+#
+# Unquoted bodies in .changes/unreleased/*.yaml silently truncate at ` #`
+# (YAML comment marker) or break parsing on `:` (mapping-values error). The
+# check_changie_entries.js script rejects any staged entry whose body isn't
+# single-quoted, double-quoted, or a block scalar.
+# ---------------------------------------------------------------------------
+
+changes_files=$(git diff --cached --name-only --diff-filter=AM | grep -E '^\.changes/unreleased/.+\.yaml$' || true)
+
+if [ -n "$changes_files" ]; then
+    # xargs -d works on GNU but not BSD — use a loop for portability.
+    file_args=""
+    while IFS= read -r f; do
+        file_args="$file_args \"$f\""
+    done <<EOF
+$changes_files
+EOF
+    # shellcheck disable=SC2086  # intentional word-split over quoted args
+    if ! eval "node script/check_changie_entries.js $file_args"; then
+        exit 1
+    fi
+fi
+
 exit 0
