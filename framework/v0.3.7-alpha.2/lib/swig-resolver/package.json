@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-swig-resolver",
+  "version": "1.0.0",
+  "description": "Detects a project-installed @rhinostone/swig (or swig-twig) and semver-gates it against the framework floor. Returns a decision record the server wires into the template engine; falls back to the framework copy on any mismatch.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

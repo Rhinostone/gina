@@ -85,6 +85,11 @@ function Lib() {
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.
         routingIntrospect: _require('./routing-introspect'),
+        // Pure resolver that picks between a project-installed @rhinostone/swig
+        // (or swig-twig) and the framework's bundled copy. Opt-in via
+        // settings.json > swig.useProject; default-off. Returns a decision
+        // record — the caller performs the actual require.
+        swigResolver    : _require('./swig-resolver'),
         // #AI8b — MCP server primitives (JSON-RPC 2.0 framing, lifecycle,
         // method handlers). Transport-agnostic; wired to stdio by bundle:mcp-start.
         mcpServer       : _require('./mcp-server'),
