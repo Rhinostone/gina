@@ -54,8 +54,6 @@ services/
 # Vendor dep extras — CI configs, benchmarks, examples
 framework/v*/core/deps/busboy-*/.github/
 framework/v*/core/deps/busboy-*/bench/
-framework/v*/core/deps/optimist-*/.travis.yml
-framework/v*/core/deps/optimist-*/example/
 
 # Vendor dep backup originals and source maps (in .gitignore but .npmignore overrides it)
 *.dist

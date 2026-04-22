@@ -1,0 +1,3 @@
+kind: Removed
+body: 'Removed orphaned core/deps/optimist-0.6.1/ vendored dependency. optimist (X11 license, flagged by Socket) was vendored but never actually used by any framework code — bin/cli parses CLI arguments directly via process.argv. Its declared transitives (wordwrap, minimist) were never installed, so any attempt to require it would have thrown MODULE_NOT_FOUND. Removal shrinks the published tarball by ~140KB and ticks up Socket''s License score.'
+time: 2026-04-22T21:25:20.848365+01:00
