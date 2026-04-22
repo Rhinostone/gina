@@ -15,16 +15,25 @@
  * `controller.render-swig.js`; invoked through `controller.js` `this.render()`
  * dispatch.
  *
- * ## Status — MVP (Session N2)
+ * ## Status — MVP (Session N2 + Inspector port 2026-04-22)
  *
- * This is a **minimum viable** implementation. It renders a `.njk` template
- * with locals data and sends an HTTP/1.1 response. The following are
- * deliberately **deferred** to follow-up sessions and are called out inline
- * below so nothing is hidden:
+ * Renders a `.njk` template with locals data and sends an HTTP/1.1 response.
+ * Inspector dev-payload injection is **shipped** (N2 deferred item #1 closed
+ * in commit TBD — see `injectInspectorScripts` below). The following are
+ * still deferred to follow-up sessions and called out inline:
  *
- *   1. **Inspector `__gdPayload`** — no `<script>__ginaData</script>` injection,
- *      no `process.emit('inspector#data')`. The Inspector Data tab will not
- *      show dev payloads for nunjucks-rendered pages until this lands.
+ *   1. ~~**Inspector `__gdPayload`**~~ — **shipped**. `<script>window.__ginaData = ...</script>`
+ *      + `<script>window.__ginaLogs = ...</script>` are injected before `</body>`
+ *      in dev mode, redacted via `lib/inspector-redact`, stashed on
+ *      `self.serverInstance._lastGinaData`, and emitted via
+ *      `process.emit('inspector#data')`. Within this port, **statusbar.html
+ *      inclusion is still deferred** — the swig template uses `{% include %}`
+ *      with swig-specific syntax; a nunjucks-compatible statusbar template
+ *      is a separate follow-up. `data.page.flow` (flow timeline from
+ *      `local._timeline`) and `data.page.queries` (query log from
+ *      `local._queryLog`) are also not yet piped into the Inspector payload
+ *      — the data is computed in render-swig.js around lines 980-1040 and
+ *      belongs in a shared helper before porting.
  *   2. **HTTP/2 `stream.respond()` direct path** — always uses `res.writeHead()`
  *      + `res.end()`. HTTP/2 falls back through the compat layer; Isaac's
  *      native HTTP/2 optimisations (Early Hints 103, `stream.respond()`) are
@@ -60,8 +69,9 @@
  * @returns {Promise<void>}
  */
 
-var fs       = require('fs');
-var nodePath = require('path');
+var fs              = require('fs');
+var nodePath        = require('path');
+var inspectorRedact = require('lib/inspector-redact');
 
 /**
  * Caches a `nunjucks.Environment` per bundle template root so we don't
@@ -145,6 +155,130 @@ function resolveTemplatePath(data, localOptions) {
     var rel = file;
     if (ext && !rel.endsWith(ext)) { rel += ext; }
     return rel;
+}
+
+/**
+ * Builds the Inspector dev-payload scripts and injects them into the
+ * rendered HTML just before `</body>`. Mirrors render-swig.js:1041-1128
+ * but without the `statusbar.html` `{% include %}` (that template is
+ * swig-specific — a nunjucks-compatible version is a follow-up).
+ *
+ * Runs only in dev mode (`self.isCacheless()`), gated by `displayInspector`:
+ *
+ *   - `displayInspector === true`    → always inject (explicit opt-in)
+ *   - `displayInspector === undefined` → inject when cacheless (dev-mode default)
+ *   - `displayInspector === false`   → never inject
+ *
+ * Side effects beyond the HTML mutation:
+ *   1. Stashes redacted `__gdPayload` on `self.serverInstance._lastGinaData` —
+ *      consumed by the engine.io push and `/_gina/agent` SSE stream.
+ *   2. Stashes unredacted snapshot on `serverInstance._lastGinaDataUnredacted`
+ *      ONLY when `NODE_SCOPE === 'local'`. Other scopes clear it to null so
+ *      `/_gina/reveal` never has anything to leak.
+ *   3. Emits `process.emit('inspector#data', __gdPayload)` so attached
+ *      listeners (dev-mode sockets) pick up the snapshot.
+ *
+ * @inner
+ * @param  {string}  html              - Rendered HTML from the nunjucks engine
+ * @param  {object}  data              - Template data (has `data.page.*`)
+ * @param  {object}  self              - SuperController instance (has serverInstance, isCacheless)
+ * @param  {object}  local             - Per-request closure
+ * @param  {boolean} [displayInspector]
+ * @returns {string} HTML with scripts injected, or the original string when gated off
+ */
+function injectInspectorScripts(html, data, self, local, displayInspector) {
+    if (displayInspector === false) { return html; }
+    if (displayInspector !== true && !self.isCacheless()) { return html; }
+    if (!data || !data.page) { return html; }
+    // No `</body>` anchor → nothing safe to inject into. Don't force it.
+    if (!/<\/body>/i.test(html)) { return html; }
+
+    // Two deep clones — one labelled gina (metadata for the Inspector
+    // sidebar), one labelled user (mirrors what application code sees).
+    // JSON.parse(JSON.stringify(...)) is intentional: it drops functions,
+    // prototype chains, and circular refs — exactly what we want before
+    // handing the payload to a client-side script tag.
+    var __gdGina = JSON.parse(JSON.stringify(data.page));
+    var __gdUser = JSON.parse(JSON.stringify(data.page));
+    if (__gdGina.view) {
+        __gdGina.view.assets      = {};
+        __gdGina.view.scripts     = 'ignored-by-toolbar';
+        __gdGina.view.stylesheets = 'ignored-by-toolbar';
+    }
+    if (__gdUser.view) {
+        __gdUser.view.scripts     = 'ignored-by-toolbar';
+        __gdUser.view.stylesheets = 'ignored-by-toolbar';
+        __gdUser.view.assets      = {};
+    }
+
+    // Redact config — identical source lookup to render-swig.js:1056
+    // so the two engines produce the same Inspector payload shape.
+    var _redactConf = inspectorRedact.getConfig(local.options.conf);
+    __gdGina.inspectorRedact = {
+        patterns:    _redactConf.patterns,
+        types:       _redactConf.types,
+        replacement: _redactConf.replacement
+    };
+    if (__gdGina.environment) {
+        __gdGina.environment.scope = process.env.NODE_SCOPE || null;
+    }
+
+    // #INS8 — standalone Inspector URL (settings.json > inspector.url)
+    var _inspUrlConf = null;
+    try {
+        var _confSource = local.options.conf || {};
+        if (_confSource.content && _confSource.content.settings
+            && _confSource.content.settings.inspector
+            && _confSource.content.settings.inspector.url) {
+            _inspUrlConf = _confSource.content.settings.inspector.url;
+        }
+    } catch (e) { /* leave null */ }
+    __gdGina.inspectorUrl = _inspUrlConf;
+
+    var __gdPayload = { gina: __gdGina, user: __gdUser };
+    // Snapshot BEFORE redaction, gated on local scope only.
+    var __gdPayloadUnredacted = (process.env.NODE_SCOPE === 'local')
+        ? JSON.parse(JSON.stringify(__gdPayload)) : null;
+    __gdPayload = inspectorRedact.redact(__gdPayload, {
+        compiledPatterns: _redactConf.compiledPatterns,
+        replacement:      _redactConf.replacement
+    });
+
+    // `</script>` and `<!--` must be escaped inside JSON-serialised script
+    // content so the browser's HTML parser doesn't terminate the tag early
+    // or start an HTML comment. Matches render-swig.js:1096-1097.
+    var _safeJson = JSON.stringify(__gdPayload)
+        .replace(/<\/script>/gi, '<\\/script>')
+        .replace(/<!--/g, '<\\!--');
+
+    var __gdScript   = '<script>window.__ginaData = ' + _safeJson + ';</script>\n';
+    var _bundleName  = (__gdUser.environment && __gdUser.environment.bundle) || '';
+    var __logsScript = '<script>'
+        + 'window.__ginaLogs = window.__ginaLogs || [];'
+        + '(function(w){'
+        + 'var _c=w.console,_l=w.__ginaLogs,_b=' + JSON.stringify(_bundleName) + ';'
+        + '["log","info","warn","error","debug"].forEach(function(lvl){'
+        + 'var orig=_c[lvl].bind(_c);'
+        + '_c[lvl]=function(){'
+        + 'orig.apply(_c,arguments);'
+        + 'try{_l.push({t:Date.now(),l:lvl,b:_b,s:Array.prototype.slice.call(arguments).join(" ")});}catch(e){}'
+        + '};});'
+        + '}(window));</script>\n';
+
+    // Stash on serverInstance + emit event. Swig path does both; the
+    // Inspector-observer side depends on these specific side effects.
+    if (self.serverInstance) {
+        self.serverInstance._lastGinaData = __gdPayload;
+        self.serverInstance._lastGinaDataUnredacted = __gdPayloadUnredacted; // null outside local scope
+    }
+    try {
+        process.emit('inspector#data', __gdPayload);
+    } catch (e) { /* listener raised — not fatal to the render */ }
+
+    // Inject before the first `</body>`. Case-insensitive match; the
+    // surrounding newline + tab match render-swig's formatting so the
+    // diff against a rendered swig-then-nunjucks page is cosmetic-only.
+    return html.replace(/<\/body>/i, '\t' + __logsScript + __gdScript + '\n\t</body>');
 }
 
 /**
@@ -289,6 +423,15 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         html = env.render(templateRel, data);
     } catch (renderErr) {
         return self.throwError(renderErr);
+    }
+
+    // Inspector dev-payload injection (dev mode only; no-op otherwise).
+    try {
+        html = injectInspectorScripts(html, data, self, local, displayInspector);
+    } catch (injectErr) {
+        // Never let an Inspector-side bug break the render. Log and
+        // continue with the un-injected HTML.
+        try { console.warn('[render-nunjucks] inspector injection skipped: ' + injectErr.message); } catch (e) {}
     }
 
     sendHtmlResponse(local, html);

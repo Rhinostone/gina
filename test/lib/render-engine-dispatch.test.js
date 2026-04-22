@@ -261,6 +261,105 @@ describe('05 - server.js bundle startup', function () {
 
 
 // ---------------------------------------------------------------------------
+// 05b - Inspector __gdPayload injection in render-nunjucks.js
+// ---------------------------------------------------------------------------
+
+describe('05b - Inspector __gdPayload injection', function () {
+
+    it('imports lib/inspector-redact', function () {
+        assert.match(RENDER_NJ_SRC, /require\(\s*['"]lib\/inspector-redact['"]\s*\)/);
+    });
+
+    it('declares injectInspectorScripts helper', function () {
+        assert.match(RENDER_NJ_SRC, /function\s+injectInspectorScripts\s*\(/);
+    });
+
+    it('gates injection on displayInspector + isCacheless', function () {
+        assert.match(RENDER_NJ_SRC, /displayInspector\s*===\s*false/);
+        assert.match(RENDER_NJ_SRC, /displayInspector\s*!==\s*true\s*&&\s*!self\.isCacheless\(\)/);
+    });
+
+    it('skips injection when no </body> anchor is in the HTML', function () {
+        // Accept any form of the guard — the key semantic is that the
+        // injection only fires when </body> is present.
+        assert.match(RENDER_NJ_SRC, /<\\\/body>\/i\.test\(html\)/);
+    });
+
+    it('builds __gdGina and __gdUser from data.page via JSON deep-clone', function () {
+        assert.match(RENDER_NJ_SRC, /var\s+__gdGina\s*=\s*JSON\.parse\(\s*JSON\.stringify\(\s*data\.page\s*\)\s*\)/);
+        assert.match(RENDER_NJ_SRC, /var\s+__gdUser\s*=\s*JSON\.parse\(\s*JSON\.stringify\(\s*data\.page\s*\)\s*\)/);
+    });
+
+    it('reads redact config via inspectorRedact.getConfig(local.options.conf)', function () {
+        assert.match(RENDER_NJ_SRC, /inspectorRedact\.getConfig\(\s*local\.options\.conf\s*\)/);
+    });
+
+    it('snapshots unredacted payload only when NODE_SCOPE === "local"', function () {
+        assert.match(
+            RENDER_NJ_SRC,
+            /process\.env\.NODE_SCOPE\s*===\s*['"]local['"]\)/
+        );
+    });
+
+    it('redacts via inspectorRedact.redact with compiledPatterns + replacement', function () {
+        assert.match(RENDER_NJ_SRC, /inspectorRedact\.redact\(/);
+        assert.match(RENDER_NJ_SRC, /compiledPatterns:\s*_redactConf\.compiledPatterns/);
+        assert.match(RENDER_NJ_SRC, /replacement:\s*_redactConf\.replacement/);
+    });
+
+    it('escapes </script> and <!-- in the serialised JSON', function () {
+        assert.match(RENDER_NJ_SRC, /\.replace\(\/<\\\/script>\/gi,\s*['"]<\\\\\/script>['"]\)/);
+        assert.match(RENDER_NJ_SRC, /\.replace\(\/<!--\/g,\s*['"]<\\\\!--['"]\)/);
+    });
+
+    it('constructs window.__ginaData script with the escaped JSON', function () {
+        assert.match(RENDER_NJ_SRC, /window\.__ginaData\s*=\s*['"]\s*\+\s*_safeJson/);
+    });
+
+    it('constructs window.__ginaLogs console-hook script', function () {
+        assert.match(RENDER_NJ_SRC, /window\.__ginaLogs\s*=\s*window\.__ginaLogs\s*\|\|\s*\[\]/);
+    });
+
+    it('stashes redacted payload on self.serverInstance._lastGinaData', function () {
+        assert.match(RENDER_NJ_SRC, /self\.serverInstance\._lastGinaData\s*=\s*__gdPayload/);
+    });
+
+    it('stashes unredacted snapshot on _lastGinaDataUnredacted (null outside local scope)', function () {
+        assert.match(RENDER_NJ_SRC, /_lastGinaDataUnredacted\s*=\s*__gdPayloadUnredacted/);
+    });
+
+    it('emits process.emit("inspector#data", __gdPayload)', function () {
+        assert.match(RENDER_NJ_SRC, /process\.emit\(\s*['"]inspector#data['"],\s*__gdPayload\s*\)/);
+    });
+
+    it('injects scripts before </body> via case-insensitive regex replace', function () {
+        assert.match(RENDER_NJ_SRC, /html\.replace\(\/<\\\/body>\/i/);
+    });
+
+    it('wraps injection in try/catch so Inspector bugs never break rendering', function () {
+        // In the main render function body the injection call is inside try/catch.
+        assert.match(
+            RENDER_NJ_SRC,
+            /try\s*\{\s*html\s*=\s*injectInspectorScripts\(\s*html\s*,\s*data\s*,\s*self\s*,\s*local\s*,\s*displayInspector\s*\)\s*;[\s\S]*?catch/
+        );
+    });
+
+    it('documents statusbar.html inclusion as a within-Inspector deferred follow-up', function () {
+        // Captures our commitment — if a future session silently drops the
+        // statusbar note, this test fails and forces explicit re-docs.
+        // Multi-line tolerant: token presence plus the 'deferred' word
+        // within a small window.
+        assert.match(RENDER_NJ_SRC, /statusbar\.html[\s\S]{0,400}deferred/i);
+    });
+
+    it('documents data.page.flow / queries pipeline as deferred', function () {
+        assert.match(RENDER_NJ_SRC, /flow[\s\S]{0,100}deferred|data\.page\.flow|_timeline/);
+        assert.match(RENDER_NJ_SRC, /queries[\s\S]{0,100}deferred|_queryLog/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 06 - Negative invariants
 // ---------------------------------------------------------------------------
 
