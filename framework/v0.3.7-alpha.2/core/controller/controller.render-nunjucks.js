@@ -34,10 +34,15 @@
  *      `local._queryLog`) are also not yet piped into the Inspector payload
  *      — the data is computed in render-swig.js around lines 980-1040 and
  *      belongs in a shared helper before porting.
- *   2. **HTTP/2 `stream.respond()` direct path** — always uses `res.writeHead()`
- *      + `res.end()`. HTTP/2 falls back through the compat layer; Isaac's
- *      native HTTP/2 optimisations (Early Hints 103, `stream.respond()`) are
- *      skipped.
+ *   2. ~~**HTTP/2 `stream.respond()` direct path**~~ — **shipped 2026-04-22**
+ *      (commit TBD). `sendHtmlResponse` now implements the four-way branch
+ *      from `class.controller.md §7b` (HEAD×stream, HEAD×HTTP1.1, body×stream,
+ *      body×HTTP1.1). HTTP/2 streams bypass the compat layer, merge pipeline-set
+ *      headers (CORS, cache-control) via `local.res.getHeaders()`, and guard
+ *      against `stream.destroyed || stream.closed` client disconnects that
+ *      would otherwise throw `ERR_HTTP2_INVALID_STREAM`. Early Hints 103
+ *      auto-send for CSS/JS preloads is still deferred — that path in swig
+ *      runs in `controller.js this.render()` before the delegate is called.
  *   3. **Static HTML cache writes** — no `writeCache()` equivalent; every
  *      request re-renders even when the route has `cache` configured.
  *   4. **Asset cataloguing / `setResources`** — no `<gina>` layout placeholder
@@ -282,9 +287,27 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
 }
 
 /**
- * Send the rendered HTML back through the standard Node response. HTTP/1.1
- * only for the MVP; HTTP/2 stream optimisations (see render-swig.js
- * §7b three-way branch in class.controller.md) are deferred.
+ * Send the rendered HTML back through the appropriate response path.
+ * Implements the four-way branch described in
+ * `the internal architecture docs §7b` — same shape as
+ * `render-swig.js:877-927`:
+ *
+ *   1. HEAD + HTTP/2 stream  → `stream.respond({content-type, content-length, :status})` + `stream.end()`
+ *   2. HEAD + HTTP/1.1       → `res.setHeader(content-type/content-length)` + `res.end()` (no body)
+ *   3. body + HTTP/2 stream  → `stream.respond({content-type, :status})` + `stream.end(html)`
+ *   4. body + HTTP/1.1       → `res.end(html)` (content-type set earlier)
+ *
+ * The HTTP/2 branches merge headers set earlier in the pipeline (CORS,
+ * cache-control, cookies) via `local.res.getHeaders()` because
+ * `stream.respond()` on the raw HTTP/2 stream does NOT include headers
+ * set via `response.setHeader()`. The `stream.destroyed || stream.closed`
+ * guard is required — the client may have disconnected before the async
+ * render callback completed, in which case `stream.respond()` throws
+ * `ERR_HTTP2_INVALID_STREAM`.
+ *
+ * `local.res.headersSent = true` is set after a successful `stream.respond()`
+ * to signal to the HTTP/1.1 compat layer that the response was sent
+ * directly, matching render-swig's §7b pattern.
  *
  * @inner
  * @param {object} local  - Per-request closure
@@ -292,20 +315,72 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
  */
 function sendHtmlResponse(local, html) {
     if (local.res.headersSent) { return; }
+
     var statusCode = local.res.statusCode || 200;
-    // Use setHeader rather than writeHead so anything the pipeline already
-    // set (CORS, cache-control, cookies) is preserved.
+    var stream     = (local.res && typeof local.res.stream !== 'undefined') ? local.res.stream : null;
+    var isHead     = /^HEAD$/i.test(local.req.method);
+    var byteLength = Buffer.byteLength(html, 'utf8');
+    // Ensure content-type is set on the HTTP/1.1 response so header merge
+    // picks it up for the stream paths and setHeader()-only paths alike.
     if (!local.res.getHeader('content-type')) {
         local.res.setHeader('content-type', 'text/html; charset=utf-8');
     }
-    if (/^HEAD$/i.test(local.req.method)) {
-        // HEAD: headers only, no body. content-length must reflect the body
-        // we would have sent.
-        local.res.setHeader('content-length', Buffer.byteLength(html, 'utf8'));
-        local.res.writeHead(statusCode);
-        local.res.end();
+
+    if (isHead) {
+        if (stream) {
+            // Case 1: HEAD + HTTP/2
+            if (stream.destroyed || stream.closed) {
+                try { console.warn('[render-nunjucks] stream already destroyed on HEAD — client disconnected ('+ local.req.url +')'); } catch (e) {}
+                return;
+            }
+            if (!stream.headersSent) {
+                var _headH2 = {
+                    'content-type':   local.res.getHeader('content-type'),
+                    'content-length': byteLength,
+                    ':status':        statusCode
+                };
+                var _pendingHeadH2 = local.res.getHeaders ? local.res.getHeaders() : {};
+                for (var _hh2k in _pendingHeadH2) {
+                    if (!(_hh2k in _headH2)) { _headH2[_hh2k] = _pendingHeadH2[_hh2k]; }
+                }
+                stream.respond(_headH2);
+            }
+            stream.end();
+            local.res.headersSent = true;
+        } else {
+            // Case 2: HEAD + HTTP/1.1
+            local.res.setHeader('content-length', byteLength);
+            local.res.writeHead(statusCode);
+            local.res.end();
+        }
         return;
     }
+
+    if (stream) {
+        // Case 3: body + HTTP/2
+        if (stream.destroyed || stream.closed) {
+            try { console.warn('[render-nunjucks] stream already destroyed — client disconnected before response ('+ local.req.url +')'); } catch (e) {}
+            return;
+        }
+        if (!stream.headersSent) {
+            var _streamHeaders = {
+                'content-type': local.res.getHeader('content-type'),
+                ':status':      statusCode
+            };
+            // Merge pipeline-set headers (CORS, cache-control, etc.) —
+            // `stream.respond()` does not include them automatically.
+            var _pendingHeaders = local.res.getHeaders ? local.res.getHeaders() : {};
+            for (var _shk in _pendingHeaders) {
+                if (!(_shk in _streamHeaders)) { _streamHeaders[_shk] = _pendingHeaders[_shk]; }
+            }
+            stream.respond(_streamHeaders);
+        }
+        stream.end(html);
+        local.res.headersSent = true;
+        return;
+    }
+
+    // Case 4: body + HTTP/1.1
     local.res.writeHead(statusCode);
     local.res.end(html);
 }

@@ -261,6 +261,64 @@ describe('05 - server.js bundle startup', function () {
 
 
 // ---------------------------------------------------------------------------
+// 05a - sendHtmlResponse four-way branch (HTTP/2 stream + HTTP/1.1)
+// ---------------------------------------------------------------------------
+
+describe('05a - sendHtmlResponse four-way branch (class.controller.md §7b)', function () {
+
+    it('reads the HTTP/2 stream from local.res.stream', function () {
+        assert.match(RENDER_NJ_SRC, /local\.res\.stream/);
+    });
+
+    it('guards HTTP/2 responses against stream.destroyed || stream.closed', function () {
+        // Match the guard pattern — must appear at least once for both
+        // HEAD and body paths.
+        var matches = RENDER_NJ_SRC.match(/stream\.destroyed\s*\|\|\s*stream\.closed/g);
+        assert.ok(matches && matches.length >= 2, 'guard appears in both HEAD+stream and body+stream branches');
+    });
+
+    it('HTTP/2 HEAD path calls stream.respond with content-length + :status', function () {
+        // Inspect the HEAD×stream block specifically
+        assert.match(RENDER_NJ_SRC, /_headH2\s*=\s*\{[\s\S]*?'content-length':\s*byteLength[\s\S]*?':status':[\s\S]*?\}/);
+        assert.match(RENDER_NJ_SRC, /stream\.respond\(_headH2\)/);
+    });
+
+    it('HTTP/2 body path calls stream.respond with content-type + :status', function () {
+        assert.match(RENDER_NJ_SRC, /_streamHeaders\s*=\s*\{[\s\S]*?'content-type':[\s\S]*?':status':[\s\S]*?\}/);
+        assert.match(RENDER_NJ_SRC, /stream\.respond\(_streamHeaders\)/);
+    });
+
+    it('HTTP/2 body path calls stream.end(html)', function () {
+        assert.match(RENDER_NJ_SRC, /stream\.end\(html\)/);
+    });
+
+    it('merges pipeline-set headers via local.res.getHeaders()', function () {
+        // Applies to BOTH stream paths — CORS / cache-control / cookies
+        // set earlier must be preserved on the raw HTTP/2 stream.
+        var matches = RENDER_NJ_SRC.match(/local\.res\.getHeaders\(\)/g);
+        assert.ok(matches && matches.length >= 2, 'getHeaders() called for both HEAD+stream and body+stream merges');
+    });
+
+    it('sets local.res.headersSent = true after successful stream.respond', function () {
+        var matches = RENDER_NJ_SRC.match(/local\.res\.headersSent\s*=\s*true/g);
+        assert.ok(matches && matches.length >= 2, 'headersSent flagged for both HEAD+stream and body+stream paths');
+    });
+
+    it('HTTP/1.1 HEAD path sends content-length via setHeader, empty body', function () {
+        assert.match(RENDER_NJ_SRC, /local\.res\.setHeader\(\s*['"]content-length['"]\s*,\s*byteLength\s*\)/);
+    });
+
+    it('HTTP/1.1 body path uses res.writeHead + res.end(html)', function () {
+        assert.match(RENDER_NJ_SRC, /local\.res\.writeHead\(statusCode\);\s*\n\s*local\.res\.end\(html\)/);
+    });
+
+    it('HEAD request fallback returns early (no body sent)', function () {
+        assert.match(RENDER_NJ_SRC, /if\s*\(isHead\)/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 05b - Inspector __gdPayload injection in render-nunjucks.js
 // ---------------------------------------------------------------------------
 
