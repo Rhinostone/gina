@@ -4,6 +4,7 @@
     "requireLib"            : "../../../../../../node_modules/requirejs/require",
 
     "vendor/engine.io"      : "../../../../../../node_modules/engine.io-client/dist/engine.io.min",
+    "vendor/gina/psl"       : "vendor/gina/psl/psl.min",
 
     "core"                  : "vendor/gina/core",
 

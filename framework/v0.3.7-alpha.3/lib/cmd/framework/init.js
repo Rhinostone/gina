@@ -968,30 +968,6 @@ function Initialize(opt) {
         done()
     }
 
-    self.checkDomainLibRequirements = function(done) {
-        // check for `public_suffix_list.dat`
-        var domainLibPath   = _( getEnvVar('GINA_FRAMEWORK_DIR') + '/lib/domain', true);
-        var distPathObj     = new _(domainLibPath + '/dist', true);
-
-        if ( !distPathObj.existsSync() ) {
-            distPathObj.mkdirSync();
-        }
-        console.debug('Checking for PSL file');
-        var datFilenameObj = new _(distPathObj.toString() + '/public_suffix_list.dat', true);
-        if ( !datFilenameObj.existsSync() ) {
-            try {
-                new Domain({isCachingRequired: true}, done);
-            } catch (err) {
-                // console.error(err.stack||err.message||err);
-                // process.exit(1)
-                return done(err)
-            }
-            // new Domain({isCachingRequired: true}, done);
-        }
-
-        done()
-    }
-
     self.checkIfCertificatesDir = function(done) {
         var certsDir = new _( getEnvVar('GINA_HOMEDIR') + '/certificates', true);
         var theRSARootCertsDir = new _(certsDir.toString() + '/RSARootCerts', true);

@@ -251,13 +251,7 @@ function ServerEngineClass(options) {
         fd = null;
 
 
-        // TODO - Make a br or a gz file asside here
         localAssets = [
-            {
-                file    : 'public_suffix_list.dat',
-                path    : getPath('gina').lib +'/domain/dist',
-                mime    : 'text/plain; charset=utf8'
-            },
             {
                 file    : 'routing.json',
                 path    : targetDir,
@@ -951,8 +945,6 @@ function ServerEngineClass(options) {
 
 
             if (
-                request.method.toUpperCase() === 'GET' && /\_gina\/assets\/public_suffix_list.dat$/i.test(request.url)
-                ||
                 request.method.toUpperCase() === 'GET' && /\_gina\/assets\/routing\.json$/i.test(request.url)
             ) {
                 // server.toApi(reques, response)

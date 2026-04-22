@@ -396,16 +396,6 @@ find $SCRIPT_PATH/dist/vendor/gina/html -type f \( -name '*.html' \) -exec brotl
 find $SCRIPT_PATH/dist/vendor/gina/html -type f \( -name '*.html' \) -exec gzip -9 -n -k {} \;
 
 ##############################
-# DAT - Domain suffixes list #
-##############################
-# Removing old
-find $SCRIPT_PATH/../../../lib/domain/dist -type f \( -name '*_list.dat.br' \) -exec rm {} \;
-find $SCRIPT_PATH/../../../lib/domain/dist -type f \( -name '*_list.dat.gz' \) -exec rm {} \;
-# Adding new
-find $SCRIPT_PATH/../../../lib/domain/dist -type f \( -name '*_list.dat' \) -exec brotli --best {} \;
-find $SCRIPT_PATH/../../../lib/domain/dist -type f \( -name '*_list.dat' \) -exec gzip -9 -n -k {} \;
-
-##############################
 # Removing map files         #
 ##############################
 if [ "${build_env}" != "dev" ]; then
