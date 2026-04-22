@@ -29,6 +29,23 @@ jobs:
           npm install --ignore-scripts
           ln -sf $(pwd) node_modules/gina
 
+      - name: Prepare framework dependencies
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          FW_DIR="framework/v${VERSION}"
+          if [ ! -f "${FW_DIR}/package.json" ]; then
+            cat > "${FW_DIR}/package.json" <<EOF
+          {
+            "name": "gina-framework",
+            "version": "${VERSION}",
+            "dependencies": {
+              "@rhinostone/swig": "^1.6.0"
+            }
+          }
+          EOF
+          fi
+          (cd "${FW_DIR}" && npm install --ignore-scripts)
+
       - name: Run tests
         run: |
           node --test \
