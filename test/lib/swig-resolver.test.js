@@ -30,6 +30,9 @@ var assert = require('node:assert/strict');
 
 var resolver = require(nodePath.join(require('../fw'), 'lib/swig-resolver/src/main'));
 
+// Note: os.tmpdir() returns a symlink on macOS (/var/folders/... → /private/var/folders/...).
+// We realpath ROOT inside before() once the directory exists so that paths we hand to
+// require.cache (via updateFixtureTo's cache eviction) match Node's realpath-normalised keys.
 var ROOT = nodePath.join(os.tmpdir(), 'gina-swig-resolver-test-' + Date.now());
 
 /**
@@ -52,6 +55,7 @@ var FX = {};
 
 before(function () {
     fs.mkdirSync(ROOT, { recursive: true });
+    ROOT = fs.realpathSync(ROOT);
 
     FX.hasSatisfies = nodePath.join(ROOT, 'has-satisfies');
     seedFixture(FX.hasSatisfies, '@rhinostone/swig', {
@@ -520,10 +524,157 @@ describe('09 - load() + get() process-cache', function () {
 
 
 // ---------------------------------------------------------------------------
-// 10 - Negative invariant — abandoned bare "swig" is never resolvable
+// 10 - Dev-mode hot-swap via mtime check
 // ---------------------------------------------------------------------------
 
-describe('10 - negative invariant', function () {
+describe('10 - dev-mode hot-swap', function () {
+
+    var originalDevFlag;
+
+    before(function () {
+        originalDevFlag = process.env.NODE_ENV_IS_DEV;
+    });
+
+    after(function () {
+        if (typeof originalDevFlag === 'undefined') {
+            delete process.env.NODE_ENV_IS_DEV;
+        } else {
+            process.env.NODE_ENV_IS_DEV = originalDevFlag;
+        }
+        resolver.reset();
+    });
+
+    // --- Helpers ---------------------------------------------------------
+
+    // Rewrite a fixture's package.json + index.js to a new version and push
+    // the package.json mtime strictly ahead of every previous value produced
+    // by this helper. `Date.now()` has only millisecond resolution, so two
+    // consecutive calls within the same wall-clock millisecond both map to
+    // `Date.now() + 1000` and produce identical mtimes — refresh would then
+    // see a no-op even though the content changed. The lastMtime tracker
+    // guarantees strict monotonic progression, independent of wall-clock
+    // granularity. Also evict require.cache for the index.js so the next
+    // `require()` re-parses the newly written file.
+    var _fixtureLastMtime = 0;
+    function updateFixtureTo(fixtureDir, newVersion) {
+        var pkgDir = nodePath.join(fixtureDir, 'node_modules', '@rhinostone/swig');
+        var pkgJsonPath = nodePath.join(pkgDir, 'package.json');
+        var indexJsPath = nodePath.join(pkgDir, 'index.js');
+        fs.writeFileSync(pkgJsonPath, JSON.stringify({
+            name: '@rhinostone/swig', version: newVersion, main: 'index.js'
+        }, null, 2) + '\n');
+        fs.writeFileSync(
+            indexJsPath,
+            'module.exports = { _fixture: ' +
+            JSON.stringify(nodePath.basename(fixtureDir)) +
+            ', version: ' + JSON.stringify(newVersion) + ' };\n'
+        );
+        var prev     = fs.statSync(pkgJsonPath).mtimeMs;
+        var nextMs   = Math.max(prev, Date.now(), _fixtureLastMtime) + 1000;
+        var future   = new Date(nextMs);
+        fs.utimesSync(pkgJsonPath, future, future);
+        _fixtureLastMtime = nextMs;
+        try { delete require.cache[indexJsPath]; } catch (e) { /* ignore */ }
+    }
+
+    // --- Tests -----------------------------------------------------------
+
+    it('get() is a no-op in production (NODE_ENV_IS_DEV unset)', function () {
+        delete process.env.NODE_ENV_IS_DEV;
+        resolver.reset();
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        var first = resolver.get();
+        // Modify the fixture; in prod mode the change must NOT be picked up.
+        updateFixtureTo(FX.hasSatisfies, '1.6.3');
+        var second = resolver.get();
+        assert.equal(first, second, 'production get() must return the cached instance');
+        // Restore the fixture so later tests start from 1.6.2.
+        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+    });
+
+    it('dev mode + unchanged mtime: get() returns the same instance', function () {
+        process.env.NODE_ENV_IS_DEV = 'true';
+        resolver.reset();
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        var first  = resolver.get();
+        var second = resolver.get();
+        assert.equal(first, second, 'no mtime change → same cached module');
+    });
+
+    it('dev mode + changed mtime: get() reloads the new version', function () {
+        process.env.NODE_ENV_IS_DEV = 'true';
+        resolver.reset();
+        // Prime the fixture's index.js with a `version` export so the module
+        // reload is observable via the returned swig (not only via the
+        // decision record).
+        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        var before = resolver.get();
+        assert.equal(before.version, '1.6.2');
+
+        updateFixtureTo(FX.hasSatisfies, '1.6.3');
+        var after = resolver.get();
+        assert.equal(after.version, '1.6.3', 'new version loaded after mtime shift');
+        var d = resolver.getDecision();
+        assert.equal(d.version, '1.6.3', 'decision record reflects new version');
+
+        // Restore for downstream tests.
+        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+    });
+
+    it('dev mode + useProject:false: refresh is a no-op even if mtime drifts', function () {
+        process.env.NODE_ENV_IS_DEV = 'true';
+        resolver.reset();
+        resolver.load(FX.hasSatisfies, { useProject: false });
+        var before = resolver.get();
+        updateFixtureTo(FX.hasSatisfies, '1.6.4');
+        var after = resolver.get();
+        assert.equal(before, after, 'useProject:false skips the mtime probe');
+        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+    });
+
+    it('dev mode + missing projectPath: refresh is a no-op', function () {
+        process.env.NODE_ENV_IS_DEV = 'true';
+        resolver.reset();
+        resolver.load(null, { useProject: true });
+        var before = resolver.get();
+        var after  = resolver.get();
+        assert.equal(before, after);
+    });
+
+    it('dev mode + never-loaded: get() does not crash on stale refresh path', function () {
+        // get() is safe before any load() — should fall back to framework copy.
+        process.env.NODE_ENV_IS_DEV = 'true';
+        resolver.reset();
+        var swig = resolver.get();
+        assert.ok(swig, 'got a module');
+        assert.equal(resolver.getDecision().source, 'framework');
+    });
+
+    it('dev mode + version drift below floor: falls back to framework on reload', function () {
+        process.env.NODE_ENV_IS_DEV = 'true';
+        resolver.reset();
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        assert.equal(resolver.getDecision().source, 'project');
+
+        // Downgrade the fixture to below the floor — refresh should reject it.
+        updateFixtureTo(FX.hasSatisfies, '1.5.0');
+        resolver.get();
+        var d = resolver.getDecision();
+        assert.equal(d.source,  'framework');
+        assert.equal(d.warning, 'version-mismatch');
+        assert.equal(d.version, '1.5.0');
+
+        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 11 - Negative invariant — abandoned bare "swig" is never resolvable
+// ---------------------------------------------------------------------------
+
+describe('11 - negative invariant', function () {
 
     it('the abandoned upstream package name "swig" is not a valid default', function () {
         // Guardrail for the CVE-2023-25345 scenario: a project may still

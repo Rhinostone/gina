@@ -366,9 +366,12 @@ function load(projectPath, options) {
         swig = require(pkgName);
     }
 
-    process.gina._swig         = swig;
-    process.gina._swigDecision = decision;
-    process.gina._swigPackage  = pkgName;
+    process.gina._swig            = swig;
+    process.gina._swigDecision    = decision;
+    process.gina._swigPackage     = pkgName;
+    process.gina._swigProjectPath = projectPath || null;
+    process.gina._swigOptions     = options;
+    process.gina._swigMtime       = readProjectPkgMtime(projectPath, pkgName);
 
     if (decision.warning) {
         try {
@@ -404,6 +407,11 @@ function get() {
     if (typeof process.gina === 'undefined' || process.gina === null) {
         process.gina = {};
     }
+    // Dev-mode only: if the project's swig `package.json` mtime has drifted
+    // since the last load() — e.g. after `npm install @rhinostone/swig@<newer>`
+    // in the bundle's project — evict the cached module from require.cache
+    // and re-run the resolver. No-op in production.
+    refreshIfStale();
     if (!process.gina._swig) {
         process.gina._swig         = require(DEFAULT_PACKAGE);
         process.gina._swigDecision = {
@@ -416,6 +424,73 @@ function get() {
         process.gina._swigPackage  = DEFAULT_PACKAGE;
     }
     return process.gina._swig;
+}
+
+/**
+ * Reads the mtime of the project's swig package.json. Returns null when the
+ * file does not exist, cannot be stat-ed, or when `projectPath` is falsy.
+ * Cheap enough to call on every HTTP request in dev mode (single fs.stat).
+ *
+ * @inner
+ * @param   {string|null} projectPath
+ * @param   {string}      pkgName
+ * @returns {number|null} mtimeMs or null.
+ */
+function readProjectPkgMtime(projectPath, pkgName) {
+    if (!projectPath) { return null; }
+    try {
+        var pkgJson = nodePath.join(projectPath, 'node_modules', pkgName, 'package.json');
+        return fs.statSync(pkgJson).mtimeMs;
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
+ * Dev-mode hot-swap hook. Compares the current project-swig `package.json`
+ * mtime against the value cached at the last `load()`. When they differ — or
+ * when the file has appeared/disappeared — evicts the cached swig from
+ * `require.cache`, clears the in-process cache, and re-runs `load()` with
+ * the original options so the next access picks up the new version.
+ *
+ * No-op unless all of these hold:
+ *   - `process.env.NODE_ENV_IS_DEV === 'true'`
+ *   - A previous `load()` stashed `_swigOptions` + `_swigProjectPath`
+ *   - `_swigOptions.useProject === true` (nothing to hot-swap otherwise)
+ *
+ * @inner
+ */
+function refreshIfStale() {
+    if (process.env.NODE_ENV_IS_DEV !== 'true') { return; }
+
+    var opts = process.gina._swigOptions;
+    if (!opts || opts.useProject !== true) { return; }
+
+    var projectPath = process.gina._swigProjectPath;
+    if (!projectPath) { return; }
+
+    var pkgName       = opts['package'] || DEFAULT_PACKAGE;
+    var currentMtime  = readProjectPkgMtime(projectPath, pkgName);
+    var previousMtime = process.gina._swigMtime;
+
+    if (currentMtime === previousMtime) { return; }
+
+    // Mtime drift (or file appeared/disappeared). Evict any cached project-
+    // copy from require.cache so the next require() re-parses the new file.
+    // Framework-copy decisions keep the framework require.cache entry — that
+    // never goes stale across project-side reinstalls.
+    var prev = process.gina._swigDecision;
+    if (prev && prev.source === 'project' && prev.path) {
+        try { delete require.cache[prev.path]; } catch (e) { /* ignore */ }
+    }
+
+    // Clear just enough state to force load() to re-enter; keep options and
+    // projectPath so the next refresh uses the same parameters.
+    delete process.gina._swig;
+    delete process.gina._swigDecision;
+    delete process.gina._swigPackage;
+
+    load(projectPath, opts);
 }
 
 /**
@@ -450,6 +525,9 @@ function reset() {
         delete process.gina._swig;
         delete process.gina._swigDecision;
         delete process.gina._swigPackage;
+        delete process.gina._swigOptions;
+        delete process.gina._swigProjectPath;
+        delete process.gina._swigMtime;
     }
 }
 
