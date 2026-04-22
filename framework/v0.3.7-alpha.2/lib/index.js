@@ -91,6 +91,10 @@ function Lib() {
         // #AI8b — HTTP loopback dispatcher. Translates MCP tools/call into a
         // real request against the running bundle's configured port.
         mcpDispatch     : _require('./mcp-dispatch'),
+        // #AI8 Phase 2b — MCP Streamable HTTP transport. Wraps an mcpServer
+        // instance with an HTTP endpoint (POST, JSON/SSE negotiation, batch,
+        // Mcp-Session-Id lifecycle). Auth / Origin checks land in Phase 2b S2.
+        mcpHttp         : _require('./mcp-http'),
     };
 
     /**
