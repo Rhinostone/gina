@@ -90,6 +90,11 @@ function Lib() {
         // settings.json > swig.useProject; default-off. Returns a decision
         // record — the caller performs the actual require.
         swigResolver    : _require('./swig-resolver'),
+        // Detects project-installed `nunjucks` and caches on process.gina._nunjucks.
+        // Opt-in via settings.json > render.engine === 'nunjucks'. No framework
+        // fallback — load() throws NUNJUCKS_NOT_INSTALLED when the project has
+        // not installed the package.
+        nunjucksResolver: _require('./nunjucks-resolver'),
         // #AI8b — MCP server primitives (JSON-RPC 2.0 framing, lifecycle,
         // method handlers). Transport-agnostic; wired to stdio by bundle:mcp-start.
         mcpServer       : _require('./mcp-server'),
