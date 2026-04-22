@@ -3,14 +3,15 @@ var CmdHelper   = require('./../helper');
 var console     = lib.logger;
 var mcpServer   = lib.mcpServer;
 var mcpDispatch = lib.mcpDispatch;
+var mcpHttp     = lib.mcpHttp;
 
 /**
  * @module gina/lib/cmd/bundle/mcp-start
  */
 /**
  * Starts a Model Context Protocol server for a running bundle. Speaks
- * JSON-RPC 2.0 over stdio (newline-delimited UTF-8) per MCP spec revision
- * 2025-06-18.
+ * JSON-RPC 2.0 either over stdio (newline-delimited UTF-8) or over HTTP
+ * (Streamable HTTP) per MCP spec revision 2025-06-18.
  *
  * The server reads the static tool manifest written by `gina bundle:mcp`,
  * advertises every tool over `tools/list`, and dispatches incoming
@@ -25,15 +26,20 @@ var mcpDispatch = lib.mcpDispatch;
  * **Stdio discipline.** The bin/cli early intercept redirects process.stdout
  * to stderr when `bundle:mcp-start` is detected in argv, and stashes the real
  * write on `process.__ginaMcpStdout`. The MCP wire uses that stashed write;
- * every framework log line ends up on stderr where it belongs.
+ * every framework log line ends up on stderr where it belongs. The redirect
+ * is harmless under `--transport=http` (nothing writes to stdout in that
+ * path), so it is not conditionalised.
  *
  * Usage:
  *  gina bundle:mcp-start <bundle_name> @<project_name>
  *  gina bundle:mcp-start <bundle_name> @<project_name> --timeout-ms=5000
+ *  gina bundle:mcp-start <bundle_name> @<project_name> --transport=http
+ *  gina bundle:mcp-start <bundle_name> @<project_name> --transport=http --http-port=3107
+ *  gina bundle:mcp-start <bundle_name> @<project_name> --transport=http --auth-token=<token>
  *
- * Timeout precedence: `--timeout-ms` CLI flag > `mcp.json > server > timeoutMs`
- * > 30 000 ms default. Negative / non-numeric values at any layer fall through
- * to the next layer with a stderr warning.
+ * Flag precedence at every resolver: CLI > `mcp.json > server > <field>` >
+ * environment (where applicable) > default. Non-numeric / out-of-range
+ * values at any layer fall through to the next layer with a stderr warning.
  *
  * @class MCPStart
  * @constructor
@@ -47,9 +53,10 @@ var mcpDispatch = lib.mcpDispatch;
 function MCPStart(opt, cmd) {
     var self = {};
 
-    var server      = null;
-    var dispatcher  = null;
-    var shuttingDown = false;
+    var server        = null;
+    var dispatcher    = null;
+    var httpTransport = null;
+    var shuttingDown  = false;
 
 
     var init = function() {
@@ -66,7 +73,7 @@ function MCPStart(opt, cmd) {
             return end( new Error('Missing argument @<project_name>') );
         }
 
-        // Exactly one bundle — MCP stdio is point-to-point.
+        // Exactly one bundle — MCP is point-to-point, whether over stdio or HTTP.
         if (!self.bundles.length) {
             return end( new Error('Missing argument <bundle_name>. Usage: gina bundle:mcp-start <bundle> @<project>') );
         }
@@ -79,9 +86,10 @@ function MCPStart(opt, cmd) {
 
 
     /**
-     * Loads the manifest, wires dispatcher + server, attaches stdio, and
-     * installs shutdown handlers. Never returns — the process lives until
-     * stdin closes or a signal arrives.
+     * Loads the manifest, wires dispatcher + server, attaches the selected
+     * transport (stdio or HTTP), and installs shutdown handlers. Never
+     * returns — the process lives until stdin closes (stdio) or a signal
+     * arrives.
      *
      * @private
      */
@@ -142,11 +150,14 @@ function MCPStart(opt, cmd) {
             packVersion = '0.0.0';
         }
 
-        var timeoutMs = resolveTimeoutMs(mcpDoc);
+        var transport   = resolveTransport(mcpDoc);
+        var timeoutMs   = resolveTimeoutMs(mcpDoc);
+        var maxInFlight = resolveMaxInFlight(mcpDoc);
 
         dispatcher = mcpDispatch.createDispatcher({
-            baseUrl:   baseUrl,
-            timeoutMs: timeoutMs
+            baseUrl:     baseUrl,
+            timeoutMs:   timeoutMs,
+            maxInFlight: maxInFlight
         });
 
         server = mcpServer.createServer({
@@ -167,6 +178,20 @@ function MCPStart(opt, cmd) {
             }
         });
 
+        if (transport === 'http') {
+            return startHttp(bundle, mcpDoc, baseUrl, timeoutMs, maxInFlight);
+        }
+
+        return startStdio(bundle, mcpDoc, baseUrl, timeoutMs);
+    };
+
+
+    /**
+     * Wires the server to stdio and blocks on stdin.
+     *
+     * @private
+     */
+    var startStdio = function(bundle, mcpDoc, baseUrl, timeoutMs) {
         // Output stream: the real stdout stashed by bin/cli before redirect.
         var output = (typeof(process.__ginaMcpStdout) === 'function')
             ? { write: process.__ginaMcpStdout }
@@ -182,6 +207,69 @@ function MCPStart(opt, cmd) {
 
         process.on('SIGTERM', function() { gracefulExit(0); });
         process.on('SIGINT',  function() { gracefulExit(0); });
+    };
+
+
+    /**
+     * Wires the server to a Streamable HTTP transport on the resolved
+     * host/port. Does NOT block — the process stays alive because the
+     * http.Server keeps the event loop busy.
+     *
+     * @private
+     */
+    var startHttp = function(bundle, mcpDoc, baseUrl, timeoutMs, maxInFlight) {
+
+        var host           = resolveHttpHost(mcpDoc);
+        var port           = resolveHttpPort(mcpDoc);
+        var authToken      = resolveAuthToken(mcpDoc);
+        var allowedOrigins = resolveAllowedOrigins(mcpDoc);
+
+        httpTransport = mcpHttp.createHttpTransport({
+            mcpServer:      server,
+            host:           host,
+            port:           port,
+            authToken:      authToken,
+            allowedOrigins: allowedOrigins,
+            onError: function(err) {
+                console.error('[ '+ bundle +' ][mcp] HTTP transport: ' + (err && err.message || err));
+            }
+        });
+
+        httpTransport.start().then(function(info) {
+            var authNote = authToken ? ' (bearer auth: enabled)' : '';
+            console.info('[ '+ bundle +' ][mcp] MCP server listening on http://'+ info.host +':'+ info.port + authNote +'. Dispatch target: '+ baseUrl +' (timeout: '+ timeoutMs +' ms, maxInFlight: '+ maxInFlight +'). '+ mcpDoc.tools.length +' tool'+ (mcpDoc.tools.length === 1 ? '' : 's') +' exposed.');
+        }, function(err) {
+            return end( new Error('Failed to start HTTP transport on '+ host +':'+ port +': '+ (err && err.message || err)) );
+        });
+
+        process.on('SIGTERM', function() { gracefulExit(0); });
+        process.on('SIGINT',  function() { gracefulExit(0); });
+    };
+
+
+    /**
+     * Resolves the transport name. Precedence:
+     *   1. `--transport=<stdio|http>` CLI flag
+     *   2. `mcp.json > server > transport`
+     *   3. `'stdio'` default (preserves pre-#AI8 Phase 2b behaviour)
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {'stdio'|'http'}
+     */
+    var resolveTransport = function(mcpDoc) {
+        var cli = self.params && self.params['transport'];
+        if (typeof(cli) === 'string' && cli) {
+            var c = cli.toLowerCase();
+            if (c === 'stdio' || c === 'http') return c;
+            console.warn('[mcp] Ignoring --transport='+ cli +' (must be "stdio" or "http"). Falling back to manifest / default.');
+        }
+        if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.transport) === 'string') {
+            var m = mcpDoc.server.transport.toLowerCase();
+            if (m === 'stdio' || m === 'http') return m;
+            console.warn('[mcp] Ignoring mcp.json > server > transport='+ mcpDoc.server.transport +' (must be "stdio" or "http"). Falling back to default.');
+        }
+        return 'stdio';
     };
 
 
@@ -221,6 +309,136 @@ function MCPStart(opt, cmd) {
         }
 
         return DEFAULT_MS;
+    };
+
+
+    /**
+     * Resolves the dispatcher in-flight request cap. Precedence:
+     *   1. `--max-in-flight=<n>` CLI flag
+     *   2. `mcp.json > server > maxInFlight`
+     *   3. `mcpDispatch.DEFAULT_MAX_IN_FLIGHT`
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {number} Positive integer
+     */
+    var resolveMaxInFlight = function(mcpDoc) {
+        var cli = self.params && self.params['max-in-flight'];
+        if (typeof(cli) !== 'undefined' && cli !== null && cli !== true && cli !== false) {
+            var parsedCli = Number(cli);
+            if (isFinite(parsedCli) && parsedCli > 0 && Math.floor(parsedCli) === parsedCli) {
+                return parsedCli;
+            }
+            console.warn('[mcp] Ignoring --max-in-flight='+ cli +' (must be a positive integer). Falling back to manifest / default.');
+        }
+        if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.maxInFlight) !== 'undefined') {
+            var parsedManifest = Number(mcpDoc.server.maxInFlight);
+            if (isFinite(parsedManifest) && parsedManifest > 0 && Math.floor(parsedManifest) === parsedManifest) {
+                return parsedManifest;
+            }
+            console.warn('[mcp] Ignoring mcp.json > server > maxInFlight='+ mcpDoc.server.maxInFlight +' (must be a positive integer). Falling back to default.');
+        }
+        return mcpDispatch.DEFAULT_MAX_IN_FLIGHT;
+    };
+
+
+    /**
+     * Resolves the HTTP bind host. Precedence:
+     *   1. `--http-host=<host>` CLI flag
+     *   2. `mcp.json > server > httpHost`
+     *   3. `process.env.GINA_HOST_V4` (set by bin/cli from
+     *      `~/.gina/<shortVersion>/settings.json > host_v4`)
+     *   4. `'127.0.0.1'` ultimate fallback
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {string}
+     */
+    var resolveHttpHost = function(mcpDoc) {
+        var cli = self.params && self.params['http-host'];
+        if (typeof(cli) === 'string' && cli) return cli;
+        if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.httpHost) === 'string' && mcpDoc.server.httpHost) {
+            return mcpDoc.server.httpHost;
+        }
+        var env = process.env.GINA_HOST_V4;
+        if (typeof(env) === 'string' && env) return env;
+        return '127.0.0.1';
+    };
+
+
+    /**
+     * Resolves the HTTP bind port. Precedence:
+     *   1. `--http-port=<n>` CLI flag (integer 0–65535; 0 = OS-assigned)
+     *   2. `mcp.json > server > httpPort`
+     *   3. `0` default (OS-assigned ephemeral port)
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {number}
+     */
+    var resolveHttpPort = function(mcpDoc) {
+        var cli = self.params && self.params['http-port'];
+        if (typeof(cli) !== 'undefined' && cli !== null && cli !== true && cli !== false) {
+            var parsedCli = Number(cli);
+            if (isFinite(parsedCli) && parsedCli >= 0 && parsedCli < 65536 && Math.floor(parsedCli) === parsedCli) {
+                return parsedCli;
+            }
+            console.warn('[mcp] Ignoring --http-port='+ cli +' (must be an integer between 0 and 65535). Falling back to manifest / default.');
+        }
+        if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.httpPort) !== 'undefined') {
+            var parsedManifest = Number(mcpDoc.server.httpPort);
+            if (isFinite(parsedManifest) && parsedManifest >= 0 && parsedManifest < 65536 && Math.floor(parsedManifest) === parsedManifest) {
+                return parsedManifest;
+            }
+            console.warn('[mcp] Ignoring mcp.json > server > httpPort='+ mcpDoc.server.httpPort +' (must be an integer between 0 and 65535). Falling back to default.');
+        }
+        return 0;
+    };
+
+
+    /**
+     * Resolves the static bearer token. Precedence:
+     *   1. `--auth-token=<token>` CLI flag
+     *   2. `mcp.json > server > authToken`
+     *   3. `process.env.GINA_MCP_AUTH_TOKEN`
+     *   4. `null` (no auth; loopback bind is the security boundary)
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {string|null}
+     */
+    var resolveAuthToken = function(mcpDoc) {
+        var cli = self.params && self.params['auth-token'];
+        if (typeof(cli) === 'string' && cli) return cli;
+        if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.authToken) === 'string' && mcpDoc.server.authToken) {
+            return mcpDoc.server.authToken;
+        }
+        var env = process.env.GINA_MCP_AUTH_TOKEN;
+        if (typeof(env) === 'string' && env) return env;
+        return null;
+    };
+
+
+    /**
+     * Resolves the CORS `Origin` allowlist. Precedence:
+     *   1. `--cors-origin=<list>` CLI flag (comma-separated; use `*` to disable)
+     *   2. `mcp.json > server > allowedOrigins` (array)
+     *   3. Empty array — `lib/mcp-http` falls back to its built-in loopback
+     *      allowlist (`http(s)://localhost`, `127.0.0.1`, `[::1]` any port)
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {string[]}
+     */
+    var resolveAllowedOrigins = function(mcpDoc) {
+        var cli = self.params && self.params['cors-origin'];
+        if (typeof(cli) === 'string' && cli) {
+            return cli.split(',').map(function(s) { return s.trim(); }).filter(function(s) { return s.length; });
+        }
+        if (mcpDoc && mcpDoc.server && Array.isArray(mcpDoc.server.allowedOrigins)) {
+            return mcpDoc.server.allowedOrigins;
+        }
+        return [];
     };
 
 
@@ -290,7 +508,8 @@ function MCPStart(opt, cmd) {
 
 
     /**
-     * Closes the server cleanly and exits. Idempotent.
+     * Closes the server cleanly and exits. Idempotent. For HTTP transport,
+     * stop() is awaited so in-flight responses drain before the process goes.
      *
      * @private
      * @param   {number} code
@@ -298,8 +517,15 @@ function MCPStart(opt, cmd) {
     var gracefulExit = function(code) {
         if (shuttingDown) return;
         shuttingDown = true;
-        try { if (server) server.close(); } catch (e) { /* ignore */ }
-        process.exit(code || 0);
+        var finish = function() {
+            try { if (server) server.close(); } catch (e) { /* ignore */ }
+            process.exit(code || 0);
+        };
+        if (httpTransport) {
+            httpTransport.stop().then(finish, finish);
+        } else {
+            finish();
+        }
     };
 
 

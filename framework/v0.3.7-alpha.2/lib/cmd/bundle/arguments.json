@@ -7,5 +7,11 @@
   "--start-port-from",
   "--gina-version",
   "--output",
-  "--timeout-ms"
+  "--timeout-ms",
+  "--transport",
+  "--http-host",
+  "--http-port",
+  "--max-in-flight",
+  "--auth-token",
+  "--cors-origin"
 ]

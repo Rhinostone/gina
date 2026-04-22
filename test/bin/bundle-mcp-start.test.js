@@ -216,3 +216,200 @@ describe('08 - --timeout-ms CLI flag wiring', function () {
         assert.match(handlerSrc, /timeout:\s*'\s*\+\s*timeoutMs/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 09 — --transport CLI flag + stdio|http branch (#AI8 Phase 2b S3)
+// ---------------------------------------------------------------------------
+
+describe('09 - --transport flag + stdio|http branch', function () {
+
+    var argsPath = path.join(FW_PATH, 'lib/cmd/bundle/arguments.json');
+    var argsSrc  = fs.readFileSync(argsPath, 'utf8');
+
+    it('whitelists --transport in arguments.json', function () {
+        assert.match(argsSrc, /"--transport"/);
+    });
+
+    it('reads self.params[\'transport\'] for the CLI override', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]transport['"]/);
+    });
+
+    it('reads mcpDoc.server.transport for the manifest fallback', function () {
+        assert.match(handlerSrc, /mcpDoc\.server\.transport/);
+    });
+
+    it('validates transport value against stdio|http', function () {
+        assert.match(handlerSrc, /c\s*===\s*['"]stdio['"]\s*\|\|\s*c\s*===\s*['"]http['"]/);
+    });
+
+    it('defaults to stdio when neither CLI nor manifest is set', function () {
+        assert.match(handlerSrc, /return\s+['"]stdio['"];/);
+    });
+
+    it('branches on the resolved transport to startStdio vs startHttp', function () {
+        assert.match(handlerSrc, /startHttp\(/);
+        assert.match(handlerSrc, /startStdio\(/);
+        assert.match(handlerSrc, /if\s*\(\s*transport\s*===\s*['"]http['"]\s*\)/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 10 — HTTP bind host/port resolvers (Session 3)
+// ---------------------------------------------------------------------------
+
+describe('10 - HTTP bind host/port resolvers', function () {
+
+    var argsPath = path.join(FW_PATH, 'lib/cmd/bundle/arguments.json');
+    var argsSrc  = fs.readFileSync(argsPath, 'utf8');
+
+    it('whitelists --http-host and --http-port in arguments.json', function () {
+        assert.match(argsSrc, /"--http-host"/);
+        assert.match(argsSrc, /"--http-port"/);
+    });
+
+    it('resolveHttpHost follows CLI → manifest → GINA_HOST_V4 → 127.0.0.1', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]http-host['"]/);
+        assert.match(handlerSrc, /mcpDoc\.server\.httpHost/);
+        assert.match(handlerSrc, /process\.env\.GINA_HOST_V4/);
+        assert.match(handlerSrc, /return\s+['"]127\.0\.0\.1['"];/);
+    });
+
+    it('resolveHttpPort follows CLI → manifest → 0 (OS-assigned)', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]http-port['"]/);
+        assert.match(handlerSrc, /mcpDoc\.server\.httpPort/);
+        assert.match(handlerSrc, /return\s+0;/);
+    });
+
+    it('resolveHttpPort guards with 0..65535 range + integer check', function () {
+        // Both CLI and manifest paths must reject out-of-range / non-integer values.
+        assert.match(handlerSrc, /parsedCli\s*>=\s*0\s*&&\s*parsedCli\s*<\s*65536/);
+        assert.match(handlerSrc, /parsedManifest\s*>=\s*0\s*&&\s*parsedManifest\s*<\s*65536/);
+        assert.match(handlerSrc, /Math\.floor\(parsedCli\)\s*===\s*parsedCli/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 11 — --max-in-flight resolver (Session 3)
+// ---------------------------------------------------------------------------
+
+describe('11 - --max-in-flight resolver', function () {
+
+    var argsPath = path.join(FW_PATH, 'lib/cmd/bundle/arguments.json');
+    var argsSrc  = fs.readFileSync(argsPath, 'utf8');
+
+    it('whitelists --max-in-flight in arguments.json', function () {
+        assert.match(argsSrc, /"--max-in-flight"/);
+    });
+
+    it('follows CLI → manifest → DEFAULT_MAX_IN_FLIGHT', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]max-in-flight['"]/);
+        assert.match(handlerSrc, /mcpDoc\.server\.maxInFlight/);
+        assert.match(handlerSrc, /mcpDispatch\.DEFAULT_MAX_IN_FLIGHT/);
+    });
+
+    it('passes the resolved cap to createDispatcher', function () {
+        assert.match(handlerSrc, /createDispatcher\(\s*\{[^}]*maxInFlight:\s*maxInFlight/);
+    });
+
+    it('guards with positive-integer semantics', function () {
+        assert.match(handlerSrc, /isFinite\(parsedCli\).*parsedCli\s*>\s*0.*Math\.floor\(parsedCli\)\s*===\s*parsedCli/s);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 12 — --auth-token + --cors-origin resolvers (Session 3)
+// ---------------------------------------------------------------------------
+
+describe('12 - auth-token + cors-origin resolvers', function () {
+
+    var argsPath = path.join(FW_PATH, 'lib/cmd/bundle/arguments.json');
+    var argsSrc  = fs.readFileSync(argsPath, 'utf8');
+
+    it('whitelists --auth-token and --cors-origin in arguments.json', function () {
+        assert.match(argsSrc, /"--auth-token"/);
+        assert.match(argsSrc, /"--cors-origin"/);
+    });
+
+    it('resolveAuthToken follows CLI → manifest → GINA_MCP_AUTH_TOKEN env → null', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]auth-token['"]/);
+        assert.match(handlerSrc, /mcpDoc\.server\.authToken/);
+        assert.match(handlerSrc, /process\.env\.GINA_MCP_AUTH_TOKEN/);
+    });
+
+    it('resolveAllowedOrigins parses CLI as comma-separated list', function () {
+        assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]cors-origin['"]/);
+        assert.match(handlerSrc, /\.split\(\s*['"]\s*,\s*['"]\s*\)/);
+        // Empty entries (trailing commas, double commas) filtered out.
+        assert.match(handlerSrc, /\.filter\(/);
+    });
+
+    it('resolveAllowedOrigins falls back to manifest array', function () {
+        assert.match(handlerSrc, /mcpDoc\.server\.allowedOrigins/);
+        assert.match(handlerSrc, /Array\.isArray\(mcpDoc\.server\.allowedOrigins\)/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 13 — HTTP transport wire-up (Session 3)
+// ---------------------------------------------------------------------------
+
+describe('13 - HTTP transport wire-up', function () {
+
+    it('reads lib.mcpHttp from the registry', function () {
+        assert.match(handlerSrc, /var\s+mcpHttp\s*=\s*lib\.mcpHttp/);
+    });
+
+    it('does not use bare-module form for mcp-http', function () {
+        assert.doesNotMatch(handlerSrc, /require\(['"]lib\/mcp-http['"]\)/);
+    });
+
+    it('calls mcpHttp.createHttpTransport with server + host/port/authToken/allowedOrigins', function () {
+        assert.match(handlerSrc, /mcpHttp\.createHttpTransport\(\s*\{/);
+        assert.match(handlerSrc, /mcpServer:\s*server/);
+        assert.match(handlerSrc, /host:\s*host/);
+        assert.match(handlerSrc, /port:\s*port/);
+        assert.match(handlerSrc, /authToken:\s*authToken/);
+        assert.match(handlerSrc, /allowedOrigins:\s*allowedOrigins/);
+    });
+
+    it('starts the transport via .start() and surfaces the resolved port in the log line', function () {
+        assert.match(handlerSrc, /httpTransport\.start\(\)/);
+        assert.match(handlerSrc, /listening on http:\/\/'\s*\+\s*info\.host/);
+    });
+
+    it('logs bearer auth status in the startup info line', function () {
+        assert.match(handlerSrc, /bearer auth:/);
+    });
+
+    it('rejects with a helpful message when start() fails (port in use etc.)', function () {
+        assert.match(handlerSrc, /Failed to start HTTP transport on /);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 14 — SIGTERM / gracefulExit drains HTTP transport (Session 3)
+// ---------------------------------------------------------------------------
+
+describe('14 - gracefulExit drains HTTP transport', function () {
+
+    it('installs SIGTERM/SIGINT in the HTTP branch too', function () {
+        // Check that BOTH startStdio and startHttp install the signal handlers.
+        var matches = handlerSrc.match(/process\.on\(['"]SIGTERM['"]/g) || [];
+        assert.ok(matches.length >= 2, 'SIGTERM must be installed in both transport branches');
+    });
+
+    it('awaits httpTransport.stop() before process.exit', function () {
+        assert.match(handlerSrc, /httpTransport\.stop\(\)\.then\(\s*finish\s*,\s*finish\s*\)/);
+    });
+
+    it('is idempotent via shuttingDown flag', function () {
+        assert.match(handlerSrc, /if\s*\(shuttingDown\)\s*return;/);
+        assert.match(handlerSrc, /shuttingDown\s*=\s*true;/);
+    });
+});

@@ -154,3 +154,38 @@
     server > timeoutMs` > default.
 
     $ gina bundle:mcp-start <bundle_name> @<project_name> --timeout-ms=5000
+
+
+    [ MCP Streamable HTTP transport ]
+
+    Switch the MCP wire from stdio to Streamable HTTP — for remote or
+    containerised agents, or any client that cannot pipe stdio.
+
+    $ gina bundle:mcp-start <bundle_name> @<project_name> --transport=http
+    $ gina bundle:mcp-start <bundle_name> @<project_name> --transport=http --http-port=3107
+    $ gina bundle:mcp-start <bundle_name> @<project_name> --transport=http --auth-token=<token>
+
+    HTTP transport flags:
+      --http-host=<host>       Bind host. Default: $GINA_HOST_V4 (from
+                               ~/.gina/<shortVersion>/settings.json > host_v4,
+                               normally 127.0.0.1). Pass 0.0.0.0 to expose
+                               externally — deliberate opt-in.
+      --http-port=<n>          Bind port. Default: 0 (OS-assigned; the
+                               resolved port is logged to stderr on start).
+      --max-in-flight=<n>      Concurrency cap on upstream dispatch.
+                               Default: 16. Applies across all HTTP clients
+                               sharing this transport.
+      --auth-token=<token>     Require `Authorization: Bearer <token>` on
+                               every non-OPTIONS request. Also readable
+                               from `$GINA_MCP_AUTH_TOKEN` or
+                               `mcp.json > server > authToken`.
+      --cors-origin=<list>     Extra origins beyond the built-in loopback
+                               allowlist (`http(s)://localhost`, `127.0.0.1`,
+                               `[::1]` on any port). Comma-separated. Pass
+                               `*` to disable the Origin check entirely.
+
+    Default security posture — bind loopback, no auth, Origin allowlist
+    accepts localhost / 127.0.0.1 / [::1] only. For OAuth-protected
+    deployments, place gina behind a reverse proxy (oauth2-proxy, Traefik
+    ForwardAuth, nginx `auth_request`) that handles the OAuth dance and
+    forwards the upstream request.
