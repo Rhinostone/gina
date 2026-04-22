@@ -15,11 +15,11 @@
  * `controller.render-swig.js`; invoked through `controller.js` `this.render()`
  * dispatch.
  *
- * ## Status — MVP (Session N2 + Inspector port 2026-04-22)
+ * ## Status — MVP (Session N2 + Inspector + HTTP/2 + error-page ports 2026-04-22)
  *
- * Renders a `.njk` template with locals data and sends an HTTP/1.1 response.
- * Inspector dev-payload injection is **shipped** (N2 deferred item #1 closed
- * in commit TBD — see `injectInspectorScripts` below). The following are
+ * Renders a `.njk` template with locals data and sends an HTTP/1.1 or HTTP/2
+ * response. Inspector dev-payload injection, HTTP/2 `stream.respond()` direct
+ * path, and error-page template routing are all shipped. The following are
  * still deferred to follow-up sessions and called out inline:
  *
  *   1. ~~**Inspector `__gdPayload`**~~ — **shipped**. `<script>window.__ginaData = ...</script>`
@@ -43,15 +43,30 @@
  *      would otherwise throw `ERR_HTTP2_INVALID_STREAM`. Early Hints 103
  *      auto-send for CSS/JS preloads is still deferred — that path in swig
  *      runs in `controller.js this.render()` before the delegate is called.
- *   3. **Static HTML cache writes** — no `writeCache()` equivalent; every
+ *   3. ~~**Error-page template routing**~~ — **shipped 2026-04-22** (commit TBD).
+ *      When `controller.js renderCustomError()` sets `localOptions.file` to
+ *      the absolute path of the bundle's error template (from
+ *      `bundleConf.content.templates._common.errorFiles[code]`), the
+ *      `isRenderingCustomError` branch below reads the file with
+ *      `fs.readFileSync` and renders it via `env.renderString(source, data)`
+ *      instead of going through `FileSystemLoader` (which rejects absolute
+ *      paths and cannot reach shared-path error templates outside the bundle
+ *      root). Failures fall back to a minimal inline HTML body rather than
+ *      recursing via `self.throwError` — recursion would re-enter this same
+ *      branch and could loop. The defensive `localOptions.isRenderingCustomError
+ *      = false` reset after render mirrors render-swig.js lines 804, 1434.
+ *   4. **Early Hints 103** auto-send — lives in `controller.js this.render()`
+ *      before the delegate runs, so the port is controller-level rather than
+ *      render-nunjucks-level.
+ *   5. **Static HTML cache writes** — no `writeCache()` equivalent; every
  *      request re-renders even when the route has `cache` configured.
- *   4. **Asset cataloguing / `setResources`** — no `<gina>` layout placeholder
+ *   6. **Asset cataloguing / `setResources`** — no `<gina>` layout placeholder
  *      resolution, no automatic CSS/JS preload injection. Users wire their
  *      own `<link>` / `<script>` tags into templates.
- *   5. **Gina SwigFilters registration** — the swig-specific filter registry
+ *   7. **Gina SwigFilters registration** — the swig-specific filter registry
  *      (`getWebroot`, `nl2br`, etc.) is not ported. Users register their own
  *      filters via `nunjucks.Environment.addFilter()`.
- *   6. **Layout composition** — nunjucks' native `{% extends %}` / `{% block %}`
+ *   8. **Layout composition** — nunjucks' native `{% extends %}` / `{% block %}`
  *      / `{% include %}` work automatically through `FileSystemLoader`. No
  *      Gina-specific layout merging beyond that.
  *
@@ -466,24 +481,6 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         });
     }
 
-    var templateRel;
-    try {
-        templateRel = resolveTemplatePath(data, localOptions);
-    } catch (pathErr) {
-        return self.throwError(pathErr);
-    }
-
-    // Template-existence pre-flight — nunjucks throws on missing templates
-    // with a generic message; this produces a Gina-style error object with
-    // a clear path so the dev sees what was looked up.
-    var absTemplate = nodePath.join(templateRoot, templateRel);
-    if (!fs.existsSync(absTemplate)) {
-        return self.throwError(new Error(
-            '[render-nunjucks] template not found: ' + templateRel +
-            ' (looked under ' + templateRoot + ')'
-        ));
-    }
-
     var env;
     try {
         env = getEnvironment(nunjucks, templateRoot, {
@@ -493,11 +490,81 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         return self.throwError(envErr);
     }
 
+    var isRenderingCustomError = (localOptions.isRenderingCustomError === true);
     var html;
-    try {
-        html = env.render(templateRel, data);
-    } catch (renderErr) {
-        return self.throwError(renderErr);
+
+    if (isRenderingCustomError) {
+        // Custom error template path. `controller.js renderCustomError()` set
+        // `localOptions.file` to the absolute path of the bundle's error file
+        // (from `bundleConf.content.templates._common.errorFiles[code]` — see
+        // `config.js:2653`). Error templates may live under the bundle's
+        // template root OR under the shared path (outside the root), so we
+        // read the file directly via `fs.readFileSync` and feed its contents
+        // to `env.renderString(source, data)` instead of going through the
+        // FileSystemLoader (absolute paths are rejected by the loader, and a
+        // shared-path file would be outside the bundle root regardless).
+        //
+        // Never recurse into `self.throwError` from this branch — that would
+        // re-enter the same render call and potentially loop. Every failure
+        // mode falls back to a minimal inline HTML body served via
+        // `sendHtmlResponse` so the client still gets a well-formed response.
+        // Mirrors the render-swig.js behaviour where `isRenderingCustomError`
+        // reads the file directly at line 347 and compiles its contents.
+        var _absErrTemplate = localOptions.file;
+        var _errStatusCode  = (data && data.page && data.page.data && data.page.data.status) || 500;
+
+        if (!_absErrTemplate || !fs.existsSync(_absErrTemplate)) {
+            html = '<!doctype html><html><head><title>Error ' + _errStatusCode + '</title></head>'
+                 + '<body><pre>[render-nunjucks] error template not found: '
+                 + (_absErrTemplate || '(unset)') + '</pre></body></html>';
+        } else {
+            var _errSource = null;
+            try {
+                _errSource = fs.readFileSync(_absErrTemplate, 'utf8');
+            } catch (readErr) {
+                html = '<!doctype html><html><head><title>Error ' + _errStatusCode + '</title></head>'
+                     + '<body><pre>[render-nunjucks] failed to read error template: '
+                     + (readErr.message || readErr) + '</pre></body></html>';
+            }
+            if (typeof _errSource === 'string') {
+                try {
+                    html = env.renderString(_errSource, data);
+                } catch (renderErr) {
+                    html = '<!doctype html><html><head><title>Error ' + _errStatusCode + '</title></head>'
+                         + '<body><pre>[render-nunjucks] error template render failed: '
+                         + (renderErr.message || renderErr) + '</pre></body></html>';
+                }
+            }
+        }
+
+        // Defensive flag reset — mirrors render-swig.js:804, 1434. Prevents
+        // a subsequent render that reuses the same localOptions reference
+        // from re-entering this branch.
+        localOptions.isRenderingCustomError = false;
+    } else {
+        var templateRel;
+        try {
+            templateRel = resolveTemplatePath(data, localOptions);
+        } catch (pathErr) {
+            return self.throwError(pathErr);
+        }
+
+        // Template-existence pre-flight — nunjucks throws on missing templates
+        // with a generic message; this produces a Gina-style error object with
+        // a clear path so the dev sees what was looked up.
+        var absTemplate = nodePath.join(templateRoot, templateRel);
+        if (!fs.existsSync(absTemplate)) {
+            return self.throwError(new Error(
+                '[render-nunjucks] template not found: ' + templateRel +
+                ' (looked under ' + templateRoot + ')'
+            ));
+        }
+
+        try {
+            html = env.render(templateRel, data);
+        } catch (renderErr) {
+            return self.throwError(renderErr);
+        }
     }
 
     // Inspector dev-payload injection (dev mode only; no-op otherwise).

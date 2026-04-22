@@ -418,6 +418,147 @@ describe('05b - Inspector __gdPayload injection', function () {
 
 
 // ---------------------------------------------------------------------------
+// 05c - Error-page template routing (isRenderingCustomError branch)
+// ---------------------------------------------------------------------------
+
+describe('05c - error-page template routing (isRenderingCustomError branch)', function () {
+
+    it('declares the isRenderingCustomError local flag from localOptions', function () {
+        // Matches: var isRenderingCustomError = (localOptions.isRenderingCustomError === true);
+        assert.match(
+            RENDER_NJ_SRC,
+            /var\s+isRenderingCustomError\s*=\s*\(\s*localOptions\.isRenderingCustomError\s*===\s*true\s*\)/
+        );
+    });
+
+    it('branches on isRenderingCustomError before picking the template path', function () {
+        // The if (isRenderingCustomError) branch must precede the call site
+        // of resolveTemplatePath so the two cases are exclusive. Search for
+        // the assignment form (`templateRel = resolveTemplatePath(...)`) so
+        // we hit the call, not the function definition at top of file.
+        var branchIdx   = RENDER_NJ_SRC.indexOf('if (isRenderingCustomError)');
+        var resolveIdx  = RENDER_NJ_SRC.indexOf('templateRel = resolveTemplatePath(data, localOptions)');
+        assert.ok(branchIdx > 0, 'isRenderingCustomError branch present');
+        assert.ok(resolveIdx > 0, 'resolveTemplatePath call present');
+        assert.ok(branchIdx < resolveIdx, 'custom-error branch must sit before resolveTemplatePath call');
+    });
+
+    it('reads the error template via fs.readFileSync on localOptions.file (absolute path)', function () {
+        assert.match(
+            RENDER_NJ_SRC,
+            /fs\.readFileSync\(\s*_absErrTemplate\s*,\s*['"]utf8['"]\s*\)/
+        );
+        // The source must come from localOptions.file — controller.js
+        // renderCustomError() injects the absolute path there via errOptions.
+        assert.match(RENDER_NJ_SRC, /var\s+_absErrTemplate\s*=\s*localOptions\.file/);
+    });
+
+    it('renders the error template with env.renderString(_errSource, data), not env.render', function () {
+        // renderString bypasses the FileSystemLoader (which rejects absolute
+        // paths and cannot reach shared-path error templates outside the
+        // bundle root).
+        assert.match(
+            RENDER_NJ_SRC,
+            /env\.renderString\(\s*_errSource\s*,\s*data\s*\)/
+        );
+    });
+
+    it('guards against a missing error template with a minimal inline HTML fallback', function () {
+        // If the absolute path doesn't exist, serve an inline fallback — do
+        // NOT recurse into self.throwError.
+        assert.match(
+            RENDER_NJ_SRC,
+            /!_absErrTemplate\s*\|\|\s*!fs\.existsSync\(\s*_absErrTemplate\s*\)/
+        );
+        assert.match(
+            RENDER_NJ_SRC,
+            /\[render-nunjucks\]\s*error template not found:/
+        );
+    });
+
+    it('guards against a readFileSync failure with an inline HTML fallback', function () {
+        // The try/catch around fs.readFileSync writes to `html` directly —
+        // again, no recursion into throwError.
+        var readBlockIdx = RENDER_NJ_SRC.indexOf('_errSource = fs.readFileSync');
+        assert.ok(readBlockIdx > 0);
+        var nearby = RENDER_NJ_SRC.slice(readBlockIdx, readBlockIdx + 700);
+        assert.match(nearby, /catch\s*\(\s*readErr\s*\)/);
+        assert.match(nearby, /\[render-nunjucks\]\s*failed to read error template:/);
+    });
+
+    it('catches env.renderString failures with an inline HTML fallback (no throwError recursion)', function () {
+        var rsIdx = RENDER_NJ_SRC.indexOf('env.renderString(_errSource');
+        assert.ok(rsIdx > 0);
+        var nearby = RENDER_NJ_SRC.slice(rsIdx, rsIdx + 500);
+        assert.match(nearby, /catch\s*\(\s*renderErr\s*\)/);
+        assert.match(nearby, /\[render-nunjucks\]\s*error template render failed:/);
+    });
+
+    it('NEVER calls self.throwError inside the isRenderingCustomError branch', function () {
+        // Slice the branch body and assert no throwError call is made. A
+        // throwError call here would re-enter the same render path and could
+        // loop infinitely. All failure modes MUST fall through to the inline
+        // HTML fallback + sendHtmlResponse.
+        var branchStart = RENDER_NJ_SRC.indexOf('if (isRenderingCustomError) {');
+        assert.ok(branchStart > 0, 'branch entry found');
+        // Find the matching closing brace of the if-branch (i.e. up to the `} else {` that opens the normal path).
+        var elseMarker = RENDER_NJ_SRC.indexOf('} else {', branchStart);
+        assert.ok(elseMarker > branchStart, 'branch else delimiter found');
+        var branchBody = RENDER_NJ_SRC.slice(branchStart, elseMarker);
+        assert.doesNotMatch(branchBody, /self\.throwError\(/);
+    });
+
+    it('resets localOptions.isRenderingCustomError = false after the render (defensive)', function () {
+        // Mirrors render-swig.js lines 804 and 1434. Prevents a downstream
+        // render that reuses the same localOptions from re-entering the
+        // custom-error branch.
+        assert.match(
+            RENDER_NJ_SRC,
+            /localOptions\.isRenderingCustomError\s*=\s*false/
+        );
+    });
+
+    it('builds the inline HTML fallback from data.page.data.status (or 500 default)', function () {
+        // Fallback title/body must show the resolved error code so the
+        // client at least sees *which* error the bundle hit.
+        assert.match(
+            RENDER_NJ_SRC,
+            /_errStatusCode\s*=\s*\(\s*data\s*&&\s*data\.page\s*&&\s*data\.page\.data\s*&&\s*data\.page\.data\.status\s*\)\s*\|\|\s*500/
+        );
+    });
+
+    it('getEnvironment is called BEFORE the isRenderingCustomError branch', function () {
+        // Both branches share the same env (cached per templateRoot). The
+        // env is built first, then we pick which render strategy to use.
+        var envIdx    = RENDER_NJ_SRC.indexOf('env = getEnvironment(nunjucks, templateRoot');
+        var branchIdx = RENDER_NJ_SRC.indexOf('if (isRenderingCustomError) {');
+        assert.ok(envIdx > 0);
+        assert.ok(branchIdx > envIdx, 'env setup precedes the branch');
+    });
+
+    it('normal render path (else branch) still calls env.render(templateRel, data)', function () {
+        // Locks that refactoring the custom-error branch did not break the
+        // normal path — env.render remains for the non-error case.
+        assert.match(RENDER_NJ_SRC, /html\s*=\s*env\.render\(\s*templateRel\s*,\s*data\s*\)/);
+    });
+
+    it('normal render path keeps the template-existence pre-flight', function () {
+        assert.match(
+            RENDER_NJ_SRC,
+            /\[render-nunjucks\]\s*template not found:/
+        );
+    });
+
+    it('documents error-page routing as shipped in the top-of-file header block', function () {
+        // Same lock we use for Inspector statusbar deferral — if a future
+        // session silently re-flags this as deferred, this assertion
+        // breaks and forces explicit re-docs.
+        assert.match(RENDER_NJ_SRC, /Error-page template routing[\s\S]{0,80}shipped/i);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 06 - Negative invariants
 // ---------------------------------------------------------------------------
 
