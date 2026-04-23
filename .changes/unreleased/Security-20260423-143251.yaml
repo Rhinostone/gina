@@ -1,3 +1,0 @@
-kind: Security
-body: 'Removed three server-side `eval` / `new Function` call sites (#SCS1). `core/server.js` built a static-path regex via `eval(''/^…/'')` and now uses `new RegExp`. `lib/logger/src/main.js` generated per-level logger methods via `new Function(...)` string concatenation and now uses a closure factory. `lib/math/index.js` `operate()` wrapped `new Function(''return ''+ expr)()` and is now a shunting-yard evaluator supporting `+ - * / %`, parentheses, decimals, and unary sign; any non-arithmetic character throws. Public contract unchanged — the expressions `math.operate` accepts are the same as before, but it now rejects arbitrary JS beyond pure arithmetic instead of silently executing it.'
-time: 2026-04-23T14:32:51+01:00

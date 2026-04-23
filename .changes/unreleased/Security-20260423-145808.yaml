@@ -1,3 +1,0 @@
-kind: Security
-body: 'Replaced the four `eval(''async function on<Name>...'')` async-chain scaffolding sites (#SCS1b) with direct `promisify` + `try`/`await`/`catch` IIFEs. Affected files: `lib/cmd/framework/build.js`, `lib/cmd/framework/init.js`, `script/pre_install.js`, `script/post_install.js`. Semantics unchanged — each step is still promisified, awaited, and error-exits via `console.error` + `process.exit(1)` before recursing to the next step. Old eval lines kept as comments with the `#SCS1b` tag per the replace-don''t-delete convention.'
-time: 2026-04-23T14:58:08+01:00
