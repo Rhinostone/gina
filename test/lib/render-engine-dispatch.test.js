@@ -559,6 +559,307 @@ describe('05c - error-page template routing (isRenderingCustomError branch)', fu
 
 
 // ---------------------------------------------------------------------------
+// 05d - #NJ2 — setResources / <gina> layout placeholder port
+// ---------------------------------------------------------------------------
+//
+// Source-inspection coverage for the asset-cataloguing port: `setResources`
+// wiring (produces raw-HTML `data.page.view.stylesheets/scripts`), post-render
+// `injectAssets` helper (stylesheets before </head>, scripts before </body>
+// unless `javascriptsDeferEnabled`, ginaLoader and externalPlugins in the
+// head), user-placement detection (exact substring match on the rendered
+// HTML), and `isWithoutLayout` Collection filter. Behavioural tests for
+// injectAssets itself are pure functions — we require the delegate via the
+// Node loader and exercise the helper directly where possible.
+
+describe('05d - #NJ2 asset injection / setResources port', function () {
+
+    // -----------------------------------------------------------------------
+    // (a) source-level wiring — deps.setResources + localTemplateConf prep
+    // -----------------------------------------------------------------------
+
+    it('consumes deps.setResources in the main render function', function () {
+        assert.match(RENDER_NJ_SRC, /var\s+setResources\s*=\s*deps\.setResources/);
+    });
+
+    it('documents deps.setResources in the top-of-file @param block', function () {
+        assert.match(RENDER_NJ_SRC, /@param\s+\{function\}\s+deps\.setResources/);
+    });
+
+    it('controller.js still passes setResources to both render delegates', function () {
+        // The ref was already in the deps block shipped with #NJ1; this test
+        // locks it in so a future cleanup pass doesn't drop it before the
+        // nunjucks side picks it up.
+        assert.match(CONTROLLER_SRC, /setResources:\s*setResources/);
+    });
+
+    it('calls setResources(localTemplateConf) before env.render()', function () {
+        // Use the `typeof setResources === 'function'` guard site as the
+        // anchor — that exact string only appears in the implementation,
+        // not in the doc-comment header block.
+        var guardIdx  = RENDER_NJ_SRC.indexOf("typeof setResources === 'function'");
+        var renderIdx = RENDER_NJ_SRC.indexOf('env.render(templateRel, data)');
+        assert.ok(guardIdx > 0, 'setResources guard present');
+        assert.ok(renderIdx > 0, 'env.render call present');
+        assert.ok(guardIdx < renderIdx, 'setResources guarded block must run before env.render');
+        // And the actual invocation line sits inside the guarded block.
+        var block = RENDER_NJ_SRC.slice(guardIdx, renderIdx);
+        assert.match(block, /setResources\(\s*localTemplateConf\s*\)\s*;/);
+    });
+
+    it('guards the setResources call with a typeof check so older controllers still work', function () {
+        assert.match(RENDER_NJ_SRC, /typeof\s+setResources\s*===\s*['"]function['"]/);
+    });
+
+    it('catches setResources failures without breaking the render', function () {
+        // Mis-shaped config should log a warning, not throwError — the render
+        // proceeds without auto-injected assets rather than 500ing.
+        var idx = RENDER_NJ_SRC.indexOf("typeof setResources === 'function'");
+        assert.ok(idx > 0);
+        var block = RENDER_NJ_SRC.slice(idx, idx + 1200);
+        assert.match(block, /catch\s*\(\s*resourcesErr\s*\)/);
+        assert.match(block, /\[render-nunjucks\]\s*setResources failed:/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (b) isWithoutLayout — Collection filter mirror of render-swig.js:494-498
+    // -----------------------------------------------------------------------
+
+    it('clones localTemplateConf via JSON.clone when isWithoutLayout is true', function () {
+        // Without cloning, the Collection.find() overwrite of .javascripts
+        // would mutate localOptions.template — dangerous across requests.
+        var idx = RENDER_NJ_SRC.indexOf('isWithoutLayout = !!localOptions.isWithoutLayout');
+        assert.ok(idx > 0, 'isWithoutLayout locals present');
+        var block = RENDER_NJ_SRC.slice(idx, idx + 800);
+        assert.match(block, /JSON\.clone\(localTemplateConf\)/);
+    });
+
+    it('filters javascripts via Collection.find({isCommon: false}, {isCommon: true, name: "gina"})', function () {
+        // The OR-clause mirrors render-swig.js:496 — keep all non-common
+        // assets PLUS the common gina loader, drop other common assets.
+        assert.match(
+            RENDER_NJ_SRC,
+            /new\s+Collection\(localTemplateConf\.javascripts\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('filters stylesheets via the same Collection.find OR-clause', function () {
+        assert.match(
+            RENDER_NJ_SRC,
+            /new\s+Collection\(localTemplateConf\.stylesheets\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('imports Collection via the lib registry (not a direct require of the sub-path)', function () {
+        // lib registry form survives dev-mode hot-reload eviction of
+        // lib/index.js. A direct require('../../lib/collection') would skip
+        // that protection.
+        assert.match(RENDER_NJ_SRC, /var\s+Collection\s*=\s*require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.Collection/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (c) injectAssets helper — shape + call-site
+    // -----------------------------------------------------------------------
+
+    it('declares the injectAssets helper as an inner function', function () {
+        assert.match(RENDER_NJ_SRC, /function\s+injectAssets\s*\(\s*html\s*,\s*data\s*,\s*localOptions\s*\)/);
+    });
+
+    it('calls injectAssets BEFORE injectInspectorScripts in the main render function', function () {
+        // Ordering matters — asset injection must settle the <head>/<body>
+        // content before Inspector scripts are appended near </body> so the
+        // Inspector payload sits last.
+        var assetIdx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions)');
+        var inspIdx  = RENDER_NJ_SRC.indexOf('html = injectInspectorScripts(html, data, self, local, displayInspector)');
+        assert.ok(assetIdx > 0, 'injectAssets call-site present');
+        assert.ok(inspIdx > 0, 'injectInspectorScripts call-site present');
+        assert.ok(assetIdx < inspIdx, 'injectAssets must run BEFORE injectInspectorScripts');
+    });
+
+    it('wraps the injectAssets call in try/catch so a mis-shaped template config never breaks rendering', function () {
+        var idx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions)');
+        assert.ok(idx > 0);
+        var block = RENDER_NJ_SRC.slice(idx, idx + 500);
+        assert.match(block, /catch\s*\(\s*assetErr\s*\)/);
+        assert.match(block, /\[render-nunjucks\]\s*asset injection skipped:/);
+    });
+
+    it('short-circuits on empty html input', function () {
+        // Defensive — an empty body (e.g. HEAD responses or early exits)
+        // must pass through unchanged.
+        assert.match(RENDER_NJ_SRC, /if\s*\(\s*typeof\s+html\s*!==\s*['"]string['"]\s*\|\|\s*html\.length\s*===\s*0\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    it('short-circuits when data.page.view is missing', function () {
+        assert.match(RENDER_NJ_SRC, /if\s*\(\s*!data\s*\|\|\s*!data\.page\s*\|\|\s*!data\.page\.view\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (d) injectAssets behaviour — exercised live
+    // -----------------------------------------------------------------------
+
+    // Resolve the delegate via the framework path so test isolation doesn't
+    // fall through to a stale require.cache entry from another suite.
+    var injectAssets;
+    try {
+        // The delegate is a module.exports async function — injectAssets is
+        // an inner helper. Re-require in a sandbox-friendly way by reading
+        // the source and evaluating in a vm context would be heavy; instead
+        // we copy the helper to a tiny shim file created at test time.
+        // The alternative is to test purely through source inspection, which
+        // we already have above — behavioural tests are nice-to-have but not
+        // required for source-inspection coverage.
+    } catch (e) {
+        injectAssets = null;
+    }
+
+    // Minimal behavioural smoke tests via an in-memory eval — keeps the
+    // coverage honest (the helper is small + pure) without spinning a
+    // full bundle.
+    (function () {
+        var RENDER_NJ_SRC_LOCAL = RENDER_NJ_SRC;
+        var helperMatch = RENDER_NJ_SRC_LOCAL.match(
+            /function\s+injectAssets\s*\([^\)]*\)\s*\{[\s\S]*?\n\}/
+        );
+        if (!helperMatch) {
+            it('SKIP: could not extract injectAssets source for behavioural tests', function () {
+                assert.ok(false, 'injectAssets helper not found in render-nunjucks.js');
+            });
+            return;
+        }
+        var helperSrc = helperMatch[0];
+        // eslint-disable-next-line no-new-func
+        var injectAssetsFn;
+        try {
+            injectAssetsFn = new Function(helperSrc + '\nreturn injectAssets;')();
+        } catch (e) {
+            it('SKIP: could not compile injectAssets for behavioural tests', function () {
+                assert.ok(false, 'failed to compile injectAssets: ' + e.message);
+            });
+            return;
+        }
+
+        it('auto-injects stylesheets before </head> when user did not place the token', function () {
+            var data = { page: { view: { stylesheets: '<link href="/a.css" rel="stylesheet">' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.match(out, /<link href="\/a\.css" rel="stylesheet">[\s\S]*<\/head>/);
+            assert.ok(
+                out.indexOf('<link href="/a.css" rel="stylesheet">') <
+                    out.indexOf('</head>'),
+                'stylesheet appears BEFORE </head>'
+            );
+        });
+
+        it('skips stylesheet auto-inject when user placed the token in their template', function () {
+            // User wrote `{{ page.view.stylesheets | safe }}` — nunjucks has
+            // already rendered the string into the HTML. We detect by exact
+            // substring match and skip.
+            var stylesheets = '<link href="/app.css" rel="stylesheet">';
+            var data = { page: { view: { stylesheets: stylesheets } } };
+            var html = '<html><head><title>x</title>' + stylesheets + '</head><body></body></html>';
+            var out = injectAssetsFn(html, data, { template: {} });
+            // The string should appear exactly ONCE in the output.
+            var matches = out.split(stylesheets).length - 1;
+            assert.equal(matches, 1, 'stylesheets string must appear exactly once');
+        });
+
+        it('auto-injects scripts before </body> by default (non-defer mode)', function () {
+            var data = { page: { view: { scripts: '<script src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(out.indexOf('<script src="/a.js"></script>') > -1, 'scripts string injected');
+            assert.ok(
+                out.indexOf('<script src="/a.js"></script>') < out.indexOf('</body>'),
+                'scripts appear BEFORE </body>'
+            );
+        });
+
+        it('places scripts in <head> when javascriptsDeferEnabled is true', function () {
+            var data = { page: { view: { scripts: '<script defer src="/a.js"></script>' } } };
+            var out = injectAssetsFn(
+                '<html><head></head><body></body></html>',
+                data,
+                { template: { javascriptsDeferEnabled: true } }
+            );
+            assert.ok(out.indexOf('<script defer src="/a.js"></script>') > -1, 'scripts string injected');
+            assert.ok(
+                out.indexOf('<script defer src="/a.js"></script>') < out.indexOf('</head>'),
+                'defer mode: scripts appear BEFORE </head>'
+            );
+        });
+
+        it('injects localOptions.template.ginaLoader before </head>', function () {
+            var data = { page: { view: {} } };
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn(
+                '<html><head></head><body></body></html>',
+                data,
+                { template: { ginaLoader: loader } }
+            );
+            assert.match(out, /window\.onGinaLoaded[\s\S]*<\/head>/);
+        });
+
+        it('skips ginaLoader injection when javascriptsExcluded === "**"', function () {
+            var data = { page: { view: {} } };
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn(
+                '<html><head></head><body></body></html>',
+                data,
+                { template: { ginaLoader: loader, javascriptsExcluded: '**' } }
+            );
+            assert.doesNotMatch(out, /window\.onGinaLoaded/);
+        });
+
+        it('skips ginaLoader injection when HTML already contains window.onGinaLoaded', function () {
+            var data = { page: { view: {} } };
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var html = '<html><head><script>/* window.onGinaLoaded already here */</script></head><body></body></html>';
+            var out = injectAssetsFn(html, data, { template: { ginaLoader: loader } });
+            // loader body must not be injected a second time
+            var matches = out.split('<script>window.onGinaLoaded').length - 1;
+            assert.equal(matches, 0, 'ginaLoader must not be duplicated');
+        });
+
+        it('injects external plugins (array, joined) before </head>', function () {
+            var data = { page: { view: {} } };
+            var out = injectAssetsFn(
+                '<html><head></head><body></body></html>',
+                data,
+                { template: { externalPlugins: ['\n<script src="/jquery.js"></script>'] } }
+            );
+            assert.match(out, /<script src="\/jquery\.js"><\/script>[\s\S]*<\/head>/);
+        });
+
+        it('skips external plugins injection when the joined string already appears', function () {
+            var extScript = '<script src="/jquery.js"></script>';
+            var data = { page: { view: {} } };
+            var html = '<html><head>' + extScript + '</head><body></body></html>';
+            var out = injectAssetsFn(html, data, { template: { externalPlugins: [extScript] } });
+            var matches = out.split(extScript).length - 1;
+            assert.equal(matches, 1, 'externalPlugins string must appear exactly once');
+        });
+
+        it('is a no-op on fragments missing </head> and </body>', function () {
+            // Partial renders / HEAD responses must pass through unchanged.
+            var data = { page: { view: { stylesheets: '<link href="/a.css" rel="stylesheet">' } } };
+            var frag = '<div>partial</div>';
+            var out = injectAssetsFn(frag, data, { template: { ginaLoader: '<script>window.onGinaLoaded=0;</script>' } });
+            assert.equal(out, frag);
+        });
+    })();
+
+    // -----------------------------------------------------------------------
+    // (e) top-of-file comment block — deferred #6 now marked shipped
+    // -----------------------------------------------------------------------
+
+    it('marks the setResources / asset-cataloguing deferred item as shipped', function () {
+        // Mirror of the pattern used for items 1-3 (Inspector / HTTP/2 /
+        // error-page). A future regression must force explicit re-docs.
+        assert.match(RENDER_NJ_SRC, /[Aa]sset cataloguing[\s\S]{0,120}shipped/);
+        assert.match(RENDER_NJ_SRC, /#NJ2/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 06 - Negative invariants
 // ---------------------------------------------------------------------------
 
@@ -588,5 +889,11 @@ describe('06 - negative invariants', function () {
         var snippet = CONTROLLER_SRC.match(/var\s+_engine\s*=\s*['"]([^'"]+)['"]/);
         assert.ok(snippet, 'engine default found');
         assert.equal(snippet[1], 'swig', 'default MUST be swig');
+    });
+
+    it('#NJ2 — render-nunjucks.js does NOT hard-code any asset URL (uses setResources output verbatim)', function () {
+        // Any hardcoded `/dist/gina.min.css` or similar would break custom
+        // bundle asset paths. All asset URLs must flow through setResources.
+        assert.doesNotMatch(RENDER_NJ_SRC, /\/dist\/gina(?:\.min)?\.(?:css|js)/);
     });
 });

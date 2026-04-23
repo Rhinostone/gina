@@ -60,9 +60,19 @@
  *      render-nunjucks-level.
  *   5. **Static HTML cache writes** — no `writeCache()` equivalent; every
  *      request re-renders even when the route has `cache` configured.
- *   6. **Asset cataloguing / `setResources`** — no `<gina>` layout placeholder
- *      resolution, no automatic CSS/JS preload injection. Users wire their
- *      own `<link>` / `<script>` tags into templates.
+ *   6. ~~**Asset cataloguing / `setResources`**~~ — **shipped 2026-04-23** (#NJ2).
+ *      `deps.setResources(localTemplateConf)` is now called before `env.render()`
+ *      so `data.page.view.stylesheets` and `data.page.view.scripts` are
+ *      populated with raw HTML strings (same shape as the swig path — produced
+ *      by `controller.js getNodeRes()`). Templates may opt in explicitly with
+ *      `{{ page.view.stylesheets | safe }}` / `{{ page.view.scripts | safe }}`.
+ *      When the rendered HTML does NOT already contain those strings,
+ *      `injectAssets` auto-injects them alongside `localOptions.template.ginaLoader`
+ *      and `localOptions.template.externalPlugins`, honouring
+ *      `javascriptsDeferEnabled` (scripts in `<head>` vs before `</body>`) and
+ *      `javascriptsExcluded === '**'` (suppresses the ginaLoader). `isWithoutLayout`
+ *      filters the asset list to common-only (`isCommon: true, name: 'gina'`)
+ *      via the `Collection` primitive, mirroring render-swig.js:494-498.
  *   7. ~~**Gina SwigFilters registration**~~ — **shipped**. `lib/nunjucks-filters`
  *      mirrors `lib/swig-filters` (same 7 public filters: `getUrl`, `getWebroot`,
  *      `length`, `nl2br`, `addHours`, `addDays`, `addYears`). Registered
@@ -88,6 +98,7 @@
  * @param {object}   deps.local            - Per-request closure (`req`, `res`, `next`, `options`)
  * @param {function} deps.getData          - Returns the merged template data object
  * @param {function} deps.hasViews         - Returns `true` when the route has a template configured
+ * @param {function} deps.setResources     - Populates `data.page.view.stylesheets`/`.scripts` (#NJ2)
  * @param {function} deps.headersSent      - Returns `true` when response headers are already sent
  * @returns {Promise<void>}
  */
@@ -95,6 +106,11 @@
 var fs              = require('fs');
 var nodePath        = require('path');
 var inspectorRedact = require('lib/inspector-redact');
+// Collection — small data-query helper used to filter the asset list when
+// rendering without a layout (mirrors render-swig.js:494-498). Fetched via
+// the lib registry so the dev-mode hot-reload evictions of `lib/index.js`
+// don't poison the reference across requests.
+var Collection      = require('../../lib').Collection;
 
 /**
  * Caches a `nunjucks.Environment` per bundle template root so we don't
@@ -468,12 +484,101 @@ function registerGinaFilters(env, self, local, localOptions) {
     }
 }
 
+/**
+ * Post-render asset injection — the nunjucks counterpart to the pre-compile
+ * layout mutation in `render-swig.js:963-1195`. Idempotent and safe to call
+ * on arbitrary HTML: every insertion is guarded against double-injection
+ * by substring-testing the rendered output.
+ *
+ * Ports three concerns from the swig path:
+ *
+ *   1. **Stylesheets** — `data.page.view.stylesheets` (raw `<link>` tags
+ *      produced by `controller.js getNodeRes('css', ...)`) are injected
+ *      before the first `</head>` unless the user already placed
+ *      `{{ page.view.stylesheets | safe }}` in their template. User-placement
+ *      is detected by substring match on the final HTML: if the rendered
+ *      text already contains the exact `stylesheets` string, we skip the
+ *      auto-injection. The strings contain bundle-specific URLs, so
+ *      false-positives are essentially zero.
+ *   2. **Scripts** — `data.page.view.scripts` are placed before `</head>`
+ *      when `localOptions.template.javascriptsDeferEnabled` is true,
+ *      otherwise before `</body>`. The swig path has two more positional
+ *      branches (`isLoadingPartial`, non-HTML iframe body) that aren't
+ *      relevant to the nunjucks render pipeline as it stands today.
+ *   3. **ginaLoader + externalPlugins** — the always-in-head loader script
+ *      (`window.onGinaLoaded`) is injected before `</head>` unless the
+ *      bundle opts out via `javascriptsExcluded === '**'` or the HTML
+ *      already contains `window.onGinaLoaded`. External plugins
+ *      (typically jQuery, loaded before Gina) are injected on the same
+ *      `</head>` anchor, preserving their configured load order.
+ *
+ * The function returns the mutated HTML. It does NOT attempt injection on
+ * fragments missing the `</head>` or `</body>` anchors — HEAD responses,
+ * partial renders, and hand-written bodyless templates pass through
+ * unchanged rather than growing truncated markup.
+ *
+ * @inner
+ * @param {string}  html             - Rendered HTML from `env.render()` / `env.renderString()`
+ * @param {object}  data             - Template data (has `data.page.view.stylesheets`/`.scripts`)
+ * @param {object}  localOptions     - Controller's localOptions (has `template.ginaLoader`, `.externalPlugins`, etc.)
+ * @returns {string} HTML with asset tags injected where appropriate
+ */
+function injectAssets(html, data, localOptions) {
+    if (typeof html !== 'string' || html.length === 0) { return html; }
+    if (!data || !data.page || !data.page.view) { return html; }
+
+    var stylesheetsHtml = data.page.view.stylesheets || '';
+    var scriptsHtml     = data.page.view.scripts     || '';
+    var tpl             = localOptions && localOptions.template;
+    var isDeferMode     = !!(tpl && tpl.javascriptsDeferEnabled);
+    var jsExcluded      = tpl && tpl.javascriptsExcluded;
+    var ginaLoader      = tpl && tpl.ginaLoader;
+    var externalPlugins = (tpl && Array.isArray(tpl.externalPlugins)) ? tpl.externalPlugins : [];
+    var hasHead         = /<\/head>/i.test(html);
+    var hasBody         = /<\/body>/i.test(html);
+
+    if (stylesheetsHtml && hasHead && html.indexOf(stylesheetsHtml) === -1) {
+        html = html.replace(/<\/head>/i, '\n\t' + stylesheetsHtml + '\n</head>');
+    }
+
+    if (scriptsHtml && html.indexOf(scriptsHtml) === -1) {
+        if (isDeferMode && hasHead) {
+            html = html.replace(/<\/head>/i, '\t' + scriptsHtml + '\n</head>');
+        } else if (hasBody) {
+            html = html.replace(/<\/body>/i, '\t' + scriptsHtml + '\n</body>');
+        }
+    }
+
+    if (externalPlugins.length > 0 && hasHead) {
+        var extHtml = externalPlugins.join('');
+        if (extHtml && html.indexOf(extHtml) === -1) {
+            html = html.replace(/<\/head>/i, '\t' + extHtml + '\n</head>');
+        }
+    }
+
+    if (
+        ginaLoader
+        && jsExcluded !== '**'
+        && hasHead
+        && !/window\.onGinaLoaded/.test(html)
+    ) {
+        html = html.replace(/<\/head>/i, '\t' + ginaLoader + '\n</head>');
+    }
+
+    return html;
+}
+
 module.exports = async function renderNunjucks(userData, displayInspector, errOptions, deps) {
     var self  = deps.self;
     var local = deps.local;
     var getData      = deps.getData;
     var hasViews     = deps.hasViews;
     var headersSent  = deps.headersSent;
+    // #NJ2 — setResources is supplied by controller.js (same ref passed to
+    // render-swig.js). It populates `data.page.view.stylesheets` and
+    // `data.page.view.scripts` with raw HTML strings by walking the bundle's
+    // `localOptions.template.{stylesheets,javascripts}` arrays.
+    var setResources = deps.setResources;
 
     // Fetch the nunjucks module from the process-cache. `get()` throws if
     // the bundle-startup load did not succeed — we surface that cleanly
@@ -569,6 +674,34 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         return self.throwError(filterErr);
     }
 
+    // #NJ2 — build the per-request template config and populate
+    // `data.page.view.stylesheets` / `data.page.view.scripts`. Mirrors the
+    // swig path at render-swig.js:493-499. When `isWithoutLayout` is set
+    // (e.g. XHR responses rendered into a popin) the asset list is filtered
+    // to common-only via `Collection.find(...)`, matching render-swig.js:496-497.
+    // `setResources` is tolerant of a missing viewConf, so we never skip the
+    // call unless the dep itself wasn't provided (older controller shape).
+    if (typeof setResources === 'function') {
+        try {
+            var isWithoutLayout = !!localOptions.isWithoutLayout;
+            var localTemplateConf = localOptions.template;
+            if (isWithoutLayout && localTemplateConf) {
+                localTemplateConf = JSON.clone(localTemplateConf);
+                if (Collection && Array.isArray(localTemplateConf.javascripts)) {
+                    localTemplateConf.javascripts = new Collection(localTemplateConf.javascripts)
+                        .find({ isCommon: false }, { isCommon: true, name: 'gina' });
+                }
+                if (Collection && Array.isArray(localTemplateConf.stylesheets)) {
+                    localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets)
+                        .find({ isCommon: false }, { isCommon: true, name: 'gina' });
+                }
+            }
+            setResources(localTemplateConf);
+        } catch (resourcesErr) {
+            try { console.warn('[render-nunjucks] setResources failed: ' + (resourcesErr.message || resourcesErr)); } catch (e) {}
+        }
+    }
+
     var isRenderingCustomError = (localOptions.isRenderingCustomError === true);
     var html;
 
@@ -644,6 +777,17 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         } catch (renderErr) {
             return self.throwError(renderErr);
         }
+    }
+
+    // #NJ2 — post-render asset injection (stylesheets / scripts / ginaLoader /
+    // externalPlugins). Runs BEFORE Inspector injection so dev-mode scripts
+    // settle in their final positions before `__ginaData` / `__ginaLogs` are
+    // appended near the end of <body>. Any error falls through with the
+    // un-mutated HTML so a mis-shaped template config never breaks the render.
+    try {
+        html = injectAssets(html, data, localOptions);
+    } catch (assetErr) {
+        try { console.warn('[render-nunjucks] asset injection skipped: ' + (assetErr.message || assetErr)); } catch (e) {}
     }
 
     // Inspector dev-payload injection (dev mode only; no-op otherwise).
