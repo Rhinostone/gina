@@ -108,9 +108,20 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
 | 📋 | **ESM compatibility layer** — Dual CJS/ESM entry points via `"exports"` in `package.json`. Framework internals stay CJS; public API gets ESM re-exports. | `0.5.0` | Q1 2027 |
-| 🚧 | **Pluggable template engine** — **Partially shipped in `0.3.7`**: opt-in `render.engine = "nunjucks"` dispatch per bundle. The project installs `nunjucks` itself (no framework dep); Gina loads it via `lib/nunjucks-resolver` and routes through `controller.render-nunjucks.js`. Swig remains the default, runs unchanged. Inspector dev payload and HTTP/2 `stream.respond()` direct path both shipped in `0.3.7` follow-ups. **Remaining `0.5.0` scope**: feature parity with render-swig (Early Hints 103 auto-send, static HTML cache, `setResources` / asset cataloguing, error-page template routing, within-Inspector `statusbar.html` include + flow/queries pipelines); per-template-extension dispatch so a single bundle can mix engines (`.swig` / `.njk`); optional auto-detect on `.njk` presence. Breaking syntax differences (`{% parent %}` → `{{ super() }}`, filter renames, `autoescape` default, `date` format strings, no `{% spaceless %}`) are nunjucks's own — Gina doesn't paper over them. | `0.5.0` | Q1 2027 |
+| 🚧 | **Pluggable template engine** — **Partially shipped in `0.3.7`**: opt-in `render.engine = "nunjucks"` dispatch per bundle. The project installs `nunjucks` itself (no framework dep); Gina loads it via `lib/nunjucks-resolver` and routes through `controller.render-nunjucks.js`. Swig remains the default, runs unchanged. Inspector dev payload, HTTP/2 `stream.respond()` direct path, and error-page template routing all shipped in `0.3.7-alpha.2`. **Closing the parity gap on the `0.3.7` ASAP track** (see Nunjucks Parity below): filter registry port, `setResources` / `<gina>` layout placeholders, static HTML cache parity, Early Hints 103 auto-send. **Remaining `0.5.0` scope**: within-Inspector sub-items (`statusbar.html` include + flow/queries pipelines); per-template-extension dispatch so a single bundle can mix engines (`.swig` / `.njk`); optional auto-detect on `.njk` presence. Breaking syntax differences (`{% parent %}` → `{{ super() }}`, filter renames, `autoescape` default, `date` format strings, no `{% spaceless %}`) are nunjucks's own — Gina doesn't paper over them. | `0.5.0` | Q1 2027 |
 | 📋 | **Structured logging** — JSON log output (`{ level, message, bundle, requestId, durationMs }`). Additive — existing consumers are unaffected. Enables log aggregation (Loki, Datadog, CloudWatch). | `0.5.0` | Q1 2027 |
 | 📋 | **Research `AsyncLocalStorage` for request context** — Evaluate `node:async_hooks` `AsyncLocalStorage` as a replacement for the `local` closure pattern, giving true async isolation across `setTimeout`, Promises, and `async/await` chains without any closure threading. Output: decision doc + proof-of-concept branch. | `0.5.0` | Q1 2027 |
+
+### Nunjucks Parity (`0.3.7` ASAP track)
+
+Four focused follow-up sessions to close the deferred gap left by the `0.3.7-alpha.2` nunjucks MVP. Ordered by user impact.
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| 🔨 | **Port `lib/swig-filters` → `lib/nunjucks-filters`** — Mechanically port the 7 filters (`getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears`) into a sister library registered via `env.addFilter()` in `controller.render-nunjucks.js`. Closes the most user-visible gap — template authors get `{{ '/home' \| getUrl() }}` and the date helpers immediately. | `0.3.7` | Q4 2026 |
+| 📋 | **`setResources` / `<gina>` layout placeholders** — Port the asset-cataloguing pipeline so build-time `<link>` / `<script>` tags are auto-injected into nunjucks layouts the same way they are into swig layouts. Biggest semantic gap of the four. | `0.3.7` | Q4 2026 |
+| 📋 | **Static HTML cache parity** — Port the swig disk-write/serve cache path so `cache:` keys in `routing.json` actually produce cached HTML for nunjucks routes. | `0.3.7` | Q4 2026 |
+| 📋 | **Early Hints 103 auto-send for CSS/JS preloads** — Move the 103 path in `controller.js this.render()` to be engine-agnostic. Pure perf optimisation; manual `self.setEarlyHints(linkHeader)` already works. | `0.3.7` | Q4 2026 |
 
 ---
 

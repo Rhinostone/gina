@@ -95,6 +95,11 @@ function Lib() {
         // fallback — load() throws NUNJUCKS_NOT_INSTALLED when the project has
         // not installed the package.
         nunjucksResolver: _require('./nunjucks-resolver'),
+        // Per-request filter registry for the nunjucks render path. Mirror of
+        // lib/swig-filters: same factory shape, same 7 public filters
+        // (getUrl, getWebroot, length, nl2br, addHours, addDays, addYears).
+        // Registered via env.addFilter() in render-nunjucks.js per request.
+        nunjucksFilters: _require('./nunjucks-filters'),
         // #AI8b — MCP server primitives (JSON-RPC 2.0 framing, lifecycle,
         // method handlers). Transport-agnostic; wired to stdio by bundle:mcp-start.
         mcpServer       : _require('./mcp-server'),

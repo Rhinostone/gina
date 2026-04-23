@@ -63,9 +63,12 @@
  *   6. **Asset cataloguing / `setResources`** — no `<gina>` layout placeholder
  *      resolution, no automatic CSS/JS preload injection. Users wire their
  *      own `<link>` / `<script>` tags into templates.
- *   7. **Gina SwigFilters registration** — the swig-specific filter registry
- *      (`getWebroot`, `nl2br`, etc.) is not ported. Users register their own
- *      filters via `nunjucks.Environment.addFilter()`.
+ *   7. ~~**Gina SwigFilters registration**~~ — **shipped**. `lib/nunjucks-filters`
+ *      mirrors `lib/swig-filters` (same 7 public filters: `getUrl`, `getWebroot`,
+ *      `length`, `nl2br`, `addHours`, `addDays`, `addYears`). Registered
+ *      per-request on the cached `nunjucks.Environment` via `env.addFilter()`
+ *      in `registerGinaFilters` below — `getConfig` is internal and excluded
+ *      from the registration loop, mirroring the swig path.
  *   8. **Layout composition** — nunjucks' native `{% extends %}` / `{% block %}`
  *      / `{% include %}` work automatically through `FileSystemLoader`. No
  *      Gina-specific layout merging beyond that.
@@ -400,6 +403,71 @@ function sendHtmlResponse(local, html) {
     local.res.end(html);
 }
 
+/**
+ * Register Gina's filter registry on the cached `nunjucks.Environment`
+ * for the current request. Mirror of the swig-side registration loop in
+ * `controller.render-swig.js:629-647`.
+ *
+ * Per-request mutation of the cached env is safe because `env.render()`
+ * is synchronous and Node's event loop serialises requests — two
+ * concurrent requests can't interleave between `addFilter` and `render`.
+ * The factory captures the per-request context (`req`, `options`,
+ * `isProxyHost`) on `NunjucksFilters.instance._options`; filter functions
+ * read from that singleton during the render pass that immediately
+ * follows. `getConfig` is excluded from the loop to match the swig path.
+ *
+ * @inner
+ * @param {*}      env          - The cached `nunjucks.Environment` for this template root
+ * @param {object} self         - SuperController instance (for `self.throwError`)
+ * @param {object} local        - Per-request closure (`req`, `res`, `next`, `options`)
+ * @param {object} localOptions - The controller's localOptions (already has `conf`)
+ * @returns {void}
+ */
+function registerGinaFilters(env, self, local, localOptions) {
+    var nunjucksFilters = require('../../lib').nunjucksFilters
+        || require('../../lib/nunjucks-filters');
+
+    // Same isProxyHost detection as render-swig.js:606-625. Duplicated here
+    // verbatim rather than abstracted because (a) the conditions read raw
+    // request headers and engine-specific localOptions, (b) extracting to a
+    // shared helper would widen the scope of this filter-port change beyond
+    // what's necessary. Future refactor candidate.
+    var localRequestPort = local.req.headers.port || local.req.headers[':port'];
+    var isProxyHost = (
+        typeof(local.req.headers.host) != 'undefined'
+        && typeof(localRequestPort) != 'undefined'
+        && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
+        && localOptions.conf.server.scheme +'://'+ local.req.headers.host+':'+ localRequestPort != localOptions.conf.hostname.replace(/\:\d+$/, '') +':'+ localOptions.conf.server.port
+        ||
+        typeof(local.req.headers[':authority']) != 'undefined'
+        && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname
+        ||
+        typeof(local.req.headers.host) != 'undefined'
+        && typeof(localRequestPort) != 'undefined'
+        && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
+        && local.req.headers.host == localOptions.conf.host
+        ||
+        typeof(local.req.headers['x-nginx-proxy']) != 'undefined'
+        && String(local.req.headers['x-nginx-proxy']).toLowerCase() === 'true'
+        ||
+        typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
+    ) ? true : false;
+
+    var filters = nunjucksFilters({
+        options:     JSON.clone(localOptions),
+        isProxyHost: isProxyHost,
+        throwError:  self.throwError,
+        req:         local.req,
+        res:         local.res
+    });
+
+    for (var name in filters) {
+        if (typeof filters[name] === 'function' && name !== 'getConfig') {
+            env.addFilter(name, filters[name]);
+        }
+    }
+}
+
 module.exports = async function renderNunjucks(userData, displayInspector, errOptions, deps) {
     var self  = deps.self;
     var local = deps.local;
@@ -488,6 +556,17 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         });
     } catch (envErr) {
         return self.throwError(envErr);
+    }
+
+    // #NJ1 — register Gina's filter registry on the cached env per-request.
+    // Mirror of render-swig.js:629-647. Per-request mutation of the cached
+    // env is safe under Node's single-threaded event loop because the
+    // env.render() / env.renderString() calls below are synchronous and
+    // cannot interleave with another request's addFilter pass.
+    try {
+        registerGinaFilters(env, self, local, localOptions);
+    } catch (filterErr) {
+        return self.throwError(filterErr);
     }
 
     var isRenderingCustomError = (localOptions.isRenderingCustomError === true);
