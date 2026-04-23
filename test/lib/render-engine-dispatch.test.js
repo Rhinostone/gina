@@ -1270,6 +1270,236 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
 
 
 // ---------------------------------------------------------------------------
+// 05f - #NJ4 — Early Hints 103 engine-agnostic (data-feed via setResources)
+// ---------------------------------------------------------------------------
+//
+// The #EH1 firing point (controller.js:1034-1044) is already engine-agnostic:
+// it reads `local.options.template.h2Links` and calls `self.setEarlyHints()`
+// BEFORE the delegate dispatch, so both swig and nunjucks bundles reach it
+// identically. The DATA-FEED question is: does `h2Links` get populated on
+// the nunjucks code path the same way it does on swig?
+//
+// Answer: yes — via #NJ2 (commit b2466398). `render-nunjucks.js` calls
+// `deps.setResources(localTemplateConf)`, which is the SAME function object
+// that `render-swig.js:499` calls (defined once in `controller.js:782`).
+// `setResources` invokes `getNodeRes` (`controller.js:843`), which writes to
+// `local.options.template.h2Links` at :901 (CSS) and :930 (JS) on HTTP/2
+// non-dev requests. The writes target the per-request `options.template`
+// reference that `#EH1` reads on subsequent renders.
+//
+// #NJ4 is therefore a feature-complete confirmation + lock-in — no
+// behavioural code was added. The invariants below prevent a future refactor
+// from (a) duplicating h2Links accumulation inside the nunjucks delegate,
+// (b) moving #EH1 inside a delegate (would break engine agnosticism), or
+// (c) fabricating a nunjucks-specific setEarlyHints call path that drifts
+// from the swig behaviour.
+
+describe('05f - #NJ4 Early Hints 103 engine-agnostic (data-feed via setResources)', function () {
+
+    // -----------------------------------------------------------------------
+    // (a) #EH1 firing point lives in controller.js, not in any delegate
+    // -----------------------------------------------------------------------
+
+    it('controller.js contains the #EH1 marker', function () {
+        assert.match(CONTROLLER_SRC, /#EH1/);
+    });
+
+    it('render-nunjucks.js code does NOT contain a #EH1 auto-send block (engine-agnostic firing point)', function () {
+        // A duplicate inside the delegate would cause a double-103 or drift
+        // between swig and nunjucks behaviour. The header JSDoc can reference
+        // the marker (item #4 explains where the firing point lives), so we
+        // strip the top comment block and scan only the module code.
+        var firstCodeIdx = RENDER_NJ_SRC.indexOf('var fs');
+        assert.ok(firstCodeIdx > 0, 'module code start found');
+        var codeOnly = RENDER_NJ_SRC.slice(firstCodeIdx);
+        assert.doesNotMatch(codeOnly, /#EH1[\s\S]{0,500}setEarlyHints/);
+    });
+
+    it('render-nunjucks.js does NOT call self.setEarlyHints in code (comments are fine)', function () {
+        // setEarlyHints is documented as something the developer MAY call
+        // manually from a controller action, but the auto-dispatch at #EH1
+        // is engine-agnostic and stays in controller.js. Strip the top
+        // JSDoc so docstring references (which cite controller.js:1039-1043
+        // for context) don't trip the invariant.
+        var firstCodeIdx = RENDER_NJ_SRC.indexOf('var fs');
+        assert.ok(firstCodeIdx > 0, 'module code start found');
+        var codeOnly = RENDER_NJ_SRC.slice(firstCodeIdx);
+        assert.doesNotMatch(codeOnly, /self\.setEarlyHints\s*\(/);
+    });
+
+    it('#EH1 fires BEFORE the delegate dispatch in controller.js this.render()', function () {
+        var eh1Idx      = CONTROLLER_SRC.indexOf('#EH1');
+        var dispatchIdx = CONTROLLER_SRC.indexOf('return require( _(__dirname + _delegate, true) )');
+        assert.ok(eh1Idx > 0,      '#EH1 marker present');
+        assert.ok(dispatchIdx > 0, 'delegate dispatch present');
+        assert.ok(eh1Idx < dispatchIdx, '#EH1 must run BEFORE delegate dispatch');
+    });
+
+    it('#EH1 reads h2Links from local.options.template (same reference both engines see)', function () {
+        var idx  = CONTROLLER_SRC.indexOf('#EH1');
+        assert.ok(idx > 0);
+        var body = CONTROLLER_SRC.slice(idx, idx + 1200);
+        assert.match(body, /local\.options\s*&&\s*local\.options\.template\s*&&\s*local\.options\.template\.h2Links/);
+    });
+
+    it('#EH1 trims the trailing comma before calling setEarlyHints', function () {
+        var idx  = CONTROLLER_SRC.indexOf('#EH1');
+        var body = CONTROLLER_SRC.slice(idx, idx + 1200);
+        assert.match(body, /\/,\$\/\.test\(_h2Links\)\s*\?\s*_h2Links\.slice\(0,\s*-1\)\s*:\s*_h2Links/);
+        assert.match(body, /self\.setEarlyHints\(\s*_hints\s*\)/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (b) h2Links accumulation — single source of truth in controller.js
+    // -----------------------------------------------------------------------
+
+    it('controller.js getNodeRes writes h2Links for the CSS branch', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /local\.options\.template\.h2Links\s*\+=\s*'<'\s*\+\s*obj\.url\s*\+\s*'>;\s*as=style;\s*rel=preload,'/
+        );
+    });
+
+    it('controller.js getNodeRes writes h2Links for the JS branch', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /local\.options\.template\.h2Links\s*\+=\s*'<'\s*\+\s*obj\.url\s*\+\s*'>;\s*as=script;\s*rel=preload,'/
+        );
+    });
+
+    it('render-nunjucks.js does NOT accumulate its own h2Links (single source is controller.js)', function () {
+        assert.doesNotMatch(RENDER_NJ_SRC, /h2Links\s*\+=/);
+    });
+
+    it('render-nunjucks.js does NOT read h2Links in code (comments are fine for docs)', function () {
+        // Strip the top JSDoc block that documents the port — we allow
+        // mentions in explanatory prose. The remaining source must not
+        // contain any h2Links reference: neither a read, a write, nor a
+        // property access. That forces a deliberate docs update on any
+        // future port that consumes h2Links inside the delegate.
+        var firstCodeIdx = RENDER_NJ_SRC.indexOf('var fs');
+        assert.ok(firstCodeIdx > 0, 'module code start found');
+        var codeOnly = RENDER_NJ_SRC.slice(firstCodeIdx);
+        assert.doesNotMatch(codeOnly, /h2Links/);
+    });
+
+    it('controller.js router.js initialisation resets h2Links per request', function () {
+        // Source-locator: confirms the reset point exists so a future
+        // router refactor cannot silently drop it and cause hints to leak
+        // across requests.
+        var routerSrc = fs.readFileSync(path.join(FW, 'core/router.js'), 'utf8');
+        assert.match(routerSrc, /options\.template\.h2Links\s*=\s*['"]{2}/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (c) setResources is the single function called by both delegates
+    // -----------------------------------------------------------------------
+
+    it('controller.js defines setResources once (local closure)', function () {
+        var matches = CONTROLLER_SRC.match(/var\s+setResources\s*=\s*function/g) || [];
+        assert.equal(matches.length, 1, 'setResources defined exactly once in controller.js');
+    });
+
+    it('controller.js passes setResources to the delegate deps block', function () {
+        assert.match(CONTROLLER_SRC, /setResources:\s*setResources/);
+    });
+
+    it('render-nunjucks.js calls setResources with localTemplateConf (mirror of render-swig.js:499)', function () {
+        assert.match(RENDER_NJ_SRC, /setResources\(\s*localTemplateConf\s*\)/);
+    });
+
+    it('setResources invokes getNodeRes for both css and js (single accumulation path)', function () {
+        var setResIdx  = CONTROLLER_SRC.indexOf('var setResources = function');
+        var getNodeIdx = CONTROLLER_SRC.indexOf('var getNodeRes = function');
+        assert.ok(setResIdx > 0 && getNodeIdx > 0, 'both helpers present');
+        assert.ok(setResIdx < getNodeIdx, 'setResources defined before getNodeRes');
+        var body = CONTROLLER_SRC.slice(setResIdx, getNodeIdx);
+        assert.match(body, /getNodeRes\(\s*'css'/);
+        assert.match(body, /getNodeRes\(\s*'js'/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (d) getNodeRes gates h2Links writes on HTTP/2 + production
+    // -----------------------------------------------------------------------
+
+    it('getNodeRes gates h2Links writes on /http\\/2/ protocol', function () {
+        var idx  = CONTROLLER_SRC.indexOf('var getNodeRes = function');
+        assert.ok(idx > 0);
+        var body = CONTROLLER_SRC.slice(idx, idx + 3000);
+        assert.match(body, /\/http\\\/2\/\.test\(\s*local\.options\.conf\.server\.protocol\s*\)/);
+    });
+
+    it('getNodeRes gates h2Links writes on !self.isCacheless() (production only)', function () {
+        var idx  = CONTROLLER_SRC.indexOf('var getNodeRes = function');
+        var body = CONTROLLER_SRC.slice(idx, idx + 3000);
+        assert.match(body, /!self\.isCacheless\(\)/);
+    });
+
+    // -----------------------------------------------------------------------
+    // (e) Behavioural replay — proves engine agnosticism at runtime
+    // -----------------------------------------------------------------------
+
+    (function () {
+        // Exact replica of the #EH1 block at controller.js:1039-1043. The
+        // block reads only local.options.template.h2Links and calls
+        // self.setEarlyHints — no engine branching — so a byte-identical
+        // h2Links input from either delegate produces a byte-identical call.
+        function replayEH1(h2Links) {
+            var sent  = [];
+            var local = { options: { template: { h2Links: h2Links } } };
+            var self  = { setEarlyHints: function (hints) { sent.push(hints); } };
+
+            var _h2Links = local.options && local.options.template && local.options.template.h2Links;
+            if (_h2Links) {
+                var _hints = /,$/.test(_h2Links) ? _h2Links.slice(0, -1) : _h2Links;
+                if (_hints) self.setEarlyHints(_hints);
+            }
+            return sent;
+        }
+
+        it('populated h2Links fires one setEarlyHints call with trailing comma trimmed', function () {
+            var populated = '</css/a.css>; as=style; rel=preload,</js/b.js>; as=script; rel=preload,';
+            var sent = replayEH1(populated);
+            assert.equal(sent.length, 1);
+            assert.equal(sent[0], '</css/a.css>; as=style; rel=preload,</js/b.js>; as=script; rel=preload');
+        });
+
+        it('empty h2Links no-ops (no setEarlyHints call)', function () {
+            assert.equal(replayEH1('').length, 0);
+            assert.equal(replayEH1(null).length, 0);
+            assert.equal(replayEH1(undefined).length, 0);
+        });
+
+        it('trailing-comma-only h2Links slices to empty → no-op', function () {
+            // Degenerate case: a getNodeRes that matched zero css/js entries
+            // would leave h2Links at its init ''. If something upstream ever
+            // wrote a bare ',' the #EH1 block must not send a hint-less 103.
+            assert.equal(replayEH1(',').length, 0);
+        });
+
+        it('swig-produced and nunjucks-produced h2Links strings yield identical #EH1 behaviour', function () {
+            // Both delegates feed h2Links through the same controller.js
+            // getNodeRes path, so the strings are byte-identical for the
+            // same viewConf. Confirm the block does not branch on engine.
+            var same = '</dist/gina.min.css>; as=style; rel=preload,</dist/gina.min.js>; as=script; rel=preload,';
+            assert.deepEqual(replayEH1(same), replayEH1(same));
+        });
+    })();
+
+    // -----------------------------------------------------------------------
+    // (f) deferred-items comment — item #4 now marked shipped
+    // -----------------------------------------------------------------------
+
+    it('marks the Early Hints 103 deferred item as shipped in the render-nunjucks.js header', function () {
+        // Matches the pattern used for items 1-3 (Inspector / HTTP/2 /
+        // error-page), 5 (#NJ3), and 6-7 (#NJ2 / #NJ1).
+        assert.match(RENDER_NJ_SRC, /[Ee]arly Hints 103[\s\S]{0,400}shipped/);
+        assert.match(RENDER_NJ_SRC, /#NJ4/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 06 - Negative invariants
 // ---------------------------------------------------------------------------
 

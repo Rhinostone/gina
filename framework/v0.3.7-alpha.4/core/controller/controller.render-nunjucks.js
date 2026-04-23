@@ -55,9 +55,17 @@
  *      recursing via `self.throwError` — recursion would re-enter this same
  *      branch and could loop. The defensive `localOptions.isRenderingCustomError
  *      = false` reset after render mirrors render-swig.js lines 804, 1434.
- *   4. **Early Hints 103** auto-send — lives in `controller.js this.render()`
- *      before the delegate runs, so the port is controller-level rather than
- *      render-nunjucks-level.
+ *   4. ~~**Early Hints 103** auto-send~~ — **shipped 2026-04-23** (#NJ4).
+ *      The #EH1 firing point in `controller.js this.render()` is already
+ *      engine-agnostic — it reads `local.options.template.h2Links` and calls
+ *      `self.setEarlyHints(_hints)` BEFORE the delegate dispatch, so both
+ *      swig and nunjucks bundles reach it identically. The data-feed was
+ *      closed by #NJ2: `deps.setResources(localTemplateConf)` is called below
+ *      (same function object defined once in `controller.js:782` and passed
+ *      to both delegates via `deps`), and `setResources` → `getNodeRes`
+ *      writes to `local.options.template.h2Links` at `controller.js:901`
+ *      (CSS) / `:930` (JS) on HTTP/2 non-dev requests. No nunjucks-specific
+ *      h2Links logic is needed — a negative-invariant test locks that in.
  *   5. ~~**Static HTML cache writes**~~ — **shipped 2026-04-23** (#NJ3).
  *      `writeCache(bundle, opt, htmlContent)` is a direct port of
  *      `render-swig.js:35-129` (same guards, cache-key shape, memory/fs
