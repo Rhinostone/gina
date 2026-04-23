@@ -521,8 +521,18 @@ function Logger() {
             }
 
             for (let l in loggerOptions.levels) {
+                // #SCS1 (2026-04-23) — replaced `new Function(...)` dynamic method build with a
+                //                       closure factory so Socket no longer flags `Uses eval` on
+                //                       the server side. `write`, `parse`, `emit` are now captured
+                //                       by reference (they were previously stringified via
+                //                       `toString()` and embedded as literals into the generated
+                //                       function body). `setDefaultLevels` is called fresh on every
+                //                       `setLevel`, so methods still reflect the latest options.
                 // override if existing
-                logger[l] = new Function('return '+ write +'('+ JSON.stringify(loggerOptions) +', '+ parse +', "'+ l +'", arguments, '+  emit +');');// jshint ignore:line
+                // logger[l] = new Function('return '+ write +'('+ JSON.stringify(loggerOptions) +', '+ parse +', "'+ l +'", arguments, '+  emit +');');// jshint ignore:line
+                logger[l] = function() {
+                    return write(loggerOptions, parse, l, arguments, emit);
+                };
             }
 
         } catch (err) {

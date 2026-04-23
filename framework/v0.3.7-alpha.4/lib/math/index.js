@@ -36,7 +36,11 @@ function MathHelper() {
     // }
 
     /**
-     * Operate from a string value
+     * Operate from a string value.
+     *
+     * Evaluates an arithmetic expression without using `eval` or `new Function`:
+     * supported operators are `+`, `-`, `*`, `/`, `%`, parentheses, decimals,
+     * and unary `+` / `-`. Any non-arithmetic character throws.
      *
      * e.g.:
      *
@@ -45,12 +49,92 @@ function MathHelper() {
      *  var result = operate(computation);
      *      => 20
      *
-     *  @param {string} calcultation
+     *  @param {string} computation
      *
      *  @returns {number} result
+     *  @throws {Error} when the expression contains an invalid character or is malformed
      * */
+    // #SCS1 (2026-04-23) — replaced `new Function('return '+ computation)()` with a shunting-yard
+    //                       evaluator so Socket no longer flags `Uses eval` here. Same public
+    //                       contract (string expression → number); now rejects any non-arithmetic
+    //                       character instead of silently running arbitrary JS. Old body kept for
+    //                       reference:
+    //
+    //     self.operate = function(computation) {
+    //         return new Function('return ' + computation)();
+    //     };
     self.operate = function(computation) {
-        return new Function('return ' + computation)();
+        var input  = String(computation);
+        var output = [];
+        var ops    = [];
+        var prec   = { '+': 1, '-': 1, '*': 2, '/': 2, '%': 2, 'u-': 3, 'u+': 3 };
+        var apply  = function(op) {
+            if (op === 'u+') { return; }
+            if (op === 'u-') {
+                if (!output.length) { throw new Error('MathHelper.operate: malformed expression'); }
+                output.push(-output.pop());
+                return;
+            }
+            var b = output.pop();
+            var a = output.pop();
+            if (typeof a === 'undefined' || typeof b === 'undefined') {
+                throw new Error('MathHelper.operate: malformed expression');
+            }
+            if (op === '+') { output.push(a + b); }
+            else if (op === '-') { output.push(a - b); }
+            else if (op === '*') { output.push(a * b); }
+            else if (op === '/') { output.push(a / b); }
+            else if (op === '%') { output.push(a % b); }
+        };
+
+        var prev = 'op';
+        var i = 0;
+        while (i < input.length) {
+            var c = input[i];
+            if (/\s/.test(c)) { ++i; continue; }
+            if (/\d/.test(c) || (c === '.' && /\d/.test(input[i + 1]))) {
+                var num = '';
+                var hasDot = false;
+                while (i < input.length && /[\d.]/.test(input[i])) {
+                    if (input[i] === '.') {
+                        if (hasDot) { throw new Error('MathHelper.operate: invalid number literal'); }
+                        hasDot = true;
+                    }
+                    num += input[i++];
+                }
+                output.push(parseFloat(num));
+                prev = 'num';
+                continue;
+            }
+            if (c === '(') { ops.push(c); prev = 'op'; ++i; continue; }
+            if (c === ')') {
+                while (ops.length && ops[ops.length - 1] !== '(') { apply(ops.pop()); }
+                if (!ops.length) { throw new Error('MathHelper.operate: mismatched parenthesis'); }
+                ops.pop();
+                prev = 'num';
+                ++i;
+                continue;
+            }
+            if (/[+\-*/%]/.test(c)) {
+                var op = c;
+                if ((op === '-' || op === '+') && prev === 'op') { op = 'u' + op; }
+                while (ops.length && ops[ops.length - 1] !== '(' && prec[ops[ops.length - 1]] >= prec[op]) {
+                    apply(ops.pop());
+                }
+                ops.push(op);
+                prev = 'op';
+                ++i;
+                continue;
+            }
+            throw new Error('MathHelper.operate: invalid character `' + c + '`');
+        }
+        while (ops.length) {
+            var tail = ops.pop();
+            if (tail === '(') { throw new Error('MathHelper.operate: mismatched parenthesis'); }
+            apply(tail);
+        }
+        if (output.length !== 1) { throw new Error('MathHelper.operate: malformed expression'); }
+        return output[0];
     };
 
     /**

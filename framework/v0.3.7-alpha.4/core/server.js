@@ -1867,7 +1867,12 @@ function Server(options) {
         } else {
             var s = 0, sLen = bundleConf.staticResources.length;
             for ( ; s < sLen; ++s ) {
-                if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(pathname) ) {
+                // #SCS1 (2026-04-23) — swap `eval` for `new RegExp` so Socket no longer flags the
+                //                       server-side `Uses eval` risk here. Semantics unchanged: both
+                //                       forms build the same regex from the (already slash-escaped)
+                //                       `staticResources` path.
+                // if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(pathname) ) {
+                if ( new RegExp('^' + bundleConf.staticResources[s].replace(/\//g,'\\/')).test(pathname) ) {
                     filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ pathname.replace(bundleConf.staticResources[s], '');
                     break;
                 }
