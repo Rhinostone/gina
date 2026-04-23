@@ -85,9 +85,57 @@ function Collection(content, options) {
     options = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions;
 
     var keywords    = ['not null']; // TODO - null, exists (`true` if property is defined)
+    // #SCS1d (2026-04-23) — replaced `eval(condition)` with a safe binary-compare evaluator.
+    // The conditions tryEval() receives are all constructed internally as `<left><op><right>`
+    // where left/right ∈ {number literal, "string literal", new Date("...")} and op ∈
+    // {===, !==, ==, !=, <, >, <=, >=}. User-controlled filter strings flowed into eval via
+    // `_content + filter` concat (line 293) and the datetime-wrapped variant (line 310) —
+    // any filter containing `<`|`>`|`=` reached eval unsanitised (RCE vector). Preserves
+    // error behaviour: throws on any unparseable input (callers at 310/314/406/411 do not
+    // catch — it bubbles).
+    // var tryEval     = function(condition) {
+    //     try {
+    //         return eval(condition);
+    //     } catch(err) {
+    //         throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack );
+    //     }
+    // }
+    var CONDITION_RE = /^\s*(new\s+Date\("[^"]*"\)|"[^"]*"|-?\d+(?:\.\d+)?)\s*(===|!==|<=|>=|==|!=|<|>)\s*(new\s+Date\("[^"]*"\)|"[^"]*"|-?\d+(?:\.\d+)?)\s*$/;
+    var parseOperand = function(s) {
+        var m = s.match(/^\s*new\s+Date\("([^"]*)"\)\s*$/);
+        if (m) return new Date(m[1]);
+        var t = s.replace(/^\s+|\s+$/g, '');
+        if (/^"[^"]*"$/.test(t)) return t.slice(1, -1);
+        var n = Number(t);
+        if (!isNaN(n) && t !== '') return n;
+        throw new Error('Invalid operand: `'+ s +'`');
+    };
     var tryEval     = function(condition) {
+        var m = (typeof(condition) == 'string') ? condition.match(CONDITION_RE) : null;
+        if (!m) {
+            throw new Error('Could not evaluate condition `'+ condition +'`.\n(grammar: <operand><op><operand>; operand ∈ number | "string" | new Date("..."); op ∈ === !== == != < > <= >=)');
+        }
         try {
-            return eval(condition);
+            var left  = parseOperand(m[1]);
+            var op    = m[2];
+            var right = parseOperand(m[3]);
+            // Match eval's Date semantics: only arithmetic ops coerce Date to valueOf()
+            // (timestamp); `==`/`!=`/`===`/`!==` between two Date objects are reference
+            // compares and always false (two fresh `new Date(x)` are different objects).
+            if ( op === '<' || op === '>' || op === '<=' || op === '>=' ) {
+                if (left  instanceof Date) left  = left.getTime();
+                if (right instanceof Date) right = right.getTime();
+            }
+            switch (op) {
+                case '===': return left === right;
+                case '!==': return left !== right;
+                case '==':  return left == right;
+                case '!=':  return left != right;
+                case '<':   return left <  right;
+                case '>':   return left >  right;
+                case '<=':  return left <= right;
+                case '>=':  return left >= right;
+            }
         } catch(err) {
             throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack );
         }
@@ -378,9 +426,32 @@ function Collection(content, options) {
 
                 var value = null;
 
+                // #SCS1d (2026-04-23) — replaced `eval('_content.' + f)` with a safe dot-path
+                // walker. `f` arrives here as a dot-separated path like `"ratings.Cleanliness"`
+                // (the `[*]` bracket-star variant is already stripped by searchWithin before
+                // this function is called — see split at line 438). User-controlled filter
+                // keys flowed through this without sanitisation; the old eval executed
+                // anything that parsed as JS, e.g. a key like
+                // `"constructor.constructor('return process.exit()')()"` would fire on lookup.
+                // try {
+                //     if ( _content )
+                //         value = eval('_content.'+f);
+                // } catch (err) {
+                //     // Nothing to do
+                //     // means that the field is not available in the collection
+                // }
                 try {
-                    if ( _content )
-                        value = eval('_content.'+f);
+                    if ( _content ) {
+                        if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(f)) {
+                            throw new Error('Invalid property path: `'+ f +'`');
+                        }
+                        var _segments = f.split('.');
+                        var _cur = _content;
+                        for (var _si = 0; _cur != null && _si < _segments.length; _si++) {
+                            _cur = _cur[_segments[_si]];
+                        }
+                        value = _cur;
+                    }
                 } catch (err) {
                     // Nothing to do
                     // means that the field is not available in the collection

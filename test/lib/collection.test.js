@@ -249,3 +249,94 @@ describe('05 - delete', function () {
         assert.deepStrictEqual(result, mocks);
     });
 });
+
+
+// 06 — #SCS1d source-inspection guards (2026-04-23)
+// Locks the refactor: live code must no longer reach `eval(` or `new Function(`.
+// Matches the #SCS1 follow-up pattern from test/lib/math.test.js.
+describe('06 - SCS1d source-inspection guards', function () {
+
+    var collectionSource = fs.readFileSync(
+        path.join(require('../fw'), 'lib/collection/src/main.js'),
+        'utf8'
+    );
+
+    it('no longer calls `eval(`', function () {
+        var stripped = collectionSource.replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(
+            !/\beval\s*\(/.test(stripped),
+            'live code still contains `eval(`'
+        );
+    });
+
+    it('no longer calls `new Function(`', function () {
+        var stripped = collectionSource.replace(/^\s*\/\/.*$/gm, '');
+        assert.ok(
+            !/\bnew\s+Function\s*\(/.test(stripped),
+            'live code still contains `new Function(`'
+        );
+    });
+
+    it('carries the #SCS1d provenance comment', function () {
+        assert.ok(
+            /#SCS1d/.test(collectionSource),
+            '#SCS1d tag should be present'
+        );
+    });
+});
+
+
+// 07 — #SCS1d date comparison (coverage gap fill; the `new Date(...)` branch
+// at the refactored tryEval sites had no prior test coverage)
+describe('07 - SCS1d date comparison', function () {
+
+    var events = [
+        { name: 'A', date: '2024-03-15 12:00:00' },
+        { name: 'B', date: '2023-06-20 15:30:00' },
+        { name: 'C', date: '2025-01-01 00:00:00' }
+    ];
+
+    it('filter `date >= 2024-01-01 00:00:00` returns A and C', function () {
+        var col = new Collection(events);
+        var result = col.find({ date: '>= 2024-01-01 00:00:00' }).toRaw();
+        var names = result.map(function (r) { return r.name; }).sort();
+        assert.deepStrictEqual(names, ['A', 'C']);
+    });
+
+    it('filter `date < 2024-01-01 00:00:00` returns only B', function () {
+        var col = new Collection(events);
+        var result = col.find({ date: '< 2024-01-01 00:00:00' }).toRaw();
+        var names = result.map(function (r) { return r.name; }).sort();
+        assert.deepStrictEqual(names, ['B']);
+    });
+});
+
+
+// 08 — #SCS1d injection rejection (security contract lock)
+// The old eval-based paths executed any JS a filter string parsed as; the new
+// safe evaluator + dot-path walker reject anything outside the closed grammar.
+describe('08 - SCS1d injection rejection', function () {
+
+    var data = [
+        { name: 'alice', rating: { score: 5 } },
+        { name: 'bob',   rating: { score: 3 } }
+    ];
+
+    it('rejects JS injection via a filter value (tryEval grammar)', function () {
+        // Old: tryEval(`5> 0; throw new Error('INJECTED'); //`) executes the throw.
+        // New: regex-based grammar rejects anything after the right operand.
+        var col = new Collection(data);
+        assert.throws(function () {
+            col.find({ 'rating.score': "> 0; throw new Error('INJECTED');" });
+        }, /Could not evaluate condition/);
+    });
+
+    it('silently drops a filter key containing JS metacharacters (dot-path walker)', function () {
+        // Old: eval('_content.' + f) where f = `rating.constructor('return 1')()` executes.
+        // New: walker rejects non-identifier chars; the surrounding try/catch swallows
+        // the throw and the field is treated as absent (no match).
+        var col = new Collection(data);
+        var result = col.find({ "rating.constructor('return 1')()": 'anything' }).toRaw();
+        assert.equal(result.length, 0);
+    });
+});
