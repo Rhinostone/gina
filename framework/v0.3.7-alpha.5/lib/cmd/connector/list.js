@@ -32,52 +32,17 @@ function List(opt, cmd) {
     var self = { format: null };
 
     /**
-     * Driver map — logical `connector` type → npm driver package + driver
-     * version range. Kept in sync with the table in
-     * `lib/cmd/connector/add.js` by hand: when a new connector type is
-     * added upstream, add an entry here.
-     *
-     * `builtin: true` means the driver is provided by Node.js itself
-     * (e.g. `node:sqlite` since Node 22.5.0) — nothing to install.
-     *
-     * The `ai` connector resolves dynamically from `entry.protocol` — see
-     * `resolveDriver()`.
+     * Connector driver registry — single source of truth for the
+     * logical `connector` type → npm driver package + semver range
+     * mapping (`DRIVER_MAP`) and the AI `protocol` scheme → npm driver
+     * mapping (`AI_DRIVER_MAP`). Previously duplicated inline here and
+     * in `lib/cmd/connector/add.js`; both now read from the shared
+     * module. See `lib/connector-registry/src/main.js`.
      *
      * @inner
      * @constant
-     * @type {Object<string, {npm?: string, range?: string, builtin?: boolean, note?: string}>}
      */
-    var DRIVER_MAP = {
-        couchbase  : { npm: 'couchbase',               range: '>=3.0.0' },
-        redis      : { npm: 'ioredis',                 range: '>=5.0.0' },
-        mysql      : { npm: 'mysql2',                  range: '>=2.0.0' },
-        postgresql : { npm: 'pg',                      range: '>=8.0.0' },
-        mongodb    : { npm: 'mongodb',                 range: '>=5.0.0' },
-        scylladb   : { npm: '@scylladb/scylla-driver', range: '>=1.0.0' },
-        sqlite     : { builtin: true, note: 'Node.js >= 22.5.0 built-in (node:sqlite)' }
-    };
-
-    /**
-     * AI `protocol` scheme → npm driver. Matches the PROVIDERS table in
-     * `core/connectors/ai/lib/connector.js`.
-     *
-     * @inner
-     * @constant
-     * @type {Object<string, {npm: string, range: string}>}
-     */
-    var AI_DRIVER_MAP = {
-        anthropic  : { npm: '@anthropic-ai/sdk', range: '>=0.27.0' },
-        openai     : { npm: 'openai',            range: '>=4.0.0' },
-        deepseek   : { npm: 'openai',            range: '>=4.0.0' },
-        qwen       : { npm: 'openai',            range: '>=4.0.0' },
-        groq       : { npm: 'openai',            range: '>=4.0.0' },
-        mistral    : { npm: 'openai',            range: '>=4.0.0' },
-        together   : { npm: 'openai',            range: '>=4.0.0' },
-        ollama     : { npm: 'openai',            range: '>=4.0.0' },
-        gemini     : { npm: 'openai',            range: '>=4.0.0' },
-        xai        : { npm: 'openai',            range: '>=4.0.0' },
-        perplexity : { npm: 'openai',            range: '>=4.0.0' }
-    };
+    var registry = lib.connectorRegistry;
 
     /**
      * Parse --format, bundle-filter/project args (populated by CmdHelper),
@@ -191,8 +156,8 @@ function List(opt, cmd) {
      * `admin/config/connectors.json` with key `"mongodb"` and no
      * `connector` field).
      *
-     * For the `ai` connector, reads `entry.protocol` and resolves against
-     * `AI_DRIVER_MAP`.
+     * For the `ai` connector, reads `entry.protocol` and resolves via
+     * `registry.getAIDriver(scheme)`.
      *
      * @inner
      * @private
@@ -206,7 +171,7 @@ function List(opt, cmd) {
         if (type === 'ai') {
             var protocol = (entry && entry.protocol) ? String(entry.protocol) : '';
             var scheme   = protocol.split(':')[0].toLowerCase();
-            var ai       = AI_DRIVER_MAP[scheme];
+            var ai       = registry.getAIDriver(scheme);
             if (ai) {
                 return {
                     type       : type,
@@ -222,12 +187,12 @@ function List(opt, cmd) {
                 npm        : null,
                 range      : null,
                 builtin    : false,
-                note       : 'unknown `ai` protocol — set `protocol` to one of: ' + Object.keys(AI_DRIVER_MAP).map(function(k){ return k + '://'; }).join(', '),
+                note       : 'unknown `ai` protocol — set `protocol` to one of: ' + registry.getAISchemes().map(function(k){ return k + '://'; }).join(', '),
                 unresolved : true
             };
         }
 
-        var entryInfo = DRIVER_MAP[type];
+        var entryInfo = registry.getDriver(type);
         if (!entryInfo) {
             return {
                 type       : type,

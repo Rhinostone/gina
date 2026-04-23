@@ -96,48 +96,17 @@ function Add(opt, cmd) {
     var ALLOWED_SCOPES = ['local', 'beta', 'production', 'testing'];
 
     /**
-     * Driver map — logical `connector` type → npm driver package + driver
-     * version range. Source of truth for the install hint printed after
-     * `connector:add` and for the range used by `connector:add --install`.
-     * Kept in sync with the table in `lib/cmd/connector/list.js` by hand.
-     *
-     * `builtin: true` means the driver is provided by Node.js itself
-     * (e.g. `node:sqlite` since Node 22.5.0) — nothing to install.
-     *
-     * @inner
-     * @constant
-     * @type {Object<string, {npm?: string, range?: string, builtin?: boolean, note?: string}>}
-     */
-    var DRIVER_MAP = {
-        couchbase  : { npm: 'couchbase',               range: '>=3.0.0' },
-        redis      : { npm: 'ioredis',                 range: '>=5.0.0' },
-        mysql      : { npm: 'mysql2',                  range: '>=2.0.0' },
-        postgresql : { npm: 'pg',                      range: '>=8.0.0' },
-        sqlite     : { builtin: true, note: 'Node.js >= 22.5.0 built-in (node:sqlite)' }
-    };
-
-    /**
-     * AI `protocol` scheme → npm driver. Matches the PROVIDERS table in
-     * `core/connectors/ai/lib/connector.js` and the AI_DRIVER_MAP in
-     * `lib/cmd/connector/list.js`.
+     * Connector driver registry — single source of truth for the
+     * logical `connector` type → npm driver package + semver range
+     * mapping (`DRIVER_MAP`) and the AI `protocol` scheme → npm driver
+     * mapping (`AI_DRIVER_MAP`). Previously duplicated inline here and
+     * in `lib/cmd/connector/list.js`; both now read from the shared
+     * module. See `lib/connector-registry/src/main.js`.
      *
      * @inner
      * @constant
-     * @type {Object<string, {npm: string, range: string}>}
      */
-    var AI_DRIVER_MAP = {
-        anthropic  : { npm: '@anthropic-ai/sdk', range: '>=0.27.0' },
-        openai     : { npm: 'openai',            range: '>=4.0.0' },
-        deepseek   : { npm: 'openai',            range: '>=4.0.0' },
-        qwen       : { npm: 'openai',            range: '>=4.0.0' },
-        groq       : { npm: 'openai',            range: '>=4.0.0' },
-        mistral    : { npm: 'openai',            range: '>=4.0.0' },
-        together   : { npm: 'openai',            range: '>=4.0.0' },
-        ollama     : { npm: 'openai',            range: '>=4.0.0' },
-        gemini     : { npm: 'openai',            range: '>=4.0.0' },
-        xai        : { npm: 'openai',            range: '>=4.0.0' },
-        perplexity : { npm: 'openai',            range: '>=4.0.0' }
-    };
+    var registry = lib.connectorRegistry;
 
     /**
      * Ordered package-manager probe list for `--install`. Lockfiles are
@@ -490,14 +459,14 @@ function Add(opt, cmd) {
     var buildInstallHint = function (connectorType, entry) {
         if (connectorType === 'ai') {
             var scheme = entry.protocol ? String(entry.protocol).split(':')[0].toLowerCase() : null;
-            if (!scheme || !AI_DRIVER_MAP[scheme]) {
-                return 'Next: set `protocol` to one of: ' + Object.keys(AI_DRIVER_MAP).map(function(k){ return k + '://'; }).join(', ') + ' — then run the matching npm install.';
+            var ai     = scheme ? registry.getAIDriver(scheme) : null;
+            if (!ai) {
+                return 'Next: set `protocol` to one of: ' + registry.getAISchemes().map(function(k){ return k + '://'; }).join(', ') + ' — then run the matching npm install.';
             }
-            var ai    = AI_DRIVER_MAP[scheme];
             var range = entry.version || ai.range;
             return 'Next: run `npm install ' + ai.npm + '@"' + range + '"` inside your project root.';
         }
-        var info = DRIVER_MAP[connectorType];
+        var info = registry.getDriver(connectorType);
         if (!info) return null;
         if (info.builtin) {
             return 'No install needed — ' + info.note + '.';
@@ -599,10 +568,11 @@ function Add(opt, cmd) {
     };
 
     /**
-     * Dispatch `--install` to the correct driver map (DRIVER_MAP or
-     * AI_DRIVER_MAP), resolve the range and package manager, and run the
-     * install. Handles sqlite (no-op, exit 0) and AI with missing/unknown
-     * protocol (exit 1 with guidance).
+     * Dispatch `--install` to the correct driver table
+     * (`lib.connectorRegistry.getDriver` / `.getAIDriver`), resolve the
+     * range and package manager, and run the install. Handles sqlite
+     * (no-op, exit 0) and AI with missing/unknown protocol (exit 1
+     * with guidance).
      *
      * @inner
      * @private
@@ -614,18 +584,18 @@ function Add(opt, cmd) {
     var runInstallForConnector = function (projectPath, connectorType, entry) {
         if (connectorType === 'ai') {
             var scheme = entry.protocol ? String(entry.protocol).split(':')[0].toLowerCase() : null;
-            if (!scheme || !AI_DRIVER_MAP[scheme]) {
-                console.error('Cannot auto-install — set `protocol` to one of: ' + Object.keys(AI_DRIVER_MAP).map(function(k){ return k + '://'; }).join(', ') + ' and re-run.');
+            var ai     = scheme ? registry.getAIDriver(scheme) : null;
+            if (!ai) {
+                console.error('Cannot auto-install — set `protocol` to one of: ' + registry.getAISchemes().map(function(k){ return k + '://'; }).join(', ') + ' and re-run.');
                 return 1;
             }
-            var ai       = AI_DRIVER_MAP[scheme];
             var aiResolv = resolveInstallRange(entry, projectPath, ai.npm, ai.range);
             var aiPm     = detectPackageManager(projectPath);
             console.log('[install] detected package manager: ' + aiPm.pm + (aiPm.lockfile ? ' (' + aiPm.lockfile + ')' : ' (fallback — no lockfile found)'));
             console.log('[install] resolving driver range: ' + aiResolv.range + ' (source: ' + aiResolv.source + ')');
             return runInstall(aiPm, ai.npm, aiResolv.range, projectPath);
         }
-        var info = DRIVER_MAP[connectorType];
+        var info = registry.getDriver(connectorType);
         if (!info) {
             console.error('Cannot auto-install — no driver mapping for connector type `' + connectorType + '`.');
             return 1;

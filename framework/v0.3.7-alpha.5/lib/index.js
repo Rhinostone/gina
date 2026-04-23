@@ -85,6 +85,11 @@ function Lib() {
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.
         routingIntrospect: _require('./routing-introspect'),
+        // Single source of truth for the connector driver → npm package + semver
+        // range mapping. Consumed by the connector:* CLI handlers (connector:add
+        // install hint + connector:add --install range resolution + connector:list
+        // driver introspection).
+        connectorRegistry: _require('./connector-registry'),
         // Pure resolver that picks between a project-installed @rhinostone/swig
         // (or swig-twig) and the framework's bundled copy. Opt-in via
         // settings.json > swig.useProject; default-off. Returns a decision

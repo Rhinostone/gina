@@ -11,7 +11,7 @@
  *
  *   (a) module shape + CmdHelper wiring
  *   (b) argv loop — `--format=<x>` capture, CmdHelper-driven project/bundle
- *   (c) DRIVER_MAP + AI_DRIVER_MAP — the full peerDependencies mapping
+ *   (c) lib.connectorRegistry consumption — no inline DRIVER_MAP/AI_DRIVER_MAP
  *   (d) resolveDriver — entry.connector vs key fallback, ai protocol map,
  *       builtin / unresolved paths
  *   (e) readJsonSafe — uses requireJSON, null on missing
@@ -107,71 +107,55 @@ describe('02 - argv parsing', function () {
 
 
 // ---------------------------------------------------------------------------
-// 03 — DRIVER_MAP + AI_DRIVER_MAP
+// 03 — Connector registry consumption
 // ---------------------------------------------------------------------------
 
-describe('03 - DRIVER_MAP', function () {
+describe('03 - connector registry consumption', function () {
 
-    it('declares a DRIVER_MAP table', function () {
-        assert.match(src, /var DRIVER_MAP\s*=\s*\{/);
+    it('declares `var registry = lib.connectorRegistry;`', function () {
+        assert.match(src, /var registry = lib\.connectorRegistry;/);
     });
 
-    it('maps couchbase → couchbase >=3.0.0', function () {
-        assert.match(src, /couchbase\s*:\s*\{\s*npm:\s*'couchbase',\s*range:\s*'>=3\.0\.0'\s*\}/);
+    it('does NOT declare an inline DRIVER_MAP — moved to the registry', function () {
+        assert.doesNotMatch(src, /var DRIVER_MAP\s*=\s*\{/, 'DRIVER_MAP must live in lib/connector-registry, not inline');
     });
 
-    it('maps redis → ioredis >=5.0.0', function () {
-        assert.match(src, /redis\s*:\s*\{\s*npm:\s*'ioredis',\s*range:\s*'>=5\.0\.0'\s*\}/);
+    it('does NOT declare an inline AI_DRIVER_MAP — moved to the registry', function () {
+        assert.doesNotMatch(src, /var AI_DRIVER_MAP\s*=\s*\{/, 'AI_DRIVER_MAP must live in lib/connector-registry, not inline');
     });
 
-    it('maps mysql → mysql2 >=2.0.0', function () {
-        assert.match(src, /mysql\s*:\s*\{\s*npm:\s*'mysql2',\s*range:\s*'>=2\.0\.0'\s*\}/);
+    it('consumes via registry.getDriver(type) for non-AI connectors', function () {
+        assert.match(src, /registry\.getDriver\(type\)/);
     });
 
-    it('maps postgresql → pg >=8.0.0', function () {
-        assert.match(src, /postgresql\s*:\s*\{\s*npm:\s*'pg',\s*range:\s*'>=8\.0\.0'\s*\}/);
+    it('consumes via registry.getAIDriver(scheme) for AI connectors', function () {
+        assert.match(src, /registry\.getAIDriver\(scheme\)/);
     });
 
-    it('maps mongodb → mongodb >=5.0.0', function () {
-        assert.match(src, /mongodb\s*:\s*\{\s*npm:\s*'mongodb',\s*range:\s*'>=5\.0\.0'\s*\}/);
-    });
-
-    it('maps scylladb → @scylladb/scylla-driver >=1.0.0', function () {
-        assert.match(src, /scylladb\s*:\s*\{\s*npm:\s*'@scylladb\/scylla-driver',\s*range:\s*'>=1\.0\.0'\s*\}/);
-    });
-
-    it('flags sqlite as builtin (node:sqlite)', function () {
-        assert.match(src, /sqlite\s*:\s*\{[^}]*builtin:\s*true[^}]*\}/);
-        assert.match(src, /node:sqlite/);
+    it('consumes via registry.getAISchemes() for AI scheme help messages', function () {
+        assert.match(src, /registry\.getAISchemes\(\)/);
     });
 });
 
 
-describe('04 - AI_DRIVER_MAP', function () {
+describe('04 - registry content mirrors list.js expectations', function () {
+    var registryPath = require('path').join(require('../fw'), 'lib/connector-registry');
+    var registry     = require(registryPath);
 
-    it('declares an AI_DRIVER_MAP table', function () {
-        assert.match(src, /var AI_DRIVER_MAP\s*=\s*\{/);
+    it('registry includes mongodb + scylladb (not removed)', function () {
+        assert.deepEqual(registry.getDriver('mongodb'), { npm: 'mongodb', range: '>=5.0.0' });
+        assert.deepEqual(registry.getDriver('scylladb'), { npm: '@scylladb/scylla-driver', range: '>=1.0.0' });
     });
 
-    it('maps anthropic → @anthropic-ai/sdk', function () {
-        assert.match(src, /anthropic\s*:\s*\{\s*npm:\s*'@anthropic-ai\/sdk',\s*range:\s*'>=0\.27\.0'\s*\}/);
+    it('registry anthropic + openai mappings match', function () {
+        assert.deepEqual(registry.getAIDriver('anthropic'), { npm: '@anthropic-ai/sdk', range: '>=0.27.0' });
+        assert.deepEqual(registry.getAIDriver('openai'), { npm: 'openai', range: '>=4.0.0' });
     });
 
-    it('maps openai → openai >=4.0.0', function () {
-        assert.match(src, /openai\s*:\s*\{\s*npm:\s*'openai',\s*range:\s*'>=4\.0\.0'\s*\}/);
-    });
-
-    it('maps at least 9 OpenAI-compatible providers', function () {
-        // deepseek, qwen, groq, mistral, together, ollama, gemini, xai, perplexity
-        assert.match(src, /deepseek\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /qwen\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /groq\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /mistral\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /together\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /ollama\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /gemini\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /xai\s*:\s*\{\s*npm:\s*'openai'/);
-        assert.match(src, /perplexity\s*:\s*\{\s*npm:\s*'openai'/);
+    it('registry maps all 9 OpenAI-compatible providers', function () {
+        ['deepseek', 'qwen', 'groq', 'mistral', 'together', 'ollama', 'gemini', 'xai', 'perplexity'].forEach(function (p) {
+            assert.deepEqual(registry.getAIDriver(p), { npm: 'openai', range: '>=4.0.0' }, p + ' must resolve to openai');
+        });
     });
 });
 
