@@ -813,7 +813,7 @@ describe('22 - help.txt + examples for --install', function () {
     it('help.txt documents the install-range resolution order', function () {
         assert.match(helpTxt, /Install range resolution order:/);
         assert.match(helpTxt, /--driver-version=/);
-        assert.match(helpTxt, /peerDependencies/);
+        assert.match(helpTxt, /built-in driver range/);
     });
 
     it('help.txt shows an --install example', function () {

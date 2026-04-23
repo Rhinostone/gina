@@ -79,7 +79,7 @@
                                  when no lockfile is present.
                                  Install range resolution order:
                                  --driver-version= → project package.json
-                                 dep → framework peerDependencies range.
+                                 dep → framework's built-in driver range.
                                  sqlite short-circuits (built-in); AI
                                  connectors with missing/unknown protocol
                                  exit 1 with guidance.
@@ -135,7 +135,7 @@
     After writing, `connector:add` prints the exact
     `npm install <driver>@"<range>"` command. The resolved range comes
     from `--version=` when supplied, otherwise from the framework's
-    peerDependencies declaration.
+    built-in driver range table.
 
     `connector:rm` writes to the same two targets (shared vs bundle) per
     positional-absence. It never uninstalls the npm driver — another
@@ -171,8 +171,8 @@
     preserve any comment header above the first `{`, but mid-body
     comments are lost on rewrite.
 
-    Driver resolution follows the framework's `peerDependencies` declared
-    in the root `package.json`:
+    Driver resolution uses the framework's built-in driver range table
+    (see `lib/cmd/connector/add.js` DRIVER_MAP):
 
       couchbase     → couchbase            >= 3.0.0
       redis         → ioredis              >= 5.0.0

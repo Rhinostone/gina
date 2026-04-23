@@ -32,10 +32,10 @@ function List(opt, cmd) {
     var self = { format: null };
 
     /**
-     * Driver map — logical `connector` type → npm driver package + the
-     * peerDependencies range declared in root `package.json`. Kept in sync
-     * with the framework's `peerDependencies` by hand: when a new connector
-     * type is added upstream, add an entry here.
+     * Driver map — logical `connector` type → npm driver package + driver
+     * version range. Kept in sync with the table in
+     * `lib/cmd/connector/add.js` by hand: when a new connector type is
+     * added upstream, add an entry here.
      *
      * `builtin: true` means the driver is provided by Node.js itself
      * (e.g. `node:sqlite` since Node 22.5.0) — nothing to install.

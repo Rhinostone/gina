@@ -22,7 +22,7 @@ var CmdHelper = require('./../helper');
  * After writing the entry, prints the exact `npm install <driver>@<range>`
  * command to run, using the resolved version range in this order:
  *   1. the entry's `version` field (set via `--version=`)
- *   2. the framework `peerDependencies` range (DRIVER_MAP / AI_DRIVER_MAP)
+ *   2. the framework's built-in driver range table (DRIVER_MAP / AI_DRIVER_MAP)
  *
  * Leading header comments at the top of an existing `connectors.json` are
  * preserved verbatim (everything before the first `{`). Mid-body `//` or
@@ -96,9 +96,10 @@ function Add(opt, cmd) {
     var ALLOWED_SCOPES = ['local', 'beta', 'production', 'testing'];
 
     /**
-     * Driver map — logical `connector` type → npm driver package + the
-     * framework peerDependencies range. Kept in sync with the table in
-     * `lib/cmd/connector/list.js` by hand.
+     * Driver map — logical `connector` type → npm driver package + driver
+     * version range. Source of truth for the install hint printed after
+     * `connector:add` and for the range used by `connector:add --install`.
+     * Kept in sync with the table in `lib/cmd/connector/list.js` by hand.
      *
      * `builtin: true` means the driver is provided by Node.js itself
      * (e.g. `node:sqlite` since Node 22.5.0) — nothing to install.
@@ -478,7 +479,7 @@ function Add(opt, cmd) {
      * Builds the "Next: run npm install …" hint line. For AI connectors,
      * resolves the driver from `entry.protocol`; for everything else, from
      * the static DRIVER_MAP. When the entry carries a `version` pin that
-     * overrides the framework peerDependencies range.
+     * overrides the framework-declared range.
      *
      * @inner
      * @private
@@ -533,7 +534,7 @@ function Add(opt, cmd) {
      * Resolve the install range for a driver in priority order:
      *   1. `entry.version` — the pin just written via --driver-version=
      *   2. project `package.json` > dependencies / devDependencies
-     *   3. framework peerDependencies range (DRIVER_MAP / AI_DRIVER_MAP)
+     *   3. framework-declared driver range (DRIVER_MAP / AI_DRIVER_MAP)
      *
      * Returns both the resolved range and the source tag so the CLI can log
      * which tier won.

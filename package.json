@@ -83,41 +83,5 @@
   "devDependencies": {
     "engine.io-client": "^6.6.3",
     "requirejs": "^2.3.7"
-  },
-  "peerDependencies": {
-    "@anthropic-ai/sdk": ">=0.27.0",
-    "@scylladb/scylla-driver": ">=1.0.0",
-    "couchbase": ">=3.0.0",
-    "ioredis": ">=5.0.0",
-    "mongodb": ">=5.0.0",
-    "mysql2": ">=2.0.0",
-    "openai": ">=4.0.0",
-    "pg": ">=8.0.0"
-  },
-  "peerDependenciesMeta": {
-    "couchbase": {
-      "optional": true
-    },
-    "ioredis": {
-      "optional": true
-    },
-    "mysql2": {
-      "optional": true
-    },
-    "pg": {
-      "optional": true
-    },
-    "mongodb": {
-      "optional": true
-    },
-    "@scylladb/scylla-driver": {
-      "optional": true
-    },
-    "openai": {
-      "optional": true
-    },
-    "@anthropic-ai/sdk": {
-      "optional": true
-    }
   }
 }
