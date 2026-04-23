@@ -1,3 +1,0 @@
-kind: Added
-body: 'The nunjucks render path now registers Gina''s built-in filter registry automatically. Bundles with `render.engine: "nunjucks"` get the same 7 filters as the swig path — `getUrl`, `getWebroot`, `length`, `nl2br`, `addHours`, `addDays`, `addYears` — with no manual `env.addFilter()` calls needed. Templates can use `{{ ''home'' | getUrl }}`, `{{ body | nl2br | safe }}`, or date helpers out of the box. User-registered filters on top (`env.addFilter(''upper'', fn)`) coexist with the built-in registry. Closes the most user-visible gap left by the 0.3.7-alpha.2 nunjucks MVP.'
-time: 2026-04-23T11:00:00.000000+01:00
