@@ -1,0 +1,36 @@
+name: Vendored CVE Scan
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+  schedule:
+    # Weekly, Sunday 00:00 UTC — catches CVEs disclosed after the last push.
+    - cron: '0 0 * * 0'
+  workflow_dispatch:
+
+# Cancel any in-flight scan for the same ref when a newer one kicks off.
+concurrency:
+  group: vendored-cve-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: OSV scan on vendored deps
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Scan vendored package.jsons via api.osv.dev
+        run: node .github/scripts/scan-vendored-cves.js
