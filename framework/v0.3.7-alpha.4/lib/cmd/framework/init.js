@@ -84,11 +84,11 @@ function Initialize(opt) {
         for (let t in self) {
             if ( typeof(self[t]) == 'function') {
                 if (n == i) {
-                    //let func = 'self.' + t + '()';
-                    let func = 'self.' + t;
-                    console.debug('Running [ ' + func + '() ]');
-                    funct       = func;
-                    functName   = t;
+                    // #SCS1b (2026-04-23) — hold the function reference directly instead
+                    //                        of building a `'self.' + t` string for eval.
+                    functName = t;
+                    funct     = self[t];
+                    console.debug('Running [ self.' + functName + '() ]');
                     break;
                 }
                 n++;
@@ -97,7 +97,24 @@ function Initialize(opt) {
 
         // to handle sync vs async to allow execution in order of declaration
         if (funct) {
-            eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e.toString()); process.exit(1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();'); // jshint ignore:line
+            // #SCS1b (2026-04-23) — replaced `eval('async function on<Name>...')` chain
+            //                        scaffolding with a direct promisify + try/await/catch
+            //                        so Socket no longer flags `Uses eval`. Semantics
+            //                        unchanged: promisify → await → error ⇒ console.error
+            //                        + process.exit(1) → recurse to begin(i+1). The
+            //                        per-function `on<Name>` stack-label is lost; functName
+            //                        is logged above instead.
+            // eval('async function on'+functName+'(){ await promisify('+ funct + ')().catch(function(e){ console.error(e.toString()); process.exit(1);}).then(function(){ begin('+(i+1)+')});}; on'+functName+'();'); // jshint ignore:line
+            (async function() {
+                try {
+                    await promisify(funct)();
+                } catch (e) {
+                    console.error(e.toString());
+                    process.exit(1);
+                    return;
+                }
+                begin(i + 1);
+            })();
         } else if ( i == self.functionCount() ) {
             e.emit('init#complete', false, run, self.opt);
         }
