@@ -1,0 +1,26 @@
+kind: Fixed
+body: >-
+  Refreshed stale URL references in code comments and man pages across the
+  framework (link-health audit gina-io/gina#18):
+  `core/template/boilerplate/bundle/controllers/setup.js` — dropped reference to
+  the deleted `github.com/jmcmanus/pagedown-extra` repo (the commented-out example
+  code uses `marked`, not pagedown-extra; the link was misleading even before the
+  repo died).
+  `core/connectors/couchbase/lib/session-store.v{2,3,4}.js` — updated
+  `github.com/visionmedia/connect-redis` to `github.com/tj/connect-redis` (the
+  maintainer renamed; old URL still 302s but relying on a stale redirect chain
+  is brittle).
+  `core/locales/README.md` — replaced `currency-iso.org/en/home/tables/table-a1.html`
+  (folded into a SIX Swiss Exchange commercial page) with the canonical
+  `iso.org/iso-4217-currency-codes.html`.
+  `lib/cmd/gina.1.md`, `gina-dev.1.md`, `gina-framework.1.md` — modernised the
+  `groups.google.com/forum/#!forum/ginajs` mailing-list link to the supported
+  `groups.google.com/g/ginajs` URL format. The Google Group itself is still
+  active; only the hash-bang URL format is obsolete.
+  `core/server.js` — dropped dead `strongloop.com/strongblog/...` blog-post
+  reference (domain TLS-broken, StrongLoop dissolved into IBM in 2015, the
+  blog post is not reachable via any successor) and dead
+  `jsperf.com/arraybuffer-string-conversion/4` test reference (410 Gone; jsperf
+  relaunched on Cloudflare but the historical test data was not restored).
+  Comment-only changes; no runtime behaviour modified.
+time: 2026-04-24T02:13:05Z

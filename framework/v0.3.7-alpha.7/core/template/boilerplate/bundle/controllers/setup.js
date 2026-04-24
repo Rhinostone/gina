@@ -1,5 +1,5 @@
 //Imports goes here.
-// var md       = require('marked'); // visit: https://github.com/jmcmanus/pagedown-extra
+// var md       = require('marked');
 // var lib      = require('gina').lib;
 // var merge    = lib.merge;
 
@@ -58,7 +58,7 @@ function SetupClass(req, res, next){
      * 3) uncomment the following filter definition
      */
     // // default markdown options
-    // var markdownOpt = { // visit: https://github.com/jmcmanus/pagedown-extra
+    // var markdownOpt = {
     //     gfm         : true, // Enable GitHub flavored markdown.
     //     tables      : false,
     //     breaks      : true, // Enable GFM line breaks. This option requires the gfm option to be true.

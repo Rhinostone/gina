@@ -2821,7 +2821,6 @@ function Server(options) {
                      *
                      * ref.:
                      *  - https://developers.google.com/web/updates/2012/06/How-to-convert-ArrayBuffer-to-and-from-String
-                     *  - https://jsperf.com/arraybuffer-string-conversion/4
                      *
                      * TODO - Test with audio content
                      *
@@ -2950,7 +2949,6 @@ function Server(options) {
 
                         // creating file
                         writeStreams[index] = fs.createWriteStream( _(uploadDir + '/' + filename) );
-                        // https://strongloop.com/strongblog/practical-examples-of-the-new-node-js-streams-api/
                         var liner = new require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {

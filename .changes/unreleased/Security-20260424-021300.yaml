@@ -1,0 +1,10 @@
+kind: Security
+body: >-
+  Removed the `polyfill.io` example from the popin plugin's HTML documentation
+  (`core/asset/plugin/src/vendor/gina/popin/doc/html.md`). The domain NXDOMAINs
+  as of April 2026 and was famously hijacked mid-2024 after its Chinese owners
+  were reported injecting malicious code into the served polyfills. The surrounding
+  guidance on how to include polyfills yourself (via `js/plugins.js` or
+  `js/vendor/polyfills.js`) is preserved. Documentation-only change; no runtime
+  code path loads the domain. Link-health audit (gina-io/gina#18).
+time: 2026-04-24T02:13:00Z

@@ -15,7 +15,7 @@ var dateFormat      = helpers.dateFormat;
  * MIT Licensed
  *
  * This is an adaption from connect-redis, see:
- * https://github.com/visionmedia/connect-redis
+ * https://github.com/tj/connect-redis
  */
 
 // CB-LOW-4 fix: duplicate 'use strict' removed — file already has "use strict" at line 1.

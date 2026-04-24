@@ -18,7 +18,7 @@ ISO 3166 official English and French short names are from
 [United Nations Statistics Division](http://unstats.un.org/unsd/methods/m49/m49.htm)
 
 ISO 4217 currency codes are from
-[currency-iso.org](http://www.currency-iso.org/en/home/tables/table-a1.html)
+[iso.org](https://www.iso.org/iso-4217-currency-codes.html)
 
 Many other country codes are from
 [statoids.com](http://www.statoids.com/wab.html)

@@ -140,16 +140,7 @@ file synchronously loaded at the top of the document.
 ## What about polyfills?
 
 If you need to include [polyfills](https://remysharp.com/2010/10/08/what-is-a-polyfill)
-in your project, you must make sure those load before any other JavaScript. If you're
-using some polyfill CDN service, like [cdn.polyfill.io](https://cdn.polyfill.io/),
-just put it before the other scripts in the bottom of the page:
-
-```html
-    <script src="https://cdn.polyfill.io/v1/polyfill.min.js"></script>
-    <script src="js/plugins.js"></script>
-    <script src="js/main.js"></script>
-</body>
-```
+in your project, you must make sure those load before any other JavaScript.
 
 If you like to just include the polyfills yourself, you could include them in
 `js/plugins.js`. When you have a bunch of polyfills to load in, you could

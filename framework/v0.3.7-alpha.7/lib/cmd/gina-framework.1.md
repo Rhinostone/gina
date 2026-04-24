@@ -97,4 +97,4 @@ and informations about reporting bugs can be found on the official web site: <ht
 
 The project is also on GitHub: <https://github.com/rhinostone/gina>
 
-Here is the mailling list: <https://groups.google.com/forum/#!forum/ginajs>
+Here is the mailling list: <https://groups.google.com/g/ginajs>

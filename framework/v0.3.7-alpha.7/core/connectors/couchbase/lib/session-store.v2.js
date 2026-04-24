@@ -6,7 +6,7 @@
  * MIT Licensed
  *
  * This is an adaption from connect-redis, see:
- * https://github.com/visionmedia/connect-redis
+ * https://github.com/tj/connect-redis
  */
 
 'use strict'
