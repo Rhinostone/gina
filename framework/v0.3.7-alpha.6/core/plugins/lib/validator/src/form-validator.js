@@ -158,7 +158,41 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                                 .trim();
 
             try {
-                localValue = eval('data.'+ localValue).replace(/^\"|\"$/g, '');
+                // #SCS1e (2026-04-24) — replaced `eval('data.' + localValue)` with a safe
+                // dot+bracket path walker. `localValue` is derived from `{{...}}` placeholders
+                // in error messages; the transforms at lines 152-158 produce
+                // `ident (. ident | ["quoted"])*`. The old eval executed anything that parsed
+                // as JS; a crafted placeholder like `{{constructor.constructor('return
+                // process.exit()')()}}` would reach eval unsanitised (the `[` → `["` / `]` →
+                // `"]` transforms don't neutralise dotted method access). The walker rejects
+                // any segment that isn't a bare identifier or a double-quoted bracket key.
+                // localValue = eval('data.'+ localValue).replace(/^\"|\"$/g, '');
+                let _scsRest = localValue;
+                let _scsSegments = [];
+                let _scsM = _scsRest.match(/^([A-Za-z_$][\w$]*)/);
+                if (!_scsM) { throw new Error('Invalid property path: `' + localValue + '`'); }
+                _scsSegments.push(_scsM[1]);
+                _scsRest = _scsRest.slice(_scsM[0].length);
+                while (_scsRest.length > 0) {
+                    _scsM = _scsRest.match(/^\.([A-Za-z_$][\w$]*)/);
+                    if (_scsM) {
+                        _scsSegments.push(_scsM[1]);
+                        _scsRest = _scsRest.slice(_scsM[0].length);
+                        continue;
+                    }
+                    _scsM = _scsRest.match(/^\["([^"\]]*)"\]/);
+                    if (_scsM) {
+                        _scsSegments.push(_scsM[1]);
+                        _scsRest = _scsRest.slice(_scsM[0].length);
+                        continue;
+                    }
+                    throw new Error('Invalid property path: `' + localValue + '`');
+                }
+                let _scsCur = data;
+                for (let _scsI = 0; _scsCur != null && _scsI < _scsSegments.length; _scsI++) {
+                    _scsCur = _scsCur[_scsSegments[_scsI]];
+                }
+                localValue = _scsCur.replace(/^\"|\"$/g, '');
                 error = error.replace( new RegExp( varArr[v].replace(/\{|\[|\]|\}/g, '\\$&') , 'g'), localValue);
             } catch(e) {}
         }
@@ -889,10 +923,59 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         try {
                             // security checks
                             compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
+                            // #SCS1e (2026-04-24) — replaced the two `eval(...)` calls below with
+                            // auditable equivalents. After `$var` substitution (lines 910-920) and
+                            // paren/return strip above, `compiledCondition` is either:
+                            //   (a) a regex literal `/<body>/<flags>` (when `/^\//` matches), or
+                            //   (b) a binary comparison `<operand><op><operand>` where operand ∈
+                            //       {number, "string", true, false, null, undefined} and op ∈
+                            //       {===, !==, ==, !=, <, >, <=, >=}.
+                            // Old eval executed arbitrary JS; any value reaching `$var` substitution
+                            // that contained a quote (e.g. user input `bar"; process.exit();//`)
+                            // could escape the `"..."` wrapper at line 916 and reach eval as
+                            // arbitrary code. Grammar-locked replacements reject any input that
+                            // doesn't fit the two documented shapes.
+                            // if ( /^\//.test(compiledCondition) ) {
+                            //     isValid = eval(compiledCondition + '.test("' + this.value + '")')
+                            // } else {
+                            //     isValid = eval(compiledCondition)
+                            // }
                             if ( /^\//.test(compiledCondition) ) {
-                                isValid = eval(compiledCondition + '.test("' + this.value + '")')
+                                var _scsRegexMatch = compiledCondition.match(/^\/(.+)\/([a-z]*)$/);
+                                if (!_scsRegexMatch) {
+                                    throw new Error('Invalid regex literal: `' + compiledCondition + '`');
+                                }
+                                isValid = new RegExp(_scsRegexMatch[1], _scsRegexMatch[2]).test(this.value);
                             } else {
-                                isValid = eval(compiledCondition)
+                                var _SCS_BINARY_RE = /^\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*(===|!==|<=|>=|==|!=|<|>)\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*$/;
+                                var _scsBinMatch = (typeof(compiledCondition) == 'string') ? compiledCondition.match(_SCS_BINARY_RE) : null;
+                                if (!_scsBinMatch) {
+                                    throw new Error('Could not evaluate condition `' + compiledCondition + '`.\n(grammar: <operand><op><operand>; operand ∈ number | "string" | true | false | null | undefined; op ∈ === !== == != < > <= >=)');
+                                }
+                                var _scsParseOperand = function(s) {
+                                    var _t = s.replace(/^\s+|\s+$/g, '');
+                                    if (_t === 'null')      return null;
+                                    if (_t === 'undefined') return undefined;
+                                    if (_t === 'true')      return true;
+                                    if (_t === 'false')     return false;
+                                    if (/^"[^"]*"$/.test(_t)) return _t.slice(1, -1);
+                                    var _n = Number(_t);
+                                    if (!isNaN(_n) && _t !== '') return _n;
+                                    throw new Error('Invalid operand: `' + s + '`');
+                                };
+                                var _scsLeft  = _scsParseOperand(_scsBinMatch[1]);
+                                var _scsOp    = _scsBinMatch[2];
+                                var _scsRight = _scsParseOperand(_scsBinMatch[3]);
+                                switch (_scsOp) {
+                                    case '===': isValid = _scsLeft === _scsRight; break;
+                                    case '!==': isValid = _scsLeft !== _scsRight; break;
+                                    case '==':  isValid = _scsLeft ==  _scsRight; break;
+                                    case '!=':  isValid = _scsLeft !=  _scsRight; break;
+                                    case '<':   isValid = _scsLeft <   _scsRight; break;
+                                    case '>':   isValid = _scsLeft >   _scsRight; break;
+                                    case '<=':  isValid = _scsLeft <=  _scsRight; break;
+                                    case '>=':  isValid = _scsLeft >=  _scsRight; break;
+                                }
                             }
 
                         } catch (err) {

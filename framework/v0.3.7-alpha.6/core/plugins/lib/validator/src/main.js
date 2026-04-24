@@ -2600,8 +2600,27 @@ function ValidatorPlugin(rules, data, formId) {
                         if (customRule) {
                             customRule = customRule.replace(/\-|\//g, '.');
                             if ( typeof(rules) != 'undefined' ) {
-                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);
+                                // #SCS1e (2026-04-24) — replaced `eval('gina.forms.rules.' + customRule)`
+                                // with a safe dot-path walker. `customRule` is user-controlled (read
+                                // from the `data-gina-form-rule` HTML attribute); after the replace at
+                                // line 2601 it is a pure dot-path like `account.signin_scope`. The old
+                                // eval executed anything that parsed as JS — a crafted rule name such
+                                // as `constructor.constructor("return process.exit()")()` would fire on
+                                // lookup. The walker rejects any non-identifier character and returns
+                                // undefined on missing path (the `typeof(local.rules[customRule]) ==
+                                // 'undefined'` check at line 2606 then produces the usual user-facing
+                                // "no rule found" error).
+                                // instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);
                                 // instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(eval('gina.forms.rules.'+ customRule), instance.rules[customRule]);
+                                if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(customRule)) {
+                                    throw new Error('Invalid form rule path: `' + customRule + '`');
+                                }
+                                var _scsSegments = customRule.split('.');
+                                var _scsCur      = gina.forms.rules;
+                                for (var _scsI = 0; _scsCur != null && _scsI < _scsSegments.length; _scsI++) {
+                                    _scsCur = _scsCur[_scsSegments[_scsI]];
+                                }
+                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone(_scsCur), instance.rules[customRule]);
                             }
                             if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');
