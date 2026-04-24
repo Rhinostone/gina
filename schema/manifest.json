@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft-07/schema#",
   "$id": "https://gina.io/schema/manifest.json",
   "title": "Gina manifest.json",
   "description": "Project manifest — the root registry of all bundles in a Gina project. Lives at the project root alongside env.json and package.json.",
