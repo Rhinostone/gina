@@ -5,7 +5,8 @@ The Google Closure Compiler JAR files are not stored in this repository.
 ## Requirements
 
 - `curl`
-- `java` >= 8 (to run the compiler during builds)
+- `java` >= 21 (to run the compiler during builds — v20260422 JAR has
+  bytecode major version 65, which is Java 21)
 
 Run the install script once before building:
 
@@ -18,8 +19,7 @@ Depending on where Gina was installed or cloned, you may need `sudo`:
 This is typically required when installed under a system-wide prefix such as
 `/usr/local`, and not needed for user-local installs like `~/.npm-global`.
 
-This downloads the following JARs from Maven Central and creates the
+This downloads the following JAR from Maven Central and creates the
 `compiler.jar` symlink used by the `build` script:
 
-- `closure-compiler-v20160619.jar` — requires Java 7+
-- `closure-compiler-v20220104.jar` ← active (`compiler.jar` → this) — requires Java 8+
+- `closure-compiler-v20260422.jar` ← active (`compiler.jar` → this) — requires Java 21+

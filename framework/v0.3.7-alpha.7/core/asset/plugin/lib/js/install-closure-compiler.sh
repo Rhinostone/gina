@@ -8,8 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MAVEN_BASE="https://repo1.maven.org/maven2/com/google/javascript/closure-compiler"
 
 JARS=(
-    "closure-compiler-v20160619.jar:v20160619"
-    "closure-compiler-v20220104.jar:v20220104"
+    "closure-compiler-v20260422.jar:v20260422"
 )
 
 for entry in "${JARS[@]}"; do
@@ -28,5 +27,5 @@ for entry in "${JARS[@]}"; do
     fi
 done
 
-ln -sf ./closure-compiler-v20220104.jar "${SCRIPT_DIR}/compiler.jar"
-echo "[ok] compiler.jar -> closure-compiler-v20220104.jar"
+ln -sf ./closure-compiler-v20260422.jar "${SCRIPT_DIR}/compiler.jar"
+echo "[ok] compiler.jar -> closure-compiler-v20260422.jar"
