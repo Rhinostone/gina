@@ -32,7 +32,7 @@ function getElementsByAttribute(attribute) {
  * 
  */
 
-/*! @source https://gist.github.com/1129031 */
+/*! @source https://gist.github.com/eligrey/1129031 */
 /*global document, DOMParser*/
 (function(DOMParser) {
 	"use strict";
