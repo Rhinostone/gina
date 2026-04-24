@@ -123,6 +123,16 @@ Four focused follow-up sessions to close the deferred gap left by the `0.3.7-alp
 | 📋 | **Static HTML cache parity** — Port the swig disk-write/serve cache path so `cache:` keys in `routing.json` actually produce cached HTML for nunjucks routes. | `0.3.7` | Q4 2026 |
 | 📋 | **Early Hints 103 auto-send for CSS/JS preloads** — Move the 103 path in `controller.js this.render()` to be engine-agnostic. Pure perf optimisation; manual `self.setEarlyHints(linkHeader)` already works. | `0.3.7` | Q4 2026 |
 
+### Eval safety
+
+Complete the removal of `eval` / `new Function` call sites from the published tarball. Four tranches shipped across `0.3.7-alpha.4` / `0.3.7-alpha.5` cleared 13 of 24 catalogued sites; 2 more were removed by deleting orphaned source during the toolbar cleanup (15 of 24 addressed). Three clusters remain, each needing a focused session.
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| 📋 | **Validator structural refactor** — Refactor `makeObjectFromArgs` in the validator plugin to replace the string-accumulator path-build-then-`eval('root=value')` pattern with a segments-array threaded through recursion and a safe setter. Clears 3 eval sites. Test coverage for the validator plugin was bootstrapped in the prior tranche, so the refactor has a safety net. | `0.3.8` | Q1 2027 |
+| 📋 | **Feature-intrinsic eval design pass** — 6 sites eval user-supplied JS by design (user-defined form validators, HTML event callbacks on form data attributes). Decision pass: safe-eval sandbox via `vm.Script`, pre-parse to a restricted AST, or formalise "accept and document" with an explicit trust assumption. Outcome may include dropping unused placeholder features. | `0.3.8` | Q1 2027 |
+| 📋 | **Logger circular-require refactor** — 3 load-bearing `eval(fs.readFileSync(...))` fallbacks in the logger work around a circular `merge → helpers → logger` require chain. Restructure the chain so the fallback is no longer needed. Clears the final 3 sites of the campaign. Regression risk touches every logger-consuming test. | `0.3.8` | Q1 2027 |
+
 ---
 
 ## Connectors
