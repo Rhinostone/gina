@@ -1,0 +1,16 @@
+kind: Security
+body: >-
+  Added `gina.plugins.Session` — an opt-in hardened wrapper around
+  `express-session` that injects SameSite/HttpOnly/Secure defaults from
+  `settings.json > session.cookie.*` into the cookie options before the
+  middleware sees them (#CSRF1). Caller-supplied `options.cookie` values
+  always override the defaults, so bundles that rely on `httpOnly: false`
+  (for client-side JS reading `document.cookie`) or other intentional
+  choices are preserved. Adoption is a one-line swap in the bundle
+  bootstrap: `var session = require('gina').plugins.Session(require('express-session'))`.
+  The new `session.cookie.{sameSite, httpOnly, secure}` keys land in
+  `core/template/conf/settings.json` with safe defaults
+  ("lax" / true / "auto"). Browser-parity invariant enforced at session
+  factory call time — `SameSite=None` without `Secure` throws.
+  Baseline for the #CSRF2 / #CSRF3 track.
+time: 2026-04-24T21:08:05Z

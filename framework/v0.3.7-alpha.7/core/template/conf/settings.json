@@ -69,6 +69,19 @@
     }
   },
   "cache": {},
+  // #CSRF1 — session-cookie defaults applied by gina.plugins.Session(expressSession).
+  // Bundle cookie options passed to session({ cookie: ... }) always override these.
+  //   sameSite: "lax" | "strict" | "none"   (default "lax")
+  //   httpOnly: true | false                 (default true)
+  //   secure:   true | false | "auto"        (default "auto")
+  // Invariant: sameSite="none" requires secure=true (browser-parity).
+  "session": {
+    "cookie": {
+      "sameSite": "lax",
+      "httpOnly": true,
+      "secure": "auto"
+    }
+  },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved

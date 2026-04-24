@@ -32,7 +32,9 @@ function Plugins() {
 
 
     var self =  {
-        Validator   : _require('./lib/validator')
+        Validator   : _require('./lib/validator'),
+        // #CSRF1 — hardened session-cookie wrapper around express-session.
+        Session     : _require('./lib/session')
     };
 
     return self

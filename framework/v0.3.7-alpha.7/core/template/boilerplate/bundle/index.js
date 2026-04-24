@@ -24,28 +24,32 @@ var ${bundle} = require('gina');
 //    var conf = self.getConfig();
 //
 //    // --- Session store (pick one backend) ---
-//    // var session      = require('express-session');
-//    // var SessionStore = lib.SessionStore;
+//    // var expressSession = require('express-session');
+//    //
+//    // #CSRF1 — wrap express-session with hardened cookie defaults from
+//    // settings.json > session.cookie.* (SameSite=Lax, HttpOnly, Secure="auto").
+//    // The bundle's cookie options below still override the defaults.
+//    // var session = ${bundle}.plugins.Session(expressSession);
 //    //
 //    // Redis — multi-pod / K8s (requires: npm install ioredis)
 //    // Configure connectors.json: { "myRedis": { "connector": "redis", "host": "...", "port": 6379, "ttl": 86400 } }
-//    // session.name = 'myRedis';
+//    // expressSession.name = 'myRedis';
 //    //
 //    // SQLite — dev / staging / single-pod (requires: Node >= 22.5.0, zero npm deps)
 //    // Configure connectors.json: { "myDb": { "connector": "sqlite", "database": ":memory:", "ttl": 86400 } }
-//    // session.name = 'myDb';
+//    // expressSession.name = 'myDb';
 //    //
-//    // var StoreClass = new SessionStore(session);  // returns connector-specific Store class
+//    // var StoreClass = new SessionStore(expressSession);  // returns connector-specific Store class
 //    // app.use(session({
 //    //     secret           : process.env.SESSION_SECRET || 'changeme',
 //    //     resave           : false,
 //    //     saveUninitialized: false,
 //    //     store            : new StoreClass(),
-//    //     cookie           : { secure: false, maxAge: 86400000 }
+//    //     cookie           : { maxAge: 86400000 }
 //    // }));
 //
-//    // you can also use express middleware components directly
-//    // eg.: app.use( session({secret: '1234567890QWERTY'}) );
+//    // you can also use express middleware components directly (no #CSRF1 hardening)
+//    // eg.: app.use( expressSession({secret: '1234567890QWERTY'}) );
 //
 //    //then notify the server that startup sequence can be resumed
 //    event.emit('complete', app);// this is important !
