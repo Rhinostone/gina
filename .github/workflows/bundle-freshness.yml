@@ -1,0 +1,99 @@
+name: Bundle Freshness
+
+# Verifies that the committed dist/vendor/gina/ bundle matches what would
+# be produced by rebuilding from the current source.  Catches the
+# source-committed-without-rebuild gap that .githooks/pre-commit (cheap,
+# "did you stage dist?") cannot detect — i.e. a stale dist was staged
+# alongside a fresh source change.
+#
+# Precedent: #SCS1e (commit 48b8fd26) shipped four validator walker
+# replacements as source-only.  The bundle was not rebuilt until commit
+# 69fb32fc picked it up as a side effect of toolbar removal.  Any browser
+# loading gina.min.js between those two commits still ran the original
+# eval('data.' + localValue).  See llms.txt §72.
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+
+# Cancel any in-flight check for the same ref when a newer one kicks off.
+concurrency:
+  group: bundle-freshness-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  freshness:
+    name: Verify dist matches source
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Set up Java (for Closure Compiler)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y brotli
+          npm install -g sass csso requirejs
+
+      - name: Install dev dependencies
+        run: |
+          npm install --ignore-scripts
+          ln -sf $(pwd) node_modules/gina
+
+      - name: Prepare framework dependencies
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          FW_DIR="framework/v${VERSION}"
+          if [ ! -f "${FW_DIR}/package.json" ]; then
+            cat > "${FW_DIR}/package.json" <<EOF
+          {
+            "name": "gina-framework",
+            "version": "${VERSION}",
+            "dependencies": {
+              "@rhinostone/swig": "^1.6.0"
+            }
+          }
+          EOF
+          fi
+          (cd "${FW_DIR}" && npm install --ignore-scripts)
+
+      - name: Install Closure Compiler JARs
+        run: bash framework/v*/core/asset/plugin/lib/js/install-closure-compiler.sh
+
+      - name: Rebuild bundle
+        run: bash framework/v*/core/asset/plugin/build --env=prod
+
+      - name: Verify dist is in sync with source
+        run: |
+          if ! git diff --exit-code framework/v*/core/asset/plugin/dist/vendor/gina/; then
+            echo ""
+            echo "::error::Bundle is out of sync with source."
+            echo "::error::A source file under one of the AMD-aliased paths in build.json"
+            echo "::error::was modified without a corresponding rebuilt dist staged."
+            echo "::error::"
+            echo "::error::Locally:"
+            echo "::error::  bash framework/v*/core/asset/plugin/build --env=prod"
+            echo "::error::  git add framework/v*/core/asset/plugin/dist/vendor/gina/"
+            echo "::error::"
+            echo "::error::See llms.txt §72 for the rebuild-gate discipline."
+            exit 1
+          fi
+          echo "Bundle is fresh — dist matches source."
