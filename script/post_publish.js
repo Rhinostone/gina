@@ -413,6 +413,46 @@ function PostPublish() {
             console.warn('[bumpVersion] Could not update gna.js: ' + (gnaErr.message || gnaErr));
         }
 
+        // Update local-only version-anchor files declared in
+        // script/.local-sync-targets.json (gitignored). Each entry is a
+        // relative path under self.gina; any occurrence of "v<currentVersion>"
+        // in the file is rewritten to "v<newVersion>". The declaration file
+        // is gitignored, so a fresh clone or a contributor's machine without
+        // it sees no action — this is a maintainer-local convenience to keep
+        // plain-text documentation from drifting across alpha cycles.
+        var localSyncConfigPath = _(self.gina + '/script/.local-sync-targets.json', true);
+        try {
+            if (new _(localSyncConfigPath).existsSync()) {
+                var syncConfig = requireJSON(localSyncConfigPath);
+                var syncFiles  = (syncConfig && syncConfig.files) || [];
+                // Matches "v<currentVersion>" when NOT followed by another
+                // digit or dot — prevents clobbering a longer version string
+                // that happens to share the same prefix.
+                var versionPattern = new RegExp(
+                    'v' + currentVersion.replace(/\./g, '\\.') + '(?![\\d.])',
+                    'g'
+                );
+                for (var i = 0; i < syncFiles.length; i++) {
+                    var relPath = syncFiles[i] && syncFiles[i].path;
+                    if (typeof relPath !== 'string') continue;
+                    var filePath = _(self.gina + '/' + relPath, true);
+                    try {
+                        if (!new _(filePath).existsSync()) continue;
+                        var src = fs.readFileSync(filePath, 'utf8');
+                        var updated = src.replace(versionPattern, 'v' + newVersion);
+                        if (updated !== src) {
+                            fs.writeFileSync(filePath, updated);
+                            console.info('[bumpVersion] Local sync: ' + relPath + ' -> v' + newVersion);
+                        }
+                    } catch (fileErr) {
+                        console.warn('[bumpVersion] Local sync skipped for ' + relPath + ': ' + (fileErr.message || fileErr));
+                    }
+                }
+            }
+        } catch (syncErr) {
+            // Sidecar config absent or malformed — silent no-op.
+        }
+
         // Update ~/.gina/main.json and ~/.gina/{shortVersion}/settings.json
         var shortVersion = newVersion.split('.');
         shortVersion.splice(2);
