@@ -90,7 +90,17 @@ jobs:
 
       - name: Verify dist is in sync with source
         run: |
-          if ! git diff --exit-code framework/v*/core/asset/plugin/dist/vendor/gina/; then
+          # *.gz files are excluded: gzip output is platform-specific (Apple
+          # gzip on the maintainer's Mac vs GNU gzip on Linux runners produce
+          # different deflate bytes for the same input — even Node's zlib
+          # disagrees Mac↔Linux because it links the system zlib). Brotli IS
+          # cross-platform deterministic (single canonical reference impl),
+          # so the .br files remain checked. If a .css/.js/.html source
+          # changes without a rebuild, the .br diff catches it; the .gz
+          # divergence would have been a false positive.
+          if ! git diff --exit-code -- \
+                  'framework/v*/core/asset/plugin/dist/vendor/gina/' \
+                  ':(exclude)framework/v*/core/asset/plugin/dist/vendor/gina/**/*.gz'; then
             echo ""
             echo "::error::Bundle is out of sync with source."
             echo "::error::A source file under one of the AMD-aliased paths in build.json"
@@ -103,4 +113,4 @@ jobs:
             echo "::error::See llms.txt §72 for the rebuild-gate discipline."
             exit 1
           fi
-          echo "Bundle is fresh — dist matches source."
+          echo "Bundle is fresh — dist matches source (excluding *.gz, which is platform-divergent)."
