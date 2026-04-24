@@ -55,7 +55,11 @@ jobs:
 
       - name: Install dev dependencies
         run: |
-          npm install --ignore-scripts
+          # `npm ci` (not `npm install`) — strictly respects package-lock.json
+          # so devDeps like engine.io-client (which gets baked into the bundle
+          # via build.json) don't drift between local rebuilds and CI rebuilds.
+          # See llms.txt §72 / 2026-04-24 incident.
+          npm ci --ignore-scripts
           ln -sf $(pwd) node_modules/gina
 
       - name: Prepare framework dependencies

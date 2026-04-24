@@ -31,7 +31,10 @@ CLAUDE.md
 node_modules/
 VERSION
 MIDDLEWARE
-package-lock.json
+# package-lock.json is tracked — required for reproducible builds, see
+# bundle-freshness.yml which uses `npm ci` to avoid devDep drift baking
+# different bytes into the published bundle (engine.io-client incident,
+# 2026-04-24, llms.txt §72).
 * copy
 test/workspace
 SUCCESS
