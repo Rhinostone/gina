@@ -3000,7 +3000,41 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                                 .trim();
 
             try {
-                localValue = eval('data.'+ localValue).replace(/^\"|\"$/g, '');
+                // #SCS1e (2026-04-24) — replaced `eval('data.' + localValue)` with a safe
+                // dot+bracket path walker. `localValue` is derived from `{{...}}` placeholders
+                // in error messages; the transforms at lines 152-158 produce
+                // `ident (. ident | ["quoted"])*`. The old eval executed anything that parsed
+                // as JS; a crafted placeholder like `{{constructor.constructor('return
+                // process.exit()')()}}` would reach eval unsanitised (the `[` → `["` / `]` →
+                // `"]` transforms don't neutralise dotted method access). The walker rejects
+                // any segment that isn't a bare identifier or a double-quoted bracket key.
+                // localValue = eval('data.'+ localValue).replace(/^\"|\"$/g, '');
+                let _scsRest = localValue;
+                let _scsSegments = [];
+                let _scsM = _scsRest.match(/^([A-Za-z_$][\w$]*)/);
+                if (!_scsM) { throw new Error('Invalid property path: `' + localValue + '`'); }
+                _scsSegments.push(_scsM[1]);
+                _scsRest = _scsRest.slice(_scsM[0].length);
+                while (_scsRest.length > 0) {
+                    _scsM = _scsRest.match(/^\.([A-Za-z_$][\w$]*)/);
+                    if (_scsM) {
+                        _scsSegments.push(_scsM[1]);
+                        _scsRest = _scsRest.slice(_scsM[0].length);
+                        continue;
+                    }
+                    _scsM = _scsRest.match(/^\["([^"\]]*)"\]/);
+                    if (_scsM) {
+                        _scsSegments.push(_scsM[1]);
+                        _scsRest = _scsRest.slice(_scsM[0].length);
+                        continue;
+                    }
+                    throw new Error('Invalid property path: `' + localValue + '`');
+                }
+                let _scsCur = data;
+                for (let _scsI = 0; _scsCur != null && _scsI < _scsSegments.length; _scsI++) {
+                    _scsCur = _scsCur[_scsSegments[_scsI]];
+                }
+                localValue = _scsCur.replace(/^\"|\"$/g, '');
                 error = error.replace( new RegExp( varArr[v].replace(/\{|\[|\]|\}/g, '\\$&') , 'g'), localValue);
             } catch(e) {}
         }
@@ -3731,10 +3765,59 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         try {
                             // security checks
                             compiledCondition = compiledCondition.replace(/(\(|\)|return)/g, '');
+                            // #SCS1e (2026-04-24) — replaced the two `eval(...)` calls below with
+                            // auditable equivalents. After `$var` substitution (lines 910-920) and
+                            // paren/return strip above, `compiledCondition` is either:
+                            //   (a) a regex literal `/<body>/<flags>` (when `/^\//` matches), or
+                            //   (b) a binary comparison `<operand><op><operand>` where operand ∈
+                            //       {number, "string", true, false, null, undefined} and op ∈
+                            //       {===, !==, ==, !=, <, >, <=, >=}.
+                            // Old eval executed arbitrary JS; any value reaching `$var` substitution
+                            // that contained a quote (e.g. user input `bar"; process.exit();//`)
+                            // could escape the `"..."` wrapper at line 916 and reach eval as
+                            // arbitrary code. Grammar-locked replacements reject any input that
+                            // doesn't fit the two documented shapes.
+                            // if ( /^\//.test(compiledCondition) ) {
+                            //     isValid = eval(compiledCondition + '.test("' + this.value + '")')
+                            // } else {
+                            //     isValid = eval(compiledCondition)
+                            // }
                             if ( /^\//.test(compiledCondition) ) {
-                                isValid = eval(compiledCondition + '.test("' + this.value + '")')
+                                var _scsRegexMatch = compiledCondition.match(/^\/(.+)\/([a-z]*)$/);
+                                if (!_scsRegexMatch) {
+                                    throw new Error('Invalid regex literal: `' + compiledCondition + '`');
+                                }
+                                isValid = new RegExp(_scsRegexMatch[1], _scsRegexMatch[2]).test(this.value);
                             } else {
-                                isValid = eval(compiledCondition)
+                                var _SCS_BINARY_RE = /^\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*(===|!==|<=|>=|==|!=|<|>)\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*$/;
+                                var _scsBinMatch = (typeof(compiledCondition) == 'string') ? compiledCondition.match(_SCS_BINARY_RE) : null;
+                                if (!_scsBinMatch) {
+                                    throw new Error('Could not evaluate condition `' + compiledCondition + '`.\n(grammar: <operand><op><operand>; operand ∈ number | "string" | true | false | null | undefined; op ∈ === !== == != < > <= >=)');
+                                }
+                                var _scsParseOperand = function(s) {
+                                    var _t = s.replace(/^\s+|\s+$/g, '');
+                                    if (_t === 'null')      return null;
+                                    if (_t === 'undefined') return undefined;
+                                    if (_t === 'true')      return true;
+                                    if (_t === 'false')     return false;
+                                    if (/^"[^"]*"$/.test(_t)) return _t.slice(1, -1);
+                                    var _n = Number(_t);
+                                    if (!isNaN(_n) && _t !== '') return _n;
+                                    throw new Error('Invalid operand: `' + s + '`');
+                                };
+                                var _scsLeft  = _scsParseOperand(_scsBinMatch[1]);
+                                var _scsOp    = _scsBinMatch[2];
+                                var _scsRight = _scsParseOperand(_scsBinMatch[3]);
+                                switch (_scsOp) {
+                                    case '===': isValid = _scsLeft === _scsRight; break;
+                                    case '!==': isValid = _scsLeft !== _scsRight; break;
+                                    case '==':  isValid = _scsLeft ==  _scsRight; break;
+                                    case '!=':  isValid = _scsLeft !=  _scsRight; break;
+                                    case '<':   isValid = _scsLeft <   _scsRight; break;
+                                    case '>':   isValid = _scsLeft >   _scsRight; break;
+                                    case '<=':  isValid = _scsLeft <=  _scsRight; break;
+                                    case '>=':  isValid = _scsLeft >=  _scsRight; break;
+                                }
                             }
 
                         } catch (err) {
@@ -11931,8 +12014,27 @@ function ValidatorPlugin(rules, data, formId) {
                         if (customRule) {
                             customRule = customRule.replace(/\-|\//g, '.');
                             if ( typeof(rules) != 'undefined' ) {
-                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);
+                                // #SCS1e (2026-04-24) — replaced `eval('gina.forms.rules.' + customRule)`
+                                // with a safe dot-path walker. `customRule` is user-controlled (read
+                                // from the `data-gina-form-rule` HTML attribute); after the replace at
+                                // line 2601 it is a pure dot-path like `account.signin_scope`. The old
+                                // eval executed anything that parsed as JS — a crafted rule name such
+                                // as `constructor.constructor("return process.exit()")()` would fire on
+                                // lookup. The walker rejects any non-identifier character and returns
+                                // undefined on missing path (the `typeof(local.rules[customRule]) ==
+                                // 'undefined'` check at line 2606 then produces the usual user-facing
+                                // "no rule found" error).
+                                // instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone( eval('gina.forms.rules.'+ customRule)), instance.rules[customRule]);
                                 // instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(eval('gina.forms.rules.'+ customRule), instance.rules[customRule]);
+                                if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(customRule)) {
+                                    throw new Error('Invalid form rule path: `' + customRule + '`');
+                                }
+                                var _scsSegments = customRule.split('.');
+                                var _scsCur      = gina.forms.rules;
+                                for (var _scsI = 0; _scsCur != null && _scsI < _scsSegments.length; _scsI++) {
+                                    _scsCur = _scsCur[_scsSegments[_scsI]];
+                                }
+                                instance.$forms[id].rules[customRule] = instance.rules[customRule] = local.rules[customRule] = merge(JSON.clone(_scsCur), instance.rules[customRule]);
                             }
                             if ( typeof(local.rules[customRule]) == 'undefined' ) {
                                 throw new Error('['+id+'] no rule found with key: `'+customRule+'`. Please check if json is not malformed @ /forms/rules/' + customRule.replace(/\./g, '/') +'.json');
@@ -19292,9 +19394,57 @@ function Collection(content, options) {
     options = (typeof(options) == 'object') ? merge(options, defaultOptions) : defaultOptions;
 
     var keywords    = ['not null']; // TODO - null, exists (`true` if property is defined)
+    // #SCS1d (2026-04-23) — replaced `eval(condition)` with a safe binary-compare evaluator.
+    // The conditions tryEval() receives are all constructed internally as `<left><op><right>`
+    // where left/right ∈ {number literal, "string literal", new Date("...")} and op ∈
+    // {===, !==, ==, !=, <, >, <=, >=}. User-controlled filter strings flowed into eval via
+    // `_content + filter` concat (line 293) and the datetime-wrapped variant (line 310) —
+    // any filter containing `<`|`>`|`=` reached eval unsanitised (RCE vector). Preserves
+    // error behaviour: throws on any unparseable input (callers at 310/314/406/411 do not
+    // catch — it bubbles).
+    // var tryEval     = function(condition) {
+    //     try {
+    //         return eval(condition);
+    //     } catch(err) {
+    //         throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack );
+    //     }
+    // }
+    var CONDITION_RE = /^\s*(new\s+Date\("[^"]*"\)|"[^"]*"|-?\d+(?:\.\d+)?)\s*(===|!==|<=|>=|==|!=|<|>)\s*(new\s+Date\("[^"]*"\)|"[^"]*"|-?\d+(?:\.\d+)?)\s*$/;
+    var parseOperand = function(s) {
+        var m = s.match(/^\s*new\s+Date\("([^"]*)"\)\s*$/);
+        if (m) return new Date(m[1]);
+        var t = s.replace(/^\s+|\s+$/g, '');
+        if (/^"[^"]*"$/.test(t)) return t.slice(1, -1);
+        var n = Number(t);
+        if (!isNaN(n) && t !== '') return n;
+        throw new Error('Invalid operand: `'+ s +'`');
+    };
     var tryEval     = function(condition) {
+        var m = (typeof(condition) == 'string') ? condition.match(CONDITION_RE) : null;
+        if (!m) {
+            throw new Error('Could not evaluate condition `'+ condition +'`.\n(grammar: <operand><op><operand>; operand ∈ number | "string" | new Date("..."); op ∈ === !== == != < > <= >=)');
+        }
         try {
-            return eval(condition);
+            var left  = parseOperand(m[1]);
+            var op    = m[2];
+            var right = parseOperand(m[3]);
+            // Match eval's Date semantics: only arithmetic ops coerce Date to valueOf()
+            // (timestamp); `==`/`!=`/`===`/`!==` between two Date objects are reference
+            // compares and always false (two fresh `new Date(x)` are different objects).
+            if ( op === '<' || op === '>' || op === '<=' || op === '>=' ) {
+                if (left  instanceof Date) left  = left.getTime();
+                if (right instanceof Date) right = right.getTime();
+            }
+            switch (op) {
+                case '===': return left === right;
+                case '!==': return left !== right;
+                case '==':  return left == right;
+                case '!=':  return left != right;
+                case '<':   return left <  right;
+                case '>':   return left >  right;
+                case '<=':  return left <= right;
+                case '>=':  return left >= right;
+            }
         } catch(err) {
             throw new Error('Could not evaluate condition `'+ condition +'`.\n' + err.stack );
         }
@@ -19585,9 +19735,32 @@ function Collection(content, options) {
 
                 var value = null;
 
+                // #SCS1d (2026-04-23) — replaced `eval('_content.' + f)` with a safe dot-path
+                // walker. `f` arrives here as a dot-separated path like `"ratings.Cleanliness"`
+                // (the `[*]` bracket-star variant is already stripped by searchWithin before
+                // this function is called — see split at line 438). User-controlled filter
+                // keys flowed through this without sanitisation; the old eval executed
+                // anything that parsed as JS, e.g. a key like
+                // `"constructor.constructor('return process.exit()')()"` would fire on lookup.
+                // try {
+                //     if ( _content )
+                //         value = eval('_content.'+f);
+                // } catch (err) {
+                //     // Nothing to do
+                //     // means that the field is not available in the collection
+                // }
                 try {
-                    if ( _content )
-                        value = eval('_content.'+f);
+                    if ( _content ) {
+                        if (!/^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*$/.test(f)) {
+                            throw new Error('Invalid property path: `'+ f +'`');
+                        }
+                        var _segments = f.split('.');
+                        var _cur = _content;
+                        for (var _si = 0; _cur != null && _si < _segments.length; _si++) {
+                            _cur = _cur[_segments[_si]];
+                        }
+                        value = _cur;
+                    }
                 } catch (err) {
                     // Nothing to do
                     // means that the field is not available in the collection
