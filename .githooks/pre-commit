@@ -59,4 +59,61 @@ EOF
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Bundle-rebuild gate (llms.txt lesson #72)
+#
+# Source files under the AMD-aliased paths in
+# core/asset/plugin/src/vendor/gina/build.json are bundled into
+# dist/vendor/gina/js/gina*.  A commit that modifies these files without
+# also staging a rebuilt dist ships develop with a stale bundle:
+# customers installing from develop (or the next alpha cut between source
+# commit and rebuild commit) get vulnerable/incorrect behaviour.
+#
+# Precedent: #SCS1e (commit 48b8fd26) shipped four validator walker
+# replacements as source-only; the bundle was not rebuilt until commit
+# 69fb32fc picked it up as a side effect of toolbar removal.  Any browser
+# loading gina.min.js between those two commits still ran the original
+# eval('data.' + localValue).
+#
+# Rule: any commit modifying the bundled-source patterns below must
+# include at least one staged file under dist/vendor/gina/(js|css)/gina*.
+# CI workflow bundle-freshness.yml enforces the deeper "is the dist
+# actually rebuilt from this source" check; this hook covers the
+# pre-commit window.
+#
+# Bundled-source patterns (resolved from build.json paths map):
+#   core/asset/plugin/src/vendor/gina/**       (all browser-side source)
+#   core/plugins/lib/(validator|storage)/src/  (gina/validator, gina/storage, lib/form-validator)
+#   lib/(collection|domain|merge|inherits|uuid|routing)/src/
+#   helpers/(prototypes|dateFormat).js
+#   helpers/data/src/                          (utils/data alias)
+# ---------------------------------------------------------------------------
+
+bundle_src_pattern='^framework/v[^/]+/(core/asset/plugin/src/vendor/gina/|core/plugins/lib/(validator|storage)/src/|lib/(collection|domain|merge|inherits|uuid|routing)/src/|helpers/(prototypes|dateFormat)\.js|helpers/data/src/)'
+bundle_dist_pattern='^framework/v[^/]+/core/asset/plugin/dist/vendor/gina/(js|css)/gina'
+
+source_changes=$(git diff --cached --name-only --diff-filter=AM | grep -E "$bundle_src_pattern" || true)
+
+if [ -n "$source_changes" ]; then
+    dist_changes=$(git diff --cached --name-only --diff-filter=AM | grep -E "$bundle_dist_pattern" || true)
+    if [ -z "$dist_changes" ]; then
+        echo "[pre-commit] ERROR: bundled source modified without a staged dist rebuild:" >&2
+        while IFS= read -r line; do
+            echo "  - $line" >&2
+        done <<EOF
+$source_changes
+EOF
+        echo "" >&2
+        echo "[pre-commit] These files are bundled into dist/vendor/gina/js/gina*." >&2
+        echo "[pre-commit] Rebuild and stage the dist:" >&2
+        echo "[pre-commit]   bash framework/v*/core/asset/plugin/build --env=prod" >&2
+        echo "[pre-commit]   git add framework/v*/core/asset/plugin/dist/vendor/gina/" >&2
+        echo "" >&2
+        echo "[pre-commit] Most lib/* paths above are also server-side runtime code," >&2
+        echo "[pre-commit] so the source change still applies — the rebuild keeps the" >&2
+        echo "[pre-commit] browser bundle in sync. See llms.txt §72." >&2
+        exit 1
+    fi
+fi
+
 exit 0
