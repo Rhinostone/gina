@@ -81,7 +81,9 @@
     "engine.io": "^6.0.0"
   },
   "devDependencies": {
+    "csso-cli": "4.0.2",
     "engine.io-client": "^6.6.3",
-    "requirejs": "^2.3.7"
+    "requirejs": "^2.3.7",
+    "sass": "1.99.0"
   }
 }

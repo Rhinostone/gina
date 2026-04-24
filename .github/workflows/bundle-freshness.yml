@@ -51,7 +51,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y brotli
-          npm install -g sass csso-cli requirejs
 
       - name: Install dev dependencies
         run: |
@@ -83,7 +82,11 @@ jobs:
         run: bash framework/v*/core/asset/plugin/lib/js/install-closure-compiler.sh
 
       - name: Rebuild bundle
-        run: bash framework/v*/core/asset/plugin/build --env=prod
+        run: |
+          bash framework/v*/core/asset/plugin/build --env=prod \
+            --sass-bin="$PWD/node_modules/.bin/sass" \
+            --csso-bin="$PWD/node_modules/.bin/csso" \
+            --rjs-bin="$PWD/node_modules/.bin/r.js"
 
       - name: Verify dist is in sync with source
         run: |
