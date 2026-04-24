@@ -224,7 +224,7 @@ do
                 rm ${css_dist_dir}/$v.min.css.map
             fi
         else
-            cmd+=" | csso > ${css_dist_dir}/$v.min.css | csso ${css_dist_dir}/$v.min.css --map ${css_dist_dir}/$v.min.css.map"
+            cmd+=" | ${csso_bin} > ${css_dist_dir}/$v.min.css | ${csso_bin} ${css_dist_dir}/$v.min.css --map ${css_dist_dir}/$v.min.css.map"
         fi
         # echo "${cmd}"
         eval $cmd
