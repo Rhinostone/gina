@@ -3941,6 +3941,8 @@ function Server(options) {
                     rule                : routing[name].originalRule || name,
                     cache               : routing[name].cache || null,
                     queryTimeout        : parseTimeout(routing[name].queryTimeout) || null,
+                    // #CSRF2 — per-route opt-out for the Csrf middleware (webhook receivers, etc.)
+                    csrfExempt          : routing[name].csrfExempt || false,
                     // We clone because we are going to modify it while comparing urls
                     param               : JSON.clone(routing[name].param),
                     // We clone because we are going to modify it while routing (.splice(..))

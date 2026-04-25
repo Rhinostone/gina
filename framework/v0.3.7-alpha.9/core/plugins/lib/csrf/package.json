@@ -1,0 +1,22 @@
+{
+  "name": "gina-core-plugin-csrf",
+  "version": "1.0.0",
+  "description": "Signed double-submit token CSRF middleware (#CSRF2)",
+  "authors": [
+    {
+      "name": "Maritn-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    },
+    {
+      "name": "Fabrice DELANEAU",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=16"
+  },
+  "main": "src/main",
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}

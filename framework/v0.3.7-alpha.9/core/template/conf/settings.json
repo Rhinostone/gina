@@ -82,6 +82,21 @@
       "secure": "auto"
     }
   },
+  // #CSRF2 — signed double-submit token middleware applied by gina.plugins.Csrf().
+  // The secret lives in `process.env.GINA_CSRF_SECRET` (NOT in this file) — generate
+  // with `openssl rand -base64 64` and store in env.json or your shell profile.
+  //   cookieName  — cookie name issued on safe methods
+  //   headerName  — request header read on mutating methods
+  //   fieldName   — form field read on mutating methods
+  //   rotate      — "per-session" (default) or "per-request"
+  //   safeMethods — methods that issue without verifying (default GET/HEAD/OPTIONS)
+  "csrf": {
+    "cookieName": "gina-csrf-token",
+    "headerName": "X-Gina-CSRF-Token",
+    "fieldName": "_csrf",
+    "rotate": "per-session",
+    "safeMethods": ["GET", "HEAD", "OPTIONS"]
+  },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved

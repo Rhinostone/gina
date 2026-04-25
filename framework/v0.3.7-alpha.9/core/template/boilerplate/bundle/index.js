@@ -47,6 +47,13 @@ var ${bundle} = require('gina');
 //    //     store            : new StoreClass(),
 //    //     cookie           : { maxAge: 86400000 }
 //    // }));
+//    //
+//    // #CSRF2 — signed double-submit token middleware. Reads
+//    // process.env.GINA_CSRF_SECRET (generate with `openssl rand -base64 64`).
+//    // MUST be registered AFTER the session middleware. Per-route opt-out
+//    // for webhook receivers via `routing.json > "csrfExempt": true`.
+//    // var csrf = ${bundle}.plugins.Csrf();
+//    // app.use(csrf);
 //
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: '1234567890QWERTY'}) );

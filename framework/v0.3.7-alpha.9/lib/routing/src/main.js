@@ -217,6 +217,10 @@ function Routing() {
             if ( typeof(routeObject.cache) != 'undefined' ) {
                 params.cache = routeObject.cache;
             }
+            // #CSRF2 — propagate per-route Csrf opt-out to req.routing.csrfExempt
+            if ( typeof(routeObject.csrfExempt) != 'undefined' ) {
+                params.csrfExempt = routeObject.csrfExempt;
+            }
             if ( typeof(routeObject.queryTimeout) != 'undefined' ) {
                 params.queryTimeout = parseTimeout(routeObject.queryTimeout);
             }
