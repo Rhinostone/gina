@@ -9,6 +9,17 @@
 
 var fs = require('fs');
 
+// #CN2v3 — Capture the state module reference at module-load time, when
+// __dirname is still valid. The cached reference survives later framework-
+// dir renames (e.g. post_publish.js bumpVersion renames framework/v<old>/
+// → framework/v<new>/), whereas a runtime `require('../state')` would
+// re-resolve `__dirname + '/../state.js'` against the on-disk path that
+// no longer exists, throw MODULE_NOT_FOUND, and silently fall through to
+// the legacy JSON-only write — leaving gina.db drifted behind main.json
+// on every alpha bump.
+var _stateModule;
+try { _stateModule = require('../state'); } catch (_) { _stateModule = null; }
+
 /**
  * @class Generator
  *
@@ -74,17 +85,22 @@ var Generator = {
     },
     createFileFromDataSync : function(data, target){
         // #CN2v3 — route known ~/.gina/ state files through StateStore for
-        // atomic SQLite write + JSON sidecar. Falls through to legacy path
-        // when the store is unavailable (Node < 22.5.0, GINA_HOMEDIR unset).
-        try {
-            var _store = require('../state').getInstance();
-            if (_store.isStatePath(target)) {
-                var _data = (typeof data === 'object') ? data : JSON.parse(data);
-                if (_store.write(target, _data)) return;
-                // write() returned false → SQLite unavailable, fall through
+        // atomic SQLite write + JSON sidecar. Skipped silently when the
+        // module wasn't loadable at startup (Node < 22.5.0, older framework
+        // versions). Unexpected runtime errors are logged — the previous
+        // empty catch silently hid the bumpVersion gina.db drift across
+        // multiple alpha cuts.
+        if (_stateModule) {
+            try {
+                var _store = _stateModule.getInstance();
+                if (_store.isStatePath(target)) {
+                    var _data = (typeof data === 'object') ? data : JSON.parse(data);
+                    if (_store.write(target, _data)) return;
+                    // write() returned false → SQLite unavailable, fall through
+                }
+            } catch(stateErr) {
+                console.warn('[generator] StateStore write failed for ' + target + ': ' + (stateErr.message || stateErr));
             }
-        } catch(stateErr) {
-            // state.js not available (e.g. old framework version) — fall through
         }
 
         // Legacy JSON write (non-state files, or SQLite unavailable)

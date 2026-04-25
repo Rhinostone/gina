@@ -78,10 +78,18 @@ function StateStore() {
      * @returns {string|null}
      */
     var _homeDir = function() {
+        // Prefer GINA_HOMEDIR override when the framework runtime has set
+        // it (gna.js → setEnvVar). Used by tests and container deployments
+        // to point at a non-default path.
         if (typeof(getEnvVar) === 'function') {
-            return getEnvVar('GINA_HOMEDIR') || null;
+            var override = getEnvVar('GINA_HOMEDIR');
+            if (override) return override;
         }
-        return null;
+        // Fall back to the default location. Makes StateStore usable from
+        // build scripts (post_publish.js bumpVersion) and any other context
+        // where gna.js hasn't loaded — same default the rest of the framework
+        // computes via getUserHome() + '/.gina'.
+        return require('os').homedir() + nodePath.sep + '.gina';
     };
 
     /**
