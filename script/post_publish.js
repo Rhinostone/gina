@@ -362,6 +362,46 @@ function PostPublish() {
 
         console.info('Bumping version: ' + currentVersion + ' -> ' + newVersion);
 
+        // Update ~/.gina/main.json and ~/.gina/{shortVersion}/settings.json
+        // BEFORE the framework dir rename. lib.generator.createFileFromDataSync
+        // routes known state paths through StateStore (atomic SQLite + JSON
+        // sidecar write, #CN2v3) via `require('../state')` from the generator
+        // module — a `__dirname`-relative resolution. After the rename below,
+        // the generator's __dirname points at a non-existent path, the relative
+        // require fails MODULE_NOT_FOUND, the catch swallows it, and the code
+        // falls through to a legacy fs.writeFileSync that only writes the JSON
+        // sidecar — not gina.db. Doing the writes here keeps the StateStore
+        // intercept resolvable while the old framework dir is still on disk,
+        // so gina.db stays in sync with main.json/settings.json on every bump.
+        var shortVersion = newVersion.split('.');
+        shortVersion.splice(2);
+        shortVersion = shortVersion.join('.');
+        var ginaHomeDir = getUserHome() + '/.gina';
+        var mainConfigPath = _(ginaHomeDir + '/main.json', true);
+        var settingsConfigPath = _(ginaHomeDir + '/' + shortVersion + '/settings.json', true);
+
+        try {
+            var mainConfig = requireJSON(mainConfigPath);
+            mainConfig.def_framework = newVersion;
+            if (mainConfig.frameworks[shortVersion].indexOf(newVersion) < 0) {
+                mainConfig.frameworks[shortVersion].push(newVersion);
+            }
+            new _(mainConfigPath).rmSync();
+            lib.generator.createFileFromDataSync(JSON.stringify(mainConfig, null, 2), mainConfigPath);
+        } catch (e) {
+            console.warn('Could not update ' + mainConfigPath + ': ' + e.message);
+        }
+
+        try {
+            var settingsConfig = requireJSON(settingsConfigPath);
+            settingsConfig.version = newVersion;
+            settingsConfig.def_framework = newVersion;
+            new _(settingsConfigPath).rmSync();
+            lib.generator.createFileFromDataSync(JSON.stringify(settingsConfig, null, 2), settingsConfigPath);
+        } catch (e) {
+            console.warn('Could not update ' + settingsConfigPath + ': ' + e.message);
+        }
+
         // Rename the framework directory
         var oldVersionDir = _(self.gina + '/framework/v' + currentVersion, true);
         var newVersionDir = _(self.gina + '/framework/v' + newVersion, true);
@@ -451,36 +491,6 @@ function PostPublish() {
             }
         } catch (syncErr) {
             // Sidecar config absent or malformed — silent no-op.
-        }
-
-        // Update ~/.gina/main.json and ~/.gina/{shortVersion}/settings.json
-        var shortVersion = newVersion.split('.');
-        shortVersion.splice(2);
-        shortVersion = shortVersion.join('.');
-        var ginaHomeDir = getUserHome() + '/.gina';
-        var mainConfigPath = _(ginaHomeDir + '/main.json', true);
-        var settingsConfigPath = _(ginaHomeDir + '/' + shortVersion + '/settings.json', true);
-
-        try {
-            var mainConfig = requireJSON(mainConfigPath);
-            mainConfig.def_framework = newVersion;
-            if (mainConfig.frameworks[shortVersion].indexOf(newVersion) < 0) {
-                mainConfig.frameworks[shortVersion].push(newVersion);
-            }
-            new _(mainConfigPath).rmSync();
-            lib.generator.createFileFromDataSync(JSON.stringify(mainConfig, null, 2), mainConfigPath);
-        } catch (e) {
-            console.warn('Could not update ' + mainConfigPath + ': ' + e.message);
-        }
-
-        try {
-            var settingsConfig = requireJSON(settingsConfigPath);
-            settingsConfig.version = newVersion;
-            settingsConfig.def_framework = newVersion;
-            new _(settingsConfigPath).rmSync();
-            lib.generator.createFileFromDataSync(JSON.stringify(settingsConfig, null, 2), settingsConfigPath);
-        } catch (e) {
-            console.warn('Could not update ' + settingsConfigPath + ': ' + e.message);
         }
 
         // Commit and push to develop
