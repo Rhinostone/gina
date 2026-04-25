@@ -580,6 +580,39 @@ function SuperController(options) {
             set('page.environment.debugPort', options.conf.server.debugPort);
             set('page.environment.pid', process.pid);
 
+            // #CSRF2 — expose CSRF token + pre-formatted hidden input to swig templates.
+            // The Csrf plugin (core/plugins/lib/csrf/src/main.js) attaches `req.csrfToken`
+            // when the bundle has registered the middleware. When absent (bundle hasn't
+            // adopted the plugin), neither key is exposed — templates guard with
+            // `{% if gina.csrfToken %}`. Field name comes from settings.csrf.fieldName
+            // (default `_csrf`) and is HTML-attribute-escaped defensively, even though
+            // the plugin already restricts it to a settings-controlled string. The
+            // token itself is base64url ([A-Za-z0-9_-]) so it needs no escaping.
+            if ( local.req && typeof(local.req.csrfToken) == 'string' && local.req.csrfToken ) {
+                var _csrfFieldName = '_csrf';
+                try {
+                    var _csrfSettings = options
+                        && options.conf
+                        && options.conf.content
+                        && options.conf.content.settings
+                        && options.conf.content.settings.csrf;
+                    if ( _csrfSettings && typeof(_csrfSettings.fieldName) == 'string' && _csrfSettings.fieldName ) {
+                        _csrfFieldName = _csrfSettings.fieldName;
+                    }
+                } catch (e) { /* fall back to default '_csrf' */ }
+
+                var _escapedFieldName = String(_csrfFieldName)
+                    .replace(/&/g, '&amp;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;');
+
+                set('gina.csrfToken', local.req.csrfToken);
+                set('gina.csrfInput',
+                    '<input type="hidden" name="' + _escapedFieldName + '" value="' + local.req.csrfToken + '">'
+                );
+            }
+
 
             set('page.view.ext', ext);
             set('page.view.control', action);
