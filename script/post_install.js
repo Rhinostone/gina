@@ -61,14 +61,44 @@ var getUserHome = function() {
 // `colors` dependency removed in 0.3.1 — ANSI codes are now built into the logger.
 // No temporary install needed.
 
-var lib         = require('./lib');
-var console     = lib.logger;
+// Framework lib registry is intentionally not loaded here. At install time the
+// framework's nested deps (psl, @rhinostone/swig) may not yet be resolvable, and
+// `lib/domain` would crash on `require('psl')`. Node's built-in `console` is
+// sufficient for the install scripts; `console.setLevel` (a `lib.logger`-only
+// method) is gated below.
 
 var scriptPath = __dirname;
 var ginaPath = (scriptPath.replace(/\\/g, '/')).replace('/script', '');
-var help        = require(ginaPath + '/utils/helper.js');
 var pack        = ginaPath + '/package.json';
 pack =  (isWin32()) ? pack.replace(/\//g, '\\') : pack;
+
+// Pre-load framework helpers BEFORE utils/helper. utils/helper.js's init()
+// calls `require('framework/v*/lib/logger')`, which itself requires
+// `framework/v*/helpers` (lib/logger:64). When utils/helper is the outer
+// caller of lib/logger, lib/logger blocks at its helpers require and the
+// iteration's `_require` reloads path.js / task.js while lib/logger is still
+// mid-load — their module-local `var console = require('../lib/logger')`
+// then binds to a partial module.exports (= {}), so a later `console.debug`
+// in `task.js#run()` throws TypeError. Pre-loading helpers here makes
+// helpers/index.js the outer caller, so lib/logger completes inside
+// context.js's trigger and the subsequent `_require` reloads of path.js/
+// task.js see the full Logger singleton from cache.
+// Filesystem-driven version discovery so this stays correct across version
+// bumps that may temporarily skew package.json `version` and the framework
+// directory name (e.g. during a patch release window).
+try {
+    var _frameworkDir = fs.readdirSync(ginaPath + '/framework')
+        .filter(function(d) { return /^v/.test(d); })
+        .sort()
+        .pop();
+    if (_frameworkDir) {
+        require(ginaPath + '/framework/' + _frameworkDir + '/helpers');
+    }
+} catch (_e) {
+    // best-effort preload; the actual install steps will surface any real failure
+}
+
+var help        = require(ginaPath + '/utils/helper.js');
 var helpers = null;
 
 
@@ -135,7 +165,10 @@ function PostInstall() {
 
             if ( /^\-\-log-level\=/.test(args[i]) ) {
                 var logLevel = args[i].split(/\=/)[1];
-                console.setLevel(logLevel, 'gina');
+                // setLevel is a lib.logger method; Node's built-in console doesn't expose it.
+                if ( typeof(console.setLevel) === 'function' ) {
+                    console.setLevel(logLevel, 'gina');
+                }
                 process.env.LOG_LEVEL=logLevel;
             }
         }
@@ -168,7 +201,8 @@ function PostInstall() {
                     ]
                 };
                 console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
-                lib.generator.createFileFromDataSync(defaultPackageJsonContent, projectPackageJsonObj.toString());
+                // Inlined to avoid loading the framework lib registry at install time.
+                fs.writeFileSync(projectPackageJsonObj.toString(), JSON.stringify(defaultPackageJsonContent, null, 4));
             }
         }
 
@@ -301,7 +335,7 @@ function PostInstall() {
                 try {
                     await promisify(funct)();
                 } catch (e) {
-                    console.error(e.toString());
+                    console.error(e && e.stack ? e.stack : e.toString());
                     process.exit(1);
                     return;
                 }

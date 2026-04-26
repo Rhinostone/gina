@@ -14,10 +14,38 @@ var util        = require('util');
 var promisify   = util.promisify;
 var { execSync } = require('child_process');
 
-//var lib         = require('./lib');
-// var console     = lib.logger;
-var lib     = null;
+// Framework lib registry is intentionally not loaded here — see checkIfGinaIsAlreadyInstalled.
 var helpers = null;
+
+// Pre-load framework helpers BEFORE utils/helper. utils/helper.js's init()
+// calls `require('framework/v*/lib/logger')`, which itself requires
+// `framework/v*/helpers` (lib/logger:64). When utils/helper is the outer
+// caller of lib/logger, lib/logger blocks at its helpers require and the
+// iteration's `_require` reloads path.js / task.js while lib/logger is still
+// mid-load — their module-local `var console = require('../lib/logger')`
+// then binds to a partial module.exports (= {}). path.js guards
+// `console.debug`/`info` with `typeof`, but `console.warn` (line 220) and
+// `console.error` (lines 575/872/902) are unguarded — disk-error code paths
+// in cp/rm during checkIfGinaIsAlreadyInstalled's archive backup would crash.
+// Pre-loading helpers here makes helpers/index.js the outer caller, so
+// lib/logger completes inside context.js's trigger and the subsequent
+// `_require` reloads see the full Logger singleton from cache.
+// Filesystem-driven version discovery so this stays correct across version
+// bumps that may temporarily skew package.json `version` and the framework
+// directory name.
+try {
+    var _scriptPath = __dirname;
+    var _ginaPath = (_scriptPath.replace(/\\/g, '/')).replace('/script', '');
+    var _frameworkDir = fs.readdirSync(_ginaPath + '/framework')
+        .filter(function(d) { return /^v/.test(d); })
+        .sort()
+        .pop();
+    if (_frameworkDir) {
+        require(_ginaPath + '/framework/' + _frameworkDir + '/helpers');
+    }
+} catch (_e) {
+    // best-effort preload; the actual install steps will surface any real failure
+}
 
 /**
  * Pre install constructor
@@ -426,9 +454,12 @@ function PreInstall() {
 
         var frameworkPath   = self.versionPath;
         try {
+            // utils/helper sets up the global `_()` path helper. We deliberately do NOT
+            // load the framework's full `lib` registry here — at preinstall time the
+            // framework's nested npm deps (psl, @rhinostone/swig) may not be resolvable
+            // yet, and `lib/domain` would crash on `require('psl')`. Node's built-in
+            // `console` is sufficient for the install scripts.
             helpers = require(self.gina+ '/utils/helper');
-            lib     = require('./lib');
-            console = lib.logger;
         } catch (err) {
             return done(err)
         }
