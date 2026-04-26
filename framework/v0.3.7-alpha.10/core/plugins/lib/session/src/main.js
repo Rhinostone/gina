@@ -161,13 +161,25 @@ function Session(expressSession) {
         );
     }
 
-    var wrapped = function ginaSession(options) {
+    function ginaSessionDispatch(options) {
         options = options || {};
         var defaults = resolveSettingsDefaults();
         options.cookie = mergeCookie(options.cookie, defaults);
         assertInvariant(options.cookie);
         return expressSession(options);
-    };
+    }
+
+    var wrapped = function (options) { return ginaSessionDispatch(options); };
+
+    // Drop-in identity: introspection (`session.name`) returns the upstream
+    // identity (`'session'`), while gina stays visible in stack traces via
+    // the inner `ginaSessionDispatch` frame. Without this, freelancer/v3 and
+    // other bundles that sniff `session.name === 'session'` saw `'ginaSession'`
+    // — the wrapper was clobbering the upstream identity.
+    Object.defineProperty(wrapped, 'name', {
+        value: expressSession.name,
+        configurable: true
+    });
 
     // Preserve express-session's static surface (.Store, .MemoryStore,
     // .Session, .Cookie). Consumers do `var MemoryStore = session.MemoryStore`

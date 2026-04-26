@@ -339,6 +339,23 @@ describe('05 - Session(): end-to-end wrap', function () {
         assert.equal(wrapped.Cookie, stub.Cookie);
     });
 
+    it('preserves expressSession.name (drop-in identity, no clobber)', function () {
+        var stub = makeStub();
+        var wrapped = Session(stub);
+        assert.equal(wrapped.name, stub.name, 'wrapper.name must match upstream — bundles sniffing session.name === "session" should not see "ginaSession"');
+    });
+
+    it('keeps ginaSessionDispatch visible in stack traces (gina layer detectable)', function () {
+        var stub = makeStub();
+        var wrapped = Session(stub);
+        try {
+            wrapped({ cookie: { sameSite: 'none', secure: false } });
+            assert.fail('expected the SameSite=None/secure=false invariant to throw');
+        } catch (e) {
+            assert.match(e.stack, /ginaSessionDispatch/, 'gina layer must remain visible in stack traces via the inner dispatch fn');
+        }
+    });
+
     it('invariant enforced at session() call: SameSite=None + secure=false throws', function () {
         var stub = makeStub();
         var wrapped = Session(stub);
