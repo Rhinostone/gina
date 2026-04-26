@@ -2866,6 +2866,68 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
     var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
 
+    /**
+     * #CSRF2 follow-up — read the gina-csrf-token cookie set by the Csrf plugin.
+     *
+     * Pure, dependency-free parser for `document.cookie`. Returns the token
+     * value (URL-decoded) or null when the cookie is absent. Browser-only
+     * (isGFFCtx); when running outside a browser document, returns null.
+     *
+     * No eval / Function / regex on user-controlled segments — name and
+     * value are compared as plain strings via indexOf + slice only.
+     *
+     * @returns {string|null}
+     * */
+    var readCsrfCookie = function () {
+        var name = 'gina-csrf-token';
+        if ( typeof(document) === 'undefined' || !document || typeof(document.cookie) !== 'string' ) {
+            return null;
+        }
+        var raw = document.cookie || '';
+        if (!raw) {
+            return null;
+        }
+        var parts = raw.split(';');
+        for (var i = 0, len = parts.length; i < len; ++i) {
+            var part = parts[i];
+            while (part.charAt(0) === ' ' || part.charAt(0) === '\t') {
+                part = part.slice(1);
+            }
+            var eq = part.indexOf('=');
+            if (eq < 0) {
+                continue;
+            }
+            var key = part.slice(0, eq);
+            if (key !== name) {
+                continue;
+            }
+            var val = part.slice(eq + 1);
+            try {
+                return decodeURIComponent(val);
+            } catch (e) {
+                return val;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * #CSRF2 follow-up — true for HTTP methods that mutate state.
+     *
+     * GET, HEAD, OPTIONS are CSRF-safe by spec. All other methods require
+     * the X-Gina-CSRF-Token header.
+     *
+     * @param {string} method
+     * @returns {boolean}
+     * */
+    var isMutatingMethod = function (method) {
+        if ( typeof(method) !== 'string' || !method ) {
+            return false;
+        }
+        var m = method.toUpperCase();
+        return (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS');
+    };
+
     var hasUserValidators = function() {
 
         var _hasUserValidators = false, formsContext = null;
@@ -3230,6 +3292,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         }
         if (typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
             xhr.setRequestHeader('Content-Type', enctype);
+        }
+
+        // #CSRF2 follow-up — inject X-Gina-CSRF-Token on mutating methods (live-validation path)
+        if ( isMutatingMethod(queryOptions.method) ) {
+            var csrfToken = readCsrfCookie();
+            if (csrfToken) {
+                xhr.setRequestHeader('X-Gina-CSRF-Token', csrfToken);
+            }
         }
 
         var onResult = function(result) {
@@ -9587,6 +9657,74 @@ function ValidatorPlugin(rules, data, formId) {
     };
 
     /**
+     * #CSRF2 follow-up — read the gina-csrf-token cookie set by the Csrf plugin.
+     *
+     * Pure, dependency-free parser for `document.cookie`. Returns the token
+     * value (URL-decoded) or null when the cookie is absent. Browser-only
+     * (isGFFCtx); when running outside a browser document, returns null.
+     *
+     * Default cookie name is 'gina-csrf-token' matching the Csrf plugin
+     * settings.json default. The matching X-Gina-CSRF-Token header is
+     * injected on mutating methods (POST/PUT/PATCH/DELETE) before xhr.send().
+     *
+     * No eval / Function / regex on user-controlled segments — name and
+     * value are compared as plain strings via indexOf + slice only.
+     *
+     * @returns {string|null}
+     * */
+    var readCsrfCookie = function () {
+        var name = 'gina-csrf-token';
+        if ( typeof(document) === 'undefined' || !document || typeof(document.cookie) !== 'string' ) {
+            return null;
+        }
+        var raw = document.cookie || '';
+        if (!raw) {
+            return null;
+        }
+        var parts = raw.split(';');
+        for (var i = 0, len = parts.length; i < len; ++i) {
+            var part = parts[i];
+            // strip leading whitespace without regex
+            while (part.charAt(0) === ' ' || part.charAt(0) === '\t') {
+                part = part.slice(1);
+            }
+            var eq = part.indexOf('=');
+            if (eq < 0) {
+                continue;
+            }
+            var key = part.slice(0, eq);
+            if (key !== name) {
+                continue;
+            }
+            var val = part.slice(eq + 1);
+            try {
+                return decodeURIComponent(val);
+            } catch (e) {
+                return val;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * #CSRF2 follow-up — true for HTTP methods that mutate state.
+     *
+     * GET, HEAD, OPTIONS are CSRF-safe by spec (they MUST NOT carry side
+     * effects). All other methods (POST, PUT, PATCH, DELETE, ...) require
+     * the X-Gina-CSRF-Token header.
+     *
+     * @param {string} method
+     * @returns {boolean}
+     * */
+    var isMutatingMethod = function (method) {
+        if ( typeof(method) !== 'string' || !method ) {
+            return false;
+        }
+        var m = method.toUpperCase();
+        return (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS');
+    };
+
+    /**
      * backend definitions
      * */
     var setCustomRules = function (customRules) {
@@ -10473,6 +10611,14 @@ function ValidatorPlugin(rules, data, formId) {
                 continue;
 
             xhr.setRequestHeader(hearder, options.headers[hearder]);
+        }
+
+        // #CSRF2 follow-up — inject X-Gina-CSRF-Token on mutating methods
+        if ( isMutatingMethod(options.method) ) {
+            var csrfToken = readCsrfCookie();
+            if (csrfToken) {
+                xhr.setRequestHeader('X-Gina-CSRF-Token', csrfToken);
+            }
         }
 
         if (xhr) {
@@ -11548,6 +11694,13 @@ function ValidatorPlugin(rules, data, formId) {
                                 'X-Requested-With': 'XMLHttpRequest' // in case of cross domain origin
                             }
                         };
+                        // #CSRF2 follow-up — inject X-Gina-CSRF-Token on mutating methods (file remove → DELETE/POST)
+                        if ( isMutatingMethod(method) ) {
+                            let csrfToken = readCsrfCookie();
+                            if (csrfToken) {
+                                xhrOptions.headers['X-Gina-CSRF-Token'] = csrfToken;
+                            }
+                        }
                         let xhr = setupXhr(xhrOptions);
                         //handleXhr(xhr);
                         if ( /GET|DELETE/i.test(method) ) {

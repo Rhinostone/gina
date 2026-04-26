@@ -70,8 +70,8 @@
 }
 
 :root {
-  --font: "SF Mono", "Fira Code", "Cascadia Code", Menlo, "Lucida Grande", monospace;
-  --sans: "Lucida Grande", Lucida, Arial, Helvetica, sans-serif;
+  --font: 'SF Mono', 'Fira Code', 'Cascadia Code', Menlo, 'Lucida Grande', monospace;
+  --sans: 'Lucida Grande', Lucida, Arial, Helvetica, sans-serif;
   --radius: 4px;
   --hdr: 32px;
 }
@@ -830,8 +830,6 @@ body {
   cursor: pointer;
   padding: 4px;
   transition: border-color 0.15s, background 0.15s;
-  /* Reveal toggle — red tint when active so the unredacted state is visually
-     distinct from the regular amber `.active` state used by RAW / fold-all. */
 }
 .bm-icon-btn svg {
   width: 14px;
@@ -854,6 +852,10 @@ body {
 }
 .bm-icon-btn.bm-hidden {
   display: none;
+}
+.bm-icon-btn {
+  /* Reveal toggle — red tint when active so the unredacted state is visually
+     distinct from the regular amber `.active` state used by RAW / fold-all. */
 }
 .bm-icon-btn#bm-reveal.active {
   border-color: var(--err);
@@ -1724,9 +1726,6 @@ details[open] > summary.bm-summary::before {
   cursor: pointer;
   user-select: none;
   position: relative;
-  /* Extend accent line to bridge the gap between consecutive selected rows */
-  /* Rounded corners on first/last of contiguous selected group */
-  /* Single-click copy feedback — green flash + checkmark */
 }
 .bm-log:hover {
   background: var(--bg3);
@@ -1734,10 +1733,12 @@ details[open] > summary.bm-summary::before {
 .bm-log.bm-log-selected {
   background: rgba(242, 175, 13, 0.13);
   border-bottom-color: transparent;
-  /* Left accent line — straight, unaffected by border-radius */
 }
 .bm-log.bm-log-selected:hover {
   background: rgba(242, 175, 13, 0.19);
+}
+.bm-log.bm-log-selected {
+  /* Left accent line — straight, unaffected by border-radius */
 }
 .bm-log.bm-log-selected::before {
   content: "";
@@ -1757,8 +1758,14 @@ details[open] > summary.bm-summary::before {
 [data-theme=light] .bm-log.bm-log-selected:hover {
   background: rgba(200, 133, 10, 0.16);
 }
+.bm-log {
+  /* Extend accent line to bridge the gap between consecutive selected rows */
+}
 .bm-log.bm-log-selected + .bm-log-selected::before {
   top: -1px;
+}
+.bm-log {
+  /* Rounded corners on first/last of contiguous selected group */
 }
 .bm-log.bm-log-selected:not(.bm-log-selected + .bm-log) {
   border-radius: 6px 6px 0 0;
@@ -1777,6 +1784,9 @@ details[open] > summary.bm-summary::before {
 }
 .bm-log.bm-log-selected:not(.bm-log-selected + .bm-log):not(:has(+ .bm-log-selected))::before {
   border-radius: 3px 0 0 3px;
+}
+.bm-log {
+  /* Single-click copy feedback — green flash + checkmark */
 }
 .bm-log.bm-log-row-copied {
   background: rgba(76, 175, 80, 0.15) !important;
@@ -3603,3 +3613,5 @@ details[open] > summary.bm-summary::before {
     text-align: left;
   }
 }
+
+/*# sourceMappingURL=inspector.css.map */
