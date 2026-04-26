@@ -82,20 +82,27 @@
       "secure": "auto"
     }
   },
-  // #CSRF2 — signed double-submit token middleware applied by gina.plugins.Csrf().
-  // The secret lives in `process.env.GINA_CSRF_SECRET` (NOT in this file) — generate
-  // with `openssl rand -base64 64` and store in env.json or your shell profile.
-  //   cookieName  — cookie name issued on safe methods
-  //   headerName  — request header read on mutating methods
-  //   fieldName   — form field read on mutating methods
-  //   rotate      — "per-session" (default) or "per-request"
-  //   safeMethods — methods that issue without verifying (default GET/HEAD/OPTIONS)
+  // #CSRF2 / #CSRF3 — signed double-submit token middleware + Origin/Referer
+  // pre-filter applied by gina.plugins.Csrf(). The secret lives in
+  // `process.env.GINA_CSRF_SECRET` (NOT in this file) — generate with
+  // `openssl rand -base64 64` and store in env.json or your shell profile.
+  //   cookieName     — cookie name issued on safe methods
+  //   headerName     — request header read on mutating methods
+  //   fieldName      — form field read on mutating methods
+  //   rotate         — "per-session" (default) or "per-request"
+  //   safeMethods    — methods that issue without verifying (default GET/HEAD/OPTIONS)
+  //   allowedOrigins — #CSRF3 allowlist matched against the request `Origin` header
+  //                    (or `Referer` host fallback) on mutating methods.
+  //                    Empty/unset = bundle's configured hostname only;
+  //                    non-empty = explicit allowlist (multi-domain bundles).
+  //                    Format: ["https://example.com", "https://www.example.com"].
   "csrf": {
     "cookieName": "gina-csrf-token",
     "headerName": "X-Gina-CSRF-Token",
     "fieldName": "_csrf",
     "rotate": "per-session",
-    "safeMethods": ["GET", "HEAD", "OPTIONS"]
+    "safeMethods": ["GET", "HEAD", "OPTIONS"],
+    "allowedOrigins": []
   },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199

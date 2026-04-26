@@ -8,24 +8,32 @@
 'use strict';
 
 /**
- * Csrf plugin (#CSRF2) — signed double-submit token middleware.
+ * Csrf plugin (#CSRF2 / #CSRF3) — signed double-submit token middleware
+ * with an Origin/Referer pre-filter.
  *
- * Stateless CSRF defense aligned with OWASP ASVS 4.0 V4.2.1. Issues a
- * signed token cookie on safe-method requests and verifies a matching
- * value on mutating requests (POST/PUT/PATCH/DELETE). Token shape:
+ * Stateless CSRF defense aligned with OWASP ASVS 4.0 V4.2.1. On mutating
+ * methods (POST/PUT/PATCH/DELETE) the middleware now layers two checks:
  *
- *     <nonce_b64url>.<mac_b64url>
- *     mac = HMAC-SHA256(sessionId + ':' + nonce_b64url, GINA_CSRF_SECRET)
+ *   1. #CSRF3 — Origin/Referer pre-filter. Reads `Origin` first, falls
+ *      back to parsing the host out of `Referer`. Both missing → 403.
+ *      Mismatch against `csrf.allowedOrigins` → 403. Belt-and-suspenders
+ *      that catches edge cases tokens might miss (referrer-header log
+ *      leaks, legacy browser bugs, misconfigured reverse proxies).
+ *   2. #CSRF2 — signed double-submit token verify. Token shape:
  *
- * Bundles adopt it with two lines in their bootstrap, AFTER the session
- * middleware:
+ *          <nonce_b64url>.<mac_b64url>
+ *          mac = HMAC-SHA256(sessionId + ':' + nonce_b64url, GINA_CSRF_SECRET)
+ *
+ * Safe methods (GET/HEAD/OPTIONS) issue a fresh token cookie and pass
+ * through. Per-route opt-out via `routing.json > "csrfExempt": true`
+ * bypasses both layers (consistent across token + Origin checks).
+ *
+ * Bundles adopt the plugin with two lines in their bootstrap, AFTER the
+ * session middleware:
  *
  *     var csrf = require('gina').plugins.Csrf();
  *     app.use(session({...}));   // must register session FIRST
  *     app.use(csrf);
- *
- * Per-route opt-out via `routing.json > "csrfExempt": true` for webhook
- * receivers (Stripe, GitHub, etc.) where CSRF defense doesn't apply.
  *
  * @module plugins/csrf
  */
@@ -48,18 +56,20 @@ var MAC_BYTES   = 32;
  * the merged framework defaults.
  *
  * @returns {{cookieName: string, headerName: string, fieldName: string,
- *            rotate: string, safeMethods: string[]}}
+ *            rotate: string, safeMethods: string[],
+ *            allowedOrigins: string[]|null}}
  * @throws  {Error} when a setting has an unsupported value.
  * @inner
  * @private
  */
 function resolveSettingsDefaults() {
     var defaults = {
-        cookieName:  DEFAULT_COOKIE_NAME,
-        headerName:  DEFAULT_HEADER_NAME,
-        fieldName:   DEFAULT_FIELD_NAME,
-        rotate:      DEFAULT_ROTATE,
-        safeMethods: DEFAULT_SAFE_METHODS.slice()
+        cookieName:     DEFAULT_COOKIE_NAME,
+        headerName:     DEFAULT_HEADER_NAME,
+        fieldName:      DEFAULT_FIELD_NAME,
+        rotate:         DEFAULT_ROTATE,
+        safeMethods:    DEFAULT_SAFE_METHODS.slice(),
+        allowedOrigins: null
     };
     var csrfConf = {};
 
@@ -101,8 +111,132 @@ function resolveSettingsDefaults() {
             return String(m).toUpperCase();
         });
     }
+    if (Array.isArray(csrfConf.allowedOrigins)) {
+        defaults.allowedOrigins = csrfConf.allowedOrigins
+            .filter(function (o) { return typeof o === 'string' && o; })
+            .map(function (o) { return o.toLowerCase(); });
+    }
 
     return defaults;
+}
+
+/**
+ * Extract `scheme://host[:port]` from a URL-like string. Returns `null`
+ * for `"null"` (sandboxed-iframe sentinel), empty input, or anything
+ * that doesn't have a parseable scheme + authority.
+ *
+ * @param   {string} s
+ * @returns {string|null}
+ * @inner
+ * @private
+ */
+function parseOriginString(s) {
+    if (typeof s !== 'string' || !s) return null;
+    if (s === 'null') return null; // browsers send literal "null" for sandboxed iframes
+    var m = /^([a-z][a-z0-9+.\-]*):\/\/([^\/?#]+)/i.exec(s);
+    if (!m) return null;
+    return (m[1] + '://' + m[2]).toLowerCase();
+}
+
+/**
+ * Best-effort detection of the origin a request was issued from. Reads
+ * `Origin` first; falls back to parsing the host out of `Referer` when
+ * `Origin` is missing (rare — some same-origin legacy browsers strip
+ * `Origin` on safe-then-mutating sequences).
+ *
+ * @param   {object} req
+ * @returns {string|null}    `"scheme://host[:port]"` or null
+ * @inner
+ * @private
+ */
+function parseRequestOrigin(req) {
+    if (!req || !req.headers) return null;
+    var origin = parseOriginString(req.headers.origin);
+    if (origin) return origin;
+    var referer = req.headers.referer || req.headers.referrer;
+    return parseOriginString(referer);
+}
+
+/**
+ * Resolve the bundle's configured origin from the active runtime
+ * configuration. Tries `conf[bundle][env].hostname` first (a full URL
+ * the framework resolves at startup), then composes one from
+ * `server.scheme + '://' + host + ':' + server.port`. Returns `null`
+ * when neither shape is present (e.g. test stub without a host).
+ *
+ * @returns {string|null}
+ * @inner
+ * @private
+ */
+function resolveBundleHostname() {
+    try {
+        var ctx    = getContext();
+        var bundle = ctx && ctx.bundle;
+        var env    = ctx && ctx.env;
+        var conf   = (typeof getConfig === 'function') ? getConfig() : null;
+        if (!bundle || !env || !conf || !conf[bundle] || !conf[bundle][env]) {
+            return null;
+        }
+        var bc = conf[bundle][env];
+        if (typeof bc.hostname === 'string' && bc.hostname) {
+            return parseOriginString(bc.hostname) || bc.hostname.toLowerCase();
+        }
+        if (bc.server
+            && typeof bc.server.scheme === 'string' && bc.server.scheme
+            && typeof bc.host          === 'string' && bc.host
+            && (bc.server.port || bc.server.port === 0)) {
+            return (bc.server.scheme + '://' + bc.host + ':' + bc.server.port).toLowerCase();
+        }
+    } catch (ignored) {
+        return null;
+    }
+    return null;
+}
+
+/**
+ * Compute the allowlist for the Origin pre-filter. Precedence:
+ *   1. `opts.allowedOrigins` (factory override, test harness)
+ *   2. `settings.json > csrf.allowedOrigins`
+ *   3. `[ resolveBundleHostname() ]` — the bundle's configured origin
+ *
+ * Returns an array of lowercase `scheme://host[:port]` strings. Throws
+ * at factory time when the resolved list ends up empty — that means
+ * neither the user nor the framework could supply a hostname, and
+ * letting the middleware run would 403 every mutating request.
+ *
+ * @param   {string[]|null} fromOpts      — `opts.allowedOrigins`
+ * @param   {string[]|null} fromSettings  — `settings.csrf.allowedOrigins`
+ * @returns {string[]}
+ * @throws  {Error} when no origin can be resolved.
+ * @inner
+ * @private
+ */
+function resolveAllowedOrigins(fromOpts, fromSettings) {
+    var list = null;
+    if (Array.isArray(fromOpts) && fromOpts.length > 0) {
+        list = fromOpts;
+    } else if (Array.isArray(fromSettings) && fromSettings.length > 0) {
+        list = fromSettings;
+    } else {
+        var bundleHost = resolveBundleHostname();
+        list = bundleHost ? [bundleHost] : [];
+    }
+
+    list = list
+        .filter(function (o) { return typeof o === 'string' && o; })
+        .map(function (o) {
+            var parsed = parseOriginString(o);
+            return parsed || o.toLowerCase();
+        });
+
+    if (list.length === 0) {
+        throw new Error(
+            '[gina csrf] csrf.allowedOrigins is empty and the bundle hostname could not be'
+            + ' resolved from getConfig(). Set settings.json > csrf.allowedOrigins'
+            + ' (e.g. ["https://example.com"]) or pass {allowedOrigins:[...]} to Csrf().'
+        );
+    }
+    return list;
 }
 
 /**
@@ -313,8 +447,13 @@ var SESSIONLESS_MESSAGE =
  * @param   {string} [opts.fieldName]
  * @param   {string} [opts.rotate]      — `"per-session"` (default) or `"per-request"`
  * @param   {string[]} [opts.safeMethods]
+ * @param   {string[]} [opts.allowedOrigins] — #CSRF3 allowlist of origins that may
+ *                                             issue mutating requests. Defaults to
+ *                                             `settings.json > csrf.allowedOrigins`,
+ *                                             which itself defaults to the bundle's
+ *                                             configured hostname.
  * @returns {function}                  — Express-compatible middleware `(req, res, next)`
- * @throws  {Error} when `GINA_CSRF_SECRET` is missing.
+ * @throws  {Error} when `GINA_CSRF_SECRET` is missing or no origin can be resolved.
  */
 function Csrf(opts) {
     opts = opts || {};
@@ -345,6 +484,10 @@ function Csrf(opts) {
     var safeMethods = Array.isArray(opts.safeMethods)
                       ? opts.safeMethods.map(function (m) { return String(m).toUpperCase(); })
                       : defaults.safeMethods;
+
+    // #CSRF3 — Origin/Referer allowlist. Resolved once at factory time;
+    // throws if no usable origin can be resolved.
+    var allowedOrigins = resolveAllowedOrigins(opts.allowedOrigins, defaults.allowedOrigins);
 
     var headerNameLower = headerName.toLowerCase();
 
@@ -380,6 +523,17 @@ function Csrf(opts) {
 
         if (isExempt) {
             return next();
+        }
+
+        // #CSRF3 — Origin/Referer pre-filter. Layered ON TOP of the token
+        // check below: a forged token with a matching cookie still gets
+        // rejected here when the request didn't come from an allowed origin.
+        var requestOrigin = parseRequestOrigin(req);
+        if (!requestOrigin) {
+            return reject(req, res, 'missing origin/referer');
+        }
+        if (allowedOrigins.indexOf(requestOrigin) < 0) {
+            return reject(req, res, 'origin not allowed');
         }
 
         var presented = readPresentedToken(req, headerNameLower, fieldName);
@@ -418,6 +572,10 @@ Csrf._readCookie              = readCookie;
 Csrf._appendSetCookie         = appendSetCookie;
 Csrf._isSecureRequest         = isSecureRequest;
 Csrf._readPresentedToken      = readPresentedToken;
+Csrf._parseOriginString       = parseOriginString;       // #CSRF3
+Csrf._parseRequestOrigin      = parseRequestOrigin;      // #CSRF3
+Csrf._resolveBundleHostname   = resolveBundleHostname;   // #CSRF3
+Csrf._resolveAllowedOrigins   = resolveAllowedOrigins;   // #CSRF3
 Csrf._ALLOWED_ROTATE          = ALLOWED_ROTATE;
 Csrf._SESSIONLESS_MESSAGE     = SESSIONLESS_MESSAGE;
 Csrf._NONCE_BYTES             = NONCE_BYTES;

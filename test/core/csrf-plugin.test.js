@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Csrf plugin (#CSRF2) tests
+ * Csrf plugin (#CSRF2 + #CSRF3) tests
  *
  * Strategy — mirrors the #CSRF1 + #SCS campaign shape:
  *  - Source-inspection guards pinning the security primitives.
@@ -12,6 +12,16 @@
  *    rotation, header path, form-field path, per-route exempt, sessionless
  *    hard-fail.
  *  - Plugin registration + settings template integrity.
+ *  - #CSRF3 — Origin/Referer pre-filter parser, allowlist resolution,
+ *    behavioural matrix on mutating methods, negative-invariant lock
+ *    (matching token + mismatching Origin → still 403).
+ *
+ * Fixture note: the global stub supplies a `hostname` so the factory's
+ * #CSRF3 Origin allowlist can resolve a default. The makeReq helpers in
+ * sections 06 + 07 set a default `Origin` header matching that hostname so
+ * pre-#CSRF3 mutating-method tests continue to exercise the token layer
+ * (not the new Origin pre-filter). Section 10+ tests omit the Origin
+ * header on purpose to drive the new pre-filter paths.
  */
 
 var { describe, it, before, after, beforeEach, afterEach } = require('node:test');
@@ -29,13 +39,23 @@ var originalGetConfig;
 var originalSecret;
 
 var TEST_SECRET = 'test-secret-do-not-use-in-production-please-do-not-use';
+var TEST_ORIGIN = 'http://localhost:3000';
 
 before(function () {
     originalGetContext = global.getContext;
     originalGetConfig  = global.getConfig;
     originalSecret     = process.env.GINA_CSRF_SECRET;
     global.getContext  = function () { return { bundle: 'test', env: 'dev' }; };
-    global.getConfig   = function () { return { test: { dev: { content: { settings: {} } } } }; };
+    global.getConfig   = function () {
+        return {
+            test: {
+                dev: {
+                    hostname: TEST_ORIGIN,
+                    content: { settings: {} }
+                }
+            }
+        };
+    };
     process.env.GINA_CSRF_SECRET = TEST_SECRET;
     Csrf = require(PLUGIN);
 });
@@ -442,14 +462,22 @@ describe('06 - verify middleware: safe bypass, mutating reject, header path, for
         return { token: token, header: 'gina-csrf-token=' + encodeURIComponent(token) };
     }
     function makeReq(method, sessionId, overrides) {
+        // #CSRF3: default Origin matches the configured bundle hostname, so
+        // existing token-layer tests don't silently hit the new Origin pre-filter.
+        // Header overrides MERGE with the default rather than replace.
+        overrides = overrides || {};
+        var headers = Object.assign({ origin: TEST_ORIGIN }, overrides.headers || {});
         var req = {
             method: method,
             url: '/api/things',
-            headers: {},
+            headers: headers,
             session: { id: sessionId },
             routing: { csrfExempt: false }
         };
-        Object.keys(overrides || {}).forEach(function (k) { req[k] = overrides[k]; });
+        Object.keys(overrides).forEach(function (k) {
+            if (k === 'headers') return;
+            req[k] = overrides[k];
+        });
         return req;
     }
     function makeRes() {
@@ -650,12 +678,18 @@ describe('06 - verify middleware: safe bypass, mutating reject, header path, for
 describe('07 - per-route exempt: req.routing.csrfExempt bypasses verify', function () {
 
     function makeReq(method, overrides) {
+        // #CSRF3: default Origin matches the configured bundle hostname.
+        overrides = overrides || {};
+        var headers = Object.assign({ origin: TEST_ORIGIN }, overrides.headers || {});
         var req = {
             method: method, url: '/webhook',
-            headers: {}, session: { id: 'session-abc' },
+            headers: headers, session: { id: 'session-abc' },
             routing: { csrfExempt: true }
         };
-        Object.keys(overrides || {}).forEach(function (k) { req[k] = overrides[k]; });
+        Object.keys(overrides).forEach(function (k) {
+            if (k === 'headers') return;
+            req[k] = overrides[k];
+        });
         return req;
     }
     function makeRes() {
@@ -779,6 +813,627 @@ describe('09 - settings.json template advertises csrf defaults', function () {
             'expected app.use(csrf) in boilerplate');
         assert.ok(/AFTER the session middleware/i.test(bp),
             'expected ordering guidance in boilerplate comment');
+    });
+
+    it('template has the #CSRF3 allowedOrigins key', function () {
+        assert.ok(/"allowedOrigins"\s*:\s*\[\s*\]/.test(src),
+            'expected "allowedOrigins": [] in settings.json template');
+    });
+
+    it('template documents the #CSRF3 allowlist semantics', function () {
+        assert.ok(/allowedOrigins/.test(src),
+            'expected allowedOrigins reference in settings.json comment');
+        assert.ok(/Empty\/unset\s*=\s*bundle's configured hostname only/i.test(src),
+            'expected the empty/unset semantics in the comment');
+    });
+
+});
+
+
+// ─── 10 — #CSRF3: parseRequestOrigin / parseOriginString helpers ────────────
+
+describe('10 - #CSRF3 parser helpers: Origin first, Referer fallback', function () {
+
+    it('parseOriginString extracts scheme://host from a bare origin', function () {
+        assert.equal(Csrf._parseOriginString('https://example.com'), 'https://example.com');
+    });
+
+    it('parseOriginString preserves the port', function () {
+        assert.equal(Csrf._parseOriginString('http://localhost:3000'), 'http://localhost:3000');
+    });
+
+    it('parseOriginString strips path/query/fragment from a Referer-style URL', function () {
+        assert.equal(
+            Csrf._parseOriginString('https://example.com:8443/path/to?q=1#x'),
+            'https://example.com:8443'
+        );
+    });
+
+    it('parseOriginString lowercases the result', function () {
+        assert.equal(
+            Csrf._parseOriginString('HTTPS://Example.COM:443/Page'),
+            'https://example.com:443'
+        );
+    });
+
+    it('parseOriginString returns null for the literal "null" sentinel', function () {
+        assert.equal(Csrf._parseOriginString('null'), null);
+    });
+
+    it('parseOriginString returns null for empty/non-string', function () {
+        assert.equal(Csrf._parseOriginString(''), null);
+        assert.equal(Csrf._parseOriginString(null), null);
+        assert.equal(Csrf._parseOriginString(undefined), null);
+        assert.equal(Csrf._parseOriginString(123), null);
+    });
+
+    it('parseOriginString returns null for malformed input (no scheme)', function () {
+        assert.equal(Csrf._parseOriginString('example.com/path'), null);
+        assert.equal(Csrf._parseOriginString('//example.com'), null);
+    });
+
+    it('parseRequestOrigin reads Origin header first', function () {
+        var req = { headers: { origin: 'https://example.com', referer: 'https://other.com/x' } };
+        assert.equal(Csrf._parseRequestOrigin(req), 'https://example.com');
+    });
+
+    it('parseRequestOrigin falls back to Referer when Origin is missing', function () {
+        var req = { headers: { referer: 'https://example.com/path?q=1' } };
+        assert.equal(Csrf._parseRequestOrigin(req), 'https://example.com');
+    });
+
+    it('parseRequestOrigin treats Origin: "null" as missing and falls back to Referer', function () {
+        var req = { headers: { origin: 'null', referer: 'https://example.com/path' } };
+        assert.equal(Csrf._parseRequestOrigin(req), 'https://example.com');
+    });
+
+    it('parseRequestOrigin accepts the alternate "referrer" spelling', function () {
+        var req = { headers: { referrer: 'https://example.com/path' } };
+        assert.equal(Csrf._parseRequestOrigin(req), 'https://example.com');
+    });
+
+    it('parseRequestOrigin returns null when both headers are missing', function () {
+        assert.equal(Csrf._parseRequestOrigin({ headers: {} }), null);
+    });
+
+    it('parseRequestOrigin returns null for malformed Referer', function () {
+        var req = { headers: { referer: '/just/a/path?x=1' } };
+        assert.equal(Csrf._parseRequestOrigin(req), null);
+    });
+
+    it('parseRequestOrigin returns null for missing/empty req', function () {
+        assert.equal(Csrf._parseRequestOrigin(null), null);
+        assert.equal(Csrf._parseRequestOrigin({}), null);
+        assert.equal(Csrf._parseRequestOrigin({ headers: null }), null);
+    });
+
+});
+
+
+// ─── 11 — #CSRF3: resolveBundleHostname / resolveAllowedOrigins ─────────────
+
+describe('11 - #CSRF3 allowlist resolution: precedence and validation', function () {
+
+    var savedConfig;
+    beforeEach(function () { savedConfig = global.getConfig; });
+    afterEach(function ()  { global.getConfig = savedConfig; });
+
+    it('resolveBundleHostname reads conf[bundle][env].hostname when set', function () {
+        global.getConfig = function () {
+            return { test: { dev: { hostname: 'https://example.com' } } };
+        };
+        assert.equal(Csrf._resolveBundleHostname(), 'https://example.com');
+    });
+
+    it('resolveBundleHostname composes from server.scheme + host + server.port', function () {
+        global.getConfig = function () {
+            return { test: { dev: { server: { scheme: 'https', port: 8443 }, host: 'api.example.com' } } };
+        };
+        assert.equal(Csrf._resolveBundleHostname(), 'https://api.example.com:8443');
+    });
+
+    it('resolveBundleHostname returns null when neither hostname nor host parts are present', function () {
+        global.getConfig = function () { return { test: { dev: {} } }; };
+        assert.equal(Csrf._resolveBundleHostname(), null);
+    });
+
+    it('resolveAllowedOrigins prefers explicit opts.allowedOrigins', function () {
+        var list = Csrf._resolveAllowedOrigins(
+            ['https://a.example.com', 'https://b.example.com'],
+            null
+        );
+        assert.deepEqual(list, ['https://a.example.com', 'https://b.example.com']);
+    });
+
+    it('resolveAllowedOrigins falls back to settings list when opts is empty', function () {
+        var list = Csrf._resolveAllowedOrigins([], ['https://settings.example.com']);
+        assert.deepEqual(list, ['https://settings.example.com']);
+    });
+
+    it('resolveAllowedOrigins falls back to bundle hostname when both lists are empty', function () {
+        var list = Csrf._resolveAllowedOrigins(null, null);
+        assert.deepEqual(list, [TEST_ORIGIN]);
+    });
+
+    it('resolveAllowedOrigins lowercases every entry', function () {
+        var list = Csrf._resolveAllowedOrigins(
+            ['HTTPS://Example.COM', 'HTTP://Localhost:3000'],
+            null
+        );
+        assert.deepEqual(list, ['https://example.com', 'http://localhost:3000']);
+    });
+
+    it('resolveAllowedOrigins parses Referer-shaped entries down to scheme://host[:port]', function () {
+        var list = Csrf._resolveAllowedOrigins(
+            ['https://example.com/some/path?q=1'],
+            null
+        );
+        assert.deepEqual(list, ['https://example.com']);
+    });
+
+    it('resolveAllowedOrigins throws when nothing can be resolved', function () {
+        global.getConfig = function () { return { test: { dev: {} } }; };
+        assert.throws(function () { Csrf._resolveAllowedOrigins(null, null); },
+            /csrf\.allowedOrigins is empty and the bundle hostname could not be resolved/);
+    });
+
+    it('factory throws when no origin can be resolved at construction time', function () {
+        global.getConfig = function () {
+            return { test: { dev: { content: { settings: {} } } } };
+        };
+        assert.throws(function () { Csrf(); },
+            /csrf\.allowedOrigins is empty and the bundle hostname could not be resolved/);
+    });
+
+    it('factory accepts an explicit opts.allowedOrigins even when no bundle hostname exists', function () {
+        global.getConfig = function () {
+            return { test: { dev: { content: { settings: {} } } } };
+        };
+        assert.doesNotThrow(function () {
+            Csrf({ allowedOrigins: ['https://app.example.com'] });
+        });
+    });
+
+    it('settings.csrf.allowedOrigins flows through resolveSettingsDefaults', function () {
+        global.getConfig = function () {
+            return {
+                test: { dev: { hostname: TEST_ORIGIN, content: {
+                    settings: { csrf: { allowedOrigins: ['https://x.example.com'] } }
+                } } }
+            };
+        };
+        var d = Csrf._resolveSettingsDefaults();
+        assert.deepEqual(d.allowedOrigins, ['https://x.example.com']);
+    });
+
+    it('settings.csrf.allowedOrigins entries are lowercased', function () {
+        global.getConfig = function () {
+            return {
+                test: { dev: { hostname: TEST_ORIGIN, content: {
+                    settings: { csrf: { allowedOrigins: ['HTTPS://Example.COM'] } }
+                } } }
+            };
+        };
+        var d = Csrf._resolveSettingsDefaults();
+        assert.deepEqual(d.allowedOrigins, ['https://example.com']);
+    });
+
+});
+
+
+// ─── 12 — #CSRF3 behavioural matrix: Origin × Referer × allowlist ──────────
+
+describe('12 - #CSRF3 mutating-method matrix: Origin/Referer/allowlist', function () {
+
+    function mintCookie(sessionId) {
+        var token = Csrf._generateToken(sessionId, TEST_SECRET);
+        return { token: token, header: 'gina-csrf-token=' + encodeURIComponent(token) };
+    }
+    function makeReq(method, sessionId, headers, overrides) {
+        var req = {
+            method: method, url: '/api/things',
+            headers: headers || {},
+            session: { id: sessionId },
+            routing: { csrfExempt: false }
+        };
+        Object.keys(overrides || {}).forEach(function (k) { req[k] = overrides[k]; });
+        return req;
+    }
+    function makeRes() {
+        var headers = {};
+        return {
+            statusCode: 200, _ended: false, _body: null,
+            getHeader: function (n) { return headers[n.toLowerCase()] || null; },
+            setHeader: function (n, v) { headers[n.toLowerCase()] = v; },
+            end: function (b) { this._ended = true; this._body = b; }
+        };
+    }
+
+    var savedConsoleError;
+    var captured;
+    beforeEach(function () {
+        captured = [];
+        savedConsoleError = console.error;
+        console.error = function () { captured.push(Array.prototype.slice.call(arguments).join(' ')); };
+    });
+    afterEach(function () { console.error = savedConsoleError; });
+
+    it('Origin matches allowlist, valid token → next() called', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: TEST_ORIGIN,
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+        assert.equal(res.statusCode, 200);
+    });
+
+    it('Origin missing AND Referer missing → 403 missing origin/referer', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+        assert.ok(captured.some(function (l) { return /missing origin\/referer/.test(l); }),
+            'expected "missing origin/referer" reason in log');
+    });
+
+    it('Referer fallback hits the allowlist → next() called', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            referer: TEST_ORIGIN + '/some/page?q=1',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+    });
+
+    it('Origin mismatches allowlist → 403 origin not allowed', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'https://attacker.example.com',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+        assert.ok(captured.some(function (l) { return /origin not allowed/.test(l); }),
+            'expected "origin not allowed" reason in log');
+    });
+
+    it('Origin matches but tokens disagree → 403 (token layer still fires)', function () {
+        var mw = Csrf();
+        var c1 = mintCookie('session-abc');
+        var c2 = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: TEST_ORIGIN,
+            cookie: c1.header,
+            'x-gina-csrf-token': c2.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+        assert.ok(captured.some(function (l) { return /token\/cookie mismatch/.test(l); }),
+            'expected token-layer reason — pre-filter passed');
+    });
+
+    it('Origin matches with explicit settings allowlist (single host)', function () {
+        var saved = global.getConfig;
+        global.getConfig = function () {
+            return {
+                test: { dev: { hostname: TEST_ORIGIN, content: {
+                    settings: { csrf: { allowedOrigins: ['https://prod.example.com'] } }
+                } } }
+            };
+        };
+        try {
+            var mw = Csrf();
+            var c  = mintCookie('session-abc');
+            // Default bundle hostname does NOT count when explicit allowlist is set.
+            var req = makeReq('POST', 'session-abc', {
+                origin: TEST_ORIGIN,
+                cookie: c.header,
+                'x-gina-csrf-token': c.token
+            });
+            var res = makeRes();
+            mw(req, res, function () { assert.fail('next() must not be called'); });
+            assert.equal(res.statusCode, 403,
+                'bundle hostname must NOT be implicitly added when allowlist is explicit');
+        } finally {
+            global.getConfig = saved;
+        }
+    });
+
+    it('Multi-origin allowlist accepts each member', function () {
+        var mw = Csrf({ allowedOrigins: ['https://a.example.com', 'https://b.example.com'] });
+        var c  = mintCookie('session-abc');
+
+        ['https://a.example.com', 'https://b.example.com'].forEach(function (origin) {
+            var req = makeReq('POST', 'session-abc', {
+                origin: origin,
+                cookie: c.header,
+                'x-gina-csrf-token': c.token
+            });
+            var res = makeRes();
+            var ok = false;
+            mw(req, res, function () { ok = true; });
+            assert.equal(ok, true, origin + ' should pass');
+        });
+    });
+
+    it('Multi-origin allowlist rejects non-members', function () {
+        var mw = Csrf({ allowedOrigins: ['https://a.example.com', 'https://b.example.com'] });
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'https://c.example.com',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+    });
+
+    it('Origin case is normalised — uppercase Origin still matches lowercase allowlist', function () {
+        var mw = Csrf({ allowedOrigins: ['https://example.com'] });
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'HTTPS://Example.COM',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+    });
+
+    it('Different scheme on the same host → 403 (http vs https)', function () {
+        var mw = Csrf({ allowedOrigins: ['https://example.com'] });
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'http://example.com',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+    });
+
+    it('Different port on the same host → 403', function () {
+        var mw = Csrf({ allowedOrigins: ['http://localhost:3000'] });
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'http://localhost:9999',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+    });
+
+    it('Origin: "null" sentinel + no Referer → 403', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'null',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () { assert.fail('next() must not be called'); });
+        assert.equal(res.statusCode, 403);
+        assert.ok(captured.some(function (l) { return /missing origin\/referer/.test(l); }));
+    });
+
+    it('Origin: "null" + valid Referer fallback → next() called', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'null',
+            referer: TEST_ORIGIN + '/x',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+    });
+
+    it('Safe method bypasses Origin pre-filter (no Origin → still issues cookie)', function () {
+        var mw = Csrf();
+        var req = makeReq('GET', 'session-abc', {});
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+        assert.equal(res.statusCode, 200);
+        assert.ok(res.getHeader('Set-Cookie'), 'cookie still issued on safe method');
+    });
+
+});
+
+
+// ─── 13 — #CSRF3 negative-invariant lock + per-route exempt interaction ────
+
+describe('13 - #CSRF3 negative-invariant lock and exempt interaction', function () {
+
+    function mintCookie(sessionId) {
+        var token = Csrf._generateToken(sessionId, TEST_SECRET);
+        return { token: token, header: 'gina-csrf-token=' + encodeURIComponent(token) };
+    }
+    function makeReq(method, sessionId, headers, overrides) {
+        var req = {
+            method: method, url: '/api/things',
+            headers: headers || {},
+            session: { id: sessionId },
+            routing: { csrfExempt: false }
+        };
+        Object.keys(overrides || {}).forEach(function (k) { req[k] = overrides[k]; });
+        return req;
+    }
+    function makeRes() {
+        var headers = {};
+        return {
+            statusCode: 200, _ended: false,
+            getHeader: function (n) { return headers[n.toLowerCase()] || null; },
+            setHeader: function (n, v) { headers[n.toLowerCase()] = v; },
+            end: function () { this._ended = true; }
+        };
+    }
+
+    var savedConsoleError;
+    beforeEach(function () {
+        savedConsoleError = console.error;
+        console.error = function () {};
+    });
+    afterEach(function () { console.error = savedConsoleError; });
+
+    it('matching token + cookie + MISMATCHING Origin → STILL 403 (token ≠ Origin layer)', function () {
+        var mw = Csrf();
+        var c  = mintCookie('session-abc');
+        // Token verifies, cookie matches header — but Origin is hostile.
+        var req = makeReq('POST', 'session-abc', {
+            origin: 'https://attacker.example.com',
+            cookie: c.header,
+            'x-gina-csrf-token': c.token
+        });
+        var res = makeRes();
+        mw(req, res, function () {
+            assert.fail('matching token must NOT bypass the Origin pre-filter');
+        });
+        assert.equal(res.statusCode, 403);
+    });
+
+    it('Origin pre-filter runs BEFORE token verify (mismatched Origin reports origin reason)', function () {
+        var captured = [];
+        console.error = function () { captured.push(Array.prototype.slice.call(arguments).join(' ')); };
+        try {
+            var mw = Csrf();
+            var c  = mintCookie('session-abc');
+            var req = makeReq('POST', 'session-abc', {
+                origin: 'https://attacker.example.com',
+                cookie: c.header,
+                'x-gina-csrf-token': c.token
+            });
+            var res = makeRes();
+            mw(req, res, function () { assert.fail('next() must not be called'); });
+            assert.ok(captured.some(function (l) { return /origin not allowed/.test(l); }),
+                'must surface "origin not allowed" — pre-filter fires first');
+        } finally {
+            console.error = savedConsoleError;
+        }
+    });
+
+    it('csrfExempt: true bypasses BOTH the Origin pre-filter and the token verify', function () {
+        var mw = Csrf();
+        // No Origin, no token, no cookie — exempt route accepts everything.
+        var req = makeReq('POST', 'session-abc', {}, { routing: { csrfExempt: true } });
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+        assert.equal(res.statusCode, 200);
+    });
+
+    it('csrfExempt: true + mismatched Origin still bypasses (consistent across both layers)', function () {
+        var mw = Csrf();
+        var req = makeReq('POST', 'session-abc',
+            { origin: 'https://attacker.example.com' },
+            { routing: { csrfExempt: true } });
+        var res = makeRes();
+        var ok = false;
+        mw(req, res, function () { ok = true; });
+        assert.equal(ok, true);
+    });
+
+});
+
+
+// ─── 14 — #CSRF3 source inspection: pre-filter is wired before token verify ─
+
+describe('14 - #CSRF3 source inspection: pre-filter ordering and primitives', function () {
+
+    var src;
+    before(function () { src = fs.readFileSync(PLUGIN, 'utf8'); });
+
+    it('#CSRF3 marker is present', function () {
+        assert.ok(src.indexOf('#CSRF3') > -1, 'expected #CSRF3 marker for traceability');
+    });
+
+    it('parseRequestOrigin reads Origin first, falls back to Referer', function () {
+        // Look in the function body — Origin must appear before Referer in the read order.
+        var match = src.match(/function\s+parseRequestOrigin[\s\S]*?\n\}/);
+        assert.ok(match, 'expected parseRequestOrigin function body');
+        var body = match[0];
+        var iOrigin  = body.indexOf('headers.origin');
+        var iReferer = body.indexOf('headers.referer');
+        assert.ok(iOrigin > -1 && iReferer > -1, 'expected both header reads');
+        assert.ok(iOrigin < iReferer, 'Origin must be read before Referer');
+    });
+
+    it('Origin pre-filter runs BEFORE the token verify in the middleware', function () {
+        // Match the call sites (not the function definitions at the top of the file).
+        var iParseCall = src.indexOf('requestOrigin = parseRequestOrigin(req)');
+        var iReadCall  = src.indexOf('presented = readPresentedToken(req');
+        assert.ok(iParseCall > -1, 'expected parseRequestOrigin call site');
+        assert.ok(iReadCall  > -1, 'expected readPresentedToken call site');
+        assert.ok(iParseCall < iReadCall,
+            'parseRequestOrigin must be called before readPresentedToken in the middleware');
+    });
+
+    it('Origin pre-filter runs AFTER the csrfExempt short-circuit', function () {
+        var iReturnExempt = src.indexOf('if (isExempt) {');
+        var iParseCall    = src.indexOf('requestOrigin = parseRequestOrigin(req)');
+        assert.ok(iReturnExempt > -1, 'expected `if (isExempt) {` short-circuit block');
+        assert.ok(iParseCall    > -1, 'expected parseRequestOrigin call site');
+        assert.ok(iReturnExempt < iParseCall,
+            'exempt short-circuit must precede the Origin pre-filter call site');
+    });
+
+    it('reject reasons distinguish "missing origin/referer" from token-layer reasons', function () {
+        assert.ok(/missing origin\/referer/.test(src),
+            'expected explicit missing-origin reject reason');
+        assert.ok(/origin not allowed/.test(src),
+            'expected explicit origin-not-allowed reject reason');
+        // Token-layer reasons must remain distinct.
+        assert.ok(/missing token/.test(src), 'expected missing-token reject reason');
+        assert.ok(/token\/cookie mismatch/.test(src), 'expected token-cookie mismatch reason');
+    });
+
+    it('parseOriginString rejects the literal "null" sentinel', function () {
+        var match = src.match(/function\s+parseOriginString[\s\S]*?\n\}/);
+        assert.ok(match);
+        assert.ok(/'null'|"null"/.test(match[0]),
+            'expected explicit guard against the "null" sentinel browsers send for sandboxed iframes');
+    });
+
+    it('allowedOrigins uses indexOf (not .includes) for allowlist lookup', function () {
+        // `.includes` would still be wrong on the secret-bearing token path; allowlist
+        // doesn't have that constraint, but consistency keeps the file-wide negative
+        // invariant simple.
+        assert.ok(/allowedOrigins\.indexOf\(/.test(src),
+            'expected allowedOrigins.indexOf(...) for allowlist match');
+        assert.ok(!/allowedOrigins\.includes\(/.test(src),
+            'do not use .includes for the allowlist match (file-wide invariant)');
     });
 
 });
