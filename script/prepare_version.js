@@ -465,6 +465,46 @@ function PrepareVersion() {
             } catch (gnaErr) {
                 console.warn('[prepare] Could not update gna.js: ' + (gnaErr.message || gnaErr));
             }
+
+            // Update local-only version-anchor files declared in
+            // script/.local-sync-targets.json (gitignored). Each entry is a
+            // relative path under ginaPath; any occurrence of "v<selectedVersion>"
+            // in the file is rewritten to "v<targetedVersion>". The declaration
+            // file is gitignored, so a fresh clone or a contributor's machine
+            // without it sees no action — this is a maintainer-local convenience
+            // to keep plain-text documentation from drifting across version cuts.
+            var localSyncConfigPath = _(ginaPath + '/script/.local-sync-targets.json', true);
+            try {
+                if (new _(localSyncConfigPath).existsSync()) {
+                    var syncConfig = JSON.parse(fs.readFileSync(localSyncConfigPath, 'utf8'));
+                    var syncFiles  = (syncConfig && syncConfig.files) || [];
+                    // Matches "v<selectedVersion>" when NOT followed by another
+                    // digit or dot — prevents clobbering a longer version string
+                    // that happens to share the same prefix.
+                    var versionPattern = new RegExp(
+                        'v' + selectedVersion.replace(/\./g, '\\.') + '(?![\\d.])',
+                        'g'
+                    );
+                    for (var i = 0; i < syncFiles.length; i++) {
+                        var relPath = syncFiles[i] && syncFiles[i].path;
+                        if (typeof relPath !== 'string') continue;
+                        var filePath = _(ginaPath + '/' + relPath, true);
+                        try {
+                            if (!new _(filePath).existsSync()) continue;
+                            var src = fs.readFileSync(filePath, 'utf8');
+                            var updated = src.replace(versionPattern, 'v' + targetedVersion);
+                            if (updated !== src) {
+                                fs.writeFileSync(filePath, updated);
+                                console.info('[prepare] Local sync: ' + relPath + ' -> v' + targetedVersion);
+                            }
+                        } catch (fileErr) {
+                            console.warn('[prepare] Local sync skipped for ' + relPath + ': ' + (fileErr.message || fileErr));
+                        }
+                    }
+                }
+            } catch (syncErr) {
+                // Sidecar config absent or malformed — silent no-op.
+            }
         }
 
         done()
