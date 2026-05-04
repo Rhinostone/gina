@@ -652,8 +652,14 @@ describe('05d - #NJ2 asset injection / setResources port', function () {
     it('imports Collection via the lib registry (not a direct require of the sub-path)', function () {
         // lib registry form survives dev-mode hot-reload eviction of
         // lib/index.js. A direct require('../../lib/collection') would skip
-        // that protection.
-        assert.match(RENDER_NJ_SRC, /var\s+Collection\s*=\s*require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.Collection/);
+        // that protection. Accept either the original direct-require shape
+        // or the libRef module-scope fallback shape (which mirrors
+        // render-swig.js's `|| require.cache[...]` defence against
+        // refreshCore() cache poisoning).
+        assert.match(
+            RENDER_NJ_SRC,
+            /var\s+Collection\s*=\s*(?:require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.Collection|libRef\.Collection)/
+        );
     });
 
     // -----------------------------------------------------------------------
@@ -886,9 +892,12 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // Mirror of render-swig.js:6 and render-json.js:5. The instance is
         // re-pointed per request via cache.from(serverInstance._cached); a
         // shared singleton is fine because there is only one server per process.
+        // Accept either the original direct-require shape or the libRef
+        // module-scope fallback shape (which mirrors render-swig.js's
+        // `|| require.cache[...]` defence against refreshCore() cache poisoning).
         assert.match(
             RENDER_NJ_SRC,
-            /var\s+cache\s*=\s*new\s*\(\s*require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.Cache\s*\)\(\s*\)/
+            /var\s+cache\s*=\s*new\s*\(\s*(?:require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.Cache|libRef\.Cache)\s*\)\(\s*\)/
         );
     });
 

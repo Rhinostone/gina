@@ -127,7 +127,13 @@ var inspectorRedact = require('lib/inspector-redact');
 // rendering without a layout (mirrors render-swig.js:494-498). Fetched via
 // the lib registry so the dev-mode hot-reload evictions of `lib/index.js`
 // don't poison the reference across requests.
-var Collection      = require('../../lib').Collection;
+//
+// FRAMEWORK PATCH (freelancer/v3): mirror render-swig.js's `|| require.cache[...]`
+// fallback. server.isaac.js refreshCore() overwrites the lib cache entry with the
+// exports value (not a Module object), so a plain `require()` here returns
+// undefined and crashes the module-level read. Push upstream to gina-io/gina.
+var libRef          = require('../../lib') || require.cache[require.resolve('../../lib')];
+var Collection      = libRef.Collection;
 // #NJ3 — static HTML cache writes. Module-scoped `cache` instance mirrors
 // `render-swig.js:6` and `render-json.js:5`. Per-request, the main render
 // function re-points it at the server's shared in-memory store (key:
@@ -135,7 +141,7 @@ var Collection      = require('../../lib').Collection;
 // (`server.isaac.js:1012-1067`) is engine-agnostic, so writes from this
 // delegate are served back on subsequent hits without going through the
 // controller at all.
-var cache           = new (require('../../lib').Cache)();
+var cache           = new (libRef.Cache)();
 
 /**
  * Caches a `nunjucks.Environment` per bundle template root so we don't
@@ -465,7 +471,9 @@ function sendHtmlResponse(local, html) {
  * @returns {void}
  */
 function registerGinaFilters(env, self, local, localOptions) {
-    var nunjucksFilters = require('../../lib').nunjucksFilters
+    // FRAMEWORK PATCH (freelancer/v3): use module-scope libRef fallback so
+    // refreshCore's malformed cache entry doesn't return undefined here.
+    var nunjucksFilters = (libRef && libRef.nunjucksFilters)
         || require('../../lib/nunjucks-filters');
 
     // Same isProxyHost detection as render-swig.js:606-625. Duplicated here
@@ -717,10 +725,11 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // Fetch the nunjucks module from the process-cache. `get()` throws if
     // the bundle-startup load did not succeed — we surface that cleanly
     // via throwError so the usual error page pipeline handles it.
+    // FRAMEWORK PATCH (freelancer/v3): use module-scope libRef fallback.
     var nunjucks;
     try {
-        nunjucks = require('../../lib').nunjucksResolver
-            ? require('../../lib').nunjucksResolver.get()
+        nunjucks = (libRef && libRef.nunjucksResolver)
+            ? libRef.nunjucksResolver.get()
             : require('../../lib/nunjucks-resolver').get();
     } catch (err) {
         return self.throwError(err);

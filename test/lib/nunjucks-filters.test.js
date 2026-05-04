@@ -224,8 +224,15 @@ describe('06 - render-nunjucks.js integration', function () {
         assert.match(RENDER_NJ_SRC, /registerGinaFilters\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*\)/);
     });
 
-    it('fetches the lib via require("../../lib").nunjucksFilters', function () {
-        assert.match(RENDER_NJ_SRC, /require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.nunjucksFilters/);
+    it('fetches the lib via require("../../lib").nunjucksFilters or libRef.nunjucksFilters', function () {
+        // Accept either the original direct-require shape or the libRef
+        // module-scope fallback shape (`(libRef && libRef.nunjucksFilters)`),
+        // which mirrors render-swig.js's `|| require.cache[...]` defence
+        // against refreshCore() cache poisoning.
+        assert.match(
+            RENDER_NJ_SRC,
+            /require\(\s*['"]\.\.\/\.\.\/lib['"]\s*\)\.nunjucksFilters|libRef\.nunjucksFilters/
+        );
     });
 
     it('has a fallback require("../../lib/nunjucks-filters") for bootstrap safety', function () {
