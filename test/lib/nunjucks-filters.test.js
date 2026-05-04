@@ -320,3 +320,78 @@ describe('07 - negative invariants', function () {
         assert.doesNotMatch(RENDER_NJ_CODE, /swig\.setFilter/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 08 - length filter null/undefined guard (#FX-length-null-guard)
+// ---------------------------------------------------------------------------
+//
+// Templates that pipe a missing variable through `| length` (e.g.
+// `{{ breadcrumb | length }}` in a layout-included partial) used to crash
+// with `TypeError: Cannot read properties of undefined (reading 'count')`
+// because the filter dereferenced `input.count` before any null check —
+// surfaced as a 500 on every affected route. The fix returns 0 for null/
+// undefined input, matching upstream nunjucks `runtime.length` and Jinja2.
+
+describe('08 - length filter null/undefined guard (#FX-length-null-guard)', function () {
+
+    it('source: null/undefined guard sits before `.count` dereference in nunjucks-filters', function () {
+        // Negative-invariant lock against an accidental revert during a future
+        // merge. The guard MUST appear in source before the `input.count`
+        // dereference so the dereference is unreachable on null/undefined.
+        // Use NF_CODE (comments stripped) so the explanatory `typeof(input.count)`
+        // mention in the patch comment doesn't trip the search.
+        var lengthIdx = NF_CODE.indexOf('self.length = function');
+        assert.ok(lengthIdx > 0, 'self.length declaration must exist');
+        var nextDecl  = NF_CODE.indexOf('self.', lengthIdx + 1);
+        var body      = NF_CODE.slice(lengthIdx, nextDecl > lengthIdx ? nextDecl : lengthIdx + 800);
+        var guardIdx  = body.search(/input\s*==\s*null/);
+        var countIdx  = body.search(/if\s*\(\s*typeof\s*\(\s*input\.count\s*\)/);
+        assert.ok(guardIdx > -1, 'expected `input == null` guard inside self.length');
+        assert.ok(countIdx > -1, 'expected `if ( typeof(input.count) ... )` dereference inside self.length');
+        assert.ok(guardIdx < countIdx, 'guard must precede the `.count` dereference');
+    });
+
+    // Inline simulator mirroring framework/v*/lib/nunjucks-filters/src/main.js
+    // self.length byte-for-byte (and swig-filters/src/main.js self.length —
+    // same logic). Pure function with no gina globals — safe to exercise.
+    function simulatedLength(input /*, obj */) {
+        if ( input == null ) {
+            return 0;
+        }
+        if ( typeof(input.count) != 'undefined' ) {
+            return input.count();
+        } else {
+            return input.length;
+        }
+    }
+
+    it('returns 0 for undefined input', function () {
+        assert.equal(simulatedLength(undefined), 0);
+    });
+
+    it('returns 0 for null input', function () {
+        assert.equal(simulatedLength(null), 0);
+    });
+
+    it('returns array length for arrays', function () {
+        assert.equal(simulatedLength([1, 2, 3]), 3);
+        assert.equal(simulatedLength([]), 0);
+    });
+
+    it('returns string length for strings', function () {
+        assert.equal(simulatedLength('abc'), 3);
+        assert.equal(simulatedLength(''), 0);
+    });
+
+    it('returns count() for collection-like objects with .count()', function () {
+        var fakeCollection = { count: function () { return 5; } };
+        assert.equal(simulatedLength(fakeCollection), 5);
+    });
+
+    it('returns .length for plain objects with a numeric length property', function () {
+        // Mirrors how a custom NodeList-like object would surface its size.
+        var obj = { length: 7 };
+        assert.equal(simulatedLength(obj), 7);
+    });
+});

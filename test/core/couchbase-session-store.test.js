@@ -263,3 +263,106 @@ describe('05 - pure logic: Promise .then() argument forwarding (#CB-BUG-4)', fun
     });
 
 });
+
+
+// ─── 06 — v4: get() handles JsonTranscoder pre-decoded object (#CB-BUG-5) ────
+//
+// Couchbase Node.js SDK 4.x's `JsonTranscoder` returns the already-decoded
+// value rather than raw bytes. The pre-fix code called `.toString()` on the
+// resulting object (producing `"[object Object]"`) and then `JSON.parse`d
+// it, surfacing as a 500 on every authenticated request that touched
+// session retrieval. The fix detects an already-parsed object (non-Buffer)
+// and short-circuits before the legacy `.toString()` + `JSON.parse` path.
+
+describe('06 - session-store.v4: get() handles JsonTranscoder pre-decoded object (#CB-BUG-5)', function () {
+
+    var src;
+    before(function () { src = fs.readFileSync(STORE_V4, 'utf8'); });
+
+    it('source: FRAMEWORK PATCH marker for the JsonTranscoder branch is present', function () {
+        // Negative-invariant lock against an accidental revert.
+        assert.ok(
+            src.indexOf('JsonTranscoder') > -1,
+            'expected `JsonTranscoder` reference in the patch comment'
+        );
+        assert.ok(
+            /typeof\s+data\.value\s*===\s*['"]object['"]\s*&&\s*!Buffer\.isBuffer\(\s*data\.value\s*\)/.test(src),
+            'expected the pre-decoded-object short-circuit guard before .toString()'
+        );
+    });
+
+    it('source: short-circuit returns fn(null, data.value) before .toString()', function () {
+        // The branch must call fn(null, parsedValue) directly — falling through
+        // to .toString() would re-coerce to "[object Object]" and corrupt parse.
+        // Strip line comments first so the commented-out reference implementation
+        // higher up in the file (`//         data = data.value.toString();`)
+        // doesn't trip the indexOf search.
+        var srcCode = src.replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+        var guardIdx    = srcCode.indexOf("typeof data.value === 'object'");
+        var toStringIdx = srcCode.indexOf('data = data.value.toString()');
+        assert.ok(guardIdx > -1,    'guard must exist');
+        assert.ok(toStringIdx > -1, '.toString() fallback must still exist for legacy raw-bytes path');
+        assert.ok(guardIdx < toStringIdx,
+            'guard must sit BEFORE the .toString() call so pre-decoded objects skip the legacy path');
+
+        // Region between guard and toString must contain `fn(null, data.value)`.
+        var region = srcCode.slice(guardIdx, toStringIdx);
+        assert.match(region, /return\s+fn\(\s*null\s*,\s*data\.value\s*\)/,
+            'pre-decoded-object branch must short-circuit via fn(null, data.value)');
+    });
+
+    // Pure-logic replica of the get() resolution branch isolated from the
+    // surrounding async client.get() call. Mirrors the source byte-for-byte
+    // for the parse-or-passthrough decision.
+    function resolveSessionValue(data, fn) {
+        if (!data || !data.value) return fn();
+        if (typeof data.value === 'object' && !Buffer.isBuffer(data.value)) {
+            return fn(null, data.value);
+        }
+        var raw = data.value.toString();
+        try {
+            return fn(null, JSON.parse(raw));
+        } catch (e) {
+            return fn(e);
+        }
+    }
+
+    it('pre-decoded object: callback receives the parsed object, not "[object Object]"', function () {
+        var parsed = { sessionId: 'abc', cookie: { httpOnly: true }, user: { id: 42 } };
+        var captured = null;
+        var capturedErr = null;
+
+        resolveSessionValue({ value: parsed }, function (err, value) {
+            capturedErr = err;
+            captured    = value;
+        });
+
+        assert.equal(capturedErr, null, 'no error must surface');
+        assert.strictEqual(captured, parsed,
+            'callback must receive the parsed-object value as-is — pre-fix it received the JSON.parse of "[object Object]" which throws');
+        assert.equal(captured.user.id, 42, 'parsed object must remain navigable post-callback');
+    });
+
+    it('Buffer payload: legacy .toString() + JSON.parse path still fires', function () {
+        var json = '{"sessionId":"abc","user":{"id":42}}';
+        var buf  = Buffer.from(json, 'utf8');
+        var captured = null;
+
+        resolveSessionValue({ value: buf }, function (err, value) {
+            assert.equal(err, null);
+            captured = value;
+        });
+
+        assert.deepEqual(captured, JSON.parse(json),
+            'Buffer payload must still flow through the legacy .toString() + JSON.parse path');
+    });
+
+    it('missing data: callback fires with no args (no-session path)', function () {
+        var calls = 0;
+        var args  = null;
+        resolveSessionValue(null, function () { calls++; args = arguments; });
+        assert.equal(calls, 1, 'callback must fire exactly once');
+        assert.equal(args.length, 0, 'no-session path passes no arguments to fn');
+    });
+});

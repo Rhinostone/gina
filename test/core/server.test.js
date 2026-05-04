@@ -280,3 +280,105 @@ describe('getAssets — embedded Swig expressions preserve inner quotes', functi
         );
     });
 });
+
+
+// ─── Bug I — createNextMiddleware factory isolates per-request dispatch state ──
+//
+// Pre-fix shape: a single module-scope `nextMiddleware` function held its
+// dispatch state on its own function-object properties (`._index`, `._count`,
+// `._request`, `._response`, `._next`, `._nextAction`). Under concurrent
+// requests, request B's setup at the entry point overwrote request A's
+// state, so A's awaited middleware callbacks resumed against B's `req`
+// object — visible as sporadic `[csrf] no req.session.id` 500s when
+// express-session correctly populated `req.session` for A but CSRF then
+// ran with B's `req` that never went through session.
+//
+// Post-fix shape: `nextMiddleware` is wrapped in a `createNextMiddleware()`
+// factory; each `_expressMiddlewares.length > 0` entry point calls the
+// factory and gets a fresh closure with isolated state. This block locks
+// in the source structure so a future merge can't silently revert it,
+// and exercises the closure-isolation invariant on a pure-logic replica
+// of the entry-point setup pattern.
+
+describe('Bug I — createNextMiddleware factory isolates per-request dispatch state', function () {
+
+    var src;
+
+    before(function () {
+        src = fs.readFileSync(SOURCE, 'utf8');
+    });
+
+    it('source: FRAMEWORK PATCH marker for Bug I is present', function () {
+        assert.ok(
+            src.indexOf('FRAMEWORK PATCH (freelancer/v3): Bug I') > -1,
+            'expected FRAMEWORK PATCH marker explaining the per-request dispatcher fix'
+        );
+    });
+
+    it('source: createNextMiddleware factory exists and wraps a fresh nextMiddleware', function () {
+        // The factory MUST exist — the old shape held state on a shared
+        // function object and is the regression path we're guarding against.
+        assert.match(
+            src,
+            /var\s+createNextMiddleware\s*=\s*function\s*\(\s*\)\s*\{[\s\S]*?var\s+nextMiddleware\s*=\s*function\s*\(\s*err\s*\)/,
+            'createNextMiddleware factory must wrap a fresh `var nextMiddleware = function(err)` declaration'
+        );
+        assert.match(
+            src,
+            /return\s+nextMiddleware\s*;?\s*\}\s*;/,
+            'factory must return the inner nextMiddleware so each call gets a fresh closure'
+        );
+    });
+
+    it('source: both _expressMiddlewares entry points use the factory (no shared state)', function () {
+        // Two call sites — onInstance() (~line 2767) and the matched-routing
+        // post-process block (~line 4118). Both must construct via the factory
+        // before assigning `._index` / `._request` / etc.; assignment to a
+        // module-scope `nextMiddleware` directly would re-introduce the bug.
+        var calls = src.match(/var\s+nextMiddleware\s*=\s*createNextMiddleware\s*\(\s*\)/g);
+        assert.ok(
+            calls && calls.length >= 2,
+            'expected createNextMiddleware() to be invoked at both _expressMiddlewares entry points (got ' + (calls ? calls.length : 0) + ')'
+        );
+    });
+
+    // Pure-logic replica of the entry-point setup pattern. Confirms that
+    // two factory invocations produce dispatchers with isolated state, so
+    // a setup race between request A and request B doesn't bleed B's req
+    // onto A's continuation.
+    function makeFactory() {
+        return function createNextMiddleware() {
+            var nextMiddleware = function (err) { /* dispatch body */ };
+            return nextMiddleware;
+        };
+    }
+
+    it('two factory calls produce dispatchers with isolated own-property state', function () {
+        var createNextMiddleware = makeFactory();
+
+        // Request A enters the pipeline first.
+        var reqA = { id: 'A', session: { id: 'sess-A' } };
+        var dispatcherA = createNextMiddleware();
+        dispatcherA._index   = 0;
+        dispatcherA._request = reqA;
+
+        // Request B enters next — the scenario that reproduced the bug.
+        var reqB = { id: 'B', session: { id: 'sess-B' } };
+        var dispatcherB = createNextMiddleware();
+        dispatcherB._index   = 0;
+        dispatcherB._request = reqB;
+
+        // The two dispatchers MUST be distinct function objects so writes
+        // to one don't shadow the other's state. Pre-fix, the assignments
+        // above would have overwritten the shared module-scope function's
+        // own properties — `dispatcherA._request` would now be `reqB`.
+        assert.notStrictEqual(dispatcherA, dispatcherB,
+            'each createNextMiddleware() call must return a distinct function');
+        assert.strictEqual(dispatcherA._request, reqA,
+            'dispatcher A must retain its own _request after dispatcher B is set up');
+        assert.strictEqual(dispatcherB._request, reqB,
+            'dispatcher B must hold its own _request');
+        assert.strictEqual(dispatcherA._request.session.id, 'sess-A',
+            'dispatcher A must continue to see request A\'s session — the regression case');
+    });
+});
