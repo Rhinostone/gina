@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Preserve inner Swig string-literal quotes in mid-URL `{{ }}` expressions in `getAssets()`. The decorative-quote-strip guard was anchored (`/^\{\{/`), so an asset URL with `{{ }}` embedded mid-string had its inner Swig quotes stripped, the mangled URL landed in the cached layout `__ginaData.gina.view.assets`, and the runtime Swig pass then threw `Unexpected colon on line N` at parse time. The compile guard keeps its anchor — only fully-Swig URLs are pre-compiled at scan time; embedded `{{ }}` is left for the cached layout runtime Swig pass.'
-time: 2026-05-04T20:04:15.582256+01:00

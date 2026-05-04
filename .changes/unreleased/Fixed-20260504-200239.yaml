@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Handle Couchbase Node.js SDK 4.x `JsonTranscoder` pre-decoded session values in the v4 session-store. Previous code called `.toString()` on the already-parsed object (producing `"[object Object]"`) and then `JSON.parse`d it, surfacing as a 500 on every authenticated request that touched session retrieval.'
-time: 2026-05-04T20:02:39.593926+01:00

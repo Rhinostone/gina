@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Drop the redundant `<namespace>-` prefix from `resolveTemplatePath()` effective name in nunjucks rendering. Routes whose name already carries the namespace (e.g. `project-get`, `client-list`) previously resolved to `project/project-get.njk` and `client/client-list.njk`; they now resolve to the cleaner `<namespace>/<action>.njk` path (e.g. `project/get.njk`, `client/list.njk`).'
-time: 2026-05-04T20:07:39.059987+01:00

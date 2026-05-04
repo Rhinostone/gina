@@ -1,3 +1,0 @@
-kind: Added
-body: 'Add a `process.gina._bundleFilterWraps[bundleName]` hook so bundles can wrap nunjucks filters at render time. Bundle-level monkey-patches on `lib.nunjucksFilters` do not survive `refreshCore()` (which creates a fresh lib singleton ~per-request in dev mode); the framework now applies registered wraps inside `registerGinaFilters` after the per-request filter factory runs.'
-time: 2026-05-04T20:08:31.895708+01:00

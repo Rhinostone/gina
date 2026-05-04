@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Mirror `ctxObj.envVars` into `process.env` during `gna.js` bootstrap so third-party plugins (CSRF middleware, future env-readers) see env vars that `bin/cli`''s `filterArgs()` stripped before spawn. `setEnvVar` populates Gina''s own context but did not touch `process.env`, leaving plugins reading the raw `process.env` with `undefined` values.'
-time: 2026-05-04T20:03:20.194432+01:00

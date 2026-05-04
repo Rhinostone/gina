@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Add a `require.cache` fallback to the `lib` registry import in `controller.render-nunjucks.js`, mirroring `render-swig.js`. `server.isaac.js` `refreshCore()` overwrites the lib cache entry with the exports value (not a Module object); a plain `require("../../lib")` returns `undefined` after a refresh and crashes the module-level read of `Collection`, `Cache`, `nunjucksFilters`, and `nunjucksResolver`. Route every per-request lookup through a module-scope `libRef` variable that uses `|| require.cache[require.resolve("../../lib")]` as the fallback.'
-time: 2026-05-04T20:06:51.247479+01:00
