@@ -216,6 +216,16 @@ function resolveTemplatePath(data, localOptions) {
         if (effective === localOptions.namespace) {
             effective = 'index';
         }
+        // FRAMEWORK PATCH (freelancer/v3): drop redundant `<namespace>-` prefix
+        // from the file segment when present, so `project/project-get.njk`
+        // resolves to `project/get.njk` (and `client/client-list.njk` to
+        // `client/list.njk`). Lets route names that already carry the
+        // namespace (e.g. `project-get`, `client-list`) live at the cleaner
+        // `<namespace>/<action>.njk` path. Push upstream to gina-io/gina.
+        var nsPrefix = localOptions.namespace + '-';
+        if (effective.length > nsPrefix.length && effective.indexOf(nsPrefix) === 0) {
+            effective = effective.substring(nsPrefix.length);
+        }
         var rel = localOptions.namespace + '/' + effective;
         if (ext && !rel.endsWith(ext)) { rel += ext; }
         return rel;
