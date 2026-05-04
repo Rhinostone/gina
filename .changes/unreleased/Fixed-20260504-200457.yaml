@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Isolate per-request middleware dispatch state in `nextMiddleware` via a new `createNextMiddleware()` factory. The previous shape held dispatch state on the function own properties (`._index`, `._count`, `._request`, `._response`, `._next`, `._nextAction`); under concurrent requests, request B setup at the entry point overwrote request A state, so A awaited middleware callbacks resumed against B `req` object — visible as sporadic `[csrf] no req.session.id` 500s when express-session correctly populated `req.session` for A but CSRF then ran with B `req`. Each call to `createNextMiddleware()` now returns a fresh closure with isolated state.'
+time: 2026-05-04T20:04:57.117613+01:00

@@ -2763,6 +2763,8 @@ function Server(options) {
                     && self.instance._expressMiddlewares.length > 0
                 ) {
 
+                    // FRAMEWORK PATCH (freelancer/v3): Bug I — per-request dispatcher
+                    var nextMiddleware = createNextMiddleware();
                     nextMiddleware._index        = 0;
                     nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
                     nextMiddleware._request      = request;
@@ -3635,6 +3637,17 @@ function Server(options) {
      * @private
      * @param {Error|boolean} err - Error from the previous middleware, or false
      */
+    // FRAMEWORK PATCH (freelancer/v3): Bug I — wrap nextMiddleware in a
+    // per-request factory. The original function held dispatch state on its
+    // own properties (._index, ._request, ._response, ._next, ._nextAction).
+    // Under concurrent requests, request B's setup at the entry point
+    // overwrote request A's state, so A's awaited middleware callbacks
+    // resumed against B's req object — visible as "[csrf] no req.session.id"
+    // sporadic 500s when express-session correctly populated req.session for
+    // A but CSRF then ran with B's req that never went through session.
+    // Each call to createNextMiddleware now returns a fresh function with
+    // closure-isolated state. Push upstream to gina-io/gina.
+    var createNextMiddleware = function() {
     var nextMiddleware = function(err) {
 
         var router              = local.router;
@@ -3687,6 +3700,8 @@ function Server(options) {
                 nextMiddleware.call(this, err, true)
             }
         });
+    };
+        return nextMiddleware;
     };
 
     /**
@@ -4099,6 +4114,8 @@ function Server(options) {
 
         if (matched) {
             if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
+                // FRAMEWORK PATCH (freelancer/v3): Bug I — per-request dispatcher
+                var nextMiddleware = createNextMiddleware();
                 nextMiddleware._index        = 0;
                 nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
                 nextMiddleware._request      = req;
