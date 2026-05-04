@@ -979,6 +979,38 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         try { console.warn('[render-nunjucks] asset injection skipped: ' + (assetErr.message || assetErr)); } catch (e) {}
     }
 
+    // FRAMEWORK PATCH (freelancer/v3): substitute {{ page.X }} / {{ page.environment.X }}
+    // placeholders inside ginaLoader (gina.onload.min.js), which is inserted as a literal
+    // HTML string by injectAssets() and therefore cannot rely on nunjucks to resolve its
+    // tokens. Mirrors render-swig.js:572-582 (flatten dict) + 1276 (whisper call). Without
+    // this, `window.onGinaLoaded` throws a JSON.parse SyntaxError on every page, leaving
+    // gina.popin / gina.session / gina.forms / window.onGenericXhrResponse undefined and
+    // breaking every legacy popin + form-submit. Push upstream to gina-io/gina alongside
+    // Bugs A-E.
+    try {
+        if (data && data.page && typeof data.page === 'object' && typeof whisper === 'function') {
+            var ginaLoaderDic = {};
+            for (var _d in data.page) {
+                ginaLoaderDic['page.' + _d] = data.page[_d];
+            }
+            if (typeof data.page.environment === 'object' && data.page.environment !== null) {
+                for (var _k in data.page.environment) {
+                    ginaLoaderDic['page.environment.' + _k] = data.page.environment[_k];
+                }
+            }
+            // gina.onload.min.js also references `{{ page.data.session.X }}` (depth 3)
+            // for session id/timeout/createdAt/lastModified — flatten that level too.
+            if (data.page.data && typeof data.page.data === 'object' && data.page.data.session && typeof data.page.data.session === 'object') {
+                for (var _s in data.page.data.session) {
+                    ginaLoaderDic['page.data.session.' + _s] = data.page.data.session[_s];
+                }
+            }
+            html = whisper(ginaLoaderDic, html, /\{{ ([a-zA-Z.]+) \}}/g);
+        }
+    } catch (whisperErr) {
+        try { console.warn('[render-nunjucks] ginaLoader whisper substitution skipped: ' + (whisperErr.message || whisperErr)); } catch (e) {}
+    }
+
     // Inspector dev-payload injection (dev mode only; no-op otherwise).
     try {
         html = injectInspectorScripts(html, data, self, local, displayInspector);

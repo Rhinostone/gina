@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Substitute `{{ page.X }}`, `{{ page.environment.X }}`, and `{{ page.data.session.X }}` placeholders inside the `ginaLoader` HTML string after `injectAssets()`. `gina.onload.min.js` is inserted as a literal HTML string and so cannot rely on nunjucks to resolve its tokens; without substitution, `window.onGinaLoaded` threw a `JSON.parse` SyntaxError on every page, leaving `gina.popin`, `gina.session`, `gina.forms`, and `window.onGenericXhrResponse` undefined and breaking every legacy popin and form-submit. Mirrors `render-swig.js` flatten-then-`whisper()` approach.'
+time: 2026-05-04T20:10:54.048879+01:00
