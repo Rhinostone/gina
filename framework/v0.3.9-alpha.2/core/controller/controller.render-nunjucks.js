@@ -520,6 +520,26 @@ function registerGinaFilters(env, self, local, localOptions) {
         res:         local.res
     });
 
+    // FRAMEWORK PATCH (freelancer/v3): apply bundle-level filter wraps registered
+    // on process state. Bundle-level monkey-patches on `lib.nunjucksFilters`
+    // don't survive refreshCore() (which creates a fresh lib singleton ~per-
+    // request in dev mode), so bundles register their wrap on
+    // `process.gina._bundleFilterWraps[bundleName]` and the framework applies
+    // them here. Push upstream to gina-io/gina alongside Bugs A-D.
+    var bundleFilterWraps = (process.gina && process.gina._bundleFilterWraps) || {};
+    Object.keys(bundleFilterWraps).forEach(function (bundleName) {
+        var wrap = bundleFilterWraps[bundleName];
+        if (typeof wrap === 'function') {
+            try {
+                filters = wrap(filters) || filters;
+            } catch (wrapErr) {
+                try {
+                    console.warn('[render-nunjucks] bundle filter wrap failed for ' + bundleName + ': ' + (wrapErr.message || wrapErr));
+                } catch (e) {}
+            }
+        }
+    });
+
     for (var name in filters) {
         if (typeof filters[name] === 'function' && name !== 'getConfig') {
             env.addFilter(name, filters[name]);
