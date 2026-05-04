@@ -820,10 +820,15 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
 
     // Merge user data into page.data so templates can access via {{ page.data.foo }}
     // or {{ foo }} at top level (promoted for ergonomic parity with swig).
+    // FRAMEWORK PATCH (freelancer/v3): the comment promised top-level promotion but
+    // the original code only wrote to data.page.data. Mirror to top-level too.
     if (userData && typeof(userData) === 'object') {
         if (!data.page.data) { data.page.data = {}; }
         Object.keys(userData).forEach(function (k) {
             data.page.data[k] = userData[k];
+            if (typeof(data[k]) === 'undefined') {
+                data[k] = userData[k];
+            }
         });
     }
 

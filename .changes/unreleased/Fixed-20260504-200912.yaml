@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Promote `userData` keys to the top-level template context in `controller.render-nunjucks.js` for ergonomic parity with swig. The previous code only wrote each key to `data.page.data[k]`, contradicting the existing comment that promised top-level promotion (`{{ foo }}`); each key is now also mirrored to `data[k]` when not already defined.'
+time: 2026-05-04T20:09:12.850172+01:00
