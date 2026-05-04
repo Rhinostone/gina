@@ -186,3 +186,97 @@ describe('#B13 — completeHeaders preserves preflight ACAH echo', function() {
         );
     });
 });
+
+
+// ─── getAssets — embedded Swig expressions preserve inner string-literal quotes ──
+//
+// Regression caught downstream in freelancer/v3 after the v0.3.9-alpha.2 self-update:
+// the decorative-quote-strip guard inside getAssets() was anchored (`/^\{\{/`), so
+// an asset URL with `{{ }}` embedded mid-string (e.g. a render-time cache-buster
+// like `css/main.css?cache={{ ''|formatDate('HH:MM:ss') }}`) had its inner Swig
+// string-literal quotes stripped as decoration. The mangled URL was written into
+// the cached layout's __ginaData.gina.view.assets JSON; the cached layout's
+// runtime Swig pass then threw `Unexpected colon on line N` at parse time,
+// surfacing as a 500 from @rhinostone/swig parser.
+//
+// Fix: drop the `^` anchor on the strip guard so the strip is also skipped when
+// `{{` appears anywhere in the URL. The compile guard keeps its `^` anchor —
+// only fully-Swig URLs are pre-compiled at scan time; embedded `{{ }}` is left
+// for the cached layout's runtime Swig pass.
+
+describe('getAssets — embedded Swig expressions preserve inner quotes', function() {
+
+    var src;
+
+    before(function() {
+        src = fs.readFileSync(SOURCE, 'utf8');
+    });
+
+    it('source: FRAMEWORK PATCH marker for the strip-guard anchor fix is present', function() {
+        // Regression guard against an accidental revert during a future merge/sync.
+        assert.ok(
+            src.indexOf('FRAMEWORK PATCH (freelancer/v3): drop the `^` anchor') > -1,
+            'expected FRAMEWORK PATCH marker explaining the strip-guard anchor fix in core/server.js'
+        );
+    });
+
+    // Minimal simulation of the two-branch quote-strip + compile logic that lives
+    // inside getAssets() in core/server.js. Mirrors the source byte-for-byte —
+    // when the source changes, this simulation must change too.
+    function normalizeAssetUrl(url, swig, data) {
+        if ( !/\{\{/.test(url) ) {
+            url = url.replace(/(\"|\')/g, '');
+        }
+        if (swig && /^\{\{/.test(url) ) {
+            url = swig.compile(url, swig.getOptions())(data || {});
+        }
+        return url;
+    }
+
+    it('plain URL (no Swig syntax): inner decorative quotes are stripped', function() {
+        // Existing behaviour — regression guard.
+        var url = normalizeAssetUrl('"css/main.css?v=1"', null);
+        assert.equal(url, 'css/main.css?v=1', 'decorative quotes around a plain URL must be stripped');
+    });
+
+    it('URL that is entirely a Swig expression: inner quotes preserved, compile branch fires', function() {
+        // Existing behaviour — regression guard.
+        var compileCalled = false;
+        var fakeSwig = {
+            getOptions: function() { return {}; },
+            compile: function(tpl /*, opts */) {
+                compileCalled = true;
+                // Inner quotes must reach this point untouched
+                assert.ok(/'resolved'/.test(tpl), 'compile must receive the original string-literal quotes');
+                return function(/* data */) { return 'resolved'; };
+            }
+        };
+
+        var url = normalizeAssetUrl("{{ 'resolved' }}", fakeSwig, {});
+        assert.ok(compileCalled, 'compile branch must fire for fully-Swig URLs');
+        assert.equal(url, 'resolved', 'compile output must replace the URL');
+    });
+
+    it('URL with {{ }} embedded mid-string: inner quotes preserved, compile branch does NOT fire (#FX-getAssets-embedded-swig)', function() {
+        // The freelancer/v3 reproducer.
+        var compileCalled = false;
+        var fakeSwig = {
+            getOptions: function() { return {}; },
+            compile: function() { compileCalled = true; return function() { return ''; }; }
+        };
+
+        var input  = "css/main.css?cache={{ ''|formatDate('HH:MM:ss') }}";
+        var output = normalizeAssetUrl(input, fakeSwig, {});
+
+        assert.equal(
+            output,
+            input,
+            'embedded {{ }} must be passed through verbatim — inner string-literal quotes are syntactically meaningful and must NOT be stripped'
+        );
+        assert.equal(
+            compileCalled,
+            false,
+            'compile branch must NOT fire for embedded {{ }} — the cached layout\'s runtime Swig pass evaluates it later'
+        );
+    });
+});

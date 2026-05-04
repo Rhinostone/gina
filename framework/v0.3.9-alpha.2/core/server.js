@@ -1063,7 +1063,14 @@ function Server(options) {
             //         .replace(/((src|href|srcset)\=\"|(src|href|srcset)\=\')/g, '')
             //         .replace(/\"/g, '')
             // ;
-            if ( !/^\{\{/.test(url) ) {
+            // FRAMEWORK PATCH (freelancer/v3): drop the `^` anchor so the
+            // decorative-quote strip is also skipped when `{{ }}` is embedded
+            // mid-string (e.g. `css/main.css?cache={{ ''|formatDate('HH:MM:ss') }}`).
+            // Without this, inner Swig string-literal quotes get stripped, the
+            // expression becomes `{{ |formatDate(HH:MM:ss) }}`, and the cached
+            // layout's runtime Swig pass throws "Unexpected colon on line N".
+            // Reproduces in v0.3.9-alpha.2 (last touched 2026-04-26).
+            if ( !/\{\{/.test(url) ) {
                 url = url.replace(/(\"|\')/g, '');
             }
             if (swig && /^\{\{/.test(url) ) {
