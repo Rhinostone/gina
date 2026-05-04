@@ -338,6 +338,13 @@ function NunjucksFilters(conf) {
      *   {{ users | length }}
      */
     self.length = function (input, obj) {
+        // Match upstream nunjucks `runtime.length` / Jinja2: undefined or null → 0.
+        // Without this guard, `typeof(input.count)` dereferences `.count` first
+        // and throws on undefined — crashing any template that pipes a missing
+        // variable through `| length`.
+        if ( input == null ) {
+            return 0;
+        }
         if ( typeof(input.count) != 'undefined' ) {
             return input.count();
         } else {
