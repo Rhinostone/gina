@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Alias `data.data` to `data.page.data` before `env.render()` in nunjucks rendering. Page-shells under nunjucks layout inheritance (e.g. `{% set document = data.document %}`) evaluated to `undefined` because `data` was not a key in the env.render context object. Swig layouts already have this aliasing implicit via `{% set data = page.data %}` at `_layouts/layout.html:1`; nunjucks layouts now get the same lookup path framework-side.'
+time: 2026-05-04T20:09:54.920873+01:00

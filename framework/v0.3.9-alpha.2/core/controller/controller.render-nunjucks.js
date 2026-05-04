@@ -832,6 +832,17 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         });
     }
 
+    // FRAMEWORK PATCH (freelancer/v3): Bug J — alias `data.data` to `data.page.data`
+    // so page-shell `{% set X = data.Y %}` resolves under nunjucks layout
+    // inheritance. Mirrors swig's `_layouts/layout.html:1` `{% set data = page.data %}`.
+    // Without this, page-shells like `estimate/get.njk:11 {% set document = data.document %}`
+    // evaluate to undefined (no `data` key in the env.render context object) and
+    // the .overview section renders empty even though page.data.document is fully
+    // populated. Push upstream to gina-io/gina alongside Bugs A-I.
+    if (data && data.page && data.page.data) {
+        data.data = data.page.data;
+    }
+
     var env;
     try {
         env = getEnvironment(nunjucks, templateRoot, {
