@@ -198,7 +198,7 @@ module.exports = function(session, bundle){
         }
         if (err) return fn(err);
         if (!data || !data.value) return fn();
-        // FRAMEWORK PATCH (freelancer/v3): handle the case where data.value is
+        // FRAMEWORK PATCH: handle the case where data.value is
         // already a parsed object (Couchbase Node.js SDK 4.x JsonTranscoder
         // returns the decoded value, not the raw bytes). Without this, calling
         // .toString() on an object produces "[object Object]" which JSON.parse

@@ -35,8 +35,8 @@
 
     gina inspector:open                                  Open for default bundle on port 3100
     gina inspector:open demo @myproject                  Open for bundle "demo" (uses settings.inspector.url if set)
-    gina inspector:open coreapi @freelancer              Bundle on a project other than @gina
-    gina inspector:open https://v3-local.example.com/api/
+    gina inspector:open coreapi @myotherproject          Bundle on a project other than @gina
+    gina inspector:open https://local.example.com/api/
                                                          URL target — Inspector SPA opens with that origin
     gina inspector:open --port=3200                      Open for a specific port (embedded)
     gina inspector:open --browser=chrome                 Force Chrome (app mode)

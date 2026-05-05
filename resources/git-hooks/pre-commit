@@ -20,7 +20,10 @@
 
 set -e
 
-BLOCKED_PATTERNS='freelancer\.app|\.local$|rhinostone\.com|freelancer-app\.fr'
+# Default catches a common dev-environment leak (the .local hostname suffix used
+# on macOS).  Add patterns matching your private domain, company hostname, or
+# any other identity that shouldn't end up in commits — pipe-separated.
+BLOCKED_PATTERNS='\.local$'
 
 email="$(git config user.email || true)"
 

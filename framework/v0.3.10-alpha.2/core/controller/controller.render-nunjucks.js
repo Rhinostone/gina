@@ -128,7 +128,7 @@ var inspectorRedact = require('lib/inspector-redact');
 // the lib registry so the dev-mode hot-reload evictions of `lib/index.js`
 // don't poison the reference across requests.
 //
-// FRAMEWORK PATCH (freelancer/v3): mirror render-swig.js's `|| require.cache[...]`
+// FRAMEWORK PATCH: mirror render-swig.js's `|| require.cache[...]`
 // fallback. server.isaac.js refreshCore() overwrites the lib cache entry with the
 // exports value (not a Module object), so a plain `require()` here returns
 // undefined and crashes the module-level read. Push upstream to gina-io/gina.
@@ -216,7 +216,7 @@ function resolveTemplatePath(data, localOptions) {
         if (effective === localOptions.namespace) {
             effective = 'index';
         }
-        // FRAMEWORK PATCH (freelancer/v3): drop redundant `<namespace>-` prefix
+        // FRAMEWORK PATCH: drop redundant `<namespace>-` prefix
         // from the file segment when present, so `project/project-get.njk`
         // resolves to `project/get.njk` (and `client/client-list.njk` to
         // `client/list.njk`). Lets route names that already carry the
@@ -481,7 +481,7 @@ function sendHtmlResponse(local, html) {
  * @returns {void}
  */
 function registerGinaFilters(env, self, local, localOptions) {
-    // FRAMEWORK PATCH (freelancer/v3): use module-scope libRef fallback so
+    // FRAMEWORK PATCH: use module-scope libRef fallback so
     // refreshCore's malformed cache entry doesn't return undefined here.
     var nunjucksFilters = (libRef && libRef.nunjucksFilters)
         || require('../../lib/nunjucks-filters');
@@ -520,7 +520,7 @@ function registerGinaFilters(env, self, local, localOptions) {
         res:         local.res
     });
 
-    // FRAMEWORK PATCH (freelancer/v3): apply bundle-level filter wraps registered
+    // FRAMEWORK PATCH: apply bundle-level filter wraps registered
     // on process state. Bundle-level monkey-patches on `lib.nunjucksFilters`
     // don't survive refreshCore() (which creates a fresh lib singleton ~per-
     // request in dev mode), so bundles register their wrap on
@@ -755,7 +755,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // Fetch the nunjucks module from the process-cache. `get()` throws if
     // the bundle-startup load did not succeed — we surface that cleanly
     // via throwError so the usual error page pipeline handles it.
-    // FRAMEWORK PATCH (freelancer/v3): use module-scope libRef fallback.
+    // FRAMEWORK PATCH: use module-scope libRef fallback.
     var nunjucks;
     try {
         nunjucks = (libRef && libRef.nunjucksResolver)
@@ -820,7 +820,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
 
     // Merge user data into page.data so templates can access via {{ page.data.foo }}
     // or {{ foo }} at top level (promoted for ergonomic parity with swig).
-    // FRAMEWORK PATCH (freelancer/v3): the comment promised top-level promotion but
+    // FRAMEWORK PATCH: the comment promised top-level promotion but
     // the original code only wrote to data.page.data. Mirror to top-level too.
     if (userData && typeof(userData) === 'object') {
         if (!data.page.data) { data.page.data = {}; }
@@ -832,7 +832,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         });
     }
 
-    // FRAMEWORK PATCH (freelancer/v3): Bug J — alias `data.data` to `data.page.data`
+    // FRAMEWORK PATCH: Bug J — alias `data.data` to `data.page.data`
     // so page-shell `{% set X = data.Y %}` resolves under nunjucks layout
     // inheritance. Mirrors swig's `_layouts/layout.html:1` `{% set data = page.data %}`.
     // Without this, page-shells like `estimate/get.njk:11 {% set document = data.document %}`
@@ -979,7 +979,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         try { console.warn('[render-nunjucks] asset injection skipped: ' + (assetErr.message || assetErr)); } catch (e) {}
     }
 
-    // FRAMEWORK PATCH (freelancer/v3): substitute {{ page.X }} / {{ page.environment.X }}
+    // FRAMEWORK PATCH: substitute {{ page.X }} / {{ page.environment.X }}
     // placeholders inside ginaLoader (gina.onload.min.js), which is inserted as a literal
     // HTML string by injectAssets() and therefore cannot rely on nunjucks to resolve its
     // tokens. Mirrors render-swig.js:572-582 (flatten dict) + 1276 (whisper call). Without

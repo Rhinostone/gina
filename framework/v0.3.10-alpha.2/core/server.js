@@ -1063,7 +1063,7 @@ function Server(options) {
             //         .replace(/((src|href|srcset)\=\"|(src|href|srcset)\=\')/g, '')
             //         .replace(/\"/g, '')
             // ;
-            // FRAMEWORK PATCH (freelancer/v3): drop the `^` anchor so the
+            // FRAMEWORK PATCH: drop the `^` anchor so the
             // decorative-quote strip is also skipped when `{{ }}` is embedded
             // mid-string (e.g. `css/main.css?cache={{ ''|formatDate('HH:MM:ss') }}`).
             // Without this, inner Swig string-literal quotes get stripped, the
@@ -2763,7 +2763,7 @@ function Server(options) {
                     && self.instance._expressMiddlewares.length > 0
                 ) {
 
-                    // FRAMEWORK PATCH (freelancer/v3): Bug I — per-request dispatcher
+                    // FRAMEWORK PATCH: Bug I — per-request dispatcher
                     var nextMiddleware = createNextMiddleware();
                     nextMiddleware._index        = 0;
                     nextMiddleware._count        = self.instance._expressMiddlewares.length-1;
@@ -3637,7 +3637,7 @@ function Server(options) {
      * @private
      * @param {Error|boolean} err - Error from the previous middleware, or false
      */
-    // FRAMEWORK PATCH (freelancer/v3): Bug I — wrap nextMiddleware in a
+    // FRAMEWORK PATCH: Bug I — wrap nextMiddleware in a
     // per-request factory. The original function held dispatch state on its
     // own properties (._index, ._request, ._response, ._next, ._nextAction).
     // Under concurrent requests, request B's setup at the entry point
@@ -4114,7 +4114,7 @@ function Server(options) {
 
         if (matched) {
             if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
-                // FRAMEWORK PATCH (freelancer/v3): Bug I — per-request dispatcher
+                // FRAMEWORK PATCH: Bug I — per-request dispatcher
                 var nextMiddleware = createNextMiddleware();
                 nextMiddleware._index        = 0;
                 nextMiddleware._count        = self.instance._expressMiddlewares.length-1;

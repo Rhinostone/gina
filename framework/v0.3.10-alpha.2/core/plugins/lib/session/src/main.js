@@ -173,8 +173,8 @@ function Session(expressSession) {
 
     // Drop-in identity: introspection (`session.name`) returns the upstream
     // identity (`'session'`), while gina stays visible in stack traces via
-    // the inner `ginaSessionDispatch` frame. Without this, freelancer/v3 and
-    // other bundles that sniff `session.name === 'session'` saw `'ginaSession'`
+    // the inner `ginaSessionDispatch` frame. Without this, bundles that sniff
+    // `session.name === 'session'` would see `'ginaSession'`
     // — the wrapper was clobbering the upstream identity.
     Object.defineProperty(wrapped, 'name', {
         value: expressSession.name,
