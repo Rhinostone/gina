@@ -13681,6 +13681,26 @@ function ValidatorPlugin(rules, data, formId) {
         } //EO for $els
 
         $els = null; $el = null; $elTMP = null; evt = null;
+
+        // [HTML5 form-reassociation support] Drain per-control listeners attached to
+        // reassociated controls during bindForm. The element-by-tagName loops above
+        // walk $form.target's descendant tree only, so reassociated controls (which
+        // live outside that subtree) are invisible to them. We hold a side-table of
+        // {el, evt, fn} triples and remove each listener directly from its element.
+        // Direct removeEventListener (not the gina removeListener helper) avoids
+        // touching gina.events bookkeeping that the form-level proxies still rely on.
+        if ( Array.isArray($form.reassociatedListeners) ) {
+            for (let i = 0, len = $form.reassociatedListeners.length; i < len; i++) {
+                let entry = $form.reassociatedListeners[i];
+                if (entry && entry.el && entry.el.removeEventListener) {
+                    entry.el.removeEventListener(entry.evt, entry.fn, false);
+                } else if (entry && entry.el && entry.el.detachEvent) {
+                    entry.el.detachEvent('on' + entry.evt, entry.fn);
+                }
+            }
+            $form.reassociatedListeners = [];
+        }
+
         // reset error display
         //resetErrorsDisplay($form);
         // or
@@ -13812,18 +13832,54 @@ function ValidatorPlugin(rules, data, formId) {
         if (!$form.fieldsSet)
             $form.fieldsSet = {};
 
+        // Side-table for per-control listeners attached on form-reassociated controls
+        // (controls whose form="X" attribute points at $target but which live OUTSIDE
+        // $target's DOM subtree). Drained by unbindForm.
+        if (!Array.isArray($form.reassociatedListeners))
+            $form.reassociatedListeners = [];
+
+        // Helper: collect controls owned by $form, including HTML5 form-reassociated
+        // controls (those carrying `form="X"` outside the form's DOM subtree). Walks
+        // $form.elements (HTMLFormControlsCollection — owner-aware) for the primary set,
+        // then a secondary in-tree sweep filtered by `.form === $form` to catch elements
+        // HTMLFormControlsCollection skips (type=image, nameless+idless). The `.form`
+        // filter also excludes in-tree descendants whose `form="..."` points at a different
+        // form (parent-form contamination guard).
+        var getOwnedElements = function($form, tag) {
+            var arr  = []
+                , seen = {}
+                , tagUpper = tag.toUpperCase()
+            ;
+            for (let i = 0, len = $form.elements.length; i < len; i++) {
+                let $el = $form.elements[i];
+                if ($el.tagName === tagUpper) {
+                    arr.push($el);
+                    if ($el.id) seen[$el.id] = true;
+                }
+            }
+            var inTree = $form.getElementsByTagName(tag);
+            for (let i = 0, len = inTree.length; i < len; i++) {
+                let $el = inTree[i];
+                if ($el.form === $form && (!$el.id || !seen[$el.id])) {
+                    arr.push($el);
+                }
+            }
+            return arr;
+        };
+
         // binding form elements
         var type            = null
             , id            = null
 
-            // a|links
+            // a|links — DOM-tree only (anchor elements don't carry the HTMLFormControlsCollection
+            // owner relationship; reassociated <a data-gina-form-submit> is not a documented pattern)
             , $a            = $target.getElementsByTagName('a')
             // input type: checkbox, radio, hidden, text, files, number, date ...
-            , $inputs       = $target.getElementsByTagName('input')
+            , $inputs       = getOwnedElements($target, 'input')
             // textarea
-            , $textareas    = $target.getElementsByTagName('textarea')
+            , $textareas    = getOwnedElements($target, 'textarea')
             // select
-            , $select       = $target.getElementsByTagName('select')
+            , $select       = getOwnedElements($target, 'select')
             , allFormGroupedElements = {}
             , allFormGroupNames = []
             , formElementGroup = {}
@@ -14947,6 +15003,276 @@ function ValidatorPlugin(rules, data, formId) {
 
         evt = 'click';
 
+        // [HTML5 form-reassociation support] Form-level proxy handler bodies extracted as
+        // named expressions so the same handlers can be attached on $target (form-level —
+        // captures bubbled events from in-tree controls) AND on each reassociated control
+        // (per-control — events on reassociated controls bubble through THEIR ancestors,
+        // not through $target, so the form-level listener never fires for them). Handler
+        // bodies read event.target.id and dispatch via gina.events; they don't depend on
+        // event.currentTarget being the form (the few places that reference currentTarget
+        // are guarded fallbacks that no-op on a control).
+        var resetProxyHandler = function(event) {
+            var $el = event.target;
+            if (
+                typeof(event.defaultPrevented) != 'undefined'
+                && event.defaultPrevented
+            ) {
+                return false;
+            }
+            event.preventDefault();
+            var _evt = $el.id;
+            if (!_evt) return false;
+            if ( !/^reset\./.test(_evt) ) {
+                _evt = 'reset.'+$el.id
+            }
+            if (gina.events[_evt]) {
+                triggerEvent(gina, $el, _evt, event.detail);
+            }
+        };
+        var keydownProxyHandler = function(event) {
+            var $el = event.target;
+            if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+            return false;
+
+            keyboardMapping[event.keyCode] = event.type == 'keydown';
+
+            var _evt = $el.id;
+            if (!_evt) return false;
+
+            if ( !/^keydown\./.test(_evt) ) {
+                _evt = 'keydown.'+$el.id
+            }
+            if (gina.events[_evt]) {
+                cancelEvent(event);
+                triggerEvent(gina, $el, _evt, event.detail, event);
+            }
+        };
+        var keyupProxyHandler = function(event) {
+            var $el = event.target;
+            if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+            return false;
+
+            if (keyboardMapping[event.keyCode]) {
+                delete keyboardMapping[event.keyCode]
+            }
+
+            var _evt = $el.id;
+            if (!_evt) return false;
+            if ( !/^keyup\./.test(_evt) ) {
+                _evt = 'keyup.'+$el.id
+            }
+            if (gina.events[_evt]) {
+                cancelEvent(event);
+                triggerEvent(gina, $el, _evt, event.detail, event);
+            }
+        };
+        var focusinProxyHandler = function(event) {
+            var $el = event.target;
+            if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+            return false;
+
+            var _evt = $el.id;
+            if (!_evt) return false;
+
+            if ( !/^focusin\./.test(_evt) ) {
+                _evt = 'focusin.'+$el.id
+            }
+            if (gina.events[_evt]) {
+                cancelEvent(event);
+
+                // event.target.form works for both in-tree and reassociated controls
+                // (form-association is owner-relationship-aware); event.currentTarget
+                // is the form when attached form-level, the control when per-control.
+                var formId      = event.target.form.getAttribute('id') || ((event.currentTarget && event.currentTarget.getAttribute) ? event.currentTarget.getAttribute('id') : null);
+                var lastFocused = {
+                    id  : $el.id,
+                    name: $el.name
+                };
+                if (!instance.$forms[formId].lastFocused.length) {
+                    instance.$forms[formId].lastFocused[0] = lastFocused;
+                } else {
+                    instance.$forms[formId].lastFocused.splice(0,0,lastFocused);
+                }
+                lastFocused = ( typeof(instance.$forms[formId].lastFocused[1]) != 'undefined' ) ? instance.$forms[formId].lastFocused[1].id : null;
+
+                instance.$forms[formId].lastFocused.splice(2);
+
+                triggerEvent(gina, $el, _evt, event.detail);
+            }
+        };
+        var focusoutProxyHandler = function(event) {
+            var $el = event.target;
+            if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                return false;
+
+            var _evt = $el.id;
+            if (!_evt) return false;
+
+            if ( !/^focusout\./.test(_evt) ) {
+                _evt = 'focusout.'+$el.id
+            }
+            if (gina.events[_evt]) {
+                cancelEvent(event);
+
+                triggerEvent(gina, $el, _evt, event.detail);
+            }
+        };
+        var changeProxyHandler = function(event) {
+            var $el = event.target;
+            if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+            return false;
+
+            var _evt = $el.id;
+            if (!_evt) return false;
+
+            if ( !/^change\./.test(_evt) ) {
+                _evt = 'change.'+$el.id
+            }
+            if (gina.events[_evt]) {
+                cancelEvent(event);
+                triggerEvent(gina, $el, _evt, event.detail);
+            }
+        };
+        var clickProxyHandler = function(event) {
+            var $el = event.target;
+
+            var isCustomSubmit = false, isCaseIgnored = false;
+
+            if (
+                /(label)/i.test(event.target.tagName)
+                    && typeof(event.target.control) != 'undefined'
+                    && event.target.control != null
+                    && /(checkbox|radio)/i.test(event.target.control.type)
+                ||
+                /(label)/i.test(event.target.parentNode.tagName)
+                    && typeof(event.target.parentNode.control) != 'undefined'
+                    && event.target.parentNode.control != null
+                    && /(checkbox|radio)/i.test(event.target.parentNode.control.type)
+            ) {
+                var isCaseIgnored = (
+                                    event.target.getAttribute('for')
+                                    ||
+                                    event.target.parentNode.getAttribute('for')
+                                ) ? true : false
+                ;
+                $el = event.target.control || event.target.parentNode.control;
+
+            }
+            if (
+                !$el.disabled
+                && /(checkbox|radio)/i.test($el.type)
+                && !isCaseIgnored
+            ) {
+                if ( /checkbox/i.test($el.type) ) {
+                    return updateCheckBox($el);
+                } else if ( /radio/i.test($el.type) ) {
+                    return updateRadio($el, false, true);
+                }
+            }
+
+
+            if (
+                /(button|input)/i.test($el.tagName) && /(submit|checkbox|radio)/i.test($el.type)
+                || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
+                || /a/i.test($el.parentNode.tagName) && $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
+            ) {
+                var namedItem = $el.attributes.getNamedItem('data-gina-form-submit');
+                var parentNamedItem = $el.parentNode.attributes.getNamedItem('data-gina-form-submit');
+                if (
+                    namedItem
+                    ||
+                    parentNamedItem
+                ) {
+                    isCustomSubmit = true;
+                    // For form-level (event.currentTarget == form), reads the form's
+                    // method attribute. For per-control on a reassociated submit, the
+                    // currentTarget fallback yields null and the if(newFormMethod) below
+                    // skips the override block — typical reassociated submits don't need it.
+                    var newFormMethod = null;
+                    var $methodSrc = (event.currentTarget && event.currentTarget.getAttribute) ? event.currentTarget : ($el.form || null);
+                    if (namedItem) {
+                        newFormMethod = $el.getAttribute('data-gina-form-submit-method') || ($methodSrc ? $methodSrc.getAttribute('method') : null);
+                    } else {
+                        newFormMethod = $el.parentNode.getAttribute('data-gina-form-submit-method') || ($methodSrc ? $methodSrc.getAttribute('method') : null);
+                    }
+                    if (newFormMethod) {
+                        if (namedItem && $el.form) {
+                            if ($el.form.setAttribute) {
+                                $el.form.setAttribute('method', newFormMethod);
+                            } else if (event.currentTarget && event.currentTarget.setAttribute) {
+                                event.currentTarget.setAttribute('method', newFormMethod);
+                            }
+                        } else if ($el.parentNode.form) {
+                            if ($el.parentNode.form.setAttribute) {
+                                $el.parentNode.form.setAttribute('method', newFormMethod);
+                            } else if (event.currentTarget && event.currentTarget.setAttribute) {
+                                event.currentTarget.setAttribute('method', newFormMethod);
+                            }
+                        }
+                    }
+                }
+                if ( typeof($el.id) == 'undefined' || !$el.getAttribute('id') ) {
+                    $el.setAttribute('id', 'click.' + uuid() );
+                    $el.id = $el.getAttribute('id')
+                } else {
+                    $el.id = $el.getAttribute('id')
+                }
+
+
+                if (/^click\./.test($el.id) || withRules) {
+
+                    var _evt = $el.id;
+
+                    if (!_evt) return false;
+
+                    if ( !/^click\./.test(_evt) ) {
+                        _evt = $el.id
+                    }
+
+                    if (
+                        !$el.disabled
+                        && /(checkbox|radio)/i.test($el.type)
+                    ) {
+                        if ( /checkbox/i.test($el.type) ) {
+                            return updateCheckBox($el);
+                        } else if ( /radio/i.test($el.type) ) {
+                            return updateRadio($el, false, true);
+                        }
+                    }
+
+                    if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
+                        return false;
+
+                    if (
+                        $el.type == 'submit' && !/^submit\./i.test(_evt)
+                        ||
+                        isCustomSubmit && !/^submit\./i.test(_evt)
+                    ) {
+                        _evt = 'submit.'+_evt;
+                        instance.$forms[$form.id].submitTrigger = $form.submitTrigger = $el.id;
+                    }
+                    if ( $el.type == 'reset' && !/^reset\./i.test(_evt) ) {
+                        _evt = 'reset.'+_evt
+                    }
+
+                    if (gina.events[_evt]) {
+                        cancelEvent(event);
+
+                        triggerEvent(gina, $el, _evt, event.detail);
+                    } else if (
+                        isCustomSubmit
+                        && typeof(this.id) != 'undefined'
+                        && this.id != ''
+                        && typeof(gina.validator.$forms[this.id]) != 'undefined'
+                    ) {
+                        gina.validator.getFormById(this.id).submit();
+                        cancelEvent(event);
+                    }
+
+                }
+            }
+        };
+
         proceed = function () {
             var subEvent = null;
             // handle form reset
@@ -14975,309 +15301,48 @@ function ValidatorPlugin(rules, data, formId) {
                     });
                 })
             }
-            // reset proxy
-            addListener(gina, $target, 'reset', function(event) {
-                var $el = event.target;
-                // prevent event to be triggered twice
-                if (
-                    typeof(event.defaultPrevented) != 'undefined'
-                    && event.defaultPrevented
-                ) {
-                    return false;
-                }
-                // Fixed on 2021/06/08 - because of radio reset
-                event.preventDefault();
-
-                var _evt = $el.id;
-                if (!_evt) return false;
-
-                if ( !/^reset\./.test(_evt) ) {
-                    _evt = 'reset.'+$el.id
-                }
-                if (gina.events[_evt]) {
-                    triggerEvent(gina, $el, _evt, event.detail);
-                }
-            });
-            // keydown proxy
-            addListener(gina, $target, 'keydown', function(event) {
-                var $el = event.target;
-                // prevent event to be triggered twice
-                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                return false;
-
-                keyboardMapping[event.keyCode] = event.type == 'keydown';
-
-                var _evt = $el.id;
-                if (!_evt) return false;
-
-                if ( !/^keydown\./.test(_evt) ) {
-                    _evt = 'keydown.'+$el.id
-                }
-                if (gina.events[_evt]) {
-                    cancelEvent(event);
-                    triggerEvent(gina, $el, _evt, event.detail, event);
-                }
-            });
-            // keyup proxy - updating keyboardMapping
-            addListener(gina, $target, 'keyup', function(event) {
-                var $el = event.target;
-                // prevent event to be triggered twice
-                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                return false;
-
-                if (keyboardMapping[event.keyCode]) {
-                    delete keyboardMapping[event.keyCode]
-                }
-
-                var _evt = $el.id;
-                if (!_evt) return false;
-                if ( !/^keyup\./.test(_evt) ) {
-                    _evt = 'keyup.'+$el.id
-                }
-                if (gina.events[_evt]) {
-                    cancelEvent(event);
-                    triggerEvent(gina, $el, _evt, event.detail, event);
-                }
-            });
-
-            // focusin proxy
-            addListener(gina, $target, 'focusin', function(event) {
-                var $el = event.target;
-                // prevent event to be triggered twice
-                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                return false;
-
-                var _evt = $el.id;
-                if (!_evt) return false;
-
-                if ( !/^focusin\./.test(_evt) ) {
-                    _evt = 'focusin.'+$el.id
-                }
-                if (gina.events[_evt]) {
-                    cancelEvent(event);
-
-                    // Fixed on 2025-03-05 - "last focus" vs "current focus"
-                    // To get active element: document.activeElement
-                    var formId      = event.target.form.getAttribute('id') || event.currentTarget.getAttribute('id');
-                    var lastFocused = {
-                        id  : $el.id,
-                        name: $el.name
-                    };
-                    if (!instance.$forms[formId].lastFocused.length) {
-                        instance.$forms[formId].lastFocused[0] = lastFocused;
-                    } else {
-                        instance.$forms[formId].lastFocused.splice(0,0,lastFocused);
-                    }
-                    lastFocused = ( typeof(instance.$forms[formId].lastFocused[1]) != 'undefined' ) ? instance.$forms[formId].lastFocused[1].id : null;
-
-                    // cleanup
-                    instance.$forms[formId].lastFocused.splice(2);
-
-                    // console.debug('lastFocused: ', lastFocused, ' VS current: ', $el.id);
-
-                    triggerEvent(gina, $el, _evt, event.detail);
-                }
-            });
-            // focusout proxy
-            addListener(gina, $target, 'focusout', function(event) {
-                // Never preventDefault from a proxy listner
-                var $el = event.target;
-                // prevent event to be triggered twice
-                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                    return false;
-
-                var _evt = $el.id;
-                if (!_evt) return false;
-
-                if ( !/^focusout\./.test(_evt) ) {
-                    _evt = 'focusout.'+$el.id
-                }
-                if (gina.events[_evt]) {
-                    cancelEvent(event);
-
-                    triggerEvent(gina, $el, _evt, event.detail);
-                }
-            });
-
-            // change proxy
-            addListener(gina, $target, 'change', function(event) {
-                // Never preventDefault from a proxy listner
-                var $el = event.target;
-                // prevent event to be triggered twice
-                if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                return false;
-
-                var _evt = $el.id;
-                if (!_evt) return false;
-
-                if ( !/^change\./.test(_evt) ) {
-                    _evt = 'change.'+$el.id
-                }
-                if (gina.events[_evt]) {
-                    cancelEvent(event);
-                    triggerEvent(gina, $el, _evt, event.detail);
-                }
-            });
-            // click proxy
-            addListener(gina, $target, 'click', function(event) {
-                // Never preventDefault from a proxy listner
-                var $el = event.target;
-                // prevent event to be triggered twice
-                // if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                //     return false;
-
-                var isCustomSubmit = false, isCaseIgnored = false;
-
-                if (
-                    /(label)/i.test(event.target.tagName)
-                        && typeof(event.target.control) != 'undefined'
-                        && event.target.control != null
-                        && /(checkbox|radio)/i.test(event.target.control.type)
-                    ||
-                    /(label)/i.test(event.target.parentNode.tagName)
-                        && typeof(event.target.parentNode.control) != 'undefined'
-                        && event.target.parentNode.control != null
-                        && /(checkbox|radio)/i.test(event.target.parentNode.control.type)
-                ) {
-                    var isCaseIgnored = (
-                                        event.target.getAttribute('for')
-                                        ||
-                                        event.target.parentNode.getAttribute('for')
-                                    ) ? true : false
-                    ;
-                    // if `event.target.control` not working on all browser,
-                    // try to detect `for` attribute OR check if on of the label's event.target.children is an input & type == (checkbox|radio)
-                    $el = event.target.control || event.target.parentNode.control;
-
-                }
-                if (
-                    !$el.disabled
-                    && /(checkbox|radio)/i.test($el.type)
-                    && !isCaseIgnored
-                ) {
-                    // apply checked choice : if true -> set to false, and if false -> set to true
-                    if ( /checkbox/i.test($el.type) ) {
-                        return updateCheckBox($el);
-                    } else if ( /radio/i.test($el.type) ) {
-                        return updateRadio($el, false, true);
-                    }
-                }
-
-
-                // include only these elements for the binding
-                if (
-                    /(button|input)/i.test($el.tagName) && /(submit|checkbox|radio)/i.test($el.type)
-                    || /a/i.test($el.tagName) && $el.attributes.getNamedItem('data-gina-form-submit')
-                    // You could also have a click on a child element like <a href="#"><span>click me</span></a>
-                    || /a/i.test($el.parentNode.tagName) && $el.parentNode.attributes.getNamedItem('data-gina-form-submit')
-                ) {
-                    var namedItem = $el.attributes.getNamedItem('data-gina-form-submit');
-                    var parentNamedItem = $el.parentNode.attributes.getNamedItem('data-gina-form-submit');
-                    if (
-                        namedItem
-                        ||
-                        parentNamedItem
-                    ) {
-                        isCustomSubmit = true;
-                        // Get others attribute and override current form attribute
-                        var newFormMethod = null;
-                        if (namedItem) {
-                            newFormMethod = $el.getAttribute('data-gina-form-submit-method') || event.currentTarget.getAttribute('method');
-                        } else {
-                            newFormMethod = $el.parentNode.getAttribute('data-gina-form-submit-method') || event.currentTarget.getAttribute('method');
-                        }
-                        if (newFormMethod) {
-                            // Backup originalMethod
-
-                            // Rewrite current method
-                            if (namedItem && $el.form) {
-                                if ($el.form.setAttribute) {
-                                    $el.form.setAttribute('method', newFormMethod);
-                                } else {
-                                    event.currentTarget.setAttribute('method', newFormMethod);
-                                }
-                            } else if ($el.parentNode.form) {
-                                if ($el.parentNode.form.setAttribute) {
-                                    $el.parentNode.form.setAttribute('method', newFormMethod);
-                                } else {
-                                    event.currentTarget.setAttribute('method', newFormMethod);
-                                }
-                            }
-                        }
-                    }
-                    // safety checking
-                    if ( typeof($el.id) == 'undefined' || !$el.getAttribute('id') ) {
-                        $el.setAttribute('id', 'click.' + uuid() );
-                        $el.id = $el.getAttribute('id')
-                    } else {
-                        $el.id = $el.getAttribute('id')
-                    }
-
-
-                    if (/^click\./.test($el.id) || withRules) {
-
-                        var _evt = $el.id;
-
-                        if (!_evt) return false;
-
-                        if ( !/^click\./.test(_evt) ) {
-                            _evt = $el.id
-                        }
-
-                        // normal case
-                        if (
-                            !$el.disabled
-                            && /(checkbox|radio)/i.test($el.type)
-                        ) {
-                            //event.stopPropagation();
-                            // apply checked choice : if true -> set to false, and if false -> set to true
-                            if ( /checkbox/i.test($el.type) ) {
-                                return updateCheckBox($el);
-                            } else if ( /radio/i.test($el.type) ) {
-                                return updateRadio($el, false, true);
-                            }
-                        }
-
-                        // prevent event to be triggered twice
-                        if ( typeof(event.defaultPrevented) != 'undefined' && event.defaultPrevented )
-                            return false;
-
-                        // in case we have multiple submit type buttons
-                        if (
-                            $el.type == 'submit' && !/^submit\./i.test(_evt)
-                            ||
-                            isCustomSubmit && !/^submit\./i.test(_evt)
-                        ) {
-                            _evt = 'submit.'+_evt;
-                            // Updating submitTrigger in case it has been changed on the fly
-                            instance.$forms[$form.id].submitTrigger = $form.submitTrigger = $el.id;
-                        }
-                        // in case we have multiple reset type buttons
-                        if ( $el.type == 'reset' && !/^reset\./i.test(_evt) ) {
-                            _evt = 'reset.'+_evt
-                        }
-
-                        if (gina.events[_evt]) {
-                            cancelEvent(event);
-
-                            triggerEvent(gina, $el, _evt, event.detail);
-                        } else if (
-                            isCustomSubmit
-                            && typeof(this.id) != 'undefined'
-                            && this.id != ''
-                            && typeof(gina.validator.$forms[this.id]) != 'undefined'
-                        ) {
-                            gina.validator.getFormById(this.id).submit();
-                            cancelEvent(event); // stop #navigation
-                        }
-
-                    }
-                }
-
-            })
+            // Form-level proxies: capture bubbled events from in-tree controls.
+            addListener(gina, $target, 'reset', resetProxyHandler);
+            addListener(gina, $target, 'keydown', keydownProxyHandler);
+            addListener(gina, $target, 'keyup', keyupProxyHandler);
+            addListener(gina, $target, 'focusin', focusinProxyHandler);
+            addListener(gina, $target, 'focusout', focusoutProxyHandler);
+            addListener(gina, $target, 'change', changeProxyHandler);
+            addListener(gina, $target, 'click', clickProxyHandler);
         }
 
         proceed();
+
+        // [HTML5 form-reassociation support] Per-control listener attachment for
+        // reassociated controls (form="X" pointing at $target but living outside
+        // $target's DOM subtree). Native events on these controls bubble through
+        // their actual ancestors, not through $target, so the form-level proxies
+        // above never see them. Per-control listeners ensure the proxy logic runs.
+        // Tracked on $form.reassociatedListeners for unbindForm cleanup.
+        //
+        // Skipped events:
+        //  - 'reset': fires on the form directly when reset() is called or a reset
+        //    button submits to the form, regardless of where the button lives. The
+        //    form-level reset listener above captures this for both cases.
+        //  - 'submit': fires on the form directly when submit() is called or a submit
+        //    button submits. Same reasoning as reset.
+        for (let _rIdx = 0, _rLen = $target.elements.length; _rIdx < _rLen; _rIdx++) {
+            let $rEl = $target.elements[_rIdx];
+            if (!$target.contains($rEl)) {
+                addListener(gina, $rEl, 'keydown', keydownProxyHandler);
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'keydown', fn: keydownProxyHandler });
+                addListener(gina, $rEl, 'keyup', keyupProxyHandler);
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'keyup', fn: keyupProxyHandler });
+                addListener(gina, $rEl, 'focusin', focusinProxyHandler);
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'focusin', fn: focusinProxyHandler });
+                addListener(gina, $rEl, 'focusout', focusoutProxyHandler);
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'focusout', fn: focusoutProxyHandler });
+                addListener(gina, $rEl, 'change', changeProxyHandler);
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'change', fn: changeProxyHandler });
+                addListener(gina, $rEl, 'click', clickProxyHandler);
+                $form.reassociatedListeners.push({ el: $rEl, evt: 'click', fn: clickProxyHandler });
+            }
+        }
 
 
 
@@ -15392,7 +15457,9 @@ function ValidatorPlugin(rules, data, formId) {
             , linkId        = null
             , buttonId      = null
         ;
-        $buttonsTMP = $target.getElementsByTagName('button');
+        // Owner-aware so reassociated submit buttons (<button form="X" type="submit">
+        // outside $target's subtree) are bound to the correct form.
+        $buttonsTMP = getOwnedElements($target, 'button');
         if ( $buttonsTMP.length > 0 ) {
             for (let b = 0, len = $buttonsTMP.length; b < len; ++b) {
                 if ($buttonsTMP[b].type == 'submit') {
@@ -15401,7 +15468,7 @@ function ValidatorPlugin(rules, data, formId) {
             }
         }
 
-        // binding links
+        // binding links — DOM-tree only; <a> doesn't participate in HTMLFormControlsCollection
         $buttonsTMP = $target.getElementsByTagName('a');
         if ( $buttonsTMP.length > 0 ) {
             for (let b = 0, len = $buttonsTMP.length; b < len; ++b) {
