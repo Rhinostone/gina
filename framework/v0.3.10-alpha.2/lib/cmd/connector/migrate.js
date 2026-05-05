@@ -30,7 +30,7 @@ var CmdHelper = require('./../helper');
  * The framework config loader (`core/config.js`) is NOT modified by this
  * session. There is no runtime auto-migration hook — this subcommand is
  * explicit, opt-in, and CI-friendly only. See
- * `.claude/todo/cn10-connector-cli-plan.md` § "Recommendation (narrower C)"
+ * the internal plan doc § "Recommendation (narrower C)"
  * for the rationale: no real old-shape → new-shape delta exists today, so
  * touching `Config.load()` on the boot path would be premature. Revisit
  * when a concrete migration (e.g. #CN8 Couchbase SDK v2 removal at

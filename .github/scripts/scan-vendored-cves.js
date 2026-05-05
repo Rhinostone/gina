@@ -14,7 +14,7 @@
  * `(name, version)` pairs, queries `api.osv.dev`, and exits non-zero if
  * any vulnerability is matched.
  *
- * Pinning convention (see .claude/architecture/vendored-deps.md): the
+ * Pinning convention (see internal architecture docs): the
  * vendored `package.json` stays byte-identical to upstream until
  * patched; on patch, `version` is bumped to `<upstream>-rhinostone.N`
  * (e.g. `1.6.0-rhinostone.1`). This script strips the

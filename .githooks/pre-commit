@@ -116,4 +116,87 @@ EOF
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# #S7 — AI-attribution content-scan.
+#
+# Extends #S5's path-scan (file names) with a substring scan of staged content.
+# Caught a 2026-05-05 near-miss where a `.claude/post-mortem.md` reference
+# inside a JSDoc comment in `test/lib/collection.test.js` slipped past the
+# path-scan (the test file's name is harmless; the comment body was the leak).
+# Manual pre-flight grep caught it; #S7 makes it automated.
+#
+# Pattern must stay in sync with the global "no AI-attribution on public
+# surfaces" rule. Documented allow-list (product functionality, not
+# attribution):
+#   - Protocol identifiers used by the AI connector (anthropic://, openai://,
+#     deepseek://, qwen://, groq://, mistral://, gemini://, xai://,
+#     perplexity://, ollama://)
+#   - Vendor SDK package names (@anthropic-ai/sdk, openai npm package)
+#   - Canonical env-var names (ANTHROPIC_API_KEY, OPENAI_API_KEY)
+# Files where the patterns appear by design are also excluded:
+#   - this hook itself
+#   - the CI mirror at .github/workflows/security.yml
+#   - the prepack content scanner at script/check_no_local_leak.js
+#   - auto-generated dist artefacts (browser bundles, minified output, source
+#     maps) — the source-side scan catches the leak before it reaches dist.
+#
+# Behaviour: each added line is read, exception substrings are stripped
+# (case-insensitive), and the residue is checked against the leak pattern.
+# This handles the "leak + exception on the same line" edge case correctly.
+# ---------------------------------------------------------------------------
+
+S7_LEAK_RE='\.claude/|\.claudeignore|claude\.ai|claude\.com/claude-code|Co-Authored-By:?[^\n]{0,30}(Claude|Anthropic)|Generated (by|with)[^\n]{0,30}Claude|🤖[^\n]{0,30}Claude'
+S7_EXCEPTION_RE='anthropic://|openai://|deepseek://|qwen://|groq://|mistral://|gemini://|xai://|perplexity://|ollama://|@anthropic-ai/sdk|ANTHROPIC_API_KEY|OPENAI_API_KEY'
+# Files where the patterns appear by design (the rule itself is documented),
+# plus auto-generated artefacts where the source-side scan already catches the
+# leak before it reaches dist.
+S7_EXCLUDED_FILES='^(\.githooks/pre-commit|\.github/workflows/security\.yml|script/check_no_local_leak\.js|script/prepare_version\.js|\.gitignore|\.npmignore|framework/v[^/]+/core/asset/plugin/dist/.*|.*\.(min\.(js|css)(\.br|\.gz)?|map))$'
+
+s7_current=""
+s7_in_excluded=0
+s7_hits=""
+while IFS= read -r s7_raw; do
+    case "$s7_raw" in
+        '+++ b/'*)
+            s7_current="${s7_raw#+++ b/}"
+            if echo "$s7_current" | grep -qE "$S7_EXCLUDED_FILES"; then
+                s7_in_excluded=1
+            else
+                s7_in_excluded=0
+            fi
+            continue
+            ;;
+        '+++'*) continue ;;
+    esac
+    [ "$s7_in_excluded" = "1" ] && continue
+    case "$s7_raw" in
+        '+'*)
+            s7_line="${s7_raw#+}"
+            s7_stripped=$(printf '%s' "$s7_line" | sed -E "s#$S7_EXCEPTION_RE##gI")
+            if printf '%s' "$s7_stripped" | grep -qiE "$S7_LEAK_RE"; then
+                s7_hits="${s7_hits}${s7_current}::${s7_line}"$'\n'
+            fi
+            ;;
+    esac
+done <<EOF
+$(git diff --cached --diff-filter=ACMR -U0)
+EOF
+
+if [ -n "$s7_hits" ]; then
+    echo "[pre-commit] ERROR: AI-attribution leak in staged content (#S7):" >&2
+    printf '%s' "$s7_hits" | head -10 | sed 's/^/    /' >&2
+    s7_hit_count=$(printf '%s' "$s7_hits" | grep -c '::' || true)
+    if [ "$s7_hit_count" -gt 10 ]; then
+        echo "    ... ($((s7_hit_count - 10)) more)" >&2
+    fi
+    echo "" >&2
+    echo "[pre-commit] These mentions must not reach a public surface." >&2
+    echo "[pre-commit] Allowed exceptions (product functionality, not attribution):" >&2
+    echo "[pre-commit]   - protocol identifiers (anthropic://, openai://, etc.)" >&2
+    echo "[pre-commit]   - vendor SDK package names (@anthropic-ai/sdk, openai)" >&2
+    echo "[pre-commit]   - canonical env-var names (ANTHROPIC_API_KEY, OPENAI_API_KEY)" >&2
+    echo "[pre-commit] Either rewrite the content, or extend S7_EXCEPTION_RE / S7_EXCLUDED_FILES." >&2
+    exit 1
+fi
+
 exit 0

@@ -30,3 +30,55 @@ jobs:
             exit 1
           fi
           echo "OK: no local-tool paths in git index."
+
+  ai-attribution-content-scan:
+    name: AI-attribution content scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      # #S7 — CI mirror of the pre-commit hook's content-scan section.
+      # While #S6 catches LOCAL-TOOL PATHS (file names), #S7 catches
+      # AI-ATTRIBUTION SUBSTRINGS in tracked file CONTENT. Pattern must
+      # stay in sync with .githooks/pre-commit. Documented exceptions:
+      #   - Protocol identifiers used by the AI connector (anthropic://,
+      #     openai://, deepseek://, qwen://, groq://, mistral://, gemini://,
+      #     xai://, perplexity://, ollama://)
+      #   - Vendor SDK package names (@anthropic-ai/sdk, openai npm package)
+      #   - Canonical env-var names (ANTHROPIC_API_KEY, OPENAI_API_KEY)
+      # Files where these patterns appear by design (this workflow, the
+      # local hook, the prepack scanner) and auto-generated dist artefacts
+      # (browser bundles, minified output, source maps) are excluded — the
+      # source-side scan catches the leak before it reaches dist.
+      - name: Scan tracked content for AI-attribution leaks
+        run: |
+          LEAK_RE='\.claude/|\.claudeignore|claude\.ai|claude\.com/claude-code|Co-Authored-By:?[^\n]{0,30}(Claude|Anthropic)|Generated (by|with)[^\n]{0,30}Claude|🤖[^\n]{0,30}Claude'
+          EXCEPTION_RE='anthropic://|openai://|deepseek://|qwen://|groq://|mistral://|gemini://|xai://|perplexity://|ollama://|@anthropic-ai/sdk|ANTHROPIC_API_KEY|OPENAI_API_KEY'
+          EXCLUDED='^(\.githooks/pre-commit|\.github/workflows/security\.yml|script/check_no_local_leak\.js|script/prepare_version\.js|\.gitignore|\.npmignore|framework/v[^/]+/core/asset/plugin/dist/.*|.*\.(min\.(js|css)(\.br|\.gz)?|map))$'
+
+          found=0
+          while IFS= read -r f; do
+              if echo "$f" | grep -qE "$EXCLUDED"; then continue; fi
+              case "$f" in
+                  *.png|*.jpg|*.jpeg|*.gif|*.svg|*.woff|*.woff2|*.ttf|*.ico|*.jar|*.zip|*.tar|*.gz|*.br|*.afdesign|*.pdf|*.mp3|*.mp4|*.heic|*.webp) continue ;;
+              esac
+              size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f" 2>/dev/null || echo 0)
+              if [ "$size" -gt 2097152 ]; then continue; fi
+              stripped=$(sed -E "s#$EXCEPTION_RE##gI" "$f" 2>/dev/null || true)
+              if printf '%s' "$stripped" | grep -qiE "$LEAK_RE"; then
+                  echo "::error file=$f::AI-attribution leak in tracked content"
+                  printf '%s' "$stripped" | grep -niE "$LEAK_RE" | head -3 | sed 's/^/    /'
+                  found=1
+              fi
+          done < <(git ls-files)
+
+          if [ "$found" = "1" ]; then
+              echo ""
+              echo "These mentions must not reach a public surface."
+              echo "Allowed exceptions (already filtered): protocol identifiers (anthropic://"
+              echo "and siblings), vendor SDK package names (@anthropic-ai/sdk, openai),"
+              echo "canonical env-var names (ANTHROPIC_API_KEY, OPENAI_API_KEY)."
+              exit 1
+          fi
+          echo "OK: no AI-attribution leaks in tracked content."
