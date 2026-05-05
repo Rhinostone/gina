@@ -315,7 +315,7 @@ describe('08 - eachRoute', function () {
 // 09 — real-world routing.json smoke
 describe('09 - real-world routing.json', function () {
 
-    it('parses a freelancer-style password-reset route cleanly', function () {
+    it('parses a real-world password-reset route cleanly', function () {
         var route = {
             namespace: 'account',
             url: '/account/password-reset/:id/:pubkey',
@@ -343,7 +343,7 @@ describe('09 - real-world routing.json', function () {
     });
 
     it('parses the multi-url account-password-update-xml route', function () {
-        // Real shape from freelancer v3 auth bundle — comma-separated URL
+        // Real shape from a consumer-app auth bundle — comma-separated URL
         var urls = introspect.parseUrls('/account/password-update/:id/:pubkey, /account/password-update/:id');
         assert.equal(urls.length, 2);
         assert.deepEqual(urls[0].params, ['id', 'pubkey']);

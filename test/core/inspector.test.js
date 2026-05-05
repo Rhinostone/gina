@@ -6394,7 +6394,7 @@ describe('53 - unredacted snapshot is only stored when scope === local', functio
 
 
 // ── 54 — toggleReveal URL resolution (cross-bundle proxy routing) ──────────
-// Proxy-routed multi-bundle setups (e.g. Freelancer v3) mount bundles under
+// Proxy-routed multi-bundle setups mount bundles under
 // path prefixes on a single host. A bare fetch to `/_gina/reveal` from the
 // Inspector window lands on the proxy's default bundle, not the one that
 // rendered the current page — so the snapshot returned is wrong (or 404).

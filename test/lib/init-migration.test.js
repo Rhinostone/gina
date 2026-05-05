@@ -453,15 +453,15 @@ describe('04 - checkIfProjects: null-valued fields must be healed', function() {
     });
 
     it('heals def_scope when projects.json has null and main has a release-scoped value', function() {
-        var projects = { freelancer: { path: '/app', def_scope: null } };
+        var projects = { myproject: { path: '/app', def_scope: null } };
         var main     = { def_scope: { '0.3': 'local', '0.2': 'local' } };
         var out      = runProjectsHeal(projects, main, '0.3');
-        assert.equal(out.freelancer.def_scope, 'local');
+        assert.equal(out.myproject.def_scope, 'local');
     });
 
     it('heals multiple null fields in one pass (def_scope, local_scope, production_scope, dev_env)', function() {
         var projects = {
-            freelancer: {
+            myproject: {
                 def_scope:        null,
                 local_scope:      null,
                 production_scope: null,
@@ -475,32 +475,32 @@ describe('04 - checkIfProjects: null-valued fields must be healed', function() {
             dev_env:          { '0.3': 'dev' }
         };
         var out = runProjectsHeal(projects, main, '0.3');
-        assert.equal(out.freelancer.def_scope,        'local');
-        assert.equal(out.freelancer.local_scope,      'local');
-        assert.equal(out.freelancer.production_scope, 'production');
-        assert.equal(out.freelancer.dev_env,          'dev');
+        assert.equal(out.myproject.def_scope,        'local');
+        assert.equal(out.myproject.local_scope,      'local');
+        assert.equal(out.myproject.production_scope, 'production');
+        assert.equal(out.myproject.dev_env,          'dev');
     });
 
     it('does NOT overwrite a live (non-null) field', function() {
-        var projects = { freelancer: { def_scope: 'beta' } };
+        var projects = { myproject: { def_scope: 'beta' } };
         var main     = { def_scope: { '0.3': 'local' } };
         var out      = runProjectsHeal(projects, main, '0.3');
-        assert.equal(out.freelancer.def_scope, 'beta',
+        assert.equal(out.myproject.def_scope, 'beta',
             'heal must not overwrite fields that already carry a real value');
     });
 
     it('heals undefined fields just like before (no regression)', function() {
-        var projects = { freelancer: { path: '/app' } }; // def_scope undefined
+        var projects = { myproject: { path: '/app' } }; // def_scope undefined
         var main     = { def_scope: { '0.3': 'local' } };
         var out      = runProjectsHeal(projects, main, '0.3');
-        assert.equal(out.freelancer.def_scope, 'local');
+        assert.equal(out.myproject.def_scope, 'local');
     });
 
     it('regression check: legacy (pre-fix) replica leaves null as null', function() {
-        var projects = { freelancer: { def_scope: null } };
+        var projects = { myproject: { def_scope: null } };
         var main     = { def_scope: { '0.3': 'local' } };
         var out      = runProjectsHealLegacy(projects, main, '0.3');
-        assert.equal(out.freelancer.def_scope, null,
+        assert.equal(out.myproject.def_scope, null,
             'without the fix, null would remain null forever — this asserts the bug was real');
     });
 

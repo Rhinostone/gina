@@ -190,7 +190,7 @@ describe('#B13 — completeHeaders preserves preflight ACAH echo', function() {
 
 // ─── getAssets — embedded Swig expressions preserve inner string-literal quotes ──
 //
-// Regression caught downstream in freelancer/v3 after the v0.3.9-alpha.2 self-update:
+// Regression caught downstream after the v0.3.9-alpha.2 self-update:
 // the decorative-quote-strip guard inside getAssets() was anchored (`/^\{\{/`), so
 // an asset URL with `{{ }}` embedded mid-string (e.g. a render-time cache-buster
 // like `css/main.css?cache={{ ''|formatDate('HH:MM:ss') }}`) had its inner Swig
@@ -215,7 +215,7 @@ describe('getAssets — embedded Swig expressions preserve inner quotes', functi
     it('source: FRAMEWORK PATCH marker for the strip-guard anchor fix is present', function() {
         // Regression guard against an accidental revert during a future merge/sync.
         assert.ok(
-            src.indexOf('FRAMEWORK PATCH (freelancer/v3): drop the `^` anchor') > -1,
+            src.indexOf('FRAMEWORK PATCH: drop the `^` anchor') > -1,
             'expected FRAMEWORK PATCH marker explaining the strip-guard anchor fix in core/server.js'
         );
     });
@@ -258,7 +258,7 @@ describe('getAssets — embedded Swig expressions preserve inner quotes', functi
     });
 
     it('URL with {{ }} embedded mid-string: inner quotes preserved, compile branch does NOT fire (#FX-getAssets-embedded-swig)', function() {
-        // The freelancer/v3 reproducer.
+        // The reproducer.
         var compileCalled = false;
         var fakeSwig = {
             getOptions: function() { return {}; },
@@ -310,7 +310,7 @@ describe('Bug I — createNextMiddleware factory isolates per-request dispatch s
 
     it('source: FRAMEWORK PATCH marker for Bug I is present', function () {
         assert.ok(
-            src.indexOf('FRAMEWORK PATCH (freelancer/v3): Bug I') > -1,
+            src.indexOf('FRAMEWORK PATCH: Bug I') > -1,
             'expected FRAMEWORK PATCH marker explaining the per-request dispatcher fix'
         );
     });

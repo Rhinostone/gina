@@ -105,7 +105,7 @@ var evalBinaryCondition = function (condition) {
 
 // --- 01 — Dot-path walker (main.js:2603) ---
 // Empirical corpus: real `data-gina-form-rule` attribute values from
-// ~/Sites/freelancer/v3/src/ (15 distinct values observed 2026-04-24, all
+// ~/Sites/<consumer-app>/src/ (15 distinct values observed 2026-04-24, all
 // transform to pure dot-paths after the `.replace(/\-|\//g, '.')` at :2601).
 describe('01 — dot-path walker (main.js:2603 replacement)', function () {
 
@@ -185,7 +185,7 @@ describe('02 — dot-path walker rejects injection (main.js:2603)', function () 
 });
 
 // --- 03 — Dot+bracket walker (form-validator.js:161) ---
-// Freelancer has zero `{{...}}` placeholders in forms/rules/*.json (corpus
+// The consumer-app has zero `{{...}}` placeholders in forms/rules/*.json (corpus
 // verified 2026-04-24). The shapes exercised here cover the transform output
 // at form-validator.js:152-158: `ident (. ident | ["quoted"])*`.
 describe('03 — dot+bracket walker (form-validator.js:161 replacement)', function () {
@@ -265,7 +265,7 @@ describe('04 — dot+bracket walker rejects injection (form-validator.js:161)', 
 });
 
 // --- 05 — Regex-literal test helper (form-validator.js:893) ---
-// Empirical corpus: real `is` field values from Freelancer forms/rules/*.json
+// Empirical corpus: real `is` field values from consumer-app forms/rules/*.json
 // (15 distinct regex literals observed 2026-04-24).
 describe('05 — regex-literal test helper (form-validator.js:893 replacement)', function () {
 
@@ -300,7 +300,7 @@ describe('05 — regex-literal test helper (form-validator.js:893 replacement)',
 });
 
 // --- 06 — Binary-compare evaluator (form-validator.js:895) ---
-// Empirical corpus: real `is` array-form conditions from Freelancer
+// Empirical corpus: real `is` array-form conditions from consumer-app
 // forms/rules/*.json (11 distinct conditions observed 2026-04-24, all binary
 // comparisons after `$var` substitution + paren-strip).
 describe('06 — binary-compare evaluator (form-validator.js:895 replacement)', function () {

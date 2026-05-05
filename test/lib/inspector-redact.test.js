@@ -364,7 +364,7 @@ describe('09 — Primitive-only redaction under secret-like keys', function () {
         assert.deepEqual(out.token, [{ name: 'a' }, { name: 'b' }]);
     });
 
-    it('preserves validator spec keyed by form field name (Freelancer signup case)', function () {
+    it('preserves validator spec keyed by form field name (consumer-app signup case)', function () {
         var input = {
             rules: {
                 'account[password]'        : { isRequired: true, isString: 7 },
@@ -461,7 +461,7 @@ describe('10 — Tokenize semantics (regression: real-world false positives)', f
     });
 
     it('does NOT false-positive on lastCompanyUsedId', function () {
-        // Real-world Freelancer key that was being redacted pre-fix.
+        // Real-world consumer-app key that was being redacted pre-fix.
         assert.equal(redactor.keyMatches('lastCompanyUsedId',  compiled), false);
         assert.equal(redactor.keyMatches('LastCompanyUsedId',  compiled), false);
         assert.equal(redactor.keyMatches('last_company_used_id', compiled), false);
@@ -517,7 +517,7 @@ describe('10 — Tokenize semantics (regression: real-world false positives)', f
         assert.equal(redactor.keyMatches('auth[token]',     compiled), true);
     });
 
-    it('redact() end-to-end — Freelancer bundle-like payload passes through non-secrets and redacts secrets', function () {
+    it('redact() end-to-end — consumer-app bundle-like payload passes through non-secrets and redacts secrets', function () {
         var input = {
             user: {
                 companyName       : 'ACME Corp',
