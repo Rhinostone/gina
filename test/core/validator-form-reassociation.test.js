@@ -305,3 +305,330 @@ describe('04 - source inspection: structural pins on main.js', function () {
             'submit should NOT be attached per-control (form-level handles it)');
     });
 });
+
+
+// ============================================================================
+// updateRadio fixes: form-owner-scoped mutual exclusion + IDL/attribute
+// reconciliation at parse time.
+//
+// Spec: an `<input type="radio" form="X">` is owned by form X regardless of
+// where it sits in the DOM tree, and mutual exclusion is defined as same
+// `name` + same form-owner. Two reassociated radios that share a `name` but
+// belong to DIFFERENT form-owners are in DIFFERENT groups and may both be
+// checked simultaneously.
+//
+// Two production bugs the fixes address:
+//   (1) Chromium-based browsers desync the IDL `.checked` from the `checked`
+//       HTML attribute when multiple form-reassociated radios share a `name`
+//       and are DOM descendants of a common ancestor `<form>`. updateRadio's
+//       init path now reconciles the two when they disagree.
+//   (2) updateRadio built its mutual-exclusion peer set from
+//       `document.getElementsByName($el.name)`, which spans the whole
+//       document and ignores form-owner. The peer set is now filtered to
+//       same-form-owner radios only.
+// ============================================================================
+
+// --- Test-local copies of the two updateRadio fix logic blocks ---
+// MUST mirror the inline blocks in main.js. The source-inspection block in
+// section 06 pins the source-side shape so these stay honest.
+
+function reconcileCheckedFromAttribute($el, isInit) {
+    if ( isInit && !$el.checked && $el.hasAttribute('checked') ) {
+        $el.checked = true;
+    }
+}
+
+function getRadioGroup($el, document) {
+    var raw = document.getElementsByName($el.name);
+    return Array.prototype.filter.call(raw, function (_r) {
+        return _r.form === $el.form;
+    });
+}
+
+// Mirrors the unchecking loop inside updateRadio when $el is checked.
+function applyMutualExclusion(group, $el) {
+    var checked = $el.checked;
+    for (var r = 0, rLen = group.length; r < rLen; ++r) {
+        if (group[r].id !== $el.id && checked) {
+            group[r].checked = false;
+            group[r].removeAttribute('checked');
+        }
+    }
+}
+
+
+// --- DOM fixtures for radio mutual exclusion ---
+
+function setupReassociatedRadioDom() {
+    // Two reassociated radios per form-owner, all DOM descendants of a common
+    // ancestor <form id="parent"> — the layout that triggers the Chromium
+    // parse-time desync. probeA owns {a, b} (b checked), probeB owns {c, d}
+    // (c checked).
+    var dom = new JSDOM('<!DOCTYPE html><html><body>'
+        + '<form id="parent">'
+        + '<input type="radio" name="grp" value="a" form="probeA" id="r-a">'
+        + '<input type="radio" name="grp" value="b" form="probeA" id="r-b" checked>'
+        + '<input type="radio" name="grp" value="c" form="probeB" id="r-c" checked>'
+        + '<input type="radio" name="grp" value="d" form="probeB" id="r-d">'
+        + '</form>'
+        + '<form id="probeA"></form>'
+        + '<form id="probeB"></form>'
+        + '</body></html>');
+    return {
+        window:   dom.window,
+        document: dom.window.document,
+        a:        dom.window.document.getElementById('r-a'),
+        b:        dom.window.document.getElementById('r-b'),
+        c:        dom.window.document.getElementById('r-c'),
+        d:        dom.window.document.getElementById('r-d')
+    };
+}
+
+function setupSingleFormRadioDom() {
+    var dom = new JSDOM('<!DOCTYPE html><html><body>'
+        + '<form id="solo">'
+        + '<input type="radio" name="grp" value="a" id="s-a">'
+        + '<input type="radio" name="grp" value="b" id="s-b" checked>'
+        + '</form>'
+        + '</body></html>');
+    return {
+        document: dom.window.document,
+        a:        dom.window.document.getElementById('s-a'),
+        b:        dom.window.document.getElementById('s-b')
+    };
+}
+
+function setupReassociatedRadioDomSingleChecked(checkedValue) {
+    // Same parent + reassociated layout as setupReassociatedRadioDom, but only
+    // ONE radio carries the `checked` HTML attribute. Use this when a test
+    // would otherwise trip jsdom's two-quirks (parse-time same-name collision
+    // and IDL-setter cross-form auto-mutex) — both surfaces in this fixture
+    // shape only when multiple same-name radios race for `checked` state.
+    function attr(v) { return checkedValue === v ? ' checked' : ''; }
+    var dom = new JSDOM('<!DOCTYPE html><html><body>'
+        + '<form id="parent">'
+        + '<input type="radio" name="grp" value="a" form="probeA" id="r-a"' + attr('a') + '>'
+        + '<input type="radio" name="grp" value="b" form="probeA" id="r-b"' + attr('b') + '>'
+        + '<input type="radio" name="grp" value="c" form="probeB" id="r-c"' + attr('c') + '>'
+        + '<input type="radio" name="grp" value="d" form="probeB" id="r-d"' + attr('d') + '>'
+        + '</form>'
+        + '<form id="probeA"></form>'
+        + '<form id="probeB"></form>'
+        + '</body></html>');
+    return {
+        window:   dom.window,
+        document: dom.window.document
+    };
+}
+
+function setupNoSharedParentRadioDom() {
+    // Same per-form ownership pattern as setupReassociatedRadioDom but no
+    // wrapping <form id="parent"> — the radios are not DOM descendants of
+    // any common form. The browser-side IDL/attribute desync does not
+    // surface in this shape.
+    var dom = new JSDOM('<!DOCTYPE html><html><body>'
+        + '<form id="probeA">'
+        + '<input type="radio" name="grp" value="a" id="r-a">'
+        + '<input type="radio" name="grp" value="b" id="r-b" checked>'
+        + '</form>'
+        + '<form id="probeB">'
+        + '<input type="radio" name="grp" value="c" id="r-c" checked>'
+        + '<input type="radio" name="grp" value="d" id="r-d">'
+        + '</form>'
+        + '</body></html>');
+    return {
+        document: dom.window.document,
+        a:        dom.window.document.getElementById('r-a'),
+        b:        dom.window.document.getElementById('r-b'),
+        c:        dom.window.document.getElementById('r-c'),
+        d:        dom.window.document.getElementById('r-d')
+    };
+}
+
+
+// 05 - updateRadio: parse-time IDL/attribute desync reconciliation on init
+
+describe('05 - updateRadio: parse-time IDL/attribute desync reconciliation', function () {
+    it('reconciles .checked from the checked HTML attribute when they disagree on init', function () {
+        var ctx = setupReassociatedRadioDom();
+        // Construct the IDL/attribute desync explicitly: IDL `.checked = false`,
+        // HTML attribute still set. This is the observable post-parse state for
+        // the reproducer fixture — Chromium produces it via per-form-owner
+        // unchecking after parse; jsdom happens to produce the same shape via
+        // its own parser collision resolution. Either way, force the state so
+        // the reconciliation path fires deterministically.
+        ctx.b.checked = false;
+        assert.equal(ctx.b.hasAttribute('checked'), true,
+            'attribute should remain set even after the IDL is mutated');
+
+        reconcileCheckedFromAttribute(ctx.b, /* isInit */ true);
+
+        assert.equal(ctx.b.checked, true,
+            'reconciliation should restore .checked to match the attribute');
+        assert.equal(ctx.b.hasAttribute('checked'), true,
+            'attribute should remain present (no-op on the attribute side)');
+    });
+
+    it('is a no-op outside init (user-triggered path must not flip values)', function () {
+        var ctx = setupReassociatedRadioDom();
+        ctx.b.checked = false;
+        reconcileCheckedFromAttribute(ctx.b, /* isInit */ false);
+        assert.equal(ctx.b.checked, false,
+            'reconciliation must NOT fire for non-init updates');
+    });
+
+    it('is a no-op when IDL and attribute already agree (the common path)', function () {
+        var ctx = setupReassociatedRadioDom();
+        // value=a: IDL false, attribute absent — nothing to reconcile.
+        assert.equal(ctx.a.checked, false);
+        assert.equal(ctx.a.hasAttribute('checked'), false);
+        reconcileCheckedFromAttribute(ctx.a, true);
+        assert.equal(ctx.a.checked, false);
+    });
+});
+
+
+// 05.b - updateRadio: form-owner-scoped mutual exclusion
+
+describe('05.b - updateRadio: form-owner-scoped mutual exclusion', function () {
+    it('peer set is filtered to same form-owner only', function () {
+        var ctx = setupReassociatedRadioDom();
+        var groupA = getRadioGroup(ctx.a, ctx.document);
+        var groupB = getRadioGroup(ctx.c, ctx.document);
+        assert.deepEqual(
+            groupA.map(function (el) { return el.id; }).sort(),
+            ['r-a', 'r-b'],
+            'probeA group should contain only probeA-owned radios');
+        assert.deepEqual(
+            groupB.map(function (el) { return el.id; }).sort(),
+            ['r-c', 'r-d'],
+            'probeB group should contain only probeB-owned radios');
+    });
+
+    it('the unchecking loop cannot reach radios in other form-owners', function () {
+        // The fix guarantees the production unchecking loop only iterates over
+        // same-form-owner peers. We verify that by combining two assertions:
+        //
+        //   (a) the filtered group excludes radios in other form-owners, and
+        //   (b) `applyMutualExclusion` (mirroring the production loop) only
+        //       mutates members of the group it was given.
+        //
+        // jsdom limitation: jsdom's `.checked` IDL setter does cross-form
+        // auto-mutex on form-reassociated radios — exactly the bug we are
+        // fixing in production, but in jsdom's setter rather than in
+        // updateRadio. Real browsers (Chromium) form-scope the IDL setter
+        // mutex correctly. We therefore can't observe the cross-form
+        // preservation end-state through `.checked` directly in jsdom; we
+        // observe it through the FILTER + LOOP contract instead, which is
+        // what the production fix actually changes.
+        var ctx = setupReassociatedRadioDom();
+        var groupA = getRadioGroup(ctx.a, ctx.document);
+
+        // (a) filter excludes probeB radios
+        assert.equal(groupA.indexOf(ctx.c), -1, 'rc must not appear in probeA group');
+        assert.equal(groupA.indexOf(ctx.d), -1, 'rd must not appear in probeA group');
+
+        // (b) loop only mutates group members. Snapshot rc/rd state immediately
+        // before the loop runs (after any jsdom-side cross-form effects have
+        // already settled), then verify the snapshot survives the loop.
+        ctx.a.checked = true;
+        var rcBefore = ctx.c.checked;
+        var rcAttrBefore = ctx.c.hasAttribute('checked');
+        var rdBefore = ctx.d.checked;
+        var rdAttrBefore = ctx.d.hasAttribute('checked');
+
+        applyMutualExclusion(groupA, ctx.a);
+
+        assert.equal(ctx.a.checked, true, 'a stays checked');
+        assert.equal(ctx.b.checked, false, 'b unchecked by the form-scoped loop');
+        assert.equal(ctx.c.checked, rcBefore,
+            'c.checked unchanged by the form-scoped loop (filter excluded it)');
+        assert.equal(ctx.c.hasAttribute('checked'), rcAttrBefore,
+            'c attribute unchanged by the form-scoped loop');
+        assert.equal(ctx.d.checked, rdBefore,
+            'd.checked unchanged by the form-scoped loop');
+        assert.equal(ctx.d.hasAttribute('checked'), rdAttrBefore,
+            'd attribute unchanged by the form-scoped loop');
+    });
+});
+
+
+// 05.c - updateRadio: regressions and edge cases
+
+describe('05.c - updateRadio: regressions and edge cases', function () {
+    it('single-form non-regression: clicking one same-name radio unchecks the other', function () {
+        var ctx = setupSingleFormRadioDom();
+        ctx.a.checked = true;
+        applyMutualExclusion(getRadioGroup(ctx.a, ctx.document), ctx.a);
+        assert.equal(ctx.a.checked, true);
+        assert.equal(ctx.b.checked, false);
+    });
+
+    it('distinct forms with no shared DOM parent: both per-form states preserved through init', function () {
+        var ctx = setupNoSharedParentRadioDom();
+        // No browser quirk here — jsdom parse already reflects the HTML attribute.
+        assert.equal(ctx.b.checked, true);
+        assert.equal(ctx.c.checked, true);
+        reconcileCheckedFromAttribute(ctx.b, true);
+        reconcileCheckedFromAttribute(ctx.c, true);
+        assert.equal(ctx.b.checked, true,  'b stays checked through init');
+        assert.equal(ctx.c.checked, true,  'c stays checked through init');
+        assert.equal(ctx.a.checked, false, 'a stays unchecked through init');
+        assert.equal(ctx.d.checked, false, 'd stays unchecked through init');
+    });
+
+    it('defaultChecked reflects the original attribute through init even when reconciliation fires', function () {
+        var ctx = setupReassociatedRadioDom();
+        ctx.b.checked = false;
+        assert.equal(ctx.b.defaultChecked, true,
+            'defaultChecked is parse-time and reflects the original attribute');
+        reconcileCheckedFromAttribute(ctx.b, true);
+        assert.equal(ctx.b.defaultChecked, true,
+            'defaultChecked stays true through reconciliation');
+    });
+
+    it('programmatic submit per form collects the right value', function () {
+        // Verify each form-owner's submission in isolation. Two separate
+        // single-checked fixtures because jsdom's two-quirks (parse-time
+        // collision and IDL-setter cross-form mutex) prevent setting up a
+        // single fixture where both probeA and probeB simultaneously hold a
+        // checked reassociated radio (see 05.b note). Real browsers form-scope
+        // the IDL setter correctly, so in production both forms can have
+        // independent checked radios — verified here per-form in isolation.
+        var ctxA = setupReassociatedRadioDomSingleChecked('b');
+        var dataA = new ctxA.window.FormData(ctxA.document.getElementById('probeA'));
+        assert.equal(dataA.get('grp'), 'b',
+            'probeA submits grp=b (its only owned-and-checked radio)');
+
+        var ctxB = setupReassociatedRadioDomSingleChecked('c');
+        var dataB = new ctxB.window.FormData(ctxB.document.getElementById('probeB'));
+        assert.equal(dataB.get('grp'), 'c',
+            'probeB submits grp=c (its only owned-and-checked radio)');
+    });
+});
+
+
+// 06 - source inspection: pins on the two updateRadio fixes in main.js
+
+describe('06 - source inspection: updateRadio fixes pin to main.js', function () {
+    it('IDL/attribute desync reconciliation block is in updateRadio init path', function () {
+        // Match the inline shape: `if ( isInit && !$el.checked && $el.hasAttribute('checked') )`
+        // followed shortly by `$el.checked = true`.
+        var re = /isInit\s*&&\s*!\$el\.checked\s*&&\s*\$el\.hasAttribute\(\s*['"]checked['"]\s*\)[\s\S]{0,80}\$el\.checked\s*=\s*true/;
+        assert.ok(re.test(mainSrc),
+            'IDL/attribute reconciliation block should be present in updateRadio');
+    });
+
+    it('radio-group filter scopes by form-owner (Array.prototype.filter.call shape)', function () {
+        var re = /Array\.prototype\.filter\.call\(\s*\w+\s*,\s*function\s*\(\s*_r\s*\)\s*\{\s*return\s+_r\.form\s*===\s*\$el\.form\s*;?\s*\}\s*\)/;
+        assert.ok(re.test(mainSrc),
+            'form-owner filter should wrap the getElementsByName result');
+    });
+
+    it('comments in the validator stay framework-generic', function () {
+        // Belt-and-suspenders for the no-consumer-references rule. The validator
+        // source must not name any consuming application.
+        assert.equal(/FRAMEWORK PATCH \(/.test(mainSrc), false,
+            'validator must not carry consumer-tagged FRAMEWORK PATCH markers');
+    });
+});

@@ -5377,9 +5377,32 @@ function ValidatorPlugin(rules, data, formId) {
             isInit = ( typeof(isInit) == 'undefined' || !isInit ) ? false : true;
             isTriggedByUser = ( typeof(isTriggedByUser) == 'undefined' || !isTriggedByUser ) ? false : true;
 
+            // [HTML5 form-reassociation] Reconcile the IDL `.checked` property with the
+            // `checked` HTML attribute on init when they disagree. Background: when
+            // multiple form-reassociated radios share a `name` AND are DOM descendants of
+            // a common ancestor `<form>`, Chromium-based browsers uncheck the earlier ones
+            // at parse time even though each radio belongs to a distinct form-owner per
+            // the HTML5 spec — leaving `.checked = false` while the `checked` HTML
+            // attribute is still present. Aligning the IDL state with the attribute
+            // matches the author's intent and is a no-op for the normal (non-reassociated)
+            // shape where the two already agree.
+            if ( isInit && !$el.checked && $el.hasAttribute('checked') ) {
+                $el.checked = true;
+            }
+
             var checked = $el.checked, evt = null;
             var isBoolean = /^(true|false)$/i.test($el.value);
-            radioGroup = document.getElementsByName($el.name);
+
+            // [HTML5 form-reassociation] Scope the mutual-exclusion peer set by form-owner
+            // per HTML5 spec ("the radio button group that contains a radio button a also
+            // contains all the other input elements b that fulfill ... b's form owner is
+            // a's form owner"). `getElementsByName` returns same-name radios across the
+            // whole document regardless of owner — without this filter, unchecking peers
+            // cross-fires into other forms whose radios happen to share the name.
+            var rawRadioGroup = document.getElementsByName($el.name);
+            radioGroup = Array.prototype.filter.call(rawRadioGroup, function(_r) {
+                return _r.form === $el.form;
+            });
 
             // loop if radio group
             for (let r = 0, rLen = radioGroup.length; r < rLen; ++r) {
