@@ -78,8 +78,19 @@ describe('03 - getFQDN', function () {
     });
 
     it('returns a FQDN string with a dot', async function () {
-        var result = await domainInstance.getFQDN();
-        assert.equal(typeof result, 'string');
-        assert.equal(/\./.test(result), true);
+        // Stub os.hostname() to a known FQDN so the test does not depend on the
+        // host's actual hostname. CI runners with bare-name hostnames (e.g.
+        // `runnervmeorf1`) otherwise force getFQDN() into the DNS reverse-lookup
+        // branch, which throws on environments whose PTR also returns a non-FQDN.
+        var os = require('os');
+        var origHostname = os.hostname;
+        os.hostname = function () { return 'runner.local'; };
+        try {
+            var result = await domainInstance.getFQDN();
+            assert.equal(typeof result, 'string');
+            assert.equal(/\./.test(result), true);
+        } finally {
+            os.hostname = origHostname;
+        }
     });
 });
