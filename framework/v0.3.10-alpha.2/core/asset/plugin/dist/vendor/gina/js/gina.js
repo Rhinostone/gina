@@ -19624,7 +19624,12 @@ function Collection(content, options) {
         if ( typeof(content[entry]._uuid) != 'undefined' ) {
             content[entry]._hasItsOwnUuid = true;
         } else {
-            content[entry]._uuid = uuid();
+            // 16-char base-62 (~4.77e28 space) — at the default 4-char (~14.78M) the
+            // birthday-paradox collision rate at N=917 is ~2.84%, and `notIn()`'s
+            // _uuid-keyed splice removes the wrong record on collision. 16 keeps the
+            // collision rate below 1e-13 up to N=100M, future-proof for any practical
+            // collection size.
+            content[entry]._uuid = uuid(16);
         }
 
         // To avoid duplicate entries
@@ -20407,8 +20412,8 @@ function Collection(content, options) {
 
             var tmpContent = Array.isArray(this) ? this : content;
 
-            // Indexing;
-            set._uuid = uuid();
+            // Indexing; 16-char to match the constructor's collision-safe size.
+            set._uuid = uuid(16);
             tmpContent.push(set);
 
             result = tmpContent;

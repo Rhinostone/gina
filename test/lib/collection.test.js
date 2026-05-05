@@ -340,3 +340,53 @@ describe('08 - SCS1d injection rejection', function () {
         assert.equal(result.length, 0);
     });
 });
+
+
+// 09 — _uuid collision-free indexing (#COLL1)
+//
+// Pins the indexing invariant. The bug: lib/collection called uuid() with the
+// default 4-char base-62 (~14.78M space) once per record during construction;
+// at N=917 records the birthday-paradox collision rate is ~2.84% per
+// `new Collection()` call, and `notIn()`'s _uuid-keyed splice removes the wrong
+// record on collision. The fix: lib/collection now calls uuid(16) explicitly
+// (~4.77e28 space → collision rate at N=917 is ~9e-21, stays below 1e-13 up to
+// N=100M). lib/uuid's own default is unchanged.
+describe('09 - _uuid collision-free indexing (#COLL1)', function () {
+
+    var data = {
+        hotelsWithoutIds: JSON.parse(fs.readFileSync(path.join(dataDir, 'hotel-without-ids.json')))
+    };
+
+    it('100 successive constructions of new Collection(N=' + 917 + ') produce zero duplicate _uuids', function () {
+        var iterations = 100;
+        var totalCollisions = 0;
+        var firstCollisionIter = -1;
+        for (var i = 0; i < iterations; i++) {
+            var col = new Collection(data.hotelsWithoutIds);
+            var seen = Object.create(null);
+            for (var j = 0, jLen = col.length; j < jLen; j++) {
+                var u = col[j]._uuid;
+                if (seen[u]) {
+                    totalCollisions++;
+                    if (firstCollisionIter < 0) firstCollisionIter = i;
+                } else {
+                    seen[u] = 1;
+                }
+            }
+        }
+        assert.equal(
+            totalCollisions, 0,
+            'expected zero _uuid collisions across ' + iterations + ' constructions of N='
+            + data.hotelsWithoutIds.length + ' records; first collision iter='
+            + firstCollisionIter + ', total collisions=' + totalCollisions
+        );
+    });
+
+    it('generated _uuid values are 16 characters of base-62', function () {
+        var col = new Collection(data.hotelsWithoutIds);
+        for (var i = 0, len = col.length; i < len; i++) {
+            assert.equal(col[i]._uuid.length, 16, 'record ' + i + ' has _uuid length ' + col[i]._uuid.length + ' (expected 16)');
+            assert.equal(/^[0-9A-Za-z]{16}$/.test(col[i]._uuid), true, 'record ' + i + ' _uuid `' + col[i]._uuid + '` is not 16 chars of base-62');
+        }
+    });
+});

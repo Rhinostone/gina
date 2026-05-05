@@ -329,11 +329,15 @@ describe('07 - Functional: Collection generates valid _uuid via uuid()', functio
     });
 
     it('Collection _uuid fields match uuid base-62 format (pre-toRaw)', function() {
+        // lib/collection opts into uuid(16) (vs lib/uuid's 4-char default) to
+        // close the birthday-paradox collision at N=917 (#COLL1). UUID_RE is
+        // intentionally NOT updated — it stays 4-char for the raw-uuid() tests
+        // at lines 178 and 281, which exercise lib/uuid's default behaviour.
         var data = [{ name: 'Test' }];
         var col = new Collection(data);
         assert.ok(
-            UUID_RE.test(col[0]._uuid),
-            'Expected 4-char base-62 uuid, got: ' + col[0]._uuid
+            /^[0-9A-Za-z]{16}$/.test(col[0]._uuid),
+            'Expected 16-char base-62 uuid (lib/collection opts into size=16), got: ' + col[0]._uuid
         );
     });
 
