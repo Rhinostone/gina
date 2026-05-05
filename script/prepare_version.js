@@ -290,6 +290,67 @@ function PrepareVersion() {
         done();
     };
 
+    /**
+     * Fail-closed gate: abort a stable publish if README.md has not been
+     * touched since the previous stable tag. Skips on alpha publishes
+     * (intermediate cuts where the "What's in <stable>" heading is
+     * allowed to be drafted ahead).
+     *
+     * The actual logic lives in `script/check_readme_freshness.js` so it
+     * can be unit-tested with an injected git driver. This wrapper just
+     * applies the alpha skip and converts the result into the
+     * gate-callback shape used by `begin()`.
+     *
+     * Background: three consecutive stable cuts (v0.3.7 → v0.3.8 →
+     * v0.3.9) shipped to npm with a stale "## What's in 0.3.7" heading
+     * and outdated `@rhinostone/swig` version because the manual grep
+     * step in the stable-release checklist was silently skipped each
+     * time. Manual gates fail; this enforces the rule.
+     */
+    self.checkReadmeFreshness = function(done) {
+        if (self.git.tag === 'alpha') {
+            console.debug('[prepare] Skipping README freshness gate (alpha publish).');
+            return done();
+        }
+
+        console.debug('[prepare] Checking README.md freshness for stable publish ...');
+
+        var checker = require('./check_readme_freshness');
+        var result;
+        try {
+            result = checker.check({ cwd: ginaPath });
+        } catch (err) {
+            return done(err);
+        }
+
+        if (result.ok) {
+            if (result.reason === 'no-previous-stable-tag') {
+                console.debug('[prepare] OK: no previous stable tag — first stable publish?');
+            } else {
+                console.debug('[prepare] OK: README.md has ' + result.commitsSinceTag +
+                    ' commit(s) since ' + result.prevStableTag + '.');
+            }
+            return done();
+        }
+
+        var pack = {};
+        try { pack = require(ginaPath + '/package.json'); } catch (e) { /* tolerated */ }
+
+        console.error('[prepare] ERROR: README.md not touched since previous stable tag — aborting publish.');
+        console.error('  Previous stable tag : ' + (result.prevStableTag || '<none>'));
+        console.error('  Targeted version    : ' + (pack.version || '<unknown>'));
+        console.error('  Failure reason      : ' + result.reason);
+        console.error('');
+        console.error('  README.md typically needs the following edits before a stable publish:');
+        console.error('    - "## What\'s in <version>" heading + bullets describing what shipped');
+        console.error('    - "@rhinostone/swig <X>" line in the Features table if swig was bumped');
+        console.error('    - Badge versions or other surfaces that drift across releases');
+        console.error('');
+        console.error('  Touch README.md (even a one-line patch-release note for hotfixes),');
+        console.error('  commit on develop, and re-run npm publish.');
+        return done(new Error('README.md untouched since previous stable tag (' + (result.prevStableTag || 'unknown') + ')'));
+    };
+
     self.getSelectedVersion = async function(done) {
         var homeDir = getUserHome() || null;
         var frameworkPath = null;
