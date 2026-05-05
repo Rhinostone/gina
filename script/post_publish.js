@@ -231,9 +231,27 @@ function PostPublish() {
             // Failures here are non-fatal — a stale lockfile can be patched manually
             // post-publish, but a thrown error would block tagAndMerge / bumpVersion /
             // publishAlpha and leave the release half-shipped.
+            //
+            // The `npm install --package-lock-only` line is retried with backoff to
+            // absorb the npm registry's eventual-consistency window after publish.
+            // Background in `llms.txt §87`: the lockfile-sync failed on `gina@0.3.7`
+            // and `gina@0.3.9` stable publishes (registry hadn't propagated the
+            // just-published version yet), shipped a mismatched `package.json` /
+            // `package-lock.json` pair, and broke the next Vercel `npm ci`. The retry
+            // (4 attempts, sleeps `[5, 15, 30, 30]` between failures) covers a ~80s
+            // window — registry consistency typically settles inside that. Final
+            // failure still emits the existing `console.warn` so the rest of the
+            // publish chain continues.
             try {
                 execSync('$(which npm) pkg set devDependencies.gina="^' + self.publishedVersion + '"');
-                execSync('$(which npm) install --package-lock-only --ignore-scripts');
+
+                var retryLockfileSync = require(scriptPath + '/retry_lockfile_sync');
+                var lockResult = retryLockfileSync.retryWithBackoff({
+                    cmd: '$(which npm) install --package-lock-only --ignore-scripts'
+                });
+                if (!lockResult.ok) {
+                    console.warn('[syncDocs] devDep / lockfile sync failed after ' + lockResult.attempts + ' attempts (non-fatal — fix manually): ' + (lockResult.lastErr.message || lockResult.lastErr));
+                }
             } catch (lockErr) {
                 console.warn('[syncDocs] devDep / lockfile sync failed (non-fatal — fix manually): ' + (lockErr.message || lockErr));
             }
