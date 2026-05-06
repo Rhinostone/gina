@@ -38,6 +38,7 @@ CLAUDE.md
 
 # Secrets
 .env
+script/.private-tokens.json
 
 # Contributor docs (not for npm consumers)
 README-4Contributors.md
