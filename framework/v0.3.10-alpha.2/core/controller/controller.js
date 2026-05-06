@@ -510,7 +510,25 @@ function SuperController(options) {
 
 
             set('page.environment.rootDomain', _config.rootDomain);
-            set('page.environment.webroot', options.conf.server.webroot);
+            // Public webroot — composed from the X-Forwarded-Prefix the reverse
+            // proxy advertised (captured by server.isaac.js into PROXY_PREFIX) and
+            // the bundle's internal server.webroot. The bundle stays unaware of
+            // its public mount path; only this output value (templated into
+            // gina.onload.min.js → gina.config.webroot) carries the prefix so
+            // browser-side URL construction (/_gina/assets/routing.json, the
+            // gina.min.css link injection, etc.) targets the correct upstream
+            // through the proxy. Internal disk-path resolution and asset URL
+            // rewriting still use options.conf.server.webroot directly.
+            var _publicWebroot = options.conf.server.webroot;
+            if ( typeof(process.gina.PROXY_PREFIX) != 'undefined' && process.gina.PROXY_PREFIX ) {
+                var _prefix = process.gina.PROXY_PREFIX;
+                var _wr     = _publicWebroot.replace(/^\/+/, '');
+                _publicWebroot = _prefix + '/' + _wr;
+                if ( !/\/$/.test(_publicWebroot) ) {
+                    _publicWebroot += '/';
+                }
+            }
+            set('page.environment.webroot', _publicWebroot);
 
             if ( typeof(ctx.config.envConf._isRoutingUpdateNeeded) == 'undefined') {
                 ctx.config.envConf._isRoutingUpdateNeeded = false;

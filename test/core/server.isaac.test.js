@@ -405,3 +405,121 @@ describe('04b - HTTP/2 session metrics: counter logic', function() {
     });
 
 });
+
+
+// ─── X-Forwarded-Prefix capture in proxy detection block ─────────────────────
+//
+// When a reverse proxy mounts the bundle on a sub-path (e.g.
+// `proxy_set_header X-Forwarded-Prefix /admin;`), the framework needs to know
+// the public mount path so the controller can compose a public webroot for
+// browser-side URL construction. The capture site sits inside the existing
+// proxy detection block — sibling to the X-Forwarded-Host / X-Forwarded-Proto
+// reads — and stores the normalised value on process.gina.PROXY_PREFIX.
+//
+// Normalisation: trim, drop trailing slashes, prepend leading slash if
+// missing, drop empty / "/" results so back-compat is preserved (header
+// absent or no-op header → PROXY_PREFIX never set).
+
+describe('X-Forwarded-Prefix capture & normalisation in proxy detection', function() {
+
+    if (typeof src == 'undefined' || src === null) {
+        src = fs.readFileSync(SOURCE, 'utf8');
+    }
+
+    // ── (a) source structure ─────────────────────────────────────────────────
+
+    it("source reads request.headers['x-forwarded-prefix'] in the proxy detection block", function() {
+        var anchor = src.indexOf("request.headers['x-forwarded-host']");
+        assert.ok(anchor > -1, "x-forwarded-host read site not found — proxy block may have moved");
+        var windowStart = anchor;
+        var windowEnd   = Math.min(src.length, anchor + 1500);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            block.indexOf("request.headers['x-forwarded-prefix']") > -1,
+            'expected x-forwarded-prefix read alongside x-forwarded-host inside the proxy detection block'
+        );
+    });
+
+    it("source assigns the normalised value to process.gina.PROXY_PREFIX", function() {
+        var anchor = src.indexOf("request.headers['x-forwarded-prefix']");
+        assert.ok(anchor > -1, 'x-forwarded-prefix read site not found');
+        var windowEnd = Math.min(src.length, anchor + 600);
+        var block = src.slice(anchor, windowEnd);
+        assert.ok(
+            block.indexOf('process.gina.PROXY_PREFIX') > -1,
+            'expected process.gina.PROXY_PREFIX assignment near the x-forwarded-prefix read'
+        );
+    });
+
+    it("source strips trailing slashes via /\\/+$/ replace", function() {
+        var anchor = src.indexOf("request.headers['x-forwarded-prefix']");
+        var windowEnd = Math.min(src.length, anchor + 600);
+        var block = src.slice(anchor, windowEnd);
+        assert.ok(
+            /\.replace\(\s*\/\\\/\+\$\/\s*,\s*''\s*\)/.test(block),
+            'expected `.replace(/\\/+$/, \'\')` to strip trailing slashes from the header value'
+        );
+    });
+
+    // ── (b) pure logic — inline replica ──────────────────────────────────────
+    //
+    // Replica of the normalisation steps in server.isaac.js. The replica must
+    // stay byte-equivalent to the live capture; the source-structure tests
+    // above pin the live shape.
+
+    function normaliseXfp(headerValue) {
+        if (!headerValue) return undefined;
+        var xfp = String(headerValue).trim();
+        xfp = xfp.replace(/\/+$/, '');
+        if (xfp.length > 0 && xfp.charAt(0) !== '/') {
+            xfp = '/' + xfp;
+        }
+        if (xfp.length > 0) return xfp;
+        return undefined;
+    }
+
+    it('absent header → undefined (back-compat)', function() {
+        assert.equal(normaliseXfp(undefined), undefined);
+        assert.equal(normaliseXfp(null), undefined);
+        assert.equal(normaliseXfp(''), undefined);
+    });
+
+    it('lone "/" → undefined (no-op header is dropped)', function() {
+        assert.equal(normaliseXfp('/'), undefined);
+        assert.equal(normaliseXfp('//'), undefined);
+        assert.equal(normaliseXfp('   /   '), undefined);
+    });
+
+    it('"/sub" → "/sub" (already canonical)', function() {
+        assert.equal(normaliseXfp('/sub'), '/sub');
+    });
+
+    it('"/sub/" → "/sub" (trailing slash stripped)', function() {
+        assert.equal(normaliseXfp('/sub/'), '/sub');
+    });
+
+    it('"/sub//" → "/sub" (multiple trailing slashes stripped)', function() {
+        assert.equal(normaliseXfp('/sub//'), '/sub');
+    });
+
+    it('"sub" → "/sub" (leading slash added)', function() {
+        assert.equal(normaliseXfp('sub'), '/sub');
+    });
+
+    it('"sub/" → "/sub" (leading added, trailing stripped)', function() {
+        assert.equal(normaliseXfp('sub/'), '/sub');
+    });
+
+    it('"  /sub  " → "/sub" (whitespace trimmed)', function() {
+        assert.equal(normaliseXfp('  /sub  '), '/sub');
+    });
+
+    it('multi-segment "/admin/v2" → "/admin/v2"', function() {
+        assert.equal(normaliseXfp('/admin/v2'), '/admin/v2');
+    });
+
+    it('multi-segment "/admin/v2/" → "/admin/v2"', function() {
+        assert.equal(normaliseXfp('/admin/v2/'), '/admin/v2');
+    });
+
+});

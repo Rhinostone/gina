@@ -880,3 +880,158 @@ describe('08 - getConfig: proxy hostname override guard', function() {
     });
 
 });
+
+
+// ─── 09 — public webroot composition under reverse proxy ─────────────────────
+//
+// When a reverse proxy mounts the bundle on a sub-path (e.g. nginx
+// `location /admin/ { proxy_pass http://upstream; }` with
+// `proxy_set_header X-Forwarded-Prefix /admin;`), the bundle's internal
+// `server.webroot` stays `/` (it doesn't know about the mount path), but the
+// value templated into `gina.onload.min.js` (which becomes the browser-side
+// `gina.config.webroot`) MUST include the prefix so that root-relative URLs
+// the browser builds (`gina.config.webroot + '_gina/assets/routing.json'`,
+// the `gina.min.css` link injection, etc.) target the correct upstream.
+// PROXY_PREFIX is captured by server.isaac.js from the X-Forwarded-Prefix
+// header (already normalised: leading slash, no trailing slash, dropped if
+// empty or "/"). controller.js composes it with the bundle's internal
+// webroot at the page.environment.webroot setter site.
+
+describe('09 - public webroot composition under reverse proxy', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ── (a) source structure ─────────────────────────────────────────────────
+
+    it("source references process.gina.PROXY_PREFIX in the page.environment.webroot setter region", function() {
+        var anchor = src.indexOf("set('page.environment.webroot'");
+        assert.ok(anchor > -1, "page.environment.webroot setter not found");
+        // Look in a window above + below the setter for the PROXY_PREFIX read
+        var windowStart = Math.max(0, anchor - 1500);
+        var windowEnd   = Math.min(src.length, anchor + 200);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            block.indexOf('process.gina.PROXY_PREFIX') > -1,
+            'expected process.gina.PROXY_PREFIX read near the page.environment.webroot setter'
+        );
+    });
+
+    it("source guards PROXY_PREFIX with typeof != 'undefined' before composing", function() {
+        var anchor = src.indexOf("set('page.environment.webroot'");
+        var windowStart = Math.max(0, anchor - 1500);
+        var windowEnd   = Math.min(src.length, anchor + 200);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            block.indexOf("typeof(process.gina.PROXY_PREFIX) != 'undefined'") > -1,
+            'expected typeof guard around process.gina.PROXY_PREFIX (back-compat: header absent)'
+        );
+    });
+
+    it("source still composes from options.conf.server.webroot as the base", function() {
+        var anchor = src.indexOf("set('page.environment.webroot'");
+        var windowStart = Math.max(0, anchor - 1500);
+        var windowEnd   = Math.min(src.length, anchor + 200);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            block.indexOf('options.conf.server.webroot') > -1,
+            'expected options.conf.server.webroot as the base webroot in composition'
+        );
+    });
+
+    // ── (b) pure logic — inline replica ──────────────────────────────────────
+    //
+    // Replica of the composition logic in controller.js. Cannot require the
+    // full controller module (needs a running gina server), so test in
+    // isolation. The replica MUST stay byte-for-byte equivalent to the live
+    // implementation; the source-structure tests above pin the live shape.
+
+    function composeWebroot(internalWebroot, proxyPrefix) {
+        var publicWebroot = internalWebroot;
+        if ( typeof(proxyPrefix) != 'undefined' && proxyPrefix ) {
+            var prefix = proxyPrefix;
+            var wr     = publicWebroot.replace(/^\/+/, '');
+            publicWebroot = prefix + '/' + wr;
+            if ( !/\/$/.test(publicWebroot) ) {
+                publicWebroot += '/';
+            }
+        }
+        return publicWebroot;
+    }
+
+    it('back-compat: undefined PROXY_PREFIX leaves "/" unchanged', function() {
+        assert.equal(composeWebroot('/', undefined), '/');
+    });
+
+    it('back-compat: undefined PROXY_PREFIX leaves "/admin/" unchanged', function() {
+        assert.equal(composeWebroot('/admin/', undefined), '/admin/');
+    });
+
+    it('back-compat: empty PROXY_PREFIX is treated as absent', function() {
+        // The truthy check (proxyPrefix && ...) drops empty strings even though
+        // the typeof check passes. This mirrors server.isaac.js's drop of "" / "/".
+        assert.equal(composeWebroot('/', ''), '/');
+        assert.equal(composeWebroot('/admin/', ''), '/admin/');
+    });
+
+    it('prefix "/sub" + bundle "/" → "/sub/"', function() {
+        assert.equal(composeWebroot('/', '/sub'), '/sub/');
+    });
+
+    it('prefix "/sub" + bundle "/admin/" → "/sub/admin/"', function() {
+        assert.equal(composeWebroot('/admin/', '/sub'), '/sub/admin/');
+    });
+
+    it('prefix "/sub" + bundle "/admin" (missing trailing slash) → "/sub/admin/"', function() {
+        // Trailing slash is appended so downstream `webroot + 'asset/path'`
+        // concatenation never produces double slashes or a missing separator.
+        assert.equal(composeWebroot('/admin', '/sub'), '/sub/admin/');
+    });
+
+    it('prefix "/sub" + bundle "//double-slash/" strips the leading slashes from the bundle', function() {
+        // Defensive: the bundle's internal webroot should start with "/", but if
+        // it accidentally has multiple leading slashes the composition still
+        // produces a clean prefix + '/' + tail shape.
+        assert.equal(composeWebroot('//double-slash/', '/sub'), '/sub/double-slash/');
+    });
+
+    it('multi-segment prefix "/admin/v2" + bundle "/" → "/admin/v2/"', function() {
+        assert.equal(composeWebroot('/', '/admin/v2'), '/admin/v2/');
+    });
+
+    it('multi-segment prefix "/admin/v2" + bundle "/dashboard/" → "/admin/v2/dashboard/"', function() {
+        assert.equal(composeWebroot('/dashboard/', '/admin/v2'), '/admin/v2/dashboard/');
+    });
+
+    it('result always ends with "/" so URL composition (webroot + leaf) is stable', function() {
+        var combos = [
+            ['/',         undefined],
+            ['/admin/',   undefined],
+            ['/',         '/sub'],
+            ['/admin/',   '/sub'],
+            ['/admin',    '/sub'],
+            ['/',         '/admin/v2']
+        ];
+        combos.forEach(function(c) {
+            var out = composeWebroot(c[0], c[1]);
+            assert.ok(/\/$/.test(out),
+                'composeWebroot(' + JSON.stringify(c[0]) + ', ' + JSON.stringify(c[1]) + ') = ' +
+                JSON.stringify(out) + ' must end with "/"');
+        });
+    });
+
+    it('repro of the cross-bundle leak shape: bundle "/" + prefix "/admin" yields "/admin/" (was "/")', function() {
+        // The shipped bug: the bundle's internal server.webroot is "/", and
+        // before this fix, that "/" was templated straight into
+        // gina.config.webroot — the browser then built
+        // "/" + "_gina/assets/routing.json" = "/_gina/assets/routing.json"
+        // which the reverse proxy routed to whichever upstream answered the
+        // root path (NOT this bundle). The composed value "/admin/" makes
+        // the browser build "/admin/_gina/assets/routing.json" instead, which
+        // the proxy routes back to this bundle's upstream.
+        var before = '/';
+        var after  = composeWebroot(before, '/admin');
+        assert.notEqual(after, before, 'composition must change "/" when a prefix is set');
+        assert.equal(after, '/admin/', 'composed webroot must include the proxy prefix');
+    });
+
+});

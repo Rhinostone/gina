@@ -939,6 +939,22 @@ function ServerEngineClass(options) {
                     process.gina.PROXY_HOST     = request.headers['x-forwarded-host'];
                     // console.debug('[PROXY_HOST][X-FORWARDED-PROTO] override request.headers["x-forwarded-host"] -> ' + request.headers['x-forwarded-host']);
                 }
+                // Path-prefix awareness for upstreams mounted on a sub-path by the
+                // reverse proxy. Standard header used by Spring Boot, Traefik,
+                // FastAPI, etc. Normalised to leading slash + no trailing slash so
+                // downstream concatenation with the bundle's internal webroot is
+                // stable (e.g. "/admin" + "/" → "/admin/"). Empty or "/" values
+                // are dropped so back-compat is preserved.
+                if (request.headers['x-forwarded-prefix']) {
+                    var _xfp = String(request.headers['x-forwarded-prefix']).trim();
+                    _xfp = _xfp.replace(/\/+$/, '');
+                    if (_xfp.length > 0 && _xfp.charAt(0) !== '/') {
+                        _xfp = '/' + _xfp;
+                    }
+                    if (_xfp.length > 0) {
+                        process.gina.PROXY_PREFIX = _xfp;
+                    }
+                }
                 // Forcing context - also available for workers
                 setContext('isProxyHost', true);
             }
