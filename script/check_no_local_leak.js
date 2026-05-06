@@ -35,27 +35,21 @@
 var execSync = require('child_process').execSync;
 var fs       = require('fs');
 
+var loadPrivateTokens = require('./_load_private_tokens');
+
 var PATH_PATTERN = /(^|\/)(CLAUDE\.md|\.claude[a-z]*)/i;
 
-// Authoring/contributing context — files where the co-author's legal name
-// is allowed (public attribution: README, AUTHORS, GOVERNANCE, CONTRIBUTING,
-// package.json contributors, scaffolding template, framework AUTHORS,
-// framework plugin package.json authors).
+// Authoring/contributing context — files where a token marked
+// allowInAttribution is permitted (public attribution: README, AUTHORS,
+// GOVERNANCE, CONTRIBUTING, package.json contributors, scaffolding
+// template, framework AUTHORS, framework plugin package.json authors).
 var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+\/package\.json)$/;
 
 // Private tokens that must not appear in published tarball contents.
-// Keep patterns narrow — bare words like "Freelancer" are too broad and
-// produce false positives on legitimate content; the domain form
-// `example.com` catches the leak-relevant variant.
-var CONTENT_TOKENS = [
-    { name: 'private phone',   pattern: /0618178647/ },
-    { name: 'private email',   pattern: /[\w.+-]*etouman@rhinostone/i },
-    { name: 'private address', pattern: /Boulevard\s+Arago/i },
-    { name: 'private domain',  pattern: /freelancer\.app/i },
-    { name: 'co-author legal name',
-                               pattern: /Fabrice\s+Delaneau/i,
-                               allowIn: ATTRIBUTION_PATHS }
-];
+// Patterns load from `script/.private-tokens.json` (gitignored,
+// maintainer-local). If the sidecar is absent, content-level scanning
+// is a no-op; path-level scanning still runs unchanged.
+var CONTENT_TOKENS = loadPrivateTokens(ATTRIBUTION_PATHS);
 
 // Heuristic: only read files that are likely text. Saves time on binary
 // assets (images, compiled JARs, compressed .br/.gz) and prevents
