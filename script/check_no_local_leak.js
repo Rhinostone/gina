@@ -88,17 +88,17 @@ function isTextPath(p) {
     return false;
 }
 
-function scanContent(path) {
+function scanContent(filePath) {
     var stat;
-    try { stat = fs.statSync(path); } catch (e) { return []; }
+    try { stat = fs.statSync(filePath); } catch (e) { return []; }
     if (!stat.isFile() || stat.size > MAX_SCAN_BYTES) return [];
 
     var content;
-    try { content = fs.readFileSync(path, 'utf8'); } catch (e) { return []; }
+    try { content = fs.readFileSync(filePath, 'utf8'); } catch (e) { return []; }
 
     var hits = [];
     for (var i = 0; i < CONTENT_TOKENS.length; i++) {
-        if (CONTENT_TOKENS[i].allowIn && CONTENT_TOKENS[i].allowIn.test(path)) continue;
+        if (CONTENT_TOKENS[i].allowIn && CONTENT_TOKENS[i].allowIn.test(filePath)) continue;
         if (CONTENT_TOKENS[i].pattern.test(content)) {
             hits.push(CONTENT_TOKENS[i].name);
         }
