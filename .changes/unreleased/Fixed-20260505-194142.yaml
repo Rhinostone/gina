@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator radio mutual-exclusion grouping for HTML5 form-reassociated controls (`form="X"` attribute). `updateRadio` now scopes the peer set by form-owner — same-name radios in different form-owners are no longer cross-fired into each other''s mutual-exclusion loop — and reconciles the IDL `.checked` property with the `checked` HTML attribute on init when they disagree, recovering author intent for radios that surface the parse-time IDL/attribute desync browsers produce in mixed DOM-tree + form-owner layouts.'
-time: 2026-05-05T19:41:42+01:00

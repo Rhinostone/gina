@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator binding for HTML5 form-reassociated controls (`form="X"` attribute) — `bindForm` now uses `HTMLFormControlsCollection` (`form.elements`) for owner-aware control collection, attaches per-control listeners on reassociated controls (out-of-tree controls whose events don''t bubble to the form), and `unbindForm` symmetrically drains the side-table on cleanup. Parent forms no longer accidentally collect descendants reassociated to other forms.'
-time: 2026-05-05T16:58:08.171713+01:00
