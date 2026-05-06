@@ -479,9 +479,17 @@ function PrepareVersion() {
         settingsConfigPath  = ginaHomeDir+'/'+shortVersion+'/settings.json';
         settingsConfig      = require(settingsConfigPath);
 
-        // setting def_framework
-        mainConfig.def_framework    = targetedVersion;
-        settingsConfig.version      = targetedVersion;
+        // setting def_framework on BOTH stores. Mirrors post_publish.bumpVersion
+        // (post_publish.js:413-421) which writes settings.def_framework alongside
+        // settings.version. Without the settings-side assignment, the prepare run
+        // leaves settings.json's def_framework at its previous value, producing
+        // a `version:<new> + def_framework:<old>` split inside settings.json (and
+        // in gina.db's settings/<short> blob via StateStore) that surfaces the next
+        // time getSelectedVersion (or anything else reading settings.def_framework)
+        // runs against the wrong framework dir.
+        mainConfig.def_framework     = targetedVersion;
+        settingsConfig.version       = targetedVersion;
+        settingsConfig.def_framework = targetedVersion;
         ginaPath                    = settingsConfig.dir;
         self.ginaPath = ginaPath;
         // backup of folder version to archives
