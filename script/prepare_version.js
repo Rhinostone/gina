@@ -348,6 +348,58 @@ function PrepareVersion() {
         return done(new Error('README.md untouched since previous stable tag (' + (result.prevStableTag || 'unknown') + ')'));
     };
 
+    /**
+     * Fail-closed gate: abort the publish if `~/.gina/main.json`'s
+     * `def_framework` field points to a framework directory that does
+     * not exist on disk. Catches the silent state-store drift that
+     * surfaces downstream as `MODULE_NOT_FOUND` from inside
+     * `getSelectedVersion`.
+     *
+     * The actual logic lives in `script/check_def_framework_consistency.js`
+     * so it can be unit-tested with an injected fs driver. This wrapper
+     * just resolves the live ginaHomeDir + ginaPath and converts the
+     * result into the gate-callback shape used by `begin()`.
+     *
+     * Background: v0.3.10 stable publish (2026-05-06) aborted with
+     * `Cannot find module 'framework/v0.3.9/helpers'` because main.json's
+     * scalar `def_framework` had drifted to "0.3.9" while the framework
+     * dir on disk was at v0.3.10-alpha.2. ~/.gina/0.3/settings.json and
+     * gina.db kv_store had the same drift. Root-cause investigation is
+     * a separate follow-up; this gate ensures future drift surfaces
+     * with an actionable error before npm publish proceeds.
+     *
+     * Runs after `checkReadmeFreshness` and before `getSelectedVersion`.
+     */
+    self.checkDefFrameworkConsistency = function(done) {
+        console.debug('[prepare] Checking def_framework consistency against framework/v* on disk ...');
+
+        var homeDir = getUserHome();
+        if (!homeDir) {
+            return done(new Error('No $HOME path found !'));
+        }
+        var ginaHomeDir = homeDir.replace(/\n/g, '') + '/.gina';
+
+        var checker = require('./check_def_framework_consistency');
+        var result;
+        try {
+            result = checker.check({ ginaHomeDir: ginaHomeDir, ginaPath: ginaPath });
+        } catch (err) {
+            return done(err);
+        }
+
+        if (result.ok) {
+            if (result.reason === 'main-json-absent') {
+                console.debug('[prepare] OK: ~/.gina/main.json absent — first install or fresh state.');
+            } else {
+                console.debug('[prepare] OK: def_framework "' + result.defFramework + '" matches ' + result.frameworkDir);
+            }
+            return done();
+        }
+
+        checker.renderFailure(result, ginaHomeDir, ginaPath);
+        return done(new Error('def_framework consistency check failed (' + result.reason + ')'));
+    };
+
     self.getSelectedVersion = async function(done) {
         var homeDir = getUserHome() || null;
         var frameworkPath = null;
