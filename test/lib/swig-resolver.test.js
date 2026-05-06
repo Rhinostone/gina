@@ -8,11 +8,12 @@
  *
  * Fixture matrix:
  *
- *   has-satisfies      — 1.6.2       (satisfies floor 1.6.0, same major)
- *   has-alpha-satisfies — 1.6.0-alpha.3 (pre-release, equal to floor after
+ *   has-satisfies      — 2.0.5       (satisfies floor 2.0.0, same major)
+ *   has-alpha-satisfies — 2.0.0-alpha.3 (pre-release, equal to floor after
  *                         suffix strip — treated as satisfying)
- *   has-too-old        — 1.5.0       (same major, below floor)
- *   has-wrong-major    — 2.0.0       (above floor but different major)
+ *   has-too-old        — 2.0.0       (same major as 2.0.1, below floor when
+ *                         test passes min='2.0.1' explicitly)
+ *   has-wrong-major    — 3.0.0       (above floor but different major)
  *   has-twig           — 2.0.0-alpha.8 of @rhinostone/swig-twig (package
  *                         override exercised with a different min)
  *   malformed          — invalid JSON in package.json
@@ -59,22 +60,22 @@ before(function () {
 
     FX.hasSatisfies = nodePath.join(ROOT, 'has-satisfies');
     seedFixture(FX.hasSatisfies, '@rhinostone/swig', {
-        name: '@rhinostone/swig', version: '1.6.2', main: 'index.js'
+        name: '@rhinostone/swig', version: '2.0.5', main: 'index.js'
     });
 
     FX.hasAlphaSatisfies = nodePath.join(ROOT, 'has-alpha-satisfies');
     seedFixture(FX.hasAlphaSatisfies, '@rhinostone/swig', {
-        name: '@rhinostone/swig', version: '1.6.0-alpha.3', main: 'index.js'
+        name: '@rhinostone/swig', version: '2.0.0-alpha.3', main: 'index.js'
     });
 
     FX.hasTooOld = nodePath.join(ROOT, 'has-too-old');
     seedFixture(FX.hasTooOld, '@rhinostone/swig', {
-        name: '@rhinostone/swig', version: '1.5.0', main: 'index.js'
+        name: '@rhinostone/swig', version: '2.0.0', main: 'index.js'
     });
 
     FX.hasWrongMajor = nodePath.join(ROOT, 'has-wrong-major');
     seedFixture(FX.hasWrongMajor, '@rhinostone/swig', {
-        name: '@rhinostone/swig', version: '2.0.0', main: 'index.js'
+        name: '@rhinostone/swig', version: '3.0.0', main: 'index.js'
     });
 
     FX.hasTwig = nodePath.join(ROOT, 'has-twig');
@@ -291,17 +292,17 @@ describe('06 - resolve() satisfying project pin', function () {
     it('picks the project copy when version is above the floor', function () {
         var d = resolver.resolve(FX.hasSatisfies, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.equal(d.source, 'project');
-        assert.equal(d.version, '1.6.2');
+        assert.equal(d.version, '2.0.5');
         assert.equal(d.warning, null);
     });
 
     it('records the absolute entry path for the caller to require()', function () {
         var d = resolver.resolve(FX.hasSatisfies, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.ok(nodePath.isAbsolute(d.path), 'path should be absolute');
         assert.match(d.path, /node_modules\/@rhinostone\/swig\/index\.js$/);
@@ -310,16 +311,16 @@ describe('06 - resolve() satisfying project pin', function () {
     it('accepts a pre-release pin equal to the floor', function () {
         var d = resolver.resolve(FX.hasAlphaSatisfies, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.equal(d.source, 'project');
-        assert.equal(d.version, '1.6.0-alpha.3');
+        assert.equal(d.version, '2.0.0-alpha.3');
     });
 
     it('the resolved path, when required, exposes the fixture marker', function () {
         var d = resolver.resolve(FX.hasSatisfies, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         var mod = require(d.path);
         assert.equal(mod._fixture, 'has-satisfies');
@@ -334,30 +335,32 @@ describe('06 - resolve() satisfying project pin', function () {
 describe('07 - resolve() rejection paths', function () {
 
     it('rejects a pin below the floor with warning=version-mismatch', function () {
+        // hasTooOld pins 2.0.0 — passing min='2.0.1' makes it below-floor
+        // within the same major, distinct from the cross-major case below.
         var d = resolver.resolve(FX.hasTooOld, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.1'
         });
         assert.equal(d.source, 'framework');
         assert.equal(d.warning, 'version-mismatch');
-        assert.equal(d.version, '1.5.0'); // record what they had, for the warning
+        assert.equal(d.version, '2.0.0'); // record what they had, for the warning
         assert.equal(d.path, null);
     });
 
     it('rejects a different-major pin with warning=version-mismatch', function () {
         var d = resolver.resolve(FX.hasWrongMajor, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.equal(d.source, 'framework');
         assert.equal(d.warning, 'version-mismatch');
-        assert.equal(d.version, '2.0.0');
+        assert.equal(d.version, '3.0.0');
     });
 
     it('rejects a project without swig with warning=not-installed', function () {
         var d = resolver.resolve(FX.noSwig, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.equal(d.source, 'framework');
         assert.equal(d.warning, 'not-installed');
@@ -367,7 +370,7 @@ describe('07 - resolve() rejection paths', function () {
     it('rejects malformed package.json with warning=malformed-package-json', function () {
         var d = resolver.resolve(FX.malformed, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.equal(d.source, 'framework');
         assert.equal(d.warning, 'malformed-package-json');
@@ -376,7 +379,7 @@ describe('07 - resolve() rejection paths', function () {
     it('rejects missing version field with warning=missing-version', function () {
         var d = resolver.resolve(FX.missingVersion, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
         });
         assert.equal(d.source, 'framework');
         assert.equal(d.warning, 'missing-version');
@@ -408,7 +411,7 @@ describe('08 - resolve() package override (swig-twig)', function () {
         // substitute a different package.
         var d = resolver.resolve(FX.hasTwig, {
             useProject: true,
-            min:        '1.6.0'
+            min:        '2.0.0'
             // package omitted → defaults to @rhinostone/swig
         });
         assert.equal(d.source, 'framework');
@@ -463,19 +466,19 @@ describe('09 - load() + get() process-cache', function () {
 
     it('load() with useProject:true + satisfying pin caches the project copy', function () {
         resolver.reset();
-        var swig = resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        var swig = resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.0' });
         assert.equal(swig._fixture, 'has-satisfies', 'returned swig is the project fixture');
         var d = resolver.getDecision();
         assert.equal(d.source,  'project');
-        assert.equal(d.version, '1.6.2');
+        assert.equal(d.version, '2.0.5');
     });
 
     it('load() is idempotent within a process — subsequent calls return the cached instance', function () {
         resolver.reset();
-        var first  = resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        var first  = resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.0' });
         // Second call with DIFFERENT options should still return the first
         // instance — the cache wins. This is the standalone-mode contract.
-        var second = resolver.load(FX.hasWrongMajor, { useProject: true, min: '1.6.0' });
+        var second = resolver.load(FX.hasWrongMajor, { useProject: true, min: '2.0.0' });
         assert.equal(first, second, 'second load returns the same cached instance');
     });
 
@@ -489,20 +492,21 @@ describe('09 - load() + get() process-cache', function () {
 
     it('get() after load() returns the loaded instance', function () {
         resolver.reset();
-        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.0' });
         var swig = resolver.get();
         assert.equal(swig._fixture, 'has-satisfies');
     });
 
     it('load() with a below-floor pin caches the framework copy + records the warning', function () {
         resolver.reset();
-        var swig = resolver.load(FX.hasTooOld, { useProject: true, min: '1.6.0' });
+        // hasTooOld pins 2.0.0 — passing min='2.0.1' makes it below-floor.
+        var swig = resolver.load(FX.hasTooOld, { useProject: true, min: '2.0.1' });
         // Framework copy is a real module (no _fixture marker) — just assert
         // the decision reflects the rejection.
         var d = resolver.getDecision();
         assert.equal(d.source,  'framework');
         assert.equal(d.warning, 'version-mismatch');
-        assert.equal(d.version, '1.5.0');
+        assert.equal(d.version, '2.0.0');
     });
 
     it('load() honours @rhinostone/swig-twig when the project has it installed', function () {
@@ -582,20 +586,20 @@ describe('10 - dev-mode hot-swap', function () {
     it('get() is a no-op in production (NODE_ENV_IS_DEV unset)', function () {
         delete process.env.NODE_ENV_IS_DEV;
         resolver.reset();
-        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.0' });
         var first = resolver.get();
         // Modify the fixture; in prod mode the change must NOT be picked up.
-        updateFixtureTo(FX.hasSatisfies, '1.6.3');
+        updateFixtureTo(FX.hasSatisfies, '2.0.6');
         var second = resolver.get();
         assert.equal(first, second, 'production get() must return the cached instance');
-        // Restore the fixture so later tests start from 1.6.2.
-        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+        // Restore the fixture so later tests start from 2.0.5.
+        updateFixtureTo(FX.hasSatisfies, '2.0.5');
     });
 
     it('dev mode + unchanged mtime: get() returns the same instance', function () {
         process.env.NODE_ENV_IS_DEV = 'true';
         resolver.reset();
-        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.0' });
         var first  = resolver.get();
         var second = resolver.get();
         assert.equal(first, second, 'no mtime change → same cached module');
@@ -607,19 +611,19 @@ describe('10 - dev-mode hot-swap', function () {
         // Prime the fixture's index.js with a `version` export so the module
         // reload is observable via the returned swig (not only via the
         // decision record).
-        updateFixtureTo(FX.hasSatisfies, '1.6.2');
-        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        updateFixtureTo(FX.hasSatisfies, '2.0.5');
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.0' });
         var before = resolver.get();
-        assert.equal(before.version, '1.6.2');
+        assert.equal(before.version, '2.0.5');
 
-        updateFixtureTo(FX.hasSatisfies, '1.6.3');
+        updateFixtureTo(FX.hasSatisfies, '2.0.6');
         var after = resolver.get();
-        assert.equal(after.version, '1.6.3', 'new version loaded after mtime shift');
+        assert.equal(after.version, '2.0.6', 'new version loaded after mtime shift');
         var d = resolver.getDecision();
-        assert.equal(d.version, '1.6.3', 'decision record reflects new version');
+        assert.equal(d.version, '2.0.6', 'decision record reflects new version');
 
         // Restore for downstream tests.
-        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+        updateFixtureTo(FX.hasSatisfies, '2.0.5');
     });
 
     it('dev mode + useProject:false: refresh is a no-op even if mtime drifts', function () {
@@ -627,10 +631,10 @@ describe('10 - dev-mode hot-swap', function () {
         resolver.reset();
         resolver.load(FX.hasSatisfies, { useProject: false });
         var before = resolver.get();
-        updateFixtureTo(FX.hasSatisfies, '1.6.4');
+        updateFixtureTo(FX.hasSatisfies, '2.0.7');
         var after = resolver.get();
         assert.equal(before, after, 'useProject:false skips the mtime probe');
-        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+        updateFixtureTo(FX.hasSatisfies, '2.0.5');
     });
 
     it('dev mode + missing projectPath: refresh is a no-op', function () {
@@ -654,18 +658,21 @@ describe('10 - dev-mode hot-swap', function () {
     it('dev mode + version drift below floor: falls back to framework on reload', function () {
         process.env.NODE_ENV_IS_DEV = 'true';
         resolver.reset();
-        resolver.load(FX.hasSatisfies, { useProject: true, min: '1.6.0' });
+        // Floor is 2.0.1 here so the fixture's 2.0.5 satisfies, but the
+        // downgrade-to-2.0.0 below it then trips the "below floor in same
+        // major" branch (distinct from a cross-major drift).
+        resolver.load(FX.hasSatisfies, { useProject: true, min: '2.0.1' });
         assert.equal(resolver.getDecision().source, 'project');
 
         // Downgrade the fixture to below the floor — refresh should reject it.
-        updateFixtureTo(FX.hasSatisfies, '1.5.0');
+        updateFixtureTo(FX.hasSatisfies, '2.0.0');
         resolver.get();
         var d = resolver.getDecision();
         assert.equal(d.source,  'framework');
         assert.equal(d.warning, 'version-mismatch');
-        assert.equal(d.version, '1.5.0');
+        assert.equal(d.version, '2.0.0');
 
-        updateFixtureTo(FX.hasSatisfies, '1.6.2');
+        updateFixtureTo(FX.hasSatisfies, '2.0.5');
     });
 });
 

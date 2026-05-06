@@ -42,7 +42,7 @@
  * var decision = resolver.resolve('/path/to/project', {
  *     useProject: true,
  *     package:    '@rhinostone/swig',
- *     min:        '1.6.0'
+ *     min:        '2.0.0'
  * });
  * if (decision.source === 'project') {
  *     var swig = require(decision.path);
@@ -70,7 +70,7 @@ var DEFAULT_PACKAGE = '@rhinostone/swig';
  * @constant
  * @type {string}
  */
-var DEFAULT_MIN = '1.6.0';
+var DEFAULT_MIN = '2.0.0';
 
 /**
  * Known warning codes emitted by {@link resolve}. A non-null `warning` on the

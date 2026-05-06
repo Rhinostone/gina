@@ -339,13 +339,19 @@ fi
 echo -e "Running: ${cmd}"
 eval $cmd
 
-# Compiling & minifying swig (@rhinostone/swig — npm dep, replaces vendored core/deps/swig-1.4.2)
-echo -e "\n[ Compiling & minifying swig ]"
+# Publishing swig browser bundle (@rhinostone/swig ships a pre-built esbuild
+# bundle at dist/swig.js since 2.0.0 — copy into dist/swig.min.js so the path
+# consumers expect stays stable).
+echo -e "\n[ Publishing swig browser bundle ]"
 echo -e "\nPlease, wait ..."
 SWIG_PATH="$SCRIPT_PATH/../../../node_modules/@rhinostone/swig"
 if [ ! -d "$SWIG_PATH" ]; then
     echo -e "\nERROR: @rhinostone/swig not found at $SWIG_PATH"
     echo -e "Run: cd $(dirname $SCRIPT_PATH)/../../.. && npm install"
+    exit 1
+fi
+if [ ! -f "$SWIG_PATH/dist/swig.js" ]; then
+    echo -e "\nERROR: $SWIG_PATH/dist/swig.js missing — expected the upstream esbuild bundle"
     exit 1
 fi
 if [ ! -d "$SWIG_PATH/dist" ]; then
@@ -354,10 +360,7 @@ fi
 if [ -f "$SWIG_PATH/dist/swig.min.js.map" ]; then
     rm $SWIG_PATH/dist/swig.min.js.map
 fi
-if [ -f "$SWIG_PATH/dist/swig.min.js" ]; then
-    rm $SWIG_PATH/dist/swig.min.js
-fi
-cmd="$java_bin -jar $SCRIPT_PATH/lib/js/compiler.jar --formatting=SINGLE_QUOTES --compilation_level SIMPLE_OPTIMIZATIONS --jscomp_warning=es5Strict --js $SWIG_PATH/bin/swig.js --create_source_map $SWIG_PATH/dist/swig.min.js.map --js_output_file $SWIG_PATH/dist/swig.min.js"
+cmd="cp $SWIG_PATH/dist/swig.js $SWIG_PATH/dist/swig.min.js"
 
 echo -e "Running: ${cmd}"
 eval $cmd
