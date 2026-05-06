@@ -4487,9 +4487,15 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ( /^(checkbox|radio)$/i.test($inputs[f].type) && typeof($form.fieldsSet[elId].defaultChecked) == 'undefined' ) {
 
-
+                    // Read the IDL `defaultChecked` (which mirrors the HTML `checked`
+                    // attribute) instead of the live `.checked`. For form-reassociated
+                    // radios hit by Chromium's parse-time IDL/attribute desync — sister
+                    // bug to the updateRadio reconciliation at commit 80dd89f9 — `.checked`
+                    // reads FALSE at bind time despite the attribute being present, so
+                    // caching from `.checked` would hold the wrong default and a subsequent
+                    // form-reset would clear the originally-checked option.
                     $form.fieldsSet[elId].defaultChecked = (
-                                                            /^(true|on)$/i.test($inputs[f].checked)
+                                                            $inputs[f].defaultChecked
                                                             ||
                                                             /^(true|on)$/.test(defaultValue)
                                                             && /^(checkbox)$/i.test($inputs[f].type)

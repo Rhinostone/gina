@@ -632,3 +632,174 @@ describe('06 - source inspection: updateRadio fixes pin to main.js', function ()
             'validator must not carry consumer-tagged FRAMEWORK PATCH markers');
     });
 });
+
+
+// ============================================================================
+// bindForm defaultChecked cache: parse-time IDL/attribute desync reconciliation
+//
+// Sister fix to the updateRadio reconciliation pinned in section 06. bindForm
+// captures `$form.fieldsSet[id].defaultChecked` once per radio/checkbox in the
+// input loop. The capture used to read the live IDL `.checked`, which lies for
+// form-reassociated radios hit by Chromium's parse-time desync — the cache
+// would hold FALSE for an attribute-bearing radio whose IDL was unchecked at
+// parse, even though updateRadio's later reconciliation flipped the IDL back
+// to TRUE. The capture now reads `.defaultChecked` (the IDL property that
+// mirrors the HTML `checked` content attribute), which is parse-time stable
+// and unaffected by the desync. resetFields then restores the
+// originally-checked option correctly.
+//
+// Test layering: the production capture pattern is replayed below in
+// `captureDefaultChecked`, mirroring the inline block in main.js. Source
+// inspection in section 07.b pins the live shape so the replica stays honest.
+// ============================================================================
+
+// Mirrors bindForm's fieldsSet.defaultChecked capture site (~line 4498).
+function captureDefaultChecked($input, defaultValue) {
+    return (
+        $input.defaultChecked
+        ||
+        /^(true|on)$/.test(defaultValue)
+        && /^(checkbox)$/i.test($input.type)
+    ) ? true : false;
+}
+
+// The pre-fix shape (kept here ONLY to demonstrate the bug). Reads live IDL.
+function captureDefaultCheckedPreFix($input, defaultValue) {
+    return (
+        /^(true|on)$/i.test($input.checked)
+        ||
+        /^(true|on)$/.test(defaultValue)
+        && /^(checkbox)$/i.test($input.type)
+    ) ? true : false;
+}
+
+
+// 07 - bindForm defaultChecked cache: capture from IDL .defaultChecked
+
+describe('07 - bindForm defaultChecked cache: parse-time IDL/attribute desync reconciliation', function () {
+    it('captures TRUE for a reassociated radio whose IDL .checked is desynced FALSE at bind time', function () {
+        var ctx = setupReassociatedRadioDom();
+        // Construct the IDL/attribute desync explicitly: HTML `checked` attribute
+        // present, IDL `.checked = false` (the post-parse state Chromium produces
+        // for the reproducer fixture). bindForm runs BEFORE updateRadio's
+        // reconciliation, so the capture sees the desynced state.
+        ctx.b.checked = false;
+        assert.equal(ctx.b.hasAttribute('checked'), true,
+            'attribute should remain set after the IDL is mutated');
+        assert.equal(ctx.b.defaultChecked, true,
+            'defaultChecked is parse-time and should reflect the original attribute');
+
+        var captured = captureDefaultChecked(ctx.b, ctx.b.value);
+        assert.equal(captured, true,
+            'cache must capture TRUE so a later resetFields restores the originally-checked option');
+    });
+
+    it('pre-fix shape would have captured FALSE for the same desynced radio (regression demo)', function () {
+        var ctx = setupReassociatedRadioDom();
+        ctx.b.checked = false;
+        var capturedOld = captureDefaultCheckedPreFix(ctx.b, ctx.b.value);
+        assert.equal(capturedOld, false,
+            'the pre-fix code path captures FALSE — the bug shape that resetFields then exhibits');
+    });
+
+    it('captures TRUE for a reassociated checkbox with the same desync shape', function () {
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="parent">'
+            + '<input type="checkbox" name="optA" form="probeA" id="cb-a" checked>'
+            + '<input type="checkbox" name="optA" form="probeB" id="cb-b" checked>'
+            + '</form>'
+            + '<form id="probeA"></form>'
+            + '<form id="probeB"></form>'
+            + '</body></html>');
+        var $cbA = dom.window.document.getElementById('cb-a');
+        $cbA.checked = false; // simulate the same parse-time desync for a checkbox
+
+        assert.equal($cbA.hasAttribute('checked'), true);
+        assert.equal($cbA.defaultChecked, true);
+        assert.equal(captureDefaultChecked($cbA, ''), true,
+            'reassociated checkbox cache must capture TRUE despite the desynced IDL');
+    });
+
+    it('non-regression: in-tree radio with the checked attribute captures TRUE', function () {
+        var ctx = setupSingleFormRadioDom();
+        // s-b carries the checked HTML attribute; jsdom's IDL agrees here.
+        assert.equal(ctx.b.checked, true);
+        assert.equal(ctx.b.defaultChecked, true);
+        assert.equal(captureDefaultChecked(ctx.b, ctx.b.value), true);
+    });
+
+    it('non-regression: in-tree radio without the checked attribute captures FALSE', function () {
+        var ctx = setupSingleFormRadioDom();
+        assert.equal(ctx.a.checked, false);
+        assert.equal(ctx.a.defaultChecked, false);
+        assert.equal(captureDefaultChecked(ctx.a, ctx.a.value), false);
+    });
+
+    it('non-regression: programmatically-checked radio (no attribute) captures FALSE', function () {
+        var ctx = setupSingleFormRadioDom();
+        // s-a has no checked attribute; mutate IDL only — defaultChecked stays false,
+        // so the cache stays FALSE. This is correct: the cache should reflect
+        // server-rendered intent (the attribute), not transient runtime state.
+        ctx.a.checked = true;
+        assert.equal(ctx.a.defaultChecked, false,
+            'IDL .checked mutation must not flip .defaultChecked');
+        assert.equal(captureDefaultChecked(ctx.a, ctx.a.value), false,
+            'cache reflects parse-time author intent, not transient IDL state');
+    });
+
+    it('checkbox defaultValue=on path still fires when the attribute is absent', function () {
+        // The second branch of the capture covers the special checkbox case where
+        // the framework was told the default is "on" via a separate input config
+        // (defaultValue), without the HTML attribute being set.
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="f"><input type="checkbox" name="opt" id="cb"></form>'
+            + '</body></html>');
+        var $cb = dom.window.document.getElementById('cb');
+        assert.equal($cb.defaultChecked, false,
+            'no attribute, no parse-time default');
+        assert.equal(captureDefaultChecked($cb, 'on'), true,
+            'checkbox + defaultValue=on should still capture TRUE');
+        assert.equal(captureDefaultChecked($cb, ''), false,
+            'checkbox + no defaultValue should capture FALSE');
+    });
+
+    it('non-regression: defaultValue=on does NOT fire for a radio (the second-branch type guard holds)', function () {
+        var ctx = setupSingleFormRadioDom();
+        // s-a: no attribute. defaultValue='on' would trigger the second branch
+        // ONLY when the type is checkbox — for radios it must NOT fire.
+        assert.equal(ctx.a.defaultChecked, false);
+        assert.equal(captureDefaultChecked(ctx.a, 'on'), false,
+            'radio + defaultValue=on must NOT capture TRUE (the second branch is checkbox-only)');
+    });
+});
+
+
+// 07.b - source inspection: pin the bindForm capture shape
+
+describe('07.b - source inspection: bindForm defaultChecked capture pins to main.js', function () {
+    it('the fieldsSet defaultChecked capture reads $inputs[f].defaultChecked (not .checked)', function () {
+        // Look for the capture assignment site: starts with
+        // `$form.fieldsSet[elId].defaultChecked = (` and the next non-whitespace
+        // token must be `$inputs[f].defaultChecked`.
+        var re = /\$form\.fieldsSet\[elId\]\.defaultChecked\s*=\s*\(\s*\$inputs\[f\]\.defaultChecked/;
+        assert.ok(re.test(mainSrc),
+            'capture must read $inputs[f].defaultChecked (the parse-time-stable IDL property)');
+    });
+
+    it('the pre-fix shape (reading $inputs[f].checked) is no longer in the capture site', function () {
+        // The pre-fix line was:
+        //   $form.fieldsSet[elId].defaultChecked = ( /^(true|on)$/i.test($inputs[f].checked) || ...
+        // Guard against regression by asserting that ".checked" does NOT appear
+        // as the immediate first conjunct of the capture.
+        var re = /\$form\.fieldsSet\[elId\]\.defaultChecked\s*=\s*\(\s*\/\^\(true\|on\)\$\/i\.test\(\$inputs\[f\]\.checked\)/;
+        assert.equal(re.test(mainSrc), false,
+            'capture must not read $inputs[f].checked (the desync-prone live IDL property)');
+    });
+
+    it('the second branch (defaultValue=on for checkboxes) is preserved', function () {
+        // Verify the special-case checkbox branch is still in place after the fix.
+        var re = /\(\s*true\|on\s*\)\$\/\.test\(defaultValue\)\s*[\s\S]{0,40}\&\&\s*\/\^\(checkbox\)\$\/i\.test\(\$inputs\[f\]\.type\)/;
+        assert.ok(re.test(mainSrc),
+            'second-branch checkbox+defaultValue path should survive the fix');
+    });
+});
