@@ -34,6 +34,10 @@
  * only content-level scanning is silenced. This matches the precedent
  * of `script/.local-sync-targets.json` (silent no-op when absent).
  *
+ * Fresh-clone recovery (new machine, restored backup): recreate the
+ * sidecar from a personal backup outside the repo, or rebuild it
+ * from the schema above before running stable publish.
+ *
  * @param {RegExp} attributionPathPattern
  * @returns {Array<{name: string, pattern: RegExp, allowIn?: RegExp}>}
  */
