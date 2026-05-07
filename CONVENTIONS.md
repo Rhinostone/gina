@@ -639,6 +639,38 @@ it('name', async function() {
 
 > Every async `it()` block must either be declared `async` or explicitly `return` a Promise. Any test that calls an async API without doing either will silently pass without testing anything.
 
+### Negative-invariant tests can false-positive on their own descriptive comments
+
+When writing a "X must NOT appear" assertion that scans source content, the assertion's surrounding test description AND the code under test's own comments are part of the search surface. A test that asserts "string Y must not appear in region R" can fail when:
+
+- The test description literally says "must not appear: Y"
+- The reader code under test has a comment "do NOT use Y, prefer Z instead" — the literal Y is still in the file
+- An adjacent file's comment says "this replaces the old Y mechanism" — also in the file
+
+**Worked example** (`cd95151b`, 2026-05-07): added a negative-invariant test in `test/core/controller.test.js`:
+
+```js
+it("source does NOT read process.gina.PROXY_PREFIX (the leaky process-global is removed)", function() {
+    // ...
+    assert.ok(
+        block.indexOf('process.gina.PROXY_PREFIX') === -1,
+        '...'
+    );
+});
+```
+
+The assertion failed because the source comment in `controller.js` near the new reader read `// Per-request slot (NOT process.gina.PROXY_PREFIX) so the prefix cannot leak...`. The literal `process.gina.PROXY_PREFIX` was the false positive — describing what NOT to use was the same string the test was scanning for.
+
+**Fix:** rephrase the comment to describe the contrast without the literal forbidden token: `// Per-request slot (NOT a process-global) so the prefix cannot leak...`. Test passed without weakening.
+
+**Authoring patterns to avoid the trap:**
+
+- Avoid explanatory "NOT X" / "do not use X" / "replaced X" comments anywhere a negation test scans for X. Describe the alternative positively instead.
+- If you genuinely need to mention the forbidden token (e.g., a deprecation comment in a separate file the test doesn't scan), keep it OUTSIDE the test's scan window.
+- When a negation test fails unexpectedly, re-read the assertion alongside the surrounding source — your own comment is the most likely false positive.
+
+**Detection rule of thumb:** if your test says "must NOT contain X" and `grep -rn "X" <region>` returns the assertion description itself OR a "not X" comment, the test will reject those false positives the same way it rejects real violations.
+
 ---
 
 ## Debugging — measurement gotchas
