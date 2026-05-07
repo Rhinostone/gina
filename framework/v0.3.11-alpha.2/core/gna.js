@@ -1840,14 +1840,48 @@ gna.formatDataFromString = formatDataFromString;
 // ── Text helper (framework/v*/helpers/text.js) ───────────────────────────
 
 /**
- * i18n placeholder — currently a no-op, preserved for forward compatibility.
+ * Legacy one-arg translation alias. Forwards to {@link gna.t} (no culture
+ * arg → returns the key verbatim when nothing matches, matching the
+ * historical no-op behaviour). Preserved for back-compat — new code should
+ * call {@link gna.t} directly with explicit culture.
  *
- * @param {string} str - Source string
- * @returns {string} Translated string (identity today)
+ * @param {string} str - Source key
+ * @returns {string} Translated value or `str` verbatim
  * @example
- *   __('Hello');
+ *   __('common.welcome');
  */
 gna.__ = __;
+
+// ── i18n primitive (framework/v*/lib/i18n) ───────────────────────────────
+
+/**
+ * Translate a key. Walks the fallback chain (specific culture → base
+ * language → bundle default → process default → 'en'), resolves the dotted
+ * path, applies CLDR plural rules when `params.count` is present and the
+ * value is a plural-form object, then runs `{name}`-style interpolation.
+ *
+ * Culture is required for actual lookup; omitting it returns the key
+ * verbatim (back-compat with the legacy `__()` shape). Inside controller
+ * actions, prefer the `self.t(key, params)` helper which auto-binds
+ * `req.culture`. Inside templates, use the swig / nunjucks `t` filter.
+ *
+ * @param {string}        key
+ * @param {Object|null}   [params]
+ * @param {string}        [culture] - Required for lookup; e.g. `'en_US'`, `'fr'`.
+ * @param {Object}        [options]
+ * @param {string}        [options.bundleName]     - Defaults to `process.env.GINA_BUNDLE`.
+ * @param {string}        [options.defaultCulture] - Bundle default culture.
+ * @param {string[]}      [options.fallbackChain]  - Override of the fallback chain.
+ * @param {string}        [options.devMissingKey]  - Dev-mode prefix for missing keys.
+ * @returns {string}
+ * @example
+ *   t('common.welcome', {},                'en_US', { bundleName: 'dashboard' });
+ *   t('common.greeting', { name: 'Ada' },  'fr',    { bundleName: 'dashboard' });
+ *   t('common.items',    { count: 5 },     'en',    { bundleName: 'dashboard' });
+ */
+gna.t = function(key, params, culture, options) {
+    return lib.i18n.t(key, params, culture, options);
+};
 
 // ── Console helper (framework/v*/helpers/console.js) ─────────────────────
 

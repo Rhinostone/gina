@@ -9,63 +9,37 @@
 /**
  * TextHelper
  *
+ * Hosts the legacy `__()` translation function as a one-arg alias of the
+ * runtime translation primitive `lib.i18n.t`. New code should call `t()`
+ * (the global exposed by `gna.t`) directly with explicit culture; `__()`
+ * is preserved for back-compat.
+ *
  * @package     Gina.Lib.Helpers
  * @author      Rhinostone <contact@gina.io>
  * @api public
  * */
 
-module.exports = function(){
+module.exports = function() {
 
     /**
-     * @todo
-     * __ Translate a given string into the i18n for local value
+     * Legacy one-arg translation alias. Forwards to `lib.i18n.t(str)` when
+     * the lib registry is available, otherwise returns `str` verbatim
+     * (matching the historical no-op stub behaviour).
      *
-     * @returns {string} i18nValue Return the translated string
-     * */
-    __ = function(str){
-        var self = __;
-
+     * No culture argument is supported on this signature — without an
+     * explicit culture, `lib.i18n.t` itself returns the key verbatim. To
+     * actually translate, callers should use `gna.t(key, params, culture)`
+     * directly, or the controller helper `self.t(key, params)`.
+     *
+     * @global
+     * @param   {string} str - Source key (dotted-path into the bundle catalog).
+     * @returns {string} Translated value, or `str` verbatim when nothing matches.
+     */
+    __ = function(str) {
+        if ( typeof lib === 'undefined' || !lib || !lib.i18n || typeof lib.i18n.t !== 'function' ) {
+            return str;
+        }
+        return lib.i18n.t(str);
     };
-
-    __.prototype.split = function(patt){
-        var self = __;
-        if (typeof(patt) == "undefined") return self;
-
-        return self.split(patt);
-    };
-
-
 
 };//EO TextHelper.
-
-/**
- * trim prototype
- *
- * @returns {string} result
- * */
-if (!String.prototype.trim) {
-    String.prototype.trim = function(){
-        return this.replace(/^\s+|\s+$/g, '');
-    }
-}
-
-/**
- * ltrim prototype
- *
- * @returns {string} result
- * */
-String.prototype.ltrim=function(){return this.replace(/^\s+/,'');};
-
-/**
- * rtrim prototype
- *
- * @returns {string} result
- * */
-String.prototype.rtrim=function(){return this.replace(/\s+$/,'');};
-
-/**
- * gtrim prototype - Global / full trim
- *
- * @returns {string} result
- * */
-String.prototype.gtrim=function(){return this.replace(/(?:(?:^|\n)\s+|\s+(?:$|\n))/g,'').replace(/\s+/g,' ');};

@@ -76,6 +76,13 @@ function Lib() {
         // #M4 — Promise adapter for .onComplete() EventEmitter callbacks.
         // Enables async/await in controller actions without rewriting entities.
         async           : _require('./async'),
+        // #I18N1 — Internationalisation primitives. Per-bundle JSON catalogs,
+        // fallback chain (specific → base → settings.region.culture →
+        // GINA_CULTURE → 'en'), CLDR plural via Intl.PluralRules,
+        // {name}-style interpolation. Backs gna.t(), self.t(), and the
+        // swig/nunjucks `t` filter (slice 2). Catalogs land at
+        // process.gina._i18nCatalogs[bundleName][culture].
+        i18n            : _require('./i18n'),
         // replaced: _require('./state') — StateStore is a singleton backed by node:sqlite
         // (DatabaseSync). Hot-reloading it in dev mode would close and re-open the DB
         // connection on every HTTP request, racing with in-flight writes. Use plain

@@ -1,0 +1,10 @@
+{
+  "common": {
+    "welcome": "Welcome!",
+    "greeting": "Hello, {name}!"
+  },
+  "errors": {
+    "notFound": "Not found",
+    "serverError": "Something went wrong"
+  }
+}

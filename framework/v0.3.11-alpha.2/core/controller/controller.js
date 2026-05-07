@@ -1385,6 +1385,69 @@ function SuperController(options) {
 
 
     /**
+     * #I18N1 — Translate a key using the bundle's loaded i18n catalogs.
+     * Auto-binds the request's culture from `req.culture` (formalised by
+     * slice 3) and the bundle name from `local.options.conf.bundle`.
+     *
+     * Caller can override the auto-bound culture via the optional 3rd
+     * argument (useful when an action needs to render a confirmation
+     * email in a specific locale, etc.).
+     *
+     * Returns the key verbatim when no translation is found anywhere in
+     * the fallback chain (specific culture → base language → bundle
+     * default → process default → 'en'); a `[MISSING] <key>` marker is
+     * available via `settings.json > i18n.devMissingKey` (slice 1
+     * surfaces the knob; the controller wires it through).
+     *
+     * @param {string}      key          - Dotted-path key, e.g. `'common.welcome'`.
+     * @param {Object|null} [params]     - Interpolation values. Pass `count` for
+     *                                     CLDR plural-form resolution.
+     * @param {string}      [culture]    - Override of the auto-bound `req.culture`.
+     * @returns {string}
+     *
+     * @example
+     *   this.home = function(req, res, next) {
+     *       var msg = self.t('common.welcome');
+     *       self.render({ msg: msg });
+     *   };
+     *
+     * @example
+     *   var subject = self.t('email.confirmSubject', { name: user.name }, user.preferredCulture);
+     */
+    this.t = function(key, params, culture) {
+        if ( !culture ) {
+            culture = (local.req && local.req.culture) || null;
+        }
+        var bundleName = (
+            local.options
+            && local.options.conf
+            && local.options.conf.bundle
+        ) ? local.options.conf.bundle : null;
+        var devMissingKey = (
+            local.options
+            && local.options.conf
+            && local.options.conf.content
+            && local.options.conf.content.settings
+            && local.options.conf.content.settings.i18n
+            && typeof local.options.conf.content.settings.i18n.devMissingKey === 'string'
+        ) ? local.options.conf.content.settings.i18n.devMissingKey : null;
+        var fallbackChain = (
+            local.options
+            && local.options.conf
+            && local.options.conf.content
+            && local.options.conf.content.settings
+            && local.options.conf.content.settings.i18n
+            && Array.isArray(local.options.conf.content.settings.i18n.fallbackChain)
+        ) ? local.options.conf.content.settings.i18n.fallbackChain : null;
+        return lib.i18n.t(key, params, culture, {
+            bundleName    : bundleName,
+            devMissingKey : devMissingKey,
+            fallbackChain : fallbackChain
+        });
+    };
+
+
+    /**
      * Set method - Override current method
      * E.g.: in case of redirect, to force PUT to GET
      *

@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://gina.io/schema/locales.json",
+  "title": "Gina i18n catalog",
+  "description": "Per-bundle message catalog. Lives at `bundle/locales/<culture>.json` (e.g. en.json, en_US.json, fr.json). Eager-loaded by lib/i18n at bundle start. Resolved via dotted-path keys (e.g. \"common.welcome\"). Plural forms are detected when (a) the caller passes `count` AND (b) the resolved value is an object whose own keys are all CLDR plural categories (zero, one, two, few, many, other) and whose values are all strings.",
+  "type": "object",
+  "additionalProperties": { "$ref": "#/$defs/value" },
+  "$defs": {
+    "value": {
+      "oneOf": [
+        {
+          "type": "string",
+          "description": "Translation string. May contain {name}-style placeholders. Use {{name}} to escape literal braces."
+        },
+        { "$ref": "#/$defs/pluralForm" },
+        {
+          "type": "object",
+          "description": "Nested category. Contains further translation keys.",
+          "additionalProperties": { "$ref": "#/$defs/value" }
+        }
+      ]
+    },
+    "pluralForm": {
+      "type": "object",
+      "description": "CLDR plural form. Selected by Intl.PluralRules at lookup time when the caller passes `count`. The `other` form is required as last-resort fallback.",
+      "properties": {
+        "zero":  { "type": "string", "description": "Used by some languages (e.g. Arabic) for 0." },
+        "one":   { "type": "string", "description": "Singular form (English '1 item')." },
+        "two":   { "type": "string", "description": "Used by some languages (e.g. Welsh) for exactly 2." },
+        "few":   { "type": "string", "description": "Used by some languages (e.g. Russian, Polish) for small counts." },
+        "many":  { "type": "string", "description": "Used by some languages (e.g. Russian, Polish) for large counts." },
+        "other": { "type": "string", "description": "Required. Used as fallback when the language-specific category is absent." }
+      },
+      "required": ["other"],
+      "additionalProperties": false
+    }
+  }
+}
