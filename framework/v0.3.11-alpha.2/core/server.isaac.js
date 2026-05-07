@@ -939,24 +939,33 @@ function ServerEngineClass(options) {
                     process.gina.PROXY_HOST     = request.headers['x-forwarded-host'];
                     // console.debug('[PROXY_HOST][X-FORWARDED-PROTO] override request.headers["x-forwarded-host"] -> ' + request.headers['x-forwarded-host']);
                 }
-                // Path-prefix awareness for upstreams mounted on a sub-path by the
-                // reverse proxy. Standard header used by Spring Boot, Traefik,
-                // FastAPI, etc. Normalised to leading slash + no trailing slash so
-                // downstream concatenation with the bundle's internal webroot is
-                // stable (e.g. "/admin" + "/" → "/admin/"). Empty or "/" values
-                // are dropped so back-compat is preserved.
-                if (request.headers['x-forwarded-prefix']) {
-                    var _xfp = String(request.headers['x-forwarded-prefix']).trim();
-                    _xfp = _xfp.replace(/\/+$/, '');
-                    if (_xfp.length > 0 && _xfp.charAt(0) !== '/') {
-                        _xfp = '/' + _xfp;
-                    }
-                    if (_xfp.length > 0) {
-                        process.gina.PROXY_PREFIX = _xfp;
-                    }
-                }
                 // Forcing context - also available for workers
                 setContext('isProxyHost', true);
+            }
+
+            // Path-prefix awareness for upstreams mounted on a sub-path by the
+            // reverse proxy. Standard header used by Spring Boot, Traefik,
+            // FastAPI, etc. Per-request state (`request._ginaProxyPrefix`) so
+            // the value cannot leak across requests when the worker handles a
+            // mix of proxied + direct calls or different proxy mounts. Run on
+            // EVERY request — gating on `!isProxyHost` like the host/scheme
+            // block above would freeze the value at the first proxied
+            // request's prefix forever (the gate stops firing after the first
+            // proxied request, because `isProxyHost` becomes globally true).
+            // Normalised to leading slash + no trailing slash so downstream
+            // concatenation with the bundle's internal webroot is stable
+            // (e.g. "/admin" + "/" → "/admin/"). Empty or "/" values are
+            // dropped (back-compat: header absent or no-op header → property
+            // never set, controller falls back to bundle's internal webroot).
+            if (request.headers['x-forwarded-prefix']) {
+                var _xfp = String(request.headers['x-forwarded-prefix']).trim();
+                _xfp = _xfp.replace(/\/+$/, '');
+                if (_xfp.length > 0 && _xfp.charAt(0) !== '/') {
+                    _xfp = '/' + _xfp;
+                }
+                if (_xfp.length > 0) {
+                    request._ginaProxyPrefix = _xfp;
+                }
             }
 
 

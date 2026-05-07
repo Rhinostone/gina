@@ -511,17 +511,23 @@ function SuperController(options) {
 
             set('page.environment.rootDomain', _config.rootDomain);
             // Public webroot — composed from the X-Forwarded-Prefix the reverse
-            // proxy advertised (captured by server.isaac.js into PROXY_PREFIX) and
-            // the bundle's internal server.webroot. The bundle stays unaware of
-            // its public mount path; only this output value (templated into
-            // gina.onload.min.js → gina.config.webroot) carries the prefix so
-            // browser-side URL construction (/_gina/assets/routing.json, the
-            // gina.min.css link injection, etc.) targets the correct upstream
-            // through the proxy. Internal disk-path resolution and asset URL
-            // rewriting still use options.conf.server.webroot directly.
+            // proxy advertised (captured by server.isaac.js into the per-request
+            // `req._ginaProxyPrefix` slot) and the bundle's internal
+            // server.webroot. The bundle stays unaware of its public mount
+            // path; only this output value (templated into gina.onload.min.js →
+            // gina.config.webroot AND into the synchronous window.__ginaWebroot
+            // global) carries the prefix so browser-side URL construction
+            // (/_gina/assets/routing.json, the gina.min.css link injection,
+            // etc.) targets the correct upstream through the proxy. Internal
+            // disk-path resolution and asset URL rewriting still use
+            // options.conf.server.webroot directly.
+            //
+            // Per-request slot (NOT a process-global) so the prefix cannot
+            // leak across requests when the worker handles a mix of proxied +
+            // direct calls. See server.isaac.js for the writer.
             var _publicWebroot = options.conf.server.webroot;
-            if ( typeof(process.gina.PROXY_PREFIX) != 'undefined' && process.gina.PROXY_PREFIX ) {
-                var _prefix = process.gina.PROXY_PREFIX;
+            if ( local.req && typeof(local.req._ginaProxyPrefix) != 'undefined' && local.req._ginaProxyPrefix ) {
+                var _prefix = local.req._ginaProxyPrefix;
                 var _wr     = _publicWebroot.replace(/^\/+/, '');
                 _publicWebroot = _prefix + '/' + _wr;
                 if ( !/\/$/.test(_publicWebroot) ) {

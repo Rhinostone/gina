@@ -407,20 +407,27 @@ describe('04b - HTTP/2 session metrics: counter logic', function() {
 });
 
 
-// ─── X-Forwarded-Prefix capture in proxy detection block ─────────────────────
+// ─── X-Forwarded-Prefix capture (per-request, not process-global) ────────────
 //
 // When a reverse proxy mounts the bundle on a sub-path (e.g.
 // `proxy_set_header X-Forwarded-Prefix /admin;`), the framework needs to know
 // the public mount path so the controller can compose a public webroot for
-// browser-side URL construction. The capture site sits inside the existing
-// proxy detection block — sibling to the X-Forwarded-Host / X-Forwarded-Proto
-// reads — and stores the normalised value on process.gina.PROXY_PREFIX.
+// browser-side URL construction. The capture site sits AFTER (sibling to,
+// not inside) the proxy detection block — it must run on EVERY request
+// regardless of `isProxyHost` state, because the proxy detection block is
+// gated on `!isProxyHost` and stops firing after the first proxied request
+// flips `isProxyHost` to globally true. Stores the normalised value on
+// `request._ginaProxyPrefix` (per-request slot) so the value cannot leak
+// across requests when the worker handles a mix of proxied + direct calls
+// or different proxy mounts. process.gina.PROXY_PREFIX (the previous
+// process-global slot) is no longer written.
 //
 // Normalisation: trim, drop trailing slashes, prepend leading slash if
 // missing, drop empty / "/" results so back-compat is preserved (header
-// absent or no-op header → PROXY_PREFIX never set).
+// absent or no-op header → property never set, controller falls back to
+// the bundle's internal webroot).
 
-describe('X-Forwarded-Prefix capture & normalisation in proxy detection', function() {
+describe('X-Forwarded-Prefix capture & normalisation (per-request)', function() {
 
     if (typeof src == 'undefined' || src === null) {
         src = fs.readFileSync(SOURCE, 'utf8');
@@ -428,26 +435,57 @@ describe('X-Forwarded-Prefix capture & normalisation in proxy detection', functi
 
     // ── (a) source structure ─────────────────────────────────────────────────
 
-    it("source reads request.headers['x-forwarded-prefix'] in the proxy detection block", function() {
+    it("source reads request.headers['x-forwarded-prefix'] near the proxy detection region", function() {
         var anchor = src.indexOf("request.headers['x-forwarded-host']");
         assert.ok(anchor > -1, "x-forwarded-host read site not found — proxy block may have moved");
+        // Slightly larger window now: the prefix read sits AFTER the gated
+        // proxy block (no longer inside it), so allow ~2.5k chars to absorb
+        // the closing `}` + the explanatory comment header that introduces
+        // the per-request rationale.
         var windowStart = anchor;
-        var windowEnd   = Math.min(src.length, anchor + 1500);
+        var windowEnd   = Math.min(src.length, anchor + 2500);
         var block = src.slice(windowStart, windowEnd);
         assert.ok(
             block.indexOf("request.headers['x-forwarded-prefix']") > -1,
-            'expected x-forwarded-prefix read alongside x-forwarded-host inside the proxy detection block'
+            'expected x-forwarded-prefix read in the same region as x-forwarded-host (sibling to the proxy detection block)'
         );
     });
 
-    it("source assigns the normalised value to process.gina.PROXY_PREFIX", function() {
+    it("source assigns the normalised value to request._ginaProxyPrefix (per-request)", function() {
         var anchor = src.indexOf("request.headers['x-forwarded-prefix']");
         assert.ok(anchor > -1, 'x-forwarded-prefix read site not found');
         var windowEnd = Math.min(src.length, anchor + 600);
         var block = src.slice(anchor, windowEnd);
         assert.ok(
-            block.indexOf('process.gina.PROXY_PREFIX') > -1,
-            'expected process.gina.PROXY_PREFIX assignment near the x-forwarded-prefix read'
+            block.indexOf('request._ginaProxyPrefix') > -1,
+            'expected request._ginaProxyPrefix assignment near the x-forwarded-prefix read (per-request, not process-global)'
+        );
+    });
+
+    it("source does NOT write process.gina.PROXY_PREFIX (the leaky process-global is removed)", function() {
+        // Negative invariant: the previous process-global write is the bug
+        // surface this slice fixed. If it ever comes back, the per-request
+        // isolation is broken and renders mixing proxied + direct calls
+        // would leak the prefix across requests until worker restart.
+        assert.ok(
+            src.indexOf('process.gina.PROXY_PREFIX') === -1,
+            'process.gina.PROXY_PREFIX must NOT be written by server.isaac.js — use request._ginaProxyPrefix instead (cross-request leak protection)'
+        );
+    });
+
+    it("x-forwarded-prefix processing is OUTSIDE the !isProxyHost gated block (runs on every request)", function() {
+        // Find the gated block's setContext('isProxyHost', true) line — that
+        // marks the END of the gated block. The x-forwarded-prefix read must
+        // come AFTER it (or be far enough away to demonstrably be outside).
+        // If both sit before setContext, the prefix is still inside the gate
+        // and the cross-request leak is back.
+        var gateEnd = src.indexOf("setContext('isProxyHost', true)");
+        var xfpRead = src.indexOf("request.headers['x-forwarded-prefix']");
+        assert.ok(gateEnd > -1, "setContext('isProxyHost', true) not found — proxy block may have moved");
+        assert.ok(xfpRead > -1, 'x-forwarded-prefix read not found');
+        assert.ok(
+            xfpRead > gateEnd,
+            'x-forwarded-prefix processing must be AFTER the !isProxyHost gated block (currently before — leak risk)'
         );
     });
 

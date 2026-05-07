@@ -903,27 +903,58 @@ describe('09 - public webroot composition under reverse proxy', function() {
 
     // ── (a) source structure ─────────────────────────────────────────────────
 
-    it("source references process.gina.PROXY_PREFIX in the page.environment.webroot setter region", function() {
+    it("source references local.req._ginaProxyPrefix in the page.environment.webroot setter region", function() {
         var anchor = src.indexOf("set('page.environment.webroot'");
         assert.ok(anchor > -1, "page.environment.webroot setter not found");
-        // Look in a window above + below the setter for the PROXY_PREFIX read
+        // Look in a window above + below the setter for the per-request read
         var windowStart = Math.max(0, anchor - 1500);
         var windowEnd   = Math.min(src.length, anchor + 200);
         var block = src.slice(windowStart, windowEnd);
         assert.ok(
-            block.indexOf('process.gina.PROXY_PREFIX') > -1,
-            'expected process.gina.PROXY_PREFIX read near the page.environment.webroot setter'
+            block.indexOf('local.req._ginaProxyPrefix') > -1,
+            'expected local.req._ginaProxyPrefix read near the page.environment.webroot setter (per-request, not process-global)'
         );
     });
 
-    it("source guards PROXY_PREFIX with typeof != 'undefined' before composing", function() {
+    it("source does NOT read process.gina.PROXY_PREFIX (the leaky process-global is removed)", function() {
+        // Negative invariant: the previous process-global read at the webroot
+        // setter is the bug surface this slice fixed. If it ever comes back,
+        // the cross-request leak returns — once a sub-path-mounted request
+        // poisons the global, every subsequent render in that worker (even
+        // direct, non-proxied requests) gets the leaked prefix concatenated.
         var anchor = src.indexOf("set('page.environment.webroot'");
         var windowStart = Math.max(0, anchor - 1500);
         var windowEnd   = Math.min(src.length, anchor + 200);
         var block = src.slice(windowStart, windowEnd);
         assert.ok(
-            block.indexOf("typeof(process.gina.PROXY_PREFIX) != 'undefined'") > -1,
-            'expected typeof guard around process.gina.PROXY_PREFIX (back-compat: header absent)'
+            block.indexOf('process.gina.PROXY_PREFIX') === -1,
+            'process.gina.PROXY_PREFIX must NOT be read by the webroot composition — use local.req._ginaProxyPrefix instead (cross-request leak protection)'
+        );
+    });
+
+    it("source guards local.req._ginaProxyPrefix with typeof != 'undefined' before composing", function() {
+        var anchor = src.indexOf("set('page.environment.webroot'");
+        var windowStart = Math.max(0, anchor - 1500);
+        var windowEnd   = Math.min(src.length, anchor + 200);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            block.indexOf("typeof(local.req._ginaProxyPrefix) != 'undefined'") > -1,
+            'expected typeof guard around local.req._ginaProxyPrefix (back-compat: header absent)'
+        );
+    });
+
+    it("source guards local.req existence before reading _ginaProxyPrefix", function() {
+        // Defensive: setOptions sets local.req synchronously, but this read
+        // sits in the larger setOptions body. A defensive `local.req &&` guard
+        // protects against future code-paths that might reach this region
+        // without local.req populated (e.g. createTestInstance with bare opts).
+        var anchor = src.indexOf("set('page.environment.webroot'");
+        var windowStart = Math.max(0, anchor - 1500);
+        var windowEnd   = Math.min(src.length, anchor + 200);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            /local\.req\s*&&\s*typeof\(local\.req\._ginaProxyPrefix\)/.test(block),
+            'expected `local.req && typeof(local.req._ginaProxyPrefix)` defensive guard'
         );
     });
 
@@ -1032,6 +1063,85 @@ describe('09 - public webroot composition under reverse proxy', function() {
         var after  = composeWebroot(before, '/admin');
         assert.notEqual(after, before, 'composition must change "/" when a prefix is set');
         assert.equal(after, '/admin/', 'composed webroot must include the proxy prefix');
+    });
+
+    // ── (c) per-request isolation — the cross-request leak shape ─────────────
+    //
+    // Before this slice, PROXY_PREFIX was a process-global (`process.gina.PROXY_PREFIX`)
+    // set by server.isaac.js inside a `!isProxyHost && headers['x-forwarded-host']`
+    // gated block. The block stops firing after the first proxied request
+    // flips `isProxyHost` to globally true (`setContext('isProxyHost', true)`),
+    // so subsequent requests never re-derive PROXY_PREFIX and the value stays
+    // at the FIRST proxied request's prefix forever (until worker restart).
+    //
+    // This bites when the worker handles a mix of proxied + direct calls
+    // (e.g. internal services hitting the bundle without going through the
+    // proxy) — direct calls inherit the leaked prefix and render with the
+    // wrong webroot. Less common but real: a bundle behind a proxy that
+    // mounts it at multiple paths.
+    //
+    // The fix moves the value to per-request `req._ginaProxyPrefix` so each
+    // request gets its own isolated state. The replica below simulates the
+    // before/after by reading the prefix from a per-request object instead
+    // of a shared global.
+
+    function resolvePrefix(req) {
+        return (req && typeof(req._ginaProxyPrefix) != 'undefined' && req._ginaProxyPrefix)
+            ? req._ginaProxyPrefix
+            : undefined;
+    }
+
+    it('per-request: req A has prefix → req A composition includes it', function() {
+        var reqA = { _ginaProxyPrefix: '/admin' };
+        var prefix = resolvePrefix(reqA);
+        assert.equal(composeWebroot('/', prefix), '/admin/');
+    });
+
+    it('per-request isolation: req B (no header, after req A) does NOT inherit req A prefix', function() {
+        // The pre-fix bug: req B would see the leaked PROXY_PREFIX from req A
+        // because both shared process.gina.PROXY_PREFIX. With the per-request
+        // shape, req B has its own _ginaProxyPrefix slot (undefined when no
+        // X-Forwarded-Prefix header was present) → composition correctly
+        // falls back to the bundle's internal webroot.
+        var reqA = { _ginaProxyPrefix: '/admin' };
+        var reqB = {}; // no x-forwarded-prefix header → slot never written
+        // Simulate req A's render first (would write process.gina.PROXY_PREFIX in the old shape):
+        var prefixA = resolvePrefix(reqA);
+        assert.equal(composeWebroot('/', prefixA), '/admin/');
+        // Then req B's render — must NOT see the prefix:
+        var prefixB = resolvePrefix(reqB);
+        assert.equal(prefixB, undefined, 'req B must not inherit req A\'s prefix');
+        assert.equal(composeWebroot('/', prefixB), '/', 'req B webroot must be the bundle internal, not the leaked prefix');
+    });
+
+    it('per-request isolation: req C with a DIFFERENT prefix (after req A) gets its own value', function() {
+        // Multi-mount proxy scenario: same bundle mounted on /admin and /staff.
+        // Pre-fix: process.gina.PROXY_PREFIX would stay at whichever request
+        // landed first. Per-request: each request gets its own value.
+        var reqA = { _ginaProxyPrefix: '/admin' };
+        var reqC = { _ginaProxyPrefix: '/staff' };
+        assert.equal(composeWebroot('/', resolvePrefix(reqA)), '/admin/');
+        assert.equal(composeWebroot('/', resolvePrefix(reqC)), '/staff/');
+    });
+
+    it('per-request: req with empty _ginaProxyPrefix slot is treated as absent (defensive)', function() {
+        // The writer at server.isaac.js drops empty / "/" header values via
+        // `_xfp.length > 0 && ...` so the slot never gets written when the
+        // header is no-op. But if some downstream wrote `req._ginaProxyPrefix
+        // = ''` defensively, the truthy check still falls back correctly.
+        var reqEmpty = { _ginaProxyPrefix: '' };
+        assert.equal(resolvePrefix(reqEmpty), undefined);
+        assert.equal(composeWebroot('/', resolvePrefix(reqEmpty)), '/');
+    });
+
+    it('per-request: missing req object falls through (defensive — createTestInstance with no req)', function() {
+        // controller.createTestInstance({}) sets local.req = {} (empty object).
+        // The defensive `local.req && ...` guard in the production reader
+        // protects against any code-path that might reach the composition
+        // without local.req populated.
+        assert.equal(resolvePrefix(undefined), undefined);
+        assert.equal(resolvePrefix(null), undefined);
+        assert.equal(composeWebroot('/', resolvePrefix(undefined)), '/');
     });
 
 });
