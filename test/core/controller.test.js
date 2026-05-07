@@ -1035,3 +1035,192 @@ describe('09 - public webroot composition under reverse proxy', function() {
     });
 
 });
+
+
+// ─── 10 — webroot handoff: server-composed → loader.js → core.js ─────────────
+//
+// Section 09 verified the SERVER-side webroot composition (PROXY_PREFIX +
+// internal webroot). This section locks the BROWSER-side handoff: the public
+// webroot must reach core.js's getDependencies BEFORE it composes the
+// routing.json fetch URL.
+//
+// The race: gina.min.js's script-tag onload handler fires getDependencies()
+// BEFORE window.onGinaLoaded(gina) has populated gina.config. At fetch time
+// gina.config.webroot is undefined, so the URL would fall back to '/' and
+// routing.json would be fetched root-relative — landing on the wrong upstream
+// when the bundle is mounted on a sub-path under a reverse proxy.
+//
+// The fix:
+//  - loader.js exposes window.__ginaWebroot SYNCHRONOUSLY (templated by
+//    whisper from page.environment.webroot, served as gina.onload.min.js).
+//  - core.js reads window.__ginaWebroot FIRST, falling back to
+//    gina.config.webroot (post-onGinaLoaded re-entry) then '/'.
+// gina.onload.min.js is injected into <head> BEFORE gina.min.js by every
+// full-page render path in render-swig.js (see :1185-1194 dev,
+// :1262-1271 prod), so the synchronous global is reliably available
+// before getDependencies runs.
+
+describe('10 - webroot handoff: loader sets __ginaWebroot, core reads it before fetch', function() {
+
+    var FW         = require('../fw');
+    var LOADER_SRC = path.join(FW, 'core/asset/plugin/src/vendor/gina/utils/loader.js');
+    var CORE_SRC   = path.join(FW, 'core/asset/plugin/src/vendor/gina/core.js');
+    var loaderSrc  = fs.readFileSync(LOADER_SRC, 'utf8');
+    var coreSrc    = fs.readFileSync(CORE_SRC,   'utf8');
+
+    // ── (a) loader.js source structure ──────────────────────────────────────
+
+    it("loader.js sets window['__ginaWebroot'] synchronously at module top level", function() {
+        assert.ok(
+            /window\['__ginaWebroot'\]\s*=\s*'\{\{ page\.environment\.webroot \}\}'/.test(loaderSrc),
+            "loader.js must contain `window['__ginaWebroot'] = '{{ page.environment.webroot }}';` so the global is whisper-substituted at serve time"
+        );
+    });
+
+    it("loader.js sets __ginaWebroot BEFORE the onGinaLoaded function definition", function() {
+        var globalIdx = loaderSrc.indexOf("window['__ginaWebroot']");
+        var fnIdx     = loaderSrc.indexOf("window['onGinaLoaded']");
+        assert.ok(globalIdx > -1, '__ginaWebroot setter not found in loader.js');
+        assert.ok(fnIdx     > -1, 'onGinaLoaded function not found in loader.js');
+        assert.ok(
+            globalIdx < fnIdx,
+            '__ginaWebroot setter must come BEFORE onGinaLoaded so the global is set at parse time, not when onGinaLoaded is invoked'
+        );
+    });
+
+    it("loader.js exposes __ginaWebroot via @js_externs so Closure does not rename it", function() {
+        // Without @js_externs, ADVANCED_OPTIMIZATIONS would rename the property
+        // and core.js (which is compiled separately) would read undefined.
+        assert.ok(
+            /@js_externs __ginaWebroot/.test(loaderSrc),
+            'loader.js must annotate __ginaWebroot with @js_externs to survive Closure ADVANCED_OPTIMIZATIONS'
+        );
+    });
+
+    // ── (b) core.js source structure ────────────────────────────────────────
+
+    it("core.js reads window.__ginaWebroot FIRST in the _webroot fallback chain", function() {
+        var anchor = coreSrc.indexOf('var _webroot');
+        assert.ok(anchor > -1, '_webroot declaration not found in core.js');
+        // Look in a window after the declaration for the fallback chain.
+        var block = coreSrc.slice(anchor, anchor + 400);
+        var winIdx     = block.indexOf('window.__ginaWebroot');
+        var configIdx  = block.indexOf('gina.config.webroot');
+        var fallbackIdx = block.indexOf("'/'");
+        assert.ok(winIdx > -1,                        'expected window.__ginaWebroot read in _webroot fallback chain');
+        assert.ok(configIdx > -1,                     'expected gina.config.webroot read in _webroot fallback chain (back-compat)');
+        assert.ok(fallbackIdx > -1,                   "expected '/' default in _webroot fallback chain");
+        assert.ok(winIdx < configIdx,                 'window.__ginaWebroot must come BEFORE gina.config.webroot in the fallback chain');
+        assert.ok(configIdx < fallbackIdx,            "gina.config.webroot must come BEFORE the '/' default");
+    });
+
+    it("core.js guards window.__ginaWebroot with `typeof window !== 'undefined'`", function() {
+        // Defensive for any node-side path that imports core.js (e.g. tests,
+        // SSR experiments). Without the guard the read would throw ReferenceError.
+        var anchor = coreSrc.indexOf('var _webroot');
+        var block  = coreSrc.slice(anchor, anchor + 400);
+        assert.ok(
+            block.indexOf("typeof window !== 'undefined'") > -1,
+            "expected typeof window guard around window.__ginaWebroot read in core.js"
+        );
+    });
+
+    it("core.js still composes the routing.json URL via _webroot + '_gina/assets/routing.json'", function() {
+        assert.ok(
+            /_webroot\s*\+\s*'_gina\/assets\/routing\.json'/.test(coreSrc),
+            "expected `_webroot + '_gina/assets/routing.json'` URL composition (the fetch site this fix protects)"
+        );
+    });
+
+    // ── (c) pure logic — _webroot resolution chain replica ───────────────────
+    //
+    // Replica of the resolution logic in core.js. JSDOM-free; the source pins
+    // above lock the live shape, this exercises the priority ordering.
+
+    function resolveWebroot(globalWindow, gina) {
+        return (typeof globalWindow !== 'undefined' && globalWindow && globalWindow.__ginaWebroot)
+            || (gina && gina.config && gina.config.webroot)
+            || '/';
+    }
+
+    it('priority 1: window.__ginaWebroot wins when set (the fix path)', function() {
+        var win  = { __ginaWebroot: '/sub/' };
+        var gina = { config: { webroot: '/should-not-be-used/' } };
+        assert.equal(resolveWebroot(win, gina), '/sub/');
+    });
+
+    it('priority 2: falls through to gina.config.webroot when __ginaWebroot is absent (re-entry, post-onGinaLoaded)', function() {
+        var win  = {}; // __ginaWebroot not set yet
+        var gina = { config: { webroot: '/admin/' } };
+        assert.equal(resolveWebroot(win, gina), '/admin/');
+    });
+
+    it("priority 3: falls through to '/' when both __ginaWebroot and gina.config.webroot are absent (the original race)", function() {
+        var win  = {};
+        var gina = { config: {} };
+        assert.equal(resolveWebroot(win, gina), '/');
+    });
+
+    it("repro of the original race: pre-fix, _webroot was '/' under sub-path mount, producing '/_gina/assets/routing.json'", function() {
+        // Before the fix, getDependencies only read gina.config.webroot. At the
+        // moment the script-tag onload fires, onGinaLoaded has NOT YET run, so
+        // gina.config is undefined. _webroot collapsed to '/', and the URL
+        // collapsed to '/_gina/assets/routing.json' — the wrong upstream under
+        // a reverse proxy with sub-path mount.
+        var win  = {}; // __ginaWebroot would be set if we used the new loader
+        var gina = {}; // pre-onGinaLoaded state
+        var oldWebroot = (gina && gina.config && gina.config.webroot) || '/';
+        assert.equal(oldWebroot + '_gina/assets/routing.json', '/_gina/assets/routing.json');
+    });
+
+    it("with the fix: pre-onGinaLoaded state, __ginaWebroot delivers the sub-path correctly", function() {
+        // After the fix, loader.js sets window.__ginaWebroot SYNCHRONOUSLY at
+        // script parse time (before gina.min.js even runs). So the same
+        // pre-onGinaLoaded state now resolves to the actual public webroot.
+        var win  = { __ginaWebroot: '/sub/' };
+        var gina = {}; // still pre-onGinaLoaded
+        var newWebroot = resolveWebroot(win, gina);
+        assert.equal(newWebroot + '_gina/assets/routing.json', '/sub/_gina/assets/routing.json');
+    });
+
+    it('back-compat: empty string __ginaWebroot is treated as absent (truthy check), falls through', function() {
+        // The truthy check (windowGlobal.__ginaWebroot && ...) drops empty
+        // strings. Mirrors the existing back-compat shape on gina.config.webroot.
+        var win  = { __ginaWebroot: '' };
+        var gina = { config: { webroot: '/admin/' } };
+        assert.equal(resolveWebroot(win, gina), '/admin/');
+    });
+
+    it('back-compat: typeof guard protects node-side imports of core.js', function() {
+        // Pretend window is undefined (server-side require, test harness, etc.).
+        // The typeof guard short-circuits; we fall through to gina.config.
+        var gina = { config: { webroot: '/srv/' } };
+        // We can't actually delete `window` from the global (Node has no
+        // window), so simulate by passing undefined directly. The pure-logic
+        // replica's typeof check on its parameter mirrors the production
+        // typeof on the bare `window` identifier.
+        assert.equal(resolveWebroot(undefined, gina), '/srv/');
+    });
+
+    // ── (d) dist-source equivalence — the build did not strip our changes ────
+
+    it('dist gina.onload.min.js contains the __ginaWebroot template (post-build)', function() {
+        var distOnload = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.onload.min.js');
+        var content    = fs.readFileSync(distOnload, 'utf8');
+        assert.ok(
+            content.indexOf("__ginaWebroot='{{ page.environment.webroot }}'") > -1
+            || content.indexOf('__ginaWebroot="{{ page.environment.webroot }}"') > -1,
+            'dist gina.onload.min.js must contain __ginaWebroot=\'{{ page.environment.webroot }}\' for whisper to substitute it at serve time'
+        );
+    });
+
+    it('dist gina.min.js contains the new __ginaWebroot read (post-build)', function() {
+        var distCore = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.min.js');
+        var content  = fs.readFileSync(distCore, 'utf8');
+        assert.ok(
+            content.indexOf('__ginaWebroot') > -1,
+            'dist gina.min.js must reference __ginaWebroot — Closure may have stripped the read if @js_externs is missing or if the source was rebuilt without our changes'
+        );
+    });
+
+});

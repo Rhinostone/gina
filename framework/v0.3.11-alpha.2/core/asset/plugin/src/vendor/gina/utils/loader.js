@@ -15,6 +15,14 @@
 
 window['originalContext']   = null;
 
+// Public webroot exposed synchronously so `core.js::getDependencies` can
+// compose the routing.json fetch URL before `onGinaLoaded` populates
+// `gina.config.webroot`. Whispered server-side from `page.environment.webroot`
+// (composed in controller.js with any X-Forwarded-Prefix the reverse proxy
+// advertised).
+/**@js_externs __ginaWebroot*/
+window['__ginaWebroot']     = '{{ page.environment.webroot }}';
+
 /**
  * onGinaLoaded
  * By modifying this portion of code, yo have to restart the bundle to apply changes

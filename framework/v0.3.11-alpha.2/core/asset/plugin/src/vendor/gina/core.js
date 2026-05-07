@@ -290,12 +290,26 @@ function getDependencies(gina, cb) {
         }
     }
 
-    // Gina madatory dependencies are handled here
-    // Webroot is resolved at runtime from `gina.config` (populated by gina.onload.min.js,
-    // which IS whispered server-side). `core.js` ships in `gina.min.js`, which is served
-    // as a static asset without a swig pass — so `{{ page.environment.webroot }}` tokens
+    // Gina mandatory dependencies are handled here.
+    //
+    // Webroot resolution race: this code runs from the gina script-tag onload
+    // handler (see ~line 335 below), which fires BEFORE `window.onGinaLoaded`
+    // populates `gina.config`. At this point `gina.config.webroot` is undefined,
+    // so the URL would fall back to '/' and routing.json would be fetched
+    // root-relative — landing on the wrong upstream under reverse-proxy
+    // sub-path mounts.
+    //
+    // `gina.onload.min.js` (whispered server-side) sets `window.__ginaWebroot`
+    // synchronously at script parse time, BEFORE this script executes, so its
+    // value is reliably available here. Fall back to `gina.config.webroot`
+    // (works when `onGinaLoaded` did already run, e.g. re-entry), then to '/'.
+    //
+    // `core.js` itself ships in `gina.min.js`, which is served as a static
+    // asset without a whisper pass — so `{{ page.environment.webroot }}` tokens
     // embedded here would reach the browser un-interpolated and break the fetch.
-    var _webroot = (gina && gina.config && gina.config.webroot) || '/';
+    var _webroot = (typeof window !== 'undefined' && window.__ginaWebroot)
+        || (gina && gina.config && gina.config.webroot)
+        || '/';
     var arr = [
         // Get routing to populate `window.gina.config.routing`
         // Now fetching routing from gina
