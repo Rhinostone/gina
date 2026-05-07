@@ -87,6 +87,11 @@ function NunjucksFilters(conf) {
     if ( !routing || typeof(routing) != 'function' ) {
         routing = require(_(GINA_FRAMEWORK_DIR+"/lib/routing", true));
     }
+    // #I18N1 slice 2 — translation primitive backing the `t` filter.
+    var i18n;
+    if ( typeof(i18n) == 'undefined' || !i18n ) {
+        i18n = require(_(GINA_FRAMEWORK_DIR+"/lib/i18n", true));
+    }
 
     var self = { options: conf };
 
@@ -420,6 +425,41 @@ function NunjucksFilters(conf) {
         var d = (input instanceof Date) ? new Date(input.getTime()) : new Date(input);
         d.setFullYear(d.getFullYear() + y);
         return d;
+    };
+
+    /**
+     * #I18N1 slice 2 — translate a key against the bundle's loaded i18n catalog.
+     *
+     * Auto-binds the request's culture from `req.culture` (slice 3 hook),
+     * falling back to the process default `GINA_CULTURE` env var. Bundle
+     * name is taken from the per-request `options.conf.bundle` slot.
+     *
+     * Identical surface to the swig `t` filter so templates port between
+     * engines unchanged.
+     *
+     * @memberof NunjucksFilters
+     * @param   {string}      key      - Dotted-path key, e.g. `"common.welcome"`.
+     * @param   {Object|null} [params] - Interpolation values. Pass `count` for
+     *                                   CLDR plural-form selection.
+     * @returns {string} Translated string, or the key verbatim when nothing
+     *                   in the fallback chain matches.
+     *
+     * @example
+     *   {{ "common.welcome"  | t }}
+     * @example
+     *   {{ "common.greeting" | t({ name: user.name }) }}
+     * @example
+     *   {{ "common.items"    | t({ count: 5 }) }}
+     */
+    self.t = function(key, params) {
+        var ctx        = NunjucksFilters.instance._options || self.options;
+        var culture    = (ctx && ctx.req && ctx.req.culture)
+            ? ctx.req.culture
+            : (process.env.GINA_CULTURE || null);
+        var bundleName = (ctx && ctx.options && ctx.options.conf && ctx.options.conf.bundle)
+            ? ctx.options.conf.bundle
+            : null;
+        return i18n.t(key, params, culture, { bundleName: bundleName });
     };
 
     return init();
