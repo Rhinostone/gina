@@ -1,0 +1,19 @@
+{
+  "name": "gina-lib-i18n",
+  "version": "1.0.0",
+  "description": "Internationalisation primitives — per-bundle JSON catalogs, fallback chain (specific → base → settings.region.culture → GINA_CULTURE → 'en'), CLDR plural rules via Intl.PluralRules, {name}-style interpolation. Backs the gna.t() global, the controller self.t() helper, and the swig/nunjucks t filter.",
+  "author": {
+    "name": "Martin-Luther ETOUMAN",
+    "email": "contact@gina.io"
+  },
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "main": "src/main",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}
