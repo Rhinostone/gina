@@ -695,6 +695,16 @@ function SuperController(options) {
 
             // set user locale: region & culture
             var userCulture     = acceptLanguage.split(',')[0];
+            // #I18N1 slice 3 — prefer the formalised req.culture when the
+            // request-pipeline negotiator set it (covers URL prefix and
+            // cookie sources that the legacy Accept-Language-only block
+            // above ignores). Converted underscore → hyphen because the
+            // downstream region-data lookup splits on `-`. They agree in
+            // the common case (no URL prefix, no cookie); they diverge
+            // when negotiation picked a higher-priority source.
+            if ( req.culture && typeof req.culture === 'string' ) {
+                userCulture = req.culture.replace(/_/g, '-');
+            }
             var userCultureCode = userCulture.split(/\-/);
             var userLangCode    = userCultureCode[0];
             var userCountryCode = userCultureCode[1];

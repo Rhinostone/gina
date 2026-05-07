@@ -618,6 +618,196 @@ function _missingResult(key, opts, bundleName) {
     return key;
 }
 
+/**
+ * #I18N1 slice 3 — parse an `Accept-Language` header into an ordered list of
+ * `{ tag, q }` entries (highest q-value first; equal-q entries preserve
+ * source order). Tags are returned in canonical underscore form
+ * (`en-US` → `en_US`); wildcards (`*`) are dropped.
+ *
+ * @memberof module:gina/lib/i18n
+ * @param   {string} header
+ * @returns {Array<{tag: string, q: number}>}
+ *
+ * @example
+ *   parseAcceptLanguage('en-US,en;q=0.9,fr;q=0.8');
+ *   // → [{tag:'en_US',q:1}, {tag:'en',q:0.9}, {tag:'fr',q:0.8}]
+ */
+function parseAcceptLanguage(header) {
+    if ( typeof header !== 'string' || header.length === 0 ) {
+        return [];
+    }
+    var parts = header.split(',');
+    var out   = [];
+    for (var i = 0; i < parts.length; i++) {
+        var raw = parts[i].trim();
+        if ( raw.length === 0 || raw === '*' ) continue;
+        var bits = raw.split(';');
+        var tag  = bits[0].trim();
+        if ( tag.length === 0 || tag === '*' ) continue;
+        var q = 1;
+        for (var j = 1; j < bits.length; j++) {
+            var p = bits[j].trim();
+            var m = p.match(/^q\s*=\s*([0-9.]+)\s*$/i);
+            if ( m ) {
+                var n = parseFloat(m[1]);
+                if ( !isNaN(n) && n >= 0 && n <= 1 ) {
+                    q = n;
+                }
+            }
+        }
+        out.push({ tag: tag.replace(/-/g, '_'), q: q, _i: i });
+    }
+    out.sort(function(a, b) {
+        if ( b.q !== a.q ) return b.q - a.q;
+        return a._i - b._i;
+    });
+    return out.map(function(e) { return { tag: e.tag, q: e.q }; });
+}
+
+/**
+ * #I18N1 slice 3 — pick the best-matching available culture for a list of
+ * requested cultures. Walks each requested entry in order, trying the exact
+ * tag first, then the base language. Returns `null` when nothing matches.
+ *
+ * @memberof module:gina/lib/i18n
+ * @param   {string[]} requested - Ordered list (e.g. from {@link parseAcceptLanguage}).
+ * @param   {string[]} available - Cultures the bundle has loaded catalogs for.
+ * @returns {string|null}
+ *
+ * @example
+ *   matchAvailable(['fr_CA', 'fr', 'en'], ['en', 'fr']);  // → 'fr'
+ *   matchAvailable(['ja_JP'],             ['en', 'fr']);  // → null
+ */
+function matchAvailable(requested, available) {
+    if ( !Array.isArray(requested) || !Array.isArray(available) || available.length === 0 ) {
+        return null;
+    }
+    var availableSet = Object.create(null);
+    for (var i = 0; i < available.length; i++) {
+        availableSet[available[i]] = true;
+    }
+    for (var j = 0; j < requested.length; j++) {
+        var tag = requested[j];
+        if ( typeof tag !== 'string' || tag.length === 0 ) continue;
+        if ( availableSet[tag] ) {
+            return tag;
+        }
+        var base = splitCulture(tag)[0];
+        if ( base && base !== tag && availableSet[base] ) {
+            return base;
+        }
+    }
+    return null;
+}
+
+/**
+ * #I18N1 slice 3 — read a cookie value from a raw `Cookie` header.
+ *
+ * @memberof module:gina/lib/i18n
+ * @param   {string} header - `req.headers.cookie` value
+ * @param   {string} name   - Cookie name to extract
+ * @returns {string|null}   - URL-decoded value, or `null` when absent
+ *
+ * @example
+ *   readCookie('session=abc; gina_culture=fr_CA', 'gina_culture');
+ *   // → 'fr_CA'
+ */
+function readCookie(header, name) {
+    if ( typeof header !== 'string' || typeof name !== 'string' || name.length === 0 ) {
+        return null;
+    }
+    var pairs = header.split(';');
+    for (var i = 0; i < pairs.length; i++) {
+        var p = pairs[i].trim();
+        var eq = p.indexOf('=');
+        if ( eq < 0 ) continue;
+        var k = p.substring(0, eq).trim();
+        if ( k !== name ) continue;
+        var v = p.substring(eq + 1).trim();
+        try { return decodeURIComponent(v); } catch (e) { return v; }
+    }
+    return null;
+}
+
+/**
+ * #I18N1 slice 3 — resolve the culture for a request. Negotiation order
+ * (highest priority first):
+ *
+ *   1. URL prefix — `req.routing.param.culture` when the matched route's
+ *      `culturePrefix` flag is set AND the captured value matches an
+ *      `availableCultures` entry.
+ *   2. Cookie — value of the cookie named `opts.cookieName`, if it matches
+ *      an `availableCultures` entry.
+ *   3. `Accept-Language` — parsed and best-matched against `availableCultures`
+ *      with q-value ordering respected.
+ *   4. `opts.defaultCulture` — bundle's `settings.region.culture`.
+ *   5. `process.env.GINA_CULTURE` — process default.
+ *   6. `'en'` — hardcoded last resort.
+ *
+ * Returned in underscore form (`en_US`, `fr`, etc.). When `availableCultures`
+ * is empty (catalogs not loaded yet), only steps 4–6 are consulted.
+ *
+ * @memberof module:gina/lib/i18n
+ * @param   {Object}   req
+ * @param   {Object}   [opts]
+ * @param   {string[]} [opts.availableCultures] - Cultures the bundle has catalogs for.
+ * @param   {string}   [opts.cookieName]        - From `settings.i18n.cookieName`.
+ * @param   {string}   [opts.defaultCulture]    - From `settings.region.culture`.
+ * @returns {string}                            - Always returns a non-empty string.
+ *
+ * @example
+ *   negotiateCulture(req, {
+ *       availableCultures: ['en', 'fr', 'en_US'],
+ *       cookieName: 'gina_culture',
+ *       defaultCulture: 'en_US'
+ *   });
+ */
+function negotiateCulture(req, opts) {
+    opts = opts || {};
+    var available = Array.isArray(opts.availableCultures) ? opts.availableCultures : [];
+
+    // 1. URL prefix
+    if ( req && req.routing && req.routing.culturePrefix && req.routing.param ) {
+        var pfx = req.routing.param.culture;
+        if ( typeof pfx === 'string' && pfx.length > 0 ) {
+            var pfxNorm = pfx.replace(/-/g, '_');
+            var pfxMatch = matchAvailable([pfxNorm], available);
+            if ( pfxMatch ) return pfxMatch;
+        }
+    }
+
+    // 2. Cookie
+    if ( opts.cookieName && req && req.headers && req.headers.cookie ) {
+        var cookieVal = readCookie(req.headers.cookie, opts.cookieName);
+        if ( typeof cookieVal === 'string' && cookieVal.length > 0 ) {
+            var cookieNorm  = cookieVal.replace(/-/g, '_');
+            var cookieMatch = matchAvailable([cookieNorm], available);
+            if ( cookieMatch ) return cookieMatch;
+        }
+    }
+
+    // 3. Accept-Language
+    if ( req && req.headers && req.headers['accept-language'] ) {
+        var entries = parseAcceptLanguage(req.headers['accept-language']);
+        var alTags  = entries.map(function(e) { return e.tag; });
+        var alMatch = matchAvailable(alTags, available);
+        if ( alMatch ) return alMatch;
+    }
+
+    // 4. settings.region.culture
+    if ( typeof opts.defaultCulture === 'string' && opts.defaultCulture.length > 0 ) {
+        return opts.defaultCulture.replace(/-/g, '_');
+    }
+
+    // 5. GINA_CULTURE
+    if ( process.env.GINA_CULTURE ) {
+        return String(process.env.GINA_CULTURE).replace(/-/g, '_');
+    }
+
+    // 6. Last resort
+    return DEFAULT_FALLBACK_LANG;
+}
+
 module.exports = {
     // Catalog management
     loadCatalogs   : loadCatalogs,
@@ -627,6 +817,11 @@ module.exports = {
     clearCatalogs  : clearCatalogs,
     // Translation
     t              : t,
+    // #I18N1 slice 3 — locale negotiation
+    parseAcceptLanguage : parseAcceptLanguage,
+    matchAvailable      : matchAvailable,
+    readCookie          : readCookie,
+    negotiateCulture    : negotiateCulture,
     // Internals exposed for testing + slice 2/3 reuse
     resolveKey     : resolveKey,
     interpolate    : interpolate,

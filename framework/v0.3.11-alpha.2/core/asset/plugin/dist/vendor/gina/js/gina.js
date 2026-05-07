@@ -5105,6 +5105,13 @@ function Routing() {
             if ( typeof(routeObject.csrfExempt) != 'undefined' ) {
                 params.csrfExempt = routeObject.csrfExempt;
             }
+            // #I18N1 slice 3 — propagate per-route culture-prefix flag to
+            // req.routing.culturePrefix. When true, the negotiator at the
+            // request-pipeline boundary reads req.routing.param.culture as
+            // the highest-priority culture source (URL prefix).
+            if ( typeof(routeObject.culturePrefix) != 'undefined' ) {
+                params.culturePrefix = routeObject.culturePrefix;
+            }
             if ( typeof(routeObject.queryTimeout) != 'undefined' ) {
                 params.queryTimeout = parseTimeout(routeObject.queryTimeout);
             }

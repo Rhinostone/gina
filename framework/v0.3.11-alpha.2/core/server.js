@@ -3965,6 +3965,11 @@ function Server(options) {
                     queryTimeout        : parseTimeout(routing[name].queryTimeout) || null,
                     // #CSRF2 — per-route opt-out for the Csrf middleware (webhook receivers, etc.)
                     csrfExempt          : routing[name].csrfExempt || false,
+                    // #I18N1 slice 3 — per-route culture-prefix opt-in.
+                    // When true, the i18n negotiator reads
+                    // req.routing.param.culture as the highest-priority
+                    // culture source (URL `/fr/...` → req.culture='fr').
+                    culturePrefix       : routing[name].culturePrefix || false,
                     // We clone because we are going to modify it while comparing urls
                     param               : JSON.clone(routing[name].param),
                     // We clone because we are going to modify it while routing (.splice(..))
@@ -3989,6 +3994,30 @@ function Server(options) {
                 if ( pathname == routing[name].url || isRoute.past ) {
 
                     _routing = req.routing;
+
+                    // #I18N1 slice 3 — formalise req.culture as a per-request
+                    // first-class field. Negotiation order: URL prefix
+                    // (req.routing.culturePrefix === true) → cookie
+                    // (settings.i18n.cookieName, default `gina_culture`) →
+                    // Accept-Language (q-value ordering, matched against the
+                    // bundle's loaded catalogs) → settings.region.culture →
+                    // GINA_CULTURE env → 'en'. Kept inside a try/catch so a
+                    // negotiation failure never blocks routing.
+                    try {
+                        var _i18nBundle = routing[name].bundle || null;
+                        var _i18nAvail  = ( _i18nBundle
+                            && process.gina._i18nCatalogs
+                            && process.gina._i18nCatalogs[_i18nBundle] )
+                            ? Object.keys(process.gina._i18nCatalogs[_i18nBundle])
+                            : [];
+                        req.culture = lib.i18n.negotiateCulture(req, {
+                            availableCultures : _i18nAvail,
+                            cookieName        : 'gina_culture',
+                            defaultCulture    : null
+                        });
+                    } catch (_i18nErr) {
+                        req.culture = (process.env.GINA_CULTURE || 'en').replace(/-/g, '_');
+                    }
 
                     // Comparing routing method VS request.url method
                     isMethodAllowed = reMethod.test(_routing.method);
