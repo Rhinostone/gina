@@ -815,11 +815,26 @@ function PostInstall() {
         // def_framework in sync here so the CLI, cmd handlers, and framework:init all
         // agree on which version is active without requiring a manual edit or a
         // bundle:start to trigger the bin/cli safety-net sync.
+        //
+        // "Never regress" guard: when self.version is strictly older than the
+        // current def_framework (per semver), skip the def_framework write.
+        // The frameworks LIST may still be updated (so historic alpha/stable
+        // tarballs that landed locally for testing remain visible), but the
+        // scalar pointer to the active version stays at whatever was already
+        // ahead. Without this guard, `npm install -g gina@<older>` overwrote
+        // def_framework with the older version (precedent: the v0.3.10
+        // stable publish 2026-05-06 aborted at prepare_version.js because
+        // an older-tarball reinstall had clobbered the live alpha state
+        // back to 0.3.9). The defensive gate at script/check_def_framework_consistency.js
+        // (added in the same release window) is the publish-time safety net;
+        // this guard removes the trigger.
         var _mainJsonPath = _(getUserHome() + '/.gina/main.json', true);
         if ( fs.existsSync(_mainJsonPath) ) {
             try {
                 var _mainData = JSON.parse( fs.readFileSync(_mainJsonPath, 'utf8') );
-                if ( _mainData.def_framework !== self.version ) {
+                var _versionCompare = require('./version_compare');
+                var _isRegression   = _versionCompare.isStrictlyOlder(self.version, _mainData.def_framework);
+                if ( _mainData.def_framework !== self.version && !_isRegression ) {
                     console.info('Updating def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + self.version);
                     _mainData.def_framework = self.version;
                     if ( !_mainData.frameworks ) { _mainData.frameworks = {}; }
@@ -828,6 +843,18 @@ function PostInstall() {
                         _mainData.frameworks[self.shortVersion].push(self.version);
                     }
                     fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
+                } else if ( _isRegression ) {
+                    console.info(
+                        'Skipping def_framework update: installed ' + self.version +
+                        ' is strictly older than current ' + _mainData.def_framework +
+                        ' — preserving newer state to prevent regression. Frameworks list still updated.'
+                    );
+                    if ( !_mainData.frameworks ) { _mainData.frameworks = {}; }
+                    if ( !_mainData.frameworks[self.shortVersion] ) { _mainData.frameworks[self.shortVersion] = []; }
+                    if ( _mainData.frameworks[self.shortVersion].indexOf(self.version) < 0 ) {
+                        _mainData.frameworks[self.shortVersion].push(self.version);
+                        fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
+                    }
                 }
             } catch(e) {
                 console.warn('Could not sync def_framework in main.json: ' + (e.message || e));
