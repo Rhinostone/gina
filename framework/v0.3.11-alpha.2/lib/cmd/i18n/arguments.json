@@ -1,0 +1,9 @@
+[
+    "--format",
+    "--from",
+    "--output",
+    "--file",
+    "--merge",
+    "--dry-run",
+    "--force"
+]

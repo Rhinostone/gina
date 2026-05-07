@@ -316,6 +316,7 @@ async function onExec() {
         'connector:',
         'dev:',
         'env:',
+        'i18n:',
         'inspector:',
         'scope:',
         'framework:',

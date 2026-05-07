@@ -1,0 +1,56 @@
+
+  Usage: gina i18n:<action> [options]
+
+  Actions:
+
+    scan @<project>              Walk every bundle in <project>; report
+                                 translation coverage per culture against
+                                 the keys used in each bundle's source.
+    scan <bundle> @<project>     Coverage report scoped to one bundle.
+    scan @<project> --format=json
+                                 Machine-readable JSON output (CI / tooling).
+
+    add <culture> @<project>     Seed `bundle/locales/<culture>.json` for
+                                 every bundle in <project>, copying keys
+                                 from the bundle's default culture and
+                                 prefixing values with `[TODO]`.
+    add <culture> <bundle> @<project>
+                                 Seed only one bundle.
+    add <culture> @<project> --from=<src>
+                                 Copy keys from `<src>` instead of the
+                                 bundle default culture.
+    add <culture> @<project> --force
+                                 Overwrite an existing target catalog.
+
+    help                         Show this help.
+
+  Options:
+
+    --format=<text|json>         Output format for `scan`. Default `text`.
+    --from=<culture>             Source culture for `add`. Defaults to the
+                                 bundle's `settings.region.culture`.
+    --output=<path>              Optional output file (write instead of
+                                 stdout). For `scan --format=json` and
+                                 `export`.
+    --file=<path>                Input file path for `import` (slice 5).
+    --merge=<union|replace>      Merge strategy for `import` (slice 5).
+                                 `union` (default) preserves existing
+                                 translations not in the import.
+    --dry-run                    Show what would be written without
+                                 touching the disk.
+    --force                      Overwrite existing target catalogs (`add`)
+                                 or skip dry-run guards.
+
+  Examples:
+
+    $ gina i18n:scan @myproject
+    $ gina i18n:scan dashboard @myproject --format=json
+    $ gina i18n:add fr @myproject
+    $ gina i18n:add fr dashboard @myproject --from=en
+    $ gina i18n:add ja_JP @myproject --force
+
+  Catalogs live at `<bundle>/locales/<culture>.json`. Filenames must match
+  `<lang>(_<REGION>)?.json` — e.g. `en.json`, `en_US.json`, `pt_BR.json`.
+
+  Schema: https://gina.io/schema/locales.json
+  Reference: https://gina.io/docs/guides/i18n
