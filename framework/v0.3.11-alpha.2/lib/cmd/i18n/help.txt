@@ -22,6 +22,20 @@
     add <culture> @<project> --force
                                  Overwrite an existing target catalog.
 
+    export <culture> @<project>  Export every bundle's <culture> catalog as
+                                 a single JSON wrapper to stdout.
+    export <culture> <bundle> @<project>
+                                 Export one bundle's catalog. Single-bundle
+                                 JSON matches the on-disk shape verbatim.
+    export <culture> @<project> --format=po --output=<path>
+                                 Translator-friendly PO file (msgctxt for
+                                 multi-bundle, msgid_plural / msgstr[N] for
+                                 plural forms with `#. cldr-keys` round-trip
+                                 markers).
+    export <culture> @<project> --format=csv --output=<path>
+                                 Flat CSV (RFC 4180 quoting). Plural forms
+                                 flatten to dotted-suffix rows.
+
     help                         Show this help.
 
   Options:
@@ -31,7 +45,9 @@
                                  bundle's `settings.region.culture`.
     --output=<path>              Optional output file (write instead of
                                  stdout). For `scan --format=json` and
-                                 `export`.
+                                 `export`. When `--format` is omitted,
+                                 the format is auto-detected from the
+                                 output extension (`.po`, `.csv`, `.json`).
     --file=<path>                Input file path for `import` (slice 5).
     --merge=<union|replace>      Merge strategy for `import` (slice 5).
                                  `union` (default) preserves existing
@@ -48,6 +64,9 @@
     $ gina i18n:add fr @myproject
     $ gina i18n:add fr dashboard @myproject --from=en
     $ gina i18n:add ja_JP @myproject --force
+    $ gina i18n:export fr @myproject --format=po --output=/tmp/fr.po
+    $ gina i18n:export en dashboard @myproject --output=/tmp/en.csv
+    $ gina i18n:export fr_CA @myproject       # JSON wrapper to stdout
 
   Catalogs live at `<bundle>/locales/<culture>.json`. Filenames must match
   `<lang>(_<REGION>)?.json` — e.g. `en.json`, `en_US.json`, `pt_BR.json`.
