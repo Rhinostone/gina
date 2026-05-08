@@ -89,6 +89,37 @@ var _missingBundleWarned = Object.create(null);
 var _missingKeyWarned = Object.create(null);
 
 /**
+ * #I18N2 — `intl-messageformat`'s `IntlMessageFormat` constructor, populated
+ * once {@link ensureIcuLoaded} resolves. The package is ESM-only since v10
+ * so it cannot be `require()`d from CJS gina; dynamic `import()` lands the
+ * value here at first use.
+ *
+ * @inner
+ * @type {*}
+ */
+var IntlMessageFormat = null;
+
+/**
+ * #I18N2 — pending load promise (singleton). Set on the first
+ * {@link ensureIcuLoaded} call; reused for subsequent calls so the
+ * `import()` only fires once per process.
+ *
+ * @inner
+ * @type {Promise|null}
+ */
+var icuLoadPromise = null;
+
+/**
+ * #I18N2 — captured load error (e.g. dependency not installed). Once set,
+ * subsequent {@link tIcu} calls surface this verbatim with an actionable
+ * "npm install intl-messageformat" hint.
+ *
+ * @inner
+ * @type {Error|null}
+ */
+var icuLoadError = null;
+
+/**
  * Lazily create the `process.gina._i18nCatalogs` slot when first touched.
  *
  * @inner
@@ -118,6 +149,24 @@ function _pluralCache() {
         process.gina._i18nPluralRules = Object.create(null);
     }
     return process.gina._i18nPluralRules;
+}
+
+/**
+ * #I18N2 — lazily create the per-process IcuFormatter cache slot. Keys are
+ * `<bundleName>::<culture>::<key>`; values are `IntlMessageFormat`
+ * instances (or `null` for entries that failed to parse).
+ *
+ * @inner
+ * @returns {Object<string, *>}
+ */
+function _icuFormatterCache() {
+    if ( !process.gina ) {
+        process.gina = {};
+    }
+    if ( !process.gina._i18nIcuFormatters ) {
+        process.gina._i18nIcuFormatters = Object.create(null);
+    }
+    return process.gina._i18nIcuFormatters;
 }
 
 /**
@@ -218,6 +267,10 @@ function loadCatalogs(bundleName, dir) {
         loaded.push(culture);
     }
     loaded.sort();
+    // #I18N2 — kick off the ICU loader in the background. Fire-and-forget;
+    // the `.catch()` prevents UnhandledPromiseRejection when the package is
+    // not installed — `tIcu()` surfaces that error clearly on first call.
+    ensureIcuLoaded().catch(function () { /* error captured on icuLoadError */ });
     return loaded;
 }
 
@@ -296,6 +349,13 @@ function clearCatalogs(bundleName) {
     for ( var kk in _missingKeyWarned ) {
         if ( kk.indexOf(prefix) === 0 ) {
             delete _missingKeyWarned[kk];
+        }
+    }
+    // #I18N2 — drop cached IcuFormatters for this bundle.
+    var icuCache = _icuFormatterCache();
+    for ( var ick in icuCache ) {
+        if ( ick.indexOf(prefix) === 0 ) {
+            delete icuCache[ick];
         }
     }
 }
@@ -619,6 +679,177 @@ function _missingResult(key, opts, bundleName) {
 }
 
 /**
+ * #I18N2 — load `intl-messageformat` via dynamic `import()` (the package is
+ * ESM-only since v10 so it cannot be `require()`d from CJS gina). Returns
+ * a Promise that resolves to the `IntlMessageFormat` constructor.
+ * Idempotent — subsequent calls return the cached promise. Failure is
+ * captured on `icuLoadError` so future calls surface a clear "package not
+ * installed" message via {@link tIcu}.
+ *
+ * Called fire-and-forget from {@link loadCatalogs} at bundle boot, so by
+ * the time the first request is served the load has resolved and
+ * {@link tIcu} is sync. Tests can `await ensureIcuLoaded()` explicitly.
+ *
+ * @memberof module:gina/lib/i18n
+ * @returns {Promise<*>} Resolves to IntlMessageFormat, or rejects with the load error.
+ *
+ * @example
+ *   await i18n.ensureIcuLoaded();
+ *   var msg = i18n.tIcu('items', { count: 3 }, 'en', { bundleName: 'dashboard' });
+ */
+function ensureIcuLoaded() {
+    if ( icuLoadError ) return Promise.reject(icuLoadError);
+    if ( IntlMessageFormat ) return Promise.resolve(IntlMessageFormat);
+    if ( icuLoadPromise ) return icuLoadPromise;
+    icuLoadPromise = import('intl-messageformat').then(function (mod) {
+        IntlMessageFormat = mod.IntlMessageFormat
+            || (mod.default && mod.default.IntlMessageFormat);
+        if ( !IntlMessageFormat ) {
+            throw new Error('[i18n] `intl-messageformat` loaded but the IntlMessageFormat export was not found.');
+        }
+        return IntlMessageFormat;
+    }).catch(function (err) {
+        icuLoadError = err;
+        throw err;
+    });
+    return icuLoadPromise;
+}
+
+/**
+ * #I18N2 — get or build the cached `IntlMessageFormat` for a
+ * `(bundle, culture, key)` tuple. Caches `null` on parse failure so we
+ * don't re-parse a malformed catalog string on every request.
+ *
+ * @inner
+ * @private
+ * @param   {string} bundleName
+ * @param   {string} culture
+ * @param   {string} key
+ * @param   {string} value - The catalog string containing ICU MessageFormat syntax.
+ * @returns {*|null}
+ */
+function _getIcuFormatter(bundleName, culture, key, value) {
+    var cache = _icuFormatterCache();
+    var cacheKey = bundleName + '::' + culture + '::' + key;
+    if ( typeof cache[cacheKey] !== 'undefined' ) {
+        return cache[cacheKey];
+    }
+    try {
+        cache[cacheKey] = new IntlMessageFormat(value, toBcp47(culture));
+    } catch (err) {
+        if ( _isDev() ) {
+            console.warn('[i18n] t.icu() parse error for key `' + key + '` in bundle `' + bundleName + '` (' + culture + '): ' + err.message);
+        }
+        cache[cacheKey] = null;
+    }
+    return cache[cacheKey];
+}
+
+/**
+ * #I18N2 — translate a key with ICU MessageFormat semantics. Resolves the
+ * key against the bundle's catalog using the same fallback chain as
+ * {@link t}, then formats the resolved string via `intl-messageformat`.
+ *
+ * Catalog values that are NOT strings (plural-form objects, nested
+ * categories) fall through to {@link t} — both shapes can coexist in the
+ * same catalog. Strings are interpreted as ICU MF syntax:
+ *  - `{count, plural, one {# item} other {# items}}` (plural)
+ *  - `{gender, select, female {…} male {…} other {…}}` (select / gender)
+ *  - nested combinators are supported
+ *
+ * `IntlMessageFormat` instances are memoised per
+ * `<bundleName>::<culture>::<key>` on `process.gina._i18nIcuFormatters`,
+ * so the parse cost is paid once per (bundle, culture, key) per process.
+ *
+ * Called sync after {@link ensureIcuLoaded} resolves. Throws clearly if
+ * called before the loader settles, or if the package is not installed.
+ *
+ * @memberof module:gina/lib/i18n
+ * @param   {string}      key
+ * @param   {Object|null} [params]
+ * @param   {string}      [culture] - Required for lookup; omitting returns the key verbatim.
+ * @param   {Object}      [options]
+ * @param   {string}      [options.bundleName]    - Defaults to `process.env.GINA_BUNDLE`.
+ * @param   {string}      [options.defaultCulture] - Bundle default culture.
+ * @param   {string[]}    [options.fallbackChain]  - Override of the fallback chain.
+ * @param   {string}      [options.devMissingKey]  - Dev-mode prefix for missing keys.
+ * @returns {string}
+ *
+ * @example
+ *   tIcu('items', { count: 5 }, 'en', { bundleName: 'dashboard' });
+ *   // → '5 items' when catalog says: "items": "{count, plural, one {# item} other {# items}}"
+ *
+ * @example
+ *   tIcu('greeting', { gender: 'female', name: 'Ada' }, 'en', { bundleName: 'dashboard' });
+ *   // → 'Hi, Ada!' when catalog says: "greeting": "{gender, select, female {Hi, {name}!} other {Hello, {name}!}}"
+ */
+function tIcu(key, params, culture, options) {
+    if ( typeof key !== 'string' || key.length === 0 ) {
+        return '';
+    }
+    if ( !culture ) {
+        return key;
+    }
+    if ( icuLoadError ) {
+        throw new Error('[i18n] t.icu() requires the `intl-messageformat` npm package — install with: npm install intl-messageformat. Original load error: ' + icuLoadError.message);
+    }
+    if ( !IntlMessageFormat ) {
+        throw new Error('[i18n] t.icu() called before intl-messageformat finished loading. Either ensure `loadCatalogs()` ran at boot, or `await i18n.ensureIcuLoaded()` first.');
+    }
+
+    var opts = options || {};
+    var bundleName = opts.bundleName || process.env.GINA_BUNDLE || null;
+    if ( !bundleName ) {
+        return _missingResult(key, opts);
+    }
+
+    var catalogs = getCatalogs(bundleName);
+    if ( !catalogs || Object.keys(catalogs).length === 0 ) {
+        if ( !_missingBundleWarned[bundleName] && _isDev() ) {
+            console.warn('[i18n] no catalogs loaded for bundle `' + bundleName + '` — t.icu() returning key verbatim');
+            _missingBundleWarned[bundleName] = true;
+        }
+        return _missingResult(key, opts);
+    }
+
+    var chain = walkFallback(culture, opts.defaultCulture, opts.fallbackChain);
+    var value = undefined;
+    var matchedCulture = culture;
+    for (var i = 0; i < chain.length; i++) {
+        var cat = catalogs[chain[i]];
+        if ( !cat ) continue;
+        var resolved = resolveKey(cat, key);
+        if ( typeof resolved !== 'undefined' ) {
+            value = resolved;
+            matchedCulture = chain[i];
+            break;
+        }
+    }
+    if ( typeof value === 'undefined' ) {
+        return _missingResult(key, opts, bundleName);
+    }
+
+    // Non-string values (plural-form objects, nested categories) fall
+    // through to v1 t() — both shapes can coexist in the same catalog.
+    if ( typeof value !== 'string' ) {
+        return t(key, params, culture, opts);
+    }
+
+    var formatter = _getIcuFormatter(bundleName, matchedCulture, key, value);
+    if ( !formatter ) {
+        return _missingResult(key, opts, bundleName);
+    }
+    try {
+        return String(formatter.format(params || {}));
+    } catch (err) {
+        if ( _isDev() ) {
+            console.warn('[i18n] t.icu() format error for key `' + key + '` in bundle `' + bundleName + '` (' + matchedCulture + '): ' + err.message);
+        }
+        return _missingResult(key, opts, bundleName);
+    }
+}
+
+/**
  * #I18N1 slice 3 — parse an `Accept-Language` header into an ordered list of
  * `{ tag, q }` entries (highest q-value first; equal-q entries preserve
  * source order). Tags are returned in canonical underscore form
@@ -817,6 +1048,9 @@ module.exports = {
     clearCatalogs  : clearCatalogs,
     // Translation
     t              : t,
+    // #I18N2 — ICU MessageFormat opt-in
+    tIcu           : tIcu,
+    ensureIcuLoaded: ensureIcuLoaded,
     // #I18N1 slice 3 — locale negotiation
     parseAcceptLanguage : parseAcceptLanguage,
     matchAvailable      : matchAvailable,

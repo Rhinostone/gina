@@ -1883,6 +1883,37 @@ gna.t = function(key, params, culture, options) {
     return lib.i18n.t(key, params, culture, options);
 };
 
+/**
+ * #I18N2 — ICU MessageFormat opt-in. Same signature as {@link gna.t} but
+ * resolves the catalog string as ICU MessageFormat syntax (plural / select
+ * / gender / nested combinators) via the `intl-messageformat` package.
+ * Powered by a dynamic-import loader kicked off at bundle boot from
+ * {@link loadCatalogs} — sync after the loader resolves.
+ *
+ * Catalog values that are NOT strings (plural-form objects, nested
+ * categories) fall through to {@link gna.t} so v1 and ICU shapes coexist
+ * freely in one catalog. Strings, in contrast, are interpreted as ICU MF.
+ *
+ * Throws if called before the loader settles, or if `intl-messageformat`
+ * is not installed in the bundle's `node_modules` (the error message
+ * carries the install hint).
+ *
+ * @param {string}      key
+ * @param {Object|null} [params]
+ * @param {string}      [culture]
+ * @param {Object}      [options]
+ * @returns {string}
+ * @example
+ *   gna.t.icu('items', { count: 5 }, 'en', { bundleName: 'dashboard' });
+ *   // → '5 items' for "items": "{count, plural, one {# item} other {# items}}"
+ * @example
+ *   gna.t.icu('greeting', { gender: 'female', name: 'Ada' }, 'en', { bundleName: 'dashboard' });
+ *   // → 'Hi, Ada!' for "greeting": "{gender, select, female {Hi, {name}!} other {Hello, {name}!}}"
+ */
+gna.t.icu = function(key, params, culture, options) {
+    return lib.i18n.tIcu(key, params, culture, options);
+};
+
 // ── Console helper (framework/v*/helpers/console.js) ─────────────────────
 
 /**

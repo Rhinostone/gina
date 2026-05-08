@@ -1456,6 +1456,55 @@ function SuperController(options) {
         });
     };
 
+    /**
+     * #I18N2 — ICU MessageFormat opt-in. Same auto-binding shape as
+     * {@link this.t} (culture from `req.culture`, bundle / devMissingKey /
+     * fallbackChain from `local.options.conf.content.settings.i18n`) but
+     * resolves the catalog string as ICU MessageFormat syntax.
+     *
+     * @param {string}      key
+     * @param {Object|null} [params]
+     * @param {string}      [culture] - Override of the auto-bound `req.culture`.
+     * @returns {string}
+     *
+     * @example
+     *   this.cart = function(req, res, next) {
+     *       var msg = self.t.icu('cart.itemCount', { count: cart.items.length });
+     *       self.render({ msg: msg });
+     *   };
+     */
+    this.t.icu = function(key, params, culture) {
+        if ( !culture ) {
+            culture = (local.req && local.req.culture) || null;
+        }
+        var bundleName = (
+            local.options
+            && local.options.conf
+            && local.options.conf.bundle
+        ) ? local.options.conf.bundle : null;
+        var devMissingKey = (
+            local.options
+            && local.options.conf
+            && local.options.conf.content
+            && local.options.conf.content.settings
+            && local.options.conf.content.settings.i18n
+            && typeof local.options.conf.content.settings.i18n.devMissingKey === 'string'
+        ) ? local.options.conf.content.settings.i18n.devMissingKey : null;
+        var fallbackChain = (
+            local.options
+            && local.options.conf
+            && local.options.conf.content
+            && local.options.conf.content.settings
+            && local.options.conf.content.settings.i18n
+            && Array.isArray(local.options.conf.content.settings.i18n.fallbackChain)
+        ) ? local.options.conf.content.settings.i18n.fallbackChain : null;
+        return lib.i18n.tIcu(key, params, culture, {
+            bundleName    : bundleName,
+            devMissingKey : devMissingKey,
+            fallbackChain : fallbackChain
+        });
+    };
+
 
     /**
      * Set method - Override current method
