@@ -22,12 +22,16 @@ var i18n         = require(path.join(FW, 'lib/i18n/src/main'));
 var I18N_SOURCE  = path.join(FW, 'lib/i18n/src/main.js');
 var GNA_SOURCE   = path.join(FW, 'core/gna.js');
 var CTRL_SOURCE  = path.join(FW, 'core/controller/controller.js');
+var SWIG_FILTERS_SOURCE = path.join(FW, 'lib/swig-filters/src/main.js');
+var NJK_FILTERS_SOURCE  = path.join(FW, 'lib/nunjucks-filters/src/main.js');
 var FW_PKG       = path.join(FW, 'package.json');
 
-var i18nSrc = fs.readFileSync(I18N_SOURCE, 'utf8');
-var gnaSrc  = fs.readFileSync(GNA_SOURCE,  'utf8');
-var ctrlSrc = fs.readFileSync(CTRL_SOURCE, 'utf8');
-var fwPkg   = JSON.parse(fs.readFileSync(FW_PKG, 'utf8'));
+var i18nSrc        = fs.readFileSync(I18N_SOURCE, 'utf8');
+var gnaSrc         = fs.readFileSync(GNA_SOURCE,  'utf8');
+var ctrlSrc        = fs.readFileSync(CTRL_SOURCE, 'utf8');
+var swigFiltersSrc = fs.readFileSync(SWIG_FILTERS_SOURCE, 'utf8');
+var njkFiltersSrc  = fs.readFileSync(NJK_FILTERS_SOURCE,  'utf8');
+var fwPkg          = JSON.parse(fs.readFileSync(FW_PKG, 'utf8'));
 
 function isolatedBundle(label) {
     var name = 'test-i18n-icu-' + label + '-' + process.pid + '-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
@@ -470,6 +474,83 @@ describe('11 - framework package.json dep', function () {
 
     it('intl-messageformat range is ^11.x', function () {
         assert.match(fwPkg.dependencies['intl-messageformat'], /^\^11\./);
+    });
+
+});
+
+
+// ─── 11b — swig + nunjucks tIcu filter source-pins (#I18N2 part 2) ──────
+
+describe('11b - swig tIcu filter wiring', function () {
+
+    it('lib/swig-filters declares self.tIcu', function () {
+        assert.match(swigFiltersSrc, /self\.tIcu\s*=\s*function\s*\(\s*key,\s*params\s*\)/);
+    });
+
+    it('swig tIcu reads culture from req.culture (auto-bind, slice 3)', function () {
+        var m = swigFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?\n\s*\}/);
+        assert.ok(m, 'self.tIcu block not found');
+        assert.match(m[0], /ctx\.req\.culture/);
+    });
+
+    it('swig tIcu reads bundleName from options.conf.bundle', function () {
+        var m = swigFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?\n\s*\}/);
+        assert.match(m[0], /ctx\.options\.conf\.bundle/);
+    });
+
+    it('swig tIcu forwards to lib.i18n.tIcu', function () {
+        var m = swigFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?\n\s*\}/);
+        assert.match(m[0], /i18n\.tIcu\(\s*key,\s*params,\s*culture,\s*\{\s*bundleName:\s*bundleName\s*\}\s*\)/);
+    });
+
+    it('swig t filter (slice 2) is unchanged — no regression', function () {
+        assert.match(swigFiltersSrc, /self\.t\s*=\s*function\s*\(\s*key,\s*params\s*\)/);
+        assert.match(swigFiltersSrc, /i18n\.t\(\s*key,\s*params,\s*culture,\s*\{\s*bundleName:\s*bundleName\s*\}\s*\)/);
+    });
+
+});
+
+
+describe('11c - nunjucks tIcu filter wiring', function () {
+
+    it('lib/nunjucks-filters declares self.tIcu', function () {
+        assert.match(njkFiltersSrc, /self\.tIcu\s*=\s*function\s*\(\s*key,\s*params\s*\)/);
+    });
+
+    it('nunjucks tIcu reads culture from req.culture (auto-bind, slice 3)', function () {
+        var m = njkFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?\n\s*\};/);
+        assert.ok(m, 'self.tIcu block not found');
+        assert.match(m[0], /ctx\.req\.culture/);
+    });
+
+    it('nunjucks tIcu reads bundleName from options.conf.bundle', function () {
+        var m = njkFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?\n\s*\};/);
+        assert.match(m[0], /ctx\.options\.conf\.bundle/);
+    });
+
+    it('nunjucks tIcu forwards to lib.i18n.tIcu', function () {
+        var m = njkFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?\n\s*\};/);
+        assert.match(m[0], /i18n\.tIcu\(\s*key,\s*params,\s*culture,\s*\{\s*bundleName:\s*bundleName\s*\}\s*\)/);
+    });
+
+    it('nunjucks t filter (slice 2) is unchanged — no regression', function () {
+        assert.match(njkFiltersSrc, /self\.t\s*=\s*function\s*\(\s*key,\s*params\s*\)/);
+        assert.match(njkFiltersSrc, /i18n\.t\(\s*key,\s*params,\s*culture,\s*\{\s*bundleName:\s*bundleName\s*\}\s*\)/);
+    });
+
+    it('swig + nunjucks tIcu filters share an identical surface (parity)', function () {
+        // Both should declare the same self.tIcu signature and forward shape.
+        var swig = swigFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?return\s+i18n\.tIcu\([^)]*\);/);
+        var njk  = njkFiltersSrc.match(/self\.tIcu\s*=\s*function[\s\S]*?return\s+i18n\.tIcu\([^)]*\);/);
+        assert.ok(swig, 'swig tIcu block not found');
+        assert.ok(njk,  'nunjucks tIcu block not found');
+        // Strip whitespace and compare semantically — both should call lib.i18n.tIcu the same way.
+        var swigForward = swig[0].replace(/\s+/g, ' ');
+        var njkForward  = njk[0].replace(/\s+/g, ' ');
+        // Pull out just the i18n.tIcu(...) call from each
+        var swigCall = swigForward.match(/i18n\.tIcu\([^)]*\)/);
+        var njkCall  = njkForward.match(/i18n\.tIcu\([^)]*\)/);
+        assert.equal(swigCall[0], njkCall[0]);
     });
 
 });

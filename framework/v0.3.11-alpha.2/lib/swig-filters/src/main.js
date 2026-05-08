@@ -431,6 +431,39 @@ function SwigFilters(conf) {
         return i18n.t(key, params, culture, { bundleName: bundleName });
     }
 
+    /**
+     * #I18N2 — ICU MessageFormat opt-in template filter. Same auto-binding
+     * shape as `self.t` (culture from `req.culture`, bundle from
+     * `options.conf.bundle`) but the catalog string is interpreted as ICU
+     * MessageFormat syntax (plural / select / gender / nested combinators)
+     * via `intl-messageformat`. Catalog values that are NOT strings
+     * (plural-form objects, nested categories) fall through to v1 `t()`.
+     *
+     * Identical surface to the nunjucks `tIcu` filter so templates port
+     * between engines unchanged. Throws clearly if `intl-messageformat`
+     * is not installed.
+     *
+     * @memberof SwigFilters
+     * @param   {string}      key      - Dotted-path key.
+     * @param   {Object|null} [params] - ICU MF placeholder values.
+     * @returns {string}
+     *
+     * @example
+     *   {{ "cart.itemCount" | tIcu({ count: 5 }) }}
+     * @example
+     *   {{ "user.greeting"  | tIcu({ gender: 'female', name: user.name }) }}
+     */
+    self.tIcu = function(key, params) {
+        var ctx        = SwigFilters.instance._options || self.options;
+        var culture    = (ctx && ctx.req && ctx.req.culture)
+            ? ctx.req.culture
+            : (process.env.GINA_CULTURE || null);
+        var bundleName = (ctx && ctx.options && ctx.options.conf && ctx.options.conf.bundle)
+            ? ctx.options.conf.bundle
+            : null;
+        return i18n.tIcu(key, params, culture, { bundleName: bundleName });
+    }
+
 
     return init()
 
