@@ -1140,6 +1140,27 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
 
                             server.on('started', async function (conf) {
 
+                                // #OBS1 — initialise Prometheus metrics if app.json
+                                // `metrics.enabled` is true. Wired here so getConfig('app')
+                                // is available and the registry exists before any
+                                // /_gina/metrics scrape can land. Idempotent — safe across
+                                // server restarts within the same process.
+                                try {
+                                    var _metricsAppConf = (typeof gna.getConfig === 'function') ? gna.getConfig('app') : null;
+                                    if (
+                                        _metricsAppConf
+                                        && _metricsAppConf.metrics
+                                        && _metricsAppConf.metrics.enabled === true
+                                    ) {
+                                        lib.metrics.start({
+                                            prefix:         _metricsAppConf.metrics.prefix,
+                                            defaultMetrics: _metricsAppConf.metrics.defaultMetrics
+                                        });
+                                    }
+                                } catch (metricsErr) {
+                                    console.warn('[lib.metrics] init skipped: ' + (metricsErr.message || metricsErr));
+                                }
+
                                 // setting default global middlewares
                                 if ( typeof(instance.use) == 'function' ) {
 

@@ -34,6 +34,39 @@
         "type": "object",
         "additionalProperties": true
       }
+    },
+    "metrics": {
+      "type": "object",
+      "description": "Prometheus metrics endpoint configuration. When `enabled` is true, the bundle exposes /_gina/metrics and records HTTP request counters + duration histograms. Requires `prom-client` to be installed in the project's node_modules (peer dependency).",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Master opt-in flag. When false (default), no endpoint is exposed and no metrics are collected.",
+          "default": false
+        },
+        "path": {
+          "type": "string",
+          "description": "Endpoint path. Defaults to /_gina/metrics. Custom paths are not yet supported (the router only registers the default).",
+          "default": "/_gina/metrics"
+        },
+        "allowFrom": {
+          "type": "array",
+          "description": "IP allowlist for the metrics endpoint. Requests from any other source receive 403. Defaults to localhost only.",
+          "items": { "type": "string" },
+          "default": ["127.0.0.1", "::1"]
+        },
+        "prefix": {
+          "type": "string",
+          "description": "Prefix for every metric name. Defaults to `gina_` (e.g. gina_http_requests_total).",
+          "default": "gina_"
+        },
+        "defaultMetrics": {
+          "type": "boolean",
+          "description": "When true (default), seeds Node.js process metrics via prom-client.collectDefaultMetrics() — heap, GC pause, event loop lag, active handles.",
+          "default": true
+        }
+      }
     }
   },
   "definitions": {

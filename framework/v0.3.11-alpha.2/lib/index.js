@@ -83,6 +83,12 @@ function Lib() {
         // swig/nunjucks `t` filter (slice 2). Catalogs land at
         // process.gina._i18nCatalogs[bundleName][culture].
         i18n            : _require('./i18n'),
+        // #OBS1 — Prometheus metrics primitive. Wraps prom-client (peer dep,
+        // loaded from project node_modules — same shape as mysql/postgres/AI
+        // SDK connectors). Backs the /_gina/metrics endpoint and the request
+        // lifecycle hook that populates the HTTP counter + histogram. Opt-in
+        // via app.json `metrics.enabled`.
+        metrics         : _require('./metrics'),
         // replaced: _require('./state') — StateStore is a singleton backed by node:sqlite
         // (DatabaseSync). Hot-reloading it in dev mode would close and re-open the DB
         // connection on every HTTP request, racing with in-flight writes. Use plain
