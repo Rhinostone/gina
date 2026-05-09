@@ -2335,6 +2335,24 @@ function Server(options) {
             if (self.isCacheless() && process.gina._inspectorActive) {
                 request._devTimeline = { requestStart: Date.now(), entries: [] };
             }
+            // #OBS1 slice 3 — HTTP request lifecycle hook for Prometheus metrics.
+            // Engine-agnostic mirror of the server.isaac.js hook. Gated on
+            // lib.metrics.isEnabled() so the listener is only wired when
+            // app.json metrics.enabled is true.
+            if (lib.metrics.isEnabled()) {
+                request._metricsStartTime = Date.now();
+                response.on('finish', function _gina_metrics_record() {
+                    try {
+                        var _route = (request.routing && request.routing.rule) || undefined;
+                        lib.metrics.recordRequest({
+                            method:   request.method,
+                            route:    _route,
+                            status:   response.statusCode,
+                            duration: Date.now() - request._metricsStartTime
+                        });
+                    } catch (_e) { /* metrics never crashes a request */ }
+                });
+            }
 
             // Caching = [...]
             // TODO - handle this through a middleware

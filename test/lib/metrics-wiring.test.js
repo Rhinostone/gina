@@ -293,7 +293,99 @@ describe('07 - core/server.js — /_gina/metrics handler (slice 2)', function() 
 });
 
 
-describe('08 - schema/app.json — metrics block', function() {
+describe('08 - core/server.isaac.js — request lifecycle hook (slice 3)', function() {
+
+    var ISAAC_SRC = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
+
+    function hookBlock() {
+        var markerIdx = ISAAC_SRC.indexOf('#OBS1 slice 3');
+        assert.ok(markerIdx > 0, 'OBS1 slice 3 marker comment not found in server.isaac.js');
+        // Window through ~1500 chars — enough for the hook block + a margin.
+        return ISAAC_SRC.substring(markerIdx, Math.min(ISAAC_SRC.length, markerIdx + 1500));
+    }
+
+    it('gates the listener registration on lib.metrics.isEnabled()', function() {
+        var blk = hookBlock();
+        assert.match(blk, /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*\)/);
+    });
+
+    it('captures request._metricsStartTime at request entry', function() {
+        var blk = hookBlock();
+        assert.match(blk, /request\._metricsStartTime\s*=\s*Date\.now\(\)/);
+    });
+
+    it("registers response.on('finish') as the recording trigger", function() {
+        var blk = hookBlock();
+        assert.match(blk, /response\.on\(\s*['"]finish['"]/);
+    });
+
+    it('reads the route label from request.routing.rule (cardinality-safe)', function() {
+        var blk = hookBlock();
+        assert.match(blk, /request\.routing\s*&&\s*request\.routing\.rule/);
+    });
+
+    it('forwards method/route/status/duration to lib.metrics.recordRequest', function() {
+        var blk = hookBlock();
+        assert.match(blk, /lib\.metrics\.recordRequest\s*\(/);
+        assert.match(blk, /method:\s*request\.method/);
+        assert.match(blk, /status:\s*response\.statusCode/);
+        assert.match(blk, /duration:\s*Date\.now\(\)\s*-\s*request\._metricsStartTime/);
+    });
+
+    it('swallows recorder errors in a try/catch (metrics never crashes a request)', function() {
+        var blk = hookBlock();
+        assert.match(blk, /try\s*\{[\s\S]*?\}\s*catch/);
+    });
+
+});
+
+
+describe('09 - core/server.js — request lifecycle hook (slice 3)', function() {
+
+    var SERVER_SRC = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
+
+    function hookBlock() {
+        var markerIdx = SERVER_SRC.indexOf('#OBS1 slice 3');
+        assert.ok(markerIdx > 0, 'OBS1 slice 3 marker not found in server.js');
+        return SERVER_SRC.substring(markerIdx, Math.min(SERVER_SRC.length, markerIdx + 1500));
+    }
+
+    it('gates on lib.metrics.isEnabled()', function() {
+        var blk = hookBlock();
+        assert.match(blk, /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*\)/);
+    });
+
+    it('captures request._metricsStartTime', function() {
+        var blk = hookBlock();
+        assert.match(blk, /request\._metricsStartTime\s*=\s*Date\.now\(\)/);
+    });
+
+    it("registers response.on('finish')", function() {
+        var blk = hookBlock();
+        assert.match(blk, /response\.on\(\s*['"]finish['"]/);
+    });
+
+    it('reads route from request.routing.rule', function() {
+        var blk = hookBlock();
+        assert.match(blk, /request\.routing\s*&&\s*request\.routing\.rule/);
+    });
+
+    it('calls lib.metrics.recordRequest with the four labels', function() {
+        var blk = hookBlock();
+        assert.match(blk, /lib\.metrics\.recordRequest\s*\(/);
+        assert.match(blk, /method:\s*request\.method/);
+        assert.match(blk, /status:\s*response\.statusCode/);
+    });
+
+    it('try/catch around the recorder', function() {
+        var blk = hookBlock();
+        assert.match(blk, /try\s*\{[\s\S]*?\}\s*catch/);
+    });
+
+});
+
+
+describe('10 - schema/app.json — metrics block', function() {
 
     it('declares metrics as an object property', function() {
         assert.equal(typeof SCHEMA.properties.metrics, 'object');

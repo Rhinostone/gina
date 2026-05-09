@@ -315,6 +315,69 @@ describe('03 - recordRequest()', function() {
         assert.equal(prom._last().registry._calls.observe[0].value, 0);
     });
 
+    // ─── Status-aware route fallback (#OBS1 slice 3) ──────────────────
+
+    it('uses __not_found__ when route is missing and status is 404', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        metrics.recordRequest({ method: 'GET', status: 404, duration: 1 });
+        assert.equal(prom._last().registry._calls.inc[0].route, '__not_found__');
+    });
+
+    it('uses __method_not_allowed__ when route is missing and status is 405', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        metrics.recordRequest({ method: 'POST', status: 405, duration: 1 });
+        assert.equal(prom._last().registry._calls.inc[0].route, '__method_not_allowed__');
+    });
+
+    it('uses __error__ when route is missing and status is 500', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        metrics.recordRequest({ method: 'GET', status: 500, duration: 1 });
+        assert.equal(prom._last().registry._calls.inc[0].route, '__error__');
+    });
+
+    it('uses __error__ when route is missing and status is 502/503/504', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        metrics.recordRequest({ method: 'GET', status: 502, duration: 1 });
+        metrics.recordRequest({ method: 'GET', status: 503, duration: 1 });
+        metrics.recordRequest({ method: 'GET', status: 504, duration: 1 });
+        var calls = prom._last().registry._calls.inc;
+        assert.equal(calls[0].route, '__error__');
+        assert.equal(calls[1].route, '__error__');
+        assert.equal(calls[2].route, '__error__');
+    });
+
+    it('uses __no_route__ when route is missing and status is a normal 2xx', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        metrics.recordRequest({ method: 'GET', status: 200, duration: 1 });
+        metrics.recordRequest({ method: 'GET', status: 201, duration: 1 });
+        var calls = prom._last().registry._calls.inc;
+        assert.equal(calls[0].route, '__no_route__');
+        assert.equal(calls[1].route, '__no_route__');
+    });
+
+    it('uses __no_route__ when route is missing and status is a redirect (3xx)', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        metrics.recordRequest({ method: 'GET', status: 302, duration: 1 });
+        metrics.recordRequest({ method: 'GET', status: 304, duration: 1 });
+        var calls = prom._last().registry._calls.inc;
+        assert.equal(calls[0].route, '__no_route__');
+        assert.equal(calls[1].route, '__no_route__');
+    });
+
+    it('keeps the route label as-is when explicitly provided (even with 4xx/5xx status)', function() {
+        var prom = makeMockProm();
+        metrics.start({ client: prom });
+        // A controller hit for `home` that returns 404 — the route was matched.
+        metrics.recordRequest({ method: 'GET', route: 'home', status: 404, duration: 1 });
+        assert.equal(prom._last().registry._calls.inc[0].route, 'home');
+    });
+
 });
 
 

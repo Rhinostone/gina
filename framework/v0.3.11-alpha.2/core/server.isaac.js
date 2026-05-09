@@ -494,6 +494,26 @@ function ServerEngineClass(options) {
             if (isCacheless && process.gina._inspectorActive) {
                 request._devTimeline = { requestStart: Date.now(), entries: [] };
             }
+            // #OBS1 slice 3 — HTTP request lifecycle hook for Prometheus metrics.
+            // Gated on lib.metrics.isEnabled() so the listener is only wired when
+            // app.json metrics.enabled is true. Records on response 'finish' (fires
+            // for both HTTP/1.1 ServerResponse and HTTP/2 Http2ServerResponse).
+            // Errors inside the listener are swallowed — metrics must never crash
+            // a request.
+            if (lib.metrics.isEnabled()) {
+                request._metricsStartTime = Date.now();
+                response.on('finish', function _gina_metrics_record() {
+                    try {
+                        var _route = (request.routing && request.routing.rule) || undefined;
+                        lib.metrics.recordRequest({
+                            method:   request.method,
+                            route:    _route,
+                            status:   response.statusCode,
+                            duration: Date.now() - request._metricsStartTime
+                        });
+                    } catch (_e) { /* metrics never crashes a request */ }
+                });
+            }
             // From the original
 
             acceptEncodingArr = null;

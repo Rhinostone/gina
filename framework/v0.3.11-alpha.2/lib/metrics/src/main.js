@@ -293,10 +293,18 @@ function setAllowList(list) {
  * (`req.routing.rule`), NOT the raw URL — otherwise Prometheus cardinality
  * blows up on every distinct path-parameter value.
  *
+ * When `obs.route` is missing, the label is derived from `obs.status`
+ * to keep the cardinality bounded:
+ *
+ *   - `404`   → `'__not_found__'`
+ *   - `405`   → `'__method_not_allowed__'`
+ *   - `>=500` → `'__error__'`
+ *   - other   → `'__no_route__'`
+ *
  * @memberof module:gina/lib/metrics
  * @param   {Object}        obs
  * @param   {string}        obs.method     - Uppercased HTTP method (`'GET'`, `'POST'`, …).
- * @param   {string}        obs.route      - routing.json rule key (cardinality-safe). Use `'__not_found__'` / `'__method_not_allowed__'` / `'__error__'` / `'__no_route__'` for unmatched paths.
+ * @param   {string}        [obs.route]    - routing.json rule key (cardinality-safe). When omitted, derived from status.
  * @param   {number|string} obs.status     - HTTP status code.
  * @param   {number}        [obs.duration] - Request duration in milliseconds (NOT seconds — converted internally for the histogram).
  * @returns {void}
@@ -308,13 +316,25 @@ function setAllowList(list) {
  *     status:   200,
  *     duration: 42  // ms
  *   });
+ *
+ * @example
+ *   // 404 with no matched route → '__not_found__' label
+ *   lib.metrics.recordRequest({ method: 'GET', status: 404, duration: 1 });
  */
 function recordRequest(obs) {
     if (!enabled) return;
     if (!obs || typeof obs !== 'object') return;
+    var route = (typeof obs.route === 'string' && obs.route.length > 0) ? obs.route : null;
+    if (!route) {
+        var statusNum = parseInt(obs.status, 10);
+        if (statusNum === 404)      route = '__not_found__';
+        else if (statusNum === 405) route = '__method_not_allowed__';
+        else if (statusNum >= 500)  route = '__error__';
+        else                        route = '__no_route__';
+    }
     var labels = {
         method: typeof obs.method === 'string' ? obs.method.toUpperCase() : 'UNKNOWN',
-        route:  (typeof obs.route === 'string' && obs.route.length > 0) ? obs.route : '__no_route__',
+        route:  route,
         status: String(obs.status || 0)
     };
     counters.requests.inc(labels);
