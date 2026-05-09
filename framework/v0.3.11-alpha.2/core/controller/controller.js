@@ -397,6 +397,14 @@ function SuperController(options) {
                 // replaced: new RegExp('@' + bundle) — use split/join instead (#P1)
                 set('page.view.title', rule.split('@' + options.conf.bundle).join(''));
                 set('page.view.namespace', namespace);
+                // Auto-promote `route.param.section` to `page.section` so templates
+                // that compose include paths from the section name (sub-section
+                // dispatch from a single index.html that fans out to per-section
+                // partials based on the matched route) work without requiring the
+                // controller to set `data.page.section` itself.
+                if ( local.req && local.req.routing && local.req.routing.param && local.req.routing.param.section ) {
+                    set('page.section', local.req.routing.param.section);
+                }
             }
 
 

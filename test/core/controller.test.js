@@ -1334,3 +1334,148 @@ describe('10 - webroot handoff: loader sets __ginaWebroot, core reads it before 
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 11 — page.section auto-promotion from route.param.section
+//
+// A common route shape declares a `section` param to drive sub-section
+// dispatch:
+//
+//     "<route-name>": {
+//         "url":    "/foo/bar",
+//         "method": "GET",
+//         "param":  { "file": "index", "section": "alpha", "control": "get" }
+//     }
+//
+// Templates compose include paths from page.section:
+//
+//     {% set t = './includes/' + page.section + '.html' %}
+//     {% include t %}
+//
+// This parallels the existing param.file → page.view.file auto-promotion
+// (sibling line). Without it, compose-from-section templates resolve to
+// '…' + undefined + '…' which Swig coerces to an empty stem; the loader
+// then throws ENOENT at compile-file time. Bundle-level template caching
+// can mask the issue intermittently — a cached compiled output keeps
+// working until the next bundle:build busts the cache.
+
+describe('11 - page.section auto-promotion from route.param.section', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ── (a) source structure ─────────────────────────────────────────────────
+
+    it("source contains set('page.section', local.req.routing.param.section)", function() {
+        assert.ok(
+            src.indexOf("set('page.section', local.req.routing.param.section)") > -1,
+            "expected `set('page.section', local.req.routing.param.section)` — the auto-promotion is missing"
+        );
+    });
+
+    it("the page.section setter sits inside the page.view auto-promotion block", function() {
+        var viewAnchor    = src.indexOf("set('page.view.namespace'");
+        var sectionAnchor = src.indexOf("set('page.section'");
+        assert.ok(viewAnchor > -1, "page.view.namespace setter not found");
+        assert.ok(sectionAnchor > -1, "page.section setter not found");
+        // Section setter must appear immediately after the view auto-promotion
+        // block (within ~600 chars — comment + guard + setter).
+        assert.ok(
+            sectionAnchor > viewAnchor && sectionAnchor - viewAnchor < 600,
+            'page.section setter must sit alongside the existing page.view.* auto-promotions'
+        );
+    });
+
+    it("source guards local.req → local.req.routing → routing.param → param.section before the setter", function() {
+        var anchor = src.indexOf("set('page.section'");
+        var windowStart = Math.max(0, anchor - 400);
+        var block = src.slice(windowStart, anchor);
+        assert.ok(
+            /local\.req\s*&&\s*local\.req\.routing\s*&&\s*local\.req\.routing\.param\s*&&\s*local\.req\.routing\.param\.section/.test(block),
+            'expected `local.req && local.req.routing && local.req.routing.param && local.req.routing.param.section` defensive chain'
+        );
+    });
+
+    it("comment uses framework-generic language (no consumer-app references)", function() {
+        // The auto-promotion block must describe the pattern abstractly, never
+        // a specific consuming app or its templates. This protects the no-
+        // consumer-references rule from regressing through future edits.
+        var anchor = src.indexOf("set('page.section'");
+        var windowStart = Math.max(0, anchor - 600);
+        var windowEnd   = Math.min(src.length, anchor + 200);
+        var block = src.slice(windowStart, windowEnd);
+        assert.ok(
+            !/freelancer|FRAMEWORK PATCH \(/.test(block),
+            'page.section auto-promotion comment must not name a consumer app or use a "FRAMEWORK PATCH (consumer)" prefix'
+        );
+    });
+
+    // ── (b) pure logic — inline replica ──────────────────────────────────────
+    //
+    // The guard + setter semantics, replicated standalone. Cannot require the
+    // full controller module (needs a running gina server), so test the shape
+    // in isolation. The source-structure tests above pin the live shape.
+
+    function autoPromoteSection(local) {
+        var page = {};
+        var set = function(key, value) {
+            // mimic the production set('page.section', value) — flat key write.
+            page[key] = value;
+        };
+        if ( local && local.req && local.req.routing && local.req.routing.param && local.req.routing.param.section ) {
+            set('page.section', local.req.routing.param.section);
+        }
+        return page;
+    }
+
+    it('positive: routing.param.section populated → page.section gets the value', function() {
+        var local = { req: { routing: { param: { section: 'alpha' } } } };
+        var page  = autoPromoteSection(local);
+        assert.equal(page['page.section'], 'alpha');
+    });
+
+    it('positive: a different section value flows through unchanged', function() {
+        var local = { req: { routing: { param: { section: 'billing' } } } };
+        var page  = autoPromoteSection(local);
+        assert.equal(page['page.section'], 'billing');
+    });
+
+    it('negative: routing.param without `section` → page.section never set', function() {
+        var local = { req: { routing: { param: { file: 'index' } } } };
+        var page  = autoPromoteSection(local);
+        assert.ok(
+            !Object.prototype.hasOwnProperty.call(page, 'page.section'),
+            'page.section must not be assigned when route.param.section is absent'
+        );
+    });
+
+    it('negative: routing without param → no page.section assignment', function() {
+        var local = { req: { routing: {} } };
+        var page  = autoPromoteSection(local);
+        assert.ok(!Object.prototype.hasOwnProperty.call(page, 'page.section'));
+    });
+
+    it('negative: req without routing → no page.section assignment', function() {
+        var local = { req: {} };
+        var page  = autoPromoteSection(local);
+        assert.ok(!Object.prototype.hasOwnProperty.call(page, 'page.section'));
+    });
+
+    it('negative: missing local.req → no crash, no page.section assignment', function() {
+        // Defensive: createTestInstance + similar test paths can call into
+        // setOptions with bare {req: {}, res: {}}; the guard on local.req
+        // protects against the "object missing routing" shape.
+        var local = {};
+        var page  = autoPromoteSection(local);
+        assert.ok(!Object.prototype.hasOwnProperty.call(page, 'page.section'));
+    });
+
+    it('negative: empty-string section is skipped (falsy guard)', function() {
+        // `if (... && param.section)` is a truthy check, so '' falls through.
+        // Mirrors the "absent" branch — page.section is never assigned to ''.
+        var local = { req: { routing: { param: { section: '' } } } };
+        var page  = autoPromoteSection(local);
+        assert.ok(!Object.prototype.hasOwnProperty.call(page, 'page.section'));
+    });
+
+});
