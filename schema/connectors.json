@@ -15,7 +15,7 @@
         "connector": {
           "type": "string",
           "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\").",
-          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai"]
+          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb"]
         },
         "version": {
           "type": "string",
@@ -39,7 +39,30 @@
         },
         "database": {
           "type": "string",
-          "description": "Database, bucket, or keyspace name. Also used as the model directory name under models/. Required for Couchbase, MySQL, PostgreSQL, SQLite."
+          "description": "Database, bucket, or keyspace name. Also used as the model directory name under models/. Required for Couchbase, MySQL, PostgreSQL, SQLite, ScyllaDB."
+        },
+        "contactPoints": {
+          "type": ["array", "string"],
+          "description": "ScyllaDB / Cassandra only. Cluster contact points. Accepts an array of `host:port` strings, a comma-separated string, or falls back to the `host`+`port` pair when omitted. Defaults to [\"127.0.0.1:9042\"].",
+          "examples": [["10.0.0.1:9042", "10.0.0.2:9042"], "node1:9042,node2:9042"]
+        },
+        "localDataCenter": {
+          "type": "string",
+          "description": "ScyllaDB / Cassandra only. Data center name used for token-aware routing. Required by cassandra-driver 4.x. Defaults to \"datacenter1\".",
+          "examples": ["datacenter1", "us-east-1"]
+        },
+        "keyspace": {
+          "type": "string",
+          "description": "ScyllaDB / Cassandra only. CQL keyspace name. Alias for `database` when both are supported; `keyspace` wins when both are set.",
+          "examples": ["mykeyspace"]
+        },
+        "credentials": {
+          "type": "object",
+          "description": "ScyllaDB / Cassandra only. Authentication credentials. Use this OR the legacy `username`+`password` pair.",
+          "properties": {
+            "username": { "type": "string" },
+            "password": { "type": "string" }
+          }
         },
         "username": {
           "type": "string",

@@ -46,21 +46,27 @@
 /**
  * Logical `connector` type → {@link DriverEntry}. Mirrors the enum in
  * `schema/connectors.json` (`connector.properties.connector.enum`)
- * plus `mongodb` and `scylladb` (listed for `connector:list` driver
- * introspection even though `connector:add` currently rejects them at
- * the CLI layer — the framework-side connector implementations land in
- * the 0.4.0 series).
+ * plus `mongodb` (listed for `connector:list` driver introspection even
+ * though `connector:add` currently rejects it at the CLI layer — the
+ * MongoDB framework-side connector lands in the 0.4.0 series, see #CN6).
+ *
+ * ScyllaDB uses `cassandra-driver` (Apache Software Foundation) since the
+ * Node.js ecosystem has no first-party shard-aware ScyllaDB driver — the
+ * official `@scylladb/scylla-driver` package does not exist on npm
+ * (Python / Java / Go / Rust drivers are first-party shard-aware; Node.js
+ * is not). `cassandra-driver` provides token-aware routing which is
+ * sufficient for most workloads against ScyllaDB or Cassandra.
  *
  * @constant
  * @type {Object<string, DriverEntry>}
  */
 var DRIVER_MAP = {
-    couchbase  : { npm: 'couchbase',               range: '>=3.0.0' },
-    redis      : { npm: 'ioredis',                 range: '>=5.0.0' },
-    mysql      : { npm: 'mysql2',                  range: '>=2.0.0' },
-    postgresql : { npm: 'pg',                      range: '>=8.0.0' },
-    mongodb    : { npm: 'mongodb',                 range: '>=5.0.0' },
-    scylladb   : { npm: '@scylladb/scylla-driver', range: '>=1.0.0' },
+    couchbase  : { npm: 'couchbase',        range: '>=3.0.0' },
+    redis      : { npm: 'ioredis',          range: '>=5.0.0' },
+    mysql      : { npm: 'mysql2',           range: '>=2.0.0' },
+    postgresql : { npm: 'pg',               range: '>=8.0.0' },
+    mongodb    : { npm: 'mongodb',          range: '>=5.0.0' },
+    scylladb   : { npm: 'cassandra-driver', range: '>=4.0.0' },
     sqlite     : { builtin: true, note: 'Node.js >= 22.5.0 built-in (node:sqlite)' }
 };
 

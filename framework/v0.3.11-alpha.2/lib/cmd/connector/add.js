@@ -83,7 +83,7 @@ function Add(opt, cmd) {
      * @constant
      * @type {string[]}
      */
-    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai'];
+    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai', 'scylladb'];
 
     /**
      * Allowed `scope` values — mirrors the enum in `schema/connectors.json`

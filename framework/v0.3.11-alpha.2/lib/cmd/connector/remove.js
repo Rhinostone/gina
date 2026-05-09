@@ -61,7 +61,7 @@ function Remove(opt, cmd) {
      * @constant
      * @type {string[]}
      */
-    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai'];
+    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai', 'scylladb'];
 
     /**
      * Parse positionals, validate scope, scan for usages, write the
@@ -482,7 +482,7 @@ function Remove(opt, cmd) {
      * @returns {string|null}
      */
     var buildDriverRetentionHint = function (driverType, connectorName, bundleName, siblings) {
-        if (ALLOWED_CONNECTOR_TYPES.indexOf(driverType) < 0 && driverType !== 'mongodb' && driverType !== 'scylladb') {
+        if (ALLOWED_CONNECTOR_TYPES.indexOf(driverType) < 0 && driverType !== 'mongodb') {
             return 'Note: gina does not uninstall npm packages. Review `' + driverType + '` usage before `npm uninstall`.';
         }
         if (driverType === 'sqlite') {

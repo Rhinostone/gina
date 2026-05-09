@@ -77,8 +77,8 @@ describe('02 - DRIVER_MAP entries', function () {
         assert.deepEqual(registry.DRIVER_MAP.mongodb, { npm: 'mongodb', range: '>=5.0.0' });
     });
 
-    it('maps scylladb → @scylladb/scylla-driver >=1.0.0', function () {
-        assert.deepEqual(registry.DRIVER_MAP.scylladb, { npm: '@scylladb/scylla-driver', range: '>=1.0.0' });
+    it('maps scylladb → cassandra-driver >=4.0.0', function () {
+        assert.deepEqual(registry.DRIVER_MAP.scylladb, { npm: 'cassandra-driver', range: '>=4.0.0' });
     });
 
     it('flags sqlite as builtin (node:sqlite)', function () {
