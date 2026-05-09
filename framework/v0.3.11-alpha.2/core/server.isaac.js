@@ -536,6 +536,67 @@ function ServerEngineClass(options) {
                 response.writeHead(200, healthHeaders);
                 return response.end(healthStatus);
             }
+
+            // /_gina/metrics — Prometheus exposition format (#OBS1, slice 2)
+            if ( request.method.toUpperCase() === 'GET' && /\/_gina\/metrics$/i.test(request.url) ) {
+                if ( !lib.metrics.isClientAllowed(request) ) {
+                    var metricsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/metrics: client IP not in app.json metrics.allowFrom' });
+                    var metricsForbiddenHeaders = {
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'pragma':        'no-cache',
+                        'expires':       '0',
+                        'content-type':  'application/json; charset=utf8',
+                        'X-Powered-By':  'Gina/' + GINA_VERSION
+                    };
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ...metricsForbiddenHeaders });
+                        return response.stream.end(metricsForbiddenBody);
+                    }
+                    response.writeHead(403, metricsForbiddenHeaders);
+                    return response.end(metricsForbiddenBody);
+                }
+                if ( !lib.metrics.isEnabled() ) {
+                    var metricsDisabledBody    = '# /_gina/metrics — metrics not enabled\n# set app.json metrics.enabled to true and install prom-client (npm install prom-client)\n';
+                    var metricsDisabledHeaders = {
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type':  'text/plain; version=0.0.4; charset=utf-8',
+                        'X-Powered-By':  'Gina/' + GINA_VERSION
+                    };
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 503, ...metricsDisabledHeaders });
+                        return response.stream.end(metricsDisabledBody);
+                    }
+                    response.writeHead(503, metricsDisabledHeaders);
+                    return response.end(metricsDisabledBody);
+                }
+                return lib.metrics.getMetrics().then(function(metricsText) {
+                    var metricsHeaders = {
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type':  'text/plain; version=0.0.4; charset=utf-8',
+                        'X-Powered-By':  'Gina/' + GINA_VERSION
+                    };
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 200, ...metricsHeaders });
+                        return response.stream.end(metricsText);
+                    }
+                    response.writeHead(200, metricsHeaders);
+                    return response.end(metricsText);
+                }).catch(function(metricsErr) {
+                    var metricsErrBody    = JSON.stringify({ error: 'metrics_error', message: metricsErr.message || String(metricsErr) });
+                    var metricsErrHeaders = {
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type':  'application/json; charset=utf8',
+                        'X-Powered-By':  'Gina/' + GINA_VERSION
+                    };
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 500, ...metricsErrHeaders });
+                        return response.stream.end(metricsErrBody);
+                    }
+                    response.writeHead(500, metricsErrHeaders);
+                    return response.end(metricsErrBody);
+                });
+            }
+
             if ( request.method.toUpperCase() === 'GET' && /\_gina\/info$/i.test(request.url) ) {
 
                 var infoPayload = {

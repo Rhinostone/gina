@@ -396,6 +396,13 @@ describe('06 - reset()', function() {
         assert.equal(metrics.getRegistry(), null);
     });
 
+    it('clears the allowList', function() {
+        metrics.start({ client: makeMockProm(), allowFrom: ['10.0.0.1'] });
+        metrics.reset();
+        // After reset, getAllowList() falls back to DEFAULT_ALLOW_LIST.
+        assert.deepEqual(metrics.getAllowList(), metrics.DEFAULT_ALLOW_LIST);
+    });
+
     it('allows a fresh start() with a new client after reset', function() {
         var p1 = makeMockProm();
         metrics.start({ client: p1 });
@@ -405,6 +412,124 @@ describe('06 - reset()', function() {
         metrics.start({ client: p2 });
         var r2 = metrics.getRegistry();
         assert.notEqual(r1, r2);
+    });
+
+});
+
+
+// ─── 07 — IP allowlist (#OBS1 slice 2) ─────────────────────────────────────
+
+describe('07 - IP allowlist', function() {
+
+    it('exports DEFAULT_ALLOW_LIST as loopback IPv4 + IPv6', function() {
+        assert.deepEqual(metrics.DEFAULT_ALLOW_LIST, ['127.0.0.1', '::1']);
+    });
+
+    it('exports isClientAllowed / getAllowList / setAllowList', function() {
+        assert.equal(typeof metrics.isClientAllowed, 'function');
+        assert.equal(typeof metrics.getAllowList,    'function');
+        assert.equal(typeof metrics.setAllowList,    'function');
+    });
+
+    it('getAllowList() returns DEFAULT_ALLOW_LIST before start()', function() {
+        assert.deepEqual(metrics.getAllowList(), ['127.0.0.1', '::1']);
+    });
+
+    it('getAllowList() returns the configured list after start()', function() {
+        metrics.start({ client: makeMockProm(), allowFrom: ['10.0.0.1', '192.168.1.5'] });
+        assert.deepEqual(metrics.getAllowList(), ['10.0.0.1', '192.168.1.5']);
+    });
+
+    it('getAllowList() falls back to DEFAULT_ALLOW_LIST when allowFrom is omitted', function() {
+        metrics.start({ client: makeMockProm() });
+        assert.deepEqual(metrics.getAllowList(), ['127.0.0.1', '::1']);
+    });
+
+    it('getAllowList() returns a defensive copy (mutating it does not change internal state)', function() {
+        metrics.start({ client: makeMockProm(), allowFrom: ['10.0.0.1'] });
+        var list = metrics.getAllowList();
+        list.push('99.99.99.99');
+        assert.deepEqual(metrics.getAllowList(), ['10.0.0.1']);
+    });
+
+    it('setAllowList() updates the list', function() {
+        metrics.start({ client: makeMockProm() });
+        metrics.setAllowList(['1.2.3.4']);
+        assert.deepEqual(metrics.getAllowList(), ['1.2.3.4']);
+    });
+
+    it('setAllowList() rejects non-array input', function() {
+        assert.throws(function() { metrics.setAllowList('1.2.3.4'); }, /must be an array/);
+        assert.throws(function() { metrics.setAllowList(null); },     /must be an array/);
+        assert.throws(function() { metrics.setAllowList({}); },       /must be an array/);
+    });
+
+    it('isClientAllowed() accepts loopback IPv4 by default', function() {
+        metrics.start({ client: makeMockProm() });
+        var req = { socket: { remoteAddress: '127.0.0.1' } };
+        assert.equal(metrics.isClientAllowed(req), true);
+    });
+
+    it('isClientAllowed() accepts loopback IPv6 by default', function() {
+        metrics.start({ client: makeMockProm() });
+        var req = { socket: { remoteAddress: '::1' } };
+        assert.equal(metrics.isClientAllowed(req), true);
+    });
+
+    it('isClientAllowed() rejects an IP not in the list', function() {
+        metrics.start({ client: makeMockProm() });
+        var req = { socket: { remoteAddress: '10.0.0.1' } };
+        assert.equal(metrics.isClientAllowed(req), false);
+    });
+
+    it('isClientAllowed() normalises IPv6-mapped IPv4 (::ffff:127.0.0.1 → 127.0.0.1)', function() {
+        metrics.start({ client: makeMockProm() });
+        var req = { socket: { remoteAddress: '::ffff:127.0.0.1' } };
+        assert.equal(metrics.isClientAllowed(req), true);
+    });
+
+    it('isClientAllowed() matches a listed IPv4 against the IPv6-mapped client form', function() {
+        metrics.start({ client: makeMockProm(), allowFrom: ['10.0.0.1'] });
+        var req = { socket: { remoteAddress: '::ffff:10.0.0.1' } };
+        assert.equal(metrics.isClientAllowed(req), true);
+    });
+
+    it('isClientAllowed() falls back to req.connection.remoteAddress when socket is absent', function() {
+        metrics.start({ client: makeMockProm() });
+        var req = { connection: { remoteAddress: '127.0.0.1' } };
+        assert.equal(metrics.isClientAllowed(req), true);
+    });
+
+    it('isClientAllowed() returns false when no client IP can be determined', function() {
+        metrics.start({ client: makeMockProm() });
+        assert.equal(metrics.isClientAllowed({}),                         false);
+        assert.equal(metrics.isClientAllowed({ socket: {} }),             false);
+        assert.equal(metrics.isClientAllowed({ socket: { remoteAddress: '' } }), false);
+    });
+
+    it('isClientAllowed() returns false when allowList is empty (deny everyone)', function() {
+        metrics.start({ client: makeMockProm(), allowFrom: [] });
+        var req = { socket: { remoteAddress: '127.0.0.1' } };
+        assert.equal(metrics.isClientAllowed(req), false);
+    });
+
+    it('isClientAllowed() honours custom allowFrom list', function() {
+        metrics.start({ client: makeMockProm(), allowFrom: ['192.168.1.5', '10.0.0.0'] });
+        assert.equal(metrics.isClientAllowed({ socket: { remoteAddress: '192.168.1.5' } }), true);
+        assert.equal(metrics.isClientAllowed({ socket: { remoteAddress: '10.0.0.0'   } }), true);
+        assert.equal(metrics.isClientAllowed({ socket: { remoteAddress: '127.0.0.1'  } }), false);
+    });
+
+    it('does NOT trust X-Forwarded-For header for the gate', function() {
+        // The allowlist intentionally reads from socket only — proxies could
+        // forge XFF. Confirm a request with a spoofed XFF but bad socket IP
+        // is rejected.
+        metrics.start({ client: makeMockProm(), allowFrom: ['127.0.0.1'] });
+        var req = {
+            socket:  { remoteAddress: '8.8.8.8' },
+            headers: { 'x-forwarded-for': '127.0.0.1' }
+        };
+        assert.equal(metrics.isClientAllowed(req), false);
     });
 
 });

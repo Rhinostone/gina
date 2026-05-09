@@ -2406,6 +2406,38 @@ function Server(options) {
 
             response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
 
+            // ── /_gina/metrics — Prometheus exposition (always-on, opt-in via app.json) ──
+            // (#OBS1 slice 2) Engine-agnostic mirror of the Isaac handler. Method gate
+            // is GET only; IP allowlist comes from app.json `metrics.allowFrom` (default
+            // loopback). 503 when metrics.enabled is false in app.json.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /\/_gina\/metrics$/.test(request.url)
+            ) {
+                if ( !lib.metrics.isClientAllowed(request) ) {
+                    response.setHeader('content-type',  'application/json; charset=utf8');
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/metrics: client IP not in app.json metrics.allowFrom' }));
+                }
+                if ( !lib.metrics.isEnabled() ) {
+                    response.setHeader('content-type',  'text/plain; version=0.0.4; charset=utf-8');
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    response.statusCode = 503;
+                    return response.end('# /_gina/metrics — metrics not enabled\n# set app.json metrics.enabled to true and install prom-client (npm install prom-client)\n');
+                }
+                return lib.metrics.getMetrics().then(function(_metricsText) {
+                    response.setHeader('content-type',  'text/plain; version=0.0.4; charset=utf-8');
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    return response.end(_metricsText);
+                }).catch(function(_metricsErr) {
+                    response.setHeader('content-type',  'application/json; charset=utf8');
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    response.statusCode = 500;
+                    return response.end(JSON.stringify({ error: 'metrics_error', message: _metricsErr.message || String(_metricsErr) }));
+                });
+            }
+
             // ── Inspector SPA — served at /_gina/inspector/ in dev mode ──────────
             if (
                 process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true'

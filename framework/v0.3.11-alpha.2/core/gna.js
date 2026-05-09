@@ -1154,7 +1154,8 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     ) {
                                         lib.metrics.start({
                                             prefix:         _metricsAppConf.metrics.prefix,
-                                            defaultMetrics: _metricsAppConf.metrics.defaultMetrics
+                                            defaultMetrics: _metricsAppConf.metrics.defaultMetrics,
+                                            allowFrom:      _metricsAppConf.metrics.allowFrom
                                         });
                                     }
                                 } catch (metricsErr) {

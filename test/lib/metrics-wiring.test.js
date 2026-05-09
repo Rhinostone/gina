@@ -77,12 +77,13 @@ describe('02 - core/gna.js — bundle-init wiring', function() {
         assert.match(callbackHead, /metrics\.enabled\s*===\s*true/);
     });
 
-    it('forwards prefix + defaultMetrics from app.json', function() {
+    it('forwards prefix + defaultMetrics + allowFrom from app.json', function() {
         var startIdx = GNA_SRC.indexOf("server.on('started'");
         var sliceEnd  = GNA_SRC.indexOf("instance.use", startIdx);
         var callbackHead = GNA_SRC.substring(startIdx, sliceEnd);
         assert.match(callbackHead, /prefix:\s*_metricsAppConf\.metrics\.prefix/);
         assert.match(callbackHead, /defaultMetrics:\s*_metricsAppConf\.metrics\.defaultMetrics/);
+        assert.match(callbackHead, /allowFrom:\s*_metricsAppConf\.metrics\.allowFrom/);
     });
 
     it('wraps the init in try/catch with a console.warn on failure', function() {
@@ -167,7 +168,132 @@ describe('05 - lib/metrics/src/main.js — module shape + boot semantics', funct
 });
 
 
-describe('06 - schema/app.json — metrics block', function() {
+describe('06 - core/server.isaac.js — /_gina/metrics handler (slice 2)', function() {
+
+    var ISAAC_SRC = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
+
+    function metricsBlock() {
+        // Locate the slice-2 marker comment then take a window covering the handler body.
+        var markerIdx = ISAAC_SRC.indexOf('#OBS1, slice 2');
+        assert.ok(markerIdx > 0, 'OBS1 slice 2 marker comment not found in server.isaac.js');
+        // Walk forward to the next /_gina handler ( /_gina/info or /_gina/cache/stats ).
+        var endIdx = ISAAC_SRC.indexOf('_gina\\/info$', markerIdx);
+        if (endIdx < 0) endIdx = markerIdx + 4000; // generous fallback
+        return ISAAC_SRC.substring(markerIdx, endIdx);
+    }
+
+    it('matches GET method and /_gina/metrics path', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /request\.method\.toUpperCase\(\)\s*===\s*['"]GET['"]/);
+        assert.match(blk, /\\\/_gina\\\/metrics\$/);
+    });
+
+    it('calls lib.metrics.isClientAllowed before isEnabled / getMetrics', function() {
+        var blk = metricsBlock();
+        var idxAllowed = blk.indexOf('lib.metrics.isClientAllowed');
+        var idxEnabled = blk.indexOf('lib.metrics.isEnabled');
+        var idxMetrics = blk.indexOf('lib.metrics.getMetrics');
+        assert.ok(idxAllowed >= 0, 'isClientAllowed not called');
+        assert.ok(idxEnabled >  idxAllowed, 'isEnabled() must be called after isClientAllowed()');
+        assert.ok(idxMetrics >  idxEnabled, 'getMetrics() must be called after isEnabled()');
+    });
+
+    it('returns 403 on IP-allowlist miss', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /403/);
+        assert.match(blk, /forbidden/);
+    });
+
+    it('returns 503 when metrics is not enabled', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /503/);
+        assert.match(blk, /metrics not enabled/);
+    });
+
+    it('returns text/plain; version=0.0.4 on success', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /text\/plain;\s*version=0\.0\.4;\s*charset=utf-8/);
+    });
+
+    it('serves both HTTP/2 (response.stream) and HTTP/1.1 paths', function() {
+        var blk = metricsBlock();
+        // Both branches present.
+        assert.ok(blk.indexOf('response.stream.respond') > 0, 'HTTP/2 branch missing');
+        assert.ok(blk.indexOf('response.writeHead')      > 0, 'HTTP/1.1 branch missing');
+    });
+
+    it('catches getMetrics() errors and surfaces 500', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /\.catch\s*\(/);
+        assert.match(blk, /500/);
+        assert.match(blk, /metrics_error/);
+    });
+
+});
+
+
+describe('07 - core/server.js — /_gina/metrics handler (slice 2)', function() {
+
+    var SERVER_SRC = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
+
+    function metricsBlock() {
+        var markerIdx = SERVER_SRC.indexOf('#OBS1 slice 2');
+        assert.ok(markerIdx > 0, 'OBS1 slice 2 marker comment not found in server.js');
+        // Window through the next /_gina/inspector handler.
+        var endIdx = SERVER_SRC.indexOf('Inspector SPA', markerIdx);
+        if (endIdx < 0) endIdx = markerIdx + 4000;
+        return SERVER_SRC.substring(markerIdx, endIdx);
+    }
+
+    it('matches GET method and /_gina/metrics path', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /request\.method\.toUpperCase\(\)\s*===\s*['"]GET['"]/);
+        assert.match(blk, /\\\/_gina\\\/metrics\$/);
+    });
+
+    it('is NOT gated on NODE_ENV_IS_DEV (always-on)', function() {
+        var blk = metricsBlock();
+        assert.equal(/NODE_ENV_IS_DEV/.test(blk), false);
+    });
+
+    it('calls lib.metrics.isClientAllowed / isEnabled / getMetrics in order', function() {
+        var blk = metricsBlock();
+        var idxAllowed = blk.indexOf('lib.metrics.isClientAllowed');
+        var idxEnabled = blk.indexOf('lib.metrics.isEnabled');
+        var idxMetrics = blk.indexOf('lib.metrics.getMetrics');
+        assert.ok(idxAllowed >= 0);
+        assert.ok(idxEnabled >  idxAllowed);
+        assert.ok(idxMetrics >  idxEnabled);
+    });
+
+    it('returns 403 on IP-allowlist miss', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /statusCode\s*=\s*403/);
+        assert.match(blk, /forbidden/);
+    });
+
+    it('returns 503 when metrics is not enabled', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /statusCode\s*=\s*503/);
+        assert.match(blk, /metrics not enabled/);
+    });
+
+    it('returns text/plain; version=0.0.4 on success', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /text\/plain;\s*version=0\.0\.4;\s*charset=utf-8/);
+    });
+
+    it('catches getMetrics() errors and surfaces 500', function() {
+        var blk = metricsBlock();
+        assert.match(blk, /\.catch\s*\(/);
+        assert.match(blk, /statusCode\s*=\s*500/);
+        assert.match(blk, /metrics_error/);
+    });
+
+});
+
+
+describe('08 - schema/app.json — metrics block', function() {
 
     it('declares metrics as an object property', function() {
         assert.equal(typeof SCHEMA.properties.metrics, 'object');

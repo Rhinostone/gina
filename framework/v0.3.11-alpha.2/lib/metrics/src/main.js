@@ -82,6 +82,17 @@ var enabled = false;
 var startError = null;
 
 /**
+ * IP allowlist for the `/_gina/metrics` endpoint. Captured from
+ * `app.json metrics.allowFrom` at {@link start} time. `null` before
+ * start; an array thereafter. Empty array `[]` means deny everyone
+ * (an explicit lockdown choice).
+ *
+ * @inner
+ * @type {string[]|null}
+ */
+var allowList = null;
+
+/**
  * Default histogram buckets in seconds — covers 5ms to 10s with finer
  * granularity at the lower end where most HTTP latencies sit.
  *
@@ -90,6 +101,16 @@ var startError = null;
  * @type {number[]}
  */
 var DEFAULT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
+
+/**
+ * Default IP allowlist when `app.json metrics.allowFrom` is omitted
+ * (loopback only — IPv4 + IPv6).
+ *
+ * @memberof module:gina/lib/metrics
+ * @constant
+ * @type {string[]}
+ */
+var DEFAULT_ALLOW_LIST = ['127.0.0.1', '::1'];
 
 /**
  * Initialise the metrics registry and wire HTTP counters. Idempotent —
@@ -107,6 +128,7 @@ var DEFAULT_BUCKETS = [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10];
  * @param   {string}   [opts.prefix='gina_']        - Metric-name prefix; appears on every counter / histogram.
  * @param   {boolean}  [opts.defaultMetrics=true]   - When `true`, calls `prom.collectDefaultMetrics()` to seed Node.js process metrics (heap, GC pause, event loop lag, active handles).
  * @param   {number[]} [opts.durationBuckets]       - Override histogram buckets (seconds). Defaults to {@link DEFAULT_BUCKETS}.
+ * @param   {string[]} [opts.allowFrom]             - IP allowlist for the `/_gina/metrics` endpoint. Defaults to {@link DEFAULT_ALLOW_LIST} (loopback only). Empty array `[]` means deny everyone.
  * @param   {*}        [opts.client]                - Test-only: inject a mock `prom-client`. Production callers omit this.
  * @returns {boolean}                               - `true` on success.
  * @throws  {Error}                                 - When `prom-client` cannot be loaded.
@@ -175,8 +197,92 @@ function start(opts) {
         registers:  [registry]
     });
 
+    allowList = Array.isArray(opts.allowFrom) ? opts.allowFrom.slice() : DEFAULT_ALLOW_LIST.slice();
+
     enabled = true;
     return true;
+}
+
+/**
+ * Test whether a request's client IP is in the configured allowlist.
+ *
+ * Reads the IP from `req.socket.remoteAddress` (or `req.connection.remoteAddress`
+ * as a fallback for older shapes). Does NOT trust `X-Forwarded-For`: the
+ * metrics endpoint is for direct scrapers (Prometheus, internal admin),
+ * never proxied public traffic.
+ *
+ * Normalises IPv6-mapped IPv4 form (`::ffff:127.0.0.1`) so an entry of
+ * `'127.0.0.1'` matches both `'127.0.0.1'` and `'::ffff:127.0.0.1'`.
+ *
+ * Returns `false` before {@link start}, when the allowlist is empty,
+ * and when no client IP can be determined.
+ *
+ * @memberof module:gina/lib/metrics
+ * @param   {Object} req - Node `IncomingMessage` (HTTP/1.1) or `Http2ServerRequest`.
+ * @returns {boolean}
+ *
+ * @example
+ *   if (!lib.metrics.isClientAllowed(request)) {
+ *     response.writeHead(403, { 'content-type': 'application/json' });
+ *     return response.end(JSON.stringify({ error: 'forbidden' }));
+ *   }
+ */
+function isClientAllowed(req) {
+    var list = (allowList !== null) ? allowList : DEFAULT_ALLOW_LIST;
+    if (list.length === 0) {
+        return false;
+    }
+
+    var ip = '';
+    if (req && req.socket && req.socket.remoteAddress) {
+        ip = req.socket.remoteAddress;
+    } else if (req && req.connection && req.connection.remoteAddress) {
+        ip = req.connection.remoteAddress;
+    }
+    if (!ip) {
+        return false;
+    }
+
+    var normalized = ip.replace(/^::ffff:/i, '');
+
+    for (var i = 0; i < list.length; i++) {
+        var entry = list[i];
+        if (entry === ip)         return true;
+        if (entry === normalized) return true;
+        // Allow listed IPv4 to match the IPv6-mapped form.
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(entry) && '::ffff:' + entry === ip) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Read the current IP allowlist. Returns a defensive copy.
+ *
+ * @memberof module:gina/lib/metrics
+ * @returns {string[]} The configured list, or {@link DEFAULT_ALLOW_LIST} before {@link start}.
+ */
+function getAllowList() {
+    if (allowList === null) {
+        return DEFAULT_ALLOW_LIST.slice();
+    }
+    return allowList.slice();
+}
+
+/**
+ * Override the IP allowlist. Test-only — production code should pass
+ * `allowFrom` to {@link start} via the bundle's `app.json` block.
+ *
+ * @memberof module:gina/lib/metrics
+ * @param {string[]} list - New allowlist. Empty array `[]` denies everyone.
+ * @returns {void}
+ */
+function setAllowList(list) {
+    if (!Array.isArray(list)) {
+        throw new TypeError('setAllowList: list must be an array');
+    }
+    allowList = list.slice();
 }
 
 /**
@@ -277,14 +383,19 @@ function reset() {
     counters   = Object.create(null);
     enabled    = false;
     startError = null;
+    allowList  = null;
 }
 
 module.exports = {
-    start          : start,
-    recordRequest  : recordRequest,
-    getMetrics     : getMetrics,
-    isEnabled      : isEnabled,
-    getRegistry    : getRegistry,
-    reset          : reset,
-    DEFAULT_BUCKETS: DEFAULT_BUCKETS
+    start             : start,
+    recordRequest     : recordRequest,
+    getMetrics        : getMetrics,
+    isEnabled         : isEnabled,
+    getRegistry       : getRegistry,
+    isClientAllowed   : isClientAllowed,
+    getAllowList      : getAllowList,
+    setAllowList      : setAllowList,
+    reset             : reset,
+    DEFAULT_BUCKETS   : DEFAULT_BUCKETS,
+    DEFAULT_ALLOW_LIST: DEFAULT_ALLOW_LIST
 };
