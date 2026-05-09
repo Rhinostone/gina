@@ -143,7 +143,7 @@ describe('04 - registry content mirrors list.js expectations', function () {
     var registry     = require(registryPath);
 
     it('registry includes mongodb + scylladb (not removed)', function () {
-        assert.deepEqual(registry.getDriver('mongodb'), { npm: 'mongodb', range: '>=5.0.0' });
+        assert.deepEqual(registry.getDriver('mongodb'), { npm: 'mongodb', range: '>=7.0.0' });
         assert.deepEqual(registry.getDriver('scylladb'), { npm: 'cassandra-driver', range: '>=4.0.0' });
     });
 

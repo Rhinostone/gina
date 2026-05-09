@@ -178,8 +178,8 @@
       redis         → ioredis              >= 5.0.0
       mysql         → mysql2               >= 2.0.0
       postgresql    → pg                   >= 8.0.0
-      mongodb       → mongodb              >= 5.0.0
-      scylladb      → @scylladb/scylla-driver >= 1.0.0
+      mongodb       → mongodb              >= 7.0.0
+      scylladb      → cassandra-driver     >= 4.0.0
       sqlite        → built-in (node:sqlite, Node >= 22.5.0)
       ai            → resolved from `protocol` (anthropic:// → @anthropic-ai/sdk,
                                                 openai://, deepseek://, …  → openai)

@@ -138,7 +138,7 @@ describe('03 - schema enum mirror', function () {
 
     it('schema/connectors.json enum is still the source of truth', function () {
         var enumValues = schema.definitions.connector.properties.connector.enum;
-        assert.deepStrictEqual(enumValues.sort(), ['ai', 'couchbase', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']);
+        assert.deepStrictEqual(enumValues.sort(), ['ai', 'couchbase', 'mongodb', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']);
     });
 });
 

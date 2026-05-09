@@ -73,8 +73,8 @@ describe('02 - DRIVER_MAP entries', function () {
         assert.deepEqual(registry.DRIVER_MAP.postgresql, { npm: 'pg', range: '>=8.0.0' });
     });
 
-    it('maps mongodb → mongodb >=5.0.0', function () {
-        assert.deepEqual(registry.DRIVER_MAP.mongodb, { npm: 'mongodb', range: '>=5.0.0' });
+    it('maps mongodb → mongodb >=7.0.0', function () {
+        assert.deepEqual(registry.DRIVER_MAP.mongodb, { npm: 'mongodb', range: '>=7.0.0' });
     });
 
     it('maps scylladb → cassandra-driver >=4.0.0', function () {

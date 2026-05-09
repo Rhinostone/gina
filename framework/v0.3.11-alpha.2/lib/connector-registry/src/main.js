@@ -45,10 +45,7 @@
 
 /**
  * Logical `connector` type → {@link DriverEntry}. Mirrors the enum in
- * `schema/connectors.json` (`connector.properties.connector.enum`)
- * plus `mongodb` (listed for `connector:list` driver introspection even
- * though `connector:add` currently rejects it at the CLI layer — the
- * MongoDB framework-side connector lands in the 0.4.0 series, see #CN6).
+ * `schema/connectors.json` (`connector.properties.connector.enum`).
  *
  * ScyllaDB uses `cassandra-driver` (Apache Software Foundation) since the
  * Node.js ecosystem has no first-party shard-aware ScyllaDB driver — the
@@ -65,7 +62,7 @@ var DRIVER_MAP = {
     redis      : { npm: 'ioredis',          range: '>=5.0.0' },
     mysql      : { npm: 'mysql2',           range: '>=2.0.0' },
     postgresql : { npm: 'pg',               range: '>=8.0.0' },
-    mongodb    : { npm: 'mongodb',          range: '>=5.0.0' },
+    mongodb    : { npm: 'mongodb',          range: '>=7.0.0' },
     scylladb   : { npm: 'cassandra-driver', range: '>=4.0.0' },
     sqlite     : { builtin: true, note: 'Node.js >= 22.5.0 built-in (node:sqlite)' }
 };

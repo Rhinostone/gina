@@ -15,7 +15,7 @@
         "connector": {
           "type": "string",
           "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\").",
-          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb"]
+          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb", "mongodb"]
         },
         "version": {
           "type": "string",
@@ -171,6 +171,21 @@
         "baseURL": {
           "type": "string",
           "description": "AI connector only. Override the default API base URL (OpenAI-compatible providers)."
+        },
+        "uri": {
+          "type": "string",
+          "description": "MongoDB only. Full connection string (mongodb:// or mongodb+srv://). Takes precedence over the decomposed host/port/username/password/authSource/replicaSet fields. The `database` field is still required and is used to select the db on the client.",
+          "examples": ["mongodb://user:pass@localhost:27017/mydb?authSource=admin", "mongodb+srv://user:pass@cluster.mongodb.net/mydb"]
+        },
+        "authSource": {
+          "type": "string",
+          "description": "MongoDB only. Authentication database name (typically \"admin\"). Used when `uri` is absent and the username/password live under a different db than the one you're querying.",
+          "examples": ["admin"]
+        },
+        "replicaSet": {
+          "type": "string",
+          "description": "MongoDB only. Replica set name. Used when `uri` is absent and you connect to a replica-set deployment.",
+          "examples": ["rs0"]
         }
       }
     }

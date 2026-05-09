@@ -154,7 +154,7 @@ describe('03 - schema enum mirrors', function () {
 
     it('schema/connectors.json enum is the source of truth', function () {
         var enumValues = schema.definitions.connector.properties.connector.enum;
-        assert.deepStrictEqual(enumValues.sort(), ['ai', 'couchbase', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']);
+        assert.deepStrictEqual(enumValues.sort(), ['ai', 'couchbase', 'mongodb', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']);
     });
 
     it('schema scope enum is [local, beta, production, testing]', function () {
