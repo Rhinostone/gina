@@ -2,7 +2,7 @@
   "name": "gina-framework",
   "version": "0.3.11-alpha.2",
   "dependencies": {
-    "@rhinostone/swig": "^2.0.0",
+    "@rhinostone/swig": "^2.0.1",
     "intl-messageformat": "^11.2.4",
     "psl": "^1.15.0"
   }
