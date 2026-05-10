@@ -1547,7 +1547,18 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 && typeof(this.target.type) != 'undefined'
                 && this.target.type == 'radio'
             ) {
-                var radios = document.getElementsByName(this.name);
+                // [HTML5 form-reassociation] Scope the radio group by form-owner per
+                // HTML5 spec. `getElementsByName` returns same-name radios across the
+                // whole document regardless of owner — without this filter, the
+                // first-checked pick cross-fires into sibling forms whose radios
+                // happen to share the name (the multi-entry layout where each entry
+                // has its own reassociated form). Mirrors the equivalent filter in
+                // main.js's updateRadio.
+                var $target = this.target;
+                var rawRadios = document.getElementsByName(this.name);
+                var radios = Array.prototype.filter.call(rawRadios, function (_r) {
+                    return _r.form === $target.form;
+                });
                 for (var i = 0, len = radios.length; i < len; ++i) {
                     if (radios[i].checked) {
                         if ( /true|false/.test(radios[i].value) ) {

@@ -27,11 +27,14 @@ var { JSDOM } = require('jsdom');
 
 var FW   = require('../fw');
 var MAIN = path.join(FW, 'core/plugins/lib/validator/src/main.js');
+var FV   = path.join(FW, 'core/plugins/lib/validator/src/form-validator.js');
 
 var mainSrc;
+var fvSrc;
 
 before(function () {
     mainSrc = fs.readFileSync(MAIN, 'utf8');
+    fvSrc   = fs.readFileSync(FV, 'utf8');
 });
 
 
@@ -801,5 +804,273 @@ describe('07.b - source inspection: bindForm defaultChecked capture pins to main
         var re = /\(\s*true\|on\s*\)\$\/\.test\(defaultValue\)\s*[\s\S]{0,40}\&\&\s*\/\^\(checkbox\)\$\/i\.test\(\$inputs\[f\]\.type\)/;
         assert.ok(re.test(mainSrc),
             'second-branch checkbox+defaultValue path should survive the fix');
+    });
+});
+
+
+// ============================================================================
+// isRequired() radio-group resolution: form-owner-scoped serialize-time pick
+//
+// Sister fix to the updateRadio mutex scoping pinned in section 06. The
+// isRequired validator's "radio group case" walks document.getElementsByName
+// and picks the first .checked element. Without filtering by form-owner, a
+// sibling form's checked radio (sharing the field name) is picked even when a
+// different form is being serialized — local.data[name] gets the wrong value
+// for the form-under-submission. The fix adds the same form-owner filter the
+// updateRadio mutex now uses, scoped to $target.form (where $target is the
+// validator-bound radio for this field).
+//
+// Test layering: the production radio-resolution branch is replayed below in
+// `resolveRadioValue`, mirroring the inline block in form-validator.js. A
+// pre-fix companion `resolveRadioValuePreFix` keeps the bug demonstrable.
+// Source inspection in section 08.b pins the live shape so the replica stays
+// honest.
+// ============================================================================
+
+// Mirrors form-validator.js's isRequired() radio-group branch (~line 1542).
+// Returns the resolved radio value, or undefined when no in-form-owner radio
+// is checked.
+function resolveRadioValue($target, name, doc) {
+    var rawRadios = doc.getElementsByName(name);
+    var radios = Array.prototype.filter.call(rawRadios, function (_r) {
+        return _r.form === $target.form;
+    });
+    for (var i = 0, len = radios.length; i < len; ++i) {
+        if (radios[i].checked) {
+            if (/true|false/.test(radios[i].value)) {
+                return (/true/.test(radios[i].value)) ? true : false;
+            }
+            return radios[i].value;
+        }
+    }
+    return undefined;
+}
+
+// The pre-fix shape (kept here ONLY to demonstrate the bug). No form-owner filter.
+function resolveRadioValuePreFix($target, name, doc) {
+    var radios = doc.getElementsByName(name);
+    for (var i = 0, len = radios.length; i < len; ++i) {
+        if (radios[i].checked) {
+            if (/true|false/.test(radios[i].value)) {
+                return (/true/.test(radios[i].value)) ? true : false;
+            }
+            return radios[i].value;
+        }
+    }
+    return undefined;
+}
+
+
+// 08 - isRequired radio: form-owner-scoped serialize-time resolution
+//
+// Note on fixtures: the bug-demo tests use layouts WITHOUT a shared parent
+// <form> (either setupNoSharedParentRadioDom, or bare-reassociation custom
+// fixtures). The shared-parent reassociation layout (setupReassociatedRadioDom)
+// triggers jsdom's parse-time same-name desync that the prior fixes worked
+// around — the desync would mask the bug shape under test here. The serialize-
+// time leak being fixed in this section is independent of that parse-time
+// desync.
+
+describe('08 - isRequired radio: form-owner-scoped serialize-time resolution', function () {
+
+    it('serializing a form picks its OWN checked radio, not a sibling form\'s', function () {
+        // Layout (setupNoSharedParentRadioDom): probeA owns {a (no check), b (checked)};
+        // probeB owns {c (checked), d (no check)}. Submitting probeB should resolve to
+        // probeB's own checked radio 'c', not the sibling probeA.b's 'b'.
+        var ctx = setupNoSharedParentRadioDom();
+        var resolved = resolveRadioValue(ctx.c, 'grp', ctx.document);
+        assert.equal(resolved, 'c',
+            'serialize-time resolution must pick probeB\'s own checked radio (c), not the cross-form sibling probeA.b');
+    });
+
+    it('pre-fix shape leaks the cross-form sibling (regression demo)', function () {
+        // The pre-fix doc-wide walk picks the FIRST .checked in document order — probeA.b ('b'),
+        // even when probeB is being serialized. This is the bug shape.
+        var ctx = setupNoSharedParentRadioDom();
+        var leaked = resolveRadioValuePreFix(ctx.c, 'grp', ctx.document);
+        assert.equal(leaked, 'b',
+            'pre-fix walks doc order and leaks the sibling form\'s checked value');
+    });
+
+    it('serializing a form with NO checked radio returns undefined (does not inherit a sibling\'s)', function () {
+        // probeA: a (false), b (false) — none checked. probeB: c (true), d (false).
+        // The pre-fix would falsely return 'c' for probeA's serialization (sibling leak masking
+        // a "no value selected" state as a valid value). The fix returns undefined correctly.
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="probeA">'
+            + '<input type="radio" name="grp" value="a" id="r-a">'
+            + '<input type="radio" name="grp" value="b" id="r-b">'
+            + '</form>'
+            + '<form id="probeB">'
+            + '<input type="radio" name="grp" value="c" id="r-c" checked>'
+            + '<input type="radio" name="grp" value="d" id="r-d">'
+            + '</form>'
+            + '</body></html>');
+        var $a = dom.window.document.getElementById('r-a');
+        var resolved = resolveRadioValue($a, 'grp', dom.window.document);
+        assert.equal(resolved, undefined,
+            'no probeA-owned radio is checked → resolution must be undefined, not the cross-form sibling\'s value');
+    });
+
+    it('pre-fix shape: serializing a form with NO checked radio falsely returns the sibling\'s value', function () {
+        // Same fixture as the previous test. Pre-fix returns 'c' — a false positive that hides the
+        // "no value" state and would mark isRequired as valid against the wrong value.
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="probeA">'
+            + '<input type="radio" name="grp" value="a" id="r-a">'
+            + '<input type="radio" name="grp" value="b" id="r-b">'
+            + '</form>'
+            + '<form id="probeB">'
+            + '<input type="radio" name="grp" value="c" id="r-c" checked>'
+            + '<input type="radio" name="grp" value="d" id="r-d">'
+            + '</form>'
+            + '</body></html>');
+        var $a = dom.window.document.getElementById('r-a');
+        var leaked = resolveRadioValuePreFix($a, 'grp', dom.window.document);
+        assert.equal(leaked, 'c',
+            'pre-fix returns "c" for probeA serialization despite probeA having no checked radio — false positive');
+    });
+
+    it('EDIT-path equivalent: form-owner filter ignores doc-order-first cross-form sibling', function () {
+        // Sibling form (probeB) appears FIRST in document order, with its checked radio 'c'.
+        // Target form (probeA) is after, with its OWN checked radio 'b'. The pre-fix walk
+        // picks the doc-order-first checked = 'c' (sibling leak). The post-fix filter scopes
+        // to probeA → 'b'. This shape models the EDIT-path symptom: prior persisted state in
+        // a sibling form clobbering the target form's serialization at submit time.
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="probeB">'
+            + '<input type="radio" name="grp" value="c" id="r-c" checked>'
+            + '<input type="radio" name="grp" value="d" id="r-d">'
+            + '</form>'
+            + '<form id="probeA">'
+            + '<input type="radio" name="grp" value="a" id="r-a">'
+            + '<input type="radio" name="grp" value="b" id="r-b" checked>'
+            + '</form>'
+            + '</body></html>');
+        var $b = dom.window.document.getElementById('r-b');
+        var resolved = resolveRadioValue($b, 'grp', dom.window.document);
+        assert.equal(resolved, 'b',
+            'serialize-time resolution must pick probeA\'s checked radio (b), independent of probeB.c which appears first in document order');
+    });
+
+    it('EDIT-path equivalent: pre-fix shape returns the doc-order-first cross-form sibling (regression demo)', function () {
+        // Same fixture as the previous test. Pre-fix walks doc order and picks 'c' from probeB.
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="probeB">'
+            + '<input type="radio" name="grp" value="c" id="r-c" checked>'
+            + '<input type="radio" name="grp" value="d" id="r-d">'
+            + '</form>'
+            + '<form id="probeA">'
+            + '<input type="radio" name="grp" value="a" id="r-a">'
+            + '<input type="radio" name="grp" value="b" id="r-b" checked>'
+            + '</form>'
+            + '</body></html>');
+        var $b = dom.window.document.getElementById('r-b');
+        var leaked = resolveRadioValuePreFix($b, 'grp', dom.window.document);
+        assert.equal(leaked, 'c',
+            'pre-fix returns "c" from probeB despite probeA being the form under serialization — sibling leak');
+    });
+
+    it('non-regression: single-form-owner shape resolves identically pre-fix and post-fix', function () {
+        // No reassociation, no cross-form ambiguity — both shapes converge on the same answer.
+        var ctx = setupSingleFormRadioDom();
+        var resolvedNew = resolveRadioValue(ctx.b, 'grp', ctx.document);
+        var resolvedOld = resolveRadioValuePreFix(ctx.b, 'grp', ctx.document);
+        assert.equal(resolvedNew, 'b');
+        assert.equal(resolvedOld, 'b');
+    });
+
+    it('non-regression: bare reassociation (form="X") without shared parent resolves correctly', function () {
+        // Reassociated radios that are NOT DOM descendants of any shared form. The form-owner
+        // filter still scopes correctly via $target.form, regardless of how ownership was
+        // declared (DOM descent vs form="X" attribute).
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<input type="radio" name="grp" value="a" form="probeA" id="r-a">'
+            + '<input type="radio" name="grp" value="b" form="probeA" id="r-b" checked>'
+            + '<input type="radio" name="grp" value="c" form="probeB" id="r-c" checked>'
+            + '<input type="radio" name="grp" value="d" form="probeB" id="r-d">'
+            + '<form id="probeA"></form>'
+            + '<form id="probeB"></form>'
+            + '</body></html>');
+        var $b = dom.window.document.getElementById('r-b');
+        var resolved = resolveRadioValue($b, 'grp', dom.window.document);
+        assert.equal(resolved, 'b',
+            'form-owner filter scopes correctly for reassociated radios regardless of DOM-descent vs form-attribute ownership');
+    });
+
+    it('boolean-value branch: "true"/"false" string is coerced to boolean', function () {
+        // Single-form sanity check on the boolean coercion path inside the resolution branch.
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="probeA">'
+            + '<input type="radio" name="opt" value="false" id="r-false">'
+            + '<input type="radio" name="opt" value="true" id="r-true" checked>'
+            + '</form>'
+            + '</body></html>');
+        var $true = dom.window.document.getElementById('r-true');
+        var resolved = resolveRadioValue($true, 'opt', dom.window.document);
+        assert.equal(resolved, true,
+            'value="true" is coerced to boolean true');
+    });
+
+    it('boolean-value branch: form-owner filter still applies', function () {
+        // Cross-form same-name boolean radios in sibling forms (no shared parent). probeA has
+        // value="false" checked; probeB has value="true" checked. Serializing probeA must
+        // return false (NOT true from probeB).
+        var dom = new JSDOM('<!DOCTYPE html><html><body>'
+            + '<form id="probeA">'
+            + '<input type="radio" name="opt" value="false" id="r-pa-false" checked>'
+            + '<input type="radio" name="opt" value="true" id="r-pa-true">'
+            + '</form>'
+            + '<form id="probeB">'
+            + '<input type="radio" name="opt" value="false" id="r-pb-false">'
+            + '<input type="radio" name="opt" value="true" id="r-pb-true" checked>'
+            + '</form>'
+            + '</body></html>');
+        var $a = dom.window.document.getElementById('r-pa-false');
+        var resolved = resolveRadioValue($a, 'opt', dom.window.document);
+        assert.equal(resolved, false,
+            'probeA serialization returns false (its own checked radio), not true from probeB');
+    });
+});
+
+
+// 08.b - source inspection: pin the isRequired form-owner filter shape
+
+describe('08.b - source inspection: isRequired form-owner filter pins to form-validator.js', function () {
+
+    it('radio-group filter scopes by form-owner via $target.form (Array.prototype.filter.call shape)', function () {
+        // Match the inline shape:
+        //   Array.prototype.filter.call(<rawRadios>, function (_r) { return _r.form === $target.form; })
+        var re = /Array\.prototype\.filter\.call\(\s*\w+\s*,\s*function\s*\(\s*_r\s*\)\s*\{\s*return\s+_r\.form\s*===\s*\$target\.form\s*;?\s*\}\s*\)/;
+        assert.ok(re.test(fvSrc),
+            'form-owner filter should wrap the getElementsByName result in isRequired\'s radio branch');
+    });
+
+    it('the pre-fix shape (getElementsByName immediately followed by for-loop on radios.length) is gone', function () {
+        // The pre-fix line was:
+        //   var radios = document.getElementsByName(this.name);
+        //   for (var i = 0, len = radios.length; i < len; ++i) {
+        // The post-fix shape inserts a closure-captured $target plus an
+        // Array.prototype.filter.call(rawRadios, ...) step between
+        // getElementsByName and the for-loop. Guard against regression by
+        // asserting the pre-fix immediate sequence is no longer present.
+        var preFixRe = /var\s+radios\s*=\s*document\.getElementsByName\(\s*this\.name\s*\)\s*;\s*for\s*\(\s*var\s+i\s*=\s*0\s*,\s*len\s*=\s*radios\.length/;
+        assert.equal(preFixRe.test(fvSrc), false,
+            'pre-fix shape (getElementsByName immediately followed by for-loop) must not be present at the radio site');
+    });
+
+    it('closure-captures this.target into $target before the filter (so the inner function can see it)', function () {
+        // Match: var $target = this.target;
+        // Anchored close to the radio resolution site rather than file-wide to keep the pin tight.
+        var re = /var\s+\$target\s*=\s*this\.target\s*;\s*var\s+rawRadios\s*=\s*document\.getElementsByName\(\s*this\.name\s*\)/;
+        assert.ok(re.test(fvSrc),
+            'closure capture (var $target = this.target;) must precede the getElementsByName call so the filter can read $target.form');
+    });
+
+    it('form-validator.js comments stay framework-generic (no consumer-app references)', function () {
+        // Belt-and-suspenders for the no-consumer-references rule. The validator
+        // source must not name any consuming application.
+        assert.equal(/FRAMEWORK PATCH \(/.test(fvSrc), false,
+            'form-validator.js must not carry consumer-tagged FRAMEWORK PATCH markers');
     });
 });
