@@ -561,3 +561,232 @@ describe('X-Forwarded-Prefix capture & normalisation (per-request)', function() 
     });
 
 });
+
+
+// 05 — URL query string parsing: '+' → space decoding (#B17)
+//
+// The Isaac engine's request handler at server.on('request', ...) parses
+// `?key=value&...` into request.query. Per WHATWG URL "application/x-www-form-urlencoded
+// parser" spec, '+' in values must be replaced with space BEFORE percent-decoding
+// (decodeURIComponent only decodes %XX, not '+'). Both branches of the parser
+// (multi-value `&` loop and single-key `=` no-`&` path) carry the fix.
+//
+// Express engine is already spec-correct via qs/querystring.unescape defaults — no
+// change there. Body parsing is covered by http-methods.test.js section 12.
+
+describe("05 - URL query string parsing: '+' → space decoding (#B17)", function() {
+
+    var srcLocal;
+    function getSrc() {
+        if (!srcLocal) srcLocal = fs.readFileSync(SOURCE, 'utf8');
+        return srcLocal;
+    }
+
+    // Source-level pins — confirm '+' handling exists at both sites BEFORE
+    // (or independent of) decodeURIComponent, in the request-handler URL parser.
+
+    it("multi-value branch: '+' replacement appears before decodeURIComponent inside the &-loop", function() {
+        // Region: the &-loop processes arr[p].split('=') inside queryParams.split('&').
+        // We look for the if-block that handles '+' and '%' in the value.
+        var s = getSrc();
+        var marker = "arr = queryParams[i].split('&')";
+        var startIdx = s.indexOf(marker);
+        assert.ok(startIdx > -1, 'expected the &-loop marker to be present');
+        // Slice to the end of the inner for-loop (closing of the arr-loop)
+        var region = s.slice(startIdx, startIdx + 1500);
+        assert.match(
+            region,
+            /a\[1\]\.indexOf\('\+'\)\s*>\s*-1/,
+            "expected '+' presence check on a[1] inside &-loop"
+        );
+        assert.match(
+            region,
+            /a\[1\]\s*=\s*a\[1\]\.replace\(\/\\\+\/g,\s*' '\)/,
+            "expected '+' → space replacement on a[1] inside &-loop"
+        );
+    });
+
+    it("single-key branch: '+' replacement appears in the no-'&' path (a.length > 1 case)", function() {
+        var s = getSrc();
+        // Region: the else branch after the &-loop (no `&` in query string)
+        var marker = "queryParams[1].split('=')";
+        var idx = s.indexOf(marker);
+        assert.ok(idx > -1, "expected single-key branch marker to be present");
+        var region = s.slice(idx, idx + 1500);
+        assert.match(
+            region,
+            /a\[1\]\.indexOf\('\+'\)\s*>\s*-1/,
+            "expected '+' presence check on a[1] in single-key branch"
+        );
+        assert.match(
+            region,
+            /a\[1\]\s*=\s*a\[1\]\.replace\(\/\\\+\/g,\s*' '\)/,
+            "expected '+' → space replacement on a[1] in single-key branch"
+        );
+    });
+
+    it("both branches replace '+' BEFORE calling decodeURIComponent (not after)", function() {
+        // The order matters: decodeURIComponent does NOT decode '+', so the replace
+        // must run first (or at least before the value is consumed). Otherwise a
+        // value like 'Hello%2B' (literal '+' encoded as %2B) would become 'Hello+'
+        // which would then be wrongly turned into 'Hello '.
+        var s = getSrc();
+        // Multi-value branch
+        var multiStart = s.indexOf("arr = queryParams[i].split('&')");
+        var multiRegion = s.slice(multiStart, multiStart + 1500);
+        var multiPlus   = multiRegion.indexOf("a[1].replace(/\\+/g, ' ')");
+        var multiDecode = multiRegion.indexOf('decodeURIComponent(a[1])');
+        assert.ok(multiPlus > -1 && multiDecode > -1, 'both ops must exist in multi-value branch');
+        assert.ok(multiPlus < multiDecode, "multi-value: '+' replace must precede decodeURIComponent");
+
+        // Single-key branch
+        var singleStart = s.indexOf("queryParams[1].split('=')");
+        var singleRegion = s.slice(singleStart, singleStart + 1500);
+        var singlePlus   = singleRegion.indexOf("a[1].replace(/\\+/g, ' ')");
+        var singleDecode = singleRegion.indexOf('decodeURIComponent(a[1])');
+        assert.ok(singlePlus > -1 && singleDecode > -1, 'both ops must exist in single-key branch');
+        assert.ok(singlePlus < singleDecode, "single-key: '+' replace must precede decodeURIComponent");
+    });
+
+    // Pure-logic replicas of the two branches AFTER #B17 fix, exercised against
+    // the inputs the production parser sees. Mirror of server.isaac.js:1258-1300.
+
+    function parseQueryAfterFix(rawQs) {
+        // rawQs is everything after '?'
+        var query = {};
+        if (rawQs.indexOf('&') > -1) {
+            // multi-value branch
+            var arr = rawQs.split('&');
+            for (var p = 0; p < arr.length; ++p) {
+                var a = arr[p].split('=');
+                var lower = a[1] && a[1].toLowerCase();
+                if (lower === 'false' || lower === 'true' || lower === 'on') {
+                    a[1] = (lower === 'true' || lower === 'on') ? true : false;
+                } else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
+                    if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
+                    if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]);
+                }
+                if (a[1] && typeof a[1] === 'string' && (a[1].charAt(0) === '{' || a[1].charAt(0) === '[')) {
+                    try { a[1] = JSON.parse(a[1]); } catch (e) { /* keep as string */ }
+                }
+                query[a[0]] = a[1];
+            }
+        } else {
+            // single-key branch (no '&')
+            var a = rawQs.split('=');
+            if (a.length > 1) {
+                var lower2 = a[1] && a[1].toLowerCase();
+                if (lower2 === 'false' || lower2 === 'true' || lower2 === 'on') {
+                    a[1] = (lower2 === 'true' || lower2 === 'on') ? true : false;
+                } else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
+                    if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
+                    if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]);
+                }
+                query[a[0]] = a[1];
+            } else {
+                // ?encodedJsonObject fallback — unchanged by #B17
+                if (a[0].indexOf('%') > -1) a[0] = decodeURIComponent(a[0]);
+                try { query = a[0] ? JSON.parse(a[0]) : {}; } catch (e) { /* ignore */ }
+            }
+        }
+        return query;
+    }
+
+    // Single-key branch (no '&') — positive cases
+
+    it("single-key '?name=Hello+World' decodes to { name: 'Hello World' }", function() {
+        var q = parseQueryAfterFix('name=Hello+World');
+        assert.deepEqual(q, { name: 'Hello World' });
+    });
+
+    it("single-key '?name=Hello%20World' still decodes to { name: 'Hello World' } via existing % path", function() {
+        var q = parseQueryAfterFix('name=Hello%20World');
+        assert.deepEqual(q, { name: 'Hello World' });
+    });
+
+    it("single-key mixed '?name=Hello+World%21' decodes to { name: 'Hello World!' }", function() {
+        var q = parseQueryAfterFix('name=Hello+World%21');
+        assert.deepEqual(q, { name: 'Hello World!' });
+    });
+
+    // Multi-value branch (has '&') — positive cases
+
+    it("multi-value '?a=1+2&b=3+4' decodes both values to '1 2' and '3 4'", function() {
+        var q = parseQueryAfterFix('a=1+2&b=3+4');
+        assert.deepEqual(q, { a: '1 2', b: '3 4' });
+    });
+
+    it("multi-value '?a=Hello+World&b=foo%21' decodes both values together", function() {
+        var q = parseQueryAfterFix('a=Hello+World&b=foo%21');
+        assert.deepEqual(q, { a: 'Hello World', b: 'foo!' });
+    });
+
+    it("multi-value '?name=Hello%20World&other=plain' still decodes via existing % path", function() {
+        var q = parseQueryAfterFix('name=Hello%20World&other=plain');
+        assert.deepEqual(q, { name: 'Hello World', other: 'plain' });
+    });
+
+    // Reproducer pinned: URLSearchParams.toString() encodes space as '+'
+
+    it("URLSearchParams.toString() output → single-key parser decodes '+' back to space", function() {
+        var params = new URLSearchParams({ name: 'Hello World' });
+        assert.ok(/\+/.test(params.toString()));
+        var q = parseQueryAfterFix(params.toString());
+        assert.deepEqual(q, { name: 'Hello World' });
+    });
+
+    it("URLSearchParams.toString() multi-key → multi-value parser decodes '+' back to space", function() {
+        var params = new URLSearchParams({ first: 'Jane Doe', last: 'John Smith' });
+        var qs = params.toString();
+        assert.ok(/\+/.test(qs));
+        var q = parseQueryAfterFix(qs);
+        assert.deepEqual(q, { first: 'Jane Doe', last: 'John Smith' });
+    });
+
+    // Counter / back-compat — values without '+' or '%' are unchanged
+
+    it("plain values without '+' or '%' pass through unchanged (multi-value)", function() {
+        var q = parseQueryAfterFix('a=plain&b=other');
+        assert.deepEqual(q, { a: 'plain', b: 'other' });
+    });
+
+    it("plain values without '+' or '%' pass through unchanged (single-key)", function() {
+        var q = parseQueryAfterFix('name=plain');
+        assert.deepEqual(q, { name: 'plain' });
+    });
+
+    it("'false'/'true'/'on' coercion still wins over '+' decoding when value matches", function() {
+        // The boolean-coercion branch comes first; if value is exactly 'false'/'true'/'on'
+        // (no '+' chars anyway), it gets boolean-coerced and never reaches the '+' branch.
+        var q = parseQueryAfterFix('flag=true&other=false');
+        assert.deepEqual(q, { flag: true, other: false });
+    });
+
+    it("multi-value JSON-parse branch still fires after '+' decode if value starts with '{'", function() {
+        // Note: '+' inside a JSON value is preserved by decodeURIComponent and JSON.parse.
+        // The JSON-parse step only exists in the multi-value branch (production parity),
+        // so the test must use a multi-key query string to exercise it.
+        var q = parseQueryAfterFix('payload=' + encodeURIComponent('{"v":"1+2"}') + '&flag=true');
+        assert.deepEqual(q, { payload: { v: '1+2' }, flag: true });
+    });
+
+    it("single-key branch does NOT auto-JSON-parse values starting with '{' (pre-existing behaviour)", function() {
+        // Production single-key branch (server.isaac.js:1282-1288) lacks the JSON-parse step
+        // present in the multi-value branch. #B17 does not change this; documented for clarity.
+        var q = parseQueryAfterFix('payload=' + encodeURIComponent('{"v":"1"}'));
+        assert.strictEqual(typeof q.payload, 'string',
+            'single-key branch keeps JSON-shaped value as string — only multi-value branch auto-parses');
+    });
+
+    // Counter — body-parser fix in commit 014ff60a is unaffected
+
+    it("body-parser fix (POST/PUT/PATCH) is unchanged — query-string fix is a different code path", function() {
+        var s = getSrc();
+        // The body-parser fix lives in server.js, not server.isaac.js. Confirm
+        // server.isaac.js does NOT have its own processRequestData definition.
+        assert.ok(
+            s.indexOf('var processRequestData = function') < 0,
+            'server.isaac.js must NOT define processRequestData — body parsing is delegated to server.js handle()'
+        );
+    });
+});

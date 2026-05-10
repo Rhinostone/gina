@@ -1263,8 +1263,11 @@ function ServerEngineClass(options) {
                                 var _aLower = a[1] && a[1].toLowerCase();
                                 if ( _aLower === 'false' || _aLower === 'true' || _aLower === 'on' )
                                     a[1] = ( _aLower === 'true' || _aLower === 'on' ) ? true : false;
-                                else if (a[1] && a[1].indexOf('%') > -1)
-                                    a[1] = decodeURIComponent(a[1]);
+                                else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
+                                    // #B17: '+' → space per WHATWG URL form-urlencoded parser; must run before decodeURIComponent (which does NOT decode '+').
+                                    if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
+                                    if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]);
+                                }
 
                                 if (a[1] && typeof a[1] === 'string' && (a[1].charAt(0) === '{' || a[1].charAt(0) === '[') ) {
                                     try {
@@ -1284,6 +1287,11 @@ function ServerEngineClass(options) {
                             var _aLower2 = a[1] && a[1].toLowerCase();
                             if ( _aLower2 === 'false' || _aLower2 === 'true' || _aLower2 === 'on' )
                                 a[1] = ( _aLower2 === 'true' || _aLower2 === 'on' ) ? true : false;
+                            else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
+                                // #B17: '+' → space per WHATWG URL form-urlencoded parser; must run before decodeURIComponent (which does NOT decode '+').
+                                if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
+                                if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]);
+                            }
 
                             request.query[ a[0] ] = a[1]
                         } else { // for redirection purposes or when passing `?encodedJsonObject`
