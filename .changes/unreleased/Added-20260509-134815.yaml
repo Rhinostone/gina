@@ -1,3 +1,0 @@
-kind: Added
-body: 'Auto-promoting `route.param.section` to `page.section` so templates that compose include paths from the section name (e.g. `{% include ''./includes/'' + page.section + ''.html'' %}`) resolve without requiring the controller to set `data.page.section` itself. Mirrors the existing `param.file` → `page.view.file` auto-promotion.'
-time: 2026-05-09T13:48:15.158287+01:00

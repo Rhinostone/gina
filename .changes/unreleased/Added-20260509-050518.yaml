@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added ScyllaDB / Cassandra connector — ORM access via cql/<Entity>/*.sql files plus a session store using CQL USING TTL. Drop-in cassandra-driver-based connector following the same client.execute(query, args, { prepare: true }) pattern as MySQL/PostgreSQL with ? placeholders, @param type casting (text/int/bigint/uuid/timestamp/boolean/blob/list/set/map/etc.), and LWT [applied] handling. Driver is loaded from your project node_modules (npm install cassandra-driver).'
-time: 2026-05-09T05:05:18.523791+01:00
