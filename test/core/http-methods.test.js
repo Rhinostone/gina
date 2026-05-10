@@ -17,6 +17,7 @@
  *  09 — inline logic: HEAD query-string processing replica
  *  10 — server.js source: method-routing fix (405 continue instead of break)
  *  11 — inline logic: method-routing 405 after full scan
+ *  12 — body parser: '+' → space decoding for application/x-www-form-urlencoded
  */
 var { describe, it, before } = require('node:test');
 var assert = require('node:assert/strict');
@@ -353,7 +354,7 @@ describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', functio
 
         if (typeof body === 'string') {
             if (!/multipart\/form-data;/.test(contentType)) {
-                if (!/application\/x-www-form-urlencoded/.test(contentType) && /\+/.test(body)) {
+                if (/application\/x-www-form-urlencoded/.test(contentType) && /\+/.test(body)) {
                     body = body.replace(/\+/g, ' ');
                 }
                 if (body.substring(0, 1) === '?') body = body.substring(1);
@@ -391,10 +392,10 @@ describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', functio
         assert.deepEqual(result.patch, { role: 'admin' });
     });
 
-    it('replaces + with space in non-form-encoded bodies', function() {
+    it('preserves literal + in non-form-encoded bodies (JSON contentType)', function() {
         var result = parsePatchBody('{"tag":"hello+world"}');
-        // + → space in string body handling
-        assert.ok(result !== null);
+        assert.strictEqual(result.patch.tag, 'hello+world',
+            "JSON body must preserve literal '+' — only urlencoded bodies get '+' → space");
     });
 
     it('casts "true" string to boolean true', function() {
@@ -615,5 +616,115 @@ describe('11 - method-routing fix: inline scan logic', function() {
             'correct':      { url: '/api', method: 'POST' }
         };
         assert.deepEqual(runScan(routes, 'POST', '/api'), { status: 200, matched: true });
+    });
+});
+
+
+// ─── 12 — body parser: '+' → space decoding for application/x-www-form-urlencoded ───
+
+describe("12 - body parser: '+' → space decoding for application/x-www-form-urlencoded", function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // Source-level pins: confirm the urlencoded test fires WHEN content-type IS urlencoded
+    // (no leading ! on the inner test) at all three sites — POST, PUT, PATCH branches.
+
+    it('POST branch: urlencoded test fires WHEN content-type IS urlencoded (no leading !)', function() {
+        var postCase = src.slice(src.indexOf("case 'post':"), src.indexOf("case 'put':"));
+        assert.match(
+            postCase,
+            /if\s*\(\s*\/application\\\/x\\-www\\-form\\-urlencoded\/\.test\(request\.headers\['content-type'\]\)\s*&&\s*\/\\\+\/\.test\(request\.body\)\s*\)/,
+            'POST branch must check IS urlencoded (no leading !) and short-circuit on absent + char'
+        );
+    });
+
+    it('PUT branch: urlencoded test fires WHEN content-type IS urlencoded (no leading !)', function() {
+        var putCase = src.slice(src.indexOf("case 'put':"), src.indexOf("case 'delete':"));
+        assert.match(
+            putCase,
+            /if\s*\(\s*\/application\\\/x\\-www\\-form\\-urlencoded\/\.test\(request\.headers\['content-type'\]\)\s*\)/,
+            'PUT branch must check IS urlencoded (no leading !)'
+        );
+    });
+
+    it('PATCH branch: urlencoded test fires WHEN content-type IS urlencoded (no leading !)', function() {
+        var patchCase = src.slice(src.indexOf("case 'patch':"), src.indexOf("case 'head':"));
+        assert.match(
+            patchCase,
+            /if\s*\(\s*\/application\\\/x\\-www\\-form\\-urlencoded\/\.test\(request\.headers\['content-type'\]\)\s*&&\s*\/\\\+\/\.test\(request\.body\)\s*\)/,
+            'PATCH branch must check IS urlencoded (no leading !) and short-circuit on absent + char'
+        );
+    });
+
+    // Negative-invariant lock: no inverted shape remains anywhere in server.js.
+    it('no inverted (!/...urlencoded.../) tests remain in server.js', function() {
+        var inverted = src.match(/!\s*\/application\\\/x\\-www\\-form\\-urlencoded\/\.test/g) || [];
+        assert.strictEqual(inverted.length, 0, 'inverted urlencoded tests must not return — would re-introduce the +→space spec inversion');
+    });
+
+    // Pure-logic replica of the corrected body-parser transform shared across
+    // POST/PUT/PATCH branches (the +→space step plus decodeURIComponent).
+    function parseBodyAfterFix(body, contentType) {
+        if (typeof body !== 'string') return body;
+        if (/multipart\/form-data;/.test(contentType || '')) return body;
+        if (/application\/x-www-form-urlencoded/.test(contentType || '')) {
+            body = body.replace(/\+/g, ' ');
+        }
+        if (body.substring(0, 1) === '?') body = body.substring(1);
+        try { return decodeURIComponent(body); } catch (e) { return body; }
+    }
+
+    // Positive cases — urlencoded path
+
+    it("urlencoded body 'name=Hello+World' decodes to 'name=Hello World'", function() {
+        var bodyStr = parseBodyAfterFix('name=Hello+World', 'application/x-www-form-urlencoded');
+        assert.strictEqual(bodyStr, 'name=Hello World');
+    });
+
+    it("urlencoded body 'name=Hello%20World' still decodes to 'name=Hello World' (decodeURIComponent path)", function() {
+        var bodyStr = parseBodyAfterFix('name=Hello%20World', 'application/x-www-form-urlencoded');
+        assert.strictEqual(bodyStr, 'name=Hello World');
+    });
+
+    it('urlencoded body: mixed + and %20 both decode to space', function() {
+        var bodyStr = parseBodyAfterFix('a=Hello+World&b=Hi%20there', 'application/x-www-form-urlencoded');
+        assert.strictEqual(bodyStr, 'a=Hello World&b=Hi there');
+    });
+
+    it('URLSearchParams.toString() output → urlencoded branch yields decoded space', function() {
+        var params = new URLSearchParams({ name: 'Hello World' });
+        // URLSearchParams.toString() encodes space as '+'
+        assert.ok(/\+/.test(params.toString()), 'URLSearchParams must encode space as +');
+        var bodyStr = parseBodyAfterFix(params.toString(), 'application/x-www-form-urlencoded');
+        assert.strictEqual(bodyStr, 'name=Hello World');
+    });
+
+    // Negative cases — non-urlencoded paths preserve literal '+'
+
+    it("JSON body '{\"version\":\"1.0+rc1\"}' is preserved (no '+' → space replacement)", function() {
+        var bodyStr = parseBodyAfterFix('{"version":"1.0+rc1"}', 'application/json');
+        assert.strictEqual(bodyStr, '{"version":"1.0+rc1"}');
+    });
+
+    it("JSON body parsed: literal '+' survives to the controller", function() {
+        var bodyStr = parseBodyAfterFix('{"version":"1.0+rc1"}', 'application/json');
+        var obj = JSON.parse(bodyStr);
+        assert.strictEqual(obj.version, '1.0+rc1');
+    });
+
+    it("multipart body: '+' is left untouched (multipart guard skips the inner branch)", function() {
+        var bodyStr = parseBodyAfterFix('name=Hello+World', 'multipart/form-data; boundary=----abc');
+        assert.strictEqual(bodyStr, 'name=Hello+World');
+    });
+
+    it("text/plain body: '+' is preserved (not urlencoded, no replacement)", function() {
+        var bodyStr = parseBodyAfterFix('Hello+World', 'text/plain');
+        assert.strictEqual(bodyStr, 'Hello+World');
+    });
+
+    it("missing content-type header: '+' is preserved (defensive — no replacement without explicit urlencoded)", function() {
+        var bodyStr = parseBodyAfterFix('Hello+World', undefined);
+        assert.strictEqual(bodyStr, 'Hello+World');
     });
 });

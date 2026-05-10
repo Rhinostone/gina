@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed urlencoded body parser: ''+'' now correctly decodes to space in ''req.post'', ''req.put'', and ''req.patch'' for ''application/x-www-form-urlencoded'' content per RFC 1866 / WHATWG URL spec. The inner content-type check was inverted — ''+'' stayed literal in urlencoded bodies (e.g. ''name=Hello+World'' surfaced as ''Hello+World'' instead of ''Hello World''), while JSON bodies with a literal ''+'' could have it silently replaced with space.'
+time: 2026-05-10T22:12:01.996205+01:00

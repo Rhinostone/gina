@@ -3161,7 +3161,7 @@ function Server(options) {
                     // get rid of encoding issues
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
+                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
                                 request.body = request.body.replace(/\+/g, ' ');
                             }
 
@@ -3313,7 +3313,7 @@ function Server(options) {
                     // get rid of encoding issues
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
                                 request.body = request.body.replace(/\+/g, ' ');
                             }
 
@@ -3403,7 +3403,7 @@ function Server(options) {
                 if ( typeof(request.body) == 'string' ) {
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( !/application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
+                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
                                 request.body = request.body.replace(/\+/g, ' ');
                             }
                             if ( request.body.substring(0,1) == '?' )
