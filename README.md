@@ -20,9 +20,11 @@ Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope
 | MVC routing | `routing.json` — declare routes in config, not code; O(m) radix trie lookup |
 | Async/await | Controller actions can be `async`; rejections routed to `throwError` automatically |
 | ORM / entities | EventEmitter-based entity system; SQL files auto-wired to entity methods |
-| Connectors | Couchbase, MySQL, PostgreSQL, Redis, SQLite, AI (LLM) — loaded from project `node_modules` |
+| Connectors | Couchbase, MongoDB, ScyllaDB / Cassandra, MySQL, PostgreSQL, Redis, SQLite, AI (LLM) — loaded from project `node_modules` |
 | AI connector | Any LLM provider via named protocol (`anthropic://`, `openai://`, `ollama://`, …) |
-| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 1.6.0 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()` |
+| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.0.1 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
+| Internationalisation | Per-bundle JSON catalogs, `t()` helper, swig + nunjucks `t` filter, CLDR plurals, ICU MessageFormat opt-in via `t.icu()` |
+| Observability | Built-in `/_gina/metrics` Prometheus endpoint (opt-in, IP-allowlisted) — Node.js process metrics + HTTP counter / duration histogram with cardinality-safe route labels |
 | Hot reload | WatcherService evicts `require.cache` only on file change — zero per-request overhead in dev |
 | K8s ready | `gina-container`, `gina-init`, SIGTERM drain, JSON stdout logging |
 | Dependency injection | Mockable connectors and config for unit testing |
@@ -36,6 +38,17 @@ gina bundle:add api @myproject
 gina bundle:start api @myproject
 open https://localhost:3100
 ```
+
+## What's in 0.3.11
+
+- **Internationalisation** (#I18N1 + #I18N2) — per-bundle JSON catalogs at `bundle/locales/<culture>.json`, `t(key, params, culture)` global helper auto-bound on controllers (`self.t()`) and as a swig + nunjucks `t` template filter, CLDR plurals via Node's built-in `Intl.PluralRules`, per-request locale negotiation (URL prefix > cookie > `Accept-Language` > settings default). New `gina i18n:scan / add / export / import` CLI for translator round-trip (PO / CSV / JSON). Optional ICU MessageFormat opt-in via `t.icu()` for gender / select / nested combinators powered by `intl-messageformat`. The legacy `__()` placeholder is rewired as a one-arg alias of `t()` — existing callers keep working.
+- **Prometheus metrics endpoint** (#OBS1) — built-in `/_gina/metrics` exposing the standard Prometheus exposition format. Default metrics cover Node.js process state (heap, GC, event loop lag), HTTP request counter and duration histogram with cardinality-safe route labels (`req.routing.rule` with `__not_found__` / `__method_not_allowed__` / `__error__` / `__no_route__` fallbacks). IP-allowlist gated (loopback only by default; does NOT trust `X-Forwarded-For`). Opt-in via `app.json metrics.enabled`; install `prom-client` as a peer dependency.
+- **ScyllaDB / Cassandra ORM connector** (#CN5) — entity classes with CQL prepared statements at `models/<keyspace>/cql/<Entity>/*.sql`, `@param` type coercion, lightweight-transaction (`IF NOT EXISTS`, `IF version = ?`) `[applied]` boolean handling, and a session store using CQL `USING TTL` for server-side reaping. Wraps the official `cassandra-driver` (Apache Software Foundation; Node.js has no first-party shard-aware driver, so token-aware routing is used). Requires Node 20+.
+- **MongoDB ORM connector** (#CN6) — entity classes with JSON pipeline files at `models/<db>/pipelines/<Entity>/*.json`, JSDoc-style `@param`/`@return` headers, BSON-type casting (`objectid`, `int`, `long`, `double`, `boolean`, `date`, `timestamp`), `{$arg: N}` and `{$oid: "<hex>"}` placeholder shapes, eleven supported operations (`findOne` / `find` / `aggregate` / `countDocuments` / 7 writes), and a session store using a TTL index auto-created on first `set()` with `expiresAt > now` filtering on reads to cover MongoDB's 60-second TTL-monitor lag. Wraps the official `mongodb` driver.
+- **`@rhinostone/swig` major bump 1.6.0 → 2.0.1** — upstream stable cycle. The framework's Phase 7 build switched from Closure-compiling `bin/swig.js` to copying the upstream esbuild bundle directly, so `swig-core`'s lazy `require()` works in the browser bundle. Resolver `DEFAULT_MIN` floor lifted to `2.0.0` — projects pinning `swig.useProject: true` need a `^2.0.0` install in their own `node_modules` to satisfy the resolver. Server-side API unchanged.
+- **`page.section` auto-promotion** — `route.param.section` is now auto-promoted to `page.section` in the controller setup, for templates that compose include paths from a section name (sub-section dispatch from a single `index.html` that fans out to per-section partials based on the matched route).
+- **X-Forwarded-Prefix per-request isolation** — fixes a cross-request webroot prefix leak under reverse-proxy sub-path mounts where the prefix was previously stored on `process.gina.PROXY_PREFIX` (process-global, sticky-after-first-request, leaking into direct/non-proxied calls); now per-request on `request._ginaProxyPrefix`. Combined with a synchronous `window.__ginaWebroot` global on the client to fix a `getDependencies` race where `gina.config.webroot` was undefined at script-tag onload time.
+- **Release pipeline hardening** — three independent fixes for the `~/.gina/main.json` `def_framework` drift family: defensive pre-publish gate (`script/check_def_framework_consistency.js`), settings.json side fix in `prepare_version.js`, main.json side fix in `post_install.js` with a strict-semver comparator that skips def_framework updates on older-version reinstalls.
 
 ## What's in 0.3.10
 
