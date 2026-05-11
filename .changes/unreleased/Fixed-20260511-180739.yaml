@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixing async race in core/controller/controller.render-swig.js where local.req / local.res / local.next reads dereferenced null when a second self.throwError() fired during an in-flight renderCustomError, capturing them into function-scoped locals at the top of render() so post-await reads remain race-safe against controller closure null-outs'
+time: 2026-05-11T18:07:39.300877+01:00

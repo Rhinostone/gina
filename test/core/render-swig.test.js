@@ -321,7 +321,7 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
 
     // ── Cache-hit path ──────────────────────────────────────────────────
 
-    it('cache-hit: local.res.end(htmlContent) exists on the cache-hit path', function() {
+    it('cache-hit: res.end(htmlContent) exists on the cache-hit path', function() {
         var src = getSrc();
         // cache.get(cacheKey) is unique to the cache-HIT path (line 766); cache.has(cacheKey)
         // first appears on the cache-WRITE path (line 47) and would anchor the search wrong.
@@ -329,18 +329,18 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
         assert.ok(cacheGetIdx > -1, 'cache.get(cacheKey) not found');
         var block = src.substring(cacheGetIdx, cacheGetIdx + 10000);
         assert.ok(
-            block.indexOf('local.res.end( htmlContent )') > -1,
-            'expected local.res.end( htmlContent ) on cache-hit path'
+            block.indexOf('res.end( htmlContent )') > -1,
+            'expected res.end( htmlContent ) on cache-hit path'
         );
     });
 
-    it('cache-hit: HEAD branch calls local.res.end() without body', function() {
+    it('cache-hit: HEAD branch calls res.end() without body', function() {
         var src = getSrc();
         var cacheGetIdx = src.indexOf('cache.get(cacheKey)');
         var block = src.substring(cacheGetIdx, cacheGetIdx + 10000);
-        // HEAD check pattern: /^HEAD$/i.test(local.req.method)
+        // HEAD check pattern: /^HEAD$/i.test(req.method)
         assert.ok(
-            /HEAD.*\.test\(local\.req\.method\)/.test(block),
+            /HEAD.*\.test\(req\.method\)/.test(block),
             'expected HEAD method check on cache-hit path'
         );
         // content-length set for HEAD
@@ -353,7 +353,7 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
     it('cache-hit: content-type header set before response', function() {
         var src = getSrc();
         var cacheGetIdx = src.indexOf('cache.get(cacheKey)');
-        var endIdx = src.indexOf('local.res.end( htmlContent )', cacheGetIdx);
+        var endIdx = src.indexOf('res.end( htmlContent )', cacheGetIdx);
         var between = src.substring(cacheGetIdx, endIdx);
         assert.ok(
             between.indexOf("setHeader('content-type'") > -1,
@@ -364,7 +364,7 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
     it('cache-hit: per-request refs nulled after response', function() {
         var src = getSrc();
         var cacheGetIdx = src.indexOf('cache.get(cacheKey)');
-        var endIdx = src.indexOf('local.res.end( htmlContent )', cacheGetIdx);
+        var endIdx = src.indexOf('res.end( htmlContent )', cacheGetIdx);
         var after = src.substring(endIdx, endIdx + 500);
         assert.ok(after.indexOf('local.req = null') > -1, 'expected local.req = null after cache-hit .end()');
         assert.ok(after.indexOf('local.res = null') > -1, 'expected local.res = null after cache-hit .end()');
@@ -374,8 +374,12 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
     it('cache-hit: _next() called after cleanup', function() {
         var src = getSrc();
         var cacheGetIdx = src.indexOf('cache.get(cacheKey)');
-        var endIdx = src.indexOf('local.res.end( htmlContent )', cacheGetIdx);
-        var after = src.substring(endIdx, endIdx + 500);
+        var endIdx = src.indexOf('res.end( htmlContent )', cacheGetIdx);
+        // Window grew from 500 → 800 after the #M1 retrofit added an inline
+        // explanation of the function-scoped captures pattern alongside the
+        // closure-null cleanup. The pattern we want (`if (_next) return _next()`)
+        // still sits in the same block, just further down the source.
+        var after = src.substring(endIdx, endIdx + 800);
         assert.ok(
             /if\s*\(\s*_next\s*\)\s*return\s+_next\(\)/.test(after),
             'expected _next() call after cache-hit cleanup'
@@ -384,31 +388,31 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
 
     // ── Cache-miss (fresh compile) path ─────────────────────────────────
 
-    it('cache-miss: local.res.end(htmlContent) exists on the fresh-compile path', function() {
+    it('cache-miss: res.end(htmlContent) exists on the fresh-compile path', function() {
         var src = getSrc();
         // Find the second .end(htmlContent) — the first is cache-hit, second is cache-miss
-        var first = src.indexOf('local.res.end( htmlContent )');
-        assert.ok(first > -1, 'first local.res.end( htmlContent ) not found');
-        var second = src.indexOf('local.res.end( htmlContent )', first + 1);
-        assert.ok(second > -1, 'second local.res.end( htmlContent ) not found (cache-miss path)');
+        var first = src.indexOf('res.end( htmlContent )');
+        assert.ok(first > -1, 'first res.end( htmlContent ) not found');
+        var second = src.indexOf('res.end( htmlContent )', first + 1);
+        assert.ok(second > -1, 'second res.end( htmlContent ) not found (cache-miss path)');
     });
 
     it('cache-miss: HEAD branch exists with content-length', function() {
         var src = getSrc();
-        var first = src.indexOf('local.res.end( htmlContent )');
-        var second = src.indexOf('local.res.end( htmlContent )', first + 1);
+        var first = src.indexOf('res.end( htmlContent )');
+        var second = src.indexOf('res.end( htmlContent )', first + 1);
         // Look for HEAD check before the second .end(htmlContent)
         var before = src.substring(second - 3000, second);
         assert.ok(
-            /HEAD.*\.test\(local\.req\.method\)/.test(before),
+            /HEAD.*\.test\(req\.method\)/.test(before),
             'expected HEAD method check on cache-miss path'
         );
     });
 
     it('cache-miss: per-request refs nulled after response', function() {
         var src = getSrc();
-        var first = src.indexOf('local.res.end( htmlContent )');
-        var second = src.indexOf('local.res.end( htmlContent )', first + 1);
+        var first = src.indexOf('res.end( htmlContent )');
+        var second = src.indexOf('res.end( htmlContent )', first + 1);
         var after = src.substring(second, second + 500);
         assert.ok(after.indexOf('local.req = null') > -1, 'expected local.req = null after cache-miss .end()');
         assert.ok(after.indexOf('local.res = null') > -1, 'expected local.res = null after cache-miss .end()');
@@ -419,14 +423,14 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
     it('fallthrough: safety-net .end() with error message', function() {
         var src = getSrc();
         assert.ok(
-            src.indexOf("local.res.end('Unexpected controller error while trying to render.')") > -1,
+            src.indexOf("res.end('Unexpected controller error while trying to render.')") > -1,
             'expected fallthrough safety-net .end() with error message'
         );
     });
 
     it('fallthrough: per-request refs nulled after safety-net', function() {
         var src = getSrc();
-        var idx = src.indexOf("local.res.end('Unexpected controller error");
+        var idx = src.indexOf("res.end('Unexpected controller error");
         var after = src.substring(idx, idx + 500);
         assert.ok(after.indexOf('local.req = null') > -1, 'expected local.req = null after fallthrough .end()');
         assert.ok(after.indexOf('local.res = null') > -1, 'expected local.res = null after fallthrough .end()');
@@ -434,20 +438,22 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
 
     // ── Total .end() count ──────────────────────────────────────────────
 
-    it('exactly 5 local.res.end() calls in the file', function() {
+    it('exactly 5 res.end() calls in the file', function() {
         var src = getSrc();
-        var matches = src.match(/local\.res\.end\s*\(/g);
-        assert.ok(matches, 'no local.res.end() calls found');
-        assert.strictEqual(matches.length, 5, 'expected exactly 5 local.res.end() calls (2 HEAD + 2 body + 1 fallthrough)');
+        // Word-boundary anchor since `res` is now used as the function-scoped
+        // capture name (no `local.` prefix to disambiguate).
+        var matches = src.match(/\bres\.end\s*\(/g);
+        assert.ok(matches, 'no res.end() calls found');
+        assert.strictEqual(matches.length, 5, 'expected exactly 5 res.end() calls (2 HEAD + 2 body + 1 fallthrough)');
     });
 
-    it('zero local.res.write() calls — all writes use .end(body)', function() {
+    it('zero res.write() calls — all writes use .end(body)', function() {
         var src = getSrc();
         // Strip comments
         var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
         assert.ok(
-            stripped.indexOf('local.res.write(') === -1,
-            'expected no local.res.write() — all responses should use .end(body) for HTTP/2 compatibility'
+            !/\bres\.write\(/.test(stripped),
+            'expected no res.write() — all responses should use .end(body) for HTTP/2 compatibility'
         );
     });
 
@@ -535,25 +541,25 @@ describe('08 - error exit paths: throwError calls and early returns', function()
         );
     });
 
-    it('deferred error object forwarding: return self.throwError(local.req.params.errorObject)', function() {
+    it('deferred error object forwarding: return self.throwError(req.params.errorObject)', function() {
         var src = getSrc();
         assert.ok(
-            src.indexOf('return self.throwError(local.req.params.errorObject)') > -1,
+            src.indexOf('return self.throwError(req.params.errorObject)') > -1,
             'expected deferred error object forwarding'
         );
     });
 
-    it('catch-all: return self.throwError(local.res, 500, err)', function() {
+    it('catch-all: return self.throwError(res, 500, err)', function() {
         var src = getSrc();
         assert.ok(
-            src.indexOf('return self.throwError(local.res, 500, err)') > -1,
+            src.indexOf('return self.throwError(res, 500, err)') > -1,
             'expected catch-all throwError at the end of the try block'
         );
     });
 
     it('catch-all is in a catch block', function() {
         var src = getSrc();
-        var catchAllIdx = src.indexOf('return self.throwError(local.res, 500, err)');
+        var catchAllIdx = src.indexOf('return self.throwError(res, 500, err)');
         var before = src.substring(Math.max(0, catchAllIdx - 100), catchAllIdx);
         assert.ok(
             /\}\s*catch\s*\(err\)\s*\{/.test(before),
@@ -616,11 +622,11 @@ describe('09 - guard patterns: headersSent, HEAD, stream setup', function() {
         );
     });
 
-    it('stream variable set up from local.res.stream', function() {
+    it('stream variable set up from res.stream', function() {
         var src = getSrc();
         assert.ok(
-            /stream\s*=\s*local\.res\.stream/.test(src),
-            'expected stream = local.res.stream assignment'
+            /stream\s*=\s*res\.stream/.test(src),
+            'expected stream = res.stream assignment'
         );
     });
 
@@ -641,9 +647,16 @@ describe('09 - guard patterns: headersSent, HEAD, stream setup', function() {
 
     it('_next alias pattern used (not direct local.next())', function() {
         var src = getSrc();
-        // _next should be captured before local.next is nulled
+        // Post-retrofit shape (#M1 race-fix): _next is captured ONCE at the top
+        // of render() from local.next, then used at each terminal exit. Pre-retrofit
+        // the file had 3 redundant `var _next = local.next` captures (one per
+        // exit block); those are now consolidated into the single top-of-render
+        // capture, with terminal exits relying on the function-scoped _next.
         var matches = src.match(/var _next\s*=.*local\.next/g);
-        assert.ok(matches && matches.length >= 3, 'expected at least 3 _next alias captures');
+        assert.ok(matches && matches.length >= 1, 'expected at least 1 _next capture from local.next at top of render()');
+        // _next must still be invoked at terminal exits (the `if (_next) return _next()` pattern).
+        var invokes = src.match(/if\s*\(\s*_next\s*\)\s*return\s+_next\(\)/g);
+        assert.ok(invokes && invokes.length >= 3, 'expected at least 3 `if (_next) return _next()` terminal-exit invocations');
     });
 
     it('isRenderingCustomError flag cleared on cache-hit and cache-miss paths', function() {
@@ -695,23 +708,25 @@ describe('10 - HTTP/2 direct stream implementation (#H8)', function() {
         assert.strictEqual(matches.length, 3, 'expected 3 stream.destroyed guards (cache-hit, cache-miss, error)');
     });
 
-    it('local.res.getHeaders merge exists in active code (5 paths)', function() {
+    it('res.getHeaders merge exists in active code (5 paths)', function() {
         var stripped = stripComments(getSrc());
-        var matches = stripped.match(/local\.res\.getHeaders/g);
-        assert.ok(matches, 'no local.res.getHeaders found');
+        // Word-boundary anchor since `res` is now the function-scoped capture
+        // name (no `local.` prefix to disambiguate from other identifiers).
+        var matches = stripped.match(/\bres\.getHeaders/g);
+        assert.ok(matches, 'no res.getHeaders found');
         assert.ok(matches.length >= 5, 'expected at least 5 getHeaders merges (2 HEAD + 2 body + 1 error)');
     });
 
-    it('local.res.headersSent = true assignment exists in active code (5 paths)', function() {
+    it('res.headersSent = true assignment exists in active code (5 paths)', function() {
         var stripped = stripComments(getSrc());
-        var matches = stripped.match(/local\.res\.headersSent\s*=\s*true/g);
-        assert.ok(matches, 'no local.res.headersSent = true found');
+        var matches = stripped.match(/\bres\.headersSent\s*=\s*true/g);
+        assert.ok(matches, 'no res.headersSent = true found');
         assert.strictEqual(matches.length, 5, 'expected 5 headersSent = true assignments');
     });
 
-    it('dynamic :status from local.res.statusCode || 200 in body/HEAD paths', function() {
+    it('dynamic :status from res.statusCode || 200 in body/HEAD paths', function() {
         var stripped = stripComments(getSrc());
-        var matches = stripped.match(/local\.res\.statusCode\s*\|\|\s*200/g);
+        var matches = stripped.match(/\bres\.statusCode\s*\|\|\s*200/g);
         assert.ok(matches, 'no dynamic :status found');
         assert.strictEqual(matches.length, 4, 'expected 4 dynamic :status (2 HEAD + 2 body, error uses hardcoded 500)');
     });
@@ -749,11 +764,12 @@ describe('10 - HTTP/2 direct stream implementation (#H8)', function() {
 
     // ── HTTP/1.1 fallback preserved ─────────────────────────────────────
 
-    it('local.res.end() calls preserved for HTTP/1.1 fallback', function() {
+    it('res.end() calls preserved for HTTP/1.1 fallback', function() {
         var src = getSrc();
-        var matches = src.match(/local\.res\.end\s*\(/g);
-        assert.ok(matches, 'no local.res.end() found');
-        assert.strictEqual(matches.length, 5, 'expected 5 local.res.end() calls for HTTP/1.1 fallback');
+        // Word-boundary anchor: `res` is the function-scoped capture name.
+        var matches = src.match(/\bres\.end\s*\(/g);
+        assert.ok(matches, 'no res.end() found');
+        assert.strictEqual(matches.length, 5, 'expected 5 res.end() calls for HTTP/1.1 fallback');
     });
 
     // ── Pure logic: patterns that #H8 must implement ────────────────────
@@ -784,7 +800,7 @@ describe('10 - HTTP/2 direct stream implementation (#H8)', function() {
         assert.strictEqual(_streamHeaders['content-type'], 'text/html');
     });
 
-    it('pure logic: dynamic :status uses local.res.statusCode', function() {
+    it('pure logic: dynamic :status uses res.statusCode', function() {
         var res = { statusCode: 404 };
         var status = res.statusCode || 200;
         assert.strictEqual(status, 404, ':status must use statusCode when set');
@@ -941,6 +957,206 @@ describe('11 - layout cache atomic temp+rename (race fix, 2026-05-11)', function
             fails.length, 0,
             'expected 0 failures across ' + (ITER * N) + ' concurrent atomic writes — saw ' + fails.length + ' (codes: ' + JSON.stringify(fails.map(function(f) { return f.code; })) + ')'
         );
+    });
+
+});
+
+
+// ─── 12 — Function-scoped captures of per-request refs (#M1 race fix) ────────
+//
+// The exported render() is async. Between awaits, the controller's `local`
+// closure can have its `req` / `res` / `next` properties nulled by another
+// code path — most commonly throwError's generic-error fallthrough that
+// runs when a second throwError fires after renderCustomError already
+// started this render. Pre-retrofit, render-swig.js read `local.req` /
+// `local.res` / `local.next` directly throughout, so any post-await read
+// after such a null-out crashed with `Cannot read properties of null
+// (reading 'method')` at the first such site.
+//
+// The retrofit captures `local.req` / `local.res` / `local.next` into
+// function-scoped `var req` / `var res` / `var _next` at the very top of
+// render() (immediately after the deps unpack, before any await), then
+// uses those captures for every post-deps read. The closure properties
+// are still nulled at terminal exits for early per-request memory release.
+
+describe('12 - function-scoped captures of per-request refs (#M1 race fix)', function() {
+
+    var _src;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // ── (a) source structure: captures at top of render() ───────────────
+
+    it("render() body captures `var req = local.req` after the deps unpack", function() {
+        var src = getSrc();
+        var renderIdx = src.indexOf('module.exports = async function render');
+        assert.ok(renderIdx > -1, 'render() exported declaration not found');
+        // Window from render() declaration to the first `await` — this is the
+        // synchronous prologue where the captures must live to be set before
+        // any yield point that another path could exploit to null the closure.
+        // Use the first CODE await (fs.promises is unambiguously code; the
+        // word `await` also appears in the doc comment about "await boundaries"
+        // which we must skip).
+        var awaitIdx = src.indexOf('await fs.promises.', renderIdx);
+        assert.ok(awaitIdx > -1, 'first await fs.promises in render() not found');
+        var prologue = src.substring(renderIdx, awaitIdx);
+        assert.ok(
+            /var\s+req\s*=\s*local\.req\s*;/.test(prologue),
+            'expected `var req = local.req;` capture before any await in render()'
+        );
+    });
+
+    it("render() body captures `var res = local.res` after the deps unpack", function() {
+        var src = getSrc();
+        var renderIdx = src.indexOf('module.exports = async function render');
+        var awaitIdx  = src.indexOf('await fs.promises.', renderIdx);
+        var prologue  = src.substring(renderIdx, awaitIdx);
+        assert.ok(
+            /var\s+res\s*=\s*local\.res\s*;/.test(prologue),
+            'expected `var res = local.res;` capture before any await in render()'
+        );
+    });
+
+    it("render() body captures `var _next = local.next` after the deps unpack", function() {
+        var src = getSrc();
+        var renderIdx = src.indexOf('module.exports = async function render');
+        var awaitIdx  = src.indexOf('await fs.promises.', renderIdx);
+        var prologue  = src.substring(renderIdx, awaitIdx);
+        assert.ok(
+            /var\s+_next\s*=\s*local\.next\s*;/.test(prologue),
+            'expected `var _next = local.next;` capture before any await in render()'
+        );
+    });
+
+    it("captures come AFTER `local = deps.local;` so they read the populated closure", function() {
+        var src = getSrc();
+        var depsIdx    = src.indexOf('local           = deps.local;');
+        var captureIdx = src.indexOf('var req         = local.req;');
+        assert.ok(depsIdx > -1, '`local = deps.local;` deps assignment not found');
+        assert.ok(captureIdx > -1, '`var req = local.req;` capture not found');
+        assert.ok(
+            captureIdx > depsIdx,
+            'captures must come AFTER `local = deps.local;` so `local` is populated when read'
+        );
+    });
+
+    // ── (b) source structure: writeCache signature takes req, res params ─
+
+    it('writeCache signature includes `req, res` parameters', function() {
+        var src = getSrc();
+        assert.ok(
+            /async\s+function\s+writeCache\s*\(\s*bundle\s*,\s*opt\s*,\s*htmlContent\s*,\s*req\s*,\s*res\s*\)/.test(src),
+            'writeCache must take `bundle, opt, htmlContent, req, res` — req/res are render()-captured copies (race-safe)'
+        );
+    });
+
+    it('writeCache call sites pass `req, res` (no falling back to closure reads inside writeCache)', function() {
+        var src = getSrc();
+        var matches = src.match(/await\s+writeCache\([^)]*,\s*req\s*,\s*res\s*\)/g);
+        assert.ok(matches && matches.length >= 2, 'expected at least 2 `writeCache(..., req, res)` call sites (cache-write + post-asset-injection)');
+    });
+
+    // ── (c) source structure: terminal exits still null the CLOSURE ─────
+
+    it("terminal exits null local.req / local.res / local.next on the closure (early memory release)", function() {
+        var src = getSrc();
+        // The block-style null trio must appear exactly 3 times — once per
+        // terminal exit (cache-hit, cache-miss, fallthrough). Renaming
+        // these to `req = null` etc. would be a regression (the function-
+        // scoped captures are GC'd on return anyway; nulling the closure
+        // releases the per-request payload earlier while the controller
+        // instance may still be alive via pending event listeners).
+        var matches = src.match(/local\.req\s*=\s*null\s*;\s*\n\s*local\.res\s*=\s*null\s*;\s*\n\s*local\.next\s*=\s*null\s*;/g);
+        assert.ok(matches, 'no closure-nulling blocks found');
+        assert.strictEqual(matches.length, 3, 'expected exactly 3 closure-nulling blocks (cache-hit + cache-miss + fallthrough)');
+    });
+
+    // ── (d) negative invariant: no post-deps `local.req` / `local.res`
+    //     reads (apart from the captures and the terminal-exit nulling) ───
+
+    it('no `local.req` reads remain outside the capture line and the terminal-exit nulling', function() {
+        var src = getSrc();
+        // Strip comments so commented-out historical code does not match.
+        var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        var allReads = stripped.match(/local\.req\b/g) || [];
+        // Allowed: `var req = local.req;` (1×) + `local.req = null;` (3×) = 4
+        assert.strictEqual(
+            allReads.length, 4,
+            'expected exactly 4 `local.req` references in active code (1 capture + 3 closure-nulls), found ' + allReads.length
+        );
+    });
+
+    it('no `local.res` reads remain outside the capture line and the terminal-exit nulling', function() {
+        var src = getSrc();
+        var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        var allReads = stripped.match(/local\.res\b/g) || [];
+        assert.strictEqual(
+            allReads.length, 4,
+            'expected exactly 4 `local.res` references in active code (1 capture + 3 closure-nulls), found ' + allReads.length
+        );
+    });
+
+    it('no `local.next` reads remain outside the capture line and the terminal-exit nulling', function() {
+        var src = getSrc();
+        var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        var allReads = stripped.match(/local\.next\b/g) || [];
+        assert.strictEqual(
+            allReads.length, 4,
+            'expected exactly 4 `local.next` references in active code (1 capture + 3 closure-nulls), found ' + allReads.length
+        );
+    });
+
+    // ── (e) pure-logic replica: race-safety property ────────────────────
+    //
+    // Simulates the exact race shape: a captured `req` reference must
+    // continue to point at the original req object even after the closure
+    // property is nulled. This is the property the retrofit relies on.
+
+    it('captured `req` survives `local.req = null` (function-scoped vs closure-scoped)', function() {
+        // Simulate the shape of the controller's per-request closure
+        var local = { req: { method: 'POST', url: '/x' }, res: {}, next: function() {} };
+        // Capture function-scoped refs (mirrors `var req = local.req;` in render())
+        var req = local.req;
+        var res = local.res;
+        var _next = local.next;
+        // External path nulls the closure properties (mirrors throwError's
+        // generic-error fallthrough at controller.js:5342-5344).
+        local.req = null;
+        local.res = null;
+        local.next = null;
+        // Pre-retrofit: `local.req.method.toLowerCase()` would have thrown
+        // "Cannot read properties of null (reading 'method')". Post-retrofit:
+        // the captured `req` still references the original object.
+        assert.equal(req.method, 'POST', 'captured req survives the closure null-out');
+        assert.equal(req.url, '/x', 'captured req object is still the same reference');
+        assert.notEqual(res, null, 'captured res survives the closure null-out');
+        assert.equal(typeof _next, 'function', 'captured _next survives the closure null-out');
+    });
+
+    it('repro of the original crash: `local.req.method.toLowerCase()` after null-out throws TypeError', function() {
+        // This is the EXACT pre-retrofit access at render-swig.js:467.
+        // Locks the failure mode the retrofit eliminates: any post-await
+        // read via `local.req.X` crashes when `local.req` was nulled.
+        var local = { req: { method: 'GET' } };
+        local.req = null;
+        assert.throws(
+            function() {
+                /* eslint-disable no-unused-vars */
+                var x = typeof(local.req[ local.req.method.toLowerCase() ]);
+                /* eslint-enable no-unused-vars */
+            },
+            /Cannot read prop(erty|erties).+null.+(reading\s+'method'|of\s+null)/,
+            'pre-retrofit access pattern must throw TypeError on null local.req'
+        );
+    });
+
+    it('post-retrofit: the same access via the captured `req` does NOT throw', function() {
+        var local = { req: { method: 'GET', get: { debug: 'true' } } };
+        var req = local.req;
+        // External null-out (the race window — `req` capture is unaffected).
+        local.req = null;
+        // Mirrors line 467's cacheless-debug detection (the canonical crash site).
+        var value = typeof(req[ req.method.toLowerCase() ]);
+        assert.equal(value, 'object', 'captured `req[method]` returns the per-method bucket — no TypeError on null');
     });
 
 });

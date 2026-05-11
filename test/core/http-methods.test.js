@@ -312,7 +312,10 @@ describe('07 - HTTP methods: render-swig.js HEAD suppression', function() {
     before(function() { src = fs.readFileSync(RENDER_SWIG_SRC, 'utf8'); });
 
     it('has a HEAD method guard in the Swig render path', function() {
-        assert.ok(/\/\^HEAD\$\/i\.test\(local\.req\.method\)/.test(src));
+        // Post-#M1 retrofit: `local.req.method` reads were renamed to the
+        // function-scoped capture `req.method` (race-safe against external
+        // null-outs of local.req during render's async awaits).
+        assert.ok(/\/\^HEAD\$\/i\.test\(req\.method\)/.test(src));
     });
 
     it('sets content-type header for HEAD HTML response', function() {
@@ -323,21 +326,22 @@ describe('07 - HTTP methods: render-swig.js HEAD suppression', function() {
         assert.ok(/Buffer\.byteLength\(htmlContent/.test(src));
     });
 
-    it('calls local.res.end() without body for HEAD', function() {
-        // The HEAD path should call res.end() with no argument (HTTP/1.1 fallback)
-        // #H8 added an inner stream branch: if (stream) { stream.end() } else { local.res.end() }
-        // so we look for local.res.end() within the full HEAD block (up to `} else if`)
-        var headGuards = src.split('/^HEAD$/i.test(local.req.method)');
+    it('calls res.end() without body for HEAD', function() {
+        // The HEAD path should call res.end() with no argument (HTTP/1.1 fallback).
+        // #H8 added an inner stream branch: if (stream) { stream.end() } else { res.end() }
+        // so we look for res.end() within the full HEAD block (up to `} else if`).
+        // Word-boundary anchor since `res` is the function-scoped capture (no `local.` prefix).
+        var headGuards = src.split('/^HEAD$/i.test(req.method)');
         assert.ok(headGuards.length >= 2, 'Expected at least one HEAD guard in render-swig');
         headGuards.slice(1).forEach(function(block) {
             var blockEnd = block.indexOf('} else if');
-            assert.ok(/local\.res\.end\(\)/.test(block.slice(0, blockEnd)),
+            assert.ok(/\bres\.end\(\)/.test(block.slice(0, blockEnd)),
                 'HEAD branch should call res.end() with no body');
         });
     });
 
     it('has HEAD suppression in both render code paths (cache hit and normal)', function() {
-        var count = (src.match(/\/\^HEAD\$\/i\.test\(local\.req\.method\)/g) || []).length;
+        var count = (src.match(/\/\^HEAD\$\/i\.test\(req\.method\)/g) || []).length;
         assert.strictEqual(count, 2, 'Expected HEAD guard in 2 render paths, found ' + count);
     });
 });

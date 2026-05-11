@@ -30,25 +30,27 @@ var self                = null
  * @param {string} bundle      - Bundle name (used as cache-key namespace)
  * @param {object} opt         - Server cache configuration (`opt.path`, `opt.ttl`)
  * @param {string} htmlContent - Compiled HTML string to cache
+ * @param {object} req         - Per-request request captured by render() (function-scoped, race-safe)
+ * @param {object} res         - Per-request response captured by render() (function-scoped, race-safe)
  * @returns {Promise<void>}
  */
-async function writeCache(bundle, opt, htmlContent) {
+async function writeCache(bundle, opt, htmlContent, req, res) {
     if (
-        typeof(local.req.routing.cache) == 'undefined'
+        typeof(req.routing.cache) == 'undefined'
         ||
-        ! local.req.routing.cache
+        ! req.routing.cache
         ||
         // replaced: /^true$/i.test() (#P6)
         String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
     ) {
         return;
     }
-    // before: "static:" + local.req.originalUrl  (#C3 — added bundle namespace to prevent silent collisions when two bundles serve the same URL path)
-    var cacheKey = "static:" + bundle + ":" + local.req.originalUrl;
-    var responseHeaders = local.res.getHeaders() || {};
+    // before: "static:" + req.originalUrl  (#C3 — added bundle namespace to prevent silent collisions when two bundles serve the same URL path)
+    var cacheKey = "static:" + bundle + ":" + req.originalUrl;
+    var responseHeaders = res.getHeaders() || {};
     if ( !cache.has(cacheKey) ) {
         // Caching kinds are: `memory` & `fs`
-        var cachingOption = ( typeof(local.req.routing.cache) == 'string' ) ? { type: local.req.routing.cache } : JSON.clone(local.req.routing.cache);
+        var cachingOption = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : JSON.clone(req.routing.cache);
         if ( typeof(cachingOption.ttl) == 'undefined' ) {
             cachingOption.ttl = opt.ttl
         }
@@ -90,7 +92,7 @@ async function writeCache(bundle, opt, htmlContent) {
         // - prioritize content linked to sessions
         // - default ttl is 3600 sec
         if ( /^fs$/i.test(cachingOption.type) ) {
-            var url = local.req.originalUrl;
+            var url = req.originalUrl;
             // replaced: /\/$/.test(url) (#P7)
             if ( url.endsWith('/') ) {
                 url += 'index'
@@ -119,7 +121,7 @@ async function writeCache(bundle, opt, htmlContent) {
         // Invalidation
         if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
             if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-                return self.throwError(local.res, 500, new Error('cache.invalidateOn must be an array'));
+                return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
             }
             // Placing event listeners
             cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
@@ -167,6 +169,21 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     SwigFilters     = deps.SwigFilters;
     headersSent     = deps.headersSent;
 ;
+    // Function-scoped captures of per-request refs. The exported render()
+    // is async with multiple await boundaries (template + layout reads,
+    // cache writes). Between yields, `local.req` / `local.res` / `local.next`
+    // can be nulled by another path on the same controller — most commonly
+    // throwError's generic-error fallthrough that runs when a second
+    // throwError fires after renderCustomError already started this render
+    // (see controller.js: the fallthrough ends the response and nulls the
+    // closure refs while we are suspended at await). Capturing into
+    // function-scoped locals isolates this render from that null-out so
+    // post-await reads do not dereference null. Terminal exits still null
+    // `local.req` / `local.res` / `local.next` on the closure to release
+    // per-request memory.
+    var req         = local.req;
+    var res         = local.res;
+    var _next       = local.next;
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
 
@@ -214,36 +231,36 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         , stream            = null
     ;
 
-    if ( typeof(local.res.stream) != 'undefined') {
-        stream = local.res.stream
+    if ( typeof(res.stream) != 'undefined') {
+        stream = res.stream
     }
 
     try {
         data = getData();
         // Display session
         if (
-            typeof(local.req.session) != 'undefined'
+            typeof(req.session) != 'undefined'
         ) {
             if ( typeof(data.page.data) == 'undefined' ) {
                 data.page.data = {};
             }
 
-            if ( typeof(local.req.session.cookie._expires) != 'undefined' ) {
-                var dateEnd = local.req.session.cookie._expires;
-                var dateStart = ( typeof(local.req.session.lastModified) != 'undefined')
-                                ? new Date(local.req.session.lastModified)
+            if ( typeof(req.session.cookie._expires) != 'undefined' ) {
+                var dateEnd = req.session.cookie._expires;
+                var dateStart = ( typeof(req.session.lastModified) != 'undefined')
+                                ? new Date(req.session.lastModified)
                                 : new Date()
                 ;
                 var elapsed = dateEnd - dateStart;
                 // var expiresAt =
                 if ( typeof(data.page.data.session) == 'undefined' ) {
                     data.page.data.session = {
-                        id          : local.req.session.id,
-                        lastModified: local.req.session.lastModified
+                        id          : req.session.id,
+                        lastModified: req.session.lastModified
                     };
                 }
                 // In milliseconds
-                data.page.data.session.createdAt    = local.req.session.createdAt;
+                data.page.data.session.createdAt    = req.session.createdAt;
                 data.page.data.session.expiresAt    = dateEnd.format('isoDateTime');
                 data.page.data.session.timeout      = elapsed;
 
@@ -253,18 +270,18 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             }
         }
 
-        // in case `local.req.routing.param.file` has been changed on the fly
+        // in case `req.routing.param.file` has been changed on the fly
         if (
-            local.req.routing.param.file
-            && local.req.routing.param.file != data.page.view.file
+            req.routing.param.file
+            && req.routing.param.file != data.page.view.file
         ) {
-            data.page.view.file = local.req.routing.param.file;
+            data.page.view.file = req.routing.param.file;
         }
         if (
-            local.req.routing.param.ext
-            && local.req.routing.param.ext != data.page.view.ext
+            req.routing.param.ext
+            && req.routing.param.ext != data.page.view.ext
         ) {
-            data.page.view.ext = local.req.routing.param.ext;
+            data.page.view.ext = req.routing.param.ext;
         }
         file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
         // making path thru [namespace &] file
@@ -464,15 +481,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     // specific override
     if (
         self.isCacheless()
-        && typeof(local.req[ local.req.method.toLowerCase() ]) != 'undefined'
-        && typeof(local.req[ local.req.method.toLowerCase() ].debug) != 'undefined'
+        && typeof(req[ req.method.toLowerCase() ]) != 'undefined'
+        && typeof(req[ req.method.toLowerCase() ].debug) != 'undefined'
     ) {
         // replaced: /^(true|false)$/i.test() — use string comparison (#P6)
-        var _debugVal = String(local.req[ local.req.method.toLowerCase() ].debug).toLowerCase();
+        var _debugVal = String(req[ req.method.toLowerCase() ].debug).toLowerCase();
         if ( _debugVal !== 'true' && _debugVal !== 'false' ) {
-            console.warn('Detected wrong value for `debug`: '+ local.req[ local.req.method.toLowerCase() ].debug);
+            console.warn('Detected wrong value for `debug`: '+ req[ req.method.toLowerCase() ].debug);
             console.warn('Switching `debug` to `true` as `cacheless` mode is enabled');
-            local.req[ local.req.method.toLowerCase() ].debug = true;
+            req[ req.method.toLowerCase() ].debug = true;
             _debugVal = 'true';
         }
         localOptions.debugMode = _debugVal === 'true';
@@ -512,16 +529,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         // Allowing file & ext override
         if (
-            typeof(local.req.routing.param.file) != 'undefined'
-            && data.page.view.file !== local.req.routing.param.file
+            typeof(req.routing.param.file) != 'undefined'
+            && data.page.view.file !== req.routing.param.file
         ) {
-            data.page.view.file = localOptions.file = local.req.routing.param.file
+            data.page.view.file = localOptions.file = req.routing.param.file
         }
         if (
-            typeof(local.req.routing.param.ext) != 'undefined'
-            && data.page.view.ext !== local.req.routing.param.ext
+            typeof(req.routing.param.ext) != 'undefined'
+            && data.page.view.ext !== req.routing.param.ext
         ) {
-            data.page.view.ext = localOptions.template.ext = local.req.routing.param.ext
+            data.page.view.ext = localOptions.template.ext = req.routing.param.ext
         }
 
 
@@ -615,23 +632,23 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             return;
         }
 
-        var localRequestPort = local.req.headers.port || local.req.headers[':port'];
+        var localRequestPort = req.headers.port || req.headers[':port'];
         var isProxyHost = (
-            typeof(local.req.headers.host) != 'undefined'
+            typeof(req.headers.host) != 'undefined'
             && typeof(localRequestPort) != 'undefined'
             &&  (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
-            && localOptions.conf.server.scheme +'://'+ local.req.headers.host+':'+ localRequestPort != localOptions.conf.hostname.replace(/\:\d+$/, '') +':'+ localOptions.conf.server.port
+            && localOptions.conf.server.scheme +'://'+ req.headers.host+':'+ localRequestPort != localOptions.conf.hostname.replace(/\:\d+$/, '') +':'+ localOptions.conf.server.port
             ||
-            typeof(local.req.headers[':authority']) != 'undefined'
-            && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname
+            typeof(req.headers[':authority']) != 'undefined'
+            && localOptions.conf.server.scheme +'://'+ req.headers[':authority'] != localOptions.conf.hostname
             ||
-            typeof(local.req.headers.host) != 'undefined'
+            typeof(req.headers.host) != 'undefined'
             && typeof(localRequestPort) != 'undefined'
             && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
-            && local.req.headers.host == localOptions.conf.host
+            && req.headers.host == localOptions.conf.host
             ||
-            typeof(local.req.headers['x-nginx-proxy']) != 'undefined'
-            && String(local.req.headers['x-nginx-proxy']).toLowerCase() === 'true'
+            typeof(req.headers['x-nginx-proxy']) != 'undefined'
+            && String(req.headers['x-nginx-proxy']).toLowerCase() === 'true'
             ||
             typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
         ) ? true : false;
@@ -642,8 +659,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             options     : JSON.clone(localOptions),
             isProxyHost : isProxyHost,
             throwError  : self.throwError,
-            req         : local.req,
-            res         : local.res
+            req         : req,
+            res         : res
         });
         try {
 
@@ -659,7 +676,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 }
             }
         } catch (err) {
-            self.throwError(local.res, 500, new Error('[SwigFilters] template filters setup exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
+            self.throwError(res, 500, new Error('[SwigFilters] template filters setup exception encoutered: [ '+path+' ]\n'+(err.stack||err.message)));
             return;
         }
 
@@ -723,7 +740,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         if (!headersSent()) {
 
             //catching errors
-            local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
+            res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
 
             // HTTP/2 (RFC7540 8.1.2.4):
             // This standard for HTTP/2 explicitly states that status messages are not supported.
@@ -742,14 +759,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             ) {
 
                 try {
-                    local.res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
+                    res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
                 } catch (err){
-                    local.res.statusCode    = 500;
-                    local.res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
+                    res.statusCode    = 500;
+                    res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[res.statusCode];
                 }
             }
 
-            local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+            res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
 
             try {
 
@@ -761,7 +778,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 filename = localOptions.template.html;
                 // replaced: new RegExp('^' + namespace + '-') — use startsWith instead (#P2)
                 filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && data.page.view.file.startsWith(data.page.view.namespace + '-') ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-                self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
+                self.throwError(res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
                 filename = null;
                 return;
             }
@@ -828,27 +845,27 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         detail: (data.page.view.file || null)
                     });
                 }
-                local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+                res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
 
                 if (
                     !self.isCacheless()
-                    && typeof(local.req.routing.cache) != 'undefined'
-                    && local.req.method.toUpperCase() === 'GET'
+                    && typeof(req.routing.cache) != 'undefined'
+                    && req.method.toUpperCase() === 'GET'
                     ||
                     // allowing caching even for dev env
                     String(self.serverInstance._cacheIsEnabled).toLowerCase() === 'true'
-                    && typeof(local.req.routing.cache) != 'undefined'
-                    && local.req.method.toUpperCase() === 'GET'
+                    && typeof(req.routing.cache) != 'undefined'
+                    && req.method.toUpperCase() === 'GET'
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent);
+                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res);
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)
-                if ( typeof(local.req.routing.cache) != 'undefined' && local.req.routing.cache ) {
-                    var _ccCfg = ( typeof(local.req.routing.cache) == 'string' ) ? { type: local.req.routing.cache } : local.req.routing.cache;
+                if ( typeof(req.routing.cache) != 'undefined' && req.routing.cache ) {
+                    var _ccCfg = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : req.routing.cache;
                     var _ccTtl = ( typeof(_ccCfg.ttl) != 'undefined' && _ccCfg.ttl > 0 ) ? _ccCfg.ttl : localOptions.conf.server.cache.ttl;
                     if ( _ccTtl > 0 ) {
-                        local.res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
+                        res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
                     }
                 }
 
@@ -885,29 +902,29 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     }
                 }
 
-                console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+                console.info(req.method +' ['+res.statusCode +'] '+ req.url);
                 // HEAD: send headers only — body suppressed (HTTP spec §4.3.2)
-                if ( /^HEAD$/i.test(local.req.method) ) {
+                if ( /^HEAD$/i.test(req.method) ) {
                     if ( stream ) {
                         // #H8 — HTTP/2 HEAD: stream.respond() with content-length, no body.
                         if ( !stream.headersSent ) {
                             var _headH = {
                                 'content-type'   : localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding,
                                 'content-length' : Buffer.byteLength(htmlContent, 'utf8'),
-                                ':status'        : local.res.statusCode || 200
+                                ':status'        : res.statusCode || 200
                             };
-                            var _pendingH = local.res.getHeaders ? local.res.getHeaders() : {};
+                            var _pendingH = res.getHeaders ? res.getHeaders() : {};
                             for (var _hk in _pendingH) {
                                 if (!(_hk in _headH)) _headH[_hk] = _pendingH[_hk];
                             }
                             stream.respond(_headH);
                         }
                         stream.end();
-                        local.res.headersSent = true;
+                        res.headersSent = true;
                     } else {
-                        local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding);
-                        local.res.setHeader('content-length', Buffer.byteLength(htmlContent, 'utf8'));
-                        local.res.end();
+                        res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding);
+                        res.setHeader('content-length', Buffer.byteLength(htmlContent, 'utf8'));
+                        res.end();
                     }
                 } else if ( stream ) {
                     // #H8 — Direct HTTP/2 stream: bypass HTTP/1.1 compat layer.
@@ -915,33 +932,35 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     // before the async callback completed. stream.destroyed is true in that
                     // case — respond() would throw ERR_HTTP2_INVALID_STREAM.
                     if (stream.destroyed || stream.closed) {
-                        console.warn('[render-swig] Stream already destroyed — client disconnected before response was sent ('+ local.req.url +')');
+                        console.warn('[render-swig] Stream already destroyed — client disconnected before response was sent ('+ req.url +')');
                     } else {
                         if ( !stream.headersSent ) {
                             var _streamHeaders = {
                                 'content-type' : localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding,
-                                ':status'      : local.res.statusCode || 200
+                                ':status'      : res.statusCode || 200
                             };
                             // Merge headers set earlier in the pipeline (CORS, cache-control, etc.)
                             // — stream.respond() on the raw HTTP/2 stream does not include headers
                             // set via response.setHeader().
-                            var _pendingHeaders = local.res.getHeaders ? local.res.getHeaders() : {};
+                            var _pendingHeaders = res.getHeaders ? res.getHeaders() : {};
                             for (var _rhk in _pendingHeaders) {
                                 if (!(_rhk in _streamHeaders)) _streamHeaders[_rhk] = _pendingHeaders[_rhk];
                             }
                             stream.respond(_streamHeaders);
                         }
                         stream.end(htmlContent);
-                        local.res.headersSent = true;
+                        res.headersSent = true;
                     }
                 } else {
-                    local.res.end( htmlContent );
+                    res.end( htmlContent );
                 }
                 layout = null;
             }
 
-            // Release per-request refs — save next first since local.next is used directly here.
-            var _next = ( typeof(local.next) != 'undefined' ) ? local.next : null;
+            // Release per-request refs on the closure. The function-scoped
+            // `req` / `res` / `_next` captures stay alive until return and
+            // are GC'd then; the closure properties need explicit nulling
+            // for early memory release of the per-request payload.
             local.req = null;
             local.res = null;
             local.next = null;
@@ -978,7 +997,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         if (hasViews() && isWithoutLayout) {
             // $.getScript(...)
-            //var isProxyHost = ( typeof(local.req.headers.host) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers.host != localOptions.conf.hostname || typeof(local.req.headers[':authority']) != 'undefined' && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname  ) ? true : false;
+            //var isProxyHost = ( typeof(req.headers.host) != 'undefined' && localOptions.conf.server.scheme +'://'+ req.headers.host != localOptions.conf.hostname || typeof(req.headers[':authority']) != 'undefined' && localOptions.conf.server.scheme +'://'+ req.headers[':authority'] != localOptions.conf.hostname  ) ? true : false;
             //var hostname = (isProxyHost) ? localOptions.conf.hostname.replace(/\:\d+$/, '') : localOptions.conf.hostname;
 
 
@@ -1291,7 +1310,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         if ( !headersSent() ) {
             // //catching errors
-            // local.res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
+            // res.statusCode = ( typeof(localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status])  != 'undefined' ) ? data.page.data.status : 200; // by default
 
             // // HTTP/2 (RFC7540 8.1.2.4):
             // // This standard for HTTP/2 explicitly states that status messages are not supported.
@@ -1310,14 +1329,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             // ) {
 
             //     try {
-            //         local.res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
+            //         res.statusMessage = localOptions.conf.server.coreConfiguration.statusCodes[data.page.data.status];
             //     } catch (err){
-            //         local.res.statusCode    = 500;
-            //         local.res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[local.res.statusCode];
+            //         res.statusCode    = 500;
+            //         res.statusMessage = err.stack||err.message||localOptions.conf.server.coreConfiguration.statusCodes[res.statusCode];
             //     }
             // }
 
-            // local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+            // res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
 
             // try {
 
@@ -1330,7 +1349,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             // } catch (err) {
             //     filename = localOptions.template.html;
             //     filename += ( typeof(data.page.view.namespace) != 'undefined' && data.page.view.namespace != '' && new RegExp('^' + data.page.view.namespace +'-').test(data.page.view.file) ) ? '/' + data.page.view.namespace + data.page.view.file.split(data.page.view.namespace +'-').join('/') + ( (data.page.view.ext != '') ? data.page.view.ext: '' ) : '/' + data.page.view.file+ ( (data.page.view.ext != '') ? data.page.view.ext: '' );
-            //     self.throwError(local.res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
+            //     self.throwError(res, 500, new Error('Controller::render(...) compilation error encountered while trying to process template `'+ filename + '`\n' + (err.stack||err.message||err) ));
             //     filename = null;
             //     blacklistRe = null;
             //     return;
@@ -1343,7 +1362,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 var assets = null;
                 try {
                     // TODO - button in toolbar to empty url assets cache
-                    if ( /**  self.isCacheless() ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[local.req.url]) == 'undefined' ) {
+                    if ( /**  self.isCacheless() ||*/ typeof(localOptions.template.assets) == 'undefined' || typeof(localOptions.template.assets[req.url]) == 'undefined' ) {
                         // assets string -> object
                         //assets = self.serverInstance.getAssets(localOptions.conf, layout.toString(), swig, data);
                         assets = self.serverInstance.getAssets(localOptions.conf, layout, null, data);
@@ -1388,7 +1407,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         if ( /\,$/.test(links) ) {
                             links = links.substring(0, links.length-1);
                         }
-                        local.res.setHeader('link', links);
+                        res.setHeader('link', links);
                         links = null;
                     }
 
@@ -1396,7 +1415,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
                 } catch (err) {
                     assets = null;
-                    self.throwError(local.res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
+                    self.throwError(res, 500, new Error('Controller::render(...) calling getAssets(...) \n' + (err.stack||err.message||err) ));
                     return;
                 }
             }
@@ -1467,30 +1486,30 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         detail: (data.page.view.file || null)
                     });
                 }
-                local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
+                res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding );
 
                 if (
                     !layoutCacheFailed
                     && (
                         !self.isCacheless()
-                        && typeof(local.req.routing.cache) != 'undefined'
-                        && local.req.method.toUpperCase() === 'GET'
+                        && typeof(req.routing.cache) != 'undefined'
+                        && req.method.toUpperCase() === 'GET'
                         ||
                         // allowing caching even for dev env
                         String(self.serverInstance._cacheIsEnabled).toLowerCase() === 'true'
-                        && typeof(local.req.routing.cache) != 'undefined'
-                        && local.req.method.toUpperCase() === 'GET'
+                        && typeof(req.routing.cache) != 'undefined'
+                        && req.method.toUpperCase() === 'GET'
                     )
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent);
+                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res);
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)
-                if ( typeof(local.req.routing.cache) != 'undefined' && local.req.routing.cache ) {
-                    var _ccCfg = ( typeof(local.req.routing.cache) == 'string' ) ? { type: local.req.routing.cache } : local.req.routing.cache;
+                if ( typeof(req.routing.cache) != 'undefined' && req.routing.cache ) {
+                    var _ccCfg = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : req.routing.cache;
                     var _ccTtl = ( typeof(_ccCfg.ttl) != 'undefined' && _ccCfg.ttl > 0 ) ? _ccCfg.ttl : localOptions.conf.server.cache.ttl;
                     if ( _ccTtl > 0 ) {
-                        local.res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
+                        res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
                     }
                 }
 
@@ -1527,60 +1546,60 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     }
                 }
 
-                console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+                console.info(req.method +' ['+res.statusCode +'] '+ req.url);
                 // HEAD: send headers only — body suppressed (HTTP spec §4.3.2)
-                if ( /^HEAD$/i.test(local.req.method) ) {
+                if ( /^HEAD$/i.test(req.method) ) {
                     if ( stream ) {
                         // #H8 — HTTP/2 HEAD: stream.respond() with content-length, no body.
                         if ( !stream.headersSent ) {
                             var _headH2 = {
                                 'content-type'   : localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding,
                                 'content-length' : Buffer.byteLength(htmlContent, 'utf8'),
-                                ':status'        : local.res.statusCode || 200
+                                ':status'        : res.statusCode || 200
                             };
-                            var _pendingH2 = local.res.getHeaders ? local.res.getHeaders() : {};
+                            var _pendingH2 = res.getHeaders ? res.getHeaders() : {};
                             for (var _hk2 in _pendingH2) {
                                 if (!(_hk2 in _headH2)) _headH2[_hk2] = _pendingH2[_hk2];
                             }
                             stream.respond(_headH2);
                         }
                         stream.end();
-                        local.res.headersSent = true;
+                        res.headersSent = true;
                     } else {
-                        local.res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding);
-                        local.res.setHeader('content-length', Buffer.byteLength(htmlContent, 'utf8'));
-                        local.res.end();
+                        res.setHeader('content-type', localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding);
+                        res.setHeader('content-length', Buffer.byteLength(htmlContent, 'utf8'));
+                        res.end();
                     }
                 } else if ( stream ) {
                     // #H8 — Direct HTTP/2 stream: bypass HTTP/1.1 compat layer.
                     if (stream.destroyed || stream.closed) {
-                        console.warn('[render-swig] Stream already destroyed — client disconnected before response was sent ('+ local.req.url +')');
+                        console.warn('[render-swig] Stream already destroyed — client disconnected before response was sent ('+ req.url +')');
                     } else {
                         if ( !stream.headersSent ) {
                             var _streamHeaders2 = {
                                 'content-type' : localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding,
-                                ':status'      : local.res.statusCode || 200
+                                ':status'      : res.statusCode || 200
                             };
-                            var _pendingHeaders2 = local.res.getHeaders ? local.res.getHeaders() : {};
+                            var _pendingHeaders2 = res.getHeaders ? res.getHeaders() : {};
                             for (var _rhk2 in _pendingHeaders2) {
                                 if (!(_rhk2 in _streamHeaders2)) _streamHeaders2[_rhk2] = _pendingHeaders2[_rhk2];
                             }
                             stream.respond(_streamHeaders2);
                         }
                         stream.end(htmlContent);
-                        local.res.headersSent = true;
+                        res.headersSent = true;
                     }
                 } else {
-                    local.res.end( htmlContent );
+                    res.end( htmlContent );
                 }
 
                 layout = null;
             }
 
-            // console.info(local.req.method +' ['+local.res.statusCode +'] '+ local.req.url);
+            // console.info(req.method +' ['+res.statusCode +'] '+ req.url);
 
-            // Release per-request refs — save next first since local.next is used directly here.
-            var _next = ( typeof(local.next) != 'undefined' ) ? local.next : null;
+            // Release per-request refs on the closure. The function-scoped
+            // `req` / `res` / `_next` captures stay alive until return.
             local.req = null;
             local.res = null;
             local.next = null;
@@ -1589,32 +1608,32 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         }
 
 
-        if ( typeof(local.req.params.errorObject) != 'undefined' ) {
-            return self.throwError(local.req.params.errorObject);
+        if ( typeof(req.params.errorObject) != 'undefined' ) {
+            return self.throwError(req.params.errorObject);
         }
         if ( stream ) {
             // #H8 — Direct HTTP/2 stream for error fallthrough.
             if (stream.destroyed || stream.closed) {
-                console.warn('[render-swig] Stream already destroyed — client disconnected before error response was sent ('+ (local.req ? local.req.url : 'unknown') +')');
+                console.warn('[render-swig] Stream already destroyed — client disconnected before error response was sent ('+ (req ? req.url : 'unknown') +')');
             } else if ( !stream.headersSent ) {
                 var _errHeaders = {
                     'content-type' : localOptions.conf.server.coreConfiguration.mime['html'] + '; charset='+ localOptions.conf.encoding,
                     ':status'      : 500
                 };
-                var _pendingErrH = local.res.getHeaders ? local.res.getHeaders() : {};
+                var _pendingErrH = res.getHeaders ? res.getHeaders() : {};
                 for (var _ehk in _pendingErrH) {
                     if (!(_ehk in _errHeaders)) _errHeaders[_ehk] = _pendingErrH[_ehk];
                 }
                 stream.respond(_errHeaders);
                 stream.end('Unexpected controller error while trying to render.');
-                local.res.headersSent = true;
+                res.headersSent = true;
             }
         } else {
-            local.res.end('Unexpected controller error while trying to render.');
+            res.end('Unexpected controller error while trying to render.');
         }
 
-        // Release per-request refs — save next first since local.next is used directly here.
-        var _next = ( typeof(local.next) != 'undefined' ) ? local.next : null;
+        // Release per-request refs on the closure. The function-scoped
+        // `req` / `res` / `_next` captures stay alive until return.
         local.req = null;
         local.res = null;
         local.next = null;
@@ -1622,6 +1641,6 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         return;
 
     } catch (err) {
-        return self.throwError(local.res, 500, err);
+        return self.throwError(res, 500, err);
     }
 };
