@@ -98,11 +98,18 @@ describe('03 - async fs.promises calls are present', function() {
         );
     });
 
-    it('uses fs.promises.writeFile for layout cache write (#P31)', function() {
+    it('uses async fs.promises for layout cache placement (#P31)', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
+        // The layout cache write must be async (#P31). After the
+        // 2026-05-11 atomic-rename race fix, the cache file is placed via
+        // a temp+rename pair: writeFile to a per-process temp, then rename
+        // onto newLayoutFilename. The rename target identifier is the
+        // load-bearing signal — section 02 already guards globally against
+        // fs.openSync / fs.writeSync, so any path reaching the rename
+        // below has gone through async fs.promises.
         assert.ok(
-            /await\s+fs\.promises\.writeFile\(newLayoutFilename/.test(src),
-            'expected `await fs.promises.writeFile(newLayoutFilename` for layout cache write (#P31)'
+            /await\s+fs\.promises\.rename\([^,)]+,\s*newLayoutFilename\s*\)/.test(src),
+            'expected `await fs.promises.rename(<temp>, newLayoutFilename)` for atomic layout cache placement (#P31)'
         );
     });
 
@@ -788,6 +795,152 @@ describe('10 - HTTP/2 direct stream implementation (#H8)', function() {
         var res2 = {};
         assert.strictEqual(res1.statusCode || 200, 200, ':status must default to 200 for statusCode=0');
         assert.strictEqual(res2.statusCode || 200, 200, ':status must default to 200 for undefined statusCode');
+    });
+
+});
+
+
+// 11 — Layout cache uses atomic temp+rename to avoid ENOENT under concurrent renders
+//
+// In dev mode (_cacheIsEnabled !== 'true'), two concurrent renders of the
+// same template (via `{% extends "layout.html" %}`) used to race because the
+// priming block deleted the cached layout file (rmSync) before rewriting it,
+// opening a gap window where a parallel render could observe the file as
+// absent at the readFile call ~340 lines below. Atomic temp+rename closes
+// the gap — readers always see the previous content or the new content,
+// never an absent file.
+describe('11 - layout cache atomic temp+rename (race fix, 2026-05-11)', function() {
+
+    it('priming block: no rmSync on newLayoutFilename (race surface removed)', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        // Strip both line and block comments before checking — the leading
+        // comment of the new block describes the old rmSync pattern.
+        var stripped = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+        assert.ok(
+            !/fs\.rmSync\(\s*newLayoutFilename/.test(stripped),
+            'fs.rmSync(newLayoutFilename) was reintroduced — the race fix was reverted'
+        );
+    });
+
+    it('priming block: writeFile target is a temp file, then rename onto newLayoutFilename', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            /await\s+fs\.promises\.writeFile\(\s*_layoutTmp\s*,\s*buffer\s*\)/.test(src),
+            'expected `await fs.promises.writeFile(_layoutTmp, buffer)` at the priming block'
+        );
+        assert.ok(
+            /await\s+fs\.promises\.rename\(\s*_layoutTmp\s*,\s*newLayoutFilename\s*\)/.test(src),
+            'expected `await fs.promises.rename(_layoutTmp, newLayoutFilename)` at the priming block'
+        );
+    });
+
+    it('post-asset-injection write: writeFile target is a temp file, then rename onto newLayoutFilename', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            /await\s+fs\.promises\.writeFile\(\s*_layoutTmpAssets\s*,\s*layout\s*\)/.test(src),
+            'expected `await fs.promises.writeFile(_layoutTmpAssets, layout)` at the post-asset write'
+        );
+        assert.ok(
+            /await\s+fs\.promises\.rename\(\s*_layoutTmpAssets\s*,\s*newLayoutFilename\s*\)/.test(src),
+            'expected `await fs.promises.rename(_layoutTmpAssets, newLayoutFilename)` at the post-asset write'
+        );
+    });
+
+    it('temp file names embed process.pid, Date.now(), and Math.random() for collision-safety', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        // Two temp-file derivations are expected, both anchored on
+        // newLayoutFilename + '.tmp.' — pin the pattern by counting matches
+        // and asserting each carries pid/time/random.
+        var matches = src.match(/newLayoutFilename\s*\+\s*'\.tmp\.'\s*\+\s*process\.pid\s*\+\s*'\.'\s*\+\s*Date\.now\(\)\s*\+\s*'\.'\s*\+\s*Math\.random\(\)/g);
+        assert.ok(
+            matches && matches.length >= 2,
+            'expected two temp-file derivations (priming + post-asset) both embedding pid + Date.now() + Math.random()'
+        );
+    });
+
+    it('CVE-2023-25345 boundary check preserved verbatim at the priming block', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            /\[CVE-2023-25345\] Path traversal attempt blocked in \{% extends %\}/.test(src),
+            'CVE-2023-25345 throw guard must be preserved'
+        );
+        assert.ok(
+            /nodePath\.resolve\(_layoutTemplateRoot,\s*layoutPath\)/.test(src),
+            'CVE-2023-25345 boundary resolve must be preserved'
+        );
+        assert.ok(
+            /!_layoutResolvedPath\.startsWith\(_layoutTemplateRoot \+ '\/'\)/.test(src),
+            'CVE-2023-25345 startsWith guard must be preserved'
+        );
+    });
+
+    // Behavior test: run the atomic-rename pattern under concurrent load and
+    // verify 0 ENOENT failures. The harness extracts the pattern from the
+    // source fix; the source pins above guarantee the source file uses this
+    // pattern. Race tests are stochastic so we run several iterations; with
+    // the atomic pattern, 0 failures is the deterministic outcome regardless
+    // of timing.
+    it('behavior: 0 ENOENT across 200 concurrent atomic writes (10 iter × 20)', { timeout: 60000 }, async function() {
+        var os       = require('os');
+        var nodePath = require('path');
+        var ROOT     = nodePath.join(os.tmpdir(), 'gina-render-swig-race-' + process.pid + '-' + Date.now());
+        var SRC      = nodePath.join(ROOT, 'source', 'layout.html');
+        var TARGET   = nodePath.join(ROOT, 'cache',  'layout.html');
+        var CONTENT  = '<!doctype html><html>{% block content %}{% endblock %}</html>\n';
+
+        fs.mkdirSync(nodePath.dirname(SRC),    { recursive: true });
+        fs.mkdirSync(nodePath.dirname(TARGET), { recursive: true });
+        fs.writeFileSync(SRC, CONTENT);
+
+        async function atomicWrite() {
+            var buf = await fs.promises.readFile(SRC);
+            var tmp = TARGET + '.tmp.' + process.pid + '.' + Date.now() + '.' + Math.random().toString(36).slice(2);
+            await fs.promises.writeFile(tmp, buf);
+            await fs.promises.rename(tmp, TARGET);
+        }
+
+        // Approximates one render in dev mode: pre-block async work to
+        // create natural stagger (the request-lifecycle awaits before the
+        // racy block), the atomic write, ~340 lines of sync intervening
+        // work, then the racy readFile.
+        async function render() {
+            for (var k = 0; k < 5; k++) await Promise.resolve();
+            await atomicWrite();
+            var sink = 0;
+            for (var i = 0; i < 5000000; i++) sink += i;
+            return await fs.promises.readFile(TARGET, 'utf8');
+        }
+
+        var ITER = 10;
+        var N    = 20;
+        var fails = [];
+
+        try {
+            for (var iter = 0; iter < ITER; iter++) {
+                var promises = [];
+                for (var i = 0; i < N; i++) {
+                    promises.push(new Promise(function(resolve) {
+                        setTimeout(function() {
+                            render().then(
+                                function() { resolve(null); },
+                                function(err) { resolve({ code: err.code, message: err.message }); }
+                            );
+                        }, Math.floor(Math.random() * 30));
+                    }));
+                }
+                var results = await Promise.all(promises);
+                for (var r = 0; r < results.length; r++) {
+                    if (results[r]) fails.push(results[r]);
+                }
+            }
+        } finally {
+            try { fs.rmSync(ROOT, { recursive: true, force: true }); } catch (e) {}
+        }
+
+        assert.strictEqual(
+            fails.length, 0,
+            'expected 0 failures across ' + (ITER * N) + ' concurrent atomic writes — saw ' + fails.length + ' (codes: ' + JSON.stringify(fails.map(function(f) { return f.code; })) + ')'
+        );
     });
 
 });

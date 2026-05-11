@@ -383,15 +383,20 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 var newLayoutPath = 'swig' + subFolder  +'/'+ layoutPath;
                 newLayoutFilename = _(cachePath +'/'+ localOptions.bundle +'/'+ newLayoutPath, true);
 
-                // For dev/cacheless envs
-                if (
+                // In dev/cacheless mode we always refresh the cached layout;
+                // in cached mode we only write when it is missing. Previously
+                // the dev branch did rmSync()+writeFile(), opening a gap window
+                // where a concurrent request could observe the file as absent
+                // between two parallel renders and ENOENT at the readFile call
+                // ~340 lines below. The atomic temp+rename pattern below closes
+                // that window: the target is always either the previous
+                // content or the new content, never absent.
+                var shouldWriteLayoutCache = (
                     String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
-                    && fs.existsSync( newLayoutFilename )
-                ) {
-                    fs.rmSync( newLayoutFilename )
-                }
+                    || !fs.existsSync( newLayoutFilename )
+                );
 
-                if ( !fs.existsSync( newLayoutFilename ) ) {
+                if ( shouldWriteLayoutCache ) {
                     var newLayoutDir = newLayoutFilename.split(/\//g).slice(0, -1).join('/');
                     var newLayoutDirObj = new _(newLayoutDir);
                     if ( !newLayoutDirObj.existsSync() ) {
@@ -416,7 +421,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     // replaced: openSync/readFileSync/writeSync/closeSync — async read + write (#P29, #P31)
                     // buffer = Buffer.from( fs.readFileSync(localOptions.template.html + '/'+ layoutPath) ); // replaced: CVE-2023-25345
                     buffer = await fs.promises.readFile(localOptions.template.html + '/'+ layoutPath);
-                    await fs.promises.writeFile(newLayoutFilename, buffer);
+                    // Atomic write: temp file + rename. rename(2) on POSIX is
+                    // atomic on the same filesystem, so concurrent readers at
+                    // the post-priming readFile below never see the target
+                    // absent.
+                    var _layoutTmp = newLayoutFilename + '.tmp.' + process.pid + '.' + Date.now() + '.' + Math.random().toString(36).slice(2);
+                    await fs.promises.writeFile(_layoutTmp, buffer);
+                    await fs.promises.rename(_layoutTmp, newLayoutFilename);
+                    _layoutTmp = null;
                     buffer = null;
                 }
 
@@ -1391,7 +1403,17 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
             if (newLayoutFilename) {
                 // replaced: openSync/writeSync/closeSync — async write (#P31)
-                await fs.promises.writeFile(newLayoutFilename, layout);
+                // Atomic write: temp file + rename. fs.promises.writeFile uses
+                // O_TRUNC which transiently exposes a 0-byte state; a parallel
+                // render reading the cached layout at the post-priming read
+                // ~640 lines above could observe that empty state. Writing to
+                // a temp file and renaming onto target is atomic on POSIX, so
+                // readers always see either the prior content or the new
+                // content.
+                var _layoutTmpAssets = newLayoutFilename + '.tmp.' + process.pid + '.' + Date.now() + '.' + Math.random().toString(36).slice(2);
+                await fs.promises.writeFile(_layoutTmpAssets, layout);
+                await fs.promises.rename(_layoutTmpAssets, newLayoutFilename);
+                _layoutTmpAssets = null;
             }
 
             // Last compilation before rendering
