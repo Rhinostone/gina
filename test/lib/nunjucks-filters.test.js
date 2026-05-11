@@ -217,11 +217,14 @@ describe('05 - lib/index.js registration', function () {
 describe('06 - render-nunjucks.js integration', function () {
 
     it('defines an inner registerGinaFilters helper function', function () {
-        assert.match(RENDER_NJ_SRC, /function\s+registerGinaFilters\s*\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*\)/);
+        // Post-#M1 retrofit: takes `req, res` as trailing parameters (the
+        // renderNunjucks-captured copies, race-safe against external
+        // local.req/res null-outs during async awaits).
+        assert.match(RENDER_NJ_SRC, /function\s+registerGinaFilters\s*\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*,\s*req\s*,\s*res\s*\)/);
     });
 
     it('calls registerGinaFilters from the render flow (per-request)', function () {
-        assert.match(RENDER_NJ_SRC, /registerGinaFilters\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*\)/);
+        assert.match(RENDER_NJ_SRC, /registerGinaFilters\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*,\s*req\s*,\s*res\s*\)/);
     });
 
     it('fetches the lib via require("../../lib").nunjucksFilters or libRef.nunjucksFilters', function () {

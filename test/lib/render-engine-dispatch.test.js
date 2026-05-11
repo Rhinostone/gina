@@ -183,11 +183,11 @@ describe('04 - controller.render-nunjucks.js shape', function () {
     });
 
     it('handles HEAD requests by sending headers only, no body', function () {
-        assert.match(RENDER_NJ_SRC, /\/\^HEAD\$\/i\.test\(\s*local\.req\.method\s*\)/);
+        assert.match(RENDER_NJ_SRC, /\/\^HEAD\$\/i\.test\(\s*\breq\.method\s*\)/);
     });
 
     it('preserves existing response headers (content-type only set when absent)', function () {
-        assert.match(RENDER_NJ_SRC, /!local\.res\.getHeader\(['"]content-type['"]\)/);
+        assert.match(RENDER_NJ_SRC, /!\bres\.getHeader\(['"]content-type['"]\)/);
     });
 
     it('short-circuits when hasViews() returns false', function () {
@@ -266,8 +266,8 @@ describe('05 - server.js bundle startup', function () {
 
 describe('05a - sendHtmlResponse four-way branch (class.controller.md §7b)', function () {
 
-    it('reads the HTTP/2 stream from local.res.stream', function () {
-        assert.match(RENDER_NJ_SRC, /local\.res\.stream/);
+    it('reads the HTTP/2 stream from res.stream', function () {
+        assert.match(RENDER_NJ_SRC, /\bres\.stream/);
     });
 
     it('guards HTTP/2 responses against stream.destroyed || stream.closed', function () {
@@ -292,24 +292,24 @@ describe('05a - sendHtmlResponse four-way branch (class.controller.md §7b)', fu
         assert.match(RENDER_NJ_SRC, /stream\.end\(html\)/);
     });
 
-    it('merges pipeline-set headers via local.res.getHeaders()', function () {
+    it('merges pipeline-set headers via res.getHeaders()', function () {
         // Applies to BOTH stream paths — CORS / cache-control / cookies
         // set earlier must be preserved on the raw HTTP/2 stream.
-        var matches = RENDER_NJ_SRC.match(/local\.res\.getHeaders\(\)/g);
+        var matches = RENDER_NJ_SRC.match(/\bres\.getHeaders\(\)/g);
         assert.ok(matches && matches.length >= 2, 'getHeaders() called for both HEAD+stream and body+stream merges');
     });
 
-    it('sets local.res.headersSent = true after successful stream.respond', function () {
-        var matches = RENDER_NJ_SRC.match(/local\.res\.headersSent\s*=\s*true/g);
+    it('sets res.headersSent = true after successful stream.respond', function () {
+        var matches = RENDER_NJ_SRC.match(/\bres\.headersSent\s*=\s*true/g);
         assert.ok(matches && matches.length >= 2, 'headersSent flagged for both HEAD+stream and body+stream paths');
     });
 
     it('HTTP/1.1 HEAD path sends content-length via setHeader, empty body', function () {
-        assert.match(RENDER_NJ_SRC, /local\.res\.setHeader\(\s*['"]content-length['"]\s*,\s*byteLength\s*\)/);
+        assert.match(RENDER_NJ_SRC, /\bres\.setHeader\(\s*['"]content-length['"]\s*,\s*byteLength\s*\)/);
     });
 
     it('HTTP/1.1 body path uses res.writeHead + res.end(html)', function () {
-        assert.match(RENDER_NJ_SRC, /local\.res\.writeHead\(statusCode\);\s*\n\s*local\.res\.end\(html\)/);
+        assert.match(RENDER_NJ_SRC, /\bres\.writeHead\(statusCode\);\s*\n\s*\bres\.end\(html\)/);
     });
 
     it('HEAD request fallback returns early (no body sent)', function () {
@@ -922,24 +922,28 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
     // (b) writeCache shape — guards + key + dispatch
     // -----------------------------------------------------------------------
 
-    it('declares writeCache as an async function with (local, self, bundle, opt, htmlContent) signature', function () {
-        // render-swig passes (bundle, opt, htmlContent) because `local`/`self`
-        // are closures inherited at module scope via `var self = null; ...` + mutation.
-        // render-nunjucks does not hoist these — they live in the module.exports
-        // scope — so the helper must accept them explicitly.
+    it('declares writeCache as an async function with (local, self, bundle, opt, htmlContent, req, res) signature', function () {
+        // render-swig passes (bundle, opt, htmlContent, req, res) because
+        // `local`/`self` are closures inherited at module scope. render-
+        // nunjucks does not hoist these — they live in the module.exports
+        // scope — so the helper accepts them explicitly. The trailing
+        // `req, res` are the renderNunjucks-captured copies (#M1 race fix);
+        // a post-await `local.res` read inside writeCache would dereference
+        // null if renderNunjucks had already nulled the closure between the
+        // writeFile yield and the resume.
         assert.match(
             RENDER_NJ_SRC,
-            /async\s+function\s+writeCache\s*\(\s*local\s*,\s*self\s*,\s*bundle\s*,\s*opt\s*,\s*htmlContent\s*\)/
+            /async\s+function\s+writeCache\s*\(\s*local\s*,\s*self\s*,\s*bundle\s*,\s*opt\s*,\s*htmlContent\s*,\s*req\s*,\s*res\s*\)/
         );
     });
 
-    it('short-circuits when local.req.routing.cache is undefined', function () {
+    it('short-circuits when req.routing.cache is undefined', function () {
         // The triple-OR guard protects three miss conditions: no routing.cache,
         // falsy routing.cache, server-wide cacheIsEnabled !== 'true'.
         var idx = RENDER_NJ_SRC.indexOf('async function writeCache');
         assert.ok(idx > 0);
         var body = RENDER_NJ_SRC.slice(idx, idx + 600);
-        assert.match(body, /typeof\(\s*local\.req\.routing\.cache\s*\)\s*==\s*['"]undefined['"]/);
+        assert.match(body, /typeof\(\s*\breq\.routing\.cache\s*\)\s*==\s*['"]undefined['"]/);
     });
 
     it('short-circuits when serverInstance._cacheIsEnabled is not the string "true"', function () {
@@ -957,16 +961,16 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // silently reading each other's cached bytes.
         assert.match(
             RENDER_NJ_SRC,
-            /var\s+cacheKey\s*=\s*"static:"\s*\+\s*bundle\s*\+\s*":"\s*\+\s*local\.req\.originalUrl/
+            /var\s+cacheKey\s*=\s*"static:"\s*\+\s*bundle\s*\+\s*":"\s*\+\s*\breq\.originalUrl/
         );
     });
 
-    it('captures response headers for the hit path via local.res.getHeaders()', function () {
+    it('captures response headers for the hit path via res.getHeaders()', function () {
         // The server-layer read path re-plays these headers before emitting
         // the cached body (server.isaac.js:1065-1068).
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
         var body = RENDER_NJ_SRC.slice(idx, idx + 1200);
-        assert.match(body, /var\s+responseHeaders\s*=\s*local\.res\.getHeaders\(\)\s*\|\|\s*\{\s*\}/);
+        assert.match(body, /var\s+responseHeaders\s*=\s*\bres\.getHeaders\(\)\s*\|\|\s*\{\s*\}/);
     });
 
     it('gates the write on cache.has(cacheKey) being false', function () {
@@ -980,7 +984,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         var body = RENDER_NJ_SRC.slice(idx, idx + 2000);
         assert.match(
             body,
-            /typeof\(\s*local\.req\.routing\.cache\s*\)\s*==\s*['"]string['"]\s*\)\s*\?\s*\{\s*type:\s*local\.req\.routing\.cache\s*\}\s*:\s*JSON\.clone\(\s*local\.req\.routing\.cache\s*\)/
+            /typeof\(\s*\breq\.routing\.cache\s*\)\s*==\s*['"]string['"]\s*\)\s*\?\s*\{\s*type:\s*\breq\.routing\.cache\s*\}\s*:\s*JSON\.clone\(\s*\breq\.routing\.cache\s*\)/
         );
     });
 
@@ -1071,7 +1075,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         assert.match(body, /!Array\.isArray\(\s*cachingOption\.invalidateOnEvents\s*\)/);
         assert.match(
             body,
-            /self\.throwError\(\s*local\.res\s*,\s*500\s*,\s*new\s+Error\(\s*['"]cache\.invalidateOn must be an array['"]\s*\)\s*\)/
+            /self\.throwError\(\s*\bres\s*,\s*500\s*,\s*new\s+Error\(\s*['"]cache\.invalidateOn must be an array['"]\s*\)\s*\)/
         );
     });
 
@@ -1091,14 +1095,14 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // — bodies vary with payload.
         assert.match(
             RENDER_NJ_SRC,
-            /!self\.isCacheless\(\)[\s\S]{0,160}local\.req\.routing\.cache[\s\S]{0,160}local\.req\.method\.toUpperCase\(\)\s*===\s*['"]GET['"]/
+            /!self\.isCacheless\(\)[\s\S]{0,160}\breq\.routing\.cache[\s\S]{0,160}\breq\.method\.toUpperCase\(\)\s*===\s*['"]GET['"]/
         );
     });
 
-    it('writeCache call: uses localOptions.bundle and localOptions.conf.server.cache', function () {
+    it('writeCache call: uses localOptions.bundle and localOptions.conf.server.cache + passes captured req, res', function () {
         assert.match(
             RENDER_NJ_SRC,
-            /await\s+writeCache\(\s*local\s*,\s*self\s*,\s*localOptions\.bundle\s*,\s*localOptions\.conf\.server\.cache\s*,\s*html\s*\)/
+            /await\s+writeCache\(\s*local\s*,\s*self\s*,\s*localOptions\.bundle\s*,\s*localOptions\.conf\.server\.cache\s*,\s*html\s*,\s*req\s*,\s*res\s*\)/
         );
     });
 
@@ -1121,7 +1125,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
 
     it('writeCache runs BEFORE sendHtmlResponse', function () {
         var writeIdx = RENDER_NJ_SRC.indexOf('await writeCache(local, self, localOptions.bundle');
-        var sendIdx  = RENDER_NJ_SRC.lastIndexOf('sendHtmlResponse(local, html)');
+        var sendIdx  = RENDER_NJ_SRC.lastIndexOf('sendHtmlResponse(local, html, req, res)');
         assert.ok(writeIdx > 0 && sendIdx > 0);
         assert.ok(writeIdx < sendIdx, 'writeCache must run BEFORE sendHtmlResponse');
     });
@@ -1130,8 +1134,8 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // The hit path in server.isaac.js re-computes its own Cache-Control
         // header, so this one only matters for fresh responses.
         var writeIdx = RENDER_NJ_SRC.indexOf('await writeCache(local, self, localOptions.bundle');
-        var ccIdx    = RENDER_NJ_SRC.indexOf("local.res.setHeader('Cache-Control'");
-        var sendIdx  = RENDER_NJ_SRC.lastIndexOf('sendHtmlResponse(local, html)');
+        var ccIdx    = RENDER_NJ_SRC.indexOf("res.setHeader('Cache-Control'");
+        var sendIdx  = RENDER_NJ_SRC.lastIndexOf('sendHtmlResponse(local, html, req, res)');
         assert.ok(writeIdx > 0 && ccIdx > 0 && sendIdx > 0);
         assert.ok(writeIdx < ccIdx, 'Cache-Control set AFTER writeCache');
         assert.ok(ccIdx < sendIdx, 'Cache-Control set BEFORE sendHtmlResponse');
@@ -1141,7 +1145,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // Same parse as render-swig.js:836-840: string shorthand allowed,
         // falls back to opt.ttl when routing.cache.ttl is undefined, skips
         // header when effective TTL is 0.
-        var idx = RENDER_NJ_SRC.indexOf("local.res.setHeader('Cache-Control'");
+        var idx = RENDER_NJ_SRC.indexOf("res.setHeader('Cache-Control'");
         assert.ok(idx > 0);
         var block = RENDER_NJ_SRC.slice(idx - 600, idx + 400);
         assert.match(block, /_ccCfg\.visibility\s*===\s*['"]public['"]\s*\?\s*['"]public['"]\s*:\s*['"]private['"]/);
@@ -1196,11 +1200,11 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             /* eslint-enable no-new-func */
         }
 
-        it('short-circuits (no cache.has call) when local.req.routing.cache is undefined', async function () {
+        it('short-circuits (no cache.has call) when req.routing.cache is undefined', async function () {
             var fn = makeFn();
             var local = { req: { routing: {}, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
             var self = { serverInstance: { _cacheIsEnabled: true } };
-            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>');
+            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>', local.req, local.res);
             assert.equal(stubCalls.cacheHas, 0, 'cache.has must NOT be called');
             assert.equal(stubCalls.cacheSet, 0, 'cache.set must NOT be called');
             assert.equal(stubCalls.writeFile, 0, 'writeFile must NOT be called');
@@ -1210,7 +1214,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             var fn = makeFn();
             var local = { req: { routing: { cache: { type: 'memory' } }, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
             var self = { serverInstance: { _cacheIsEnabled: false } };
-            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>');
+            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>', local.req, local.res);
             assert.equal(stubCalls.cacheHas, 0);
             assert.equal(stubCalls.cacheSet, 0);
         });
@@ -1233,7 +1237,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
                 res: { getHeaders: function () { return { 'x-foo': 'bar' }; } }
             };
             var self = { serverInstance: { _cacheIsEnabled: 'true' } };
-            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>hello</p>');
+            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>hello</p>', local.req, local.res);
             assert.equal(captured.key, 'static:demo:/hello', 'cache key namespaced by bundle');
             assert.equal(captured.value.fromMemory, true);
             assert.equal(captured.value.content, '<p>hello</p>');
@@ -1259,7 +1263,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
                 res: { getHeaders: function () { return {}; } }
             };
             var self = { serverInstance: { _cacheIsEnabled: 'true' } };
-            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>');
+            await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>', local.req, local.res);
             assert.equal(captured.visibility, 'public');
         });
     })();

@@ -38,7 +38,7 @@
  *      (commit TBD). `sendHtmlResponse` now implements the four-way branch
  *      from `class.controller.md §7b` (HEAD×stream, HEAD×HTTP1.1, body×stream,
  *      body×HTTP1.1). HTTP/2 streams bypass the compat layer, merge pipeline-set
- *      headers (CORS, cache-control) via `local.res.getHeaders()`, and guard
+ *      headers (CORS, cache-control) via `res.getHeaders()`, and guard
  *      against `stream.destroyed || stream.closed` client disconnects that
  *      would otherwise throw `ERR_HTTP2_INVALID_STREAM`. Early Hints 103
  *      auto-send for CSS/JS preloads is still deferred — that path in swig
@@ -373,14 +373,14 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
  *   4. body + HTTP/1.1       → `res.end(html)` (content-type set earlier)
  *
  * The HTTP/2 branches merge headers set earlier in the pipeline (CORS,
- * cache-control, cookies) via `local.res.getHeaders()` because
+ * cache-control, cookies) via `res.getHeaders()` because
  * `stream.respond()` on the raw HTTP/2 stream does NOT include headers
  * set via `response.setHeader()`. The `stream.destroyed || stream.closed`
  * guard is required — the client may have disconnected before the async
  * render callback completed, in which case `stream.respond()` throws
  * `ERR_HTTP2_INVALID_STREAM`.
  *
- * `local.res.headersSent = true` is set after a successful `stream.respond()`
+ * `res.headersSent = true` is set after a successful `stream.respond()`
  * to signal to the HTTP/1.1 compat layer that the response was sent
  * directly, matching render-swig's §7b pattern.
  *
@@ -388,45 +388,45 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
  * @param {object} local  - Per-request closure
  * @param {string} html   - Rendered HTML content
  */
-function sendHtmlResponse(local, html) {
-    if (local.res.headersSent) { return; }
+function sendHtmlResponse(local, html, req, res) {
+    if (res.headersSent) { return; }
 
-    var statusCode = local.res.statusCode || 200;
-    var stream     = (local.res && typeof local.res.stream !== 'undefined') ? local.res.stream : null;
-    var isHead     = /^HEAD$/i.test(local.req.method);
+    var statusCode = res.statusCode || 200;
+    var stream     = (res && typeof res.stream !== 'undefined') ? res.stream : null;
+    var isHead     = /^HEAD$/i.test(req.method);
     var byteLength = Buffer.byteLength(html, 'utf8');
     // Ensure content-type is set on the HTTP/1.1 response so header merge
     // picks it up for the stream paths and setHeader()-only paths alike.
-    if (!local.res.getHeader('content-type')) {
-        local.res.setHeader('content-type', 'text/html; charset=utf-8');
+    if (!res.getHeader('content-type')) {
+        res.setHeader('content-type', 'text/html; charset=utf-8');
     }
 
     if (isHead) {
         if (stream) {
             // Case 1: HEAD + HTTP/2
             if (stream.destroyed || stream.closed) {
-                try { console.warn('[render-nunjucks] stream already destroyed on HEAD — client disconnected ('+ local.req.url +')'); } catch (e) {}
+                try { console.warn('[render-nunjucks] stream already destroyed on HEAD — client disconnected ('+ req.url +')'); } catch (e) {}
                 return;
             }
             if (!stream.headersSent) {
                 var _headH2 = {
-                    'content-type':   local.res.getHeader('content-type'),
+                    'content-type':   res.getHeader('content-type'),
                     'content-length': byteLength,
                     ':status':        statusCode
                 };
-                var _pendingHeadH2 = local.res.getHeaders ? local.res.getHeaders() : {};
+                var _pendingHeadH2 = res.getHeaders ? res.getHeaders() : {};
                 for (var _hh2k in _pendingHeadH2) {
                     if (!(_hh2k in _headH2)) { _headH2[_hh2k] = _pendingHeadH2[_hh2k]; }
                 }
                 stream.respond(_headH2);
             }
             stream.end();
-            local.res.headersSent = true;
+            res.headersSent = true;
         } else {
             // Case 2: HEAD + HTTP/1.1
-            local.res.setHeader('content-length', byteLength);
-            local.res.writeHead(statusCode);
-            local.res.end();
+            res.setHeader('content-length', byteLength);
+            res.writeHead(statusCode);
+            res.end();
         }
         return;
     }
@@ -434,30 +434,30 @@ function sendHtmlResponse(local, html) {
     if (stream) {
         // Case 3: body + HTTP/2
         if (stream.destroyed || stream.closed) {
-            try { console.warn('[render-nunjucks] stream already destroyed — client disconnected before response ('+ local.req.url +')'); } catch (e) {}
+            try { console.warn('[render-nunjucks] stream already destroyed — client disconnected before response ('+ req.url +')'); } catch (e) {}
             return;
         }
         if (!stream.headersSent) {
             var _streamHeaders = {
-                'content-type': local.res.getHeader('content-type'),
+                'content-type': res.getHeader('content-type'),
                 ':status':      statusCode
             };
             // Merge pipeline-set headers (CORS, cache-control, etc.) —
             // `stream.respond()` does not include them automatically.
-            var _pendingHeaders = local.res.getHeaders ? local.res.getHeaders() : {};
+            var _pendingHeaders = res.getHeaders ? res.getHeaders() : {};
             for (var _shk in _pendingHeaders) {
                 if (!(_shk in _streamHeaders)) { _streamHeaders[_shk] = _pendingHeaders[_shk]; }
             }
             stream.respond(_streamHeaders);
         }
         stream.end(html);
-        local.res.headersSent = true;
+        res.headersSent = true;
         return;
     }
 
     // Case 4: body + HTTP/1.1
-    local.res.writeHead(statusCode);
-    local.res.end(html);
+    res.writeHead(statusCode);
+    res.end(html);
 }
 
 /**
@@ -480,7 +480,7 @@ function sendHtmlResponse(local, html) {
  * @param {object} localOptions - The controller's localOptions (already has `conf`)
  * @returns {void}
  */
-function registerGinaFilters(env, self, local, localOptions) {
+function registerGinaFilters(env, self, local, localOptions, req, res) {
     // FRAMEWORK PATCH: use module-scope libRef fallback so
     // refreshCore's malformed cache entry doesn't return undefined here.
     var nunjucksFilters = (libRef && libRef.nunjucksFilters)
@@ -491,23 +491,23 @@ function registerGinaFilters(env, self, local, localOptions) {
     // request headers and engine-specific localOptions, (b) extracting to a
     // shared helper would widen the scope of this filter-port change beyond
     // what's necessary. Future refactor candidate.
-    var localRequestPort = local.req.headers.port || local.req.headers[':port'];
+    var localRequestPort = req.headers.port || req.headers[':port'];
     var isProxyHost = (
-        typeof(local.req.headers.host) != 'undefined'
+        typeof(req.headers.host) != 'undefined'
         && typeof(localRequestPort) != 'undefined'
         && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
-        && localOptions.conf.server.scheme +'://'+ local.req.headers.host+':'+ localRequestPort != localOptions.conf.hostname.replace(/\:\d+$/, '') +':'+ localOptions.conf.server.port
+        && localOptions.conf.server.scheme +'://'+ req.headers.host+':'+ localRequestPort != localOptions.conf.hostname.replace(/\:\d+$/, '') +':'+ localOptions.conf.server.port
         ||
-        typeof(local.req.headers[':authority']) != 'undefined'
-        && localOptions.conf.server.scheme +'://'+ local.req.headers[':authority'] != localOptions.conf.hostname
+        typeof(req.headers[':authority']) != 'undefined'
+        && localOptions.conf.server.scheme +'://'+ req.headers[':authority'] != localOptions.conf.hostname
         ||
-        typeof(local.req.headers.host) != 'undefined'
+        typeof(req.headers.host) != 'undefined'
         && typeof(localRequestPort) != 'undefined'
         && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
-        && local.req.headers.host == localOptions.conf.host
+        && req.headers.host == localOptions.conf.host
         ||
-        typeof(local.req.headers['x-nginx-proxy']) != 'undefined'
-        && String(local.req.headers['x-nginx-proxy']).toLowerCase() === 'true'
+        typeof(req.headers['x-nginx-proxy']) != 'undefined'
+        && String(req.headers['x-nginx-proxy']).toLowerCase() === 'true'
         ||
         typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
     ) ? true : false;
@@ -516,8 +516,8 @@ function registerGinaFilters(env, self, local, localOptions) {
         options:     JSON.clone(localOptions),
         isProxyHost: isProxyHost,
         throwError:  self.throwError,
-        req:         local.req,
-        res:         local.res
+        req:         req,
+        res:         res
     });
 
     // FRAMEWORK PATCH: apply bundle-level filter wraps registered
@@ -651,11 +651,11 @@ function injectAssets(html, data, localOptions) {
  * @param {string} htmlContent - Final HTML string to cache (post injectAssets + injectInspectorScripts)
  * @returns {Promise<void>}
  */
-async function writeCache(local, self, bundle, opt, htmlContent) {
+async function writeCache(local, self, bundle, opt, htmlContent, req, res) {
     if (
-        typeof(local.req.routing.cache) == 'undefined'
+        typeof(req.routing.cache) == 'undefined'
         ||
-        ! local.req.routing.cache
+        ! req.routing.cache
         ||
         String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
     ) {
@@ -663,11 +663,11 @@ async function writeCache(local, self, bundle, opt, htmlContent) {
     }
     // Bundle namespace prevents silent collisions when two bundles serve the
     // same URL path — matches render-swig.js:47 and render-json.js:40 (#C3).
-    var cacheKey = "static:" + bundle + ":" + local.req.originalUrl;
-    var responseHeaders = local.res.getHeaders() || {};
+    var cacheKey = "static:" + bundle + ":" + req.originalUrl;
+    var responseHeaders = res.getHeaders() || {};
     if ( !cache.has(cacheKey) ) {
         // Caching kinds are: `memory` & `fs`
-        var cachingOption = ( typeof(local.req.routing.cache) == 'string' ) ? { type: local.req.routing.cache } : JSON.clone(local.req.routing.cache);
+        var cachingOption = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : JSON.clone(req.routing.cache);
         if ( typeof(cachingOption.ttl) == 'undefined' ) {
             cachingOption.ttl = opt.ttl
         }
@@ -701,7 +701,7 @@ async function writeCache(local, self, bundle, opt, htmlContent) {
 
         // Caching to `fs` (file system)
         if ( /^fs$/i.test(cachingOption.type) ) {
-            var url = local.req.originalUrl;
+            var url = req.originalUrl;
             if ( url.endsWith('/') ) {
                 url += 'index'
             }
@@ -726,7 +726,7 @@ async function writeCache(local, self, bundle, opt, htmlContent) {
         // Invalidation
         if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
             if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-                return self.throwError(local.res, 500, new Error('cache.invalidateOn must be an array'));
+                return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
             }
             // Placing event listeners
             cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
@@ -745,6 +745,20 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // `data.page.view.scripts` with raw HTML strings by walking the bundle's
     // `localOptions.template.{stylesheets,javascripts}` arrays.
     var setResources = deps.setResources;
+
+    // Function-scoped captures of per-request refs (#M1 race fix — mirror of
+    // controller.render-swig.js). renderNunjucks() is async with awaits at
+    // writeCache (the layout-cache write). Between yields, an external code
+    // path (most commonly throwError's generic-HTML fallthrough at
+    // controller.js:5342-5344) can null `local.req`/`local.res`/`local.next`
+    // on the controller closure. Capturing into function-scoped locals at the
+    // top of the function isolates this render from that null-out so post-
+    // await reads do not dereference null. Helpers that read the per-request
+    // refs (sendHtmlResponse / writeCache / registerGinaFilters) take the
+    // captures as parameters.
+    var req   = local.req;
+    var res   = local.res;
+    var _next = local.next;
 
     // #NJ3 — point the module-level `cache` at the server's shared in-memory
     // store for this request. Same pattern as render-swig.js:171 and
@@ -770,7 +784,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // level (the full render-swig file has much more nuanced handling;
     // MVP keeps it simple).
     if (!hasViews || !hasViews()) {
-        return sendHtmlResponse(local, '');
+        return sendHtmlResponse(local, '', req, res);
     }
 
     // headersSent guard — if the pipeline already sent headers (e.g. an
@@ -858,7 +872,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // env.render() / env.renderString() calls below are synchronous and
     // cannot interleave with another request's addFilter pass.
     try {
-        registerGinaFilters(env, self, local, localOptions);
+        registerGinaFilters(env, self, local, localOptions, req, res);
     } catch (filterErr) {
         return self.throwError(filterErr);
     }
@@ -1028,16 +1042,16 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // testing), GETs only, route must declare a `cache` block.
     if (
         !self.isCacheless()
-        && typeof(local.req.routing.cache) != 'undefined'
-        && local.req.method.toUpperCase() === 'GET'
+        && typeof(req.routing.cache) != 'undefined'
+        && req.method.toUpperCase() === 'GET'
         ||
         // allowing caching even for dev env
         String(self.serverInstance._cacheIsEnabled).toLowerCase() === 'true'
-        && typeof(local.req.routing.cache) != 'undefined'
-        && local.req.method.toUpperCase() === 'GET'
+        && typeof(req.routing.cache) != 'undefined'
+        && req.method.toUpperCase() === 'GET'
     ) {
         try {
-            await writeCache(local, self, localOptions.bundle, localOptions.conf.server.cache, html);
+            await writeCache(local, self, localOptions.bundle, localOptions.conf.server.cache, html, req, res);
         } catch (cacheErr) {
             // Cache-write failures must never break the render. The response
             // still goes out; subsequent requests will retry the write on the
@@ -1051,13 +1065,13 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // re-computes its own Cache-Control header from `cachedContentObj.ttl`
     // so this header is only meaningful when a client receives the
     // freshly-rendered bytes.
-    if ( typeof(local.req.routing.cache) != 'undefined' && local.req.routing.cache ) {
-        var _ccCfg = ( typeof(local.req.routing.cache) == 'string' ) ? { type: local.req.routing.cache } : local.req.routing.cache;
+    if ( typeof(req.routing.cache) != 'undefined' && req.routing.cache ) {
+        var _ccCfg = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : req.routing.cache;
         var _ccTtl = ( typeof(_ccCfg.ttl) != 'undefined' && _ccCfg.ttl > 0 ) ? _ccCfg.ttl : localOptions.conf.server.cache.ttl;
         if ( _ccTtl > 0 ) {
-            local.res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
+            res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
         }
     }
 
-    sendHtmlResponse(local, html);
+    sendHtmlResponse(local, html, req, res);
 };

@@ -26,7 +26,12 @@ var self                = null
  * @param {string} jsonContent - Serialised JSON string to cache
  * @returns {Promise<void>}
  */
-async function writeCache(bundle, opt, jsonContent) {
+// `res` (the captured response from renderJSON) is passed in so the post-
+// await throwError below does not dereference a nulled `local.res`. Pre-
+// await reads of `local.req`/`local.res` (lines 31-86) are part of
+// renderJSON's synchronous call (it is not async), so they are safe — the
+// race window opens only after `await fs.promises.writeFile` at line 100.
+async function writeCache(bundle, opt, jsonContent, res) {
     if (
         typeof(local.req.routing.cache) == 'undefined'
         ||
@@ -111,7 +116,11 @@ async function writeCache(bundle, opt, jsonContent) {
     // Invalidation
     if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
         if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-            return self.throwError(local.res, 500, new Error('cache.invalidateOn must be an array'));
+            // #M1 — post-await read goes through the captured `res` (passed
+            // from renderJSON) rather than `local.res`, which renderJSON may
+            // have nulled at its terminal exit between the writeFile await
+            // and this resume point.
+            return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
         }
         // Placing event listeners
         cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
@@ -406,7 +415,7 @@ module.exports = function renderJSON(jsonObj, deps) {
             && typeof(request.routing.cache) != 'undefined'
             && /^GET$/i.test(request.method)
         ) {
-            writeCache(self._options.bundle, local.options.conf.server.cache, data).catch(function(err) {
+            writeCache(self._options.bundle, local.options.conf.server.cache, data, response).catch(function(err) {
                 console.error('[render-json] writeCache failed:', err);
             });
         }

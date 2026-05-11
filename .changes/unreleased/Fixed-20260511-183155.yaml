@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Extending the #M1 async-race local-copy retrofit to controller.render-nunjucks.js (full call chain: renderNunjucks captures req/res/_next at top, helpers sendHtmlResponse/registerGinaFilters/writeCache take captures as parameters) and to controller.render-json.js writeCache helper (post-await throwError on invalidateOnEvents misconfiguration now goes through a captured res parameter instead of local.res)'
+time: 2026-05-11T18:31:55.51221+01:00
