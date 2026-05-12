@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed URL query-string parser on the Isaac engine: ''+'' now correctly decodes to space in ''request.query'' values per RFC 1866 / WHATWG URL ''application/x-www-form-urlencoded parser'' spec (e.g. ''GET /search?name=Hello+World'' yields ''request.query.name === "Hello World"'' instead of ''Hello+World''). Closes the parallel to commit 014ff60a''s body-parser fix. Express engine is already spec-correct via qs/querystring defaults — no change there.'
-time: 2026-05-10T22:53:20.181371+01:00

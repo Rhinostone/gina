@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Bumped @rhinostone/swig dependency floor from ^2.1.0 to ^2.2.0 in framework/v*/package.json. ''npm view @rhinostone/swig version'' returns 2.2.0; ^2.1.0 semver-satisfies 2.2.0 but the documented floor was stale and the swig-version-sync rule mandates keeping the pin current. swigResolver DEFAULT_MIN stays at 2.0.0 since the framework does not depend on any new 2.2.0-only API.'
-time: 2026-05-11T03:56:25.880315+01:00

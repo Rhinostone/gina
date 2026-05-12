@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed FormValidator''s isRequired validator for HTML5 form-reassociated radios sharing a name across sibling forms. Submitting a form whose checked radio differs from a sibling form''s .checked radio no longer leaks the sibling''s value at submit time. Sister fix to commit 80dd89f9 (updateRadio peer-set scoping) and 6e544411 (defaultChecked cache); same root shape — same-name radios across multiple form-owners — different code path. The unfiltered document.getElementsByName walk in the radio-group case now scopes to the validator-bound radio''s form-owner per HTML5 spec, mirroring the equivalent filter applied to updateRadio''s mutual-exclusion peer set.'
-time: 2026-05-10T23:59:54.430249+01:00
