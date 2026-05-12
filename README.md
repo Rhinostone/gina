@@ -22,7 +22,7 @@ Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope
 | ORM / entities | EventEmitter-based entity system; SQL files auto-wired to entity methods |
 | Connectors | Couchbase, MongoDB, ScyllaDB / Cassandra, MySQL, PostgreSQL, Redis, SQLite, AI (LLM) — loaded from project `node_modules` |
 | AI connector | Any LLM provider via named protocol (`anthropic://`, `openai://`, `ollama://`, …) |
-| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.0.1 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
+| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.2.0 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
 | Internationalisation | Per-bundle JSON catalogs, `t()` helper, swig + nunjucks `t` filter, CLDR plurals, ICU MessageFormat opt-in via `t.icu()` |
 | Observability | Built-in `/_gina/metrics` Prometheus endpoint (opt-in, IP-allowlisted) — Node.js process metrics + HTTP counter / duration histogram with cardinality-safe route labels |
 | Hot reload | WatcherService evicts `require.cache` only on file change — zero per-request overhead in dev |
@@ -38,6 +38,13 @@ gina bundle:add api @myproject
 gina bundle:start api @myproject
 open https://localhost:3100
 ```
+
+## What's in 0.3.12
+
+- **Spec-correct `+` decoding in URL query strings and urlencoded bodies** — fixes two complementary parsers that didn't decode `+` to space per RFC 1866 / WHATWG URL. The Isaac engine's URL query-string parser had no `+` substitution at all in either of its two branches (multi-value `&` loop + single-key `=` no-`&` path); the body parser's `application/x-www-form-urlencoded` content-type test was inverted, leaving `+` literal in `req.post` / `req.put` / `req.patch` values. Both now correctly produce space. Express engine was already spec-correct via `qs` defaults. Closes #B17.
+- **Render-pipeline async-race safety** (#M1 family) — `render-swig.js` now captures `local.req` / `local.res` / `local.next` into function-scoped locals at the top of `render()` so post-`await` reads remain race-safe when a second `self.throwError()` fires during an in-flight `renderCustomError`. Same shape extended to `render-nunjucks.js`'s full call chain (`sendHtmlResponse`, `registerGinaFilters`, `writeCache`) and to `render-json.js`'s `writeCache` helper. Separate dev-mode layout cache ENOENT fix: the per-template layout cache write now uses an atomic temp+rename pattern so concurrent renders for the same `{% extends %}` URL no longer collide on the priming-block delete-then-rewrite. Production was unaffected (cached mode skips the path entirely). CVE-2023-25345 path-traversal boundary check preserved verbatim.
+- **FormValidator form-reassociated radios — serialize-time scoping** — third sister fix for HTML5 form-reassociated radios sharing a name across sibling forms. The `isRequired` validator's radio-group case walked `document.getElementsByName($el.name)` without filtering by form-owner; submit-time serialization could leak a sibling form's `.checked` radio into the form-under-submission's payload. Now scopes the walk to the validator-bound radio's form-owner, mirroring the equivalent filter applied in 0.3.10's `updateRadio` (`80dd89f9`) and `bindForm` `defaultChecked` cache (`6e544411`). No-op for the normal single-form-owner shape.
+- **`@rhinostone/swig` floor bumped to `^2.2.0`** — version-currency drift fix. The 2.1.0 release introduced a multi-flavor architecture (shared `@rhinostone/swig-core` plus per-flavor frontends including `@rhinostone/swig-twig` for Twig syntax); the native `@rhinostone/swig` package remains drop-in compatible with the API surface gina depends on. `swigResolver DEFAULT_MIN` stays at `2.0.0` — the framework does not depend on any new 2.1.0 / 2.2.0-only API.
 
 ## What's in 0.3.11
 
