@@ -149,8 +149,12 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
         );
     });
 
-    // ── (d) negative invariant: no `local.req` / `local.res` reads in
-    //     active code outside the captures and the bug-explanation comment ─
+    // ── (d) negative invariant: no `local.req` / `local.res` / `local.next`
+    //     READS in active code outside the captures and the bug-explanation
+    //     comment. The negative lookahead `(?!\s*=)` excludes terminal-exit
+    //     WRITES (`local.req = null;` etc.) — those are deliberate per
+    //     class.controller.md § 4 and don't carry the post-await race risk
+    //     the captures guard against.
 
     it('no `local.req` reads remain in active code outside the captures', function() {
         var src = getSrc();
@@ -158,31 +162,31 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
         // (e.g. the bug explanation in the captures' comment block) does not
         // count as an "active read".
         var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        var allReads = stripped.match(/local\.req\b/g) || [];
+        var allReads = stripped.match(/local\.req\b(?!\s*=)/g) || [];
         // Allowed: only the capture `var req   = local.req;` (1 occurrence)
         assert.strictEqual(
             allReads.length, 1,
-            'expected exactly 1 `local.req` reference in active code (the capture line), found ' + allReads.length
+            'expected exactly 1 `local.req` READ in active code (the capture line), found ' + allReads.length
         );
     });
 
     it('no `local.res` reads remain in active code outside the captures', function() {
         var src = getSrc();
         var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        var allReads = stripped.match(/local\.res\b/g) || [];
+        var allReads = stripped.match(/local\.res\b(?!\s*=)/g) || [];
         assert.strictEqual(
             allReads.length, 1,
-            'expected exactly 1 `local.res` reference in active code (the capture line), found ' + allReads.length
+            'expected exactly 1 `local.res` READ in active code (the capture line), found ' + allReads.length
         );
     });
 
     it('no `local.next` reads remain in active code outside the captures', function() {
         var src = getSrc();
         var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
-        var allReads = stripped.match(/local\.next\b/g) || [];
+        var allReads = stripped.match(/local\.next\b(?!\s*=)/g) || [];
         assert.strictEqual(
             allReads.length, 1,
-            'expected exactly 1 `local.next` reference in active code (the capture line), found ' + allReads.length
+            'expected exactly 1 `local.next` READ in active code (the capture line), found ' + allReads.length
         );
     });
 
@@ -235,4 +239,83 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
         assert.equal(isHead, false, 'GET is not HEAD; the access returns a boolean instead of throwing');
     });
 
+});
+
+
+// ─── 02 — Terminal-exit closure nulling (#M1 retrofit follow-up) ─────────────
+//
+// render-swig.js nulls `local.req` / `local.res` / `local.next` on the closure
+// at every success-side terminal exit (cache-hit, normal render, error
+// fallthrough) for early per-request memory release. The captures from
+// section 01 stay alive until the function returns and are GC'd then; the
+// closure properties need explicit nulling for early release of the per-
+// request payload (the controller's `local` closure also holds `options` and
+// other per-request fields that GC can reclaim once the request is done).
+//
+// Mirror site: render-swig.js terminal exits at lines 964, 1603, 1637.
+
+describe('02 - terminal-exit closure nulling (#M1 retrofit follow-up)', function() {
+
+    var _src;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('no-view short-circuit nulls local.req/res/next after sendHtmlResponse', function() {
+        var src = getSrc();
+        // Match the 5-line shape: sendHtmlResponse + 3 null writes + return.
+        var pattern = /sendHtmlResponse\(local,\s*['"]['"],\s*req,\s*res\);[\s\S]{0,300}?local\.req\s*=\s*null;\s*local\.res\s*=\s*null;\s*local\.next\s*=\s*null;\s*return;/;
+        assert.ok(
+            pattern.test(src),
+            'expected the no-view short-circuit to null local.req/res/next after sendHtmlResponse and before return'
+        );
+    });
+
+    it('final terminal exit nulls local.req/res/next after sendHtmlResponse', function() {
+        var src = getSrc();
+        // Match the final sendHtmlResponse(local, html, req, res) + 3 null
+        // writes at the end of the function, followed by the function close `};`.
+        var pattern = /sendHtmlResponse\(local,\s*html,\s*req,\s*res\);[\s\S]{0,300}?local\.req\s*=\s*null;\s*local\.res\s*=\s*null;\s*local\.next\s*=\s*null;\s*\};/;
+        assert.ok(
+            pattern.test(src),
+            'expected the final terminal exit to null local.req/res/next after sendHtmlResponse before the function close'
+        );
+    });
+
+    it('exactly 2 closure-nulling sites (no over-nulling on throwError paths)', function() {
+        var src = getSrc();
+        // Strip comments so commented-out documentation doesn't count.
+        var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        var writes = stripped.match(/local\.req\s*=\s*null/g) || [];
+        // Two sites: no-view short-circuit + final terminal exit. throwError
+        // paths handle cleanup via their own controller render chain, matching
+        // render-swig.js's "only success-side terminals" pattern.
+        assert.strictEqual(
+            writes.length, 2,
+            'expected exactly 2 `local.req = null` writes (no-view + final), found ' + writes.length
+        );
+    });
+
+    it('captures precede the first nulling site (ordering invariant)', function() {
+        var src = getSrc();
+        var captureIdx = src.indexOf('var req   = local.req;');
+        var firstNull  = src.indexOf('local.req = null');
+        assert.ok(captureIdx > -1, 'capture line `var req   = local.req;` not found');
+        assert.ok(firstNull > -1, 'no `local.req = null` site found');
+        assert.ok(
+            captureIdx < firstNull,
+            'captures must precede the first nulling site so the function-scoped refs hold live values when the closure is nulled'
+        );
+    });
+
+    it('triple-null block: req → res → next ordering matches render-swig pattern', function() {
+        var src = getSrc();
+        // Each nulling block must be the exact three-line shape in the order
+        // req → res → next. This locks the pattern against partial regressions
+        // (e.g. someone adding `local.res = null` without the matching pair).
+        var pattern = /local\.req\s*=\s*null;\s*local\.res\s*=\s*null;\s*local\.next\s*=\s*null;/g;
+        var matches = src.match(pattern) || [];
+        assert.strictEqual(
+            matches.length, 2,
+            'expected exactly 2 `local.req=null; local.res=null; local.next=null;` triple-blocks, found ' + matches.length
+        );
+    });
 });

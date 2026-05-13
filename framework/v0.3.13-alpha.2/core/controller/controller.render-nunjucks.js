@@ -784,7 +784,13 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // level (the full render-swig file has much more nuanced handling;
     // MVP keeps it simple).
     if (!hasViews || !hasViews()) {
-        return sendHtmlResponse(local, '', req, res);
+        sendHtmlResponse(local, '', req, res);
+        // Release per-request refs on the closure. The function-scoped
+        // `req` / `res` / `_next` captures stay alive until return.
+        local.req = null;
+        local.res = null;
+        local.next = null;
+        return;
     }
 
     // headersSent guard — if the pipeline already sent headers (e.g. an
@@ -1074,4 +1080,10 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     }
 
     sendHtmlResponse(local, html, req, res);
+
+    // Release per-request refs on the closure. The function-scoped
+    // `req` / `res` / `_next` captures stay alive until return.
+    local.req = null;
+    local.res = null;
+    local.next = null;
 };
