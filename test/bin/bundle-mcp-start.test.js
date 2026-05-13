@@ -21,7 +21,7 @@
 
 var fs   = require('fs');
 var path = require('path');
-var { describe, it } = require('node:test');
+var { describe, it, beforeEach, afterEach } = require('node:test');
 var assert = require('node:assert/strict');
 
 var FW_PATH     = require('../fw');
@@ -411,5 +411,114 @@ describe('14 - gracefulExit drains HTTP transport', function () {
     it('is idempotent via shuttingDown flag', function () {
         assert.match(handlerSrc, /if\s*\(shuttingDown\)\s*return;/);
         assert.match(handlerSrc, /shuttingDown\s*=\s*true;/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 15 — ${secret:KEY} resolver runs on parsed mcp.json before downstream reads
+// ---------------------------------------------------------------------------
+//
+// mcp.json is loaded by THIS handler via requireJSON, NOT via
+// core/config.js::loadBundleConfig — so the resolver hook on bundle
+// start does not see it. The handler must explicitly call
+// secrets.resolve(mcpDoc) immediately after parse so server.authToken
+// (or any future placeholder field) gets filled from process.env.
+
+describe('15 - secrets.resolve runs on parsed mcp.json before resolveAuthToken', function () {
+
+    it('imports lib.secrets', function () {
+        assert.match(handlerSrc, /var\s+secrets\s*=\s*lib\.secrets;/);
+    });
+
+    it('calls secrets.resolve(mcpDoc) after requireJSON parse', function () {
+        // Order matters: requireJSON → tools-array sanity → secrets.resolve → downstream readers.
+        var requireJSONIdx = handlerSrc.indexOf('mcpDoc = requireJSON(mcpPath);');
+        var resolveIdx     = handlerSrc.indexOf('secrets.resolve(mcpDoc);');
+        var authTokenIdx   = handlerSrc.indexOf('resolveAuthToken(mcpDoc)');
+        assert.ok(requireJSONIdx > -1, 'requireJSON call must be present');
+        assert.ok(resolveIdx > -1,     'secrets.resolve(mcpDoc) must be called');
+        assert.ok(authTokenIdx > -1,   'resolveAuthToken(mcpDoc) call must be present');
+        assert.ok(resolveIdx > requireJSONIdx, 'secrets.resolve must run after requireJSON');
+        assert.ok(authTokenIdx > resolveIdx,   'resolveAuthToken must run after secrets.resolve');
+    });
+
+    it('propagates resolver errors through end()', function () {
+        assert.match(handlerSrc,
+            /catch\s*\(\s*secretErr\s*\)\s*\{\s*return\s+end\(\s*new\s+Error\(\s*'Failed to resolve secrets in '/);
+    });
+
+    it('JSDoc on resolveAuthToken documents the ${secret:KEY} support', function () {
+        // Match the literal `${secret:KEY}` reference in the resolveAuthToken JSDoc block.
+        var idx = handlerSrc.indexOf('Resolves the static bearer token');
+        assert.ok(idx > -1);
+        var block = handlerSrc.substring(idx, idx + 600);
+        assert.ok(/\$\{secret:KEY\}/.test(block),
+            'resolveAuthToken JSDoc should mention ${secret:KEY} placeholder support');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 16 — secrets.resolve behavioural check against a synthetic mcp.json
+// ---------------------------------------------------------------------------
+//
+// The handler itself cannot run from this test (it needs the daemon
+// context), but the same lib/secrets the handler imports IS testable
+// against a synthetic mcpDoc shape. Locks the resolver contract for
+// the fields mcp.json may carry.
+
+describe('16 - secrets.resolve against synthetic mcp.json', function () {
+
+    var secretsLib = require(path.join(FW_PATH, 'lib/secrets'));
+
+    var _saved;
+    beforeEach(function () { _saved = process.env.GINA_TEST_MCP_TOKEN; });
+    afterEach(function () {
+        if (typeof _saved === 'undefined') delete process.env.GINA_TEST_MCP_TOKEN;
+        else                                process.env.GINA_TEST_MCP_TOKEN = _saved;
+    });
+
+    it('substitutes ${secret:KEY} in server.authToken', function () {
+        process.env.GINA_TEST_MCP_TOKEN = 't0k3n-value';
+        var doc = {
+            tools: [],
+            server: { authToken: '${secret:GINA_TEST_MCP_TOKEN}' }
+        };
+        secretsLib.resolve(doc);
+        assert.equal(doc.server.authToken, 't0k3n-value');
+    });
+
+    it('throws when the env var is unset', function () {
+        delete process.env.GINA_TEST_MCP_TOKEN;
+        var doc = {
+            tools: [],
+            server: { authToken: '${secret:GINA_TEST_MCP_TOKEN}' }
+        };
+        assert.throws(
+            function () { secretsLib.resolve(doc); },
+            function (err) { return err.message === 'Secret resolution failed'; }
+        );
+    });
+
+    it('leaves non-placeholder fields untouched', function () {
+        var doc = {
+            tools: [],
+            server: { httpPort: 3107, host: 'localhost', allowedOrigins: ['http://localhost'] }
+        };
+        secretsLib.resolve(doc);
+        assert.equal(doc.server.httpPort, 3107);
+        assert.equal(doc.server.host, 'localhost');
+        assert.deepStrictEqual(doc.server.allowedOrigins, ['http://localhost']);
+    });
+
+    it('tracks the resolved path via getResolvedPaths', function () {
+        process.env.GINA_TEST_MCP_TOKEN = 'observable';
+        var doc = {
+            tools: [],
+            server: { authToken: '${secret:GINA_TEST_MCP_TOKEN}', httpPort: 3107 }
+        };
+        secretsLib.resolve(doc);
+        assert.deepStrictEqual(secretsLib.getResolvedPaths(doc), ['server.authToken']);
     });
 });

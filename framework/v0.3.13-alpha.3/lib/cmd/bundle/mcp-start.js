@@ -4,6 +4,7 @@ var console     = lib.logger;
 var mcpServer   = lib.mcpServer;
 var mcpDispatch = lib.mcpDispatch;
 var mcpHttp     = lib.mcpHttp;
+var secrets     = lib.secrets;
 
 /**
  * @module gina/lib/cmd/bundle/mcp-start
@@ -134,6 +135,19 @@ function MCPStart(opt, cmd) {
 
         if (!mcpDoc || !Array.isArray(mcpDoc.tools)) {
             return end( new Error(mcpPath +' is not a valid MCP manifest (missing `tools` array)') );
+        }
+
+        // ${secret:KEY} placeholder substitution. The cmd handler loads mcp.json
+        // directly (it is not part of the bundle-config tree walked by
+        // core/config.js::loadBundleConfig), so the resolver hook on bundle
+        // start does NOT see this document. Run resolve() here so that
+        // `server.authToken` (and any other future placeholder field in
+        // mcp.json) gets filled from process.env before downstream readers
+        // pick it up.
+        try {
+            secrets.resolve(mcpDoc);
+        } catch (secretErr) {
+            return end( new Error('Failed to resolve secrets in '+ mcpPath +': '+ secretErr.message) );
         }
 
         var baseUrl = buildBaseUrl(bundle, mcpDoc);
@@ -399,8 +413,10 @@ function MCPStart(opt, cmd) {
     /**
      * Resolves the static bearer token. Precedence:
      *   1. `--auth-token=<token>` CLI flag
-     *   2. `mcp.json > server > authToken`
-     *   3. `process.env.GINA_MCP_AUTH_TOKEN`
+     *   2. `mcp.json > server > authToken` — supports `${secret:KEY}` placeholders
+     *      (resolved at handler entry by `lib/secrets` against `process.env`).
+     *   3. `process.env.GINA_MCP_AUTH_TOKEN` — direct fallback when neither the
+     *      CLI flag nor the mcp.json field is set.
      *   4. `null` (no auth; loopback bind is the security boundary)
      *
      * @private
