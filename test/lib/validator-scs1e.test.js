@@ -512,14 +512,21 @@ describe('09 — #SCS1e source-inspection guards', function () {
         assert.ok(/_scsSegments/.test(FORM_VAL_SRC), 'bracket-walker segments should be present');
     });
 
-    it('form-validator.js: the two deferred eval sites remain live (intentional)', function () {
-        // :919 (arbitrary condition) and :1722 (user validator function body)
-        // are documented deferrals. If these get removed without a plan, fail.
+    it('form-validator.js: the one deferred eval site remains live (intentional)', function () {
+        // The previously-deferred eval(condition) site was cleared by #M21b
+        // (replaced with explicit throw documenting supported condition shapes).
+        // The user-validator-function-body eval remains live — it is the
+        // Pattern B site that #M21c reframed to accept-and-document after the
+        // freelancer/v3 consumer survey re-verification on 2026-05-14 surfaced
+        // a live consumer at `src/dashboard/forms/validators/isSiren/main.js`.
         var live = stripLineComments(FORM_VAL_SRC);
-        assert.ok(/isValid\s*=\s*eval\s*\(\s*condition\s*\)/.test(live), 'deferred :919 eval should remain');
+        assert.ok(
+            !/isValid\s*=\s*eval\s*\(\s*condition\s*\)/.test(live),
+            'previously deferred eval(condition) should be cleared by #M21b'
+        );
         assert.ok(
             /eval\s*\(\s*['"]\(['"]\s*\+\s*userValidator/.test(live),
-            'deferred :1722 eval should remain'
+            'deferred user-validator-function-body eval should remain (Pattern B / #M21c)'
         );
     });
 });

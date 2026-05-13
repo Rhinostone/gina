@@ -1069,7 +1069,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                             isValid = new RegExp(re, flags).test(this.value)
                         } else {
-                            isValid = eval(condition);
+                            // #M21b — free-form JS condition shape unsupported; declare a documented shape instead
+                            throw new Error('[FormValidator] Unsupported condition shape — supported: binary comparison (a OP b), RegExp, boolean, /regex/flags literal. Got: `' + condition + '`');
                         }
 
                         //valid = new RegExp(condition.replace(/\//g, '')).test(this.value)

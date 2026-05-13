@@ -1,0 +1,3 @@
+kind: Security
+body: 'Removing eval() from the conditional binding evaluator fallback in form-validator.js. Form `condition` strings that previously hit the eval escape-hatch now throw with an explicit message listing the four supported shapes (binary comparison `a OP b`, RegExp instance, boolean, /regex/flags literal). Regex-literal strings still pass through. Clears 1 of the 5 remaining Socket `Uses eval` flag sites (#M21b).'
+time: 2026-05-14T00:41:07.851076+01:00
