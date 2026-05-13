@@ -893,11 +893,13 @@ describe('09 - settings.json template advertises csrf defaults', function () {
             'expected "csrf": { ... } block in settings.json template');
     });
 
-    it('template documents the env-var-only secret rule', function () {
+    it('template documents the new secret slot with env fallback', function () {
         assert.ok(/GINA_CSRF_SECRET/.test(src),
-            'expected GINA_CSRF_SECRET reference in settings.json comment');
-        assert.ok(/NOT in this file/i.test(src),
-            'expected explicit "NOT in this file" guidance for the secret');
+            'expected GINA_CSRF_SECRET reference in settings.json comment (back-compat fallback)');
+        assert.ok(/\$\{secret:KEY\}/.test(src),
+            'expected ${secret:KEY} placeholder example in settings.json comment');
+        assert.ok(/falls\s+back|back[- ]compat/i.test(src),
+            'expected explicit "falls back" / "back-compat" wording linking the two paths');
     });
 
     it('default values match the plugin defaults', function () {

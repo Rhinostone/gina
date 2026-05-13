@@ -83,9 +83,14 @@
     }
   },
   // #CSRF2 / #CSRF3 — signed double-submit token middleware + Origin/Referer
-  // pre-filter applied by gina.plugins.Csrf(). The secret lives in
-  // `process.env.GINA_CSRF_SECRET` (NOT in this file) — generate with
-  // `openssl rand -base64 64` and store in env.json or your shell profile.
+  // pre-filter applied by gina.plugins.Csrf(). Generate the HMAC secret with
+  // `openssl rand -base64 64`.
+  //
+  //   secret         — HMAC signing key. Supports ${secret:KEY} placeholders
+  //                    (lib/secrets fills them from process.env at config-load
+  //                    time). Falls back to process.env.GINA_CSRF_SECRET when
+  //                    this field is empty or absent (back-compat). Example:
+  //                    "secret": "${secret:MY_CSRF_KEY}".
   //   cookieName     — cookie name issued on safe methods
   //   headerName     — request header read on mutating methods
   //   fieldName      — form field read on mutating methods

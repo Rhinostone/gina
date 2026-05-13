@@ -40,23 +40,33 @@ var ${bundle} = require('gina');
 //    // expressSession.name = 'myDb';
 //    //
 //    // var StoreClass = new SessionStore(expressSession);  // returns connector-specific Store class
+//    //
+//    // Recommended: keep the session secret out of tracked source via the
+//    // ${secret:KEY} placeholder pattern. Put it in bundle/config/session.json:
+//    //   { "secret": "${secret:SESSION_SECRET}" }
+//    // then read via self.getConfig('session').secret. lib/secrets fills
+//    // the placeholder from process.env.SESSION_SECRET at config-load time.
+//    // See https://gina.io/docs/guides/secrets for details.
+//    //
 //    // app.use(session({
-//    //     secret           : process.env.SESSION_SECRET || 'changeme',
+//    //     secret           : self.getConfig('session').secret,  // ${secret:SESSION_SECRET}
 //    //     resave           : false,
 //    //     saveUninitialized: false,
 //    //     store            : new StoreClass(),
 //    //     cookie           : { maxAge: 86400000 }
 //    // }));
 //    //
-//    // #CSRF2 — signed double-submit token middleware. Reads
-//    // process.env.GINA_CSRF_SECRET (generate with `openssl rand -base64 64`).
+//    // #CSRF2 — signed double-submit token middleware. Reads its HMAC secret
+//    // from settings.json > csrf.secret (recommended; supports ${secret:KEY}
+//    // placeholders), or falls back to process.env.GINA_CSRF_SECRET
+//    // (back-compat). Generate the secret once with `openssl rand -base64 64`.
 //    // MUST be registered AFTER the session middleware. Per-route opt-out
 //    // for webhook receivers via `routing.json > "csrfExempt": true`.
 //    // var csrf = ${bundle}.plugins.Csrf();
 //    // app.use(csrf);
 //
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
-//    // eg.: app.use( expressSession({secret: '1234567890QWERTY'}) );
+//    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //
 //    //then notify the server that startup sequence can be resumed
 //    event.emit('complete', app);// this is important !
