@@ -1,0 +1,3 @@
+kind: Security
+body: 'Removing eval() from 4 HTML event-callback sites in the browser bundle (events.js + validator/main.js). The function-call shape `data-gina-...-event-on-*="fn(args)"` is no longer supported — register the handler on window and use the bare-identifier shape `="fn"`; a deprecation warning is logged at runtime if a function-call shape is encountered. Clears 4 of the 9 remaining Socket `Uses eval` flag sites (#M21a).'
+time: 2026-05-14T00:27:44.740323+01:00

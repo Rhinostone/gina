@@ -870,7 +870,8 @@ function on(event, cb) {
         if (htmlSuccesEventCallback != null) {
 
             if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
-                eval(htmlSuccesEventCallback)
+                // #M21a — function-call shape unsupported; register a bare handler on window instead
+                try { console.warn('[gina-event] function-call shape no longer supported on data-gina-'+ type +'-event-on-success — use a bare identifier and register the handler on window: '+ htmlSuccesEventCallback); } catch (e) {}
             } else {
                 $el.on('success.h'+ type,  window[htmlSuccesEventCallback])
             }
@@ -880,7 +881,8 @@ function on(event, cb) {
         var htmlErrorEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-error') || null;
         if (htmlErrorEventCallback != null) {
             if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
-                eval(htmlErrorEventCallback)
+                // #M21a — function-call shape unsupported; register a bare handler on window instead
+                try { console.warn('[gina-event] function-call shape no longer supported on data-gina-'+ type +'-event-on-error — use a bare identifier and register the handler on window: '+ htmlErrorEventCallback); } catch (e) {}
             } else {
                 $el.on('error.h'+ type, window[htmlErrorEventCallback])
             }

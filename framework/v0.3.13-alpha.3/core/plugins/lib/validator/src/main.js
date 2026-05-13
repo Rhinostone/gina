@@ -2400,7 +2400,8 @@ function ValidatorPlugin(rules, data, formId) {
         if (htmlSuccesEventCallback != null) {
 
             if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
-                eval(htmlSuccesEventCallback)
+                // #M21a — function-call shape unsupported; register a bare handler on window instead
+                try { console.warn('[gina-form-event] function-call shape no longer supported on data-gina-form-event-on-submit-success — use a bare identifier and register the handler on window: '+ htmlSuccesEventCallback); } catch (e) {}
             } else {
                 $form.on('success.hform',  window[htmlSuccesEventCallback])
             }
@@ -2409,7 +2410,8 @@ function ValidatorPlugin(rules, data, formId) {
         var htmlErrorEventCallback =  $form.target.getAttribute('data-gina-form-event-on-submit-error') || null;
         if (htmlErrorEventCallback != null) {
             if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
-                eval(htmlErrorEventCallback)
+                // #M21a — function-call shape unsupported; register a bare handler on window instead
+                try { console.warn('[gina-form-event] function-call shape no longer supported on data-gina-form-event-on-submit-error — use a bare identifier and register the handler on window: '+ htmlErrorEventCallback); } catch (e) {}
             } else {
                 $form.on('error.hform', window[htmlErrorEventCallback])
             }
