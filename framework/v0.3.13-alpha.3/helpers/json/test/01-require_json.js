@@ -9,6 +9,9 @@ var routing = __dirname + '/data/routing.json';
 var settings = __dirname + '/data/settings.json';
 var statics = __dirname + '/data/statics.json';
 var templates = __dirname + '/data/templates.json';
+var urlPlusBareSeparator = __dirname + '/data/url-plus-bare-separator.json';
+var urlOnly = __dirname + '/data/url-only.json';
+var bareSeparatorOnly = __dirname + '/data/bare-separator-only.json';
 
 var setVariable = function (path) {
     return requireJSON(path);
@@ -25,6 +28,9 @@ var routingCase  = setVariable(routing);
 var settingsCase  = setVariable(settings);
 var staticsCase  = setVariable(statics);
 var templatesCase  = setVariable(templates);
+var urlPlusBareSeparatorCase = setVariable(urlPlusBareSeparator);
+var urlOnlyCase = setVariable(urlOnly);
+var bareSeparatorOnlyCase = setVariable(bareSeparatorOnly);
 
 
 exports['requireJSON: app.json case'] = function(test) {
@@ -922,6 +928,40 @@ exports['requireJSON: templates.json case'] = function(test) {
 
     test.equal( typeof(templatesCase), 'object' );
     test.deepEqual(JSON.stringify(templatesCase), JSON.stringify(res));
+
+    test.done()
+}
+
+exports['requireJSON: url-plus-bare-separator.json case'] = function(test) {
+    var res = {
+        "url": "https://example.com/foo",
+        "value": 1
+    };
+
+    test.equal( typeof(urlPlusBareSeparatorCase), 'object' );
+    test.deepEqual(urlPlusBareSeparatorCase, res);
+
+    test.done()
+}
+
+exports['requireJSON: url-only.json case'] = function(test) {
+    var res = {
+        "url": "https://example.com/foo"
+    };
+
+    test.equal( typeof(urlOnlyCase), 'object' );
+    test.deepEqual(urlOnlyCase, res);
+
+    test.done()
+}
+
+exports['requireJSON: bare-separator-only.json case'] = function(test) {
+    var res = {
+        "value": 1
+    };
+
+    test.equal( typeof(bareSeparatorOnlyCase), 'object' );
+    test.deepEqual(bareSeparatorOnlyCase, res);
 
     test.done()
 }

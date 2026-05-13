@@ -21,21 +21,35 @@ module.exports = function(){
     // `JSON.clone()` is a prototype defined in `GINA_DIR//lib/prototypes.json_clone`
 
     /**
-     * Load a json file and removing comments if found
+     * Load a JSON file, stripping JS-style block (`/* ... *\/`) and line (`// ...`)
+     * comments before parsing. Trailing commas before `}`/`]` are tolerated with
+     * a warning. Line-comment stripping is per-line on the leftmost `//`: when
+     * that `//` is preceded by `:` (URL protocol), `"` (inside a string value),
+     * or `\` (escape), the entire line is treated as data and left alone — so
+     * values like `"http://host//:rest"` round-trip unchanged.
      *
-     * @param {string} filename - path to json content
+     * On a real syntax error the helper logs via `console.emerg` and exits with
+     * code 1; on unexpected I/O failure it rethrows.
      *
-     * @return {object} jsonObject
+     * @param {string} filename - absolute or relative path to the JSON-with-comments file
+     *
+     * @return {object} parsed JSON object
+     *
+     * @example
+     * // file: app.json
+     * //   {
+     * //     "url": "https://example.com/foo",
+     * //     // a bare line-comment separator
+     * //     "value": 1
+     * //   }
+     * var config = requireJSON(__dirname + '/app.json');
+     * // → { url: 'https://example.com/foo', value: 1 }
      * */
     requireJSON = function(filename){
 
         //console.debug('[ Helpers ][ requireJSON ] ', filename);
 
-        var i                       = null
-            , len                   = null
-            , commentsWithSlashes = null
-            , jsonStr               = null
-        ;
+        var jsonStr = null;
 
         try {
             if (
@@ -60,22 +74,24 @@ module.exports = function(){
             jsonStr   = jsonStr.replace(/(\/\*([^*]|[\r\n]|(\*+([^*\/]|[\r\n])))*\*+\/)/g, '');
         }
 
-        // line style comments
-        commentsWithSlashes = jsonStr.match(/\/\/(.*)?/g);
-
-        len = ( commentsWithSlashes) ? commentsWithSlashes.length : 0;
-        if (commentsWithSlashes && len > 0) {
-            i = 0;
-            for(; i< len; ++i) {
-                // ignore urls
-                // if ( /(\:|\")/.test( jsonStr.substring(jsonStr.indexOf(commentsWithSlashes[i])-1,1) ) ) {
-                if ( /(\:|\")/.test( jsonStr.substr(jsonStr.indexOf(commentsWithSlashes[i])-1,1) ) ) {
-                    continue;
-                }
-
-                jsonStr = jsonStr.replace(commentsWithSlashes[i], '');
+        // line style comments — per-line, leftmost `//` only. When the leftmost
+        // `//` on a line is preceded by `:` (URL protocol), `"` (inside a string
+        // value), or `\` (escape), the entire line is treated as data and left
+        // alone — mirrors the original greedy-from-first-match heuristic so
+        // values like "http://host//:rest" round-trip unchanged.
+        jsonStr = jsonStr.split('\n').map(function(line) {
+            var idx = line.indexOf('//');
+            if (idx === -1) {
+                return line;
             }
-        }
+            if (idx > 0) {
+                var prev = line.charAt(idx - 1);
+                if (prev === ':' || prev === '"' || prev === '\\') {
+                    return line;
+                }
+            }
+            return line.substring(0, idx);
+        }).join('\n');
 
         try {
             return JSON.parse(jsonStr)
