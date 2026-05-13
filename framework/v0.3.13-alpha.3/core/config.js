@@ -2748,9 +2748,9 @@ function Config(opt, contextResetNeeded) {
         // }
         self.envConf[bundle][env] = conf[bundle][env];
 
-        // {secret:KEY} placeholder substitution. Walks the merged config
+        // ${secret:KEY} placeholder substitution. Walks the merged config
         // for this bundle in place, replacing every string value that
-        // matches `^\{secret:KEY\}$` with the value resolved by the env
+        // matches `^\${secret:KEY\}$` with the value resolved by the env
         // backend. Runs once per bundle inside the config-load cycle;
         // downstream reads (getConfig, getInstance) see the resolved
         // values. Fail-closed: backend throws on unset/empty values.

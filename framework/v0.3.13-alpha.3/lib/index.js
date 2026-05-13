@@ -128,7 +128,7 @@ function Lib() {
         // instance with an HTTP endpoint (POST, JSON/SSE negotiation, batch,
         // Mcp-Session-Id lifecycle). Auth / Origin checks land in Phase 2b S2.
         mcpHttp         : _require('./mcp-http'),
-        // {secret:KEY} placeholder resolver for bundle JSON configs. Walks
+        // ${secret:KEY} placeholder resolver for bundle JSON configs. Walks
         // the merged config object in place at config-load time (per-bundle,
         // inside loadBundleConfig). Default backend reads process.env[KEY];
         // fail-closed on unset/empty values. See lib/secrets/src/main.js.

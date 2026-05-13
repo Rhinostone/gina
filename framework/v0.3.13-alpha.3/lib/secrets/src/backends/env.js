@@ -9,7 +9,7 @@
 
 /**
  * @module lib/secrets/backends/env
- * @description `process.env`-backed resolver for `{secret:KEY}` placeholders.
+ * @description `process.env`-backed resolver for `${secret:KEY}` placeholders.
  * Reads the raw value from `process.env[key]`. Throws the generic
  * `'Secret resolution failed'` Error when the env var is unset or empty —
  * the user-facing message intentionally omits the key name. The key is

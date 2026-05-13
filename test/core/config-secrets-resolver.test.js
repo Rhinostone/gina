@@ -1,5 +1,5 @@
 /**
- * lib/secrets — {secret:KEY} placeholder resolver for bundle JSON
+ * lib/secrets — ${secret:KEY} placeholder resolver for bundle JSON
  * configs. Walks the merged config object in place at config-load time
  * (per-bundle, inside core/config.js::loadBundleConfig). Default backend
  * reads process.env; fail-closed on unset/empty values.
@@ -43,19 +43,19 @@ describe('01 - module shape', function () {
     });
 
     it('SECRET_RE matches valid placeholders only', function () {
-        assert.ok(secrets.SECRET_RE.test('{secret:DB_PASSWORD}'));
-        assert.ok(secrets.SECRET_RE.test('{secret:A}'));
-        assert.ok(secrets.SECRET_RE.test('{secret:_PRIVATE}'));
-        assert.ok(secrets.SECRET_RE.test('{secret:K_1}'));
+        assert.ok(secrets.SECRET_RE.test('${secret:DB_PASSWORD}'));
+        assert.ok(secrets.SECRET_RE.test('${secret:A}'));
+        assert.ok(secrets.SECRET_RE.test('${secret:_PRIVATE}'));
+        assert.ok(secrets.SECRET_RE.test('${secret:K_1}'));
     });
 
     it('SECRET_RE rejects lowercase, leading digit, empty, embedded, trailing whitespace', function () {
-        assert.ok(!secrets.SECRET_RE.test('{secret:lowercase}'));
-        assert.ok(!secrets.SECRET_RE.test('{secret:1STARTS_WITH_DIGIT}'));
-        assert.ok(!secrets.SECRET_RE.test('{secret:}'));
-        assert.ok(!secrets.SECRET_RE.test('prefix-{secret:K}-suffix'));
-        assert.ok(!secrets.SECRET_RE.test('{secret:K} '));
-        assert.ok(!secrets.SECRET_RE.test(' {secret:K}'));
+        assert.ok(!secrets.SECRET_RE.test('${secret:lowercase}'));
+        assert.ok(!secrets.SECRET_RE.test('${secret:1STARTS_WITH_DIGIT}'));
+        assert.ok(!secrets.SECRET_RE.test('${secret:}'));
+        assert.ok(!secrets.SECRET_RE.test('prefix-${secret:K}-suffix'));
+        assert.ok(!secrets.SECRET_RE.test('${secret:K} '));
+        assert.ok(!secrets.SECRET_RE.test(' ${secret:K}'));
     });
 
     it('package.json declares main: "src/main"', function () {
@@ -81,16 +81,16 @@ describe('02 - basic substitution', function () {
         }
     });
 
-    it('replaces {secret:KEY} with the env-var value', function () {
+    it('replaces ${secret:KEY} with the env-var value', function () {
         process.env.GINA_SECRET_TEST_KEY = 'hello';
-        var conf = { feature: { key: '{secret:GINA_SECRET_TEST_KEY}' } };
+        var conf = { feature: { key: '${secret:GINA_SECRET_TEST_KEY}' } };
         secrets.resolve(conf);
         assert.equal(conf.feature.key, 'hello');
     });
 
     it('returns the same config reference (mutation in place)', function () {
         process.env.GINA_SECRET_TEST_KEY = 'world';
-        var conf = { a: '{secret:GINA_SECRET_TEST_KEY}' };
+        var conf = { a: '${secret:GINA_SECRET_TEST_KEY}' };
         var returned = secrets.resolve(conf);
         assert.equal(returned, conf);
         assert.equal(returned.a, 'world');
@@ -116,7 +116,7 @@ describe('03 - missing key throws with exact message', function () {
 
     it('throws Error("Secret resolution failed") when env var is unset', function () {
         delete process.env.GINA_SECRET_TEST_KEY;
-        var conf = { a: '{secret:GINA_SECRET_TEST_KEY}' };
+        var conf = { a: '${secret:GINA_SECRET_TEST_KEY}' };
         assert.throws(
             function () { secrets.resolve(conf); },
             function (err) {
@@ -127,7 +127,7 @@ describe('03 - missing key throws with exact message', function () {
 
     it('throws Error("Secret resolution failed") when env var is empty string', function () {
         process.env.GINA_SECRET_TEST_KEY = '';
-        var conf = { a: '{secret:GINA_SECRET_TEST_KEY}' };
+        var conf = { a: '${secret:GINA_SECRET_TEST_KEY}' };
         assert.throws(
             function () { secrets.resolve(conf); },
             function (err) {
@@ -138,7 +138,7 @@ describe('03 - missing key throws with exact message', function () {
 
     it('error message does NOT include the key name', function () {
         delete process.env.GINA_SECRET_TEST_KEY;
-        var conf = { a: '{secret:GINA_SECRET_TEST_KEY}' };
+        var conf = { a: '${secret:GINA_SECRET_TEST_KEY}' };
         try {
             secrets.resolve(conf);
             assert.fail('should have thrown');
@@ -150,7 +150,7 @@ describe('03 - missing key throws with exact message', function () {
 
     it('error carries non-enumerable _ginaSecretKey for debug logging', function () {
         delete process.env.GINA_SECRET_TEST_KEY;
-        var conf = { a: '{secret:GINA_SECRET_TEST_KEY}' };
+        var conf = { a: '${secret:GINA_SECRET_TEST_KEY}' };
         try {
             secrets.resolve(conf);
             assert.fail('should have thrown');
@@ -224,7 +224,7 @@ describe('05 - nested object substitution', function () {
 
     it('reaches arbitrary depth (4 levels)', function () {
         process.env.GINA_SECRET_NESTED = 'deep';
-        var conf = { a: { b: { c: { d: '{secret:GINA_SECRET_NESTED}' } } } };
+        var conf = { a: { b: { c: { d: '${secret:GINA_SECRET_NESTED}' } } } };
         secrets.resolve(conf);
         assert.equal(conf.a.b.c.d, 'deep');
     });
@@ -250,14 +250,14 @@ describe('06 - array element substitution', function () {
     it('substitutes in array elements; non-placeholder elements pass through', function () {
         process.env.GINA_SECRET_K1 = 'v1';
         process.env.GINA_SECRET_K2 = 'v2';
-        var conf = { items: ['{secret:GINA_SECRET_K1}', 'literal', '{secret:GINA_SECRET_K2}'] };
+        var conf = { items: ['${secret:GINA_SECRET_K1}', 'literal', '${secret:GINA_SECRET_K2}'] };
         secrets.resolve(conf);
         assert.deepStrictEqual(conf.items, ['v1', 'literal', 'v2']);
     });
 
     it('substitutes inside object-valued array elements', function () {
         process.env.GINA_SECRET_K1 = 'nv';
-        var conf = { items: [{ k: '{secret:GINA_SECRET_K1}' }, { k: 'literal' }] };
+        var conf = { items: [{ k: '${secret:GINA_SECRET_K1}' }, { k: 'literal' }] };
         secrets.resolve(conf);
         assert.equal(conf.items[0].k, 'nv');
         assert.equal(conf.items[1].k, 'literal');
@@ -283,20 +283,20 @@ describe('07 - mixed-string passthrough (no substitution attempted)', function (
 
     it('placeholder embedded in a larger string is returned unchanged', function () {
         process.env.GINA_SECRET_HOST = 'example.com'; // would-be substitute
-        var conf = { url: 'https://{secret:GINA_SECRET_HOST}/path' };
+        var conf = { url: 'https://${secret:GINA_SECRET_HOST}/path' };
         secrets.resolve(conf);
-        assert.equal(conf.url, 'https://{secret:GINA_SECRET_HOST}/path');
+        assert.equal(conf.url, 'https://${secret:GINA_SECRET_HOST}/path');
     });
 
     it('placeholder followed by trailing whitespace passes through', function () {
-        var conf = { x: '{secret:GINA_SECRET_HOST} ' };
+        var conf = { x: '${secret:GINA_SECRET_HOST} ' };
         secrets.resolve(conf);
-        assert.equal(conf.x, '{secret:GINA_SECRET_HOST} ');
+        assert.equal(conf.x, '${secret:GINA_SECRET_HOST} ');
     });
 
     it('mixed-string is NOT recorded in getResolvedPaths', function () {
         process.env.GINA_SECRET_HOST = 'example.com';
-        var conf = { url: 'https://{secret:GINA_SECRET_HOST}/path' };
+        var conf = { url: 'https://${secret:GINA_SECRET_HOST}/path' };
         secrets.resolve(conf);
         assert.deepStrictEqual(secrets.getResolvedPaths(conf), []);
     });
@@ -320,7 +320,7 @@ describe('08 - resolution happens once per config; idempotent', function () {
     });
 
     it('subsequent resolve() calls do not re-resolve (placeholder is gone after first call)', function () {
-        var conf = { feature: { key: '{secret:GINA_SECRET_ONCE}' } };
+        var conf = { feature: { key: '${secret:GINA_SECRET_ONCE}' } };
         process.env.GINA_SECRET_ONCE = 'first';
         secrets.resolve(conf);
         assert.equal(conf.feature.key, 'first');
@@ -338,14 +338,14 @@ describe('08 - resolution happens once per config; idempotent', function () {
             calls: 0,
             resolve: function (key) {
                 this.calls++;
-                if (key === 'OUTER') return '{secret:INNER}';
+                if (key === 'OUTER') return '${secret:INNER}';
                 if (key === 'INNER') return 'inner-value';
                 throw new Error('Secret resolution failed');
             }
         };
-        var conf = { k: '{secret:OUTER}' };
+        var conf = { k: '${secret:OUTER}' };
         secrets.resolve(conf, backend);
-        assert.equal(conf.k, '{secret:INNER}');
+        assert.equal(conf.k, '${secret:INNER}');
         assert.equal(backend.calls, 1, 'backend resolve must be called once, not twice');
     });
 });
@@ -369,7 +369,7 @@ describe('09 - getResolvedPaths tracking', function () {
 
     it('reports dotted paths for object keys', function () {
         process.env.GINA_SECRET_TR1 = 'v1';
-        var conf = { db: { password: '{secret:GINA_SECRET_TR1}' } };
+        var conf = { db: { password: '${secret:GINA_SECRET_TR1}' } };
         secrets.resolve(conf);
         assert.deepStrictEqual(secrets.getResolvedPaths(conf), ['db.password']);
     });
@@ -377,7 +377,7 @@ describe('09 - getResolvedPaths tracking', function () {
     it('reports bracketed indices for array elements', function () {
         process.env.GINA_SECRET_TR1 = 'v1';
         process.env.GINA_SECRET_TR2 = 'v2';
-        var conf = { items: ['{secret:GINA_SECRET_TR1}', 'literal', '{secret:GINA_SECRET_TR2}'] };
+        var conf = { items: ['${secret:GINA_SECRET_TR1}', 'literal', '${secret:GINA_SECRET_TR2}'] };
         secrets.resolve(conf);
         assert.deepStrictEqual(secrets.getResolvedPaths(conf), ['items[0]', 'items[2]']);
     });
@@ -386,8 +386,8 @@ describe('09 - getResolvedPaths tracking', function () {
         process.env.GINA_SECRET_TR1 = 'v1';
         process.env.GINA_SECRET_TR2 = 'v2';
         var conf = {
-            db: { password: '{secret:GINA_SECRET_TR1}' },
-            items: ['{secret:GINA_SECRET_TR2}']
+            db: { password: '${secret:GINA_SECRET_TR1}' },
+            items: ['${secret:GINA_SECRET_TR2}']
         };
         secrets.resolve(conf);
         var paths = secrets.getResolvedPaths(conf).slice().sort();
@@ -408,7 +408,7 @@ describe('09 - getResolvedPaths tracking', function () {
 
     it('paths contain field names only — never the resolved values', function () {
         process.env.GINA_SECRET_TR1 = 'super-secret-value';
-        var conf = { db: { password: '{secret:GINA_SECRET_TR1}' } };
+        var conf = { db: { password: '${secret:GINA_SECRET_TR1}' } };
         secrets.resolve(conf);
         var paths = secrets.getResolvedPaths(conf);
         for (var i = 0; i < paths.length; i++) {
@@ -425,7 +425,7 @@ describe('09 - getResolvedPaths tracking', function () {
 describe('10 - custom backend override', function () {
 
     it('accepts a backend override (used by tests and future plug-ins)', function () {
-        var conf = { k: '{secret:CUSTOM_KEY}' };
+        var conf = { k: '${secret:CUSTOM_KEY}' };
         var backend = {
             resolve: function (key) {
                 if (key === 'CUSTOM_KEY') return 'value-from-custom';
@@ -437,7 +437,7 @@ describe('10 - custom backend override', function () {
     });
 
     it('custom backend errors propagate through unchanged', function () {
-        var conf = { k: '{secret:MISSING}' };
+        var conf = { k: '${secret:MISSING}' };
         var backend = {
             resolve: function () { throw new Error('Secret resolution failed'); }
         };

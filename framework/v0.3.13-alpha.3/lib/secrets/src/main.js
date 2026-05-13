@@ -9,13 +9,13 @@
 
 /**
  * @module lib/secrets
- * @description Substitutes `{secret:KEY}` placeholders in a merged bundle
+ * @description Substitutes `${secret:KEY}` placeholders in a merged bundle
  * config tree at config-load time. The default backend resolves keys from
  * `process.env`; a future iteration may add pluggable backends.
  *
- * **Syntax.** `{secret:KEY}` where `KEY` matches `^[A-Z_][A-Z0-9_]*$`.
+ * **Syntax.** `${secret:KEY}` where `KEY` matches `^[A-Z_][A-Z0-9_]*$`.
  * The placeholder must be the entire JSON string value — mixed-content
- * strings like `'prefix-{secret:K}-suffix'` are passed through unchanged
+ * strings like `'prefix-${secret:K}-suffix'` are passed through unchanged
  * (no substitution attempted).
  *
  * **Timing.** Runs once per bundle slice during `loadBundleConfig`,
@@ -33,7 +33,7 @@
  * @example
  * var secrets = lib.secrets;
  * process.env.DB_PASSWORD = 's3cret';
- * var conf = { db: { password: '{secret:DB_PASSWORD}' }, db_host: 'localhost' };
+ * var conf = { db: { password: '${secret:DB_PASSWORD}' }, db_host: 'localhost' };
  * secrets.resolve(conf);
  * conf.db.password;                  // → 's3cret'
  * secrets.getResolvedPaths(conf);    // → ['db.password']
@@ -42,7 +42,7 @@
  * // Fail-closed when env var is missing:
  * delete process.env.MISSING;
  * try {
- *     secrets.resolve({ a: '{secret:MISSING}' });
+ *     secrets.resolve({ a: '${secret:MISSING}' });
  * } catch (e) {
  *     e.message;   // 'Secret resolution failed'
  * }
@@ -51,14 +51,14 @@
 var defaultBackend = require('./backends/env');
 
 /**
- * Regex matching an entire `{secret:KEY}` placeholder. The capture group
+ * Regex matching an entire `${secret:KEY}` placeholder. The capture group
  * is the key name. Anchored on both ends — embedded placeholders inside
  * longer strings do not match.
  *
  * @constant {RegExp} SECRET_RE
  * @memberof module:lib/secrets
  */
-var SECRET_RE = /^\{secret:([A-Z_][A-Z0-9_]*)\}$/;
+var SECRET_RE = /^\${secret:([A-Z_][A-Z0-9_]*)\}$/;
 
 /**
  * Internal map of resolved-config object → array of dotted paths that
@@ -122,13 +122,13 @@ function walkAndResolve(node, paths, currentPath, backend) {
 }
 
 /**
- * Resolve all `{secret:KEY}` placeholders in `config` in place. Returns
+ * Resolve all `${secret:KEY}` placeholders in `config` in place. Returns
  * the same `config` reference (for chaining).
  *
  * Walks every object key and array element; replaces any string value
- * matching `^\{secret:KEY\}$` with the value returned by `backend.resolve(KEY)`.
+ * matching `^\${secret:KEY\}$` with the value returned by `backend.resolve(KEY)`.
  * Substitution is one-pass — placeholders inside already-resolved values
- * are NOT re-walked. Mixed-content strings (`'prefix-{secret:K}-suffix'`)
+ * are NOT re-walked. Mixed-content strings (`'prefix-${secret:K}-suffix'`)
  * return unchanged.
  *
  * @memberof module:lib/secrets
@@ -142,7 +142,7 @@ function walkAndResolve(node, paths, currentPath, backend) {
  * @example
  * var secrets = lib.secrets;
  * process.env.API_KEY = 'abc';
- * secrets.resolve({ api: { key: '{secret:API_KEY}' } });
+ * secrets.resolve({ api: { key: '${secret:API_KEY}' } });
  * // → { api: { key: 'abc' } }
  *
  * @example
@@ -180,7 +180,7 @@ function resolve(config, backend) {
  * @returns {string[]} Array of substituted dotted paths. Empty if none.
  *
  * @example
- * var conf = { db: { password: '{secret:DB_PASSWORD}' }, items: ['{secret:A}', 'literal'] };
+ * var conf = { db: { password: '${secret:DB_PASSWORD}' }, items: ['${secret:A}', 'literal'] };
  * process.env.DB_PASSWORD = 'pw';
  * process.env.A = 'va';
  * secrets.resolve(conf);
