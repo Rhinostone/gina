@@ -22,6 +22,7 @@ var inherits        = lib.inherits;
 var console         = lib.logger;
 var Collection      = lib.Collection;
 var modelUtil       = new lib.Model();
+var secrets         = lib.secrets;
 
 
 /**
@@ -2746,6 +2747,18 @@ function Config(opt, contextResetNeeded) {
         //     conf[bundle][env].hostname = process.gina.PROXY_HOSTNAME
         // }
         self.envConf[bundle][env] = conf[bundle][env];
+
+        // {secret:KEY} placeholder substitution. Walks the merged config
+        // for this bundle in place, replacing every string value that
+        // matches `^\{secret:KEY\}$` with the value resolved by the env
+        // backend. Runs once per bundle inside the config-load cycle;
+        // downstream reads (getConfig, getInstance) see the resolved
+        // values. Fail-closed: backend throws on unset/empty values.
+        try {
+            secrets.resolve(self.envConf[bundle][env]);
+        } catch (secretErr) {
+            return callback(secretErr);
+        }
 
         ++b;
         if (b < bundles.length) {
