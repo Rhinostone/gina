@@ -464,12 +464,14 @@ describe('09 — #SCS1e source-inspection guards', function () {
         assert.ok(/customRule\.split\(['"]\.['"]\)/.test(MAIN_SRC), 'walker split(".") should be present');
     });
 
-    it('main.js: the three deferred eval sites remain live (intentional)', function () {
-        // Any fix to these must be explicit — they are noted in the #SCS1e
-        // plan as deferred because they need a structural refactor (root-path
-        // assignment in recursive makeObjectFromArgs).
+    it('main.js: cleared the previously-deferred root-path eval sites (#M20 / #SCS1f)', function () {
+        // The three eval(root + ...) sites in makeObjectFromArgs were deferred
+        // at #SCS1e (segments-array structural refactor needed) and shipped at
+        // #M20 / #SCS1f. Lock the cleared state — any re-introduction must be
+        // explicit and conscious. Full parity coverage in
+        // test/lib/validator-scs1f.test.js.
         var live = stripLineComments(MAIN_SRC);
-        assert.ok(/eval\(root \+[^)]*\)/.test(live), 'deferred root-path eval should remain');
+        assert.ok(!/eval\(root \+[^)]*\)/.test(live), 'M20/#SCS1f cleared the deferred root-path eval sites');
     });
 
     it('form-validator.js: cleared eval at compileError (#SCS1e)', function () {

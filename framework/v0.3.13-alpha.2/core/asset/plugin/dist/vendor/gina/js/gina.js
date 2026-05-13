@@ -12509,39 +12509,75 @@ function ValidatorPlugin(rules, data, formId) {
 
 
     /**
-     * makeObjectFromArgs
+     * setByPath — Safe property setter that walks a segments array and
+     * assigns a value at the terminal segment, creating intermediate
+     * `{}` / `[]` based on the next segment's type (numeric → array,
+     * otherwise object).
      *
+     * @inner
+     * @private
      *
-     * @param {string} root
-     * @param {array} args
-     * @param {object} obj
-     * @param {number} len
-     * @param {number} i
-     * @param {string|object} value
-     * @param {object} [rootObj]
+     * @param {object|array} rootObj - Root container to mutate in place.
+     * @param {array} segments - Path keys (numbers for array indices, strings for object props).
+     * @param {*} value - Value to assign at the terminal segment.
      *
-     * @returns {Object} rootObj
+     * @returns {void}
+     *
+     * @example
+     *   var root = {};
+     *   setByPath(root, ['foo', 'bar'], 42);
+     *   // root === { foo: { bar: 42 } }
+     *
+     * @example
+     *   var root = {};
+     *   setByPath(root, ['items', 0], 'first');
+     *   // root === { items: ['first'] }
+     */
+    var setByPath = function(rootObj, segments, value) {
+        var cur = rootObj;
+        for (var i = 0; i < segments.length - 1; i++) {
+            var seg = segments[i];
+            if ( cur[seg] === undefined || cur[seg] === null ) {
+                cur[seg] = (typeof segments[i + 1] === 'number') ? [] : {};
+            }
+            cur = cur[seg];
+        }
+        cur[segments[segments.length - 1]] = value;
+    };
+
+
+    /**
+     * makeObjectFromArgs — Recursive builder of a nested object/array tree
+     * from a flat segments array. Threads a `rootSegments` path through the
+     * recursion and assigns at the terminal via `setByPath`.
+     *
+     * #M20: replaced the previous string-path accumulator and runtime
+     * evaluation with the segments-array + safe setter (see `setByPath`
+     * above).
+     *
+     * @inner
+     * @private
+     *
+     * @param {array} _root - Initial path segments (overwritten in init branch on first call).
+     * @param {array} args - Bracketed key sequence.
+     * @param {object} _obj - Current sub-tree being walked.
+     * @param {number} len - args.length.
+     * @param {number} i - Current index into args.
+     * @param {*} _value - Terminal value to assign.
+     * @param {object} [_rootObj] - Accumulator root object (null on first call).
+     *
+     * @returns {Object} A `JSON.clone`d snapshot of the assembled root tree.
      */
     var makeObjectFromArgs = function(_root, args, _obj, len, i, _value, _rootObj) {
 
-        // Closure Compiler requirements
-        var _global = window['gina']['_global'];
-        // js_externs
-        _global.register({
-            'root'      : _root || null,
-            'obj'       : _obj || null,
-            'value'     : _value || null,
-            'rootObj'   : _rootObj || null
-        });
-
+        var rootSegments = Array.isArray(_root) ? _root : ['rootObj'];
+        var obj          = _obj || null;
+        var value        = _value || null;
+        var rootObj      = _rootObj || null;
 
         if (i == len) { // end
-            eval(root +'=value');
-            // backup result
-            var result = JSON.clone(rootObj);
-            // cleanup _global
-            _global.unregister(['root', 'obj', 'rootObj', 'value', 'valueType']);
-            return result
+            setByPath(rootObj, rootSegments.slice(1), value);
+            return JSON.clone(rootObj);
         }
 
         var key = args[i].replace(/^\[|\]$/g, '');
@@ -12549,22 +12585,19 @@ function ValidatorPlugin(rules, data, formId) {
         // init root object
         if ( typeof(rootObj) == 'undefined' || !rootObj ) {
             rootObj = {};
-            root = 'rootObj';
+            rootSegments = ['rootObj'];
 
-            root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
-            eval(root +'=obj');
+            rootSegments.push((/^\d+$/.test(key)) ? parseInt(key, 10) : key);
+            setByPath(rootObj, rootSegments.slice(1), obj);
         } else {
-            root += (/^\d+$/.test(key)) ? '['+ key + ']' : '["'+ key +'"]';
+            rootSegments.push((/^\d+$/.test(key)) ? parseInt(key, 10) : key);
         }
 
 
         var nextKey = ( typeof(args[i + 1]) != 'undefined' ) ? args[i + 1].replace(/^\[|\]$/g, '') : null;
         var valueType = ( nextKey && parseInt(nextKey) == nextKey ) ? [] : {};
-        _global.register({
-            'valueType' : valueType
-        });
         if ( nextKey ) {
-            eval(root +' = valueType');
+            setByPath(rootObj, rootSegments.slice(1), valueType);
         }
 
         if ( typeof(obj[key]) == 'undefined' ) {
@@ -12576,11 +12609,11 @@ function ValidatorPlugin(rules, data, formId) {
             }
 
             ++i;
-            return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
+            return makeObjectFromArgs(rootSegments, args, obj[key], len, i, value, rootObj);
         }
 
         ++i;
-        return makeObjectFromArgs(root, args, obj[key], len, i, value, rootObj);
+        return makeObjectFromArgs(rootSegments, args, obj[key], len, i, value, rootObj);
     }
 
 
