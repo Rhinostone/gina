@@ -156,6 +156,16 @@ Cross-site request forgery protection. Three-phase defense-in-depth plan aligned
 
 ---
 
+## Secrets & Configuration
+
+Secrets handling for bundle JSON configs without baking plaintext values into source. Pluggable-backend design with `process.env` as the default; the reserved API surface allows future Vault / SOPS / K8s Secrets backends to slot in without changing call sites or the placeholder syntax.
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| ✅ | **`${secret:KEY}` placeholder substitution** — `lib/secrets` resolves `${secret:KEY}` placeholders embedded in bundle JSON configs (`settings.json`, `app.json`, `connectors.json`, `mcp.json`, etc.) at config-load time. Anchored regex matches the entire string value only — mixed strings (`"prefix-${secret:K}-suffix"`) pass through unchanged. Default backend reads `process.env[KEY]`; pluggable-backend interface reserved for a future iteration. Fails closed (throws `Error('Secret resolution failed')`) when an env var is unset or empty; the error message intentionally omits the key name. Resolution is once per config-load cycle (in-place mutation). `WeakMap`-backed path tracking enables a future log-redaction wrapper at merged-conf print sites. Hooked inside `core/config.js::loadBundleConfig`, so downstream readers (`getConfig()`, plugin factories) see resolved values transparently. **Consumers shipped**: `gina.plugins.Csrf()` reads `settings.csrf.secret` (precedence `opts.secret` > `settings.csrf.secret` > `process.env.GINA_CSRF_SECRET` for back-compat); `gina bundle:mcp-start` re-runs the resolver on the parsed `mcp.json` immediately after `requireJSON()` so `server.authToken` and any future placeholder field gets filled before downstream readers; bundle scaffolding (`project:add` / `bundle:add`) recommends the placeholder shape in `core/template/conf/settings.json` and `core/template/boilerplate/bundle/index.js`. 33 tests in `test/core/config-secrets-resolver.test.js`. | `0.3.13-alpha` | 2026-05-13 |
+
+---
+
 ## Connectors
 
 New database connectors follow the same interface as the existing Couchbase connector: declared in `connectors.json`, acquired via `getConnection()`.
