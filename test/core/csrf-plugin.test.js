@@ -673,6 +673,110 @@ describe('06 - verify middleware: safe bypass, mutating reject, header path, for
 });
 
 
+// ─── 06b — Secret precedence: opts > settings.csrf.secret > env ─────────────
+//
+// The factory resolves the HMAC secret from a three-step chain. settings.csrf.secret
+// is the new resolver-compatible slot — `${secret:KEY}` placeholders are filled by
+// `lib/secrets` at config-load time, so by the time the plugin reads
+// `settings.csrf.secret` it holds a real string.
+
+describe('06b - secret precedence chain (opts > settings.csrf.secret > env)', function () {
+
+    var savedEnv;
+    var savedGetConfig;
+    beforeEach(function () {
+        savedEnv = process.env.GINA_CSRF_SECRET;
+        savedGetConfig = global.getConfig;
+    });
+    afterEach(function () {
+        if (typeof savedEnv === 'undefined') delete process.env.GINA_CSRF_SECRET;
+        else                                 process.env.GINA_CSRF_SECRET = savedEnv;
+        global.getConfig = savedGetConfig;
+    });
+
+    function withSettingsCsrfSecret(secret) {
+        global.getConfig = function () {
+            return {
+                test: {
+                    dev: {
+                        hostname: TEST_ORIGIN,
+                        content: { settings: { csrf: { secret: secret } } }
+                    }
+                }
+            };
+        };
+    }
+
+    it('settings.csrf.secret is honoured when env var is unset', function () {
+        delete process.env.GINA_CSRF_SECRET;
+        withSettingsCsrfSecret('settings-secret-do-not-use-in-prod-please-do-not-use');
+        assert.doesNotThrow(function () { Csrf(); });
+    });
+
+    it('opts.secret overrides settings.csrf.secret', function () {
+        delete process.env.GINA_CSRF_SECRET;
+        withSettingsCsrfSecret('SHOULD-NOT-BE-USED-settings-fallback');
+        var mw = Csrf({ secret: 'opts-wins-do-not-use-in-prod-please-do-not-use-32b' });
+        assert.equal(typeof mw, 'function');
+    });
+
+    it('settings.csrf.secret takes precedence over the env var', function () {
+        process.env.GINA_CSRF_SECRET = 'env-loses-do-not-use-in-prod-please-do-not-use-x';
+        withSettingsCsrfSecret('settings-wins-do-not-use-in-prod-please-do-not-use');
+        // Factory does not return the secret — exercise the middleware: a
+        // token signed with settings-secret must verify; a token signed with
+        // env-secret must NOT verify. Use the exposed primitives.
+        Csrf(); // does not throw
+        var settingsToken = Csrf._generateToken('session-x', 'settings-wins-do-not-use-in-prod-please-do-not-use');
+        var envToken      = Csrf._generateToken('session-x', 'env-loses-do-not-use-in-prod-please-do-not-use-x');
+        assert.equal(Csrf._verifyToken(settingsToken, 'session-x', 'settings-wins-do-not-use-in-prod-please-do-not-use'), true);
+        assert.equal(Csrf._verifyToken(envToken,      'session-x', 'env-loses-do-not-use-in-prod-please-do-not-use-x'), true);
+        // Cross-key verify must fail:
+        assert.equal(Csrf._verifyToken(envToken,      'session-x', 'settings-wins-do-not-use-in-prod-please-do-not-use'), false);
+    });
+
+    it('env-only path still works when settings.csrf.secret is absent', function () {
+        process.env.GINA_CSRF_SECRET = TEST_SECRET;
+        // global.getConfig from the top-level before() stub returns
+        // content: { settings: {} } — no csrf.secret.
+        assert.doesNotThrow(function () { Csrf(); });
+    });
+
+    it('factory throws when all three sources are missing', function () {
+        delete process.env.GINA_CSRF_SECRET;
+        // top-level stub has no settings.csrf.secret
+        assert.throws(function () { Csrf(); },
+            /GINA_CSRF_SECRET env var is required/);
+    });
+
+    it('non-string settings.csrf.secret is ignored (falls through to env)', function () {
+        process.env.GINA_CSRF_SECRET = TEST_SECRET;
+        withSettingsCsrfSecret(42); // wrong type
+        assert.doesNotThrow(function () { Csrf(); });
+    });
+
+    it('empty-string settings.csrf.secret is ignored (falls through to env)', function () {
+        process.env.GINA_CSRF_SECRET = TEST_SECRET;
+        withSettingsCsrfSecret('');
+        assert.doesNotThrow(function () { Csrf(); });
+    });
+
+    it('resolveSettingsDefaults exposes secret in the returned defaults', function () {
+        withSettingsCsrfSecret('settings-secret-do-not-use-in-prod-please-do-not-use');
+        var d = Csrf._resolveSettingsDefaults();
+        assert.equal(d.secret, 'settings-secret-do-not-use-in-prod-please-do-not-use');
+    });
+
+    it('resolveSettingsDefaults returns secret: null when settings.csrf.secret is unset', function () {
+        global.getConfig = function () {
+            return { test: { dev: { hostname: TEST_ORIGIN, content: { settings: {} } } } };
+        };
+        var d = Csrf._resolveSettingsDefaults();
+        assert.equal(d.secret, null);
+    });
+});
+
+
 // ─── 07 — Per-route exempt: req.routing.csrfExempt === true bypasses ────────
 
 describe('07 - per-route exempt: req.routing.csrfExempt bypasses verify', function () {

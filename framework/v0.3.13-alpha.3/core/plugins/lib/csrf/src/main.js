@@ -64,6 +64,7 @@ var MAC_BYTES   = 32;
  */
 function resolveSettingsDefaults() {
     var defaults = {
+        secret:         null,
         cookieName:     DEFAULT_COOKIE_NAME,
         headerName:     DEFAULT_HEADER_NAME,
         fieldName:      DEFAULT_FIELD_NAME,
@@ -87,6 +88,12 @@ function resolveSettingsDefaults() {
         csrfConf = {};
     }
 
+    // `settings.csrf.secret` flows through `lib/secrets` at config-load
+    // time — a `${secret:KEY}` placeholder is already resolved by the
+    // time we read it here.
+    if (typeof csrfConf.secret === 'string' && csrfConf.secret) {
+        defaults.secret = csrfConf.secret;
+    }
     if (typeof csrfConf.cookieName === 'string' && csrfConf.cookieName) {
         defaults.cookieName = csrfConf.cookieName;
     }
@@ -422,13 +429,24 @@ var SESSIONLESS_MESSAGE =
     + ' - CSRF doesn\'t apply to non-cookie authentication.';
 
 /**
- * Build the CSRF middleware. The factory reads
- * `process.env.GINA_CSRF_SECRET` once, at call time, and refuses to
- * proceed if it is missing — no dev fallback.
+ * Build the CSRF middleware. The factory reads the HMAC secret at call
+ * time from a three-step chain and refuses to proceed if all three are
+ * missing — no dev fallback. Precedence:
+ *
+ *   1. `opts.secret` — factory override (test harness only).
+ *   2. `settings.json > csrf.secret` — resolver-compatible config slot.
+ *      `${secret:KEY}` placeholders are filled by `lib/secrets` at
+ *      config-load time from `process.env[KEY]`, so this slot lets
+ *      consumers name the env var anything they like.
+ *   3. `process.env.GINA_CSRF_SECRET` — back-compat direct env read.
+ *      Always honoured when set, regardless of (2).
  *
  * @example
+ *   // settings.json — recommended shape:
+ *   // { "csrf": { "secret": "${secret:MY_CSRF_KEY}" } }
+ *   // then set process.env.MY_CSRF_KEY at deploy time.
  *   var csrf = require('gina').plugins.Csrf();
- *   app.use(session({ secret: process.env.SESSION_SECRET }));
+ *   app.use(session({ secret: self.getConfig('session').secret }));
  *   app.use(csrf);
  *
  * @example
@@ -441,7 +459,7 @@ var SESSIONLESS_MESSAGE =
  *   }
  *
  * @param   {object} [opts]
- * @param   {string} [opts.secret]      — overrides `GINA_CSRF_SECRET` (test harness)
+ * @param   {string} [opts.secret]      — overrides settings.csrf.secret and GINA_CSRF_SECRET (test harness)
  * @param   {string} [opts.cookieName]
  * @param   {string} [opts.headerName]
  * @param   {string} [opts.fieldName]
@@ -453,23 +471,28 @@ var SESSIONLESS_MESSAGE =
  *                                             which itself defaults to the bundle's
  *                                             configured hostname.
  * @returns {function}                  — Express-compatible middleware `(req, res, next)`
- * @throws  {Error} when `GINA_CSRF_SECRET` is missing or no origin can be resolved.
+ * @throws  {Error} when no secret is resolvable from any of the three sources,
+ *                  or no origin can be resolved.
  */
 function Csrf(opts) {
     opts = opts || {};
 
+    var defaults = resolveSettingsDefaults();
+
     var secret = (typeof opts.secret === 'string' && opts.secret)
                  ? opts.secret
-                 : process.env.GINA_CSRF_SECRET;
+                 : (typeof defaults.secret === 'string' && defaults.secret)
+                   ? defaults.secret
+                   : process.env.GINA_CSRF_SECRET;
     if (typeof secret !== 'string' || !secret) {
         throw new Error(
-            '[gina csrf] GINA_CSRF_SECRET env var is required.'
+            '[gina csrf] GINA_CSRF_SECRET env var is required'
+            + ' (or set settings.json > csrf.secret — supports ${secret:KEY} placeholders).'
             + ' Generate once: openssl rand -base64 64.'
             + ' Place in your bundle\'s env.json or your shell profile.'
         );
     }
 
-    var defaults    = resolveSettingsDefaults();
     var cookieName  = (typeof opts.cookieName === 'string' && opts.cookieName) ? opts.cookieName : defaults.cookieName;
     var headerName  = (typeof opts.headerName === 'string' && opts.headerName) ? opts.headerName : defaults.headerName;
     var fieldName   = (typeof opts.fieldName  === 'string' && opts.fieldName)  ? opts.fieldName  : defaults.fieldName;

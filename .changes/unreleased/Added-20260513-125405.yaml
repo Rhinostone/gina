@@ -1,0 +1,3 @@
+kind: Added
+body: '`settings.json > csrf.secret` config slot in `gina.plugins.Csrf()` — flows through the `lib/secrets` resolver, so `${secret:KEY}` placeholders work for the Csrf HMAC secret. Precedence is `opts.secret` (test override) > `settings.csrf.secret` > `process.env.GINA_CSRF_SECRET` (back-compat); existing bundles that set `GINA_CSRF_SECRET` keep working unchanged.'
+time: 2026-05-13T12:54:05.000000+01:00
