@@ -2732,7 +2732,8 @@ function Merge() {
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     // for unit tests
     if ( typeof(JSON.clone) == 'undefined' ) {
-        require('../../../helpers');
+        // #M22 — direct require of the clone primitive instead of helpers/index.js's for-loop loader (which transitively requires lib/logger and returns a partial merge under circular load)
+        JSON.clone = require(__dirname + '/../../../../../utils/prototypes.json_clone');
     }
     // Publish as node.js module
     module.exports = Merge()

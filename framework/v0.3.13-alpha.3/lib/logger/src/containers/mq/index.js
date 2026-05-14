@@ -4,11 +4,8 @@ const fs          = require('fs');
 const net         = require('net');
 const util        = require('util');
 const promisify   = util.promisify;
+// #M22 — merge-eval fallback removed (sister fix to lib/merge/src/main.js direct json_clone require)
 var merge         = require(__dirname +'/../../../../merge');
-if ( typeof(merge) != 'function' ) {
-    // if needed for unit tests
-    merge = eval(fs.readFileSync(__dirname +'/../../../../merge/src/main.js').toString())
-}
 function MqContainer(opt, loggers) {
     var self = {
         // flow or container name/id

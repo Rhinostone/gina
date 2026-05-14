@@ -63,11 +63,8 @@ var merge           = require('../../merge');
 var inherits        = require('../../inherits');
 var helpers         = require('../../../helpers');
 
+// #M22 — merge-eval fallback removed; the circular chain that produced a partial merge was broken at the merge.js side (direct require of utils/prototypes.json_clone instead of helpers/index.js's for-loop loader, which transitively required lib/logger).
 // BO - publishing hack
-if ( typeof(merge) != 'function' ) {
-    // if needed for unit tests
-    merge = eval(fs.readFileSync(__dirname +'/../../merge/src/main.js').toString())
-}
 if ( typeof(JSON.clone) == 'undefined' ) {
     require(__dirname +'/../../../helpers/prototypes')()
 }
