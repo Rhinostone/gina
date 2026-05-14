@@ -1,0 +1,17 @@
+{
+    "name": "Gina Bundle",
+    "short_name": "Gina",
+    "description": "A Gina bundle — edit this manifest to describe your app.",
+    "start_url": "/",
+    "scope": "/",
+    "display": "standalone",
+    "theme_color": "#2b2b2b",
+    "background_color": "#ffffff",
+    "icons": [
+        {
+            "src": "/favicon.ico",
+            "sizes": "any",
+            "type": "image/x-icon"
+        }
+    ]
+}
