@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Bundle scaffolding (project add / bundle add) now shows the `${secret:KEY}` placeholder pattern as the recommended shape for session and CSRF secrets. `core/template/conf/settings.json` documents the new `settings.csrf.secret` slot (placeholder-compatible) alongside the existing GINA_CSRF_SECRET env-var fallback; `core/template/boilerplate/bundle/index.js` shows `self.getConfig(''session'').secret` (with bundle/config/session.json holding a `${secret:SESSION_SECRET}` placeholder) as the recommended session-secret wiring, keeping the direct `process.env.SESSION_SECRET` shape as a back-compat note.'
-time: 2026-05-13T13:07:34.000000+01:00

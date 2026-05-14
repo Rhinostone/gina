@@ -1,3 +1,0 @@
-kind: Added
-body: '`${secret:KEY}` placeholder syntax in bundle JSON configs. Substituted at getConfig() time from process.env[KEY]. Fails closed if the env var is unset or empty. Resolution happens once per config-load cycle (cached). Pluggable-backend support is reserved for a future iteration; only the env-var backend ships in this alpha.'
-time: 2026-05-13T04:06:00.000000+01:00

@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Added terminal-exit closure nulling to render-nunjucks for early per-request memory release, matching render-swig pattern (#M1 retrofit follow-up).'
-time: 2026-05-13T02:46:16.170551+01:00

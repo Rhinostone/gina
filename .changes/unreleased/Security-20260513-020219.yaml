@@ -1,3 +1,0 @@
-kind: Security
-body: 'Replaced eval() in validator nested-key rule construction (Socket #SCS campaign cluster M20).'
-time: 2026-05-13T02:02:19.998573+01:00

@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`requireJSON` line-comment stripping no longer fails when a bundle config combines a URL string with a bare `//` line-comment separator. The previous `indexOf`-into-greedy-match pass collided on the URL `://` and silently skipped the real separator, leaving `JSON.parse` to throw `Expected double-quoted property name`. The pass is now per-line on the leftmost `//`, matching the prior heuristic without the substring collision.'
-time: 2026-05-13T21:06:34.829201+01:00

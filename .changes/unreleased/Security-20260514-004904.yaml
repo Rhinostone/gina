@@ -1,3 +1,0 @@
-kind: Security
-body: 'Documenting the Pattern B eval surface at form-validator.js (user-defined validator function bodies registered on `gina.forms.validators` from disk-loaded `bundle/validators/<name>/main.js` files at framework boot). The eval is load-bearing public API and stays — no behavior change. Adds an in-source trust-model comment block and pins the invariant with `test/lib/validator-scs1i.test.js` (zero writes to `gina.forms.validators` in framework source; zero request-time identifiers around the userValidator source chain). Closes the M21 cluster (#M21c).'
-time: 2026-05-14T00:49:04.949169+01:00
