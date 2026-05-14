@@ -349,3 +349,115 @@ describe('03 - HTTP/2 response trailers (#H10)', function() {
         );
     });
 });
+
+
+// Bundle-compat parity with swig (commit bf474621): three independent edits.
+describe('bundle-compat parity with render-swig (commit bf474621)', function() {
+
+    var _src;
+    function src() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // (1) resolveTemplatePath honours self.setTemplate() override
+    describe('resolveTemplatePath honours _templateOverride', function() {
+
+        it('declares resolveTemplatePath(data, localOptions)', function() {
+            assert.ok(
+                /function\s+resolveTemplatePath\s*\(\s*data\s*,\s*localOptions\s*\)/.test(src()),
+                'expected `function resolveTemplatePath(data, localOptions)` — helper signature changed or reverted'
+            );
+        });
+
+        it('checks localOptions._templateOverride.file before falling back to data.page.view.file', function() {
+            var s = src();
+            var fnMatch = s.match(/function\s+resolveTemplatePath[\s\S]*?\n\}/);
+            assert.ok(fnMatch, 'resolveTemplatePath body not found');
+            var body = fnMatch[0];
+            assert.ok(
+                /localOptions\s*&&\s*localOptions\._templateOverride\s*&&\s*localOptions\._templateOverride\.file/.test(body),
+                'expected _templateOverride.file guard in resolveTemplatePath — setTemplate() honour was reverted'
+            );
+            assert.ok(
+                /var\s+ovFile\s*=\s*localOptions\._templateOverride\.file/.test(body),
+                'expected `var ovFile = localOptions._templateOverride.file` capture'
+            );
+        });
+
+        it('override path skips the namespace prefix block', function() {
+            // The override returns ovFile directly before reaching the
+            // `if (localOptions.namespace)` block further down.
+            var s = src();
+            var fnMatch = s.match(/function\s+resolveTemplatePath[\s\S]*?\n\}/);
+            var body = fnMatch[0];
+            var overrideReturn = body.indexOf('return ovFile');
+            var nsBlock = body.indexOf('localOptions.namespace');
+            assert.ok(overrideReturn > -1, 'expected `return ovFile` early-exit in override branch');
+            assert.ok(nsBlock > overrideReturn, 'override must return before reaching the namespace block (no namespace prefixing)');
+        });
+    });
+
+    // (2) registerUserFilters invokes setup.js with this.engine bound
+    describe('registerUserFilters invokes setup.js with this.engine bound to nunjucks env', function() {
+
+        it('declares registerUserFilters with captured req/res/_next params (#M1 async-race guard)', function() {
+            assert.ok(
+                /function\s+registerUserFilters\s*\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*,\s*req\s*,\s*res\s*,\s*_next\s*\)/.test(src()),
+                'expected `function registerUserFilters(env, self, local, localOptions, req, res, _next)` — captured-locals pattern (mirrors registerGinaFilters); reading local.req/res/next inside the helper would re-introduce the #M1 async-race read'
+            );
+        });
+
+        it('Setup.apply uses captured req/res/_next, not local.req/res/next', function() {
+            var s = src();
+            // The setup invocation must read from the captured locals.
+            assert.ok(
+                /Setup\.apply\(\s*Setup\s*,\s*\[\s*req\s*,\s*res\s*,\s*_next\s*\]\s*\)/.test(s),
+                'expected `Setup.apply(Setup, [req, res, _next])` using captured locals — reading local.req/res/next here defeats the #M1 retrofit'
+            );
+            assert.ok(
+                !/Setup\.apply\(\s*Setup\s*,\s*\[\s*local\.req/.test(s),
+                'must NOT call Setup.apply with [local.req, local.res, local.next] — captured locals only'
+            );
+        });
+
+        it('is guarded by an `env._userSetupDone` idempotency marker', function() {
+            var s = src();
+            assert.ok(
+                /if\s*\(\s*env\._userSetupDone\s*\)\s*return/.test(s),
+                'expected idempotency early-return `if (env._userSetupDone) return` — would re-run setup.js per render'
+            );
+            assert.ok(
+                /env\._userSetupDone\s*=\s*true/.test(s),
+                'expected env._userSetupDone marker to be set after setup invocation'
+            );
+        });
+    });
+
+    // (3) userData merge mirrors render-swig.js — unconditional top-level merge
+    describe('userData merge mirrors render-swig (unconditional top-level merge; userData.page merges INTO data.page)', function() {
+
+        it('merges userData.page INTO data.page rather than clobbering it', function() {
+            var s = src();
+            // The post-patch loop iterates userData.page keys and writes onto
+            // data.page key-by-key, preserving framework-injected page.view etc.
+            assert.ok(
+                /k\s*===\s*'page'[\s\S]{0,160}Object\.keys\(\s*userData\.page\s*\)\.forEach/.test(s),
+                'expected `k === "page"` branch with `Object.keys(userData.page).forEach` — clobber-mode (data.page = userData.page) would erase view metadata'
+            );
+            assert.ok(
+                /data\.page\[\s*pk\s*\]\s*=\s*userData\.page\[\s*pk\s*\]/.test(s),
+                'expected per-key write `data.page[pk] = userData.page[pk]` inside the page-merge branch'
+            );
+        });
+
+        it('keeps the data.page.data stash for the !userData.page branch', function() {
+            // The full-page-shape stash must still exist for templates that branch on layout-dependent shapes.
+            var s = src();
+            assert.ok(
+                /data\.page\.data\s*=/.test(s),
+                'expected data.page.data assignment to remain for full-page-shape stash'
+            );
+        });
+
+    });
+
+});
+
