@@ -22,7 +22,7 @@ Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope
 | ORM / entities | EventEmitter-based entity system; SQL files auto-wired to entity methods |
 | Connectors | Couchbase, MongoDB, ScyllaDB / Cassandra, MySQL, PostgreSQL, Redis, SQLite, AI (LLM) — loaded from project `node_modules` |
 | AI connector | Any LLM provider via named protocol (`anthropic://`, `openai://`, `ollama://`, …) |
-| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.2.0 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
+| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.3.0 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
 | Internationalisation | Per-bundle JSON catalogs, `t()` helper, swig + nunjucks `t` filter, CLDR plurals, ICU MessageFormat opt-in via `t.icu()` |
 | Observability | Built-in `/_gina/metrics` Prometheus endpoint (opt-in, IP-allowlisted) — Node.js process metrics + HTTP counter / duration histogram with cardinality-safe route labels |
 | Hot reload | WatcherService evicts `require.cache` only on file change — zero per-request overhead in dev |
@@ -38,6 +38,16 @@ gina bundle:add api @myproject
 gina bundle:start api @myproject
 open https://localhost:3100
 ```
+
+## What's in 0.3.13
+
+- **`${secret:KEY}` placeholder substitution** (#SECRETS1) — bundle JSON configs (`settings.json`, `app.json`, `connectors.json`, `mcp.json`, …) can embed `${secret:KEY}` placeholders that the framework resolves from `process.env[KEY]` at config-load time, before the merged config reaches `getConfig()` or any plugin factory. Anchored to whole-string values; fails closed on an unset/empty var. `gina.plugins.Csrf()` reads `settings.csrf.secret` through it, and `gina bundle:mcp-start` resolves `mcp.json` placeholders such as `server.authToken`. Pluggable-backend interface reserved for a future iteration; only the `process.env` backend ships now.
+- **Progressive Web App scaffold** (#R6) — `gina view:add` now drops a `manifest.webmanifest` and a cache-first service-worker stub (`sw.js`) into the bundle's `public/` directory, and wires the manifest `<link>`, a `theme-color` `<meta>`, an apple-touch-icon `<link>`, and an inline service-worker registration into the default layout. Zero runtime dependency — static files plus layout tags.
+- **HTTP/2 rapid-reset rate limiter** (#H9) — the Isaac engine now bounds new-stream creation per session in a rolling one-second window; over `maxStreamsPerSecond` (default 200) it sends a `GOAWAY` and closes the session. An application-level layer over the OS-level CVE-2023-44487 mitigation in modern Node.js, complementing `maxSessionRejectedStreams` (which counts refused, not created, streams). Configurable via `settings.json` `http2Options.maxStreamsPerSecond`; `/_gina/info` exposes a `rapidResetBlocked` counter.
+- **Eval-safety campaign completed** (#M20–#M22) — the multi-release effort to remove `eval` / `new Function` call sites from the published tarball is finished. The validator plugin's `makeObjectFromArgs` was refactored to a segments-array path build; the HTML-event-callback evals and the conditional-binding fallback were dropped; and the logger's circular-require `eval(fs.readFileSync(...))` fallbacks were eliminated by fixing the `merge → helpers → logger` cycle at its source. The one remaining eval is a load-bearing public-API site (user-defined form validators), kept by design with a documented trust model and an invariant test.
+- **`@rhinostone/swig` floor bumped to `^2.3.0`** — `2.3.0` drops `yargs` and `terser` from the published package's production dependencies (CLI parsing is now a built-in zero-dependency parser; `terser` moved to `devDependencies`, loaded lazily), so a library install pulls in only `@rhinostone/swig-core` — a smaller transitive tree. No template-engine API or behaviour change.
+- **`requireJSON` comment / URL fix** — `requireJSON` no longer mis-parses JSON config files that combine a `//` line comment with a URL string value (`"key": "https://…"`); the comment-stripping pass is now per-line on the leftmost `//`, so comment-bearing configs with URLs load cleanly.
+- **Dev-mode hot-reload fix** — `refreshCore()` was rebuilding the `lib` / `plugins` `require.cache` entries with their exports objects instead of `Module` instances, crashing the controller render delegates with `Cannot read properties of undefined` after a hot reload; it now lets `require()` rebuild a proper `Module`. Also removed two dormant internal plugin directories (`core/plugins/lib/file/`, `core/plugins/lib/intl/`) with no known consumers — a slightly smaller npm tarball, no functional change.
 
 ## What's in 0.3.12
 
