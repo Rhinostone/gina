@@ -134,13 +134,13 @@ Four focused follow-up sessions to close the deferred gap left by the `0.3.7-alp
 
 ### Eval safety
 
-Complete the removal of `eval` / `new Function` call sites from the published tarball. Four tranches shipped across `0.3.7-alpha.4` / `0.3.7-alpha.5` cleared 13 of 24 catalogued sites; 2 more were removed by deleting orphaned source during the toolbar cleanup (15 of 24 addressed). The validator structural refactor cleared 3 more on `0.3.13-alpha.2` (18 of 24). Two clusters remain, each needing a focused session.
+Complete the removal of `eval` / `new Function` call sites from the published tarball. Four tranches shipped across `0.3.7-alpha.4` / `0.3.7-alpha.5` cleared 13 of 24 catalogued sites; 2 more were removed by deleting orphaned source during the toolbar cleanup (15 of 24 addressed). The validator structural refactor cleared 3 more on `0.3.13-alpha.2` (18 of 24). The two remaining clusters — the feature-intrinsic eval design pass and the logger circular-require refactor — both shipped on `0.3.13-alpha.3`, completing the campaign. The single remaining eval is a load-bearing public-API site (user-defined form validators), kept by design with a documented trust model.
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
 | ✅ | **Validator structural refactor** — Refactored `makeObjectFromArgs` in the validator plugin: the previous string-accumulator path-build + runtime evaluation is replaced by a segments-array threaded through the recursion plus a local safe setter. Cleared 3 eval sites. +27 parity tests in `test/lib/validator-scs1f.test.js`. Browser bundle rebuilt. | `0.3.13-alpha.2` | 2026-05-13 |
-| 📋 | **Feature-intrinsic eval design pass** — 6 sites eval user-supplied JS by design (user-defined form validators, HTML event callbacks on form data attributes). Decision pass: safe-eval sandbox via `vm.Script`, pre-parse to a restricted AST, or formalise "accept and document" with an explicit trust assumption. Outcome may include dropping unused placeholder features. | `0.3.8` | Q1 2027 |
-| 📋 | **Logger circular-require refactor** — 3 load-bearing `eval(fs.readFileSync(...))` fallbacks in the logger work around a circular `merge → helpers → logger` require chain. Restructure the chain so the fallback is no longer needed. Clears the final 3 sites of the campaign. Regression risk touches every logger-consuming test. | `0.3.8` | Q1 2027 |
+| ✅ | **Feature-intrinsic eval design pass** — 6 sites that eval user-supplied JS by design, across 3 patterns (HTML event callbacks, user-defined form validators, conditional binding fallback). The design pass formalised the trust model; the coding slices dropped the HTML-event-callback evals and the conditional-binding fallback, and documented the user-defined-validator site as a load-bearing public API with an invariant test. | `0.3.13-alpha.3` | 2026-05-14 |
+| ✅ | **Logger circular-require refactor** — 3 load-bearing `eval(fs.readFileSync(...))` fallbacks in the logger worked around a circular `merge → helpers → logger` require chain. Fixed at the source of the cycle: `merge.js` now requires the json-clone primitive directly instead of going through the helpers loader, so the circular chain never fires and the 3 eval fallbacks are unreachable and removed. | `0.3.13-alpha.3` | 2026-05-14 |
 
 ---
 
