@@ -1,3 +1,0 @@
-kind: Added
-body: 'The Isaac HTTP/2 server now rate-limits rapid-reset stream floods. When a single connection opens more than maxStreamsPerSecond new streams within a rolling one-second window (default 200), the server sends a GOAWAY and closes that session — a targeted, application-level defense against CVE-2023-44487-style attacks on top of the OS-level fix in modern Node.js. Configurable via settings.json http2Options.maxStreamsPerSecond. The /_gina/info endpoint exposes a new rapidResetBlocked counter.'
-time: 2026-05-14T15:32:34.757068+01:00

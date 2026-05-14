@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed a dev-mode hot-reload crash: refreshCore() overwrote the lib and plugins require.cache entries with their exports objects instead of Module instances, so the controller render delegates threw "Cannot read properties of undefined" after a hot reload.'
-time: 2026-05-14T14:59:20.687907+01:00

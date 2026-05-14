@@ -1,3 +1,0 @@
-kind: Added
-body: 'Bundle scaffolding now includes a starter Progressive Web App setup. Running view:add adds a manifest.webmanifest and a cache-first service-worker stub (sw.js) to the bundle public directory, and the default HTML layout links the manifest, declares a theme colour, and registers the service worker. Add your own icon PNGs and edit the manifest to describe the app.'
-time: 2026-05-14T13:37:55.999494+01:00
