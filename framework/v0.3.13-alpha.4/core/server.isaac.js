@@ -338,6 +338,12 @@ function ServerEngineClass(options) {
         // #H3 — CONTINUATION flood defense (CVE-2024-27316, CVE-2024-27983)
         // #H7 — configurable via settings.json http2Options.maxSessionInvalidFrames (default 1000)
         http2Options.maxSessionInvalidFrames = _h2Opts.maxSessionInvalidFrames || 1000;
+        // #H9 — rapid-reset rate limit: max new streams accepted per session per
+        // rolling 1s window before the session is GOAWAY'd + closed. Defends against
+        // CVE-2023-44487-style rapid-reset floods (open then immediately RST streams
+        // faster than maxConcurrentStreams alone can throttle). Configurable via
+        // settings.json http2Options.maxStreamsPerSecond (default 200).
+        var _maxStreamsPerSec = _h2Opts.maxStreamsPerSecond || 200;
         var http2   = require('http2');
         switch (options.scheme) {
             case 'http':
@@ -358,7 +364,8 @@ function ServerEngineClass(options) {
             activeSessions : 0,
             totalStreams    : 0,
             goawayCount     : 0,
-            rstCount        : 0
+            rstCount        : 0,
+            rapidResetBlocked : 0
         };
         server._h2Metrics = _h2Metrics;
 
@@ -382,6 +389,30 @@ function ServerEngineClass(options) {
 
             session.on('stream', (stream) => {
                 _h2Metrics.totalStreams++;
+
+                // #H9 — rapid-reset rate limit. Count new streams in a rolling 1s
+                // window per session; on breach send GOAWAY(ENHANCE_YOUR_CALM) and
+                // close the session so a flood cannot exhaust the worker.
+                var _now = Date.now();
+                if (typeof session._streamWindowStart === 'undefined' || (_now - session._streamWindowStart) >= 1000) {
+                    session._streamWindowStart = _now;
+                    session._streamWindowCount = 0;
+                }
+                session._streamWindowCount++;
+                if (session._streamWindowCount > _maxStreamsPerSec) {
+                    _h2Metrics.rapidResetBlocked++;
+                    console.warn('[ SERVER ] HTTP/2 rapid-reset rate limit exceeded — ' + session._streamWindowCount + ' streams in <1s (limit ' + _maxStreamsPerSec + '); sending GOAWAY + closing session');
+                    session.goaway(http2.constants.NGHTTP2_ENHANCE_YOUR_CALM);
+                    session.close();
+                    // Deliberately return before registering the per-stream
+                    // `rstCode` listener below: the session is being torn down,
+                    // so the breaching stream needs no per-stream accounting.
+                    // Breached streams are counted by `rapidResetBlocked`, not
+                    // `rstCount` — the two metrics stay cleanly separated
+                    // (proactive block vs. observed client RST_STREAM).
+                    return;
+                }
+
                 stream.on('rstCode', (code) => {
                     if (code !== 0) _h2Metrics.rstCount++;
                 });
@@ -643,7 +674,8 @@ function ServerEngineClass(options) {
                         activeSessions : server._h2Metrics.activeSessions,
                         totalStreams    : server._h2Metrics.totalStreams,
                         goawayCount    : server._h2Metrics.goawayCount,
-                        rstCount       : server._h2Metrics.rstCount
+                        rstCount       : server._h2Metrics.rstCount,
+                        rapidResetBlocked : server._h2Metrics.rapidResetBlocked
                     };
                 }
                 const infoStatus = JSON.stringify(infoPayload);
