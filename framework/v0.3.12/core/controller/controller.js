@@ -1057,6 +1057,40 @@ function SuperController(options) {
      * @param {boolean} [displayInspector] - Show the Gina dev inspector when `true`
      * @returns {void}
      */
+    /**
+     * Override the route's default template path / extension at action time.
+     *
+     * Use case: a controller action that resolves the template dynamically
+     * (e.g. a catch-all router that picks the template by URL pattern). With
+     * Gina's standard 1:1 routing.json → template mapping the rule's
+     * `param.file` is sufficient, but dynamic dispatch needs a runtime
+     * override that survives until render-time.
+     *
+     * The render delegates (controller.render-nunjucks.js,
+     * controller.render-swig.js) read `localOptions._templateOverride`
+     * before falling back to `data.page.view.file`/`.ext`. Setting this
+     * after `setOptions()` has already populated `data.page.view.*` is the
+     * supported way to redirect rendering from inside an action — that
+     * eviction-order is otherwise unreachable from controller code because
+     * `local.options` is closure-private.
+     *
+     * @memberof BaseController
+     * @param {string} file - Template path relative to the bundle's
+     *                        templates root (no extension; pass `ext` separately).
+     * @param {string} [ext] - File extension (with or without leading dot).
+     *                         Defaults to whatever `data.page.view.ext` carries.
+     */
+    this.setTemplate = function (file, ext) {
+        if (!local.options) return; // setOptions hasn't run yet — bail safely
+        if (!local.options._templateOverride) local.options._templateOverride = {};
+        if (typeof file === 'string') {
+            local.options._templateOverride.file = file;
+        }
+        if (typeof ext === 'string' && ext) {
+            local.options._templateOverride.ext = (ext.charAt(0) === '.') ? ext : ('.' + ext);
+        }
+    };
+
     this.renderWithoutLayout = function (data, displayInspector) {
 
         // preventing multiple call of self.renderWithoutLayout() when controller is rendering from another required controller
