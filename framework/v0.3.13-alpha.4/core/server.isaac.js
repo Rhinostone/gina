@@ -64,15 +64,28 @@ var refreshCore = function() {
         }
     }
 
-    // Update lib & helpers
-    delete require.cache[require.resolve(_(libPath +'/index.js', true))];
-    require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
-    require.cache[_(corePath + '/gna.js', true)].exports.lib = require.cache[_(libPath +'/index.js', true)];
+    // Update lib & helpers.
+    //
+    // `require.cache[<path>] = require(<path>)` would overwrite the cache entry
+    // — which Node expects to be a `Module` instance with an `.exports` property
+    // — with the lib registry's *exports object* directly. Subsequent plain
+    // `require('../../lib')` calls then read `require.cache[<path>].exports` and
+    // get `undefined` (the registry object has no `.exports` key), surfacing as
+    // `Cannot read properties of undefined (reading 'Collection')` / `(reading
+    // 'Cache')` etc. in the controller render delegates after a dev-mode hot
+    // reload. Fix: delete the entry and let the next require() rebuild a proper
+    // Module, then point gna.js's captured `.lib` at the fresh exports — the
+    // same `.exports`-preserving shape the loop above already uses.
+    var libIndexPath = _(libPath +'/index.js', true);
+    delete require.cache[require.resolve(libIndexPath)];
+    var freshLib = require( libIndexPath );
+    require.cache[_(corePath + '/gna.js', true)].exports.lib = freshLib;
 
-    // Update plugins
-    delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
-    require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
-    require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
+    // Update plugins — same fix as above.
+    var pluginsIndexPath = _(corePath +'/plugins/index.js', true);
+    delete require.cache[require.resolve(pluginsIndexPath)];
+    var freshPlugins = require( pluginsIndexPath );
+    require.cache[_(corePath + '/gna.js', true)].exports.plugins = freshPlugins;
 }
 
 // Express compatibility

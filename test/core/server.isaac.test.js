@@ -790,3 +790,80 @@ describe("05 - URL query string parsing: '+' → space decoding (#B17)", functio
         );
     });
 });
+
+
+// 06 — refreshCore() require.cache rebuild: Module-vs-exports object
+describe('06 - refreshCore() require.cache rebuild — no exports-object poisoning', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // Slice the refreshCore() function body so the assertions below cannot
+    // false-match similar shapes elsewhere in the file.
+    function refreshCoreRegion() {
+        var s = getSrc();
+        var start = s.indexOf('var refreshCore = function()');
+        assert.ok(start > -1, 'expected `var refreshCore = function()` to be present');
+        var end = s.indexOf('// Express compatibility', start);
+        assert.ok(end > start, 'expected the `// Express compatibility` marker after refreshCore()');
+        return s.slice(start, end);
+    }
+
+    it('rebuilds the lib entry via delete + fresh require (not `require.cache[path] = require(path)`)', function() {
+        assert.match(
+            refreshCoreRegion(),
+            /delete require\.cache\[require\.resolve\(libIndexPath\)\];\s+var freshLib = require\( libIndexPath \);/,
+            'expected `delete require.cache[...]` then `var freshLib = require(libIndexPath)` — rebuild via fresh require'
+        );
+    });
+
+    it('does NOT overwrite require.cache[libPath] with the exports object (the poisoning antipattern)', function() {
+        var region = refreshCoreRegion();
+        assert.ok(
+            region.indexOf("require.cache[_(libPath +'/index.js', true)] = require(") < 0,
+            'require.cache[libPath] must not be assigned the exports object — Node expects a Module instance there'
+        );
+        assert.ok(
+            region.indexOf('require.cache[libIndexPath] =') < 0,
+            'the fresh-binding refactor must not re-introduce a require.cache[libIndexPath] = ... assignment'
+        );
+    });
+
+    it('points gna.js `.exports.lib` at the fresh registry binding', function() {
+        assert.match(
+            refreshCoreRegion(),
+            /require\.cache\[_\(corePath \+ '\/gna\.js', true\)\]\.exports\.lib\s*=\s*freshLib;/,
+            'expected `…/gna.js…].exports.lib = freshLib` — gna must point at the rebuilt registry'
+        );
+    });
+
+    it('applies the same delete + fresh-require + exports.plugins shape to the plugins entry', function() {
+        var region = refreshCoreRegion();
+        assert.match(
+            region,
+            /delete require\.cache\[require\.resolve\(pluginsIndexPath\)\];\s+var freshPlugins = require\( pluginsIndexPath \);/,
+            'expected the plugins entry to use the same rebuild-via-fresh-require shape'
+        );
+        assert.ok(
+            region.indexOf("require.cache[_(corePath +'/plugins/index.js', true)] = require(") < 0,
+            'require.cache[pluginsPath] must not be assigned the exports object'
+        );
+        assert.match(
+            region,
+            /require\.cache\[_\(corePath \+ '\/gna\.js', true\)\]\.exports\.plugins\s*=\s*freshPlugins;/,
+            'expected `…/gna.js…].exports.plugins = freshPlugins`'
+        );
+    });
+
+    it('keeps the correct `.exports`-assigning form for the core-path refresh loop', function() {
+        // The loop that refreshes every other core module already uses the
+        // correct shape — `require.cache[c].exports = require(...)` — which keeps
+        // the Module instance and only swaps `.exports`. The lib/plugins fix
+        // mirrors that intent via delete + fresh require.
+        assert.match(
+            refreshCoreRegion(),
+            /require\.cache\[c\]\.exports\s*=\s*require\(/,
+            'expected the core-path loop to keep `require.cache[c].exports = require(...)`'
+        );
+    });
+
+});
