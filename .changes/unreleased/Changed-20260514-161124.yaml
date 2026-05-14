@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Bumped the @rhinostone/swig dependency floor from ^2.2.0 to ^2.3.0 in framework/v*/package.json. Version 2.3.0 drops yargs and terser from the published package production dependencies — CLI argument parsing is now a built-in zero-dependency parser, and terser (used only by swig compile --minify) moved to devDependencies and loads lazily. A library install of @rhinostone/swig now pulls in only @rhinostone/swig-core, so installing gina has a smaller transitive dependency tree. No template-engine API or behavior change; swigResolver DEFAULT_MIN stays at 2.0.0 since the framework does not depend on any new 2.3.0 API.'
+time: 2026-05-14T16:11:24.44962+01:00
