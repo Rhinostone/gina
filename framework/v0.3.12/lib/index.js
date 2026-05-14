@@ -20,8 +20,26 @@
 //var merge = require('./merge');
 
 /**
- * Library registry constructor — returns a plain object `self`, not `this`.
- * Consumed via `lib = new Lib()` in `gna.js`.
+ * Library registry constructor — mutates `module.exports` in place rather
+ * than returning a fresh object so that any consumer that captures a
+ * reference to `require('./lib')` (or `require('../../lib')`, etc.) before
+ * Lib() finishes executing still ends up with the fully-populated registry
+ * once construction completes. This breaks the `Cannot read properties of
+ * undefined (reading 'X')` class of failures we hit when dev-mode hot-reload
+ * (controller.js's per-render eviction of `controller.render-<engine>.js`)
+ * re-evaluates a controller delegate while lib/index.js is mid-load.
+ *
+ * Pre-fix: `lib = new Lib()` returned a fresh `self`, then
+ * `module.exports = lib` ran at the very end of the file. Anything the
+ * `_require('./...')` calls below transitively required-back saw the
+ * initial empty `module.exports = {}` because the assignment hadn't
+ * happened yet; their captured references never updated.
+ *
+ * Post-fix: `self === module.exports`. Properties land on the *same* object
+ * reference every captured `require('../../lib')` already holds, so
+ * `require('../../lib').Collection` resolves correctly the moment Lib()
+ * has assigned that property — including when the require'r is hit before
+ * Lib() returns.
  *
  * @class Lib
  * @constructor
@@ -42,7 +60,8 @@ function Lib() {
 
 
 
-    var self = {
+    var self = module.exports;
+    Object.assign(self, {
         Config          : _require('./config'),
         //dev     : require('./lib/dev'),//must be at the same level than gina.lib => gina.dev
         inherits        : _require('./inherits'),
@@ -128,7 +147,7 @@ function Lib() {
         // instance with an HTTP endpoint (POST, JSON/SSE negotiation, batch,
         // Mcp-Session-Id lifecycle). Auth / Origin checks land in Phase 2b S2.
         mcpHttp         : _require('./mcp-http'),
-    };
+    });
 
     /**
      * Strip macOS dot-files (`.DS_Store`, `._*`, etc.) from a directory listing.
@@ -151,8 +170,12 @@ function Lib() {
 
     return self
 }
-// Making it global
+// Making it global. `new Lib()` mutates `module.exports` in place and returns
+// the same reference, so `lib === module.exports` post-construction.
 lib = new Lib();
+// `module.exports = lib` at the bottom of this file is now redundant (the
+// assignment in Lib() is what populates the export), but kept as a no-op
+// cap for symmetry with the pre-fix version and as a clear reading anchor.
 
 /**
  * Bootstrap the command dispatcher when running inside the daemon process.
