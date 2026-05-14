@@ -64,15 +64,30 @@ var refreshCore = function() {
         }
     }
 
-    // Update lib & helpers
-    delete require.cache[require.resolve(_(libPath +'/index.js', true))];
-    require.cache[_(libPath +'/index.js', true)] = require( _(libPath +'/index.js', true) );
-    require.cache[_(corePath + '/gna.js', true)].exports.lib = require.cache[_(libPath +'/index.js', true)];
+    // Update lib & helpers.
+    //
+    // Pre-fix bug: line `require.cache[<path>] = require(<path>)` overwrote the
+    // require.cache entry — which Node expects to be a `Module` instance with
+    // an `.exports` property — with the lib registry's *exports object* directly.
+    // Subsequent `require('../../lib')` calls then read `require.cache[<path>].exports`
+    // and got `undefined` (the registry has no `.exports` key), surfacing as
+    // `Cannot read properties of undefined (reading 'Collection')` /
+    // `(reading 'Cache')` / etc. inside controller.render-nunjucks.js.
+    //
+    // Fix: just delete the cache entry and let the next require() re-evaluate
+    // the module the normal way. Node will rebuild the Module instance with a
+    // fresh `.exports`. Then update gna.js's captured `.lib` reference to point
+    // at the new exports. Same applies to the plugins entry below.
+    var libIndexPath = _(libPath +'/index.js', true);
+    delete require.cache[require.resolve(libIndexPath)];
+    var freshLib = require( libIndexPath );
+    require.cache[_(corePath + '/gna.js', true)].exports.lib = freshLib;
 
     // Update plugins
-    delete require.cache[require.resolve(_(corePath +'/plugins/index.js', true))];
-    require.cache[_(corePath +'/plugins/index.js', true)] = require( _(corePath +'/plugins/index.js', true) );
-    require.cache[_(corePath + '/gna.js', true)].exports.plugins = require.cache[_(corePath +'/plugins/index.js', true)];
+    var pluginsIndexPath = _(corePath +'/plugins/index.js', true);
+    delete require.cache[require.resolve(pluginsIndexPath)];
+    var freshPlugins = require( pluginsIndexPath );
+    require.cache[_(corePath + '/gna.js', true)].exports.plugins = freshPlugins;
 }
 
 // Express compatibility
