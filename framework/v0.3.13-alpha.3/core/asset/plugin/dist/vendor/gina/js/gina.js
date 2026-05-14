@@ -4726,6 +4726,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                         userValidator = gina.forms.validators[v].toString();
                     }
 
+                    // #M21c — Pattern B eval surface (trust-model invariant)
+                    // Load-bearing: user-defined validator function bodies are registered on
+                    // `gina.forms.validators` from disk-loaded `bundle/validators/<name>/main.js`
+                    // files at framework boot. Trust assumption: the source of `userValidator`
+                    // is always disk-sourced at boot — never request-time input (req.*, request.*,
+                    // form values, URL params). End-user data MUST NOT reach this eval.
+                    // Invariant pinned by test/lib/validator-scs1i.test.js (zero write sites for
+                    // `gina.forms.validators` in framework source; zero request-time identifiers
+                    // around the userValidator source chain).
                     self[el][v] = eval('(' + userValidator + ')\n//# sourceURL='+ v +'.js');
                     //self[el][v] = Function('errorMessage', 'errorStack', userValidator);
                 }
