@@ -1,6 +1,6 @@
 {
   "name": "gina-framework",
-  "version": "0.3.13-alpha.3",
+  "version": "0.3.13-alpha.4",
   "dependencies": {
     "@rhinostone/swig": "^2.2.0",
     "intl-messageformat": "^11.2.4",
