@@ -42,6 +42,42 @@ const env               = process.env.NODE_ENV
 ;
 
 /**
+ * IP-allowlist check for admin-grade /_gina/* endpoints (/_gina/info,
+ * /_gina/cache/stats). #S7.
+ *
+ * Reads the allowlist from `process.gina._adminAllowList`, which `gna.js`
+ * populates at bundle init from `app.json` `admin.allowFrom` (defaults to
+ * loopback `['127.0.0.1', '::1']`). Same shape as `lib.metrics.isClientAllowed`
+ * but on a separate axis — admin endpoints expose process state (memory,
+ * uptime, HTTP/2 session counters, cache contents) and are gated separately
+ * from Prometheus scrapes.
+ *
+ * Reads the client IP from `req.socket.remoteAddress` only — never trusts
+ * `X-Forwarded-For` because reverse proxies could spoof it. Normalises
+ * `::ffff:IPv4` (IPv6-mapped IPv4) → `IPv4` so listing `127.0.0.1` matches
+ * both forms.
+ *
+ * Empty allowlist (`[]`) denies everyone — explicit lockdown choice.
+ * Missing `process.gina._adminAllowList` (init not yet fired) falls back
+ * to loopback-only, the safest default.
+ *
+ * @inner
+ * @param {http.IncomingMessage|http2.Http2ServerRequest} req
+ * @returns {boolean} true if client IP is allowed, false otherwise
+ */
+function isAdminClientAllowed(req) {
+    var list = (typeof process.gina === 'object' && process.gina && Array.isArray(process.gina._adminAllowList))
+        ? process.gina._adminAllowList
+        : ['127.0.0.1', '::1'];
+    if (list.length === 0) return false;
+    var ip = (req.socket && req.socket.remoteAddress)
+          || (req.connection && req.connection.remoteAddress)
+          || '';
+    if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
+    return list.indexOf(ip) >= 0;
+}
+
+/**
  * Reloads all core and lib modules from disk by replacing their require.cache
  * entries with fresh exports. Excludes gna.js itself. Also refreshes the
  * plugins index so the running instance picks up any hot-reloaded code.
@@ -663,6 +699,25 @@ function ServerEngineClass(options) {
 
             if ( request.method.toUpperCase() === 'GET' && /\_gina\/info$/i.test(request.url) ) {
 
+                // #S7 — IP allowlist gate. Mirrors the metrics endpoint
+                // gate at L605-621. 403 on deny.
+                if ( !isAdminClientAllowed(request) ) {
+                    var infoForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/info: client IP not in app.json admin.allowFrom' });
+                    var infoForbiddenHeaders = {
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'pragma':        'no-cache',
+                        'expires':       '0',
+                        'content-type':  'application/json; charset=utf8',
+                        'X-Powered-By':  'Gina/' + GINA_VERSION
+                    };
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ...infoForbiddenHeaders });
+                        return response.stream.end(infoForbiddenBody);
+                    }
+                    response.writeHead(403, infoForbiddenHeaders);
+                    return response.end(infoForbiddenBody);
+                }
+
                 var infoPayload = {
                     "cache-is-enabled": server._cacheIsEnabled,
                     "memory"  : process.memoryUsage(),
@@ -705,6 +760,25 @@ function ServerEngineClass(options) {
             }
 
             if ( request.method.toUpperCase() === 'GET' && /\/_gina\/cache\/stats$/i.test(request.url) ) {
+
+                // #S7 — IP allowlist gate. Same shape as the /_gina/info gate above.
+                if ( !isAdminClientAllowed(request) ) {
+                    var cacheStatsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/cache/stats: client IP not in app.json admin.allowFrom' });
+                    var cacheStatsForbiddenHeaders = {
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'pragma':        'no-cache',
+                        'expires':       '0',
+                        'content-type':  'application/json; charset=utf8',
+                        'X-Powered-By':  'Gina/' + GINA_VERSION
+                    };
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ...cacheStatsForbiddenHeaders });
+                        return response.stream.end(cacheStatsForbiddenBody);
+                    }
+                    response.writeHead(403, cacheStatsForbiddenHeaders);
+                    return response.end(cacheStatsForbiddenBody);
+                }
+
                 cache.from(server._cached);
                 const cacheStatsData = JSON.stringify(cache.stats());
                 const cacheStatsHeaders = {

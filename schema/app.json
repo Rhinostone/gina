@@ -67,6 +67,19 @@
           "default": true
         }
       }
+    },
+    "admin": {
+      "type": "object",
+      "description": "Admin-grade /_gina/* endpoint access control. Gates /_gina/info and /_gina/cache/stats on a per-bundle IP allowlist. Same shape as `metrics.allowFrom` but a separate axis — admin endpoints expose process state (memory, uptime, HTTP/2 session counters, cache contents) and are scope-separately from Prometheus scrapes.",
+      "additionalProperties": false,
+      "properties": {
+        "allowFrom": {
+          "type": "array",
+          "description": "IP allowlist for admin /_gina/* endpoints (/_gina/info, /_gina/cache/stats). Requests from any other source receive 403. Defaults to localhost only (127.0.0.1, ::1). Empty array `[]` denies everyone — explicit lockdown choice. Reads from req.socket.remoteAddress only — X-Forwarded-For is NOT trusted because reverse proxies could spoof it.",
+          "items": { "type": "string" },
+          "default": ["127.0.0.1", "::1"]
+        }
+      }
     }
   },
   "definitions": {

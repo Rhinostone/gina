@@ -1162,6 +1162,25 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.warn('[lib.metrics] init skipped: ' + (metricsErr.message || metricsErr));
                                 }
 
+                                // #S7 — admin /_gina/* allowlist init. Reads `admin.allowFrom`
+                                // from app.json; defaults to loopback (127.0.0.1, ::1). Stored
+                                // on process.gina so server.isaac.js's /_gina/info and
+                                // /_gina/cache/stats handlers can gate on it. Same shape as the
+                                // metrics allowlist but a separate axis — admin endpoints expose
+                                // process state and warrant their own access control.
+                                try {
+                                    var _adminAppConf = (typeof gna.getConfig === 'function') ? gna.getConfig('app') : null;
+                                    var _adminAllow   = (_adminAppConf && _adminAppConf.admin && Array.isArray(_adminAppConf.admin.allowFrom))
+                                        ? _adminAppConf.admin.allowFrom.slice()
+                                        : ['127.0.0.1', '::1'];
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._adminAllowList = _adminAllow;
+                                } catch (adminAclErr) {
+                                    console.warn('[admin-acl] init skipped: ' + (adminAclErr.message || adminAclErr));
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._adminAllowList = ['127.0.0.1', '::1'];
+                                }
+
                                 // setting default global middlewares
                                 if ( typeof(instance.use) == 'function' ) {
 

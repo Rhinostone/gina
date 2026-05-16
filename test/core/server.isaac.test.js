@@ -1046,3 +1046,175 @@ describe('06 - refreshCore() require.cache rebuild — no exports-object poisoni
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 08 — #S7 admin-grade /_gina/* IP allowlist
+// ─────────────────────────────────────────────────────────────────────────
+//
+// /_gina/info and /_gina/cache/stats expose process state (memory,
+// uptime, HTTP/2 session counters, cache contents). They are admin-grade
+// endpoints and must be IP-allowlisted at the bundle edge.
+//
+// Mirrors the #OBS1 metrics gate at /_gina/metrics:
+//   - Reads client IP from req.socket.remoteAddress only (NEVER X-Forwarded-For)
+//   - Normalises ::ffff:IPv4 → IPv4
+//   - Empty allowlist `[]` means deny-everyone (explicit lockdown)
+//   - Defaults to loopback `['127.0.0.1', '::1']` when app.json admin.allowFrom omitted
+//   - process.gina._adminAllowList holds the cached list (populated by gna.js at bundle init)
+//
+// 403 JSON `{ error: 'forbidden', message: '...' }` with cache-control headers
+// on deny, mirroring the metrics endpoint's deny shape.
+
+describe('08 - #S7 admin /_gina/* IP allowlist source structure', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('source contains the isAdminClientAllowed helper at module scope', function() {
+        assert.ok(
+            src.indexOf('function isAdminClientAllowed(req)') > -1,
+            'expected `function isAdminClientAllowed(req)` at module scope'
+        );
+    });
+
+    it('helper reads from process.gina._adminAllowList, defaults to loopback', function() {
+        var fnStart = src.indexOf('function isAdminClientAllowed(req)');
+        var fnEnd   = src.indexOf('}', src.indexOf('return list.indexOf(ip) >= 0'));
+        var body    = src.slice(fnStart, fnEnd);
+        assert.ok(body.indexOf('process.gina._adminAllowList') > -1, 'helper must read process.gina._adminAllowList');
+        assert.ok(body.indexOf("'127.0.0.1'") > -1 && body.indexOf("'::1'") > -1, 'helper must default to loopback');
+    });
+
+    it('helper never trusts X-Forwarded-For (reads from req.socket only)', function() {
+        var fnStart = src.indexOf('function isAdminClientAllowed(req)');
+        var fnEnd   = src.indexOf('}', src.indexOf('return list.indexOf(ip) >= 0'));
+        var body    = src.slice(fnStart, fnEnd);
+        assert.ok(body.indexOf('req.socket') > -1, 'helper must read req.socket.remoteAddress');
+        assert.ok(body.indexOf('x-forwarded-for') < 0 && body.indexOf('X-Forwarded-For') < 0,
+            'helper must NOT reference X-Forwarded-For');
+    });
+
+    it('helper normalises ::ffff:IPv4 → IPv4', function() {
+        var fnStart = src.indexOf('function isAdminClientAllowed(req)');
+        var fnEnd   = src.indexOf('}', src.indexOf('return list.indexOf(ip) >= 0'));
+        var body    = src.slice(fnStart, fnEnd);
+        assert.ok(body.indexOf('::ffff:') > -1 && body.indexOf('slice(7)') > -1,
+            'helper must strip the ::ffff: prefix from IPv6-mapped IPv4 addresses');
+    });
+
+    it('/_gina/info handler invokes the gate before responding', function() {
+        var infoMatch = src.indexOf('\\_gina\\/info$');
+        assert.ok(infoMatch > -1, '/_gina/info regex anchor not found');
+        var afterInfo = src.slice(infoMatch, infoMatch + 1200);
+        assert.ok(afterInfo.indexOf('isAdminClientAllowed(request)') > -1,
+            '/_gina/info handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(afterInfo.indexOf("':status': 403") > -1 || afterInfo.indexOf(', 403') > -1,
+            '/_gina/info handler must return 403 on deny');
+    });
+
+    it('/_gina/cache/stats handler invokes the gate before responding', function() {
+        var cacheMatch = src.indexOf('/_gina\\/cache\\/stats$');
+        assert.ok(cacheMatch > -1, '/_gina/cache/stats regex anchor not found');
+        var afterCache = src.slice(cacheMatch, cacheMatch + 1200);
+        assert.ok(afterCache.indexOf('isAdminClientAllowed(request)') > -1,
+            '/_gina/cache/stats handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(afterCache.indexOf("':status': 403") > -1 || afterCache.indexOf(', 403') > -1,
+            '/_gina/cache/stats handler must return 403 on deny');
+    });
+
+    it('gna.js wires the admin allowlist init alongside the metrics init block', function() {
+        var gnaSrc = fs.readFileSync(path.join(require('../fw'), 'core/gna.js'), 'utf8');
+        assert.ok(
+            gnaSrc.indexOf('process.gina._adminAllowList') > -1,
+            'gna.js must set process.gina._adminAllowList at bundle init'
+        );
+        assert.ok(
+            gnaSrc.indexOf('_adminAppConf.admin') > -1 || gnaSrc.indexOf('admin.allowFrom') > -1,
+            'gna.js must read admin.allowFrom from app.json'
+        );
+    });
+
+    it('schema/app.json declares the admin.allowFrom block', function() {
+        var schemaSrc = fs.readFileSync(path.join(require('../fw'), '../../schema/app.json'), 'utf8');
+        var schema    = JSON.parse(schemaSrc);
+        assert.ok(schema.properties.admin, 'schema must declare an `admin` block');
+        assert.ok(schema.properties.admin.properties.allowFrom, 'admin block must declare an `allowFrom` property');
+        assert.equal(schema.properties.admin.properties.allowFrom.type, 'array', 'allowFrom must be an array');
+        assert.deepEqual(schema.properties.admin.properties.allowFrom.default, ['127.0.0.1', '::1'],
+            'allowFrom must default to loopback');
+    });
+
+});
+
+
+describe('08b - #S7 admin allowlist: pure logic replica', function() {
+
+    // Inline replica of isAdminClientAllowed. Takes the allowlist as a parameter
+    // so we can exercise every branch without touching process.gina state.
+    function isAllowed(req, list) {
+        if (list.length === 0) return false;
+        var ip = (req.socket && req.socket.remoteAddress)
+              || (req.connection && req.connection.remoteAddress)
+              || '';
+        if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
+        return list.indexOf(ip) >= 0;
+    }
+
+    it('loopback IPv4 is allowed by default', function() {
+        var req = { socket: { remoteAddress: '127.0.0.1' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), true);
+    });
+
+    it('loopback IPv6 (::1) is allowed by default', function() {
+        var req = { socket: { remoteAddress: '::1' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), true);
+    });
+
+    it('::ffff:127.0.0.1 (IPv6-mapped IPv4 loopback) is normalised and allowed', function() {
+        var req = { socket: { remoteAddress: '::ffff:127.0.0.1' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), true);
+    });
+
+    it('arbitrary public IP is denied by default loopback-only list', function() {
+        var req = { socket: { remoteAddress: '203.0.113.42' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), false);
+    });
+
+    it('private network IP is allowed when listed', function() {
+        var req = { socket: { remoteAddress: '10.0.1.5' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1', '10.0.1.5']), true);
+    });
+
+    it('::ffff:10.0.1.5 (IPv6-mapped non-loopback) is normalised and matched', function() {
+        var req = { socket: { remoteAddress: '::ffff:10.0.1.5' } };
+        assert.equal(isAllowed(req, ['10.0.1.5']), true);
+    });
+
+    it('empty allowlist denies everyone (explicit lockdown)', function() {
+        assert.equal(isAllowed({ socket: { remoteAddress: '127.0.0.1' } }, []), false);
+        assert.equal(isAllowed({ socket: { remoteAddress: '::1' } }, []), false);
+        assert.equal(isAllowed({ socket: { remoteAddress: '10.0.0.1' } }, []), false);
+    });
+
+    it('falls back to req.connection.remoteAddress when req.socket is missing', function() {
+        var req = { connection: { remoteAddress: '127.0.0.1' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), true);
+    });
+
+    it('req with no socket and no connection returns empty IP, denies', function() {
+        var req = {};
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), false);
+    });
+
+    it('X-Forwarded-For header is ignored even when present (spoofing defense)', function() {
+        // The actual socket source is non-loopback; the X-Forwarded-For header
+        // claims to be loopback. Helper must trust the socket, not the header.
+        var req = {
+            socket:  { remoteAddress: '203.0.113.42' },
+            headers: { 'x-forwarded-for': '127.0.0.1' }
+        };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), false,
+            'must NOT trust X-Forwarded-For — reverse proxies could spoof it');
+    });
+
+});
