@@ -48,12 +48,23 @@ function List(opt, cmd) {
                 // Tolerant — fall through with empty ports table.
             }
         }
+        // Full pre-scan of argv. No dispatch inside the loop — separating
+        // parsing from dispatch means flag ordering can't change behaviour
+        // (`--all --format=json` now produces the same JSON output as
+        // `--format=json --all`). The previous in-loop short-circuit on
+        // `!self.projectName` was also the root of the spurious
+        // `[ null ] is not a valid project name` error on the bare
+        // `gina bundle:list` no-arg call: CmdHelper initialises
+        // `cmd.projectName` to `null` (filterArgs only assigns from a
+        // `@<project>` argv token, per `lib/cmd/helper.js:77`), and the
+        // original post-loop dispatch only handled `undefined`.
+        var allFlag = false;
         for (let i=3, len=process.argv.length; i<len; i++) {
             if ( /^\-\-format\=/.test(process.argv[i]) ) {
-                self.format = process.argv[i].split(/\=/)[1]
+                self.format = process.argv[i].split(/\=/)[1];
             }
-            if ( /^\-\-all\=/.test(process.argv[i]) || !self.projectName ) {
-                return listAll()
+            if ( /^\-\-all(\=|$)/.test(process.argv[i]) ) {
+                allFlag = true;
             }
         }
 
@@ -73,16 +84,19 @@ function List(opt, cmd) {
         //     }
         // }
 
-        if ( typeof(self.projectName) == 'undefined' ) {
-            listAll()
-        } else if ( typeof(self.projectName) != 'undefined' && isDefined(self.projectName) ) {
-            listProjectOnly()
+        // Dispatch after the full scan. `self.projectName == null` matches
+        // both null (CmdHelper default) and undefined — either signals "no
+        // project specified", route to listAll().
+        if ( allFlag || self.projectName == null ) {
+            listAll();
+        } else if ( isDefined(self.projectName) ) {
+            listProjectOnly();
         } else {
             console.error('[ '+self.projectName+' ] is not a valid project name.');
-            process.exit(1)
+            process.exit(1);
         }
 
-        process.exit(0)
+        process.exit(0);
     }
 
     /**
