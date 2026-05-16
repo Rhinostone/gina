@@ -1479,3 +1479,193 @@ describe('11 - page.section auto-promotion from route.param.section', function()
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 12 — throwError: stack stripped from JSON wire outside local scope
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Server-side stack frames leak file paths, library versions, and internal
+// function locations to API clients. The XHR/JSON branch of throwError must
+// strip errorObject.stack on the wire for every scope except local (where
+// the dev toolbar's data-xhr panel renders it via events.js:394 →
+// ginaToolbar.update('data-xhr', XHRData)).
+//
+// Gate shape: `if (!_isLocalScope && errorObject && errorObject.stack)
+//              delete errorObject.stack;`
+// Placed after both construction paths converge (after the L5129-5137 fallback
+// initializer) and before serialization at `var errOutput = null, output = ...`.
+
+describe('12 - throwError: stack stripped from JSON wire outside local scope', function() {
+
+    // ── (a) source structure ─────────────────────────────────────────────────
+
+    it('source contains the fail-closed strip gate', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf('!_isLocalScope && errorObject && errorObject.stack') > -1,
+            'expected `!_isLocalScope && errorObject && errorObject.stack` guard'
+        );
+        assert.ok(
+            src.indexOf('delete errorObject.stack;') > -1,
+            'expected `delete errorObject.stack;` inside the guard body'
+        );
+    });
+
+    it('strip gate sits after the L5129-5137 fallback initializer and before serialization', function() {
+        var src         = fs.readFileSync(SOURCE, 'utf8');
+        var fallbackIdx = src.indexOf('stack: msg.stack');
+        var gateIdx     = src.indexOf('!_isLocalScope && errorObject && errorObject.stack');
+        var serializeIdx = src.indexOf('var errOutput = null, output = errorObject.toString()');
+        assert.ok(fallbackIdx > -1, 'fallback initializer literal `stack: msg.stack` not found');
+        assert.ok(gateIdx > -1, 'strip gate not found');
+        assert.ok(serializeIdx > -1, 'serialization site `var errOutput = null, output = errorObject.toString()` not found');
+        assert.ok(
+            fallbackIdx < gateIdx,
+            'strip gate must be AFTER the fallback initializer so both construction paths converge first'
+        );
+        assert.ok(
+            gateIdx < serializeIdx,
+            'strip gate must be BEFORE serialization so JSON.stringify never sees the stack field'
+        );
+    });
+
+    it('source uses the module-load cached _isLocalScope (not a per-request lookup)', function() {
+        var src    = fs.readFileSync(SOURCE, 'utf8');
+        var cached = src.match(/var _isLocalScope\s*=\s*process\.env\.NODE_SCOPE_IS_LOCAL/);
+        assert.ok(cached, 'expected cached `var _isLocalScope = process.env.NODE_SCOPE_IS_LOCAL` per #P19');
+        // Strip gate references the cached boolean, not process.env directly.
+        var gateBlock = src.split('!_isLocalScope && errorObject && errorObject.stack')[1];
+        assert.ok(gateBlock, 'gate block could not be extracted');
+        // Within ~200 chars after the gate header, no per-request env lookup.
+        var window200 = gateBlock.slice(0, 200);
+        assert.ok(
+            window200.indexOf('process.env.NODE_SCOPE_IS_LOCAL') < 0,
+            'gate body must use cached _isLocalScope (#P19), not process.env.NODE_SCOPE_IS_LOCAL'
+        );
+    });
+
+    it('JSDoc on throwError documents the scope-gated stack behaviour', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        var jsdocStart = src.indexOf('Throw error — terminates the request');
+        var fnDecl     = src.indexOf('this.throwError = function(res, code, msg)');
+        assert.ok(jsdocStart > -1, 'expected updated JSDoc description on throwError');
+        assert.ok(fnDecl > -1, 'throwError function declaration not found');
+        var jsdocBlock = src.slice(jsdocStart, fnDecl);
+        assert.ok(
+            jsdocBlock.indexOf('NODE_SCOPE_IS_LOCAL') > -1,
+            'JSDoc must reference NODE_SCOPE_IS_LOCAL'
+        );
+        assert.ok(
+            jsdocBlock.indexOf('strip') > -1 || jsdocBlock.indexOf('stripped') > -1,
+            'JSDoc must mention that stack is stripped outside local scope'
+        );
+    });
+
+    // ── (b) pure logic — inline replica ──────────────────────────────────────
+
+    // Mirrors the gate + serialization shape in controller.js (~L5138-5150).
+    // Takes an isLocalScope bool so both branches can be exercised without
+    // mutating process.env or reloading the controller module.
+    function buildErrOutput(errorObject, isLocalScope) {
+        if (!isLocalScope && errorObject && errorObject.stack) {
+            delete errorObject.stack;
+        }
+        var output = errorObject.toString();
+        if (output == '[object Object]') {
+            return JSON.parse(JSON.stringify(errorObject));
+        }
+        return JSON.parse(JSON.stringify({
+            status : errorObject.status,
+            error  : output,
+            stack  : errorObject.stack || null
+        }));
+    }
+
+    it('local scope: stack preserved on the wire (catch-all path)', function() {
+        var errObj = {
+            status  : 500,
+            error   : 'boom',
+            stack   : 'Error: boom\n    at /server/path/to/controller.js:42'
+        };
+        var out = buildErrOutput(errObj, true);
+        assert.equal(out.stack, 'Error: boom\n    at /server/path/to/controller.js:42');
+        assert.equal(out.status, 500);
+    });
+
+    it('production / beta / testing / unset: stack stripped (catch-all path)', function() {
+        var errObj = {
+            status  : 500,
+            error   : 'boom',
+            stack   : 'Error: boom\n    at /server/path/to/controller.js:42'
+        };
+        var out = buildErrOutput(errObj, false);
+        assert.ok(!('stack' in out), 'stack field must be absent from JSON body');
+        assert.equal(out.status, 500);
+        assert.equal(out.error, 'boom');
+    });
+
+    it('non-local: covers the L5129-5137 fallback construction path', function() {
+        // Mirrors the fallback initializer at L5129-5137 — built from msg.stack.
+        var msg = { stack: 'Error: synth\n    at /server/lib/x.js:9' };
+        var errObj = {
+            status  : 500,
+            error   : 'synth',
+            message : 'synth',
+            stack   : msg.stack
+        };
+        var out = buildErrOutput(errObj, false);
+        assert.ok(!('stack' in out), 'fallback path must also strip stack outside local scope');
+    });
+
+    it('whitelist serialization path: stack becomes null when toString is custom', function() {
+        // Mirrors the L5143-5149 branch where `output != "[object Object]"` —
+        // the wire shape carries `stack: errorObject.stack || null`.
+        var errObj = {
+            status  : 500,
+            error   : 'boom',
+            stack   : 'Error: boom\n    at /server/path/x.js:1',
+            toString: function() { return 'custom error toString'; }
+        };
+        var out = buildErrOutput(errObj, false);
+        assert.equal(out.stack, null, 'stripped stack must serialize to null on the whitelist path');
+        assert.equal(out.error, 'custom error toString');
+    });
+
+    it('whitelist serialization path: stack preserved on local scope', function() {
+        var errObj = {
+            status  : 500,
+            error   : 'boom',
+            stack   : 'Error: boom\n    at /server/path/x.js:1',
+            toString: function() { return 'custom error toString'; }
+        };
+        var out = buildErrOutput(errObj, true);
+        assert.equal(out.stack, 'Error: boom\n    at /server/path/x.js:1');
+    });
+
+    it('no-stack error: gate is a no-op (no crash on missing field)', function() {
+        // Catch-all path (`output == '[object Object]'`) serializes errorObject
+        // as-is — an absent stack stays absent (undefined). The whitelist path
+        // explicitly emits `stack: null`. Both shapes are falsy and correct.
+        var errObj = { status: 400, error: 'bad request' };
+        var outLocal    = buildErrOutput(Object.assign({}, errObj), true);
+        var outNonLocal = buildErrOutput(Object.assign({}, errObj), false);
+        assert.ok(!outLocal.stack, 'absent stack must remain falsy under local scope');
+        assert.ok(!outNonLocal.stack, 'absent stack must remain falsy under non-local scope');
+    });
+
+    it('falsy errorObject: gate is a no-op (defensive `errorObject &&` guard)', function() {
+        // The guard's `errorObject &&` short-circuit guarantees no crash when
+        // errorObject is null/undefined. This test mirrors that defensive shape.
+        function gateOnly(errorObject, isLocalScope) {
+            if (!isLocalScope && errorObject && errorObject.stack) {
+                delete errorObject.stack;
+            }
+            return errorObject;
+        }
+        assert.equal(gateOnly(null, false), null);
+        assert.equal(gateOnly(undefined, false), undefined);
+        assert.equal(gateOnly(null, true), null);
+    });
+
+});

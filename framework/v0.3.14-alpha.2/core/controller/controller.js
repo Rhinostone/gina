@@ -4954,7 +4954,17 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
 
     /**
-     * Throw error
+     * Throw error — terminates the request with an error response.
+     *
+     * Response shape depends on the request type:
+     *   - XHR / non-templated routes → JSON body `{ status, error, stack? }`
+     *   - Templated routes → HTML error page or rendered error template
+     *
+     * The `stack` field is included in the JSON response only when the active
+     * scope is local (`NODE_SCOPE_IS_LOCAL=true`) so the dev toolbar can render
+     * server-side stack frames in its data-xhr panel. Beta, testing, production,
+     * and unset scopes strip the stack to prevent server-internals (file paths,
+     * library versions, internal frames) from leaking to API clients.
      *
      * @param {object} [ res ]
      * @param {number} code
@@ -5134,6 +5144,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         message: msg.message || msg,
                         stack: msg.stack
                     }
+                }
+
+                // Fail-closed: strip server-side stack from the JSON wire outside
+                // local scope so file paths, library versions, and internal stack
+                // frames don't leak to API clients. Local scope keeps it so the
+                // dev toolbar's data-xhr panel can render it (events.js:394 →
+                // ginaToolbar.update('data-xhr', XHRData)).
+                if (!_isLocalScope && errorObject && errorObject.stack) {
+                    delete errorObject.stack;
                 }
 
                 var errOutput = null, output = errorObject.toString();
