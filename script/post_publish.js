@@ -455,6 +455,22 @@ function PostPublish() {
             console.warn('[bumpVersion] Could not update framework package.json: ' + (fwErr.message || fwErr));
         }
 
+        // Update framework/v{new}/VERSION
+        // The file is gitignored and moves with the renameSync above, so its
+        // content stays at whatever the prior publish's updateVersionIfNeeded
+        // wrote. Without this rewrite, VERSION drifts by 1 version every
+        // bumpVersion cycle until the next `npm publish` fires prepare_version.js
+        // — leaves a local dev environment between alpha cuts reporting the
+        // previous version. Sibling to the framework/v{new}/package.json
+        // rewrite above; same "moved with rename, not auto-updated" reasoning.
+        var fwVersionPath = _(newVersionDir + '/VERSION', true);
+        try {
+            fs.writeFileSync(fwVersionPath, newVersion);
+            console.info('[bumpVersion] Updated framework/v' + newVersion + '/VERSION: ' + newVersion);
+        } catch (vErr) {
+            console.warn('[bumpVersion] Could not update framework VERSION: ' + (vErr.message || vErr));
+        }
+
         // Update gna.js — replace all framework version path references
         var gnaJsPath = _(self.gina + '/gna.js', true);
         try {
