@@ -638,30 +638,45 @@ function CmdHelper(cmd, client, debug) {
             }
 
             if ( ! new _(cmd.projectManifestPath).existsSync() ) {
-                if ( !/^project\:(add|import)/.test(cmd.task) ) {
-                    console.warn('Project manifest.json not found. Trying to fix it ...');
-                    // return process.exit(1);
+                // #B16 — project:remove --force tolerates a missing manifest:
+                // registry-only removal (`~/.gina/projects.json` + state-store)
+                // is sufficient to unregister a partially-broken project. The
+                // recreate-from-template branch may itself fail when the
+                // project directory is gone, and the downstream read would
+                // error out. Stub `cmd.projectData` to a minimal shape and
+                // skip both recreate and read. The rest of `loadAssets`
+                // (homedir / bundles / releases / ports) reads `projectData`
+                // only via guarded `typeof != 'undefined'` checks, so a stub
+                // satisfies every downstream consumer for the removal path.
+                if ( /\:remove$/.test(cmd.task) && cmd.params['force'] ) {
+                    console.warn('Project manifest.json not found at '+ cmd.projectManifestPath +' — proceeding with registry-only removal (--force).');
+                    cmd.projectData = { project: cmd.projectName, version: '0.0.0', bundles: {} };
+                } else {
+                    if ( !/^project\:(add|import)/.test(cmd.task) ) {
+                        console.warn('Project manifest.json not found. Trying to fix it ...');
+                        // return process.exit(1);
+                    }
+
+                    // Creating default manifest
+                    var conf        = _(getPath('gina').core +'/template/conf/manifest.json', true);
+                    var contentFile = require(conf);
+                    var dic = {
+                        "project"   : cmd.projectName,
+                        "version"   : "1.0.0",
+                        "scope"     : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ],
+                        "rootDomain": os.hostname()
+                    };
+
+                    contentFile = whisper(dic, contentFile); //data
+                    lib.generator.createFileFromDataSync(
+                        contentFile,
+                        _(cmd.projectManifestPath, true)
+                    );
+                    cmd.projectData = requireJSON(cmd.projectManifestPath);
                 }
-
-                // Creating default manifest
-                var conf        = _(getPath('gina').core +'/template/conf/manifest.json', true);
-                var contentFile = require(conf);
-                var dic = {
-                    "project"   : cmd.projectName,
-                    "version"   : "1.0.0",
-                    "scope"     : cmd.mainConfig['def_scope'][ GINA_SHORT_VERSION ],
-                    "rootDomain": os.hostname()
-                };
-
-                contentFile = whisper(dic, contentFile); //data
-                lib.generator.createFileFromDataSync(
-                    contentFile,
-                    _(cmd.projectManifestPath, true)
-                )
+            } else {
+                cmd.projectData = requireJSON(cmd.projectManifestPath);
             }
-
-
-            cmd.projectData         = requireJSON(cmd.projectManifestPath);
 
             cmd.projectHomedir      = (
                                         typeof(cmd.projects[cmd.projectName].homedir) != 'undefined'

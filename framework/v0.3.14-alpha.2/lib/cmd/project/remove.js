@@ -50,7 +50,18 @@ function Remove(opt, cmd) {
             , force     = ( typeof(self.params['force']) != 'undefined' ) ? self.params['force'] : false;
 
 
+        // #B16 — --force tolerates a missing project directory. The whole
+        // point of --force on a rm command is to honour partial breakage
+        // (dir deleted by hand, failed scaffold, etc.). Without --force,
+        // a missing dir is still a hard error so the user notices the
+        // typo / wrong-machine case.
         if ( !folder.existsSync() ) {
+            if ( force ) {
+                console.warn('project [ '+ self.projectName +' ] not found at '+ folder.toString() +' — proceeding with registry-only removal (--force).');
+                // Skip the prompt and folder rmSync; jump straight to
+                // ports cleanup + projects.json delete via end().
+                return end(true);
+            }
             console.error('project [ '+ self.projectName+' ] was not found at this location: ' + folder.toString() );
             process.exit(1)
         }
