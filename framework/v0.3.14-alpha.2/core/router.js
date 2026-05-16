@@ -118,9 +118,15 @@ function Router(env, scope) {
         // removed: direct pre-load of controller.js — index.js (in dev/cacheless mode) deletes and
         // re-requires controller.js internally, so pre-loading it here caused a double instantiation
         // (Domain constructor, swig init, etc.) on every request. Let index.js own the re-require.
-        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
 
-        SuperController = require.cache[_(corePath +'/controller/index.js', true)];
+        // #B18 — Use the return value of require() directly instead of
+        // re-poisoning the cache slot with `require.cache[path] = require(path)`.
+        // The latter assigns the exports OBJECT (no `.exports` key) into the slot
+        // where Node expects a Module instance; downstream plain `require()`
+        // calls then read `.exports` off a bare exports object and get
+        // `undefined`. router.js was the last latent occurrence of this
+        // antipattern after the `refreshCore()` fix (`add6655e`).
+        SuperController = require(_(corePath +'/controller/index.js', true));
 
         if (_hotReload) _hotReload.core = false; // #M6 — clear flag after eviction
         corePath = null;
@@ -615,12 +621,13 @@ function Router(env, scope) {
                     //if (isCacheless) {
                         // Super controller
                         delete require.cache[require.resolve(_(corePath +'/controller/index.js', true))];
-                        require.cache[_(corePath +'/controller/index.js', true)] = require( _(corePath +'/controller/index.js', true) );
-
                         delete require.cache[require.resolve(filename)];
                     //}
 
-                    var SuperController     = require.cache[_(corePath +'/controller/index.js', true)];
+                    // #B18 — Same fix as the sibling at L116-127. require() returns
+                    // a freshly built Module instance; assigning the exports object
+                    // back into require.cache[path] poisons the slot.
+                    var SuperController     = require(_(corePath +'/controller/index.js', true));
 
 
                     var RequiredController  = require(filename);

@@ -638,3 +638,162 @@ describe('09 - hot-reload dirty-flag logic (#M6)', function() {
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 10 — #B18 router.js require.cache antipattern eviction
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Per llms.txt #104: `require.cache[path] = require(path)` is an antipattern
+// because Node reads `.exports` off each `require.cache` entry on every
+// subsequent `require()`; assigning the bare exports object into the slot
+// (no `.exports` key) makes the next plain `require()` return `undefined`.
+//
+// router.js had two latent occurrences after the `refreshCore()` fix
+// (server.isaac.js commit `add6655e`):
+//   - refreshCoreDependencies() at ~L116-127 (Super controller hot-reload)
+//   - controller-require path at ~L617-627 (per-route Super controller lookup)
+//
+// The fix at both sites: drop the cache-slot poisoning line and use the
+// return value of `require()` directly. The preceding `delete require.cache[
+// require.resolve(path)]` already evicts the slot, so the next `require()`
+// builds a fresh Module instance correctly.
+
+describe('10 - #B18 router.js require.cache antipattern eviction', function() {
+
+    var SOURCE = path.join(require('../fw'), 'core/router.js');
+    var src    = fs.readFileSync(SOURCE, 'utf8');
+
+    // ── (a) source structure — the antipattern is GONE ───────────────────────
+
+    it('no `require.cache[<path>] = require(<path>)` poisoning anywhere in router.js', function() {
+        // Specifically the controller/index.js slot — the only path the old
+        // antipattern reused. Tolerate other unrelated `require.cache[…] = …`
+        // sites if they ever appear (none today), but enforce no occurrence
+        // of the exact poisoning shape on controller/index.js.
+        var poisonRe = /require\.cache\[\s*_\([^)]*controller\/index\.js[^)]*\)\s*\]\s*=\s*require\s*\(/;
+        assert.ok(
+            !poisonRe.test(src),
+            'router.js must not reassign require.cache[controller/index.js] with require() (#B18 antipattern)'
+        );
+    });
+
+    it('no `require.cache[<path>] = require(<path>)` poisoning on controller/controller.js either', function() {
+        var poisonRe = /require\.cache\[\s*_\([^)]*controller\/controller\.js[^)]*\)\s*\]\s*=\s*require\s*\(/;
+        assert.ok(
+            !poisonRe.test(src),
+            'router.js must not reassign require.cache[controller/controller.js] with require()'
+        );
+    });
+
+    it('SuperController is read from the return value of require(), not from require.cache[]', function() {
+        // Two assignment sites — both should use `require(<path>)` directly,
+        // not `require.cache[<path>]`.
+        var assignRe = /SuperController\s*=\s*require\.cache\[/g;
+        var matches  = src.match(assignRe) || [];
+        assert.equal(
+            matches.length, 0,
+            'no `SuperController = require.cache[...]` reads — read from `require(...)` directly'
+        );
+    });
+
+    it('refreshCoreDependencies() preserves the delete-before-require shape', function() {
+        // The function still evicts both slots; only the re-binding shape changed.
+        // Anchor: the function body starts with the two-line eviction block.
+        var refreshFnIdx = src.indexOf('refreshCoreDependencies');
+        assert.ok(refreshFnIdx > -1, 'refreshCoreDependencies function not found');
+        var afterFn = src.slice(refreshFnIdx, refreshFnIdx + 1500);
+        assert.ok(
+            afterFn.indexOf("delete require.cache[require.resolve(_(corePath +'/controller/controller.js'") > -1,
+            'must still delete the controller.js cache entry'
+        );
+        assert.ok(
+            afterFn.indexOf("delete require.cache[require.resolve(_(corePath +'/controller/index.js'") > -1,
+            'must still delete the controller/index.js cache entry'
+        );
+        assert.ok(
+            afterFn.indexOf('SuperController = require(_(corePath') > -1,
+            'must read SuperController from require(...), not from require.cache[...]'
+        );
+    });
+
+    it('controller-require path (~L617) preserves the delete-before-require shape', function() {
+        // The per-route Super controller lookup. Anchor: the comment marker
+        // `//if (isCacheless) {` is unique to this block.
+        var blockIdx = src.indexOf('//if (isCacheless) {');
+        assert.ok(blockIdx > -1, 'controller-require path anchor not found');
+        var afterBlock = src.slice(blockIdx, blockIdx + 800);
+        assert.ok(
+            afterBlock.indexOf("delete require.cache[require.resolve(_(corePath +'/controller/index.js'") > -1,
+            'must still delete the controller/index.js cache entry'
+        );
+        assert.ok(
+            afterBlock.indexOf('delete require.cache[require.resolve(filename)]') > -1,
+            'must still delete the user controller filename cache entry'
+        );
+        assert.ok(
+            afterBlock.indexOf('var SuperController     = require(_(corePath') > -1,
+            'must read SuperController from require(...), not from require.cache[...]'
+        );
+    });
+
+    it('source mentions #B18 at the fix sites for traceability', function() {
+        assert.ok(src.indexOf('#B18') > -1, 'expected #B18 trace marker at the fix sites');
+    });
+
+    // ── (b) pure logic — why the antipattern is wrong ────────────────────────
+
+    it('replica: require.cache[path] = require(path) poisons subsequent require()', function() {
+        // Simulate Node's require.cache lookup semantics.
+        //   - A real Module instance has `.exports`
+        //   - `require.cache[path] = require(path)` stores the exports object directly
+        //   - Next require() reads `.exports` off the cache entry → undefined
+        var fakeCache = {};
+        var modulePath = '/fake/path/to/index.js';
+
+        // The poisoning pattern:
+        function poisonedRequire(path) {
+            var fresh = { greet: function() { return 'hello'; } }; // simulates module exports
+            fakeCache[path] = fresh; // POISON: assigns exports, not Module
+            return fakeCache[path];
+        }
+        function nextPlainRequire(path) {
+            // Node's plain require reads `.exports` off the cache entry.
+            return fakeCache[path] ? fakeCache[path].exports : undefined;
+        }
+        var first = poisonedRequire(modulePath);
+        assert.ok(first.greet, 'first poisoned require returns the exports object directly');
+        assert.equal(nextPlainRequire(modulePath), undefined,
+            'plain require on the poisoned slot returns undefined (the bug)');
+    });
+
+    it('replica: delete + plain require() yields a usable Module reference', function() {
+        // The correct shape:
+        //   - delete require.cache[path]
+        //   - var fresh = require(path)
+        //   - use `fresh` directly
+        var fakeCache = {};
+        var modulePath = '/fake/path/to/index.js';
+
+        function plainRequire(path) {
+            if (!fakeCache[path]) {
+                // simulates Node: creates a Module wrapper holding exports
+                fakeCache[path] = {
+                    exports: { greet: function() { return 'hello'; } }
+                };
+            }
+            return fakeCache[path].exports;
+        }
+        function deleteAndRequire(path) {
+            delete fakeCache[path];
+            return plainRequire(path); // returns exports off a properly-built Module
+        }
+        var fresh = deleteAndRequire(modulePath);
+        assert.ok(fresh.greet, 'fresh exports object is usable');
+        assert.equal(fresh.greet(), 'hello', 'fresh exports object behaves correctly');
+        // And subsequent plainRequire() still works because the slot now holds a Module wrapper.
+        var second = plainRequire(modulePath);
+        assert.equal(second.greet(), 'hello', 'subsequent plain require still works');
+    });
+
+});
