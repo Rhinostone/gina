@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Framework VERSION file no longer drifts by 1 version after each post-publish bumpVersion cycle — post_publish.js now writes framework/v{new}/VERSION alongside the renamed framework directory''s package.json, sibling to the existing gitignored-file rewrite. Without this, VERSION moved with the renameSync but kept the prior publish''s content, so framework/v{new}/VERSION reported the previous version until the next npm publish fired prepare_version.js. No runtime impact today (no readers); fixes the visible drift for anyone inspecting the file directly.'
-time: 2026-05-16T21:19:21.423122+01:00

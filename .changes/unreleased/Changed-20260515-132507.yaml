@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Bumped the @rhinostone/swig dependency floor from ^2.3.0 to ^2.4.0 in framework/v*/package.json and root package.json. Version 2.4.0 adds ternary (a ? b : c) and Elvis (a ?: b) operator support in template expressions — usable in {{ }} output and in tag arguments such as {% if %}, {% set %}, {% for %} — plus two CLI/build fixes (mocha invocation in make coverage; EEXIST guard in swig compile -o). No template-engine API change at the surface gina calls; swigResolver DEFAULT_MIN stays at 2.0.0.'
-time: 2026-05-15T13:25:07.32704+01:00
