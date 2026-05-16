@@ -304,6 +304,18 @@ function ValidatorPlugin(rules, data, formId) {
     }
 
 
+    /**
+     * getFormById
+     *
+     * @param {string} formId
+     *
+     * @returns {object} $form
+     *
+     * @throws {Error} When `formId` resolves via document.getElementById to a non-FORM
+     *                 element. Same shape and root cause as validateFormById's @throws —
+     *                 a sibling <p id="X"> / <div id="X"> shares the id with a later-
+     *                 loaded <form id="X"> (popin / AJAX fragment).
+     * */
     var getFormById = function(formId) {
         var $form = null, _id = formId;
 
@@ -317,8 +329,25 @@ function ValidatorPlugin(rules, data, formId) {
         _id = _id.replace(/\#/, '');
 
         // in case form is created on the fly and is not yet registered
-        if (document.getElementById(_id) != null && typeof (instance['$forms'][_id]) == 'undefined') {
-            initForm( document.getElementById(_id) );
+        var $candidate = document.getElementById(_id);
+        if ($candidate != null && typeof (instance['$forms'][_id]) == 'undefined') {
+
+            // Same fail-loud guard as validateFormById's else branch —
+            // document.getElementById returns the first matching element regardless
+            // of tag, so a sibling <p id="X"> / <div id="X"> / etc. wins over a
+            // later-loaded <form id="X">. Surface the collision instead of letting
+            // initForm register the non-FORM element in instance.$forms (polluting
+            // subsequent lookups) and crash later inside bindForm with
+            // `Cannot read properties of undefined (reading 'length')`.
+            if ( !($candidate instanceof HTMLFormElement) ) {
+                throw new Error(
+                    '[ FormValidator::getFormById(formId) ] `' + _id + '` resolves to <'
+                    + $candidate.tagName + '>, not a FORM. A non-FORM element shares the same id as '
+                    + 'the target form — rename one of them so the id is unique.'
+                );
+            }
+
+            initForm( $candidate );
         }
 
         if ( typeof(instance.$forms[_id]) != 'undefined' ) {
