@@ -4960,11 +4960,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   - XHR / non-templated routes → JSON body `{ status, error, stack? }`
      *   - Templated routes → HTML error page or rendered error template
      *
-     * The `stack` field is included in the JSON response only when the active
-     * scope is local (`NODE_SCOPE_IS_LOCAL=true`) so the dev toolbar can render
-     * server-side stack frames in its data-xhr panel. Beta, testing, production,
-     * and unset scopes strip the stack to prevent server-internals (file paths,
-     * library versions, internal frames) from leaking to API clients.
+     * The `stack` field (JSON) and the `<pre class="stack">` block (fallback
+     * HTML error page) are emitted only when the active scope is local
+     * (`NODE_SCOPE_IS_LOCAL=true`) so the dev toolbar can render server-side
+     * stack frames in its data-xhr panel and the fallback HTML page shows the
+     * trace inline. Beta, testing, production, and unset scopes strip both to
+     * prevent server-internals (file paths, library versions, internal frames)
+     * from leaking to API clients or page viewers. Custom error templates
+     * dispatched via `renderCustomError` are consumer-owned — what the
+     * template renders from `req.params.errorObject` is the consumer's call.
      *
      * @param {object} [ res ]
      * @param {number} code
@@ -5308,7 +5312,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         msgString += '<pre class="'+ eCode +' message">'+ msg.message +'</pre>';
                     }
 
-                    if (msg.stack) {
+                    // Fail-closed: render the stack frame only in local scope
+                    // so file paths, library versions, and internal frames don't
+                    // leak via the fallback HTML error page. Symmetric to the
+                    // JSON wire gate (~L5147). Custom error templates dispatched
+                    // via renderCustomError at L5266-5281 are consumer-owned.
+                    if (msg.stack && _isLocalScope) {
 
                         if (msg.error) {
                             msg.stack = msg.stack.replace(msg.error, '')
@@ -5346,7 +5355,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     if (message) {
                         msgString += '<pre class="'+ eCode +' message">'+ message +'</pre>';
                     }
-                    if (stack) {
+                    // Fail-closed: local scope only — same gate shape as the
+                    // msg-shape site above.
+                    if (stack && _isLocalScope) {
                         msgString += '<pre class="'+ eCode +' stack">'+ stack +'</pre>';
                     }
                 }

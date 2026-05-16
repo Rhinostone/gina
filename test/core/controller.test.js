@@ -1669,3 +1669,171 @@ describe('12 - throwError: stack stripped from JSON wire outside local scope', f
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 13 — throwError HTML branch: <pre class="stack"> rendered only in local scope
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Symmetric to section 12 (JSON wire). The fallback HTML error page —
+// produced inside the L5294+ `var msgString = '<h1 class="status">...'`
+// construction block when no custom error template is configured — must
+// gate its `<pre class="stack">` render on `_isLocalScope` so it doesn't
+// leak server-side stack frames to non-local viewers.
+//
+// Two render sites:
+//   (1) msg-shape   — `if (msg.stack && _isLocalScope) { ... msg.stack mangling + render ... }`
+//   (2) generic-shape — `if (stack && _isLocalScope) { msgString += <pre class=...stack> }`
+//
+// Custom error templates dispatched via `renderCustomError` (L5266-5281)
+// are consumer-owned and out of scope here.
+
+describe('13 - throwError HTML branch: stack rendered only in local scope', function() {
+
+    // ── (a) source structure ─────────────────────────────────────────────────
+
+    it('source contains the msg-shape fail-closed gate', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf('if (msg.stack && _isLocalScope)') > -1,
+            'expected `if (msg.stack && _isLocalScope)` at the msg-shape site'
+        );
+    });
+
+    it('source contains the generic-shape fail-closed gate', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf('if (stack && _isLocalScope)') > -1,
+            'expected `if (stack && _isLocalScope)` at the generic-shape site'
+        );
+    });
+
+    it('both gates sit inside the fallback HTML msgString construction block', function() {
+        var src              = fs.readFileSync(SOURCE, 'utf8');
+        var msgStringIdx     = src.indexOf("var msgString = '<h1 class=\"status\">Error ");
+        var msgGateIdx       = src.indexOf('if (msg.stack && _isLocalScope)');
+        var genericGateIdx   = src.indexOf('if (stack && _isLocalScope)');
+        assert.ok(msgStringIdx > -1, 'msgString anchor not found in source');
+        assert.ok(msgGateIdx > -1, 'msg-shape gate not found');
+        assert.ok(genericGateIdx > -1, 'generic-shape gate not found');
+        assert.ok(msgGateIdx > msgStringIdx, 'msg-shape gate must sit AFTER the msgString anchor');
+        assert.ok(genericGateIdx > msgStringIdx, 'generic-shape gate must sit AFTER the msgString anchor');
+        // generic-shape sits after msg-shape (the if/else branches in source).
+        assert.ok(genericGateIdx > msgGateIdx, 'generic-shape gate must sit AFTER the msg-shape gate');
+    });
+
+    it('source uses the cached _isLocalScope, not a per-request env lookup', function() {
+        // Neither gate body should reach into process.env directly — the
+        // _isLocalScope module cache (controller.js:69, #P19) is the only
+        // valid source.
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        var msgBlock = src.split('if (msg.stack && _isLocalScope)')[1] || '';
+        var genBlock = src.split('if (stack && _isLocalScope)')[1] || '';
+        assert.ok(
+            msgBlock.slice(0, 400).indexOf('process.env.NODE_SCOPE_IS_LOCAL') < 0,
+            'msg-shape gate body must not reference process.env.NODE_SCOPE_IS_LOCAL directly'
+        );
+        assert.ok(
+            genBlock.slice(0, 200).indexOf('process.env.NODE_SCOPE_IS_LOCAL') < 0,
+            'generic-shape gate body must not reference process.env.NODE_SCOPE_IS_LOCAL directly'
+        );
+    });
+
+    it('JSDoc covers the HTML branch policy alongside the JSON branch', function() {
+        var src        = fs.readFileSync(SOURCE, 'utf8');
+        var jsdocStart = src.indexOf('Throw error — terminates the request');
+        var fnDecl     = src.indexOf('this.throwError = function(res, code, msg)');
+        assert.ok(jsdocStart > -1 && fnDecl > -1, 'throwError JSDoc anchors not found');
+        var jsdoc = src.slice(jsdocStart, fnDecl);
+        assert.ok(
+            jsdoc.indexOf('HTML') > -1 || jsdoc.indexOf('<pre class="stack">') > -1,
+            'JSDoc must mention the HTML branch policy'
+        );
+    });
+
+    // ── (b) pure logic — inline replicas mirror the controller.js shapes ─────
+
+    // Mirrors L5294-5323 (msg-shape branch).
+    function renderMsgShape(msg, eCode, isLocalScope) {
+        var msgString = '<h1 class="status">Error '+ (msg.status || 500) +'.</h1>';
+        if (msg.title)   msgString += '<pre class="'+ eCode +' title">'+ msg.title +'</pre>';
+        if (msg.error)   msgString += '<pre class="'+ eCode +' message">'+ msg.error +'</pre>';
+        if (msg.message) msgString += '<pre class="'+ eCode +' message">'+ msg.message +'</pre>';
+        if (msg.stack && isLocalScope) {
+            if (msg.error)   msg.stack = msg.stack.replace(msg.error, '');
+            if (msg.message) msg.stack = msg.stack.replace(msg.message, '');
+            msg.stack = msg.stack.replace('Error:', '').replace(' ', '');
+            msgString += '<pre class="'+ eCode +' stack">'+ msg.stack +'</pre>';
+        }
+        return msgString;
+    }
+
+    // Mirrors L5325-5352 (generic-shape branch).
+    function renderGenericShape(errorObject, eCode, isLocalScope) {
+        var msgString = '<h1 class="status">Error '+ (errorObject.status || 500) +'.</h1>';
+        var title = null, message = null, stack = null;
+        if (errorObject && typeof(errorObject.error)   != 'undefined') title   = errorObject.error;
+        if (errorObject && typeof(errorObject.message) != 'undefined') message = errorObject.message;
+        if (errorObject && typeof(errorObject.stack)   != 'undefined') stack   = errorObject.stack;
+        if (title)   msgString += '<pre class="'+ eCode +' title">'+ title +'</pre>';
+        if (message) msgString += '<pre class="'+ eCode +' message">'+ message +'</pre>';
+        if (stack && isLocalScope) {
+            msgString += '<pre class="'+ eCode +' stack">'+ stack +'</pre>';
+        }
+        return msgString;
+    }
+
+    it('msg-shape local scope: stack <pre> rendered with frame content', function() {
+        var msg = { status: 500, error: 'boom', stack: 'Error: boom\n    at /server/path/x.js:1' };
+        var html = renderMsgShape(msg, '5xx', true);
+        assert.ok(html.indexOf('<pre class="5xx stack">') > -1, 'stack pre must be present in local scope');
+        assert.ok(html.indexOf('/server/path/x.js:1') > -1, 'frame content must be visible in local scope');
+    });
+
+    it('msg-shape non-local scope: stack <pre> absent, no frame content', function() {
+        var msg = { status: 500, error: 'boom', stack: 'Error: boom\n    at /server/path/x.js:1' };
+        var html = renderMsgShape(msg, '5xx', false);
+        assert.ok(html.indexOf('<pre class="5xx stack">') < 0, 'stack pre must be absent outside local scope');
+        assert.ok(html.indexOf('/server/path/x.js:1') < 0, 'frame content must not leak outside local scope');
+    });
+
+    it('generic-shape local scope: stack <pre> rendered with frame content', function() {
+        var errObj = { status: 500, error: 'boom', stack: 'Error: boom\n    at /server/path/y.js:42' };
+        var html = renderGenericShape(errObj, '5xx', true);
+        assert.ok(html.indexOf('<pre class="5xx stack">') > -1, 'stack pre must be present in local scope');
+        assert.ok(html.indexOf('/server/path/y.js:42') > -1, 'frame content must be visible in local scope');
+    });
+
+    it('generic-shape non-local scope: stack <pre> absent, no frame content', function() {
+        var errObj = { status: 500, error: 'boom', stack: 'Error: boom\n    at /server/path/y.js:42' };
+        var html = renderGenericShape(errObj, '5xx', false);
+        assert.ok(html.indexOf('<pre class="5xx stack">') < 0, 'stack pre must be absent outside local scope');
+        assert.ok(html.indexOf('/server/path/y.js:42') < 0, 'frame content must not leak outside local scope');
+    });
+
+    it('non-stack content (title, error, message) renders identically across scopes', function() {
+        // The gate must only affect the stack <pre> — title/error/message
+        // <pre> blocks render the same in any scope.
+        var msg = { status: 500, title: 'Boom', error: 'failed', message: 'Internal' };
+        var localHtml    = renderMsgShape(Object.assign({}, msg), '5xx', true);
+        var nonLocalHtml = renderMsgShape(Object.assign({}, msg), '5xx', false);
+        assert.equal(localHtml, nonLocalHtml, 'non-stack content must render identically in both scopes');
+    });
+
+    it('msg-shape with no stack: gate is a no-op (no crash)', function() {
+        var msg = { status: 400, error: 'bad request' };
+        var localHtml    = renderMsgShape(Object.assign({}, msg), '4xx', true);
+        var nonLocalHtml = renderMsgShape(Object.assign({}, msg), '4xx', false);
+        assert.equal(localHtml, nonLocalHtml, 'absent stack must render the same in both scopes');
+        assert.ok(localHtml.indexOf('<pre class="4xx stack">') < 0, 'no stack pre when no stack field');
+    });
+
+    it('generic-shape with no stack: gate is a no-op (no crash)', function() {
+        var errObj = { status: 400, error: 'bad request' };
+        var localHtml    = renderGenericShape(Object.assign({}, errObj), '4xx', true);
+        var nonLocalHtml = renderGenericShape(Object.assign({}, errObj), '4xx', false);
+        assert.equal(localHtml, nonLocalHtml, 'absent stack must render the same in both scopes');
+        assert.ok(localHtml.indexOf('<pre class="4xx stack">') < 0, 'no stack pre when no stack field');
+    });
+
+});
