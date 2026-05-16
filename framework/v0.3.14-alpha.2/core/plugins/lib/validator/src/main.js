@@ -390,6 +390,12 @@ function ValidatorPlugin(rules, data, formId) {
      * @param {object} [customRule]
      *
      * @returns {object} $form
+     *
+     * @throws {Error} When `formId` resolves via document.getElementById to a non-FORM
+     *                 element (e.g. a sibling <p id="X"> / <div id="X"> sharing the id
+     *                 with a later-loaded <form id="X">). Surfaces the collision instead
+     *                 of crashing later inside bindForm with a cryptic
+     *                 `Cannot read properties of undefined (reading 'length')`.
      * */
     var validateFormById = function(formId, customRule) {
         var $form = null
@@ -433,6 +439,21 @@ function ValidatorPlugin(rules, data, formId) {
             $form   = this.$forms[_id] = instance['$forms'][_id];
         } else { // binding a form out of context (outside of the main instance)
             $target             = document.getElementById(_id);
+
+            // validateFormById was designed for FORM elements. getElementById
+            // returns the first matching element regardless of tag, so a sibling
+            // <p id="X"> / <div id="X"> / etc. wins over a later-loaded
+            // <form id="X">. Surface the collision instead of crashing later
+            // inside bindForm with a cryptic
+            // `Cannot read properties of undefined (reading 'length')`.
+            if ( $target && !($target instanceof HTMLFormElement) ) {
+                throw new Error(
+                    '[ FormValidator::validateFormById(formId) ] `' + _id + '` resolves to <'
+                    + $target.tagName + '>, not a FORM. A non-FORM element shares the same id as '
+                    + 'the target form — rename one of them so the id is unique.'
+                );
+            }
+
             $validator.id           = _id;
             $validator.target       = $target;
 

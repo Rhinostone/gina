@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'FormValidator::validateFormById now fails loud with an actionable error when the resolved id is not an HTMLFormElement — for example when a sibling <p id="X"> or <div id="X"> shares the id with a later-loaded <form id="X"> from a popin or AJAX fragment — instead of crashing later inside bindForm with a cryptic TypeError on the undefined .elements.length access. The error names the offending tag (e.g. `parent` resolves to <P>, not a FORM) and suggests renaming so the underlying id collision is visible from the console message. The guard mirrors the existing instanceof HTMLFormElement discriminator already used in resetErrorsDisplay elsewhere in the same file.'
+time: 2026-05-16T20:46:31.993723+01:00
