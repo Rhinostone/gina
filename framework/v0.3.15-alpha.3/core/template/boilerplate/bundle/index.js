@@ -189,6 +189,19 @@ var ${bundle} = require('gina');
 //    // var xDownloadOptions = ${bundle}.plugins.XDownloadOptions();
 //    // app.use(xDownloadOptions);
 //
+//    // #HDR12 — X-Permitted-Cross-Domain-Policies response header.
+//    // Phase 1.5 (helmet-parity) — CLOSES Phase 1.5. Restricts
+//    // Adobe Flash and PDF readers from honouring cross-domain
+//    // policy files served from this origin.
+//    //   value — one of "none" (default) / "master-only" /
+//    //           "by-content-type" / "all".
+//    // helmet uses { permittedPolicies }; gina uses { value }
+//    // matching the single-token-enum convention.
+//    // Flash EOL since December 2020; mostly no-op in modern
+//    // PDF readers. Defense-in-depth + helmet-parity.
+//    // var xPermittedCrossDomainPolicies = ${bundle}.plugins.XPermittedCrossDomainPolicies();
+//    // app.use(xPermittedCrossDomainPolicies);
+//
 //    // #HDR13 — Cross-Origin-Opener-Policy response header. Reads its
 //    // value from settings.json > coop.value (one of "same-origin",
 //    // "same-origin-allow-popups", "noopener-allow-popups",

@@ -272,6 +272,28 @@
   // the MSDN spec — there is no "open" alternative. No tunable
   // options today.
   "xDownloadOptions": {},
+  // #HDR12 — X-Permitted-Cross-Domain-Policies response header applied
+  // by gina.plugins.XPermittedCrossDomainPolicies(). Phase 1.5
+  // (helmet-parity) — CLOSES Phase 1.5. Restricts Adobe Flash and PDF
+  // readers from honouring cross-domain policy files served from this
+  // origin (defends against the cross-domain-data-read shape).
+  //   value — one of the 4 Adobe spec tokens:
+  //           "none" (default — no cross-domain policy files honoured;
+  //           Flash/PDF cross-origin loading blocked; most restrictive),
+  //           "master-only" (only /crossdomain.xml is honoured),
+  //           "by-content-type" (only Content-Type: text/x-cross-domain-
+  //           policy files honoured; lighter than master-only),
+  //           "all" (any policy file honoured — NOT recommended;
+  //           defeats the header purpose).
+  //           Unknown tokens throw at factory call time.
+  // (Note: helmet uses { permittedPolicies }; gina uses { value }
+  // matching the existing single-token-enum convention.)
+  // Flash is EOL since December 2020; Adobe Reader honoured the header
+  // historically but most modern PDF readers ignore it. Defense-in-
+  // depth + helmet-parity narrative.
+  "xPermittedCrossDomainPolicies": {
+    "value": "none"
+  },
   // #HDR13 — Cross-Origin-Opener-Policy response header applied by
   // gina.plugins.Coop(). Controls how the page's browsing context
   // relates to popups and cross-origin window.opener references on

@@ -59,6 +59,8 @@ function Plugins() {
         XXssProtection      : _require('./lib/security-headers/x-xss-protection'),
         // #HDR11 — X-Download-Options: noopen response header — IE-legacy (helmet-parity).
         XDownloadOptions    : _require('./lib/security-headers/x-download-options'),
+        // #HDR12 — X-Permitted-Cross-Domain-Policies response header — Adobe Flash/PDF legacy (closes Phase 1.5).
+        XPermittedCrossDomainPolicies : _require('./lib/security-headers/x-permitted-cross-domain-policies'),
         // #HDR13 — Cross-Origin-Opener-Policy response header.
         Coop                : _require('./lib/security-headers/coop'),
         // #HDR14 — Cross-Origin-Resource-Policy response header.
