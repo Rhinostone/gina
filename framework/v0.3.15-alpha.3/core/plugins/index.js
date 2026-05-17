@@ -66,7 +66,7 @@ function Plugins() {
         // #HDR14 — Cross-Origin-Resource-Policy response header.
         Corp                : _require('./lib/security-headers/corp'),
         // #HDR15 — Security Headers combined wrapper (composes HDR1-7 + HDR5 + HDR6/13/14).
-        SecurityHeaders     : _require('./lib/security-headers/wrapper')
+        SecurityHeaders     : _require('./lib/security-headers')
     };
 
     return self

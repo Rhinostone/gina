@@ -63,23 +63,23 @@
  * Closes Phase 2 of the gina security-headers track; extended with
  * the Phase 1.5 helmet-parity plugins (HDR8-12) post-Phase-1.5-closure.
  *
- * @module plugins/security-headers/wrapper
+ * @module plugins/security-headers
  */
 
-var XContentTypeOptions             = require('../../x-content-type-options/src/main.js');
-var XFrameOptions                   = require('../../x-frame-options/src/main.js');
-var ReferrerPolicy                  = require('../../referrer-policy/src/main.js');
-var Hsts                            = require('../../hsts/src/main.js');
-var Csp                             = require('../../csp/src/main.js');
-var Coep                            = require('../../coep/src/main.js');
-var OriginAgentCluster              = require('../../origin-agent-cluster/src/main.js');
-var HidePoweredBy                   = require('../../hide-powered-by/src/main.js');
-var XDnsPrefetchControl             = require('../../x-dns-prefetch-control/src/main.js');
-var XXssProtection                  = require('../../x-xss-protection/src/main.js');
-var XDownloadOptions                = require('../../x-download-options/src/main.js');
-var XPermittedCrossDomainPolicies   = require('../../x-permitted-cross-domain-policies/src/main.js');
-var Coop                            = require('../../coop/src/main.js');
-var Corp                            = require('../../corp/src/main.js');
+var XContentTypeOptions             = require('../x-content-type-options/src/main.js');
+var XFrameOptions                   = require('../x-frame-options/src/main.js');
+var ReferrerPolicy                  = require('../referrer-policy/src/main.js');
+var Hsts                            = require('../hsts/src/main.js');
+var Csp                             = require('../csp/src/main.js');
+var Coep                            = require('../coep/src/main.js');
+var OriginAgentCluster              = require('../origin-agent-cluster/src/main.js');
+var HidePoweredBy                   = require('../hide-powered-by/src/main.js');
+var XDnsPrefetchControl             = require('../x-dns-prefetch-control/src/main.js');
+var XXssProtection                  = require('../x-xss-protection/src/main.js');
+var XDownloadOptions                = require('../x-download-options/src/main.js');
+var XPermittedCrossDomainPolicies   = require('../x-permitted-cross-domain-policies/src/main.js');
+var Coop                            = require('../coop/src/main.js');
+var Corp                            = require('../corp/src/main.js');
 
 /**
  * Sub-plugin registry. Order = emission order in the composed chain
