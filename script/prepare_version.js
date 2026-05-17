@@ -204,7 +204,7 @@ function PrepareVersion() {
         // AUTHORS, GOVERNANCE, CONTRIBUTING, package.json contributors,
         // scaffolding template, framework AUTHORS, framework plugin
         // package.json authors).
-        var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+\/package\.json)$/;
+        var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+(\/[^/]+)?\/package\.json)$/;
 
         // Private tokens that must not appear in tracked-file contents.
         // Patterns load from `script/.private-tokens.json` (gitignored,
