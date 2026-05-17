@@ -517,6 +517,11 @@ function PostPublish() {
                         if (updated !== src) {
                             fs.writeFileSync(filePath, updated);
                             console.info('[bumpVersion] Local sync: ' + relPath + ' -> v' + newVersion);
+                        } else {
+                            // Regex didn't match — sidecar lists this file but its embedded
+                            // version isn't currentVersion. Likely stale by >1 cut; the
+                            // warn surfaces it so the operator can investigate.
+                            console.warn('[bumpVersion] Local sync regex did not match in ' + relPath + ' — file may be stale by more than one version');
                         }
                     } catch (fileErr) {
                         console.warn('[bumpVersion] Local sync skipped for ' + relPath + ': ' + (fileErr.message || fileErr));

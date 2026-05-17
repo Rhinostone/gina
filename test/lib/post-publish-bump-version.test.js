@@ -84,3 +84,41 @@ describe('02 - bumpVersion VERSION write ordering vs sibling rewrites', function
     });
 
 });
+
+
+describe('03 - bumpVersion local-sync warns on regex non-match', function () {
+
+    it('warns when the local-sync regex did not match in a sidecar target', function () {
+        assert.ok(
+            SRC.indexOf('[bumpVersion] Local sync regex did not match in') > -1,
+            "expected `[bumpVersion] Local sync regex did not match in` warn — silent-staleness gap fix missing"
+        );
+    });
+
+    it("warn message names the failure mode ('file may be stale by more than one version')", function () {
+        assert.ok(
+            SRC.indexOf('file may be stale by more than one version') > -1,
+            'expected the warn body to include the documented marker phrase — needed for operator triage'
+        );
+    });
+
+    it('warn fires in the else branch of the `if (updated !== src)` local-sync write check', function () {
+        var infoIdx = SRC.indexOf('[bumpVersion] Local sync: ');
+        var warnIdx = SRC.indexOf('[bumpVersion] Local sync regex did not match in');
+        assert.ok(infoIdx > -1, 'success-path info log missing');
+        assert.ok(warnIdx > -1, 'non-match warn log missing');
+        assert.ok(
+            warnIdx > infoIdx,
+            'warn (else branch) should appear AFTER the info log (if branch) in source order'
+        );
+        // The window between the info log and the warn log should hold the
+        // closing `}` of the if-branch + the `else {` opener — keeps the warn
+        // wired to the same conditional rather than orphaned elsewhere.
+        var between = SRC.substring(infoIdx, warnIdx);
+        assert.ok(
+            /\}\s*else\s*\{/.test(between),
+            'expected `} else {` between the info log and the warn log — warn should be the else branch of the same conditional'
+        );
+    });
+
+});
