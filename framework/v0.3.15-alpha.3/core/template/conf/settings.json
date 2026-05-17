@@ -252,6 +252,18 @@
   "corp": {
     "value": "same-origin"
   },
+  // #HDR15 — Security Headers combined wrapper applied by
+  // gina.plugins.SecurityHeaders(). Composes HDR1-7 + HDR5 + HDR6/13/14
+  // in a single mount + one config block. With no opts emits the
+  // SAFE-SET (xContentTypeOptions, xFrameOptions, referrerPolicy, hsts,
+  // originAgentCluster, coop, corp — 7 plugins with per-plugin
+  // defaults). CSP and COEP are opt-in only (must set csp: { directives:
+  // {...} } or coep: true / coep: { value: ... }). Per-sub-config
+  // explicit opt-out via "<key>": false (or null) skips that plugin.
+  // Sub-config shapes match the standalone plugins' settings.json keys
+  // above. Caller opts to SecurityHeaders({...}) override these
+  // settings.
+  "securityHeaders": {},
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved
