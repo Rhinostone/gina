@@ -106,6 +106,20 @@ var ${bundle} = require('gina');
 //    // var hsts = ${bundle}.plugins.Hsts();
 //    // app.use(hsts);
 //
+//    // #HDR5 — Content-Security-Policy response header. Reads its
+//    // directives + reportOnly from settings.json > csp.{directives,
+//    // reportOnly}. **directives is required** — there is no sensible
+//    // cross-bundle default; populate settings.json > csp.directives
+//    // before mounting (see example in settings.json comment) or pass
+//    // them directly here. Strict CSP Level 3 whitelist on directive
+//    // names — typos throw at factory call time. v0 ships static
+//    // directives only; per-response nonce wiring defers to a future
+//    // CSP-aware view-layer plugin. reportOnly:true emits
+//    // Content-Security-Policy-Report-Only for non-enforcing migration
+//    // testing.
+//    // var csp = ${bundle}.plugins.Csp();
+//    // app.use(csp);
+//
 //    // #HDR7 — Origin-Agent-Cluster: ?1 response header. Requests
 //    // origin-keyed agent clustering — same-site cross-origin pages
 //    // get isolated agents (can no longer reach in via document.domain).

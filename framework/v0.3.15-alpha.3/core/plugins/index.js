@@ -45,6 +45,8 @@ function Plugins() {
         ReferrerPolicy      : _require('./lib/referrer-policy'),
         // #HDR4 — HSTS (Strict-Transport-Security) response header.
         Hsts                : _require('./lib/hsts'),
+        // #HDR5 — Content-Security-Policy response header.
+        Csp                 : _require('./lib/csp'),
         // #HDR7 — Origin-Agent-Cluster response header (origin-keyed isolation).
         OriginAgentCluster  : _require('./lib/origin-agent-cluster')
     };

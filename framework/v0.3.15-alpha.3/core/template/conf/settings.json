@@ -159,6 +159,36 @@
     "includeSubDomains": false,
     "preload": false
   },
+  // #HDR5 — Content-Security-Policy response header applied by
+  // gina.plugins.Csp(). Limits which resources the browser may load and
+  // from where; defeats stored XSS and clickjacking-via-frame-ancestors.
+  //   directives — Required object (factory throws at call time if
+  //                missing or empty). Keys are CSP Level 3 directive
+  //                names (case-insensitive; validated against the
+  //                standard whitelist — unknown names throw). Values:
+  //                array of source-list tokens (joined with space), a
+  //                pre-formatted string, true (boolean-only directives
+  //                + "sandbox"), or false (omit). There is no sensible
+  //                cross-bundle default — every bundle has its own
+  //                resource graph. v0 ships STATIC DIRECTIVES ONLY —
+  //                per-response nonce wiring requires template-render
+  //                integration and defers to a future CSP-aware
+  //                view-layer plugin. Example:
+  //                  "csp": {
+  //                    "directives": {
+  //                      "default-src": ["'self'"],
+  //                      "script-src":  ["'self'", "https://cdn.example.com"],
+  //                      "style-src":   ["'self'", "'unsafe-inline'"],
+  //                      "img-src":     ["'self'", "data:"],
+  //                      "upgrade-insecure-requests": true
+  //                    },
+  //                    "reportOnly": false
+  //                  }
+  //   reportOnly — boolean (default false). When true, emits the header
+  //                as Content-Security-Policy-Report-Only — browsers
+  //                report violations but do not block resources. Useful
+  //                for non-enforcing migration testing.
+  "csp": {},
   // #HDR7 — Origin-Agent-Cluster: ?1 response header applied by
   // gina.plugins.OriginAgentCluster(). Requests origin-keyed agent
   // clustering — the page's origin gets its own agent isolated from
