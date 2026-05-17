@@ -129,6 +129,19 @@
   "xFrameOptions": {
     "value": "SAMEORIGIN"
   },
+  // #HDR3 — Referrer-Policy response header applied by
+  // gina.plugins.ReferrerPolicy(). Controls how much referrer information
+  // the browser includes when navigating away from the page or fetching
+  // sub-resources.
+  //   value — one of the 8 W3C tokens: "no-referrer",
+  //           "no-referrer-when-downgrade", "origin",
+  //           "origin-when-cross-origin", "same-origin", "strict-origin",
+  //           "strict-origin-when-cross-origin" (default — matches modern
+  //           browsers since ~2021), "unsafe-url" (dangerous — leaks paths
+  //           and queries). Unknown tokens throw at factory call time.
+  "referrerPolicy": {
+    "value": "strict-origin-when-cross-origin"
+  },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved

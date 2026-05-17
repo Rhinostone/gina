@@ -83,6 +83,16 @@ var ${bundle} = require('gina');
 //    // var xFrameOptions = ${bundle}.plugins.XFrameOptions();
 //    // app.use(xFrameOptions);
 //
+//    // #HDR3 — Referrer-Policy response header. Reads its value from
+//    // settings.json > referrerPolicy.value (one of the 8 W3C tokens;
+//    // default "strict-origin-when-cross-origin" — matches modern
+//    // browsers since ~2021). Caller options always win — pass
+//    // { value: 'no-referrer' } here for stricter privacy or
+//    // { value: 'same-origin' } to suppress all cross-origin referrer
+//    // leakage. Unknown tokens throw at factory call time.
+//    // var referrerPolicy = ${bundle}.plugins.ReferrerPolicy();
+//    // app.use(referrerPolicy);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

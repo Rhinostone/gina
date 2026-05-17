@@ -40,7 +40,9 @@ function Plugins() {
         // #HDR1 — X-Content-Type-Options: nosniff response header.
         XContentTypeOptions : _require('./lib/x-content-type-options'),
         // #HDR2 — X-Frame-Options clickjacking-defense response header.
-        XFrameOptions       : _require('./lib/x-frame-options')
+        XFrameOptions       : _require('./lib/x-frame-options'),
+        // #HDR3 — Referrer-Policy response header.
+        ReferrerPolicy      : _require('./lib/referrer-policy')
     };
 
     return self
