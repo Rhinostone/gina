@@ -93,6 +93,19 @@ var ${bundle} = require('gina');
 //    // var referrerPolicy = ${bundle}.plugins.ReferrerPolicy();
 //    // app.use(referrerPolicy);
 //
+//    // #HDR4 — HSTS (Strict-Transport-Security) response header.
+//    // Reads its three fields from settings.json > hsts.{maxAge,
+//    // includeSubDomains, preload} (defaults: 15552000 = 180 days,
+//    // false, false). Caller options always win. Browser-parity
+//    // invariant: preload:true requires includeSubDomains:true AND
+//    // maxAge>=31536000 (1 year) per the HSTS preload-list submission
+//    // requirements (https://hstspreload.org/); factory throws on
+//    // invariant violations. Only register in HTTPS-only bundles —
+//    // browsers ignore HSTS on HTTP responses anyway, but emitting on
+//    // HTTP is technically RFC 6797 §7.2 noncompliant.
+//    // var hsts = ${bundle}.plugins.Hsts();
+//    // app.use(hsts);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

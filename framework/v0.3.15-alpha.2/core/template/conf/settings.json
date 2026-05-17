@@ -142,6 +142,23 @@
   "referrerPolicy": {
     "value": "strict-origin-when-cross-origin"
   },
+  // #HDR4 — HSTS (Strict-Transport-Security) response header applied by
+  // gina.plugins.Hsts(). Instructs browsers to access the host exclusively
+  // over HTTPS for the next maxAge seconds — defeats SSL-stripping attacks.
+  //   maxAge            — seconds; default 15552000 (180 days).
+  //   includeSubDomains — apply HSTS to all sub-domains too; default false.
+  //   preload           — opt into the HSTS preload list; default false.
+  //                       Browser-parity invariant: preload=true requires
+  //                       includeSubDomains=true AND maxAge>=31536000
+  //                       (1 year) per the HSTS preload-list submission
+  //                       requirements (https://hstspreload.org/). The
+  //                       factory throws at call time on invariant
+  //                       violations.
+  "hsts": {
+    "maxAge": 15552000,
+    "includeSubDomains": false,
+    "preload": false
+  },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved
