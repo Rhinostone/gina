@@ -106,6 +106,17 @@ var ${bundle} = require('gina');
 //    // var hsts = ${bundle}.plugins.Hsts();
 //    // app.use(hsts);
 //
+//    // #HDR7 — Origin-Agent-Cluster: ?1 response header. Requests
+//    // origin-keyed agent clustering — same-site cross-origin pages
+//    // get isolated agents (can no longer reach in via document.domain).
+//    // Mitigates one class of Spectre side-channel attack. No required
+//    // configuration; ?1 is the only useful value per the HTML spec.
+//    // Browser support: Chrome 88+, Edge 88+, Firefox 109+, Safari 15+;
+//    // older browsers ignore silently. Don't register if the bundle
+//    // relies on document.domain to bridge same-site origins.
+//    // var originAgentCluster = ${bundle}.plugins.OriginAgentCluster();
+//    // app.use(originAgentCluster);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

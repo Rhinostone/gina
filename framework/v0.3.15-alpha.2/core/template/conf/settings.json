@@ -159,6 +159,17 @@
     "includeSubDomains": false,
     "preload": false
   },
+  // #HDR7 — Origin-Agent-Cluster: ?1 response header applied by
+  // gina.plugins.OriginAgentCluster(). Requests origin-keyed agent
+  // clustering — the page's origin gets its own agent isolated from
+  // sibling-origin pages (same-site cross-origin pages can no longer
+  // reach in via document.domain). Mitigates one class of Spectre
+  // side-channel attack. No tunable options today (?1 is the only useful
+  // value; ?0 is the browser default and would be a no-op); the block is
+  // reserved for future fields. Register the plugin to opt in; do not
+  // register to opt out. Browser support: Chrome 88+, Edge 88+,
+  // Firefox 109+, Safari 15+. Older browsers ignore silently.
+  "originAgentCluster": {},
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved
