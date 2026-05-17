@@ -20,7 +20,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/corp/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/corp/src/main.js');
 
 var Corp;
 var originalGetContext;
@@ -454,9 +454,9 @@ describe('06 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('Corp is wired to ./lib/corp', function () {
+    it('Corp is wired to ./lib/security-headers/corp', function () {
         assert.ok(
-            /Corp\s*:\s*_require\(\s*['"]\.\/lib\/corp['"]\s*\)/.test(src),
+            /Corp\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/corp['"]\s*\)/.test(src),
             'expected Corp registry entry'
         );
     });

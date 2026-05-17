@@ -24,7 +24,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/wrapper/src/main.js');
 
 var SecurityHeaders;
 var originalGetContext;
@@ -812,9 +812,9 @@ describe('08 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('SecurityHeaders is wired to ./lib/security-headers', function () {
+    it('SecurityHeaders is wired to ./lib/security-headers/wrapper', function () {
         assert.ok(
-            /SecurityHeaders\s*:\s*_require\(\s*['"]\.\/lib\/security-headers['"]\s*\)/.test(src),
+            /SecurityHeaders\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/wrapper['"]\s*\)/.test(src),
             'expected SecurityHeaders registry entry'
         );
     });

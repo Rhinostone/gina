@@ -60,7 +60,7 @@
  * HDR7 shipped in 0.3.15-alpha). Single-header plugin shape — composes
  * cleanly under the future `SecurityHeaders` combined wrapper (#HDR15).
  *
- * @module plugins/csp
+ * @module plugins/security-headers/csp
  */
 
 var HEADER_NAME             = 'content-security-policy';

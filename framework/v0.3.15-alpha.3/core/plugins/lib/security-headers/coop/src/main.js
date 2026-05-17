@@ -61,7 +61,7 @@
  * open, useful for one-way notifications back to the opener via
  * `BroadcastChannel` or `localStorage`).
  *
- * @module plugins/coop
+ * @module plugins/security-headers/coop
  */
 
 var HEADER_NAME    = 'cross-origin-opener-policy';

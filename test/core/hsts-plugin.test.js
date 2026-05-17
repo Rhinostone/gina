@@ -21,7 +21,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/hsts/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/hsts/src/main.js');
 
 var Hsts;
 var originalGetContext;
@@ -578,9 +578,9 @@ describe('08 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('Hsts is wired to ./lib/hsts', function () {
+    it('Hsts is wired to ./lib/security-headers/hsts', function () {
         assert.ok(
-            /Hsts\s*:\s*_require\(\s*['"]\.\/lib\/hsts['"]\s*\)/.test(src),
+            /Hsts\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/hsts['"]\s*\)/.test(src),
             'expected Hsts registry entry'
         );
     });

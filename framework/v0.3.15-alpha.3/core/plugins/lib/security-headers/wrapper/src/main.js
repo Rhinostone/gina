@@ -56,7 +56,7 @@
  *
  * Closes Phase 2 of the gina security-headers track.
  *
- * @module plugins/security-headers
+ * @module plugins/security-headers/wrapper
  */
 
 var XContentTypeOptions  = require('../../x-content-type-options/src/main.js');

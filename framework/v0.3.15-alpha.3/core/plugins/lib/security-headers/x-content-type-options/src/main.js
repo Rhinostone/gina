@@ -28,7 +28,7 @@
  * value — there is no `enabled` flag in the configuration surface; register
  * the plugin to opt in, don't register to opt out.
  *
- * @module plugins/x-content-type-options
+ * @module plugins/security-headers/x-content-type-options
  */
 
 var HEADER_NAME  = 'x-content-type-options';

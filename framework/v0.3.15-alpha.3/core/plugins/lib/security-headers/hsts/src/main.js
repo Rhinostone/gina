@@ -48,7 +48,7 @@
  * spec purity. Bundles that need strict §7.2 compliance can simply not
  * register the plugin in non-HTTPS bundles.
  *
- * @module plugins/hsts
+ * @module plugins/security-headers/hsts
  */
 
 var HEADER_NAME              = 'strict-transport-security';

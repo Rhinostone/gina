@@ -38,7 +38,7 @@
  * factory call time to fail fast (mirrors the #CSRF1 SameSite=None+Secure
  * invariant and the #HDR2 ALLOW-FROM rejection).
  *
- * @module plugins/referrer-policy
+ * @module plugins/security-headers/referrer-policy
  */
 
 var HEADER_NAME    = 'referrer-policy';

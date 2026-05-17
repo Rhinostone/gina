@@ -37,7 +37,7 @@
  * it would be a no-op. There is no `enabled` flag in the configuration
  * surface; register the plugin to opt in, don't register to opt out.
  *
- * @module plugins/origin-agent-cluster
+ * @module plugins/security-headers/origin-agent-cluster
  */
 
 var HEADER_NAME  = 'origin-agent-cluster';

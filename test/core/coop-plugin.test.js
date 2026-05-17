@@ -20,7 +20,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/coop/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/coop/src/main.js');
 
 var Coop;
 var originalGetContext;
@@ -490,9 +490,9 @@ describe('06 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('Coop is wired to ./lib/coop', function () {
+    it('Coop is wired to ./lib/security-headers/coop', function () {
         assert.ok(
-            /Coop\s*:\s*_require\(\s*['"]\.\/lib\/coop['"]\s*\)/.test(src),
+            /Coop\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/coop['"]\s*\)/.test(src),
             'expected Coop registry entry'
         );
     });

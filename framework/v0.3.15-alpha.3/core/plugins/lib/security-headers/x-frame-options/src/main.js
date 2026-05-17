@@ -31,7 +31,7 @@
  * Firefox dropped it in 70); `Content-Security-Policy: frame-ancestors`
  * is the modern replacement that does work cross-browser.
  *
- * @module plugins/x-frame-options
+ * @module plugins/security-headers/x-frame-options
  */
 
 var HEADER_NAME    = 'x-frame-options';

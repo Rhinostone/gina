@@ -49,7 +49,7 @@
  * (cookies stripped on cross-origin no-CORS) or `unsafe-none` (no
  * isolation, but compatible with any embed).
  *
- * @module plugins/coep
+ * @module plugins/security-headers/coep
  */
 
 var HEADER_NAME    = 'cross-origin-embedder-policy';

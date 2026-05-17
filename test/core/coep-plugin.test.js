@@ -19,7 +19,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/coep/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/coep/src/main.js');
 
 var Coep;
 var originalGetContext;
@@ -433,9 +433,9 @@ describe('06 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('Coep is wired to ./lib/coep', function () {
+    it('Coep is wired to ./lib/security-headers/coep', function () {
         assert.ok(
-            /Coep\s*:\s*_require\(\s*['"]\.\/lib\/coep['"]\s*\)/.test(src),
+            /Coep\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/coep['"]\s*\)/.test(src),
             'expected Coep registry entry'
         );
     });

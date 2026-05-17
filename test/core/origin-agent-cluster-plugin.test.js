@@ -19,7 +19,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/origin-agent-cluster/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/origin-agent-cluster/src/main.js');
 
 var OriginAgentCluster;
 var originalGetContext;
@@ -293,9 +293,9 @@ describe('05 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('OriginAgentCluster is wired to ./lib/origin-agent-cluster', function () {
+    it('OriginAgentCluster is wired to ./lib/security-headers/origin-agent-cluster', function () {
         assert.ok(
-            /OriginAgentCluster\s*:\s*_require\(\s*['"]\.\/lib\/origin-agent-cluster['"]\s*\)/.test(src),
+            /OriginAgentCluster\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/origin-agent-cluster['"]\s*\)/.test(src),
             'expected OriginAgentCluster registry entry'
         );
     });

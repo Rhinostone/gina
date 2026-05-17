@@ -21,7 +21,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/csp/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/csp/src/main.js');
 
 var Csp;
 var originalGetContext;
@@ -760,9 +760,9 @@ describe('08 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('Csp is wired to ./lib/csp', function () {
+    it('Csp is wired to ./lib/security-headers/csp', function () {
         assert.ok(
-            /Csp\s*:\s*_require\(\s*['"]\.\/lib\/csp['"]\s*\)/.test(src),
+            /Csp\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/csp['"]\s*\)/.test(src),
             'expected Csp registry entry'
         );
     });

@@ -18,7 +18,7 @@ var path   = require('path');
 var fs     = require('fs');
 
 var FW     = require('../fw');
-var PLUGIN = path.join(FW, 'core/plugins/lib/x-content-type-options/src/main.js');
+var PLUGIN = path.join(FW, 'core/plugins/lib/security-headers/x-content-type-options/src/main.js');
 
 var XContentTypeOptions;
 var originalGetContext;
@@ -292,9 +292,9 @@ describe('05 - plugin is registered in core/plugins/index.js', function () {
     var src;
     before(function () { src = fs.readFileSync(REGISTRY, 'utf8'); });
 
-    it('XContentTypeOptions is wired to ./lib/x-content-type-options', function () {
+    it('XContentTypeOptions is wired to ./lib/security-headers/x-content-type-options', function () {
         assert.ok(
-            /XContentTypeOptions\s*:\s*_require\(\s*['"]\.\/lib\/x-content-type-options['"]\s*\)/.test(src),
+            /XContentTypeOptions\s*:\s*_require\(\s*['"]\.\/lib\/security-headers\/x-content-type-options['"]\s*\)/.test(src),
             'expected XContentTypeOptions registry entry'
         );
     });

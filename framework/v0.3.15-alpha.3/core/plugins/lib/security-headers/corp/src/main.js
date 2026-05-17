@@ -52,7 +52,7 @@
  * meant to be embedded by arbitrary third-party sites) should pick
  * `cross-origin`.
  *
- * @module plugins/corp
+ * @module plugins/security-headers/corp
  */
 
 var HEADER_NAME    = 'cross-origin-resource-policy';
