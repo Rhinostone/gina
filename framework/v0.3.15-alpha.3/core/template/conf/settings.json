@@ -189,6 +189,21 @@
   //                report violations but do not block resources. Useful
   //                for non-enforcing migration testing.
   "csp": {},
+  // #HDR6 — Cross-Origin-Embedder-Policy response header applied by
+  // gina.plugins.Coep(). Controls which cross-origin resources the page
+  // may embed. Required (paired with #HDR13 Coop:"same-origin") to enable
+  // SharedArrayBuffer and high-resolution performance.now() in the page.
+  //   value — one of the 3 W3C HTML spec tokens:
+  //           "require-corp" (default — cross-origin resources must opt-in
+  //           via CORP or CORS; required for the SharedArrayBuffer combo;
+  //           BREAKS embeds without matching CORP/CORS headers),
+  //           "credentialless" (no-CORS cross-origin requests sent without
+  //           cookies/HTTP auth; less restrictive but still gates the
+  //           isolation combo), "unsafe-none" (browser default; no
+  //           restrictions). Unknown tokens throw at factory call time.
+  "coep": {
+    "value": "require-corp"
+  },
   // #HDR7 — Origin-Agent-Cluster: ?1 response header applied by
   // gina.plugins.OriginAgentCluster(). Requests origin-keyed agent
   // clustering — the page's origin gets its own agent isolated from

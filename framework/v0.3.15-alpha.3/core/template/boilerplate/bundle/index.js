@@ -120,6 +120,19 @@ var ${bundle} = require('gina');
 //    // var csp = ${bundle}.plugins.Csp();
 //    // app.use(csp);
 //
+//    // #HDR6 — Cross-Origin-Embedder-Policy response header. Reads its
+//    // value from settings.json > coep.value (one of "require-corp",
+//    // "credentialless", "unsafe-none"; default "require-corp"). Caller
+//    // options always win — pass { value: 'credentialless' } for less
+//    // restrictive embed-without-credentials behaviour, or
+//    // { value: 'unsafe-none' } to opt out. Required (paired with
+//    // #HDR13 gina.plugins.Coop() at "same-origin") to enable
+//    // SharedArrayBuffer and high-resolution performance.now().
+//    // BREAKS cross-origin embeds without matching CORP/CORS headers —
+//    // know your resource graph before enabling at "require-corp".
+//    // var coep = ${bundle}.plugins.Coep();
+//    // app.use(coep);
+//
 //    // #HDR7 — Origin-Agent-Cluster: ?1 response header. Requests
 //    // origin-keyed agent clustering — same-site cross-origin pages
 //    // get isolated agents (can no longer reach in via document.domain).

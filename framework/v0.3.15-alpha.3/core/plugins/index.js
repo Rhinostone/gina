@@ -47,6 +47,8 @@ function Plugins() {
         Hsts                : _require('./lib/hsts'),
         // #HDR5 — Content-Security-Policy response header.
         Csp                 : _require('./lib/csp'),
+        // #HDR6 — Cross-Origin-Embedder-Policy response header.
+        Coep                : _require('./lib/coep'),
         // #HDR7 — Origin-Agent-Cluster response header (origin-keyed isolation).
         OriginAgentCluster  : _require('./lib/origin-agent-cluster')
     };
