@@ -1,20 +1,22 @@
 # Security Headers Combined Wrapper (#HDR15)
 
-Opt-in middleware that composes the nine per-header security plugins
-into a single mount point with one `settings.json` block. Closes
-Phase 2 of the gina Web Security Headers track.
+Opt-in middleware that composes the fourteen per-header security
+plugins into a single mount point with one `settings.json` block.
+Closes Phase 2 of the gina Web Security Headers track; extended with
+the Phase 1.5 helmet-parity plugins (HDR8-12) post-Phase-1.5-closure.
 
 ## Why
 
 The individual `#HDR` plugins are deliberately single-concern — each
 emits one response header, reads one settings.json key, has its own
 README. That makes each plugin easy to reason about but verbose to
-adopt: bundles wanting all nine end up with nine `require(...)` calls,
-nine `app.use(...)` mounts, and nine settings.json blocks.
+adopt: bundles wanting all fourteen end up with fourteen `require(...)`
+calls, fourteen `app.use(...)` mounts, and fourteen settings.json
+blocks.
 
 `gina.plugins.SecurityHeaders({...})` is the one-mount + one-config
-convenience layer over the nine. Mirrors helmet's `helmet()` shape so
-bundles migrating from helmet find the API familiar.
+convenience layer over the fourteen. Mirrors helmet's `helmet()` shape
+so bundles migrating from helmet find the API familiar.
 
 ## Adoption
 
@@ -32,18 +34,23 @@ myapp.onInitialize(function(event, app) {
 });
 ```
 
-With no opts, mounts the **seven non-footgun plugins** with their
+With no opts, mounts the **twelve non-footgun plugins** with their
 per-plugin defaults:
 
-| Sub-plugin                    | Header                          | Default value                          |
-|-------------------------------|---------------------------------|----------------------------------------|
-| `XContentTypeOptions` (HDR1)  | `X-Content-Type-Options`        | `nosniff`                              |
-| `XFrameOptions` (HDR2)        | `X-Frame-Options`               | `SAMEORIGIN`                           |
-| `ReferrerPolicy` (HDR3)       | `Referrer-Policy`               | `strict-origin-when-cross-origin`      |
-| `Hsts` (HDR4)                 | `Strict-Transport-Security`     | `max-age=15552000` (180 days)          |
-| `OriginAgentCluster` (HDR7)   | `Origin-Agent-Cluster`          | `?1`                                   |
-| `Coop` (HDR13)                | `Cross-Origin-Opener-Policy`    | `same-origin`                          |
-| `Corp` (HDR14)                | `Cross-Origin-Resource-Policy`  | `same-origin`                          |
+| Sub-plugin                                | Header                              | Default value                                |
+|-------------------------------------------|-------------------------------------|----------------------------------------------|
+| `XContentTypeOptions` (HDR1)              | `X-Content-Type-Options`            | `nosniff`                                    |
+| `XFrameOptions` (HDR2)                    | `X-Frame-Options`                   | `SAMEORIGIN`                                 |
+| `ReferrerPolicy` (HDR3)                   | `Referrer-Policy`                   | `strict-origin-when-cross-origin`            |
+| `Hsts` (HDR4)                             | `Strict-Transport-Security`         | `max-age=15552000` (180 days)                |
+| `OriginAgentCluster` (HDR7)               | `Origin-Agent-Cluster`              | `?1`                                         |
+| `HidePoweredBy` (HDR8)                    | `X-Powered-By`                      | **REMOVED** (Express engine only)            |
+| `XDnsPrefetchControl` (HDR9)              | `X-DNS-Prefetch-Control`            | `off`                                        |
+| `XXssProtection` (HDR10)                  | `X-XSS-Protection`                  | `0` (deliberately disables Chrome auditor)   |
+| `XDownloadOptions` (HDR11)                | `X-Download-Options`                | `noopen` (IE-legacy)                         |
+| `XPermittedCrossDomainPolicies` (HDR12)   | `X-Permitted-Cross-Domain-Policies` | `none` (Flash/PDF-legacy)                    |
+| `Coop` (HDR13)                            | `Cross-Origin-Opener-Policy`        | `same-origin`                                |
+| `Corp` (HDR14)                            | `Cross-Origin-Resource-Policy`      | `same-origin`                                |
 
 The two **opt-in-only plugins** (#HDR5 Csp + #HDR6 Coep) are NOT
 mounted by default because they have known footguns:
@@ -116,16 +123,21 @@ In `bundles/<name>/config/settings.json`:
 ```jsonc
 {
   "securityHeaders": {
-    "xContentTypeOptions": true,
-    "xFrameOptions":       { "value": "SAMEORIGIN" },
-    "referrerPolicy":      { "value": "strict-origin-when-cross-origin" },
-    "hsts":                { "maxAge": 15552000, "includeSubDomains": false, "preload": false },
-    "originAgentCluster":  true,
-    "coop":                { "value": "same-origin" },
-    "corp":                { "value": "same-origin" },
+    "xContentTypeOptions":           true,
+    "xFrameOptions":                 { "value": "SAMEORIGIN" },
+    "referrerPolicy":                { "value": "strict-origin-when-cross-origin" },
+    "hsts":                          { "maxAge": 15552000, "includeSubDomains": false, "preload": false },
+    "originAgentCluster":            true,
+    "hidePoweredBy":                 true,
+    "xDnsPrefetchControl":           { "value": "off" },
+    "xXssProtection":                true,
+    "xDownloadOptions":              true,
+    "xPermittedCrossDomainPolicies": { "value": "none" },
+    "coop":                          { "value": "same-origin" },
+    "corp":                          { "value": "same-origin" },
 
-    "csp":                 { "directives": { "default-src": ["'self'"] } },
-    "coep":                { "value": "require-corp" }
+    "csp":                           { "directives": { "default-src": ["'self'"] } },
+    "coep":                          { "value": "require-corp" }
   }
 }
 ```
@@ -136,17 +148,22 @@ CSP / COEP stay opt-in-only).
 
 ### Per-sub-config shapes
 
-| Sub-config key         | Value shape                                                                          | Mount behaviour                                       |
-|------------------------|--------------------------------------------------------------------------------------|-------------------------------------------------------|
-| `xContentTypeOptions`  | `true` / `false` / `null` / `{}`                                                     | Default mount; `false` or `null` opts out             |
-| `xFrameOptions`        | `{ value: 'DENY' \| 'SAMEORIGIN' }` / `true` / `false` / `null` / `{}`                | Default mount with SAMEORIGIN                          |
-| `referrerPolicy`       | `{ value: '<one-of-8-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Default mount with strict-origin-when-cross-origin     |
-| `hsts`                 | `{ maxAge, includeSubDomains, preload }` / `true` / `false` / `null` / `{}`           | Default mount with 180-day maxAge                      |
-| `csp`                  | `{ directives: {...}, reportOnly: false }` / `false` / `null`                        | Opt-in only; throws on `{}` or `true` (no directives) |
-| `coep`                 | `{ value: '<one-of-3-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Opt-in only; default require-corp                      |
-| `originAgentCluster`   | `true` / `false` / `null` / `{}`                                                     | Default mount                                         |
-| `coop`                 | `{ value: '<one-of-4-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Default mount with same-origin                         |
-| `corp`                 | `{ value: '<one-of-3-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Default mount with same-origin                         |
+| Sub-config key                    | Value shape                                                                          | Mount behaviour                                                                  |
+|-----------------------------------|--------------------------------------------------------------------------------------|----------------------------------------------------------------------------------|
+| `xContentTypeOptions`             | `true` / `false` / `null` / `{}`                                                     | Default mount; `false` or `null` opts out                                        |
+| `xFrameOptions`                   | `{ value: 'DENY' \| 'SAMEORIGIN' }` / `true` / `false` / `null` / `{}`                | Default mount with SAMEORIGIN                                                     |
+| `referrerPolicy`                  | `{ value: '<one-of-8-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Default mount with strict-origin-when-cross-origin                                |
+| `hsts`                            | `{ maxAge, includeSubDomains, preload }` / `true` / `false` / `null` / `{}`           | Default mount with 180-day maxAge                                                 |
+| `csp`                             | `{ directives: {...}, reportOnly: false }` / `false` / `null`                        | Opt-in only; throws on `{}` or `true` (no directives)                            |
+| `coep`                            | `{ value: '<one-of-3-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Opt-in only; default require-corp                                                 |
+| `originAgentCluster`              | `true` / `false` / `null` / `{}`                                                     | Default mount                                                                    |
+| `hidePoweredBy`                   | `true` / `false` / `null` / `{}`                                                     | Default mount (Express engine only; Isaac engine writeHead path unaffected)       |
+| `xDnsPrefetchControl`             | `{ value: 'on' \| 'off' }` / `true` / `false` / `null` / `{}`                         | Default mount with `off`                                                          |
+| `xXssProtection`                  | `true` / `false` / `null` / `{}`                                                     | Default mount (emits literal `0` to DISABLE Chrome legacy auditor)               |
+| `xDownloadOptions`                | `true` / `false` / `null` / `{}`                                                     | Default mount (emits `noopen`; IE-legacy)                                         |
+| `xPermittedCrossDomainPolicies`   | `{ value: '<one-of-4-Adobe-tokens>' }` / `true` / `false` / `null` / `{}`            | Default mount with `none`                                                         |
+| `coop`                            | `{ value: '<one-of-4-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Default mount with same-origin                                                    |
+| `corp`                            | `{ value: '<one-of-3-W3C-tokens>' }` / `true` / `false` / `null` / `{}`              | Default mount with same-origin                                                    |
 
 ## Settings precedence
 
@@ -197,6 +214,11 @@ and failure modes, see the standalone READMEs:
 - [`gina-core-plugin-csp`](../csp/README.md) (HDR5)
 - [`gina-core-plugin-coep`](../coep/README.md) (HDR6)
 - [`gina-core-plugin-origin-agent-cluster`](../origin-agent-cluster/README.md) (HDR7)
+- [`gina-core-plugin-hide-powered-by`](../hide-powered-by/README.md) (HDR8)
+- [`gina-core-plugin-x-dns-prefetch-control`](../x-dns-prefetch-control/README.md) (HDR9)
+- [`gina-core-plugin-x-xss-protection`](../x-xss-protection/README.md) (HDR10)
+- [`gina-core-plugin-x-download-options`](../x-download-options/README.md) (HDR11)
+- [`gina-core-plugin-x-permitted-cross-domain-policies`](../x-permitted-cross-domain-policies/README.md) (HDR12)
 - [`gina-core-plugin-coop`](../coop/README.md) (HDR13)
 - [`gina-core-plugin-corp`](../corp/README.md) (HDR14)
 

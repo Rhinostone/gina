@@ -58,7 +58,7 @@ describe('01 - source inspection: composition patterns are present', function ()
         assert.ok(src.indexOf('#HDR15') > -1, 'expected #HDR15 marker for traceability');
     });
 
-    it('requires all 9 per-header sub-plugin factories', function () {
+    it('requires all 14 per-header sub-plugin factories', function () {
         var subs = [
             'x-content-type-options',
             'x-frame-options',
@@ -67,6 +67,11 @@ describe('01 - source inspection: composition patterns are present', function ()
             'csp',
             'coep',
             'origin-agent-cluster',
+            'hide-powered-by',
+            'x-dns-prefetch-control',
+            'x-xss-protection',
+            'x-download-options',
+            'x-permitted-cross-domain-policies',
             'coop',
             'corp'
         ];
@@ -76,14 +81,14 @@ describe('01 - source inspection: composition patterns are present', function ()
         }
     });
 
-    it('SUB_PLUGINS registry array is declared with at least 9 entries', function () {
+    it('SUB_PLUGINS registry array is declared with exactly 14 entries', function () {
         assert.ok(
             /SUB_PLUGINS\s*=\s*\[[\s\S]*?\];/.test(src),
             'expected SUB_PLUGINS = [ ... ] declaration'
         );
         // Count the per-entry safeDefault key occurrences as a proxy for entry count.
         var matches = src.match(/safeDefault:\s*(true|false)/g);
-        assert.ok(matches && matches.length === 9, 'expected 9 safeDefault flags');
+        assert.ok(matches && matches.length === 14, 'expected 14 safeDefault flags');
     });
 
     it('reads settings.json > securityHeaders via content.settings.securityHeaders', function () {
@@ -333,12 +338,15 @@ describe('04 - _resolveSubConfig: per-case decision rules', function () {
 
 describe('05 - SUB_PLUGINS registry metadata', function () {
 
-    it('contains exactly 9 entries', function () {
-        assert.equal(SecurityHeaders._SUB_PLUGINS.length, 9);
+    it('contains exactly 14 entries', function () {
+        assert.equal(SecurityHeaders._SUB_PLUGINS.length, 14);
     });
 
-    it('emission order: HDR1, 2, 3, 4, 5, 6, 7, 13, 14', function () {
-        var expected = ['#HDR1', '#HDR2', '#HDR3', '#HDR4', '#HDR5', '#HDR6', '#HDR7', '#HDR13', '#HDR14'];
+    it('emission order: HDR1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14', function () {
+        var expected = [
+            '#HDR1',  '#HDR2',  '#HDR3',  '#HDR4',  '#HDR5',  '#HDR6',  '#HDR7',
+            '#HDR8',  '#HDR9',  '#HDR10', '#HDR11', '#HDR12', '#HDR13', '#HDR14'
+        ];
         var actual = SecurityHeaders._SUB_PLUGINS.map(function (s) { return s.marker; });
         assert.deepEqual(actual, expected);
     });
@@ -346,19 +354,25 @@ describe('05 - SUB_PLUGINS registry metadata', function () {
     it('sub-config keys match the settings.json convention', function () {
         var expected = [
             'xContentTypeOptions', 'xFrameOptions', 'referrerPolicy', 'hsts',
-            'csp', 'coep', 'originAgentCluster', 'coop', 'corp'
+            'csp', 'coep', 'originAgentCluster',
+            'hidePoweredBy', 'xDnsPrefetchControl', 'xXssProtection',
+            'xDownloadOptions', 'xPermittedCrossDomainPolicies',
+            'coop', 'corp'
         ];
         var actual = SecurityHeaders._SUB_PLUGINS.map(function (s) { return s.key; });
         assert.deepEqual(actual, expected);
     });
 
-    it('safe-set: HDR1/2/3/4/7/13/14 are safeDefault:true (7 plugins)', function () {
+    it('safe-set: HDR1/2/3/4/7/8/9/10/11/12/13/14 are safeDefault:true (12 plugins)', function () {
         var safeKeys = SecurityHeaders._SUB_PLUGINS
             .filter(function (s) { return s.safeDefault; })
             .map(function (s) { return s.key; });
         assert.deepEqual(safeKeys, [
             'xContentTypeOptions', 'xFrameOptions', 'referrerPolicy', 'hsts',
-            'originAgentCluster', 'coop', 'corp'
+            'originAgentCluster',
+            'hidePoweredBy', 'xDnsPrefetchControl', 'xXssProtection',
+            'xDownloadOptions', 'xPermittedCrossDomainPolicies',
+            'coop', 'corp'
         ]);
     });
 
@@ -477,22 +491,130 @@ describe('07 - Factory + middleware end-to-end', function () {
         assert.equal(typeof mw, 'function');
     });
 
-    it('with no opts, emits the 7 safe-set headers (no CSP, no COEP)', function () {
+    it('with no opts, emits the 12 safe-set headers (no CSP, no COEP)', function () {
         var mw  = SecurityHeaders();
         var req = { method: 'GET', url: '/' };
         var res = makeRes();
         mw(req, res, function () {});
-        // Safe-set
-        assert.equal(res.getHeader('x-content-type-options'),       'nosniff');
-        assert.equal(res.getHeader('x-frame-options'),              'SAMEORIGIN');
-        assert.equal(res.getHeader('referrer-policy'),              'strict-origin-when-cross-origin');
+        // Safe-set (12 plugins)
+        assert.equal(res.getHeader('x-content-type-options'),              'nosniff');
+        assert.equal(res.getHeader('x-frame-options'),                     'SAMEORIGIN');
+        assert.equal(res.getHeader('referrer-policy'),                     'strict-origin-when-cross-origin');
         assert.ok(/max-age=15552000/.test(res.getHeader('strict-transport-security')));
-        assert.equal(res.getHeader('origin-agent-cluster'),         '?1');
-        assert.equal(res.getHeader('cross-origin-opener-policy'),   'same-origin');
-        assert.equal(res.getHeader('cross-origin-resource-policy'), 'same-origin');
+        assert.equal(res.getHeader('origin-agent-cluster'),                '?1');
+        // HDR8 HidePoweredBy is REMOVE-shape: removes if present (no-op
+        // here since the stub res has no upstream X-Powered-By set).
+        assert.equal(res.getHeader('x-powered-by'),                        null);
+        assert.equal(res.getHeader('x-dns-prefetch-control'),              'off');
+        assert.equal(res.getHeader('x-xss-protection'),                    '0');
+        assert.equal(res.getHeader('x-download-options'),                  'noopen');
+        assert.equal(res.getHeader('x-permitted-cross-domain-policies'),   'none');
+        assert.equal(res.getHeader('cross-origin-opener-policy'),          'same-origin');
+        assert.equal(res.getHeader('cross-origin-resource-policy'),        'same-origin');
         // Opt-in only — must NOT be emitted with no opts
-        assert.equal(res.getHeader('content-security-policy'),       null);
-        assert.equal(res.getHeader('cross-origin-embedder-policy'),  null);
+        assert.equal(res.getHeader('content-security-policy'),             null);
+        assert.equal(res.getHeader('cross-origin-embedder-policy'),        null);
+    });
+
+    it('safe-set HidePoweredBy actually removes upstream-set X-Powered-By', function () {
+        // The default makeRes doesn't seed any X-Powered-By, so the
+        // previous test's null assertion only proves removeHeader is a
+        // no-op on an absent header. This test seeds the header and
+        // confirms it's removed. Uses a local stub with removeHeader
+        // since HDR8 is the only sub-plugin that needs it.
+        function makeResWithRemove(initial) {
+            var headers = Object.assign({}, initial || {});
+            return {
+                statusCode: 200,
+                getHeader: function (n) {
+                    var v = headers[String(n).toLowerCase()];
+                    return typeof v === 'undefined' ? null : v;
+                },
+                setHeader: function (n, v) { headers[String(n).toLowerCase()] = v; },
+                removeHeader: function (n) { delete headers[String(n).toLowerCase()]; },
+                _headers: headers
+            };
+        }
+        var mw  = SecurityHeaders();
+        var req = { method: 'GET', url: '/' };
+        var res = makeResWithRemove({ 'x-powered-by': 'Gina/0.3.15-alpha.3' });
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-powered-by'), null);
+    });
+
+    it('hidePoweredBy: false skips HDR8 (X-Powered-By remains if upstream set it)', function () {
+        function makeResWithRemove(initial) {
+            var headers = Object.assign({}, initial || {});
+            return {
+                statusCode: 200,
+                getHeader: function (n) {
+                    var v = headers[String(n).toLowerCase()];
+                    return typeof v === 'undefined' ? null : v;
+                },
+                setHeader: function (n, v) { headers[String(n).toLowerCase()] = v; },
+                removeHeader: function (n) { delete headers[String(n).toLowerCase()]; },
+                _headers: headers
+            };
+        }
+        var mw  = SecurityHeaders({ hidePoweredBy: false });
+        var req = { method: 'GET', url: '/' };
+        var res = makeResWithRemove({ 'x-powered-by': 'Gina/X' });
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-powered-by'), 'Gina/X');
+    });
+
+    it('xDnsPrefetchControl: { value: "on" } overrides the safe-set default', function () {
+        var mw  = SecurityHeaders({ xDnsPrefetchControl: { value: 'on' } });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-dns-prefetch-control'), 'on');
+    });
+
+    it('xDnsPrefetchControl: false skips HDR9', function () {
+        var mw  = SecurityHeaders({ xDnsPrefetchControl: false });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-dns-prefetch-control'), null);
+    });
+
+    it('xXssProtection: false skips HDR10', function () {
+        var mw  = SecurityHeaders({ xXssProtection: false });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-xss-protection'), null);
+    });
+
+    it('xDownloadOptions: false skips HDR11', function () {
+        var mw  = SecurityHeaders({ xDownloadOptions: false });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-download-options'), null);
+    });
+
+    it('xPermittedCrossDomainPolicies: { value: "master-only" } overrides the safe-set default', function () {
+        var mw  = SecurityHeaders({ xPermittedCrossDomainPolicies: { value: 'master-only' } });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-permitted-cross-domain-policies'), 'master-only');
+    });
+
+    it('xPermittedCrossDomainPolicies: false skips HDR12', function () {
+        var mw  = SecurityHeaders({ xPermittedCrossDomainPolicies: false });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('x-permitted-cross-domain-policies'), null);
+    });
+
+    it('xPermittedCrossDomainPolicies: { value: "nope" } throws via sub-plugin invariant', function () {
+        assert.throws(function () {
+            SecurityHeaders({ xPermittedCrossDomainPolicies: { value: 'nope' } });
+        }, /invalid value/);
     });
 
     it('coep: true opts in to COEP with require-corp default', function () {

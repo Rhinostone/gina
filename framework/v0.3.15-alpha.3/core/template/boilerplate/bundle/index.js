@@ -233,16 +233,17 @@ var ${bundle} = require('gina');
 //    // var corp = ${bundle}.plugins.Corp();
 //    // app.use(corp);
 //
-//    // #HDR15 — Security Headers combined wrapper. Composes HDR1-7 +
-//    // HDR5 + HDR6/13/14 in a single mount + one settings.json block.
-//    // With no opts emits the SAFE-SET (xContentTypeOptions,
-//    // xFrameOptions, referrerPolicy, hsts, originAgentCluster, coop,
-//    // corp — 7 plugins with per-plugin defaults). CSP (#HDR5) and
-//    // COEP (#HDR6) are opt-in only (must pass { csp: { directives:
-//    // {...} } } or { coep: true }). Per-sub-config opt-out via
-//    // { csp: false } / { hsts: false } / etc. Reads settings.json >
-//    // securityHeaders.* for sub-configs; caller opts win. The
-//    // individual plugins (#HDR1-7 / HDR5 / HDR6/13/14) remain
+//    // #HDR15 — Security Headers combined wrapper. Composes the full
+//    // HDR1-14 set in a single mount + one settings.json block. With
+//    // no opts emits the SAFE-SET (xContentTypeOptions, xFrameOptions,
+//    // referrerPolicy, hsts, originAgentCluster, hidePoweredBy,
+//    // xDnsPrefetchControl, xXssProtection, xDownloadOptions,
+//    // xPermittedCrossDomainPolicies, coop, corp — 12 plugins with
+//    // per-plugin defaults). CSP (#HDR5) and COEP (#HDR6) are opt-in
+//    // only (must pass { csp: { directives: {...} } } or { coep: true }).
+//    // Per-sub-config opt-out via { csp: false } / { hsts: false } /
+//    // etc. Reads settings.json > securityHeaders.* for sub-configs;
+//    // caller opts win. The individual plugins (#HDR1-14) remain
 //    // mountable independently as power-user escape hatches; the
 //    // idempotent first-writer-wins pattern means no double-emit when
 //    // stacking the wrapper with an upstream individual mount.

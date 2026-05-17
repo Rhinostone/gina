@@ -8,9 +8,10 @@
 'use strict';
 
 /**
- * Security Headers combined wrapper plugin (#HDR15) — composes
- * #HDR1 / #HDR2 / #HDR3 / #HDR4 / #HDR5 / #HDR6 / #HDR7 / #HDR13 /
- * #HDR14 into a single mount point with one `settings.json` block.
+ * Security Headers combined wrapper plugin (#HDR15) — composes the
+ * full #HDR1 / #HDR2 / #HDR3 / #HDR4 / #HDR5 / #HDR6 / #HDR7 /
+ * #HDR8 / #HDR9 / #HDR10 / #HDR11 / #HDR12 / #HDR13 / #HDR14 set
+ * into a single mount point with one `settings.json` block.
  *
  * Bundles adopt it inside the bundle bootstrap:
  *
@@ -23,12 +24,15 @@
  *     });
  *
  * **Batteries-included safe set**: calling `SecurityHeaders()` with no
- * opts mounts the seven non-footgun plugins with their per-plugin
+ * opts mounts the twelve non-footgun plugins with their per-plugin
  * defaults — `XContentTypeOptions` (HDR1), `XFrameOptions` (HDR2),
  * `ReferrerPolicy` (HDR3), `Hsts` (HDR4), `OriginAgentCluster` (HDR7),
- * `Coop` (HDR13), `Corp` (HDR14). The two opt-in-only plugins —
- * `Csp` (HDR5) and `Coep` (HDR6) — are NOT mounted by default because
- * they have known footguns:
+ * `HidePoweredBy` (HDR8), `XDnsPrefetchControl` (HDR9),
+ * `XXssProtection` (HDR10), `XDownloadOptions` (HDR11),
+ * `XPermittedCrossDomainPolicies` (HDR12), `Coop` (HDR13),
+ * `Corp` (HDR14). The two opt-in-only plugins — `Csp` (HDR5) and
+ * `Coep` (HDR6) — are NOT mounted by default because they have known
+ * footguns:
  *
  *   - CSP throws on missing directives (no sensible cross-bundle
  *     default; every bundle has its own resource graph).
@@ -53,23 +57,29 @@
  *
  * **Mirrors helmet's `helmet()` combined wrapper shape** — one mount,
  * per-header sub-configs, sub-config `= false` opts out. The
- * helmet-parity choice (per `llms.txt` #115) — bundles migrating
- * from helmet should find the API familiar.
+ * helmet-parity choice — bundles migrating from helmet should find
+ * the API familiar.
  *
- * Closes Phase 2 of the gina security-headers track.
+ * Closes Phase 2 of the gina security-headers track; extended with
+ * the Phase 1.5 helmet-parity plugins (HDR8-12) post-Phase-1.5-closure.
  *
  * @module plugins/security-headers/wrapper
  */
 
-var XContentTypeOptions  = require('../../x-content-type-options/src/main.js');
-var XFrameOptions        = require('../../x-frame-options/src/main.js');
-var ReferrerPolicy       = require('../../referrer-policy/src/main.js');
-var Hsts                 = require('../../hsts/src/main.js');
-var Csp                  = require('../../csp/src/main.js');
-var Coep                 = require('../../coep/src/main.js');
-var OriginAgentCluster   = require('../../origin-agent-cluster/src/main.js');
-var Coop                 = require('../../coop/src/main.js');
-var Corp                 = require('../../corp/src/main.js');
+var XContentTypeOptions             = require('../../x-content-type-options/src/main.js');
+var XFrameOptions                   = require('../../x-frame-options/src/main.js');
+var ReferrerPolicy                  = require('../../referrer-policy/src/main.js');
+var Hsts                            = require('../../hsts/src/main.js');
+var Csp                             = require('../../csp/src/main.js');
+var Coep                            = require('../../coep/src/main.js');
+var OriginAgentCluster              = require('../../origin-agent-cluster/src/main.js');
+var HidePoweredBy                   = require('../../hide-powered-by/src/main.js');
+var XDnsPrefetchControl             = require('../../x-dns-prefetch-control/src/main.js');
+var XXssProtection                  = require('../../x-xss-protection/src/main.js');
+var XDownloadOptions                = require('../../x-download-options/src/main.js');
+var XPermittedCrossDomainPolicies   = require('../../x-permitted-cross-domain-policies/src/main.js');
+var Coop                            = require('../../coop/src/main.js');
+var Corp                            = require('../../corp/src/main.js');
 
 /**
  * Sub-plugin registry. Order = emission order in the composed chain
@@ -88,15 +98,20 @@ var Corp                 = require('../../corp/src/main.js');
  * @type {Array<object>}
  */
 var SUB_PLUGINS = [
-    { key: 'xContentTypeOptions', factory: XContentTypeOptions, marker: '#HDR1',  safeDefault: true  },
-    { key: 'xFrameOptions',       factory: XFrameOptions,       marker: '#HDR2',  safeDefault: true  },
-    { key: 'referrerPolicy',      factory: ReferrerPolicy,      marker: '#HDR3',  safeDefault: true  },
-    { key: 'hsts',                factory: Hsts,                marker: '#HDR4',  safeDefault: true  },
-    { key: 'csp',                 factory: Csp,                 marker: '#HDR5',  safeDefault: false },
-    { key: 'coep',                factory: Coep,                marker: '#HDR6',  safeDefault: false },
-    { key: 'originAgentCluster',  factory: OriginAgentCluster,  marker: '#HDR7',  safeDefault: true  },
-    { key: 'coop',                factory: Coop,                marker: '#HDR13', safeDefault: true  },
-    { key: 'corp',                factory: Corp,                marker: '#HDR14', safeDefault: true  }
+    { key: 'xContentTypeOptions',          factory: XContentTypeOptions,           marker: '#HDR1',  safeDefault: true  },
+    { key: 'xFrameOptions',                factory: XFrameOptions,                 marker: '#HDR2',  safeDefault: true  },
+    { key: 'referrerPolicy',               factory: ReferrerPolicy,                marker: '#HDR3',  safeDefault: true  },
+    { key: 'hsts',                         factory: Hsts,                          marker: '#HDR4',  safeDefault: true  },
+    { key: 'csp',                          factory: Csp,                           marker: '#HDR5',  safeDefault: false },
+    { key: 'coep',                         factory: Coep,                          marker: '#HDR6',  safeDefault: false },
+    { key: 'originAgentCluster',           factory: OriginAgentCluster,            marker: '#HDR7',  safeDefault: true  },
+    { key: 'hidePoweredBy',                factory: HidePoweredBy,                 marker: '#HDR8',  safeDefault: true  },
+    { key: 'xDnsPrefetchControl',          factory: XDnsPrefetchControl,           marker: '#HDR9',  safeDefault: true  },
+    { key: 'xXssProtection',               factory: XXssProtection,                marker: '#HDR10', safeDefault: true  },
+    { key: 'xDownloadOptions',             factory: XDownloadOptions,              marker: '#HDR11', safeDefault: true  },
+    { key: 'xPermittedCrossDomainPolicies',factory: XPermittedCrossDomainPolicies, marker: '#HDR12', safeDefault: true  },
+    { key: 'coop',                         factory: Coop,                          marker: '#HDR13', safeDefault: true  },
+    { key: 'corp',                         factory: Corp,                          marker: '#HDR14', safeDefault: true  }
 ];
 
 
@@ -237,11 +252,12 @@ function runChain(mws, req, res, done) {
  * Return an express-compatible middleware that composes the configured
  * security-header sub-plugins.
  *
- * Batteries-included: with no opts, mounts HDR1/2/3/4/7/13/14 with
- * their per-plugin defaults. CSP (#HDR5) and COEP (#HDR6) are opt-in
- * only — pass `csp: { directives: {...} }` or `coep: true` to mount.
+ * Batteries-included: with no opts, mounts HDR1/2/3/4/7/8/9/10/11/12/
+ * 13/14 (12 plugins) with their per-plugin defaults. CSP (#HDR5) and
+ * COEP (#HDR6) are opt-in only — pass `csp: { directives: {...} }` or
+ * `coep: true` to mount.
  *
- * @example <caption>Default (safe set)</caption>
+ * @example <caption>Default (safe set — 12 plugins)</caption>
  * var securityHeaders = require('gina').plugins.SecurityHeaders();
  * app.use(securityHeaders);
  *
@@ -261,17 +277,32 @@ function runChain(mws, req, res, done) {
  * var securityHeaders = require('gina').plugins.SecurityHeaders({ hsts: false });
  * app.use(securityHeaders);
  *
+ * @example <caption>Opt out of the Phase 1.5 legacy headers</caption>
+ * var securityHeaders = require('gina').plugins.SecurityHeaders({
+ *     hidePoweredBy:                  false,
+ *     xDnsPrefetchControl:            false,
+ *     xXssProtection:                 false,
+ *     xDownloadOptions:               false,
+ *     xPermittedCrossDomainPolicies:  false
+ * });
+ * app.use(securityHeaders);
+ *
  * @param   {object}          [opts]
- * @param   {boolean|object}  [opts.xContentTypeOptions=true]  — HDR1; defaults to mount.
- * @param   {boolean|object}  [opts.xFrameOptions=true]        — HDR2; defaults to mount with SAMEORIGIN.
- * @param   {boolean|object}  [opts.referrerPolicy=true]       — HDR3; defaults to mount with strict-origin-when-cross-origin.
- * @param   {boolean|object}  [opts.hsts=true]                 — HDR4; defaults to mount with 180-day maxAge.
- * @param   {boolean|object}  [opts.csp]                       — HDR5; opt-in only. Throws if `{}` (no directives) — directives required.
- * @param   {boolean|object}  [opts.coep]                      — HDR6; opt-in only. Default `require-corp` BREAKS embeds without CORP.
- * @param   {boolean|object}  [opts.originAgentCluster=true]   — HDR7; defaults to mount.
- * @param   {boolean|object}  [opts.coop=true]                 — HDR13; defaults to mount with same-origin.
- * @param   {boolean|object}  [opts.corp=true]                 — HDR14; defaults to mount with same-origin.
- * @returns {function}                                          — express middleware `(req, res, next) => void`
+ * @param   {boolean|object}  [opts.xContentTypeOptions=true]            — HDR1; defaults to mount.
+ * @param   {boolean|object}  [opts.xFrameOptions=true]                  — HDR2; defaults to mount with SAMEORIGIN.
+ * @param   {boolean|object}  [opts.referrerPolicy=true]                 — HDR3; defaults to mount with strict-origin-when-cross-origin.
+ * @param   {boolean|object}  [opts.hsts=true]                           — HDR4; defaults to mount with 180-day maxAge.
+ * @param   {boolean|object}  [opts.csp]                                 — HDR5; opt-in only. Throws if `{}` (no directives) — directives required.
+ * @param   {boolean|object}  [opts.coep]                                — HDR6; opt-in only. Default `require-corp` BREAKS embeds without CORP.
+ * @param   {boolean|object}  [opts.originAgentCluster=true]             — HDR7; defaults to mount.
+ * @param   {boolean|object}  [opts.hidePoweredBy=true]                  — HDR8; defaults to mount (Express engine only; Isaac engine writeHead path is unaffected).
+ * @param   {boolean|object}  [opts.xDnsPrefetchControl=true]            — HDR9; defaults to mount with `{ value: 'off' }`.
+ * @param   {boolean|object}  [opts.xXssProtection=true]                 — HDR10; defaults to mount (emits literal `0` to DISABLE Chrome legacy auditor).
+ * @param   {boolean|object}  [opts.xDownloadOptions=true]               — HDR11; defaults to mount (emits `noopen`).
+ * @param   {boolean|object}  [opts.xPermittedCrossDomainPolicies=true]  — HDR12; defaults to mount with `{ value: 'none' }`.
+ * @param   {boolean|object}  [opts.coop=true]                           — HDR13; defaults to mount with same-origin.
+ * @param   {boolean|object}  [opts.corp=true]                           — HDR14; defaults to mount with same-origin.
+ * @returns {function}                                                    — express middleware `(req, res, next) => void`
  * @throws  {Error} when a sub-plugin factory throws (invalid config —
  *                  e.g. CSP without directives, COEP with unknown
  *                  token, HSTS with preload-list invariant violation).
