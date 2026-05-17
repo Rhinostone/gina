@@ -21,7 +21,8 @@
  *      co-author's legal name is allowed in authoring/contributing files
  *      (README, AUTHORS, GOVERNANCE, CONTRIBUTING, package.json
  *      contributors, scaffolding template, framework AUTHORS, framework
- *      plugin package.json authors) — see ATTRIBUTION_PATHS.
+ *      plugin package.json authors) — see `ATTRIBUTION_PATHS` in
+ *      `_load_private_tokens.js`.
  *
  * Plus a third gate that fires BEFORE the scan starts:
  *
@@ -53,17 +54,14 @@ var loadPrivateTokens = require('./_load_private_tokens');
 
 var PATH_PATTERN = /(^|\/)(CLAUDE\.md|\.claude[a-z]*)/i;
 
-// Authoring/contributing context — files where a token marked
-// allowInAttribution is permitted (public attribution: README, AUTHORS,
-// GOVERNANCE, CONTRIBUTING, package.json contributors, scaffolding
-// template, framework AUTHORS, framework plugin package.json authors).
-var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+(\/[^/]+)?\/package\.json)$/;
-
 // Private tokens that must not appear in published tarball contents.
 // Patterns load from `script/.private-tokens.json` (gitignored,
 // maintainer-local). If the sidecar is absent, content-level scanning
-// is a no-op; path-level scanning still runs unchanged.
-var CONTENT_TOKENS = loadPrivateTokens(ATTRIBUTION_PATHS);
+// is a no-op; path-level scanning still runs unchanged. The attribution
+// allowlist (`ATTRIBUTION_PATHS`) lives in `_load_private_tokens.js`
+// alongside the loader — both shipping scanners use the default so the
+// regex stays in one place.
+var CONTENT_TOKENS = loadPrivateTokens();
 
 // Heuristic: only read files that are likely text. Saves time on binary
 // assets (images, compiled JARs, compressed .br/.gz) and prevents

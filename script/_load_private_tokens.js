@@ -24,10 +24,19 @@
  *     ]
  *   }
  *
- * The caller passes its `attributionPathPattern` (the regex matching
- * authoring/contributing files where a token like a legal name is
- * allowed). Entries with `allowInAttribution: true` get that pattern
- * attached as `allowIn`, mirroring the original hardcoded shape.
+ * Also owns the `ATTRIBUTION_PATHS` regex — the path pattern matching
+ * authoring/contributing files where a token marked `allowInAttribution`
+ * is permitted (public attribution: README, AUTHORS, GOVERNANCE,
+ * CONTRIBUTING, package.json contributors, scaffolding template,
+ * framework AUTHORS, framework plugin package.json authors at one or two
+ * directory levels under `core/plugins/lib/`). Exposed as
+ * `loadPrivateTokens.ATTRIBUTION_PATHS` so any new scanner needing the
+ * same allowance can reference it without redeclaring; entries marked
+ * `allowInAttribution: true` get it attached as `allowIn`.
+ *
+ * Callers may pass an override; when omitted, the exported default is
+ * used. Both shipping scanners use the default — keeping the regex in
+ * one place is the whole point of the consolidation.
  *
  * If the sidecar is absent or malformed, returns an empty array. The
  * caller's path-level scan (CLAUDE.md / .claude*) still runs unchanged;
@@ -38,14 +47,24 @@
  * sidecar from a personal backup outside the repo, or rebuild it
  * from the schema above before running stable publish.
  *
- * @param {RegExp} attributionPathPattern
+ * @param {RegExp} [attributionPathPattern] - optional override of the
+ *   exported ATTRIBUTION_PATHS default.
  * @returns {Array<{name: string, pattern: RegExp, allowIn?: RegExp}>}
  */
 
 var fs   = require('fs');
 var path = require('path');
 
-module.exports = function loadPrivateTokens(attributionPathPattern) {
+// Authoring/contributing context — see JSDoc above. Matches one or two
+// directory levels under `core/plugins/lib/` so namespace dirs like
+// `core/plugins/lib/security-headers/<plugin>/package.json` are allowed
+// alongside the historical flat shape `core/plugins/lib/<plugin>/package.json`.
+var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+(\/[^/]+)?\/package\.json)$/;
+
+function loadPrivateTokens(attributionPathPattern) {
+    if (!attributionPathPattern) {
+        attributionPathPattern = ATTRIBUTION_PATHS;
+    }
     var sidecar = path.join(__dirname, '.private-tokens.json');
     if (!fs.existsSync(sidecar)) {
         return [];
@@ -74,4 +93,7 @@ module.exports = function loadPrivateTokens(attributionPathPattern) {
         out.push(entry);
     }
     return out;
-};
+}
+
+module.exports = loadPrivateTokens;
+module.exports.ATTRIBUTION_PATHS = ATTRIBUTION_PATHS;

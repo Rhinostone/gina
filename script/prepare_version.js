@@ -199,18 +199,14 @@ function PrepareVersion() {
     self.checkPrivateTokenLeakage = function(done) {
         console.debug('[prepare] Checking for private-token leakage ...');
 
-        // Authoring/contributing context — files where a token marked
-        // allowInAttribution is permitted (public attribution: README,
-        // AUTHORS, GOVERNANCE, CONTRIBUTING, package.json contributors,
-        // scaffolding template, framework AUTHORS, framework plugin
-        // package.json authors).
-        var ATTRIBUTION_PATHS = /^(AUTHORS|CONTRIBUTING\.md|GOVERNANCE\.md|README\.md|package\.json|resources\/package\.json\.template|framework\/v[^/]+\/AUTHORS|framework\/v[^/]+\/core\/plugins\/lib\/[^/]+(\/[^/]+)?\/package\.json)$/;
-
         // Private tokens that must not appear in tracked-file contents.
         // Patterns load from `script/.private-tokens.json` (gitignored,
         // maintainer-local). If the sidecar is absent, content-level
-        // scanning is a no-op for this gate.
-        var TOKENS = require('./_load_private_tokens')(ATTRIBUTION_PATHS);
+        // scanning is a no-op for this gate. The attribution allowlist
+        // (`ATTRIBUTION_PATHS`) lives in `_load_private_tokens.js`
+        // alongside the loader — both shipping scanners use the default
+        // so the regex stays in one place.
+        var TOKENS = require('./_load_private_tokens')();
 
         var TEXT_EXT = /\.(md|txt|json|js|mjs|cjs|ts|tsx|jsx|html|htm|css|sass|scss|less|sh|bash|zsh|yaml|yml|xml|svg|csv|mapping|conf|ini|toml|env|template)$/i;
         var TEXT_BASENAME = /^(AUTHORS|LICENSE|COPYING|CHANGELOG|README|NOTICE|CONTRIBUTING|GOVERNANCE|Makefile|\.npmignore|\.gitignore|\.eslintrc|\.editorconfig)(\.[^.]+)?$/;
