@@ -258,6 +258,20 @@
   // browsers but ships for defense-in-depth + helmet-parity narrative.
   // No tunable options today; the block is reserved for future fields.
   "xXssProtection": {},
+  // #HDR11 — X-Download-Options: noopen response header applied by
+  // gina.plugins.XDownloadOptions(). Phase 1.5 (helmet-parity).
+  // IE-legacy header: emits the literal `X-Download-Options: noopen`
+  // to prevent Internet Explorer 8+ from opening downloads in the
+  // site's security context (an old IE vulnerability shape — the
+  // "Open" button on a download dialog opened the file in the SITE's
+  // origin, allowing XSS via downloaded HTML from a trusted site).
+  // Modern browsers (Chrome / Firefox / Safari / Edge) ignore the
+  // header silently; only IE10 / IE11 honour it (both EOL since 2022).
+  // Effectively a no-op in modern browsers; ships for defense-in-depth
+  // + helmet-parity narrative. "noopen" is the only valid value per
+  // the MSDN spec — there is no "open" alternative. No tunable
+  // options today.
+  "xDownloadOptions": {},
   // #HDR13 — Cross-Origin-Opener-Policy response header applied by
   // gina.plugins.Coop(). Controls how the page's browsing context
   // relates to popups and cross-origin window.opener references on

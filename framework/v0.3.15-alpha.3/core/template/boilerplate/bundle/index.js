@@ -179,6 +179,16 @@ var ${bundle} = require('gina');
 //    // var xXssProtection = ${bundle}.plugins.XXssProtection();
 //    // app.use(xXssProtection);
 //
+//    // #HDR11 — X-Download-Options: noopen response header. Phase 1.5
+//    // (helmet-parity). IE-legacy: prevents IE8+ from opening
+//    // downloads in the site's security context (an old IE vuln
+//    // shape). Modern browsers ignore the header; only IE10/IE11
+//    // honour it (both EOL since 2022). Effectively no-op in modern
+//    // browsers; defense-in-depth + helmet-parity. "noopen" is the
+//    // only valid value per MSDN. No tunable options.
+//    // var xDownloadOptions = ${bundle}.plugins.XDownloadOptions();
+//    // app.use(xDownloadOptions);
+//
 //    // #HDR13 — Cross-Origin-Opener-Policy response header. Reads its
 //    // value from settings.json > coop.value (one of "same-origin",
 //    // "same-origin-allow-popups", "noopener-allow-popups",
