@@ -1,0 +1,3 @@
+kind: Added
+body: 'New `isInList` form-validator rule for enum / membership validation. Accepts a JSON array of allowed primitive values (`"isInList": ["draft", "pending", "sent", "paid"]`) and rejects field values that are not strict-equal to any list member. Lives in the shared `form-validator.js`, so the rule fires on both server-side routing validation and client-side browser enforcement. Plugs into the existing `_case_<field>` conditional resolver without special-case handling.'
+time: 2026-05-17T22:38:09.625979+01:00

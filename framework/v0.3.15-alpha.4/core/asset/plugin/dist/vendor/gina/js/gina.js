@@ -2982,7 +2982,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         'isStringMaxLength': 'Should not be more than %s characters',
         'isJsonWebToken': 'Must be a valid JSON Web Token',
         'query': 'Must be a valid response',
-        'isApiError': 'Condition not satisfied'
+        'isApiError': 'Condition not satisfied',
+        'isInList': 'Must be one of: %s'
     };
     var self  = null;
     if (!data) {
@@ -4605,6 +4606,62 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             this.valid = isValid;
 
             return date
+        }
+
+        /**
+         * Check if value is one of the allowed values (strict equality).
+         *
+         * The routing dispatcher spreads array-valued rule configs via
+         * `apply()`, so `isInList: ["a", "b"]` lands here as positional
+         * args; collected via `arguments`. Empty allowed-list rejects
+         * every value (no value can satisfy an empty membership
+         * constraint). Non-primitive args indicate the non-array dispatch
+         * path (`isInList: "draft"`) — throw a config error.
+         *
+         * @param {...(string|number|boolean)} allowedValues - values that pass
+         * @returns {object} field object (chainable)
+         *
+         * @example
+         *     // routing.json rule
+         *     "field[status]": {
+         *         "isString": true,
+         *         "isInList": ["draft", "pending", "sent", "paid"]
+         *     }
+         * */
+        self[el]['isInList'] = function() {
+            var errors = self[this['name']]['errors'] || {};
+
+            var allowedValues = [];
+            for (var i = 0, len = arguments.length; i < len; ++i) {
+                var t = typeof(arguments[i]);
+                if (t !== 'string' && t !== 'number' && t !== 'boolean') {
+                    throw new Error('`isInList` requires an array of allowed primitive values; got ' + t + ' at position ' + i + '. Use `isInList: ["a", "b", "c"]` form.');
+                }
+                allowedValues.push(arguments[i]);
+            }
+
+            var val     = local.data[this.name] = this.value;
+            var isValid = false;
+
+            if ( !errors['isRequired'] && (val === '' || val == null) ) {
+                isValid = true;
+            } else if ( allowedValues.indexOf(val) > -1 ) {
+                isValid = true;
+            }
+
+            if (!isValid) {
+                this['size'] = allowedValues.join(', ');
+                errors['isInList'] = replace(this.error || local.errorLabels['isInList'], this);
+            } else if ( typeof(errors['isInList']) != 'undefined' ) {
+                delete errors['isInList'];
+            }
+
+            this.valid = isValid;
+            if ( errors.count() > 0 ) {
+                this['errors'] = errors;
+            }
+
+            return self[this.name]
         }
 
         /**
