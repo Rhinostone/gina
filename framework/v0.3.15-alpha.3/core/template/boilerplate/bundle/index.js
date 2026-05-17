@@ -157,6 +157,18 @@ var ${bundle} = require('gina');
 //    // var hidePoweredBy = ${bundle}.plugins.HidePoweredBy();
 //    // app.use(hidePoweredBy);
 //
+//    // #HDR9 — X-DNS-Prefetch-Control response header. Phase 1.5
+//    // (helmet-parity). Controls whether the browser proactively
+//    // resolves DNS for links/images/CSS/JS referenced by the page.
+//    // "off" (default) is the privacy-respecting choice. "on" enables
+//    // prefetching for perceived-performance gains at the cost of
+//    // leaking the page's link surface to the DNS resolver.
+//    //   value — one of "on" / "off" (default "off").
+//    // helmet uses { allow: boolean }; gina uses { value: 'on'|'off' }
+//    // matching the single-token-enum convention.
+//    // var xDnsPrefetchControl = ${bundle}.plugins.XDnsPrefetchControl();
+//    // app.use(xDnsPrefetchControl);
+//
 //    // #HDR13 — Cross-Origin-Opener-Policy response header. Reads its
 //    // value from settings.json > coop.value (one of "same-origin",
 //    // "same-origin-allow-popups", "noopener-allow-popups",

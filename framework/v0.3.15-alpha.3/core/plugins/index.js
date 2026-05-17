@@ -53,6 +53,8 @@ function Plugins() {
         OriginAgentCluster  : _require('./lib/security-headers/origin-agent-cluster'),
         // #HDR8 — X-Powered-By response-header removal (helmet-parity gap-fill, opens Phase 1.5).
         HidePoweredBy       : _require('./lib/security-headers/hide-powered-by'),
+        // #HDR9 — X-DNS-Prefetch-Control response header (helmet-parity gap-fill).
+        XDnsPrefetchControl : _require('./lib/security-headers/x-dns-prefetch-control'),
         // #HDR13 — Cross-Origin-Opener-Policy response header.
         Coop                : _require('./lib/security-headers/coop'),
         // #HDR14 — Cross-Origin-Resource-Policy response header.

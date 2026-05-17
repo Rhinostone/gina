@@ -228,6 +228,22 @@
   // removeHeader interface — middleware cannot intercept the header on
   // Isaac-engine bundles. README documents this limitation.
   "hidePoweredBy": {},
+  // #HDR9 — X-DNS-Prefetch-Control response header applied by
+  // gina.plugins.XDnsPrefetchControl(). Phase 1.5 (helmet-parity).
+  // Controls whether the browser proactively resolves DNS for links,
+  // images, CSS, and JavaScript referenced by the page. "off" (default)
+  // is the privacy-respecting choice — the browser does not pre-resolve
+  // DNS for unclicked links, so the resolver only sees the hostnames
+  // the user actually navigates to. "on" enables prefetching for
+  // perceived-performance gains at the cost of leaking the page's
+  // link surface to the DNS resolver.
+  //   value — one of "on" / "off" (default "off" matches helmet).
+  //           Unknown tokens throw at factory call time.
+  // (Note: helmet uses { allow: boolean }; gina uses { value: 'on'|'off' }
+  // matching the existing single-token-enum convention.)
+  "xDnsPrefetchControl": {
+    "value": "off"
+  },
   // #HDR13 — Cross-Origin-Opener-Policy response header applied by
   // gina.plugins.Coop(). Controls how the page's browsing context
   // relates to popups and cross-origin window.opener references on
