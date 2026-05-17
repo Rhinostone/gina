@@ -51,6 +51,8 @@ function Plugins() {
         Coep                : _require('./lib/security-headers/coep'),
         // #HDR7 — Origin-Agent-Cluster response header (origin-keyed isolation).
         OriginAgentCluster  : _require('./lib/security-headers/origin-agent-cluster'),
+        // #HDR8 — X-Powered-By response-header removal (helmet-parity gap-fill, opens Phase 1.5).
+        HidePoweredBy       : _require('./lib/security-headers/hide-powered-by'),
         // #HDR13 — Cross-Origin-Opener-Policy response header.
         Coop                : _require('./lib/security-headers/coop'),
         // #HDR14 — Cross-Origin-Resource-Policy response header.

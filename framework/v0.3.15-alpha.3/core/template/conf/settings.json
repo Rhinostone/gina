@@ -215,6 +215,19 @@
   // register to opt out. Browser support: Chrome 88+, Edge 88+,
   // Firefox 109+, Safari 15+. Older browsers ignore silently.
   "originAgentCluster": {},
+  // #HDR8 — X-Powered-By response-header REMOVAL applied by
+  // gina.plugins.HidePoweredBy(). Opens Phase 1.5 (helmet-parity gap-fill).
+  // Removes the X-Powered-By: Gina/<version> header that the framework
+  // emits by default at server.js:2425 (plus env.json > response.header).
+  // Reduces the attacker's reconnaissance surface — they no longer learn
+  // the server stack identity from the response header. Different SHAPE
+  // from the other HDR plugins: REMOVE (res.removeHeader) not SET. No
+  // tunable options today; the block is reserved for future fields.
+  // Express engine: works as expected. Isaac engine: the 15+ direct
+  // response.writeHead({ 'X-Powered-By': ... }) call sites bypass the
+  // removeHeader interface — middleware cannot intercept the header on
+  // Isaac-engine bundles. README documents this limitation.
+  "hidePoweredBy": {},
   // #HDR13 — Cross-Origin-Opener-Policy response header applied by
   // gina.plugins.Coop(). Controls how the page's browsing context
   // relates to popups and cross-origin window.opener references on
