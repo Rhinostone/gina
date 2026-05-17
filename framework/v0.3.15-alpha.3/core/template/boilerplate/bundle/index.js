@@ -144,6 +144,23 @@ var ${bundle} = require('gina');
 //    // var originAgentCluster = ${bundle}.plugins.OriginAgentCluster();
 //    // app.use(originAgentCluster);
 //
+//    // #HDR13 — Cross-Origin-Opener-Policy response header. Reads its
+//    // value from settings.json > coop.value (one of "same-origin",
+//    // "same-origin-allow-popups", "noopener-allow-popups",
+//    // "unsafe-none"; default "same-origin"). Caller options always
+//    // win — pass { value: 'same-origin-allow-popups' } if the bundle
+//    // hosts OAuth popups that need same-origin opener references, or
+//    // { value: 'noopener-allow-popups' } (Chrome 119+ / Firefox 131+)
+//    // to sever opener while keeping the popup window open.
+//    // Required (paired with #HDR6 gina.plugins.Coep() at
+//    // "require-corp") to enable SharedArrayBuffer and high-resolution
+//    // performance.now(). The "same-origin" default BREAKS OAuth /
+//    // SSO popup flows where the popup needs to call
+//    // window.opener.postMessage(...) back — pick an
+//    // -allow-popups variant for those.
+//    // var coop = ${bundle}.plugins.Coop();
+//    // app.use(coop);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

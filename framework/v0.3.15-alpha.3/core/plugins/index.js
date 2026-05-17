@@ -50,7 +50,9 @@ function Plugins() {
         // #HDR6 — Cross-Origin-Embedder-Policy response header.
         Coep                : _require('./lib/coep'),
         // #HDR7 — Origin-Agent-Cluster response header (origin-keyed isolation).
-        OriginAgentCluster  : _require('./lib/origin-agent-cluster')
+        OriginAgentCluster  : _require('./lib/origin-agent-cluster'),
+        // #HDR13 — Cross-Origin-Opener-Policy response header.
+        Coop                : _require('./lib/coop')
     };
 
     return self

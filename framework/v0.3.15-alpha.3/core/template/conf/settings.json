@@ -215,6 +215,25 @@
   // register to opt out. Browser support: Chrome 88+, Edge 88+,
   // Firefox 109+, Safari 15+. Older browsers ignore silently.
   "originAgentCluster": {},
+  // #HDR13 — Cross-Origin-Opener-Policy response header applied by
+  // gina.plugins.Coop(). Controls how the page's browsing context
+  // relates to popups and cross-origin window.opener references on
+  // top-level navigation. Required (paired with #HDR6 Coep:"require-corp")
+  // to enable SharedArrayBuffer and high-resolution performance.now()
+  // in the page.
+  //   value — one of the 4 W3C HTML spec tokens:
+  //           "same-origin" (default — full isolation, severs
+  //           window.opener cross-origin; BREAKS OAuth popup flows
+  //           where the popup needs to call back into the opener),
+  //           "same-origin-allow-popups" (keeps window.opener for
+  //           same-origin popups; compat-friendly for OAuth flows),
+  //           "noopener-allow-popups" (popups open but window.opener
+  //           forced to null; Chrome 119+ / Firefox 131+),
+  //           "unsafe-none" (browser default; no isolation).
+  //           Unknown tokens throw at factory call time.
+  "coop": {
+    "value": "same-origin"
+  },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved
