@@ -169,6 +169,16 @@ var ${bundle} = require('gina');
 //    // var xDnsPrefetchControl = ${bundle}.plugins.XDnsPrefetchControl();
 //    // app.use(xDnsPrefetchControl);
 //
+//    // #HDR10 — X-XSS-Protection: 0 response header. Phase 1.5
+//    // (helmet-parity). Emits the literal "0" to DISABLE Chrome's
+//    // legacy XSS auditor (the auditor itself had vulnerabilities;
+//    // disabling is the modern recommendation per MDN). The "0" is
+//    // deliberate — do NOT change to "1". Use #HDR5 Csp for actual
+//    // XSS defense. Effectively no-op in modern browsers; defense-
+//    // in-depth + helmet-parity narrative. No tunable options.
+//    // var xXssProtection = ${bundle}.plugins.XXssProtection();
+//    // app.use(xXssProtection);
+//
 //    // #HDR13 — Cross-Origin-Opener-Policy response header. Reads its
 //    // value from settings.json > coop.value (one of "same-origin",
 //    // "same-origin-allow-popups", "noopener-allow-popups",

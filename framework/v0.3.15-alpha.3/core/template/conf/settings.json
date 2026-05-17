@@ -244,6 +244,20 @@
   "xDnsPrefetchControl": {
     "value": "off"
   },
+  // #HDR10 — X-XSS-Protection: 0 response header applied by
+  // gina.plugins.XXssProtection(). Phase 1.5 (helmet-parity).
+  // Emits the literal header `X-XSS-Protection: 0` to DISABLE
+  // Chrome's legacy XSS auditor — the auditor itself had its own
+  // vulnerabilities (cross-site information disclosure), so disabling
+  // is the modern recommendation per MDN. The "0" value is deliberate;
+  // do not change it to "1" (which would re-enable the unsafe auditor).
+  // Use Content-Security-Policy (#HDR5) for the actual XSS defense.
+  // Browser status in 2026: Chrome dropped the auditor in v78 (2019);
+  // Edge follows Chrome; Firefox / Safari never implemented; IE11
+  // honoured but is EOL. Header is effectively a no-op in modern
+  // browsers but ships for defense-in-depth + helmet-parity narrative.
+  // No tunable options today; the block is reserved for future fields.
+  "xXssProtection": {},
   // #HDR13 — Cross-Origin-Opener-Policy response header applied by
   // gina.plugins.Coop(). Controls how the page's browsing context
   // relates to popups and cross-origin window.opener references on

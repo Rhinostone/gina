@@ -55,6 +55,8 @@ function Plugins() {
         HidePoweredBy       : _require('./lib/security-headers/hide-powered-by'),
         // #HDR9 — X-DNS-Prefetch-Control response header (helmet-parity gap-fill).
         XDnsPrefetchControl : _require('./lib/security-headers/x-dns-prefetch-control'),
+        // #HDR10 — X-XSS-Protection: 0 response header — DISABLES Chrome legacy XSS auditor (helmet-parity).
+        XXssProtection      : _require('./lib/security-headers/x-xss-protection'),
         // #HDR13 — Cross-Origin-Opener-Policy response header.
         Coop                : _require('./lib/security-headers/coop'),
         // #HDR14 — Cross-Origin-Resource-Policy response header.
