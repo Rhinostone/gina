@@ -67,21 +67,35 @@ the time `HidePoweredBy`'s middleware fires, the header is set and
 `res.removeHeader('x-powered-by')` removes it cleanly before the
 response is written.
 
-**Isaac engine (`server.isaac.js`)**: the plugin does NOT work for
-the 15+ direct `response.writeHead({ 'X-Powered-By': ... })` call
-sites in Isaac. `writeHead` bypasses the `setHeader`/`removeHeader`
-interface entirely — once `writeHead` is called with the headers
-object, those headers are committed regardless of any prior
-`removeHeader` call. The plugin still runs and calls removeHeader
-(no-op for Isaac since the header isn't set at middleware time);
-then `writeHead` emits the header directly to the client.
+**Isaac engine (`server.isaac.js`) — use `server.hidePoweredBy: true`
+instead of (or in addition to) this middleware**: Isaac writes
+`X-Powered-By` directly via 15 `response.writeHead({ 'X-Powered-By': ... })`
+sites. `writeHead` bypasses the `setHeader`/`removeHeader` interface
+entirely — once `writeHead` is called with the headers object, those
+headers are committed regardless of any prior `removeHeader` call. This
+middleware still runs and calls removeHeader on Isaac (no-op since the
+header isn't set at middleware time), but `writeHead` then emits the
+header directly to the client. The middleware therefore does NOT
+suppress the header on Isaac.
 
-If your bundle uses the Isaac engine and you need the same behaviour,
-the fix is a framework-level settings-flag gate (e.g.
-`server.hidePoweredBy: true` that the framework reads before calling
-writeHead). That's a separate slice — file an issue against
-gina-io/gina if your bundle needs it. The README of every Isaac-engine
-bundle should note the limitation.
+The framework-level `server.hidePoweredBy` settings flag closes that
+gap. Set it in your bundle's `config/settings.json`:
+
+```jsonc
+{
+  "server": {
+    "engine": "isaac",
+    "hidePoweredBy": true
+  }
+}
+```
+
+The flag (default `false`) makes the Isaac engine skip the
+`X-Powered-By` emission at all 15 `writeHead` sites. It is a no-op on
+the Express engine — use `gina.plugins.HidePoweredBy()` middleware
+there. Bundles that want belt-and-suspenders coverage across both
+engines can set the flag AND register the middleware (each is a no-op
+on the engine the other handles).
 
 To check which engine your bundle uses, look at
 `bundles/<name>/config/settings.json > server.engine` (defaults to
@@ -93,7 +107,8 @@ the Isaac engine when absent on most installs).
 |--------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | Plugin not registered                                              | `X-Powered-By: Gina/<version>` continues to be emitted                            |
 | Plugin registered on Express engine                                | Header removed cleanly                                                            |
-| Plugin registered on Isaac engine                                  | Header still emitted via direct `writeHead` (see "Effectiveness" above)            |
+| Plugin registered on Isaac engine (no `server.hidePoweredBy` flag) | Header still emitted via direct `writeHead` — set `settings.json > server.hidePoweredBy: true` |
+| Isaac engine + `server.hidePoweredBy: true`                        | Header suppressed at `writeHead` emission; this middleware is a no-op (safe redundancy)        |
 | User middleware sets `X-Powered-By` AFTER this plugin runs         | Re-added; mount HidePoweredBy LAST in the chain to prevent                        |
 | Response already sent (`res.headersSent === true`)                 | Node's `removeHeader` no-ops; request resumes                                    |
 

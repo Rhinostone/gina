@@ -1,6 +1,15 @@
 {
   "server": {
     "engine": "isaac",
+    // #HDR8 Phase 2 — engine-level X-Powered-By suppression. When `true`,
+    // the Isaac engine skips the 15 direct `writeHead({ 'X-Powered-By': ... })`
+    // emissions that bypass the middleware interface (gina.plugins.HidePoweredBy()
+    // can intercept `setHeader`/`removeHeader` but not the direct `writeHead`
+    // headers object — that's the Isaac-engine gap this flag closes).
+    // Express-engine bundles should use gina.plugins.HidePoweredBy() instead;
+    // this flag is a no-op on the Express engine.
+    // Default `false` preserves shipped behaviour; opt-in by setting to `true`.
+    "hidePoweredBy": false,
     // [Listen] Binding address: `0.0.0.0` by default or `127.0.0.1` for ipv4 only, `::` for ipv6 only, `:::` for both
     "address": "0.0.0.0",
     // [Listen] Queue length limited to os values : tcp_max_syn_backlog, somaxconn

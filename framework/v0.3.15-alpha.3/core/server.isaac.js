@@ -562,6 +562,20 @@ function ServerEngineClass(options) {
             , cachedIndexe      = null
         ;
 
+        // #HDR8 Phase 2 — gate the framework's X-Powered-By emission based on
+        // settings.json > server.hidePoweredBy (default false). Phase 1's
+        // gina.plugins.HidePoweredBy() middleware can intercept setHeader /
+        // removeHeader on the Express engine but NOT the 15 direct writeHead
+        // emissions below — writeHead bypasses the setHeader interface. This
+        // helper closes that Isaac-engine gap. Default false preserves shipped
+        // behaviour; opt-in by setting server.hidePoweredBy = true.
+        var _setPoweredByHeader = function(headers) {
+            if (!options.hidePoweredBy) {
+                headers['X-Powered-By'] = 'Gina/' + GINA_VERSION;
+            }
+            return headers;
+        };
+
 
         // http2stream handle by the Router class & the SuperController class
         // See `${core}/router.js` & `${core}/controller/controller.js`
@@ -614,13 +628,12 @@ function ServerEngineClass(options) {
                     timestamp: new Date().toISOString() // Correction : JSON valide (string)
                 });
 
-                const healthHeaders = {
+                const healthHeaders = _setPoweredByHeader({
                     'cache-control': 'no-cache, no-store, must-revalidate',
                     'pragma': 'no-cache',
                     'expires': '0',
-                    'content-type': 'application/json; charset=utf8',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'content-type': 'application/json; charset=utf8'
+                });
 
                 // HTTP/2 (Multiplexing)
                 if (response.stream) {
@@ -641,13 +654,12 @@ function ServerEngineClass(options) {
             if ( request.method.toUpperCase() === 'GET' && /\/_gina\/metrics$/i.test(request.url) ) {
                 if ( !lib.metrics.isClientAllowed(request) ) {
                     var metricsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/metrics: client IP not in app.json metrics.allowFrom' });
-                    var metricsForbiddenHeaders = {
+                    var metricsForbiddenHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
                         'pragma':        'no-cache',
                         'expires':       '0',
-                        'content-type':  'application/json; charset=utf8',
-                        'X-Powered-By':  'Gina/' + GINA_VERSION
-                    };
+                        'content-type':  'application/json; charset=utf8'
+                    });
                     if (response.stream) {
                         response.stream.respond({ ':status': 403, ...metricsForbiddenHeaders });
                         return response.stream.end(metricsForbiddenBody);
@@ -657,11 +669,10 @@ function ServerEngineClass(options) {
                 }
                 if ( !lib.metrics.isEnabled() ) {
                     var metricsDisabledBody    = '# /_gina/metrics — metrics not enabled\n# set app.json metrics.enabled to true and install prom-client (npm install prom-client)\n';
-                    var metricsDisabledHeaders = {
+                    var metricsDisabledHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
-                        'content-type':  'text/plain; version=0.0.4; charset=utf-8',
-                        'X-Powered-By':  'Gina/' + GINA_VERSION
-                    };
+                        'content-type':  'text/plain; version=0.0.4; charset=utf-8'
+                    });
                     if (response.stream) {
                         response.stream.respond({ ':status': 503, ...metricsDisabledHeaders });
                         return response.stream.end(metricsDisabledBody);
@@ -670,11 +681,10 @@ function ServerEngineClass(options) {
                     return response.end(metricsDisabledBody);
                 }
                 return lib.metrics.getMetrics().then(function(metricsText) {
-                    var metricsHeaders = {
+                    var metricsHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
-                        'content-type':  'text/plain; version=0.0.4; charset=utf-8',
-                        'X-Powered-By':  'Gina/' + GINA_VERSION
-                    };
+                        'content-type':  'text/plain; version=0.0.4; charset=utf-8'
+                    });
                     if (response.stream) {
                         response.stream.respond({ ':status': 200, ...metricsHeaders });
                         return response.stream.end(metricsText);
@@ -683,11 +693,10 @@ function ServerEngineClass(options) {
                     return response.end(metricsText);
                 }).catch(function(metricsErr) {
                     var metricsErrBody    = JSON.stringify({ error: 'metrics_error', message: metricsErr.message || String(metricsErr) });
-                    var metricsErrHeaders = {
+                    var metricsErrHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
-                        'content-type':  'application/json; charset=utf8',
-                        'X-Powered-By':  'Gina/' + GINA_VERSION
-                    };
+                        'content-type':  'application/json; charset=utf8'
+                    });
                     if (response.stream) {
                         response.stream.respond({ ':status': 500, ...metricsErrHeaders });
                         return response.stream.end(metricsErrBody);
@@ -703,13 +712,12 @@ function ServerEngineClass(options) {
                 // gate at L605-621. 403 on deny.
                 if ( !isAdminClientAllowed(request) ) {
                     var infoForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/info: client IP not in app.json admin.allowFrom' });
-                    var infoForbiddenHeaders = {
+                    var infoForbiddenHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
                         'pragma':        'no-cache',
                         'expires':       '0',
-                        'content-type':  'application/json; charset=utf8',
-                        'X-Powered-By':  'Gina/' + GINA_VERSION
-                    };
+                        'content-type':  'application/json; charset=utf8'
+                    });
                     if (response.stream) {
                         response.stream.respond({ ':status': 403, ...infoForbiddenHeaders });
                         return response.stream.end(infoForbiddenBody);
@@ -735,13 +743,12 @@ function ServerEngineClass(options) {
                 }
                 const infoStatus = JSON.stringify(infoPayload);
 
-                const infoHeaders = {
+                const infoHeaders = _setPoweredByHeader({
                     'cache-control': 'no-cache, no-store, must-revalidate',
                     'pragma': 'no-cache',
                     'expires': '0',
-                    'content-type': 'application/json; charset=utf8',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'content-type': 'application/json; charset=utf8'
+                });
 
                 // HTTP/2 (Multiplexing)
                 if (response.stream) {
@@ -764,13 +771,12 @@ function ServerEngineClass(options) {
                 // #S7 — IP allowlist gate. Same shape as the /_gina/info gate above.
                 if ( !isAdminClientAllowed(request) ) {
                     var cacheStatsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/cache/stats: client IP not in app.json admin.allowFrom' });
-                    var cacheStatsForbiddenHeaders = {
+                    var cacheStatsForbiddenHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
                         'pragma':        'no-cache',
                         'expires':       '0',
-                        'content-type':  'application/json; charset=utf8',
-                        'X-Powered-By':  'Gina/' + GINA_VERSION
-                    };
+                        'content-type':  'application/json; charset=utf8'
+                    });
                     if (response.stream) {
                         response.stream.respond({ ':status': 403, ...cacheStatsForbiddenHeaders });
                         return response.stream.end(cacheStatsForbiddenBody);
@@ -781,13 +787,12 @@ function ServerEngineClass(options) {
 
                 cache.from(server._cached);
                 const cacheStatsData = JSON.stringify(cache.stats());
-                const cacheStatsHeaders = {
+                const cacheStatsHeaders = _setPoweredByHeader({
                     'cache-control': 'no-cache, no-store, must-revalidate',
                     'pragma': 'no-cache',
                     'expires': '0',
-                    'content-type': 'application/json; charset=utf8',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'content-type': 'application/json; charset=utf8'
+                });
                 // HTTP/2 (Multiplexing)
                 if (response.stream) {
                     response.stream.respond({ ':status': 200, ...cacheStatsHeaders });
@@ -825,13 +830,12 @@ function ServerEngineClass(options) {
 
                 if (fs.existsSync(_inspFile)) {
                     var _inspBinary = /^(woff2?|png|ico|gif|jpe?g)$/.test(_inspExt);
-                    var _inspHeaders = {
+                    var _inspHeaders = _setPoweredByHeader({
                         'content-type': _inspMime[_inspExt] || 'application/octet-stream',
                         'cache-control': 'no-cache, no-store, must-revalidate',
                         'x-content-type-options': 'nosniff',
-                        'access-control-allow-origin': '*',
-                        'X-Powered-By': 'Gina/' + GINA_VERSION
-                    };
+                        'access-control-allow-origin': '*'
+                    });
                     var _inspData = fs.readFileSync(_inspFile, _inspBinary ? undefined : 'utf8');
 
                     // HTTP/2
@@ -857,14 +861,13 @@ function ServerEngineClass(options) {
                 if (!process.gina._inspectorActive) process.gina._inspectorActive = true;
                 var _ansiRe = /\x1B\[\d+m/g;
 
-                var _sseHeaders = {
+                var _sseHeaders = _setPoweredByHeader({
                     'content-type': 'text/event-stream; charset=utf-8',
                     'cache-control': 'no-cache, no-store',
                     'connection': 'keep-alive',
                     'x-content-type-options': 'nosniff',
-                    'access-control-allow-origin': '*',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'access-control-allow-origin': '*'
+                });
 
                 var _write, _onClose;
 
@@ -926,14 +929,13 @@ function ServerEngineClass(options) {
                 if (!process.gina._inspectorActive) process.gina._inspectorActive = true;
                 var _agAnsiRe = /\x1B\[\d+m/g;
 
-                var _agHeaders = {
+                var _agHeaders = _setPoweredByHeader({
                     'content-type': 'text/event-stream; charset=utf-8',
                     'cache-control': 'no-cache, no-store',
                     'connection': 'keep-alive',
                     'access-control-allow-origin': '*',
-                    'x-content-type-options': 'nosniff',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'x-content-type-options': 'nosniff'
+                });
 
                 var _agWrite, _agOnClose;
 
@@ -1025,12 +1027,11 @@ function ServerEngineClass(options) {
                 if (!process.gina._inspectorActive) process.gina._inspectorActive = true;
 
                 var _ixListenerCount = process.listenerCount('inspector#indexes');
-                var _ixHeaders = {
+                var _ixHeaders = _setPoweredByHeader({
                     'content-type': 'application/json; charset=utf8',
                     'cache-control': 'no-cache, no-store',
-                    'access-control-allow-origin': '*',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'access-control-allow-origin': '*'
+                });
 
                 if (_ixListenerCount === 0) {
                     var _ixEmpty = JSON.stringify({ connectors: {} });
@@ -1089,12 +1090,11 @@ function ServerEngineClass(options) {
                 && request.method.toUpperCase() === 'GET'
                 && /\/_gina\/reveal$/.test(request.url)
             ) {
-                var _rvHeaders = {
+                var _rvHeaders = _setPoweredByHeader({
                     'content-type': 'application/json; charset=utf8',
                     'cache-control': 'no-cache, no-store',
-                    'access-control-allow-origin': '*',
-                    'X-Powered-By': 'Gina/' + GINA_VERSION
-                };
+                    'access-control-allow-origin': '*'
+                });
 
                 var _rvSend = function(status, body) {
                     var _rvBody = JSON.stringify(body);
@@ -1181,7 +1181,12 @@ function ServerEngineClass(options) {
                 response.setHeader('x-content-type-options', 'nosniff');
                 response.setHeader('x-frame-options', 'DENY');
                 response.setHeader('x-xss-protection', '1; mode=block');
-                response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION);
+                // #HDR8 Phase 2 — gated on settings.json > server.hidePoweredBy
+                // (inline form because this site uses setHeader instead of the
+                // writeHead object-literal headers shape that _setPoweredByHeader covers)
+                if (!options.hidePoweredBy) {
+                    response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION);
+                }
 
                 var filename  =  _(localAsset.path +'/'+ localAsset.file, true);
                 if (acceptEncodingArr) {

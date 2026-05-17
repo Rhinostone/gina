@@ -36,15 +36,17 @@
  * `server.js:2425`, so `res.removeHeader('x-powered-by')` successfully
  * removes the header before the response is written.
  *
- * **Limitation — Isaac engine**: `server.isaac.js` writes `X-Powered-By`
- * directly via `response.writeHead({ 'X-Powered-By': ... })` at 15+
- * sites. `writeHead` bypasses the `setHeader`/`removeHeader` interface,
- * so middleware can NOT intercept the header on Isaac-engine bundles.
- * The plugin runs and calls removeHeader (no-op for Isaac since the
- * header isn't set yet at middleware time); then `writeHead` emits the
- * header directly. README documents this gap — Isaac-engine bundles
- * needing the same behaviour require a separate framework-level
- * settings-flag slice.
+ * **Isaac engine — use `server.hidePoweredBy: true` instead (or both)**:
+ * `server.isaac.js` writes `X-Powered-By` directly via 15
+ * `response.writeHead({ 'X-Powered-By': ... })` sites. `writeHead`
+ * bypasses the `setHeader`/`removeHeader` interface, so this plugin's
+ * middleware cannot intercept the header on Isaac. The framework-level
+ * gate `settings.json > server.hidePoweredBy` (default `false`) closes
+ * that gap — the Isaac engine reads it at boot and skips the emission
+ * at all 15 sites. This middleware is a no-op on Isaac (the header
+ * isn't set at middleware time); registering it is harmless but does
+ * not actually suppress the header. Set `server.hidePoweredBy: true`
+ * in the bundle's `config/settings.json` for Isaac-engine bundles.
  *
  * Takes no options — registering the plugin opts in; not registering
  * opts out. Mirrors helmet's no-opts shape (helmet warns + falls back if

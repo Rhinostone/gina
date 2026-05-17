@@ -1,0 +1,3 @@
+kind: Security
+body: 'Adding `server.hidePoweredBy` settings flag (#HDR8 Phase 2) that suppresses the 15 Isaac-engine `X-Powered-By` writeHead emissions the Phase 1 `gina.plugins.HidePoweredBy()` middleware cannot reach (writeHead bypasses setHeader/removeHeader). Default `false` preserves shipped behaviour; Isaac-engine bundles opt in by setting `server.hidePoweredBy: true` in settings.json. No-op on the Express engine — Express bundles use the Phase 1 middleware.'
+time: 2026-05-17T12:55:16.763388+01:00

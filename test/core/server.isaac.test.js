@@ -1218,3 +1218,323 @@ describe('08b - #S7 admin allowlist: pure logic replica', function() {
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 09 — #HDR8 Phase 2 X-Powered-By framework-level gate (source structure)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Phase 2 closes the Isaac-engine gap that the Phase 1
+// gina.plugins.HidePoweredBy() middleware cannot reach: 15 direct
+// response.writeHead({ 'X-Powered-By': ... }) emissions that bypass
+// the setHeader/removeHeader interface. Wiring:
+//   - settings.json > server.hidePoweredBy boolean (default false)
+//   - _setPoweredByHeader(headers) closure inside onPath, defined
+//     once at server boot, capturing `options` from ServerEngineClass
+//   - 14 object-literal header blocks wrap via _setPoweredByHeader({...})
+//   - 1 routing.json asset handler wraps response.setHeader in an
+//     inline `if (!options.hidePoweredBy)` (different writeHead shape)
+//
+// Default false preserves shipped behaviour; opt-in via
+// server.hidePoweredBy: true. The flag is a no-op on the Express
+// engine — Express bundles use gina.plugins.HidePoweredBy() instead.
+
+describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('source defines the _setPoweredByHeader helper', function() {
+        assert.ok(
+            src.indexOf('var _setPoweredByHeader = function(headers) {') > -1,
+            'expected `var _setPoweredByHeader = function(headers) {` helper definition'
+        );
+    });
+
+    it('helper gates on !options.hidePoweredBy', function() {
+        var fnStart = src.indexOf('var _setPoweredByHeader = function(headers) {');
+        var fnEnd   = src.indexOf('};', fnStart);
+        var body    = src.slice(fnStart, fnEnd);
+        assert.ok(body.indexOf('if (!options.hidePoweredBy)') > -1,
+            'helper must use `if (!options.hidePoweredBy)` as the gate');
+    });
+
+    it("helper sets 'X-Powered-By' to 'Gina/' + GINA_VERSION when the gate is open", function() {
+        var fnStart = src.indexOf('var _setPoweredByHeader = function(headers) {');
+        var fnEnd   = src.indexOf('};', fnStart);
+        var body    = src.slice(fnStart, fnEnd);
+        assert.ok(body.indexOf("headers['X-Powered-By'] = 'Gina/' + GINA_VERSION;") > -1,
+            "helper must assign `headers['X-Powered-By'] = 'Gina/' + GINA_VERSION;` inside the gate");
+    });
+
+    it('helper returns the headers object (mutates in place, then returns)', function() {
+        var fnStart = src.indexOf('var _setPoweredByHeader = function(headers) {');
+        var fnEnd   = src.indexOf('};', fnStart);
+        var body    = src.slice(fnStart, fnEnd);
+        assert.ok(/return\s+headers\s*;/.test(body),
+            'helper must end with `return headers;`');
+    });
+
+    it('helper is defined exactly once (no duplicate definitions)', function() {
+        var matches = src.match(/var _setPoweredByHeader\s*=\s*function/g);
+        assert.equal(matches && matches.length, 1,
+            'expected exactly one _setPoweredByHeader definition; found ' + (matches ? matches.length : 0));
+    });
+
+    it('helper is defined inside onPath (after var-block, before request callback)', function() {
+        var helperPos = src.indexOf('var _setPoweredByHeader = function(headers) {');
+        var onPathPos = src.indexOf('const onPath = function(path, cb, allowAll)');
+        var reqPos    = src.indexOf("server.on('request',", onPathPos);
+        assert.ok(helperPos > onPathPos, 'helper must be defined after `const onPath = ...`');
+        assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
+    });
+
+    it('exactly 14 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+        var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
+        assert.equal(matches && matches.length, 14,
+            'expected 14 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+    });
+
+    it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {
+        var names = [
+            'healthHeaders',
+            'metricsForbiddenHeaders', 'metricsDisabledHeaders', 'metricsHeaders', 'metricsErrHeaders',
+            'infoForbiddenHeaders',    'infoHeaders',
+            'cacheStatsForbiddenHeaders', 'cacheStatsHeaders',
+            '_inspHeaders', '_sseHeaders', '_agHeaders',
+            '_ixHeaders', '_rvHeaders'
+        ];
+        names.forEach(function(name) {
+            var re = new RegExp('(?:var|const)\\s+' + name + '\\s*=\\s*_setPoweredByHeader\\(\\{');
+            assert.ok(re.test(src), 'expected `' + name + ' = _setPoweredByHeader({` in source');
+        });
+    });
+
+    it('source contains exactly 3 X-Powered-By mentions (1 helper comment, 1 helper body, 1 routing.json setHeader)', function() {
+        var matches = src.match(/X-Powered-By/g);
+        assert.equal(matches && matches.length, 3,
+            'expected 3 X-Powered-By mentions; found ' + (matches ? matches.length : 0));
+    });
+
+    it('routing.json asset setHeader site wraps in an inline !options.hidePoweredBy guard', function() {
+        var routingMatch = src.indexOf('\\_gina\\/assets\\/routing\\.json');
+        assert.ok(routingMatch > -1, '/_gina/assets/routing.json regex anchor not found');
+        var afterRouting = src.slice(routingMatch, routingMatch + 1500);
+        assert.ok(afterRouting.indexOf('if (!options.hidePoweredBy)') > -1,
+            'routing.json asset handler must wrap response.setHeader in `if (!options.hidePoweredBy)`');
+        assert.ok(afterRouting.indexOf("response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION);") > -1,
+            'routing.json asset handler must still emit the header via setHeader when the gate is open');
+    });
+
+    it('helper and inline gate both read options.hidePoweredBy (exactly 2 reads)', function() {
+        var matches = src.match(/options\.hidePoweredBy/g);
+        assert.equal(matches && matches.length, 2,
+            'expected 2 reads of options.hidePoweredBy (1 in helper, 1 in inline gate); found ' + (matches ? matches.length : 0));
+    });
+
+    it('settings.json template declares server.hidePoweredBy as boolean false (default)', function() {
+        var settingsSrc = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/conf/settings.json'),
+            'utf8'
+        );
+        assert.ok(settingsSrc.indexOf('"hidePoweredBy": false') > -1,
+            'settings.json template must declare `"hidePoweredBy": false` as the default');
+    });
+
+    it('settings.json hidePoweredBy key sits inside the top-level server.* block', function() {
+        var settingsSrc = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/conf/settings.json'),
+            'utf8'
+        );
+        var serverStart = settingsSrc.indexOf('"server": {');
+        var serverEnd   = settingsSrc.indexOf('"upload": {');
+        assert.ok(serverStart > -1 && serverEnd > -1 && serverEnd > serverStart,
+            'expected server.* block to precede upload.* block in settings.json');
+        var serverBlock = settingsSrc.slice(serverStart, serverEnd);
+        assert.ok(serverBlock.indexOf('"hidePoweredBy"') > -1,
+            'hidePoweredBy must live inside the server.* block, not at top level');
+    });
+
+    it('settings.json comment block names #HDR8 Phase 2 and the Isaac-engine writeHead context', function() {
+        var settingsSrc = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/conf/settings.json'),
+            'utf8'
+        );
+        var hidePos    = settingsSrc.indexOf('"hidePoweredBy"');
+        var blockStart = settingsSrc.lastIndexOf('// #HDR8 Phase 2', hidePos);
+        assert.ok(blockStart > -1, 'expected `// #HDR8 Phase 2` marker comment above the hidePoweredBy key');
+        var commentBlock = settingsSrc.slice(blockStart, hidePos);
+        assert.ok(/Isaac/.test(commentBlock),    'comment block must explain the Isaac-engine context');
+        assert.ok(/writeHead/.test(commentBlock), 'comment block must explain the writeHead bypass shape');
+    });
+
+});
+
+
+describe('09b - #HDR8 Phase 2 framework gate: pure logic replica', function() {
+
+    // Inline replica of _setPoweredByHeader, parameterised by the options
+    // object so we can exercise the gate without touching framework state.
+    var GINA_VERSION_FIXTURE = '0.3.15-alpha.3';
+
+    function gate(options) {
+        return function _setPoweredByHeader(headers) {
+            if (!options.hidePoweredBy) {
+                headers['X-Powered-By'] = 'Gina/' + GINA_VERSION_FIXTURE;
+            }
+            return headers;
+        };
+    }
+
+    it('undefined hidePoweredBy emits the header (default behaviour)', function() {
+        var headers = gate({})({ 'content-type': 'application/json' });
+        assert.equal(headers['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+    });
+
+    it('false hidePoweredBy emits the header', function() {
+        var headers = gate({ hidePoweredBy: false })({ 'content-type': 'application/json' });
+        assert.equal(headers['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+    });
+
+    it('true hidePoweredBy suppresses the header (key absent)', function() {
+        var headers = gate({ hidePoweredBy: true })({ 'content-type': 'application/json' });
+        assert.equal(typeof headers['X-Powered-By'], 'undefined');
+    });
+
+    it('truthy non-boolean (e.g. string "true") also suppresses (loose truthy check)', function() {
+        var headers = gate({ hidePoweredBy: 'true' })({ 'content-type': 'application/json' });
+        assert.equal(typeof headers['X-Powered-By'], 'undefined');
+    });
+
+    it('falsy non-boolean (0, "", null) emits the header', function() {
+        assert.equal(gate({ hidePoweredBy: 0    })({})['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+        assert.equal(gate({ hidePoweredBy: ''   })({})['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+        assert.equal(gate({ hidePoweredBy: null })({})['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+    });
+
+    it('helper mutates the input headers object in place (does not copy)', function() {
+        var input  = { 'content-type': 'application/json' };
+        var output = gate({})(input);
+        assert.strictEqual(output, input,
+            'helper must return the same object reference it received');
+    });
+
+    it('helper preserves other header keys untouched', function() {
+        var headers = gate({ hidePoweredBy: true })({
+            'cache-control':                'no-cache',
+            'content-type':                 'application/json',
+            'access-control-allow-origin':  '*'
+        });
+        assert.equal(headers['cache-control'],                'no-cache');
+        assert.equal(headers['content-type'],                 'application/json');
+        assert.equal(headers['access-control-allow-origin'],  '*');
+    });
+
+    it('helper does not corrupt unrelated X-* headers when the gate is open or closed', function() {
+        var headers = gate({ hidePoweredBy: false })({
+            'X-Custom-Header': 'preserved',
+            'X-Request-Id':    'abc123'
+        });
+        assert.equal(headers['X-Custom-Header'], 'preserved');
+        assert.equal(headers['X-Request-Id'],    'abc123');
+        assert.equal(headers['X-Powered-By'],    'Gina/0.3.15-alpha.3');
+    });
+
+    it('repeated calls with gate=true are idempotent (header stays absent)', function() {
+        var headers = {};
+        gate({ hidePoweredBy: true })(headers);
+        gate({ hidePoweredBy: true })(headers);
+        assert.equal(typeof headers['X-Powered-By'], 'undefined');
+    });
+
+    it('repeated calls with gate=false are idempotent (key uniqueness preserved)', function() {
+        var headers = {};
+        gate({ hidePoweredBy: false })(headers);
+        gate({ hidePoweredBy: false })(headers);
+        assert.equal(headers['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+        var ownKeys = Object.keys(headers);
+        var matchingKeys = ownKeys.filter(function(k) { return k === 'X-Powered-By'; });
+        assert.equal(matchingKeys.length, 1, 'expected exactly one X-Powered-By key');
+    });
+
+    it('flip gate true → false on same headers — header appears', function() {
+        var headers = {};
+        gate({ hidePoweredBy: true })(headers);
+        assert.equal(typeof headers['X-Powered-By'], 'undefined');
+        gate({ hidePoweredBy: false })(headers);
+        assert.equal(headers['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+    });
+
+    it('flip gate false → true on same headers — helper does NOT delete (only adds)', function() {
+        // Real framework call sites pass a fresh literal each request, so the
+        // carry-over scenario doesn't arise in production. This documents the
+        // helper's add-only behaviour.
+        var headers = {};
+        gate({ hidePoweredBy: false })(headers);
+        assert.equal(headers['X-Powered-By'], 'Gina/0.3.15-alpha.3');
+        gate({ hidePoweredBy: true })(headers);
+        assert.equal(headers['X-Powered-By'], 'Gina/0.3.15-alpha.3',
+            'gate=true does not actively remove a previously-set key');
+    });
+
+});
+
+
+describe('09c - #HDR8 Phase 2 framework gate documentation cross-references', function() {
+
+    it("plugin README's Effectiveness section references server.hidePoweredBy: true", function() {
+        var readmePath = path.join(
+            require('../fw'),
+            'core/plugins/lib/security-headers/hide-powered-by/README.md'
+        );
+        var readme = fs.readFileSync(readmePath, 'utf8');
+        assert.ok(readme.indexOf('server.hidePoweredBy: true') > -1,
+            'README must reference `server.hidePoweredBy: true` as the Isaac-engine complement');
+    });
+
+    it('plugin README no longer says "separate slice" or "file an issue against"', function() {
+        var readmePath = path.join(
+            require('../fw'),
+            'core/plugins/lib/security-headers/hide-powered-by/README.md'
+        );
+        var readme = fs.readFileSync(readmePath, 'utf8');
+        assert.equal(readme.indexOf('separate slice'),         -1,
+            'README must no longer call the Isaac gate a "separate slice"');
+        assert.equal(readme.indexOf('file an issue against'),  -1,
+            'README must no longer ask users to file an issue for the Isaac gate');
+    });
+
+    it('plugin main.js JSDoc references server.hidePoweredBy', function() {
+        var mainPath = path.join(
+            require('../fw'),
+            'core/plugins/lib/security-headers/hide-powered-by/src/main.js'
+        );
+        var mainSrc = fs.readFileSync(mainPath, 'utf8');
+        var docEnd  = mainSrc.indexOf('var HEADER_NAME');
+        var doc     = mainSrc.slice(0, docEnd);
+        assert.ok(doc.indexOf('server.hidePoweredBy') > -1,
+            'main.js JSDoc must reference `server.hidePoweredBy` as the Isaac complement');
+    });
+
+    it('plugin main.js JSDoc no longer says "separate framework-level settings-flag slice"', function() {
+        var mainPath = path.join(
+            require('../fw'),
+            'core/plugins/lib/security-headers/hide-powered-by/src/main.js'
+        );
+        var mainSrc = fs.readFileSync(mainPath, 'utf8');
+        assert.equal(mainSrc.indexOf('separate framework-level settings-flag slice'), -1,
+            'main.js JSDoc must no longer describe the gate as a separate slice');
+    });
+
+    it('README failure-modes table documents both Isaac states (flag off and flag on)', function() {
+        var readmePath = path.join(
+            require('../fw'),
+            'core/plugins/lib/security-headers/hide-powered-by/README.md'
+        );
+        var readme = fs.readFileSync(readmePath, 'utf8');
+        assert.ok(readme.indexOf('Isaac engine (no `server.hidePoweredBy` flag)') > -1,
+            'failure-modes table must document Isaac without the flag');
+        assert.ok(readme.indexOf('Isaac engine + `server.hidePoweredBy: true`') > -1,
+            'failure-modes table must document Isaac with the flag enabled');
+    });
+
+});
