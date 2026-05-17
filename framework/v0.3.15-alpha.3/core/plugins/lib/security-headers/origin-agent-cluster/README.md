@@ -35,15 +35,16 @@ surface — register the plugin to opt in, don't register to opt out.
 
 ## Adoption
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express            = require('express');
+var myapp              = require('gina');
 var originAgentCluster = require('gina').plugins.OriginAgentCluster();
-var app                = express();
 
-app.use(originAgentCluster);
+myapp.onInitialize(function(event, app) {
+    app.use(originAgentCluster);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is

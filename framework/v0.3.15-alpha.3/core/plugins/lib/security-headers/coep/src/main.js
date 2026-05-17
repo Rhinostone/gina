@@ -12,13 +12,15 @@
  * `Cross-Origin-Embedder-Policy` (COEP) response header on every response
  * to control which cross-origin resources the page may embed.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express = require('express');
- *     var coep    = require('gina').plugins.Coep();
- *     var app     = express();
+ *     var myapp = require('gina');
+ *     var coep  = require('gina').plugins.Coep();
  *
- *     app.use(coep);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(coep);
+ *         event.emit('complete', app);
+ *     });
  *
  * Three valid values per the W3C HTML spec
  * (https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-embedder-policies):

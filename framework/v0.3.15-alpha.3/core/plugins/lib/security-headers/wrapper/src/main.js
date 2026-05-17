@@ -12,13 +12,15 @@
  * #HDR1 / #HDR2 / #HDR3 / #HDR4 / #HDR5 / #HDR6 / #HDR7 / #HDR13 /
  * #HDR14 into a single mount point with one `settings.json` block.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express          = require('express');
- *     var securityHeaders  = require('gina').plugins.SecurityHeaders();
- *     var app              = express();
+ *     var myapp           = require('gina');
+ *     var securityHeaders = require('gina').plugins.SecurityHeaders();
  *
- *     app.use(securityHeaders);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(securityHeaders);
+ *         event.emit('complete', app);
+ *     });
  *
  * **Batteries-included safe set**: calling `SecurityHeaders()` with no
  * opts mounts the seven non-footgun plugins with their per-plugin

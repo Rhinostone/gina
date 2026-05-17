@@ -23,12 +23,11 @@ wasn't yet covered.
 
 ## Adoption
 
-One block in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express = require('express');
-var csp     = require('gina').plugins.Csp({
+var myapp = require('gina');
+var csp   = require('gina').plugins.Csp({
     directives: {
         'default-src': ["'self'"],
         'script-src':  ["'self'", 'https://cdn.example.com'],
@@ -37,9 +36,11 @@ var csp     = require('gina').plugins.Csp({
         'upgrade-insecure-requests': true
     }
 });
-var app     = express();
 
-app.use(csp);
+myapp.onInitialize(function(event, app) {
+    app.use(csp);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is

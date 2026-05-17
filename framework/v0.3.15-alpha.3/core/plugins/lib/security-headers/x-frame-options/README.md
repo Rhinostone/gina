@@ -21,15 +21,16 @@ some intermediaries honour the older header and ignore CSP.
 
 ## Adoption
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express       = require('express');
+var myapp         = require('gina');
 var xFrameOptions = require('gina').plugins.XFrameOptions();
-var app           = express();
 
-app.use(xFrameOptions);
+myapp.onInitialize(function(event, app) {
+    app.use(xFrameOptions);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is

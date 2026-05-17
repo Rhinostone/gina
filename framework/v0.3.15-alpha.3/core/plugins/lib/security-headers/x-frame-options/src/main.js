@@ -13,13 +13,15 @@
  * controlling whether the page may be rendered inside a `<frame>`,
  * `<iframe>`, `<embed>` or `<object>`.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express        = require('express');
- *     var xFrameOptions  = require('gina').plugins.XFrameOptions();
- *     var app            = express();
+ *     var myapp         = require('gina');
+ *     var xFrameOptions = require('gina').plugins.XFrameOptions();
  *
- *     app.use(xFrameOptions);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(xFrameOptions);
+ *         event.emit('complete', app);
+ *     });
  *
  * Two valid values per RFC 7034:
  *

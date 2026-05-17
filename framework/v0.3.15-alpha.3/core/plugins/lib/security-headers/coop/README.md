@@ -30,15 +30,16 @@ back to no isolation.
 
 ## Adoption
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express = require('express');
-var coop    = require('gina').plugins.Coop();
-var app     = express();
+var myapp = require('gina');
+var coop  = require('gina').plugins.Coop();
 
-app.use(coop);
+myapp.onInitialize(function(event, app) {
+    app.use(coop);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is

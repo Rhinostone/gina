@@ -13,10 +13,10 @@
  * response header on every response, limiting which resources the browser
  * is allowed to load and from where.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express = require('express');
- *     var csp     = require('gina').plugins.Csp({
+ *     var myapp = require('gina');
+ *     var csp   = require('gina').plugins.Csp({
  *         directives: {
  *             'default-src': ["'self'"],
  *             'script-src':  ["'self'", 'https://cdn.example.com'],
@@ -24,9 +24,11 @@
  *             'img-src':     ["'self'", 'data:', 'https:']
  *         }
  *     });
- *     var app     = express();
  *
- *     app.use(csp);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(csp);
+ *         event.emit('complete', app);
+ *     });
  *
  * v0 ships STATIC DIRECTIVES ONLY. Per-response nonce wiring requires
  * template-render integration and defers to a separate CSP-aware view-layer

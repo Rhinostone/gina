@@ -11,13 +11,15 @@
  * X-Content-Type-Options plugin (#HDR1) — emits the
  * `X-Content-Type-Options: nosniff` response header on every response.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express             = require('express');
+ *     var myapp               = require('gina');
  *     var xContentTypeOptions = require('gina').plugins.XContentTypeOptions();
- *     var app                 = express();
  *
- *     app.use(xContentTypeOptions);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(xContentTypeOptions);
+ *         event.emit('complete', app);
+ *     });
  *
  * The header instructs browsers to honour the declared `Content-Type` of a
  * response strictly, blocking MIME-sniffing attacks where a `text/plain`

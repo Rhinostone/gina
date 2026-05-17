@@ -13,13 +13,15 @@
  * to control how the page's browsing context relates to popups and
  * cross-origin opener references on top-level navigation.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express = require('express');
- *     var coop    = require('gina').plugins.Coop();
- *     var app     = express();
+ *     var myapp = require('gina');
+ *     var coop  = require('gina').plugins.Coop();
  *
- *     app.use(coop);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(coop);
+ *         event.emit('complete', app);
+ *     });
  *
  * Four valid values per the W3C HTML spec
  * (https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies):

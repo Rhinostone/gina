@@ -30,15 +30,16 @@ unconditionally.
 
 ## Adoption
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express = require('express');
-var corp    = require('gina').plugins.Corp();
-var app     = express();
+var myapp = require('gina');
+var corp  = require('gina').plugins.Corp();
 
-app.use(corp);
+myapp.onInitialize(function(event, app) {
+    app.use(corp);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is

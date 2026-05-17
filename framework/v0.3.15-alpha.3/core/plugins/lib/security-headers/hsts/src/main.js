@@ -12,13 +12,15 @@
  * header on every response, instructing browsers to access the host
  * exclusively over HTTPS for the next `maxAge` seconds.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express = require('express');
- *     var hsts    = require('gina').plugins.Hsts();
- *     var app     = express();
+ *     var myapp = require('gina');
+ *     var hsts  = require('gina').plugins.Hsts();
  *
- *     app.use(hsts);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(hsts);
+ *         event.emit('complete', app);
+ *     });
  *
  * Three configuration fields per RFC 6797:
  *

@@ -20,15 +20,16 @@ bundles migrating from helmet find the API familiar.
 
 ### Default — batteries-included safe set
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after
-the express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express          = require('express');
-var securityHeaders  = require('gina').plugins.SecurityHeaders();
-var app              = express();
+var myapp           = require('gina');
+var securityHeaders = require('gina').plugins.SecurityHeaders();
 
-app.use(securityHeaders);
+myapp.onInitialize(function(event, app) {
+    app.use(securityHeaders);
+    event.emit('complete', app);
+});
 ```
 
 With no opts, mounts the **seven non-footgun plugins** with their

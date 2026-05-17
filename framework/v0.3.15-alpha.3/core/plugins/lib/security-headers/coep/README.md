@@ -29,15 +29,16 @@ Browser support: Chrome 83+, Edge 83+, Firefox 79+, Safari 15.2+.
 
 ## Adoption
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express = require('express');
-var coep    = require('gina').plugins.Coep();
-var app     = express();
+var myapp = require('gina');
+var coep  = require('gina').plugins.Coep();
 
-app.use(coep);
+myapp.onInitialize(function(event, app) {
+    app.use(coep);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is

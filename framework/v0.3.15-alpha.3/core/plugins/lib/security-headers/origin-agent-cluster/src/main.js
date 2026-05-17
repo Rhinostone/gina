@@ -11,13 +11,15 @@
  * Origin-Agent-Cluster plugin (#HDR7) — emits the
  * `Origin-Agent-Cluster: ?1` response header on every response.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express            = require('express');
+ *     var myapp              = require('gina');
  *     var originAgentCluster = require('gina').plugins.OriginAgentCluster();
- *     var app                = express();
  *
- *     app.use(originAgentCluster);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(originAgentCluster);
+ *         event.emit('complete', app);
+ *     });
  *
  * The header is a Structured Field Value (RFC 8941) carrying a boolean —
  * `?1` requests origin-keyed agent clustering (each origin gets its own

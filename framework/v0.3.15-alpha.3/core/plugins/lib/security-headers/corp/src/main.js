@@ -13,13 +13,15 @@
  * response, restricting which other origins may load this resource as
  * a no-CORS / `<img>` / `<script>` / `<link>` etc. embed.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express = require('express');
- *     var corp    = require('gina').plugins.Corp();
- *     var app     = express();
+ *     var myapp = require('gina');
+ *     var corp  = require('gina').plugins.Corp();
  *
- *     app.use(corp);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(corp);
+ *         event.emit('complete', app);
+ *     });
  *
  * Three valid values per the W3C HTML spec
  * (https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-resource-policy-internal-header):

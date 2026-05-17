@@ -13,13 +13,15 @@
  * browser includes when navigating away from the page or fetching
  * sub-resources.
  *
- * Bundles adopt it with a one-line bootstrap add:
+ * Bundles adopt it inside the bundle bootstrap:
  *
- *     var express        = require('express');
+ *     var myapp          = require('gina');
  *     var referrerPolicy = require('gina').plugins.ReferrerPolicy();
- *     var app            = express();
  *
- *     app.use(referrerPolicy);
+ *     myapp.onInitialize(function(event, app) {
+ *         app.use(referrerPolicy);
+ *         event.emit('complete', app);
+ *     });
  *
  * Eight valid tokens per the W3C Referrer Policy spec
  * (https://www.w3.org/TR/referrer-policy/):

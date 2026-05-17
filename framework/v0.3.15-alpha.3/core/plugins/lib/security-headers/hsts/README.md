@@ -19,15 +19,16 @@ track (#HDR1–#HDR4).
 
 ## Adoption
 
-One line in the bundle bootstrap (`bundles/<name>/index.js`), after the
-express app is created:
+One block in the bundle bootstrap (`bundles/<name>/index.js`):
 
 ```js
-var express = require('express');
-var hsts    = require('gina').plugins.Hsts();
-var app     = express();
+var myapp = require('gina');
+var hsts  = require('gina').plugins.Hsts();
 
-app.use(hsts);
+myapp.onInitialize(function(event, app) {
+    app.use(hsts);
+    event.emit('complete', app);
+});
 ```
 
 Order with other gina security plugins does not matter — the header is
