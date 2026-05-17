@@ -74,6 +74,15 @@ var ${bundle} = require('gina');
 //    // var xContentTypeOptions = ${bundle}.plugins.XContentTypeOptions();
 //    // app.use(xContentTypeOptions);
 //
+//    // #HDR2 — X-Frame-Options clickjacking-defense response header.
+//    // Reads its value from settings.json > xFrameOptions.value ("DENY"
+//    // or "SAMEORIGIN"; default "SAMEORIGIN"). Caller options always win
+//    // — pass { value: 'DENY' } here to override. Legacy
+//    // "ALLOW-FROM <uri>" is rejected at factory call time; use CSP
+//    // `frame-ancestors` for cross-browser allow-listing.
+//    // var xFrameOptions = ${bundle}.plugins.XFrameOptions();
+//    // app.use(xFrameOptions);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

@@ -119,6 +119,16 @@
   // future fields (e.g. per-route opt-out). Register the plugin to opt
   // in; do not register to opt out.
   "xContentTypeOptions": {},
+  // #HDR2 — X-Frame-Options clickjacking-defense response header applied
+  // by gina.plugins.XFrameOptions(). Controls whether the page may be
+  // rendered inside a <frame>/<iframe>/<embed>/<object>.
+  //   value — "DENY" (no framing ever) or "SAMEORIGIN" (same-origin only).
+  //           Default "SAMEORIGIN". Legacy "ALLOW-FROM <uri>" is rejected
+  //           at factory call time — modern browsers ignore it; use CSP
+  //           `frame-ancestors` for cross-browser allow-listing.
+  "xFrameOptions": {
+    "value": "SAMEORIGIN"
+  },
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved

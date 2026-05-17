@@ -38,7 +38,9 @@ function Plugins() {
         // #CSRF2 — signed double-submit token CSRF middleware.
         Csrf                : _require('./lib/csrf'),
         // #HDR1 — X-Content-Type-Options: nosniff response header.
-        XContentTypeOptions : _require('./lib/x-content-type-options')
+        XContentTypeOptions : _require('./lib/x-content-type-options'),
+        // #HDR2 — X-Frame-Options clickjacking-defense response header.
+        XFrameOptions       : _require('./lib/x-frame-options')
     };
 
     return self
