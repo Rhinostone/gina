@@ -23,30 +23,43 @@
  *
  * **Different shape from #HDR1-#HDR7 / #HDR13-#HDR14**: REMOVE pattern
  * (`res.removeHeader('x-powered-by')`) rather than SET. gina's framework
- * code emits `X-Powered-By: Gina/<version>` on every response at
- * `server.js:2425`, plus a config-driven `"X-Powered-By"` entry under
- * `env.json > response.header`. Both leak framework identity to scanners
- * looking for known-vulnerable stacks; removing the header reduces the
- * attacker's reconnaissance surface (one byte of useful intel — what
- * server stack to target). helmet ships `hidePoweredBy` for the same
- * reason.
+ * code emits `X-Powered-By: Gina/<version>` on every response — the
+ * canonical wire format. Removing the header reduces the attacker's
+ * reconnaissance surface (one byte of useful intel — what server stack
+ * to target). helmet ships `hidePoweredBy` for the same reason.
  *
- * **Effectiveness — Express engine**: middleware runs AFTER the early
- * framework `response.setHeader('X-Powered-By', ...)` at
- * `server.js:2425`, so `res.removeHeader('x-powered-by')` successfully
- * removes the header before the response is written.
+ * **Two engine-specific emit paths — full coverage requires both
+ * mechanisms**:
  *
- * **Isaac engine — use `server.hidePoweredBy: true` instead (or both)**:
- * `server.isaac.js` writes `X-Powered-By` directly via 15
- * `response.writeHead({ 'X-Powered-By': ... })` sites. `writeHead`
- * bypasses the `setHeader`/`removeHeader` interface, so this plugin's
- * middleware cannot intercept the header on Isaac. The framework-level
- * gate `settings.json > server.hidePoweredBy` (default `false`) closes
- * that gap — the Isaac engine reads it at boot and skips the emission
- * at all 15 sites. This middleware is a no-op on Isaac (the header
- * isn't set at middleware time); registering it is harmless but does
- * not actually suppress the header. Set `server.hidePoweredBy: true`
- * in the bundle's `config/settings.json` for Isaac-engine bundles.
+ *  1. **Express engine** (`server.js:2425`) — `response.setHeader(
+ *     'X-Powered-By', 'Gina/'+GINA_VERSION)` fires once in the early
+ *     request pipeline, before any user `app.use()` mount. This
+ *     middleware's `res.removeHeader('x-powered-by')` runs later in
+ *     the chain and removes the header cleanly before the response
+ *     is written.
+ *
+ *  2. **Isaac engine** (`server.isaac.js`) — the framework emits
+ *     `X-Powered-By: Gina/<version>` via the `_setPoweredByHeader(
+ *     headers)` helper at `server.isaac.js:572-577`, which writes
+ *     the header into the headers object passed to `writeHead(...)`
+ *     at every `/_gina/*` built-in endpoint (~15 sites: health,
+ *     metrics, info, cache stats, inspector SSE, agent, indexes,
+ *     reveal, etc.), plus one direct `setHeader` site at L1188 for
+ *     the routing.json asset endpoint. ALL of these emit sites are
+ *     gated on `options.hidePoweredBy` — set
+ *     `settings.json > server.hidePoweredBy: true` (default `false`)
+ *     to make the helper skip the X-Powered-By write across every
+ *     site at once. This middleware is a no-op on Isaac (the header
+ *     never lands in the response object at middleware time);
+ *     registering it is harmless but does not suppress the header
+ *     on Isaac. Use the `server.hidePoweredBy: true` settings gate
+ *     for Isaac-engine bundles.
+ *
+ * **No third path** — the env.json template's `response.header` block
+ * intentionally does NOT carry an `X-Powered-By` default (a previous
+ * `"Gina I/O - v${version}"` entry was structurally dead — overwritten
+ * by L2425's `setHeader` on Express, and Isaac never reads
+ * `server.response.header` — dropped 2026-05-17).
  *
  * Takes no options — registering the plugin opts in; not registering
  * opts out. Mirrors helmet's no-opts shape (helmet warns + falls back if

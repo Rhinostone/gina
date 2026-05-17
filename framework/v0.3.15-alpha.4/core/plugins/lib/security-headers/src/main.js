@@ -295,7 +295,7 @@ function runChain(mws, req, res, done) {
  * @param   {boolean|object}  [opts.csp]                                 — HDR5; opt-in only. Throws if `{}` (no directives) — directives required.
  * @param   {boolean|object}  [opts.coep]                                — HDR6; opt-in only. Default `require-corp` BREAKS embeds without CORP.
  * @param   {boolean|object}  [opts.originAgentCluster=true]             — HDR7; defaults to mount.
- * @param   {boolean|object}  [opts.hidePoweredBy=true]                  — HDR8; defaults to mount (Express engine only; Isaac engine writeHead path is unaffected).
+ * @param   {boolean|object}  [opts.hidePoweredBy=true]                  — HDR8; defaults to mount the express middleware (Express engine). For Isaac engine bundles, additionally set `settings.json > server.hidePoweredBy: true` to gate the `_setPoweredByHeader()` helper at every writeHead/setHeader emit site.
  * @param   {boolean|object}  [opts.xDnsPrefetchControl=true]            — HDR9; defaults to mount with `{ value: 'off' }`.
  * @param   {boolean|object}  [opts.xXssProtection=true]                 — HDR10; defaults to mount (emits literal `0` to DISABLE Chrome legacy auditor).
  * @param   {boolean|object}  [opts.xDownloadOptions=true]               — HDR11; defaults to mount (emits `noopen`).

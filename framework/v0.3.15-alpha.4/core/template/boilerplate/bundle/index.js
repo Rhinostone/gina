@@ -150,10 +150,12 @@ var ${bundle} = require('gina');
 //    // attacker's reconnaissance surface (they no longer learn the
 //    // server stack identity from the response header). Different
 //    // SHAPE from the other HDR plugins: REMOVE not SET. No tunable
-//    // options. Express engine: works as expected. Isaac engine: the
-//    // 15+ direct response.writeHead({ 'X-Powered-By': ... }) call
-//    // sites bypass the removeHeader interface — middleware cannot
-//    // intercept on Isaac bundles. See the plugin README for the gap.
+//    // options. Express engine: middleware intercepts setHeader cleanly.
+//    // Isaac engine: middleware is a no-op (writeHead commits headers
+//    // before middleware runs); set `settings.json > server.hidePoweredBy:
+//    // true` to gate the `_setPoweredByHeader()` helper that backs every
+//    // Isaac emit site (~15 writeHead + 1 setHeader). README documents
+//    // the per-engine split.
 //    // var hidePoweredBy = ${bundle}.plugins.HidePoweredBy();
 //    // app.use(hidePoweredBy);
 //

@@ -1,13 +1,16 @@
 {
   "server": {
     "engine": "isaac",
-    // #HDR8 Phase 2 — engine-level X-Powered-By suppression. When `true`,
-    // the Isaac engine skips the 15 direct `writeHead({ 'X-Powered-By': ... })`
-    // emissions that bypass the middleware interface (gina.plugins.HidePoweredBy()
-    // can intercept `setHeader`/`removeHeader` but not the direct `writeHead`
-    // headers object — that's the Isaac-engine gap this flag closes).
-    // Express-engine bundles should use gina.plugins.HidePoweredBy() instead;
-    // this flag is a no-op on the Express engine.
+    // #HDR8 Phase 2 — engine-level X-Powered-By suppression on the Isaac
+    // engine. When `true`, the `_setPoweredByHeader(headers)` helper at
+    // `server.isaac.js:572-577` skips the X-Powered-By write across every
+    // emit site at once (~15 `writeHead({...})` headers objects at
+    // `/_gina/*` built-in endpoints, plus the `setHeader` site at L1188
+    // for the routing.json asset endpoint). Express-engine bundles use
+    // gina.plugins.HidePoweredBy() instead — the middleware intercepts
+    // server.js:2425's setHeader cleanly. This flag is a no-op on the
+    // Express engine; the middleware is a no-op on Isaac. Belt-and-
+    // suspenders bundles can mount both.
     // Default `false` preserves shipped behaviour; opt-in by setting to `true`.
     "hidePoweredBy": false,
     // [Listen] Binding address: `0.0.0.0` by default or `127.0.0.1` for ipv4 only, `::` for ipv6 only, `:::` for both
@@ -227,15 +230,17 @@
   // #HDR8 — X-Powered-By response-header REMOVAL applied by
   // gina.plugins.HidePoweredBy(). Opens Phase 1.5 (helmet-parity gap-fill).
   // Removes the X-Powered-By: Gina/<version> header that the framework
-  // emits by default at server.js:2425 (plus env.json > response.header).
-  // Reduces the attacker's reconnaissance surface — they no longer learn
-  // the server stack identity from the response header. Different SHAPE
-  // from the other HDR plugins: REMOVE (res.removeHeader) not SET. No
-  // tunable options today; the block is reserved for future fields.
-  // Express engine: works as expected. Isaac engine: the 15+ direct
-  // response.writeHead({ 'X-Powered-By': ... }) call sites bypass the
-  // removeHeader interface — middleware cannot intercept the header on
-  // Isaac-engine bundles. README documents this limitation.
+  // emits by default at server.js:2425 (Express) / server.isaac.js
+  // _setPoweredByHeader() (Isaac). Reduces the attacker's reconnaissance
+  // surface — they no longer learn the server stack identity from the
+  // response header. Different SHAPE from the other HDR plugins: REMOVE
+  // (res.removeHeader) not SET. No tunable options today; the block is
+  // reserved for future fields.
+  // Express engine: middleware intercepts setHeader cleanly.
+  // Isaac engine: the middleware is a no-op (writeHead commits headers
+  // before middleware runs); use `server.hidePoweredBy: true` above to
+  // gate the `_setPoweredByHeader()` helper that backs every Isaac
+  // emit site (~15 writeHead + 1 setHeader). README documents this split.
   "hidePoweredBy": {},
   // #HDR9 — X-DNS-Prefetch-Control response header applied by
   // gina.plugins.XDnsPrefetchControl(). Phase 1.5 (helmet-parity).

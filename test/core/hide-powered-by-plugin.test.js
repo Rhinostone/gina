@@ -105,10 +105,20 @@ describe('01 - source inspection: remove-header patterns are present', function 
         );
     });
 
-    it('documents Isaac-engine writeHead limitation in module JSDoc', function () {
+    it('documents Isaac-engine emit path + the settings gate in module JSDoc', function () {
+        // Phase 2 (2026-05-14) introduced `_setPoweredByHeader(headers)` at
+        // server.isaac.js:572-577 which gates every Isaac emit site on
+        // `options.hidePoweredBy`. The pre-Phase-2 "writeHead bypasses
+        // removeHeader" framing is replaced with the actual current
+        // contract: middleware is a no-op on Isaac; the settings gate
+        // suppresses across every emit site at once.
         assert.ok(
-            /Isaac engine[\s\S]*writeHead/i.test(src),
-            'expected Isaac-engine writeHead caveat in module JSDoc'
+            /Isaac engine[\s\S]*_setPoweredByHeader/.test(src),
+            'expected mention of the _setPoweredByHeader() helper as the Isaac emit path'
+        );
+        assert.ok(
+            /server\.hidePoweredBy/.test(src),
+            'expected the settings.json > server.hidePoweredBy gate to be named'
         );
     });
 
@@ -384,6 +394,109 @@ describe('06 - settings.json template advertises hidePoweredBy slot', function (
         assert.ok(
             /\$\{bundle\}\.plugins\.HidePoweredBy\(\)/.test(BP),
             'expected HidePoweredBy adoption example in bundle boilerplate'
+        );
+    });
+
+});
+
+
+// ─── 07 — env.json template carries no X-Powered-By default (dead-code drop) ─
+
+describe('07 - env.json template carries no X-Powered-By default', function () {
+
+    // 2026-05-17 — the env.json template `response.header` block previously
+    // shipped `"X-Powered-By": "Gina I/O - v${version}"` as a default. It was
+    // structurally dead: server.js:2425's setHeader OVERWRITES it on Express
+    // before any middleware runs, and server.isaac.js does not read
+    // `server.response.header` at all. Dropping it has zero observable wire
+    // effect AND resolves a format inconsistency (only the canonical
+    // `Gina/<version>` shape remains on the wire). This section locks the
+    // drop so it cannot silently regress.
+
+    var TEMPLATE = path.join(FW, 'core/template/conf/env.json');
+    var src;
+    before(function () { src = fs.readFileSync(TEMPLATE, 'utf8'); });
+
+    it('env.json template does NOT define an X-Powered-By default', function () {
+        // Match any quoted "X-Powered-By" KEY in the source (case-insensitive)
+        // — would be the dead default if it came back. The comment block
+        // describing why it's intentionally absent does not contain a quoted
+        // key (only the bare token "X-Powered-By"), so a key match would
+        // catch a regression even with the why-not comment present.
+        assert.ok(
+            !/"X-Powered-By"\s*:/i.test(src),
+            'env.json template must NOT carry an X-Powered-By default; it would be ' +
+            'dead code (overwritten on Express, ignored on Isaac)'
+        );
+    });
+
+    it('env.json template carries a why-not anchor explaining the absence', function () {
+        // Future maintainers diffing the template will see the comment block
+        // and understand why no X-Powered-By default lives here.
+        assert.ok(
+            /X-Powered-By is intentionally NOT set here/.test(src),
+            'expected a why-not anchor comment in env.json response.header block'
+        );
+    });
+
+});
+
+
+// ─── 08 — server.isaac.js Phase 2 gate is wired ──────────────────────────────
+
+describe('08 - server.isaac.js _setPoweredByHeader Phase 2 gate is wired', function () {
+
+    // Phase 2 (2026-05-14) added `_setPoweredByHeader(headers)` at
+    // server.isaac.js:572-577 as the central X-Powered-By emission point
+    // for the Isaac engine. Every Isaac writeHead/setHeader emit site runs
+    // its headers object through this helper, so flipping
+    // `settings.json > server.hidePoweredBy: true` suppresses the header
+    // across every site at once. These pins ensure the gate stays wired.
+
+    var ISAAC = path.join(FW, 'core/server.isaac.js');
+    var src;
+    before(function () { src = fs.readFileSync(ISAAC, 'utf8'); });
+
+    it('_setPoweredByHeader helper is defined', function () {
+        assert.ok(
+            /var\s+_setPoweredByHeader\s*=\s*function\s*\(\s*headers\s*\)/.test(src),
+            'expected `var _setPoweredByHeader = function (headers) { ... }` in server.isaac.js'
+        );
+    });
+
+    it('_setPoweredByHeader gates on options.hidePoweredBy', function () {
+        assert.ok(
+            /_setPoweredByHeader[\s\S]{0,400}if\s*\(\s*!\s*options\.hidePoweredBy\s*\)/.test(src),
+            'expected `if (!options.hidePoweredBy)` gate inside _setPoweredByHeader'
+        );
+    });
+
+    it('_setPoweredByHeader writes the canonical Gina/<version> format', function () {
+        assert.ok(
+            /headers\[['"]X-Powered-By['"]\]\s*=\s*['"]Gina\/['"]\s*\+\s*GINA_VERSION/.test(src),
+            'expected canonical Gina/<version> wire format (not the legacy Gina I/O - v${version} env.json shape)'
+        );
+    });
+
+    it('routing.json asset setHeader site is gated on options.hidePoweredBy', function () {
+        // server.isaac.js:1187-1188 — the one direct setHeader emit site
+        // (the /_gina/assets/routing.json handler uses setHeader rather
+        // than the writeHead headers object).
+        assert.ok(
+            /if\s*\(\s*!\s*options\.hidePoweredBy\s*\)\s*\{[\s\S]{0,200}response\.setHeader\(\s*['"]X-Powered-By['"]/.test(src),
+            'expected the routing.json asset setHeader X-Powered-By call to be gated on options.hidePoweredBy'
+        );
+    });
+
+    it('at least 10 writeHead sites pass headers through _setPoweredByHeader', function () {
+        // The exact count drifts as /_gina/* endpoints are added/removed.
+        // 10 is a conservative floor — at write-time there are ~13 such
+        // sites. A regression that removed the gate at half of them would
+        // still be caught.
+        var matches = src.match(/_setPoweredByHeader\s*\(\s*\{/g) || [];
+        assert.ok(
+            matches.length >= 10,
+            'expected at least 10 _setPoweredByHeader({...}) call sites in server.isaac.js, got ' + matches.length
         );
     });
 
