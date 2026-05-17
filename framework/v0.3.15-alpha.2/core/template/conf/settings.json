@@ -111,6 +111,14 @@
     "safeMethods": ["GET", "HEAD", "OPTIONS"],
     "allowedOrigins": []
   },
+  // #HDR1 — X-Content-Type-Options: nosniff response header applied by
+  // gina.plugins.XContentTypeOptions(). The header instructs browsers to
+  // honour the declared Content-Type strictly, blocking MIME-sniffing
+  // attacks. No tunable options today (nosniff is the only valid value
+  // per RFC 7034 / WHATWG Fetch Standard); the block is reserved for
+  // future fields (e.g. per-route opt-out). Register the plugin to opt
+  // in; do not register to opt out.
+  "xContentTypeOptions": {},
   "engine.io": {
     // Reserved Gina infrastructure range: 4100–4199
     // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved

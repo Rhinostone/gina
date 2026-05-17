@@ -156,6 +156,21 @@ Cross-site request forgery protection. Three-phase defense-in-depth plan aligned
 
 ---
 
+## Web Security Headers
+
+HTTP security response headers as opt-in `gina.plugins.*` middlewares, mirroring the `Session` (#CSRF1) and `Csrf` (#CSRF2/#CSRF3) plugin shape. Each plugin is single-concern, opt-in by default-off, and reads its config from a flat top-level `settings.json` key. Native implementation — no `helmet` dependency. Phase 1 covers the four static-value headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, HSTS); Phase 2 covers CSP + COEP/COOP/CORP. CORS handling is separate and already lives in `core/server.js` (request-side).
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| ✅ | **`X-Content-Type-Options: nosniff` middleware** — Opt-in plugin `gina.plugins.XContentTypeOptions()` returns an Express-compatible middleware that emits the `X-Content-Type-Options: nosniff` response header on every response (the only valid value per RFC 7034 / WHATWG Fetch Standard). Adoption is two lines: `var xContentTypeOptions = require('gina').plugins.XContentTypeOptions(); app.use(xContentTypeOptions);`. Idempotent — if an earlier middleware already set the header, the existing value is preserved (safe to stack with helmet-style upstream gates). No `enabled` flag — register to opt in, don't register to opt out. Settings template seeds `xContentTypeOptions: {}` with the block reserved for future fields (per-route opt-out, etc.); future additions do not need an API break. Establishes the per-header response-middleware shape that the rest of Phase 1 (X-Frame-Options, Referrer-Policy, HSTS) will mirror. 33 unit tests; full suite 5467/5467. | `0.3.15-alpha` | 2026-05-17 |
+| 📋 | **`X-Frame-Options` clickjacking-defense middleware** — Opt-in plugin `gina.plugins.XFrameOptions({ value })`. Settings: `xFrameOptions.value: "DENY"` or `"SAMEORIGIN"` (default `"SAMEORIGIN"`). Validation rejects the legacy `"ALLOW-FROM"` value (modern browsers ignore it; explicit error directs users to CSP `frame-ancestors`). | `0.3.15-alpha` | Q2 2026 |
+| 📋 | **`Referrer-Policy` middleware** — Opt-in plugin `gina.plugins.ReferrerPolicy({ value })`. Settings: `referrerPolicy.value` is one of the eight RFC tokens (`"no-referrer"`, `"strict-origin-when-cross-origin"`, etc.). Default `"strict-origin-when-cross-origin"` matches the browser default since ~2021. Validation rejects invalid tokens. | `0.3.15-alpha` | Q2 2026 |
+| 📋 | **`Strict-Transport-Security` (HSTS) middleware** — Opt-in plugin `gina.plugins.Hsts({ maxAge, includeSubDomains, preload })`. Defaults: `maxAge: 15552000` (180 days), `includeSubDomains: false`, `preload: false`. Browser-parity invariant: `preload: true` requires `includeSubDomains: true` AND `maxAge >= 31536000` (1 year) per the HSTS preload-list submission requirements; factory throws when the combination is invalid. `preload: false` default is firm — never default to true (preload-list removal takes months). | `0.3.15-alpha` | Q2 2026 |
+| 📋 | **`Content-Security-Policy` (Phase 2 — static directives)** — Opt-in plugin `gina.plugins.Csp({ directives, reportOnly })`. v0 ships static directives only; per-response nonce wiring requires template-render integration and defers to a separate CSP-aware view-layer plugin. `reportOnly: true` emits `Content-Security-Policy-Report-Only` for non-enforcing migration testing. | `0.4.0` | Q1 2027 |
+| 📋 | **`Cross-Origin-{Embedder,Opener,Resource}-Policy` (Phase 2)** — Opt-in plugin `gina.plugins.CrossOriginPolicies({ embedder, opener, resource })` — COEP/COOP/CORP browsing-context isolation. Distinct from CORS (request-side, handled in `core/server.js:1362-1520`). Can break legitimate cross-origin resource loading; opt-in even more conservatively than Phase 1. | `0.4.0` | Q1 2027 |
+
+---
+
 ## Secrets & Configuration
 
 Secrets handling for bundle JSON configs without baking plaintext values into source. Pluggable-backend design with `process.env` as the default; the reserved API surface allows future Vault / SOPS / K8s Secrets backends to slot in without changing call sites or the placeholder syntax.

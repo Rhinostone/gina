@@ -65,6 +65,15 @@ var ${bundle} = require('gina');
 //    // var csrf = ${bundle}.plugins.Csrf();
 //    // app.use(csrf);
 //
+//    // #HDR1 — X-Content-Type-Options: nosniff response header. Blocks
+//    // MIME-sniffing attacks by instructing browsers to trust the declared
+//    // Content-Type strictly. No required configuration; nosniff is the
+//    // only valid value per RFC 7034. Order with other gina security
+//    // plugins does not matter — the header is emitted on the response,
+//    // not consumed from the request.
+//    // var xContentTypeOptions = ${bundle}.plugins.XContentTypeOptions();
+//    // app.use(xContentTypeOptions);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

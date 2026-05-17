@@ -1,0 +1,22 @@
+{
+  "name": "gina-core-plugin-x-content-type-options",
+  "version": "1.0.0",
+  "description": "X-Content-Type-Options: nosniff response header middleware (#HDR1)",
+  "authors": [
+    {
+      "name": "Maritn-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    },
+    {
+      "name": "Fabrice DELANEAU",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}

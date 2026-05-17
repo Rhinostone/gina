@@ -32,11 +32,13 @@ function Plugins() {
 
 
     var self =  {
-        Validator   : _require('./lib/validator'),
+        Validator           : _require('./lib/validator'),
         // #CSRF1 — hardened session-cookie wrapper around express-session.
-        Session     : _require('./lib/session'),
+        Session             : _require('./lib/session'),
         // #CSRF2 — signed double-submit token CSRF middleware.
-        Csrf        : _require('./lib/csrf')
+        Csrf                : _require('./lib/csrf'),
+        // #HDR1 — X-Content-Type-Options: nosniff response header.
+        XContentTypeOptions : _require('./lib/x-content-type-options')
     };
 
     return self
