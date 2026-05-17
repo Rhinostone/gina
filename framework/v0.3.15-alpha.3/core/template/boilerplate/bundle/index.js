@@ -161,6 +161,20 @@ var ${bundle} = require('gina');
 //    // var coop = ${bundle}.plugins.Coop();
 //    // app.use(coop);
 //
+//    // #HDR14 — Cross-Origin-Resource-Policy response header. Reads
+//    // its value from settings.json > corp.value (one of "same-origin",
+//    // "same-site", "cross-origin"; default "same-origin"). Caller
+//    // options always win — pass { value: 'cross-origin' } for
+//    // resources intended to be publicly embeddable (CDN fonts,
+//    // analytics images, public APIs), or { value: 'same-site' } for
+//    // first-party multi-subdomain setups (app.example.com embedding
+//    // cdn.example.com assets while still blocking evil.com).
+//    // Resource-side complement to #HDR6 gina.plugins.Coep() —
+//    // cross-origin embeds under Coep: require-corp need the embed-
+//    // target bundle to set Corp: cross-origin (or wider) to load.
+//    // var corp = ${bundle}.plugins.Corp();
+//    // app.use(corp);
+//
 //    // you can also use express middleware components directly (no #CSRF1 hardening)
 //    // eg.: app.use( expressSession({secret: process.env.SESSION_SECRET}) );
 //

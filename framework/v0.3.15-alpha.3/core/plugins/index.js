@@ -52,7 +52,9 @@ function Plugins() {
         // #HDR7 — Origin-Agent-Cluster response header (origin-keyed isolation).
         OriginAgentCluster  : _require('./lib/origin-agent-cluster'),
         // #HDR13 — Cross-Origin-Opener-Policy response header.
-        Coop                : _require('./lib/coop')
+        Coop                : _require('./lib/coop'),
+        // #HDR14 — Cross-Origin-Resource-Policy response header.
+        Corp                : _require('./lib/corp')
     };
 
     return self
