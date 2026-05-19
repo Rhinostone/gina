@@ -319,12 +319,13 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
         }
     } catch (e) { /* defensive */ }
 
-    // Inspector View tab Weight/Load fallback. serverMs is the best-available
-    // server processing duration at this point; weightBytes stays null because
-    // the nunjucks pipeline does not (yet) carry a late-bind patch script
-    // mechanism — `Buffer.byteLength(html)` can't be reflected back into the
-    // already-serialised __ginaData payload. Bundles on nunjucks see Load
-    // restored under COOP, Weight remains opener-dependent.
+    // Inspector View tab Weight/Load fallback (emit-time values). `weightBytes`
+    // is null at emit (body bytes unknown until post-render); `serverMs` is the
+    // best-available server processing duration from the timeline walk above.
+    // A late-bind patch script in the main render function (post-writeCache,
+    // pre-sendHtmlResponse) upgrades both to byte-final values on fresh
+    // renders; `server.isaac.js` cache-hits serve these emit-time values as a
+    // fallback (mirroring render-swig.js parity).
     var _njServerMs = null;
     try {
         if (local._timeline && local._timeline.entries.length > 0) {
@@ -1120,6 +1121,29 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         var _ccTtl = ( typeof(_ccCfg.ttl) != 'undefined' && _ccCfg.ttl > 0 ) ? _ccCfg.ttl : localOptions.conf.server.cache.ttl;
         if ( _ccTtl > 0 ) {
             res.setHeader('Cache-Control', ( _ccCfg.visibility === 'public' ? 'public' : 'private' ) + ', max-age=' + ~~(_ccTtl));
+        }
+    }
+
+    // Late-bind Inspector View tab Weight + Load metrics into the already-
+    // serialised `window.__ginaData` so the badges work under COOP without
+    // `window.opener`. Mirrors render-swig.js:1601-1622 (cache-miss late-bind),
+    // minus the `_flowPatch` ternary which is Flow-tab scope. `server.isaac.js`
+    // cache-hits serve the pre-patch bytes (weightBytes=null + emit-time
+    // serverMs) — same state as render-swig.js cache-hits today.
+    if ((displayInspector || self.isCacheless()) && /<\/body>/i.test(html)) {
+        try {
+            var _njWeightBytesFinal = Buffer.byteLength(html, 'utf8');
+            var _njServerMsFinal    = (local._timeline && typeof local._timeline.requestStart === 'number')
+                ? Date.now() - local._timeline.requestStart
+                : null;
+            var _njPatchScript = '<script>(function(d){'
+                + 'var u=d&&d.user,g=d&&d.gina;'
+                + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';u.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
+                + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';g.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
+                + '}(window.__ginaData));</script>';
+            html = html.replace(/<\/body>/i, _njPatchScript + '</body>');
+        } catch (lateBindErr) {
+            try { console.warn('[render-nunjucks] view-fallback late-bind skipped: ' + (lateBindErr.message || lateBindErr)); } catch (e) {}
         }
     }
 

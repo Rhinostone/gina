@@ -6919,22 +6919,15 @@ describe('58 - View tab Weight / Load fallback via server-side metrics', functio
         );
     });
 
-    it('render-nunjucks.js emits metrics with serverMs (no late-bind for weightBytes)', function() {
+    it('render-nunjucks.js emits metrics with weightBytes:null + serverMs (emit-time fallback for cache-hits)', function() {
         var src = getRNj58();
         assert.ok(
             /__gdGina\.environment\.metrics\s*=\s*\{\s*weightBytes:\s*null,\s*serverMs:/.test(src),
-            'expected metrics = { weightBytes: null, serverMs } on nunjucks __gdGina.environment'
+            'expected metrics = { weightBytes: null, serverMs } on nunjucks __gdGina.environment (cache-hit fallback)'
         );
         assert.ok(
             /__gdUser\.environment\.metrics\s*=/.test(src),
             'expected metrics on __gdUser.environment too'
-        );
-        // No late-bind of weightBytes — nunjucks doesn't carry a patch-script
-        // infrastructure (yet). The only Buffer.byteLength usage in this file
-        // is the existing content-length header computation, which is unrelated.
-        assert.ok(
-            !/metrics\.weightBytes\s*=/.test(src) && !/weightBytes:\s*Buffer\.byteLength/.test(src),
-            'render-nunjucks.js must not late-bind metrics.weightBytes (no patch infra)'
         );
     });
 
@@ -6944,6 +6937,67 @@ describe('58 - View tab Weight / Load fallback via server-side metrics', functio
         assert.ok(
             /local\._timeline\.entries/.test(src),
             'expected nunjucks delegate reads timeline entries'
+        );
+    });
+
+    it('render-nunjucks.js late-binds weightBytes via Buffer.byteLength(html)', function() {
+        var src = getRNj58();
+        var idx = src.indexOf('_njWeightBytesFinal');
+        assert.ok(idx > -1, 'expected _njWeightBytesFinal variable in late-bind block');
+        var block = src.substring(idx, idx + 200);
+        assert.ok(
+            /Buffer\.byteLength\(html,\s*['"]utf8['"]\)/.test(block),
+            'expected Buffer.byteLength(html, "utf8") near _njWeightBytesFinal'
+        );
+    });
+
+    it('render-nunjucks.js late-binds serverMs as final timeline delta', function() {
+        var src = getRNj58();
+        var idx = src.indexOf('_njServerMsFinal');
+        assert.ok(idx > -1, 'expected _njServerMsFinal variable in late-bind block');
+        var block = src.substring(idx, idx + 300);
+        assert.ok(
+            /Date\.now\(\)\s*-\s*local\._timeline\.requestStart/.test(block),
+            'expected Date.now() - local._timeline.requestStart near _njServerMsFinal'
+        );
+    });
+
+    it('render-nunjucks.js patch script writes weightBytes + serverMs onto both user and gina environments', function() {
+        var src = getRNj58();
+        // Single late-bind site (no cache-hit/miss split in nunjucks),
+        // so >= 1 occurrence each is enough.
+        var userPatches = src.match(/u\.environment\.metrics\.weightBytes\s*=/g) || [];
+        var ginaPatches = src.match(/g\.environment\.metrics\.weightBytes\s*=/g) || [];
+        assert.ok(userPatches.length >= 1, 'expected u.environment.metrics.weightBytes assignment');
+        assert.ok(ginaPatches.length >= 1, 'expected g.environment.metrics.weightBytes assignment');
+    });
+
+    it('render-nunjucks.js patch script injects via /<\\/body>/i replace', function() {
+        var src = getRNj58();
+        var idx = src.indexOf('_njPatchScript');
+        assert.ok(idx > -1, 'expected _njPatchScript variable');
+        // Slice forward across the multi-line patch construction (var decl,
+        // string concat, and the html.replace call) — keep generous.
+        var block = src.substring(idx, idx + 1500);
+        assert.ok(
+            /html\s*=\s*html\.replace\(\s*\/<\\\/body>\/i\s*,\s*_njPatchScript/.test(block),
+            'expected html = html.replace(/<\\/body>/i, _njPatchScript + ...)'
+        );
+    });
+
+    it('render-nunjucks.js late-bind block guards on </body> presence and inspector gate', function() {
+        var src = getRNj58();
+        var idx = src.indexOf('_njPatchScript');
+        assert.ok(idx > -1, 'expected _njPatchScript variable');
+        // Walk back from _njPatchScript to find the gating if-condition.
+        var preamble = src.substring(Math.max(0, idx - 800), idx);
+        assert.ok(
+            /\/<\\\/body>\/i\.test\(\s*html\s*\)/.test(preamble),
+            'expected /<\\/body>/i.test(html) guard before patch generation'
+        );
+        assert.ok(
+            /displayInspector\s*\|\|\s*self\.isCacheless\(\)/.test(preamble),
+            'expected gating on (displayInspector || self.isCacheless())'
         );
     });
 
