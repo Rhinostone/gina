@@ -122,3 +122,87 @@ describe('03 - bumpVersion local-sync warns on regex non-match', function () {
     });
 
 });
+
+
+describe('04 - bumpVersion local-sync regex consumes optional -alpha.N suffix (#R3)', function () {
+
+    it('versionPattern matches the optional (?:-alpha\\.\\d+)? whole-token suffix group', function () {
+        assert.ok(
+            SRC.indexOf("(?:-alpha\\\\.\\\\d+)?") > -1,
+            "expected `(?:-alpha\\.\\d+)?` whole-token suffix group in versionPattern — #R3 fix missing, bare-semver currentVersion (e.g. 0.3.15) would still match the prefix of v0.3.15-alpha.6 and produce concatenated v0.3.16-alpha.X-alpha.6 corruption"
+        );
+    });
+
+    it('versionPattern uses the tightened (?![\\w.-]) negative-lookahead', function () {
+        assert.ok(
+            SRC.indexOf("(?![\\\\w.-])") > -1,
+            "expected `(?![\\w.-])` tightened lookahead in versionPattern — old `(?![\\d.])` permitted `-` as the next char, which is what allowed the prefix match against alpha-suffixed versions"
+        );
+    });
+
+    it('combines optional suffix + tightened lookahead inline in the same regex pattern string', function () {
+        assert.ok(
+            SRC.indexOf("'(?:-alpha\\\\.\\\\d+)?(?![\\\\w.-])'") > -1,
+            "expected `'(?:-alpha\\.\\d+)?(?![\\w.-])'` inline — both fragments must appear together as a single trailing pattern, not split across edits"
+        );
+    });
+
+    it('does NOT carry the old (?![\\d.]) lookahead anywhere near versionPattern', function () {
+        var idx = SRC.indexOf('versionPattern');
+        assert.ok(idx > -1, 'versionPattern declaration not found');
+        var window = SRC.substring(idx, idx + 400);
+        assert.equal(
+            /\(\?\!\[\\\\d\.\]\)/.test(window),
+            false,
+            'old `(?![\\d.])` lookahead still appears within 400 chars of versionPattern — #R3 regression risk, bare-prefix match would corrupt alpha-suffixed versions again'
+        );
+    });
+
+});
+
+
+describe('05 - bumpVersion local-sync post-replace concatenated-suffix safety guard (#R3)', function () {
+
+    it('asserts a regex check against the concatenated alpha-suffix shape', function () {
+        assert.ok(
+            SRC.indexOf('/v\\d+\\.\\d+\\.\\d+-alpha\\.\\d+-alpha\\.\\d+/') > -1,
+            "expected `/v\\d+\\.\\d+\\.\\d+-alpha\\.\\d+-alpha\\.\\d+/` safety check regex — #R3 defense-in-depth missing, a regex regression would persist corrupted content silently"
+        );
+    });
+
+    it('emits a [bumpVersion] warn naming the concatenated-suffix failure mode', function () {
+        assert.ok(
+            SRC.indexOf('[bumpVersion] Local sync produced concatenated alpha suffix in ') > -1,
+            "expected concatenated-suffix warn message — safety guard missing visible logging"
+        );
+    });
+
+    it('safety guard appears AFTER src.replace and BEFORE the if (updated !== src) write conditional', function () {
+        var replaceIdx = SRC.indexOf('src.replace(versionPattern, ');
+        var guardIdx   = SRC.indexOf('[bumpVersion] Local sync produced concatenated alpha suffix in ');
+        var writeIdx   = SRC.indexOf('[bumpVersion] Local sync: ');
+        assert.ok(replaceIdx > -1, 'src.replace call missing');
+        assert.ok(guardIdx   > -1, 'safety guard warn missing');
+        assert.ok(writeIdx   > -1, 'write info log missing');
+        assert.ok(
+            guardIdx > replaceIdx,
+            'safety guard should appear AFTER src.replace in source order'
+        );
+        assert.ok(
+            guardIdx < writeIdx,
+            'safety guard should appear BEFORE the write info log in source order'
+        );
+    });
+
+    it('safety guard fail-closes via continue between warn and the if-write conditional', function () {
+        var guardIdx = SRC.indexOf('[bumpVersion] Local sync produced concatenated alpha suffix in ');
+        var writeIdx = SRC.indexOf('[bumpVersion] Local sync: ');
+        assert.ok(guardIdx > -1 && writeIdx > -1);
+        var between = SRC.substring(guardIdx, writeIdx);
+        assert.ok(
+            /continue\s*;/.test(between),
+            'expected `continue;` between the safety warn and the write — fail-closed shape missing, guard would warn-but-still-write'
+        );
+    });
+
+});

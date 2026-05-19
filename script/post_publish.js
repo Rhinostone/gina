@@ -499,11 +499,18 @@ function PostPublish() {
             if (new _(localSyncConfigPath).existsSync()) {
                 var syncConfig = requireJSON(localSyncConfigPath);
                 var syncFiles  = (syncConfig && syncConfig.files) || [];
-                // Matches "v<currentVersion>" when NOT followed by another
-                // digit or dot — prevents clobbering a longer version string
-                // that happens to share the same prefix.
+                // Matches "v<currentVersion>" as a whole token, optionally
+                // consuming a trailing "-alpha.N" suffix so a stable-cut
+                // bump (currentVersion="0.3.15") cannot match the bare
+                // prefix of "v0.3.15-alpha.6" and leave the suffix in
+                // place — that was the #R3 corruption shape that produced
+                // "v0.3.16-alpha.2-alpha.6" in CLAUDE.md after the 0.3.15
+                // stable cut. The tightened lookahead (?![\w.-]) also
+                // blocks word chars, dot, and dash from extending the
+                // matched token (defends against any future similar
+                // prefix-collision shape).
                 var versionPattern = new RegExp(
-                    'v' + currentVersion.replace(/\./g, '\\.') + '(?![\\d.])',
+                    'v' + currentVersion.replace(/\./g, '\\.') + '(?:-alpha\\.\\d+)?(?![\\w.-])',
                     'g'
                 );
                 for (var i = 0; i < syncFiles.length; i++) {
@@ -514,6 +521,17 @@ function PostPublish() {
                         if (!new _(filePath).existsSync()) continue;
                         var src = fs.readFileSync(filePath, 'utf8');
                         var updated = src.replace(versionPattern, 'v' + newVersion);
+                        // Defense-in-depth: a concatenated alpha-suffix
+                        // shape in the output indicates the regex matched
+                        // a prefix it shouldn't have. Fail-closed — warn
+                        // and skip the write rather than persist the
+                        // corruption. This is the post-replace check the
+                        // #R3 corruption would have tripped if it had
+                        // existed at the time of the 0.3.15 cut.
+                        if (/v\d+\.\d+\.\d+-alpha\.\d+-alpha\.\d+/.test(updated)) {
+                            console.warn('[bumpVersion] Local sync produced concatenated alpha suffix in ' + relPath + ' — NOT writing. Fix regex or sidecar entry.');
+                            continue;
+                        }
                         if (updated !== src) {
                             fs.writeFileSync(filePath, updated);
                             console.info('[bumpVersion] Local sync: ' + relPath + ' -> v' + newVersion);
