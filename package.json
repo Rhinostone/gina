@@ -79,14 +79,17 @@
   "readmeFilename": "README.md",
   "dependencies": {
     "@rhinostone/swig": "^2.4.0",
-    "engine.io": "^6.0.0",
+    "engine.io": "^6.6.7",
     "psl": "^1.15.0"
   },
   "devDependencies": {
     "csso-cli": "4.0.2",
-    "engine.io-client": "^6.6.3",
+    "engine.io-client": "^6.6.4",
     "jsdom": "^29.1.1",
     "requirejs": "^2.3.7",
     "sass": "1.99.0"
+  },
+  "overrides": {
+    "ws": "^8.20.1"
   }
 }
