@@ -92,7 +92,13 @@ fi
 bundle_src_pattern='^framework/v[^/]+/(core/asset/plugin/src/vendor/gina/|core/plugins/lib/(validator|storage)/src/|lib/(collection|domain|merge|inherits|uuid|routing)/src/|helpers/(prototypes|dateFormat)\.js|helpers/data/src/)'
 bundle_dist_pattern='^framework/v[^/]+/core/asset/plugin/dist/vendor/gina/(js|css)/gina'
 
-source_changes=$(git diff --cached --name-only --diff-filter=AM | grep -E "$bundle_src_pattern" || true)
+# Inspector is built in Phase 3 (excluded from Phase 2 auto-discovery) and
+# ships its own dist at dist/vendor/gina/inspector/inspector.{js,css} — NOT
+# bundled into dist/vendor/gina/(js|css)/gina*. Carve it out of the gina.min.*
+# freshness check so inspector-only changes don't trip a false positive. CI
+# bundle-freshness.yml still rebuilds + diffs the full vendor/gina/ tree
+# (including inspector/) on push, so Inspector drift is caught there.
+source_changes=$(git diff --cached --name-only --diff-filter=AM | grep -E "$bundle_src_pattern" | grep -v 'core/asset/plugin/src/vendor/gina/inspector/' || true)
 
 if [ -n "$source_changes" ]; then
     dist_changes=$(git diff --cached --name-only --diff-filter=AM | grep -E "$bundle_dist_pattern" || true)
