@@ -1,3 +1,10 @@
+# Global hidden-file exclusion — catches all .* paths at any depth.
+# Defense-in-depth: covers AI/IDE tool dirs (.playwright-mcp/, .cursor/, .aider*,
+# future tooling) + nested gitignored sidecars (script/.local-sync-targets.json)
+# + .github/ (CI metadata, no value to npm consumers).
+# Existing specific entries below stay for explicit intent documentation.
+.*
+
 .DS_Store
 browser/**
 .jshintrc
