@@ -6705,3 +6705,129 @@ describe('56 - Refresh button soft refresh (live indexes, reveal, passive agent)
     });
 
 });
+
+
+describe('57 - Template engine version badge in View tab', function() {
+
+    var RENDER_SWIG_57    = path.join(FW, 'core/controller/controller.render-swig.js');
+    var RENDER_NJ_57      = path.join(FW, 'core/controller/controller.render-nunjucks.js');
+    var INSPECTOR_JS_57   = path.join(BM_DIR, 'inspector.js');
+    var INSPECTOR_CSS_57  = path.join(BM_DIR, 'inspector.css');
+    var _rSwigSrc57, _rNjSrc57, _iJsSrc57, _iCssSrc57;
+    function getRSwigSrc57()    { return _rSwigSrc57  || (_rSwigSrc57  = fs.readFileSync(RENDER_SWIG_57,    'utf8')); }
+    function getRNjSrc57()      { return _rNjSrc57    || (_rNjSrc57    = fs.readFileSync(RENDER_NJ_57,      'utf8')); }
+    function getInspectorJs57() { return _iJsSrc57    || (_iJsSrc57    = fs.readFileSync(INSPECTOR_JS_57,   'utf8')); }
+    function getInspectorCss57(){ return _iCssSrc57   || (_iCssSrc57   = fs.readFileSync(INSPECTOR_CSS_57,  'utf8')); }
+
+    it('render-swig.js reads process.gina._swigDecision', function() {
+        assert.ok(
+            /process\.gina\s*&&\s*process\.gina\._swigDecision/.test(getRSwigSrc57()),
+            'expected _swigDecision lookup'
+        );
+    });
+
+    it('render-swig.js emits __gdGina.environment.templateEngine = { name, version }', function() {
+        assert.ok(
+            /__gdGina\.environment\.templateEngine\s*=\s*\{[^}]*name[^}]*version/.test(getRSwigSrc57()),
+            'expected templateEngine = { name, version } on __gdGina.environment'
+        );
+    });
+
+    it('render-swig.js mirrors templateEngine on __gdUser.environment', function() {
+        assert.ok(
+            /__gdUser\.environment\.templateEngine\s*=\s*\{[^}]*name[^}]*version/.test(getRSwigSrc57()),
+            'expected templateEngine on __gdUser.environment too'
+        );
+    });
+
+    it('render-swig.js has package.json fallback when decision version is missing', function() {
+        assert.ok(
+            /require\(_swigPkg\s*\+\s*['"]\/package\.json['"]\)\.version/.test(getRSwigSrc57()),
+            'expected require(pkg + "/package.json").version fallback'
+        );
+    });
+
+    it('render-swig.js strips @rhinostone/ prefix from package name', function() {
+        assert.ok(
+            /replace\(\/\^@rhinostone\\\//.test(getRSwigSrc57()),
+            'expected /^@rhinostone\\// prefix stripping'
+        );
+    });
+
+    it('render-nunjucks.js reads process.gina._nunjucksDecision', function() {
+        assert.ok(
+            /process\.gina\s*&&\s*process\.gina\._nunjucksDecision/.test(getRNjSrc57()),
+            'expected _nunjucksDecision lookup'
+        );
+    });
+
+    it('render-nunjucks.js emits templateEngine with name "nunjucks"', function() {
+        assert.ok(
+            /__gdGina\.environment\.templateEngine\s*=\s*\{\s*name:\s*['"]nunjucks['"]/.test(getRNjSrc57()),
+            'expected literal name: "nunjucks" in templateEngine for nunjucks delegate'
+        );
+    });
+
+    it('render-nunjucks.js mirrors templateEngine on __gdUser.environment', function() {
+        assert.ok(
+            /__gdUser\.environment\.templateEngine\s*=/.test(getRNjSrc57()),
+            'expected templateEngine on __gdUser.environment too'
+        );
+    });
+
+    it('inspector.js detectEngine checks env.templateEngine BEFORE the view.layout heuristic', function() {
+        var src = getInspectorJs57();
+        var fnIdx = src.indexOf('function detectEngine(');
+        assert.ok(fnIdx > -1, 'detectEngine function must exist');
+        var envIdx    = src.indexOf('env.templateEngine', fnIdx);
+        var layoutIdx = src.indexOf('view.layout',        fnIdx);
+        assert.ok(envIdx    > -1, 'expected env.templateEngine read');
+        assert.ok(layoutIdx > -1, 'expected view.layout heuristic');
+        assert.ok(envIdx < layoutIdx, 'env.templateEngine must be checked before the heuristic');
+    });
+
+    it('inspector.js detectEngine returns { name, version } object shape', function() {
+        var src = getInspectorJs57();
+        var fnIdx  = src.indexOf('function detectEngine(');
+        // Scan ~2000 chars of function body — enough for the whole body.
+        var fnBody = src.substring(fnIdx, fnIdx + 2000);
+        assert.ok(
+            /return\s*\{[\s\S]*?name[\s\S]*?version[\s\S]*?\}/.test(fnBody),
+            'expected return { name, version } shape'
+        );
+    });
+
+    it('inspector.js wraps the version render in an engineVersion guard', function() {
+        assert.ok(
+            /if\s*\(\s*engineVersion\s*\)/.test(getInspectorJs57()),
+            'expected if (engineVersion) guard around the version span'
+        );
+    });
+
+    it('inspector.js renders bm-vbadge-sep + bm-vbadge-ver inside the engine badge', function() {
+        var src = getInspectorJs57();
+        // The two spans must be adjacent (sep then ver) inside the engine
+        // badge's `if (engine)` block.
+        assert.ok(
+            /bm-vbadge-sep[\s\S]{0,200}?bm-vbadge-ver/.test(src),
+            'expected bm-vbadge-sep followed by bm-vbadge-ver span'
+        );
+    });
+
+    it('inspector.css has scoped .bm-vbadge-engine .bm-vbadge-ver rule', function() {
+        assert.ok(
+            /\.bm-vbadge-engine\s+\.bm-vbadge-ver\s*\{/.test(getInspectorCss57()),
+            'expected scoped .bm-vbadge-engine .bm-vbadge-ver rule in compiled CSS'
+        );
+    });
+
+    it('inspector.css resets text-transform and letter-spacing for the version span', function() {
+        var src   = getInspectorCss57();
+        var match = src.match(/\.bm-vbadge-engine\s+\.bm-vbadge-ver\s*\{[^}]+\}/);
+        assert.ok(match, 'scoped rule must exist');
+        assert.ok(/text-transform\s*:\s*none/.test(match[0]),  'expected text-transform: none');
+        assert.ok(/letter-spacing\s*:\s*0/.test(match[0]),     'expected letter-spacing: 0');
+        assert.ok(/opacity\s*:\s*\.?0?\.65/.test(match[0]),    'expected opacity: .65 (dimmed)');
+    });
+
+});

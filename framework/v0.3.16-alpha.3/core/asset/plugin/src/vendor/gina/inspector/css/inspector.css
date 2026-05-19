@@ -1113,6 +1113,14 @@ body {
   opacity: 0.4;
 }
 
+/* Engine version — dimmed, normal-case (overrides the uppercase + tracking
+   that `.bm-vbadge-engine` applies). */
+.bm-vbadge-engine .bm-vbadge-ver {
+  opacity: 0.65;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
 /* Load — green tint */
 .bm-vbadge-load {
   color: var(--ok);

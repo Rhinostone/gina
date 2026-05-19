@@ -1097,6 +1097,27 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 __gdGina.environment.scope = process.env.NODE_SCOPE || null;
             }
 
+            // Template engine identity (name + version) for the Inspector View
+            // badge. Read from the cached resolver decision; fall back to the
+            // package's package.json when the cache is missing (test stubs,
+            // very-early bootstrap). Defensive — never break render.
+            try {
+                var _swigDec   = process.gina && process.gina._swigDecision;
+                var _swigPkg   = (_swigDec && _swigDec['package']) || '@rhinostone/swig';
+                var _swigVer   = (_swigDec && _swigDec.version) || null;
+                if (!_swigVer) {
+                    try { _swigVer = require(_swigPkg + '/package.json').version; }
+                    catch (e) { _swigVer = null; }
+                }
+                var _engineName = _swigPkg.replace(/^@rhinostone\//, '');
+                if (__gdGina.environment) {
+                    __gdGina.environment.templateEngine = { name: _engineName, version: _swigVer };
+                }
+                if (__gdUser.environment) {
+                    __gdUser.environment.templateEngine = { name: _engineName, version: _swigVer };
+                }
+            } catch (e) { /* defensive — engine badge falls back to client heuristic */ }
+
             // #INS8 — expose the standalone Inspector URL so statusbar.html can
             // prefer it over the embedded /_gina/inspector/ path. Null when
             // unset = fall back to legacy embedded popup.

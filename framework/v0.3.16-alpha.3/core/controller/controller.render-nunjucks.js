@@ -303,6 +303,22 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
         __gdGina.environment.scope = process.env.NODE_SCOPE || null;
     }
 
+    // Template engine identity for the Inspector View badge.
+    try {
+        var _njDec = process.gina && process.gina._nunjucksDecision;
+        var _njVer = (_njDec && _njDec.version) || null;
+        if (!_njVer) {
+            try { _njVer = require('nunjucks/package.json').version; }
+            catch (e) { _njVer = null; }
+        }
+        if (__gdGina.environment) {
+            __gdGina.environment.templateEngine = { name: 'nunjucks', version: _njVer };
+        }
+        if (__gdUser.environment) {
+            __gdUser.environment.templateEngine = { name: 'nunjucks', version: _njVer };
+        }
+    } catch (e) { /* defensive */ }
+
     // #INS8 — standalone Inspector URL (settings.json > inspector.url)
     var _inspUrlConf = null;
     try {

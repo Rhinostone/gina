@@ -1017,6 +1017,13 @@ body {
 }
 .bm-vbadge-res { opacity: .65; }
 .bm-vbadge-sep { margin: 0 1px; opacity: .4; }
+/* Engine version — dimmed, normal-case (overrides the uppercase + tracking
+   that `.bm-vbadge-engine` applies). */
+.bm-vbadge-engine .bm-vbadge-ver {
+    opacity: .65;
+    text-transform: none;
+    letter-spacing: 0;
+}
 /* Load — green tint */
 .bm-vbadge-load {
     color: var(--ok);

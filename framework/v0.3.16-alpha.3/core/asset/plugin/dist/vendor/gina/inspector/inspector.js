@@ -675,32 +675,40 @@
     // ── Engine badge ──────────────────────────────────────────────────────
 
     /**
-     * Detect the template engine name from view data.
-     * Inspects `view.layout` path and `view.ext` to distinguish between
-     * template engines. Does NOT use `env.engine` (that is the HTTP server
-     * engine — isaac/express — not the template engine).
+     * Detect the template engine and version from server-emitted environment
+     * data, with a heuristic fallback from view layout/ext when the field is
+     * absent (legacy renders, test stubs, render-v1.js path).
+     *
+     * Does NOT use `env.engine` — that is the HTTP server engine (isaac/express),
+     * not the template engine.
+     *
      * @inner
-     * @param {Object} view - View data from `__ginaData.user.view`
-     * @param {Object} env - Environment data from `__ginaData.user.environment`
-     * @returns {string} Template engine name (e.g. `'Swig'`, `'Nunjucks'`)
+     * @param   {Object} view - View data from `__ginaData.user.view`
+     * @param   {Object} env  - Environment data from `__ginaData.user.environment`
+     * @returns {{name: (string|null), version: (string|null)}}
      */
     function detectEngine(view, env) {
-        // Detect the TEMPLATE engine, not the HTTP engine.
-        // env.engine is the HTTP server engine (isaac/express) — do not use it here.
-        // The template engine is determined by the view layout path or file extension.
+        // Server-emitted field wins — render-swig.js / render-nunjucks.js
+        // populate env.templateEngine = { name, version } from the resolver
+        // decision cache.
+        if (env && env.templateEngine && typeof env.templateEngine === 'object') {
+            return {
+                name:    env.templateEngine.name || null,
+                version: env.templateEngine.version || null
+            };
+        }
 
-        // Try to detect from view.layout path (e.g. "swig/html/default")
+        // Fallback heuristic — view.layout path then view.ext.
+        var name = null;
         if (view && typeof view.layout === 'string') {
-            if (/swig[\/\\]/i.test(view.layout)) return 'Swig';
-            if (/nunjucks[\/\\]|njk[\/\\]/i.test(view.layout)) return 'Nunjucks';
+            if (/swig[\/\\]/i.test(view.layout)) name = 'Swig';
+            else if (/nunjucks[\/\\]|njk[\/\\]/i.test(view.layout)) name = 'Nunjucks';
         }
-        // Try from view.ext
-        if (view && typeof view.ext === 'string') {
-            if (view.ext === '.njk') return 'Nunjucks';
-            if (view.ext === '.html') return 'Swig';
+        if (!name && view && typeof view.ext === 'string') {
+            if (view.ext === '.njk') name = 'Nunjucks';
+            else if (view.ext === '.html') name = 'Swig';
         }
-        // Default: render-swig.js handles all current rendering
-        return 'Swig';
+        return { name: name || 'Swig', version: null };
     }
 
     // ── Page metrics (weight, load time, paint time) ───────────────────────
@@ -1019,7 +1027,9 @@
 
         // Engine + metrics badges (floating right row)
         var env = (ginaData && ginaData.user && ginaData.user.environment) || {};
-        var engine = detectEngine(view, env);
+        var engineInfo    = detectEngine(view, env);
+        var engine        = engineInfo.name;
+        var engineVersion = engineInfo.version;
         var u = ginaData && ginaData.user ? ginaData.user : {};
         var isXhr = typeof u['view-xhr'] !== 'undefined';
         var metrics = getPageMetrics(isXhr);
@@ -1034,9 +1044,16 @@
         if (hasBadges) {
             h += '<div class="bm-view-badges">';
             if (engine) {
-                h += '<span class="bm-vbadge bm-vbadge-engine" title="Template engine">'
+                var _engineTitle = 'Template engine'
+                    + (engineVersion ? ': ' + engine + ' ' + engineVersion : '');
+                h += '<span class="bm-vbadge bm-vbadge-engine" title="' + escHtml(_engineTitle) + '">'
                     + '<svg viewBox="0 0 16 16"><path d="M5.854 4.854a.5.5 0 10-.708-.708l-3.5 3.5a.5.5 0 000 .708l3.5 3.5a.5.5 0 00.708-.708L2.707 8l3.147-3.146zm4.292 0a.5.5 0 01.708-.708l3.5 3.5a.5.5 0 010 .708l-3.5 3.5a.5.5 0 01-.708-.708L13.293 8l-3.147-3.146z"/></svg>'
-                    + escHtml(engine) + '</span>';
+                    + escHtml(engine);
+                if (engineVersion) {
+                    h += '<span class="bm-vbadge-sep">|</span>'
+                        + '<span class="bm-vbadge-ver">' + escHtml(engineVersion) + '</span>';
+                }
+                h += '</span>';
             }
             if (metrics.weight) {
                 var _res = metrics.resourceSize;
