@@ -1837,3 +1837,216 @@ describe('13 - throwError HTML branch: stack rendered only in local scope', func
     });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 14 — throwError 2-arg form: (statusCode, Error|string) preserves status
+// ─────────────────────────────────────────────────────────────────────────
+//
+// The documented overloads in types/index.d.ts are 1-arg, 3-arg, and
+// 1-arg-object. Consumers also reach for an undocumented 2-arg form
+// `throwError(statusCode, ErrorInstance)`. Before the normalization shift,
+// this form silently fell back to HTTP 500 because the L4998 if-branch's
+// coercion at L5005-5007 inspects `code` (the Error/string) and `res.status`
+// (the number's .status — undefined), never `res` itself as a number.
+//
+// Fix shape: a 2-arg normalization shift at the top of the function detects
+// `typeof(res) == 'number' && arguments.length === 2` with the second arg
+// being an Error or string, and shifts the locals to the canonical form
+// (msg = arguments[1], code = res, res = local.res). Args then flow naturally
+// through the existing L4998 IF branch with the explicit code preserved.
+//
+// The 2-arg errorObj form `throwError(statusCode, errorObj)` is NOT shifted —
+// the existing `else if (arguments.length < 3)` branch at L5072 already
+// handles it correctly (status reaches the explicit code via `code = res`).
+
+describe('14 - throwError 2-arg form: (statusCode, Error|string) preserves status', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ── (a) source structure ─────────────────────────────────────────────────
+
+    it('source contains the 2-arg normalization shift signal strings', function() {
+        assert.ok(src.indexOf("typeof(res) == 'number' && arguments.length === 2") > -1,
+            "expected `typeof(res) == 'number' && arguments.length === 2` shift guard");
+        assert.ok(src.indexOf('arguments[1] instanceof Error') > -1,
+            'expected `arguments[1] instanceof Error` recognized shape');
+        assert.ok(src.indexOf("typeof(arguments[1]) == 'string'") > -1,
+            "expected `typeof(arguments[1]) == 'string'` recognized shape");
+    });
+
+    it('shift sits BEFORE the existing L4998 IF branch', function() {
+        var shiftIdx = src.indexOf("typeof(res) == 'number' && arguments.length === 2");
+        var ifIdx    = src.indexOf('arguments[0] instanceof Error');
+        assert.ok(shiftIdx > -1, '2-arg shift not found in source');
+        assert.ok(ifIdx > -1, 'L4998 IF branch anchor not found');
+        assert.ok(shiftIdx < ifIdx, 'shift must run BEFORE the L4998 IF branch');
+    });
+
+    it('shift binds to length === 2 (regression guard against 1-arg / 3-arg call shapes)', function() {
+        assert.ok(src.indexOf('arguments.length === 2') > -1,
+            'expected strict `arguments.length === 2` to bind the shift to the 2-arg shape only');
+    });
+
+    it('JSDoc on throwError documents the 2-arg form', function() {
+        var jsdocStart = src.indexOf('Throw error — terminates the request');
+        var fnDecl     = src.indexOf('this.throwError = function(res, code, msg)');
+        assert.ok(jsdocStart > -1 && fnDecl > -1, 'throwError JSDoc anchors not found');
+        var jsdoc = src.slice(jsdocStart, fnDecl);
+        assert.ok(jsdoc.indexOf('throwError(code, err)') > -1,
+            'JSDoc must list the `throwError(code, err)` 2-arg form');
+    });
+
+    it('types/index.d.ts declares the 2-arg overload', function() {
+        var dtsPath = path.resolve(__dirname, '../../types/index.d.ts');
+        var dts     = fs.readFileSync(dtsPath, 'utf8');
+        assert.ok(
+            dts.indexOf('throwError(code: number, err: Error | string)') > -1,
+            'types/index.d.ts must declare `throwError(code: number, err: Error | string): void;`'
+        );
+    });
+
+    // ── (b) pure logic — inline replica of normalization + downstream branches
+
+    // Mirrors controller.js: the new shift block at function entry, then
+    // either the L4998 IF branch (Error/string second args) or the L5072
+    // `else if (arguments.length < 3)` branch. Returns the final locals
+    // and constructed errorObject so tests can assert end-to-end shape.
+    var statusCodes = {
+        400: 'Bad Request',
+        404: 'Not Found',
+        412: 'Precondition Failed',
+        500: 'Internal Server Error'
+    };
+
+    function normalizeAndCoerce(args, localRes) {
+        var res  = args[0];
+        var code = args[1];
+        var msg  = args[2];
+
+        // Mirrors the new shift block in controller.js verbatim.
+        if ( typeof(res) == 'number' && args.length === 2 && (
+            args[1] instanceof Error
+            || typeof(args[1]) == 'string'
+        )) {
+            msg  = args[1];
+            code = res;
+            res  = localRes;
+        }
+
+        var errorObject = null;
+        var standardErrorMessage = null;
+
+        if (
+            args[0] instanceof Error
+            || args.length == 1 && typeof(res) == 'object'
+            || args[args.length-1] instanceof Error
+            || typeof(args[args.length-1]) == 'string' && !(args[0] instanceof Error)
+        ) {
+            // Mirror of L5005-5070 (status-coercion + Error/string extraction).
+            msg  = ( !/^\d+$/.test(code) && typeof(msg) == 'undefined' ) ? code : msg;
+            code = ( /^\d{3}$/.test(String(code)) ) ? code
+                 : ( res && typeof(res.status) != 'undefined' ) ? res.status
+                 : 500;
+            standardErrorMessage = statusCodes[code] || null;
+            errorObject = {
+                status: code,
+                error: (res && res.error) || (res && res.message) || standardErrorMessage
+            };
+            if (args[args.length-1] instanceof Error) {
+                var _lastArg = args[args.length-1];
+                if (_lastArg.message) errorObject.message = _lastArg.message;
+                if (_lastArg.stack)   errorObject.stack   = _lastArg.stack;
+                if (!errorObject.error) errorObject.error = _lastArg.message || standardErrorMessage;
+            } else if (typeof(args[args.length-1]) == 'string') {
+                errorObject.message = args[args.length-1];
+            }
+            res = localRes;
+        } else if (args.length < 3) {
+            // Mirror of L5072-5076 else branch + L5143-5151 fallback initializer.
+            msg  = code || null;
+            code = res || 500;
+            res  = localRes;
+            standardErrorMessage = statusCodes[code] || null;
+            errorObject = {
+                status:  code,
+                error:   standardErrorMessage || (msg && msg.error) || msg,
+                message: (msg && msg.message) || msg,
+                stack:   msg && msg.stack
+            };
+        }
+
+        return { res: res, code: code, msg: msg, errorObject: errorObject };
+    }
+
+    var FAKE_RES = { __isLocalRes: true, getHeaders: function() { return {}; } };
+
+    it('throwError(404, new Error("not found")) — status preserved as 404', function() {
+        var err = new Error('not found');
+        var r = normalizeAndCoerce([404, err], FAKE_RES);
+        assert.equal(r.code, 404, 'code must be the explicit 404, not the 500 fallback');
+        assert.equal(r.errorObject.status, 404);
+        assert.equal(r.errorObject.error, 'Not Found', 'standardErrorMessage for 404');
+        assert.equal(r.errorObject.message, 'not found', 'Error.message preserved on errorObject');
+        assert.equal(r.res, FAKE_RES, 'res shifted to local.res');
+    });
+
+    it('throwError(400, "Bad input") — status preserved as 400', function() {
+        var r = normalizeAndCoerce([400, 'Bad input'], FAKE_RES);
+        assert.equal(r.code, 400);
+        assert.equal(r.errorObject.status, 400);
+        assert.equal(r.errorObject.error, 'Bad Request');
+        assert.equal(r.errorObject.message, 'Bad input');
+    });
+
+    it('throwError(412, errorObj) — NOT shifted, falls through to L5072 else (status 412)', function() {
+        // Regression guard: the 2-arg errorObj form is intentionally NOT shifted.
+        var errObj = { status: 412, fields: { name: 'Required' } };
+        var r = normalizeAndCoerce([412, errObj], FAKE_RES);
+        assert.equal(r.code, 412, 'code must be the explicit 412');
+        assert.equal(r.errorObject.status, 412);
+        assert.equal(r.msg, errObj, 'msg holds the errorObj after the L5072 reshuffle');
+    });
+
+    it('throwError(new Error("boom")) — 1-arg form unchanged (shift does NOT fire on length 1)', function() {
+        var err = new Error('boom');
+        var r = normalizeAndCoerce([err], FAKE_RES);
+        assert.equal(r.code, 500, '1-arg Error with no status falls back to 500');
+        assert.equal(r.errorObject.status, 500);
+        assert.equal(r.errorObject.message, 'boom');
+    });
+
+    it('throwError(res, 500, new Error()) — 3-arg internal form unchanged (shift does NOT fire on length 3)', function() {
+        var err = new Error('explicit 3-arg');
+        var fakeRouterRes = { getHeaders: function() { return {}; } };
+        var r = normalizeAndCoerce([fakeRouterRes, 500, err], FAKE_RES);
+        assert.equal(r.code, 500, '3-arg with explicit 500 must remain 500');
+        assert.equal(r.errorObject.status, 500);
+        assert.equal(r.errorObject.message, 'explicit 3-arg');
+    });
+
+    it('throwError(404, null) — shift does NOT fire (null is not Error or string), falls to L5072 else', function() {
+        var r = normalizeAndCoerce([404, null], FAKE_RES);
+        assert.equal(r.code, 404, 'L5072 else picks up the explicit 404 via `code = res || 500`');
+    });
+
+    it('throwError(404, {}) — empty-object 2nd arg, shift does NOT fire, falls to L5072 else', function() {
+        var r = normalizeAndCoerce([404, {}], FAKE_RES);
+        assert.equal(r.code, 404, 'explicit 404 preserved via L5072 else');
+    });
+
+    it('shift guard: typeof(res) === "number" required (object first arg does NOT fire the shift)', function() {
+        function shiftFires(args) {
+            return typeof(args[0]) == 'number' && args.length === 2 && (
+                args[1] instanceof Error
+                || typeof(args[1]) == 'string'
+            );
+        }
+        assert.equal(shiftFires([404, new Error()]), true, 'number + Error → shift fires');
+        assert.equal(shiftFires([400, 'msg']), true, 'number + string → shift fires');
+        assert.equal(shiftFires([{}, new Error()]), false, 'object first arg → shift does not fire');
+        assert.equal(shiftFires([new Error()]), false, '1-arg Error → shift does not fire (length 1)');
+        assert.equal(shiftFires([{ getHeaders: function(){} }, 500, new Error()]), false, '3-arg → shift does not fire (length 3)');
+    });
+
+});

@@ -4970,6 +4970,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * dispatched via `renderCustomError` are consumer-owned — what the
      * template renders from `req.params.errorObject` is the consumer's call.
      *
+     * Polymorphic signatures:
+     *   - `throwError(err)` — Error instance or errorObj `{status, error, ...}`
+     *   - `throwError(code, err)` — 2-arg form: HTTP status + Error|string
+     *   - `throwError(res, code, msg)` — internal 3-arg form used by the router
+     *
      * @param {object} [ res ]
      * @param {number} code
      * @param {string} msg
@@ -4977,6 +4982,22 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * @returns {void}
      * */
     this.throwError = function(res, code, msg) {
+
+        // 2-arg form (statusCode, Error|string) — without this shift, the
+        // downstream Error/string branch coerces code via /^\d{3}$/.test(String(code))
+        // and falls back to 500 because `code` holds the Error or string, not
+        // the number, and `res` (the number itself) has no .status property.
+        // The 2-arg errorObj form (statusCode, errorObj) is intentionally NOT
+        // shifted — the existing `else if (arguments.length < 3)` branch below
+        // already handles it correctly.
+        if ( typeof(res) == 'number' && arguments.length === 2 && (
+            arguments[1] instanceof Error
+            || typeof(arguments[1]) == 'string'
+        )) {
+            msg  = arguments[1];
+            code = res;
+            res  = local.res;
+        }
 
         var protocol        = getResponseProtocol(res);
         var stream          = ( /http\/2/.test(protocol) && res.stream ) ? res.stream : null;

@@ -206,10 +206,12 @@ export class SuperController extends EventEmitter {
     /**
      * Error handler. Polymorphic signatures:
      * - `throwError(err: Error)`
+     * - `throwError(code, err)` — 2-arg form: HTTP status + Error | string
      * - `throwError(res, code, msg)`
      * - `throwError(errorObj)` where errorObj has `.status`, `.error`, `.fields`
      */
     throwError(err: Error): void;
+    throwError(code: number, err: Error | string): void;
     throwError(res: GinaResponse, code: number, msg?: string | Error): void;
     throwError(errorObj: { status?: number; error?: string; message?: string; fields?: object; flash?: object }): void;
 
