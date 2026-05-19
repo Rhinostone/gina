@@ -2219,24 +2219,28 @@ describe('25 - Late-entry patch guard fix and controller-setup timeline entry', 
 
     it('render-swig.js miss-path late-entry patch uses isCacheless() fallback', function() {
         var src = getRSwig25();
-        // Find the miss-path late-entry guard (after _snapshotCount, not _cacheSnapshotCount)
+        // Slice 2 lifted `self.isCacheless()` to the OUTER gate that wraps
+        // the flow late-bind AND the new metrics late-bind. The
+        // `_lateEntries.length > 0` reference is now an inner ternary inside
+        // that gate, so the outer block must appear before it. Assert the
+        // gate is within reasonable proximity preceding the inner ref.
         var idx = src.indexOf('_lateEntries.length > 0');
-        assert.ok(idx > -1, 'expected _lateEntries guard');
-        var block = src.substring(idx, idx + 100);
+        assert.ok(idx > -1, 'expected _lateEntries reference');
+        var pre = src.substring(Math.max(0, idx - 300), idx);
         assert.ok(
-            block.indexOf('self.isCacheless()') > -1,
-            'miss-path late-entry patch must use isCacheless() fallback, not displayInspector alone'
+            pre.indexOf('self.isCacheless()') > -1,
+            'miss-path patch must use isCacheless() fallback in the enclosing gate, not displayInspector alone'
         );
     });
 
     it('render-swig.js cache-hit path late-entry patch uses isCacheless() fallback', function() {
         var src = getRSwig25();
         var idx = src.indexOf('_cacheLateEntries.length > 0');
-        assert.ok(idx > -1, 'expected _cacheLateEntries guard');
-        var block = src.substring(idx, idx + 100);
+        assert.ok(idx > -1, 'expected _cacheLateEntries reference');
+        var pre = src.substring(Math.max(0, idx - 300), idx);
         assert.ok(
-            block.indexOf('self.isCacheless()') > -1,
-            'cache-hit late-entry patch must use isCacheless() fallback, not displayInspector alone'
+            pre.indexOf('self.isCacheless()') > -1,
+            'cache-hit patch must use isCacheless() fallback in the enclosing gate, not displayInspector alone'
         );
     });
 
@@ -6828,6 +6832,199 @@ describe('57 - Template engine version badge in View tab', function() {
         assert.ok(/text-transform\s*:\s*none/.test(match[0]),  'expected text-transform: none');
         assert.ok(/letter-spacing\s*:\s*0/.test(match[0]),     'expected letter-spacing: 0');
         assert.ok(/opacity\s*:\s*\.?0?\.65/.test(match[0]),    'expected opacity: .65 (dimmed)');
+    });
+
+});
+
+
+describe('58 - View tab Weight / Load fallback via server-side metrics', function() {
+
+    var RENDER_SWIG_58   = path.join(FW, 'core/controller/controller.render-swig.js');
+    var RENDER_NJ_58     = path.join(FW, 'core/controller/controller.render-nunjucks.js');
+    var INSPECTOR_JS_58  = path.join(BM_DIR, 'inspector.js');
+    var _rSwig58, _rNj58, _iJs58;
+    function getRSwig58()      { return _rSwig58 || (_rSwig58 = fs.readFileSync(RENDER_SWIG_58,   'utf8')); }
+    function getRNj58()        { return _rNj58   || (_rNj58   = fs.readFileSync(RENDER_NJ_58,     'utf8')); }
+    function getInspectorJs58(){ return _iJs58   || (_iJs58   = fs.readFileSync(INSPECTOR_JS_58,  'utf8')); }
+
+    // ── Server-side emission ──────────────────────────────────────────────
+
+    it('render-swig.js emits __gdGina.environment.metrics with weightBytes + serverMs', function() {
+        assert.ok(
+            /__gdGina\.environment\.metrics\s*=\s*\{\s*weightBytes:\s*null,\s*serverMs:/.test(getRSwig58()),
+            'expected metrics = { weightBytes: null, serverMs } on __gdGina.environment'
+        );
+    });
+
+    it('render-swig.js mirrors metrics on __gdUser.environment', function() {
+        assert.ok(
+            /__gdUser\.environment\.metrics\s*=\s*\{\s*weightBytes:\s*null,\s*serverMs:/.test(getRSwig58()),
+            'expected metrics on __gdUser.environment too'
+        );
+    });
+
+    it('render-swig.js computes serverMs from local._timeline entries', function() {
+        var src = getRSwig58();
+        // The init computation walks timeline entries; the var name is _serverMsInit.
+        assert.ok(src.indexOf('_serverMsInit') > -1, 'expected _serverMsInit variable');
+        assert.ok(
+            /local\._timeline\.entries/.test(src),
+            'expected reads from local._timeline.entries to compute serverMs'
+        );
+    });
+
+    it('render-swig.js cache-hit patch late-binds weightBytes via Buffer.byteLength', function() {
+        var src = getRSwig58();
+        var idx = src.indexOf('_cacheWeightBytes');
+        assert.ok(idx > -1, 'expected _cacheWeightBytes variable in cache-hit branch');
+        var block = src.substring(idx, idx + 200);
+        assert.ok(
+            /Buffer\.byteLength\(htmlContent,\s*['"]utf8['"]\)/.test(block),
+            'expected Buffer.byteLength(htmlContent, "utf8") near _cacheWeightBytes'
+        );
+    });
+
+    it('render-swig.js cache-miss patch late-binds weightBytes via Buffer.byteLength', function() {
+        var src = getRSwig58();
+        var idx = src.indexOf('_weightBytesFinal');
+        assert.ok(idx > -1, 'expected _weightBytesFinal variable in cache-miss branch');
+        var block = src.substring(idx, idx + 200);
+        assert.ok(
+            /Buffer\.byteLength\(htmlContent,\s*['"]utf8['"]\)/.test(block),
+            'expected Buffer.byteLength(htmlContent, "utf8") near _weightBytesFinal'
+        );
+    });
+
+    it('render-swig.js patch script writes weightBytes + serverMs onto both user and gina environments', function() {
+        var src = getRSwig58();
+        // Both cache-hit and cache-miss patches must touch user.environment.metrics
+        // AND gina.environment.metrics for the SSE/poll consumers.
+        var userPatches = src.match(/u\.environment\.metrics\.weightBytes\s*=/g) || [];
+        var ginaPatches = src.match(/g\.environment\.metrics\.weightBytes\s*=/g) || [];
+        assert.ok(userPatches.length >= 2, 'expected u.environment.metrics.weightBytes assignment in both branches');
+        assert.ok(ginaPatches.length >= 2, 'expected g.environment.metrics.weightBytes assignment in both branches');
+    });
+
+    it('render-swig.js patch combines flow late-entries with metrics late-bind', function() {
+        var src = getRSwig58();
+        // The new patch shape has a _flowPatch ternary that only emits when
+        // late entries exist, then unconditionally late-binds metrics.
+        assert.ok(
+            /_flowPatch\s*=\s*\(\s*_lateEntries\.length\s*>\s*0\s*\)/.test(src),
+            'expected _flowPatch ternary in cache-miss'
+        );
+        assert.ok(
+            /_cacheFlowPatch\s*=\s*\(\s*_cacheLateEntries\.length\s*>\s*0\s*\)/.test(src),
+            'expected _cacheFlowPatch ternary in cache-hit'
+        );
+    });
+
+    it('render-nunjucks.js emits metrics with serverMs (no late-bind for weightBytes)', function() {
+        var src = getRNj58();
+        assert.ok(
+            /__gdGina\.environment\.metrics\s*=\s*\{\s*weightBytes:\s*null,\s*serverMs:/.test(src),
+            'expected metrics = { weightBytes: null, serverMs } on nunjucks __gdGina.environment'
+        );
+        assert.ok(
+            /__gdUser\.environment\.metrics\s*=/.test(src),
+            'expected metrics on __gdUser.environment too'
+        );
+        // No late-bind of weightBytes — nunjucks doesn't carry a patch-script
+        // infrastructure (yet). The only Buffer.byteLength usage in this file
+        // is the existing content-length header computation, which is unrelated.
+        assert.ok(
+            !/metrics\.weightBytes\s*=/.test(src) && !/weightBytes:\s*Buffer\.byteLength/.test(src),
+            'render-nunjucks.js must not late-bind metrics.weightBytes (no patch infra)'
+        );
+    });
+
+    it('render-nunjucks.js computes serverMs from local._timeline', function() {
+        var src = getRNj58();
+        assert.ok(src.indexOf('_njServerMs') > -1, 'expected _njServerMs variable');
+        assert.ok(
+            /local\._timeline\.entries/.test(src),
+            'expected nunjucks delegate reads timeline entries'
+        );
+    });
+
+    // ── Client-side consumption ───────────────────────────────────────────
+
+    it('inspector.js getPageMetrics reads env.metrics into serverWeight + serverLoadMs', function() {
+        var src = getInspectorJs58();
+        var fnIdx = src.indexOf('function getPageMetrics(');
+        assert.ok(fnIdx > -1, 'getPageMetrics function must exist');
+        var fnBody = src.substring(fnIdx, fnIdx + 3000);
+        assert.ok(
+            /environment\.metrics/.test(fnBody),
+            'expected env.metrics read in getPageMetrics'
+        );
+        assert.ok(/serverWeight/.test(fnBody),  'expected serverWeight assignment');
+        assert.ok(/serverLoadMs/.test(fnBody),  'expected serverLoadMs assignment');
+    });
+
+    it('inspector.js hasBadges gate considers server metrics', function() {
+        var src = getInspectorJs58();
+        var idx = src.indexOf('var hasBadges =');
+        assert.ok(idx > -1, 'hasBadges must exist');
+        var block = src.substring(idx, idx + 300);
+        assert.ok(/metrics\.serverWeight/.test(block),  'expected serverWeight in hasBadges');
+        assert.ok(/metrics\.serverLoadMs/.test(block),  'expected serverLoadMs in hasBadges');
+    });
+
+    it('inspector.js weight badge renders dual when both client + server are present', function() {
+        var src = getInspectorJs58();
+        // Look for the explicit if-both branch in the weight block.
+        assert.ok(
+            /if\s*\(\s*_clientW\s*&&\s*_serverW\s*\)/.test(src),
+            'expected dual branch for client + server weight'
+        );
+        // The dual branch must use bm-vbadge-res (dimmed) + bm-vbadge-sep.
+        var dualIdx = src.search(/if\s*\(\s*_clientW\s*&&\s*_serverW\s*\)/);
+        var block = src.substring(dualIdx, dualIdx + 600);
+        assert.ok(/bm-vbadge-res/.test(block),  'expected bm-vbadge-res in weight dual');
+        assert.ok(/bm-vbadge-sep/.test(block),  'expected bm-vbadge-sep in weight dual');
+    });
+
+    it('inspector.js load badge renders dual when both client + server are present', function() {
+        var src = getInspectorJs58();
+        assert.ok(
+            /if\s*\(\s*_ld\s*&&\s*_srvLd\s*\)/.test(src),
+            'expected dual branch for client + server load'
+        );
+        var dualIdx = src.search(/if\s*\(\s*_ld\s*&&\s*_srvLd\s*\)/);
+        var block = src.substring(dualIdx, dualIdx + 600);
+        assert.ok(/bm-vbadge-res/.test(block),  'expected bm-vbadge-res in load dual');
+        assert.ok(/bm-vbadge-sep/.test(block),  'expected bm-vbadge-sep in load dual');
+    });
+
+    it('inspector.js weight badge falls back to server value when no client', function() {
+        var src = getInspectorJs58();
+        // The server-only branch must reference _serverW alone and surface a
+        // tooltip mentioning the opener-unavailable reason.
+        assert.ok(
+            /Server response body size[\s\S]{0,200}opener/.test(src),
+            'expected server-only weight branch with opener-unavailable tooltip'
+        );
+    });
+
+    it('inspector.js load badge falls back to server value when no client', function() {
+        var src = getInspectorJs58();
+        assert.ok(
+            /Server processing time[\s\S]{0,200}opener/.test(src),
+            'expected server-only load branch with opener-unavailable tooltip'
+        );
+    });
+
+    it('inspector.js empty-state guard considers env.metrics (renderViewContent)', function() {
+        var src = getInspectorJs58();
+        var fnIdx = src.indexOf('function renderViewContent(');
+        assert.ok(fnIdx > -1, 'renderViewContent must exist');
+        // Up to the empty-state container HTML.
+        var stretch = src.substring(fnIdx, fnIdx + 1500);
+        assert.ok(
+            /_emSrvMet/.test(stretch),
+            'expected _emSrvMet check (server metrics fallback) in empty-state guard'
+        );
     });
 
 });

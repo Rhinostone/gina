@@ -740,7 +740,22 @@
      * @returns {PageMetrics} Metrics object (all numeric fields may be `null`)
      */
     function getPageMetrics(isXhr) {
-        var m = { weight: null, resourceSize: null, loadMs: null, transferMs: null, fcpMs: null, source: 'page' };
+        var m = {
+            weight: null, resourceSize: null, loadMs: null, transferMs: null, fcpMs: null, source: 'page',
+            // Server-emitted fallback values (populated below from env.metrics).
+            // These survive the COOP/no-opener case where window.opener is null
+            // and the Performance API path returns the all-null skeleton.
+            serverWeight: null, serverLoadMs: null
+        };
+        // Read server-side metrics from the env payload first — independent of
+        // whether the opener is reachable.
+        try {
+            var _envMetrics = (ginaData && ginaData.user && ginaData.user.environment && ginaData.user.environment.metrics) || null;
+            if (_envMetrics) {
+                if (typeof _envMetrics.weightBytes === 'number') m.serverWeight = _envMetrics.weightBytes;
+                if (typeof _envMetrics.serverMs    === 'number') m.serverLoadMs = _envMetrics.serverMs;
+            }
+        } catch (e) { /* defensive — leave server values null */ }
         try {
             var win = (source && source !== 'localStorage') ? source : null;
             if (!win || !win.performance) return m;
@@ -972,10 +987,18 @@
         var keys = Object.keys(view);
         keys.sort();
 
-        // Empty state — no view data and no page metrics (JSON-only API)
+        // Empty state — no view data and no page metrics (JSON-only API).
+        // Server-side metrics survive the COOP/no-opener case, so the
+        // empty-state guard must also consider env.metrics; otherwise the
+        // View tab would falsely render "No views attached" when only the
+        // server-side fallback values are populated.
         var _emptyMetrics = true;
         try {
             if (source && source !== 'localStorage' && source.performance) {
+                _emptyMetrics = false;
+            }
+            var _emSrvMet = (ginaData && ginaData.user && ginaData.user.environment && ginaData.user.environment.metrics) || null;
+            if (_emSrvMet && (typeof _emSrvMet.weightBytes === 'number' || typeof _emSrvMet.serverMs === 'number')) {
                 _emptyMetrics = false;
             }
         } catch (e) {}
@@ -1040,7 +1063,10 @@
         var _anomMap = {};
         for (var _ai = 0; _ai < _anomalies.length; _ai++) _anomMap[_anomalies[_ai].metric] = _anomalies[_ai];
         updateViewDot(_anomalies);
-        var hasBadges = engine || metrics.weight || metrics.loadMs || metrics.transferMs || metrics.fcpMs;
+        var hasBadges = engine
+            || metrics.weight  || metrics.serverWeight
+            || metrics.loadMs  || metrics.transferMs || metrics.serverLoadMs
+            || metrics.fcpMs;
         if (hasBadges) {
             h += '<div class="bm-view-badges">';
             if (engine) {
@@ -1055,50 +1081,78 @@
                 }
                 h += '</span>';
             }
-            if (metrics.weight) {
-                var _res = metrics.resourceSize;
-                var _xfr = metrics.weight;
-                var _showDual = _res && _res !== _xfr;
-                var weightTitle = _showDual
-                    ? 'Resource: ' + formatBytes(_res) + ' | Transfer: ' + formatBytes(_xfr)
-                    : (isXhr ? 'XHR response transfer size' : 'Page transfer size (document)');
-                var _aw = _anomMap['weight'];
-                h += '<span class="bm-vbadge bm-vbadge-weight' + (_aw ? ' bm-perf-' + _aw.level : '') + '" title="' + weightTitle + (_aw ? '\n\u26a0 ' + _aw.label : '') + '">'
-                    + '<svg viewBox="0 0 16 16"><path d="M3.5 1h9l2.5 14H1zM4.8 2.5h6.4l2 11H2.8z"/></svg>';
-                if (_showDual) {
-                    var _rp = splitBytes(_res), _xp = splitBytes(_xfr);
+            // Weight badge \u2014 dual rendering rules:
+            //   1. server + client \u2192 server dimmed | client primary (most informative)
+            //   2. client only with differing resourceSize \u2192 resource | transfer (legacy)
+            //   3. server only \u2192 server primary (COOP / no-opener fallback)
+            //   4. client only (no resource diff) \u2192 transfer single
+            if (metrics.weight || metrics.serverWeight) {
+                var _clientW = metrics.weight;
+                var _serverW = metrics.serverWeight;
+                var _res     = metrics.resourceSize;
+                var _aw      = _anomMap['weight'];
+                var _wtTitle, _wtBody;
+                if (_clientW && _serverW) {
+                    _wtTitle = 'Server: ' + formatBytes(_serverW) + ' (response body) | Client: ' + formatBytes(_clientW) + ' (browser transferSize)';
+                    _wtBody  = '<span class="bm-vbadge-res">' + formatBytes(_serverW) + '</span>'
+                             + '<span class="bm-vbadge-sep">|</span>'
+                             + formatBytes(_clientW);
+                } else if (_clientW && _res && _res !== _clientW) {
+                    _wtTitle = 'Resource: ' + formatBytes(_res) + ' | Transfer: ' + formatBytes(_clientW);
+                    var _rp = splitBytes(_res), _xp = splitBytes(_clientW);
                     if (_rp.unit === _xp.unit) {
-                        h += '<span class="bm-vbadge-res">' + _rp.num + '</span>'
-                            + '<span class="bm-vbadge-sep">|</span>'
-                            + _xp.num + _xp.unit;
+                        _wtBody = '<span class="bm-vbadge-res">' + _rp.num + '</span>'
+                                + '<span class="bm-vbadge-sep">|</span>'
+                                + _xp.num + _xp.unit;
                     } else {
-                        h += '<span class="bm-vbadge-res">' + formatBytes(_res) + '</span>'
-                            + '<span class="bm-vbadge-sep">|</span>'
-                            + formatBytes(_xfr);
+                        _wtBody = '<span class="bm-vbadge-res">' + formatBytes(_res) + '</span>'
+                                + '<span class="bm-vbadge-sep">|</span>'
+                                + formatBytes(_clientW);
                     }
+                } else if (_clientW) {
+                    _wtTitle = isXhr ? 'XHR response transfer size' : 'Page transfer size (document)';
+                    _wtBody  = formatBytes(_clientW);
                 } else {
-                    h += formatBytes(_xfr);
+                    _wtTitle = 'Server response body size (client transferSize unavailable \u2014 window.opener.performance is null, e.g. under Cross-Origin-Opener-Policy)';
+                    _wtBody  = formatBytes(_serverW);
                 }
-                h += '</span>';
+                h += '<span class="bm-vbadge bm-vbadge-weight' + (_aw ? ' bm-perf-' + _aw.level : '') + '" title="' + _wtTitle + (_aw ? '\n\u26a0 ' + _aw.label : '') + '">'
+                    + '<svg viewBox="0 0 16 16"><path d="M3.5 1h9l2.5 14H1zM4.8 2.5h6.4l2 11H2.8z"/></svg>'
+                    + _wtBody
+                    + '</span>';
             }
-            if (metrics.loadMs || metrics.transferMs) {
-                var _ld = metrics.loadMs;
-                var _tf = metrics.transferMs;
-                var _showDualTime = _ld && _tf && _ld !== _tf;
-                var timeTitle = _showDualTime
-                    ? 'Load: ' + fmtMs(_ld) + ' | Transfer: ' + fmtMs(_tf)
-                    : (isXhr ? 'XHR round-trip duration' : (_ld ? 'Page load time' : 'Document transfer time (requestStart \u2192 responseEnd)'));
-                var _al = _anomMap['load'];
-                h += '<span class="bm-vbadge bm-vbadge-load' + (_al ? ' bm-perf-' + _al.level : '') + '" title="' + timeTitle + (_al ? '\n\u26a0 ' + _al.label : '') + '">'
-                    + '<svg viewBox="0 0 16 16"><path d="M8 3.5a.5.5 0 00-1 0V8a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 7.71V3.5z"/><path d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"/></svg>';
-                if (_showDualTime) {
-                    h += '<span class="bm-vbadge-res">' + fmtMs(_ld) + '</span>'
-                        + '<span class="bm-vbadge-sep">|</span>'
-                        + fmtMs(_tf);
+            // Load badge \u2014 same four-way rules, applied to load time:
+            //   1. server + client load \u2192 server dimmed | client primary
+            //   2. client load + differing transfer time \u2192 load | transfer (legacy)
+            //   3. server only \u2192 server primary (COOP / no-opener fallback)
+            //   4. client only \u2192 load OR transfer single
+            if (metrics.loadMs || metrics.transferMs || metrics.serverLoadMs) {
+                var _ld     = metrics.loadMs;
+                var _tf     = metrics.transferMs;
+                var _srvLd  = metrics.serverLoadMs;
+                var _al     = _anomMap['load'];
+                var _ltTitle, _ltBody;
+                if (_ld && _srvLd) {
+                    _ltTitle = 'Server: ' + fmtMs(_srvLd) + ' (backend processing) | Client: ' + fmtMs(_ld) + ' (full page load: network + parse + paint)';
+                    _ltBody  = '<span class="bm-vbadge-res">' + fmtMs(_srvLd) + '</span>'
+                             + '<span class="bm-vbadge-sep">|</span>'
+                             + fmtMs(_ld);
+                } else if (_ld && _tf && _ld !== _tf) {
+                    _ltTitle = 'Load: ' + fmtMs(_ld) + ' | Transfer: ' + fmtMs(_tf);
+                    _ltBody  = '<span class="bm-vbadge-res">' + fmtMs(_ld) + '</span>'
+                             + '<span class="bm-vbadge-sep">|</span>'
+                             + fmtMs(_tf);
+                } else if (_ld || _tf) {
+                    _ltTitle = isXhr ? 'XHR round-trip duration' : (_ld ? 'Page load time' : 'Document transfer time (requestStart \u2192 responseEnd)');
+                    _ltBody  = fmtMs(_ld || _tf);
                 } else {
-                    h += fmtMs(_ld || _tf);
+                    _ltTitle = 'Server processing time (client load time unavailable \u2014 window.opener.performance is null, e.g. under Cross-Origin-Opener-Policy)';
+                    _ltBody  = fmtMs(_srvLd);
                 }
-                h += '</span>';
+                h += '<span class="bm-vbadge bm-vbadge-load' + (_al ? ' bm-perf-' + _al.level : '') + '" title="' + _ltTitle + (_al ? '\n\u26a0 ' + _al.label : '') + '">'
+                    + '<svg viewBox="0 0 16 16"><path d="M8 3.5a.5.5 0 00-1 0V8a.5.5 0 00.252.434l3.5 2a.5.5 0 00.496-.868L8 7.71V3.5z"/><path d="M8 16A8 8 0 108 0a8 8 0 000 16zm7-8A7 7 0 111 8a7 7 0 0114 0z"/></svg>'
+                    + _ltBody
+                    + '</span>';
             }
             if (metrics.fcpMs) {
                 var _af = _anomMap['fcp'];

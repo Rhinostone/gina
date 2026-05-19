@@ -887,17 +887,27 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         detail: null
                     });
 
-                    // Patch late entries into HTML — flow/execute/response/total were pushed
-                    // after data.page.flow was set, so the __ginaData script in the cached
-                    // template has stale entries. Inject a small correction script.
-                    // Uses _cacheFlowSnapshot saved before any late entries were pushed.
+                    // Patch late state into HTML — `__ginaData` was serialised
+                    // (deep clone) before swig-compile, so anything that became
+                    // known after that point needs a client-side late-bind:
+                    //   • flow/execute/response/total entries appended to the
+                    //     timeline AFTER `_cacheFlowSnapshot`
+                    //   • `metrics.weightBytes` (only computable once
+                    //     `htmlContent` is finalised) and the final
+                    //     `metrics.serverMs` (includes the late `total` entry)
                     var _cacheLateEntries = local._timeline.entries.slice(_cacheFlowSnapshot);
-                    if (_cacheLateEntries.length > 0 && (displayInspector || self.isCacheless())) {
-                        var _cachePatchScript = '<script>if(window.__ginaData&&window.__ginaData.user&&window.__ginaData.user.flow){'
-                            + 'var _e=window.__ginaData.user.flow.entries;'
-                            + 'var _p=' + JSON.stringify(_cacheLateEntries) + ';'
-                            + 'for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}'
-                            + '}</script>';
+                    if (displayInspector || self.isCacheless()) {
+                        var _cacheWeightBytes = Buffer.byteLength(htmlContent, 'utf8');
+                        var _cacheServerMsFinal = _cacheRespEnd - local._timeline.requestStart;
+                        var _cacheFlowPatch = (_cacheLateEntries.length > 0)
+                            ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_cacheLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
+                            : '';
+                        var _cachePatchScript = '<script>(function(d){'
+                            + 'var u=d&&d.user,g=d&&d.gina;'
+                            + _cacheFlowPatch
+                            + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _cacheWeightBytes + ';u.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
+                            + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _cacheWeightBytes + ';g.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
+                            + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, _cachePatchScript + '</body>');
                     }
                 }
@@ -1117,6 +1127,42 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     __gdUser.environment.templateEngine = { name: _engineName, version: _swigVer };
                 }
             } catch (e) { /* defensive — engine badge falls back to client heuristic */ }
+
+            // Inspector View tab Weight/Load fallback. When the popup's
+            // window.opener is unreachable (Cross-Origin-Opener-Policy on the
+            // host page nulls opener references), the client-side Performance
+            // API path can't compute weight/load. These server-side values let
+            // the Inspector render dual badges (server dimmed | client primary)
+            // and a server-only badge when client is unavailable.
+            //
+            //   serverMs    — best-available server processing duration; updated
+            //                 by the late-bind patch script below with the final
+            //                 total once `response-write` + `total` entries are
+            //                 appended to the timeline.
+            //   weightBytes — null at emit time, late-bound by the patch script
+            //                 from `Buffer.byteLength(htmlContent)` (only known
+            //                 after htmlContent is finalised).
+            var _serverMsInit = null;
+            try {
+                if (local._timeline && local._timeline.entries.length > 0) {
+                    var _latestEndMs = local._timeline.requestStart;
+                    for (var _mi = 0, _mlen = local._timeline.entries.length; _mi < _mlen; _mi++) {
+                        var _mEnt = local._timeline.entries[_mi];
+                        if (typeof _mEnt.endMs === 'number' && _mEnt.endMs > _latestEndMs) {
+                            _latestEndMs = _mEnt.endMs;
+                        }
+                    }
+                    if (_latestEndMs > local._timeline.requestStart) {
+                        _serverMsInit = _latestEndMs - local._timeline.requestStart;
+                    }
+                }
+            } catch (e) { _serverMsInit = null; }
+            if (__gdGina.environment) {
+                __gdGina.environment.metrics = { weightBytes: null, serverMs: _serverMsInit };
+            }
+            if (__gdUser.environment) {
+                __gdUser.environment.metrics = { weightBytes: null, serverMs: _serverMsInit };
+            }
 
             // #INS8 — expose the standalone Inspector URL so statusbar.html can
             // prefer it over the embedded /_gina/inspector/ path. Null when
@@ -1552,17 +1598,26 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         detail: null
                     });
 
-                    // #FI — patch late entries into the HTML.
-                    // __ginaData was serialized (deep clone) before swig-compile,
-                    // so template/response/total entries are missing from it.
-                    // Uses _flowSnapshotCount saved before any late entries were pushed.
+                    // Patch late state into HTML. __ginaData was serialised
+                    // (deep clone) before swig-compile, so anything that became
+                    // known after that point needs a client-side late-bind:
+                    //   • flow late entries (template/response/total)
+                    //   • `metrics.weightBytes` (only known once htmlContent
+                    //     is finalised) and the final `metrics.serverMs`
+                    //     (includes the just-pushed `total` entry).
                     var _lateEntries = local._timeline.entries.slice(_flowSnapshotCount);
-                    if (_lateEntries.length > 0 && (displayInspector || self.isCacheless())) {
-                        var _patchScript = '<script>if(window.__ginaData&&window.__ginaData.user&&window.__ginaData.user.flow){'
-                            + 'var _e=window.__ginaData.user.flow.entries;'
-                            + 'var _p=' + JSON.stringify(_lateEntries) + ';'
-                            + 'for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}'
-                            + '}</script>';
+                    if (displayInspector || self.isCacheless()) {
+                        var _weightBytesFinal = Buffer.byteLength(htmlContent, 'utf8');
+                        var _serverMsFinal    = _respEnd - local._timeline.requestStart;
+                        var _flowPatch = (_lateEntries.length > 0)
+                            ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_lateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
+                            : '';
+                        var _patchScript = '<script>(function(d){'
+                            + 'var u=d&&d.user,g=d&&d.gina;'
+                            + _flowPatch
+                            + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _weightBytesFinal + ';u.environment.metrics.serverMs=' + _serverMsFinal + ';}'
+                            + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _weightBytesFinal + ';g.environment.metrics.serverMs=' + _serverMsFinal + ';}'
+                            + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, _patchScript + '</body>');
                     }
                 }

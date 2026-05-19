@@ -319,6 +319,34 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
         }
     } catch (e) { /* defensive */ }
 
+    // Inspector View tab Weight/Load fallback. serverMs is the best-available
+    // server processing duration at this point; weightBytes stays null because
+    // the nunjucks pipeline does not (yet) carry a late-bind patch script
+    // mechanism — `Buffer.byteLength(html)` can't be reflected back into the
+    // already-serialised __ginaData payload. Bundles on nunjucks see Load
+    // restored under COOP, Weight remains opener-dependent.
+    var _njServerMs = null;
+    try {
+        if (local._timeline && local._timeline.entries.length > 0) {
+            var _njLatest = local._timeline.requestStart;
+            for (var _njMi = 0, _njMlen = local._timeline.entries.length; _njMi < _njMlen; _njMi++) {
+                var _njEnt = local._timeline.entries[_njMi];
+                if (typeof _njEnt.endMs === 'number' && _njEnt.endMs > _njLatest) {
+                    _njLatest = _njEnt.endMs;
+                }
+            }
+            if (_njLatest > local._timeline.requestStart) {
+                _njServerMs = _njLatest - local._timeline.requestStart;
+            }
+        }
+    } catch (e) { _njServerMs = null; }
+    if (__gdGina.environment) {
+        __gdGina.environment.metrics = { weightBytes: null, serverMs: _njServerMs };
+    }
+    if (__gdUser.environment) {
+        __gdUser.environment.metrics = { weightBytes: null, serverMs: _njServerMs };
+    }
+
     // #INS8 — standalone Inspector URL (settings.json > inspector.url)
     var _inspUrlConf = null;
     try {
