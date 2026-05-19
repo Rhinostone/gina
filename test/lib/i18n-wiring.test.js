@@ -165,7 +165,7 @@ describe('07 - schema/locales.json — published JSON Schema', function() {
     it('declares the published $id and Draft-07 $schema', function() {
         var parsed = JSON.parse(fs.readFileSync(SCHEMA_PATH, 'utf8'));
         assert.equal(parsed.$id,     'https://gina.io/schema/locales.json');
-        assert.equal(parsed.$schema, 'http://json-schema.org/draft-07/schema#');
+        assert.equal(parsed.$schema, 'https://json-schema.org/draft-07/schema#');
     });
 
     it('declares the value-or-pluralForm $defs', function() {
