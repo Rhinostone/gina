@@ -72,7 +72,7 @@ Gina is co-authored by **Martin Luther** ([Rhinostone](https://rhinostone.com)) 
 
 ## License (MIT)
 
-Copyright © 2009-2026 [Rhinostone](http://www.rhinostone.com/)
+Copyright © 2009-2026 [Rhinostone](https://rhinostone.com)
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
