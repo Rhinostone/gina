@@ -1,3 +1,0 @@
-kind: Security
-body: 'Bumped `engine.io` to ^6.6.7 and `engine.io-client` to ^6.6.4, and forced the transitive `ws` dep to ^8.20.1 via npm `overrides` — closes CVE-2026-45736 (CWE-908 Use of Uninitialized Resource, CVSS 6.9 medium). The engine.io 6.x line still transitively pins the vulnerable `ws ~8.18.3`, so the override is the only available remediation path.'
-time: 2026-05-19T05:03:25.74506+01:00
