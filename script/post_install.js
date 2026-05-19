@@ -177,6 +177,14 @@ function PostInstall() {
             self.isCustomPrefix = true;
         }
 
+        // Path-shape fallback for isGlobalInstall when npm doesn't propagate
+        // npm_config_global to the post-install subprocess. Win32 is unreachable
+        // (early throw above), so a POSIX-only regex suffices.
+        if ( !self.isGlobalInstall && /\/lib\/node_modules\/gina\/script\/?$/.test(__dirname) ) {
+            self.isGlobalInstall = true;
+            console.debug('isGlobalInstall set true via path-shape fallback (__dirname: '+ __dirname +')');
+        }
+
         // For local install
         console.debug('self.isGlobalInstall => '+ self.isGlobalInstall);
         if ( !self.isGlobalInstall ) {
@@ -389,6 +397,15 @@ function PostInstall() {
 
         if ( callback && typeof(callback) != 'undefined') {
             console.info('Linking to binaries dir: '+ source +' -> '+ target);
+
+            // If the link source is missing, no-op the link. npm auto-creates
+            // ./node_modules/.bin/gina inside a local install's project; absence here
+            // typically means a global install was mis-detected as local.
+            if ( !fs.existsSync(source) ) {
+                console.warn('Skipping binaries-dir link: `'+ source +'` does not exist.');
+                return callback(false);
+            }
+
             try {
                 if ( fs.existsSync(target) ) {
                     fs.unlinkSync(target)

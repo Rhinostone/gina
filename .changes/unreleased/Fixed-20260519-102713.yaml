@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Hardening `npm install -g gina` against npm setups that don''t propagate `npm_config_global` to the post-install subprocess: `isGlobalInstall` now also detects from `__dirname`, and the local-install symlink step no-ops when its source path is missing instead of crashing the install.'
+time: 2026-05-19T10:27:13.66199+01:00
