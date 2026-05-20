@@ -1907,9 +1907,15 @@
      * Looks up the connector:database key in _liveIndexes, then resolves by
      * extracting the target table from the statement.
      *
+     * #QI Phase C.3 — descriptors are CLONED and stamped with a per-query
+     * `covers` flag (leftmost-prefix vs `q.whereColumns`), mirroring the
+     * server-side sql-parser annotateCoverage so the live (no indexes.sql) path
+     * renders the same bm-idx-uncovered badge as the declared-index path. The
+     * shared _liveIndexes cache is never mutated.
+     *
      * @inner
      * @param {object} q - Query entry with `q.indexes === null`
-     * @returns {?Array<{name: string, primary: boolean}>} Resolved indexes, or null
+     * @returns {?Array<{name: string, primary: boolean, columns: Array<string>, covers: boolean}>} Resolved indexes (cloned), [] when the table has none, or null when unresolvable
      */
     function resolveLiveIndexes(q) {
         if (!_liveIndexes || !_liveIndexes.connectors) return null;
@@ -1928,7 +1934,24 @@
         // Use the table field if available; otherwise extract from statement
         var tbl = q.table || extractTableFromStatement(q.statement);
         if (!tbl) return null;
-        return tables[tbl] || [];
+        var live = tables[tbl];
+        if (!live) return [];
+        // Clone each descriptor (never mutate the shared cache — two queries on the
+        // same table may filter different columns) and stamp `covers` via the
+        // leftmost-prefix rule: an index serves the filter only if its FIRST column
+        // is among the query's WHERE columns. Same logic as sql-parser annotateCoverage.
+        var wc  = q.whereColumns || [];
+        var out = [];
+        for (var i = 0; i < live.length; i++) {
+            var cols = live[i].columns || [];
+            out.push({
+                name    : live[i].name,
+                primary : !!live[i].primary,
+                columns : cols.slice(),
+                covers  : (cols.length > 0 && wc.length > 0 && wc.indexOf(cols[0]) > -1)
+            });
+        }
+        return out;
     }
 
     /**

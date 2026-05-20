@@ -7474,3 +7474,105 @@ describe('62 - QI Phase C.2: live-introspection column capture (#QI Phase C.2)',
     });
 
 });
+
+
+// ── 63 — Phase C.3: retroactive live-index coverage on the SPA (#QI Phase C.3) ──
+
+describe('63 - QI Phase C.3: retroactive live-index coverage on the SPA (#QI Phase C.3)', function() {
+
+    var MYSQL_SRC_63  = path.join(FW, 'core/connectors/mysql/index.js');
+    var PG_SRC_63     = path.join(FW, 'core/connectors/postgresql/index.js');
+    var SQLITE_SRC_63 = path.join(FW, 'core/connectors/sqlite/index.js');
+    var INSPECTOR_63  = path.join(BM_DIR, 'inspector.js');
+    var _my63, _pg63, _sq63, _insp63;
+    function getMy63()   { return _my63   || (_my63   = fs.readFileSync(MYSQL_SRC_63, 'utf8')); }
+    function getPg63()   { return _pg63   || (_pg63   = fs.readFileSync(PG_SRC_63, 'utf8')); }
+    function getSq63()   { return _sq63   || (_sq63   = fs.readFileSync(SQLITE_SRC_63, 'utf8')); }
+    function getInsp63() { return _insp63 || (_insp63 = fs.readFileSync(INSPECTOR_63, 'utf8')); }
+
+    // ── Server: whereColumns + table now emitted unconditionally ──────────────
+    // Before C.3 they were computed inside `if (_knownIndexes !== null)`, so a
+    // bundle without indexes.sql emitted whereColumns:null / table:null and the
+    // SPA had nothing to compute coverage from. The annotateCoverage call (which
+    // needs known indexes) stays gated; only the always-available filter metadata
+    // moves out of the gate.
+
+    function assertUnconditionalFilterMeta(src, label) {
+        var wc  = src.indexOf('var _whereColumns = sqlParser.extractWhereColumns(queryString)');
+        var tbl = src.indexOf('var _tbl = sqlParser.extractTargetTable(queryString)');
+        var cov = src.indexOf('sqlParser.annotateCoverage(_tblIdx, queryString)');
+        assert.ok(wc  > -1, label + ': expected unconditional extractWhereColumns(queryString)');
+        assert.ok(tbl > -1, label + ': expected unconditional extractTargetTable(queryString)');
+        assert.ok(cov > -1, label + ': expected the gated annotateCoverage call to remain');
+        assert.ok(tbl < cov, label + ': extractTargetTable must precede the gated annotateCoverage');
+        assert.ok(wc  < cov, label + ': extractWhereColumns must precede the gated annotateCoverage');
+    }
+
+    it('MySQL emits whereColumns + table outside the _knownIndexes gate', function() {
+        assertUnconditionalFilterMeta(getMy63(), 'MySQL');
+    });
+
+    it('PostgreSQL emits whereColumns + table outside the _knownIndexes gate', function() {
+        assertUnconditionalFilterMeta(getPg63(), 'PostgreSQL');
+    });
+
+    it('SQLite emits whereColumns + table outside the _knownIndexes gate', function() {
+        assertUnconditionalFilterMeta(getSq63(), 'SQLite');
+    });
+
+    it('index annotation stays gated on _knownIndexes (indexes still null without indexes.sql)', function() {
+        // _indexes defaults to null and is only assigned from _cov inside the gate,
+        // so the N/A badge — and the SPA live-resolution trigger — is preserved.
+        [['MySQL', getMy63()], ['PostgreSQL', getPg63()], ['SQLite', getSq63()]].forEach(function(pair) {
+            var label = pair[0], src = pair[1];
+            var dflt = src.indexOf('var _indexes = null;');
+            var gate = src.indexOf('if (_knownIndexes !== null) {');
+            var set  = src.indexOf('_indexes = _cov.indexes;');
+            assert.ok(dflt > -1 && gate > -1 && set > -1, label + ': expected _indexes default + gate + assignment');
+            assert.ok(dflt < gate && gate < set, label + ': _indexes must default to null before the gate and only be set inside it');
+        });
+    });
+
+    // ── Client: resolveLiveIndexes clones + stamps covers (leftmost-prefix) ───
+    // Reads from BM_DIR (dist) — the built artefact the framework serves and the
+    // suite tests against — so this section depends on the prod dist rebuild.
+
+    it('resolveLiveIndexes reads q.whereColumns and stamps a per-descriptor covers flag', function() {
+        var js  = getInsp63();
+        var i   = js.indexOf('function resolveLiveIndexes');
+        assert.ok(i > -1, 'expected resolveLiveIndexes in dist inspector.js');
+        var blk = js.substring(i, i + 1800);
+        assert.ok(/q\.whereColumns/.test(blk),               'expected a q.whereColumns read');
+        assert.ok(/covers\s*:/.test(blk),                    'expected a covers field on the returned descriptors');
+        assert.ok(/indexOf\(cols\[0\]\)\s*>\s*-1/.test(blk),  'expected the leftmost-prefix (cols[0]) test');
+    });
+
+    it('resolveLiveIndexes clones descriptors — never returns the shared cache array', function() {
+        var js  = getInsp63();
+        var i   = js.indexOf('function resolveLiveIndexes');
+        var blk = js.substring(i, i + 1800);
+        assert.ok(/cols\.slice\(\)/.test(blk), 'expected columns: cols.slice() clone of the column list');
+        assert.ok(/out\.push\(\{/.test(blk),   'expected fresh descriptor objects pushed to a new array');
+        assert.ok(!/return\s+tables\[tbl\]\s*\|\|\s*\[\]/.test(blk),
+            'must no longer return the shared tables[tbl] array directly (cache-poisoning guard)');
+    });
+
+    it('resolveLiveIndexes still returns [] when the table has no live index', function() {
+        var js  = getInsp63();
+        var i   = js.indexOf('function resolveLiveIndexes');
+        var blk = js.substring(i, i + 1800);
+        assert.ok(/if\s*\(!live\)\s*return\s*\[\];/.test(blk), 'expected the empty-table [] path');
+    });
+
+    it('live-resolved indexes feed the existing bm-idx-uncovered branch', function() {
+        // renderQueryContent assigns q.indexes = resolveLiveIndexes(q) for N/A entries;
+        // with covers + whereColumns now present, the §61 uncovered branch fires for
+        // the live (no indexes.sql) path too.
+        var js  = getInsp63();
+        var i   = js.indexOf('function renderQueryContent');
+        var blk = js.substring(i, i + 8000);
+        assert.ok(/q\.indexes\s*=\s*_resolved/.test(blk), 'expected live-resolved indexes assigned to q.indexes');
+        assert.ok(blk.indexOf('bm-idx-uncovered') > -1,   'expected the uncovered branch to remain reachable');
+    });
+
+});

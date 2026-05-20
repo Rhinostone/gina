@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The Inspector Query tab now flags SQL queries whose WHERE filter no existing index can serve, even for bundles without an indexes.sql file (resolved via live database introspection); previously these showed an optimistic index badge instead of the no-index-for-filter warning.'
+time: 2026-05-20T17:04:01.549632+01:00

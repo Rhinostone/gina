@@ -377,9 +377,10 @@ function Sqlite(conn, infos) {
                     // #QI1 — resolve indexes from _knownIndexes map
                     // #QI Phase C — annotate per-index column coverage vs the WHERE filter
                     var _indexes = null;
-                    var _whereColumns = null;
+                    // #QI Phase C.3 - emit table + whereColumns even without indexes.sql
+                    var _tbl = sqlParser.extractTargetTable(queryString);
+                    var _whereColumns = sqlParser.extractWhereColumns(queryString);
                     if (_knownIndexes !== null) {
-                        var _tbl = sqlParser.extractTargetTable(queryString);
                         var _tblIdx = (_tbl && _knownIndexes[_tbl]) ? _knownIndexes[_tbl] : [];
                         var _cov = sqlParser.annotateCoverage(_tblIdx, queryString);
                         _indexes = _cov.indexes;
