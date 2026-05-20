@@ -11,10 +11,9 @@ nbproject
 .svn
 .git
 
-# Local-only — never track
-.claude/
-.claudeignore
-CLAUDE.md
+# Local-only — never track (prefix globs cover backup/variant filenames too)
+.claude*
+CLAUDE*
 
 # Gina
 .*
