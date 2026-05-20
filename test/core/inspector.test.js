@@ -7139,3 +7139,85 @@ describe('59 - View tab server-emitted dim differentiation (bm-vbadge-svr)', fun
     });
 
 });
+
+describe('60 - Flow tab nunjucks parity — data.page.flow build + late-entry _njFlowPatch', function() {
+
+    var RENDER_NJ_60 = path.join(FW, 'core/controller/controller.render-nunjucks.js');
+    var _rNj60;
+    function getRNj60() { return _rNj60 || (_rNj60 = fs.readFileSync(RENDER_NJ_60, 'utf8')); }
+
+    // ── Base flow build (injectInspectorScripts) ──────────────────────────
+
+    it('render-nunjucks.js builds data.page.flow = { requestStart, entries }', function() {
+        var src = getRNj60();
+        var idx = src.indexOf('data.page.flow =');
+        assert.ok(idx > -1, 'expected data.page.flow assignment (was entirely missing before — Flow tab stayed empty)');
+        var block = src.substring(idx, idx + 160);
+        assert.ok(/requestStart:\s*local\._timeline\.requestStart/.test(block), 'expected requestStart: local._timeline.requestStart');
+        assert.ok(/entries:\s*local\._timeline\.entries/.test(block),           'expected entries: local._timeline.entries');
+    });
+
+    it('render-nunjucks.js converts QI entries to timeline entries (n1ql label, cat db)', function() {
+        var src = getRNj60();
+        assert.ok(/local\._queryLog/.test(src), 'expected the QI conversion to read local._queryLog');
+        var idx = src.indexOf("label: 'n1ql:'");
+        assert.ok(idx > -1, "expected label: 'n1ql:' + trigger entry (mirrors render-swig.js)");
+        var block = src.substring(idx, idx + 220);
+        assert.ok(/cat:\s*'db'/.test(block), "expected cat: 'db' on the QI-derived entry");
+    });
+
+    // ── Snapshot + late-entry pushes ──────────────────────────────────────
+
+    it('render-nunjucks.js captures _njFlowSnapshotCount after serialisation', function() {
+        var src = getRNj60();
+        assert.ok(
+            /_njFlowSnapshotCount\s*=\s*\(local\._timeline\)\s*\?\s*local\._timeline\.entries\.length/.test(src),
+            'expected _njFlowSnapshotCount = (local._timeline) ? local._timeline.entries.length : 0'
+        );
+    });
+
+    it('render-nunjucks.js pushes response-write + total late entries', function() {
+        var src = getRNj60();
+        assert.ok(/label:\s*'response-write',\s*cat:\s*'response'/.test(src), "expected the response-write / 'response' entry push");
+        assert.ok(/label:\s*'total',\s*cat:\s*'total'/.test(src),             "expected the total / 'total' entry push");
+    });
+
+    it('render-nunjucks.js slices _njLateEntries from the snapshot', function() {
+        var src = getRNj60();
+        assert.ok(
+            /_njLateEntries\s*=\s*local\._timeline\.entries\.slice\(\s*_njFlowSnapshotCount\s*\)/.test(src),
+            'expected _njLateEntries = local._timeline.entries.slice(_njFlowSnapshotCount)'
+        );
+    });
+
+    // ── _njFlowPatch (mirrors render-swig.js _flowPatch) ──────────────────
+
+    it('render-nunjucks.js builds the _njFlowPatch ternary gated on late entries', function() {
+        var src = getRNj60();
+        assert.ok(
+            /_njFlowPatch\s*=\s*\(\s*_njLateEntries\.length\s*>\s*0\s*\)/.test(src),
+            'expected _njFlowPatch = (_njLateEntries.length > 0) ? ... : "" ternary (mirrors swig _flowPatch)'
+        );
+    });
+
+    it('render-nunjucks.js _njFlowPatch appends late entries onto u.flow.entries', function() {
+        var src = getRNj60();
+        assert.ok(
+            /if\(u&&u\.flow\)\{var _e=u\.flow\.entries/.test(src),
+            'expected the _njFlowPatch to push onto u.flow.entries (matches render-swig.js — user namespace only)'
+        );
+    });
+
+    it('render-nunjucks.js inserts _njFlowPatch BEFORE the metrics late-bind in _njPatchScript', function() {
+        var src = getRNj60();
+        var idx = src.indexOf('_njPatchScript =');
+        assert.ok(idx > -1, 'expected the _njPatchScript assembly');
+        var block      = src.substring(idx, idx + 800);
+        var flowIdx    = block.indexOf('+ _njFlowPatch');
+        var metricsIdx = block.indexOf('u.environment.metrics.weightBytes');
+        assert.ok(flowIdx > -1,    'expected + _njFlowPatch in the _njPatchScript concat');
+        assert.ok(metricsIdx > -1, 'expected the metrics late-bind in the _njPatchScript concat');
+        assert.ok(flowIdx < metricsIdx, 'expected _njFlowPatch to come BEFORE the metrics late-bind (mirrors render-swig.js ordering)');
+    });
+
+});

@@ -273,6 +273,34 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
     // No `</body>` anchor → nothing safe to inject into. Don't force it.
     if (!/<\/body>/i.test(html)) { return html; }
 
+    // #FI — inject the dev-mode request timeline for the Inspector Flow tab,
+    // and convert QI entries into timeline entries so the waterfall shows N1QL
+    // queries alongside the routing/controller/template phases. Mirrors
+    // render-swig.js:1056-1076. Without this `__ginaData.user.flow` never
+    // exists for nunjucks pages, so the Flow tab stays empty (and the late
+    // `_njFlowPatch` would no-op against a missing `u.flow`).
+    if (local._timeline && local._timeline.entries.length > 0) {
+        if (local._queryLog) {
+            for (var _njTi = 0; _njTi < local._queryLog.length; _njTi++) {
+                var _njQe = local._queryLog[_njTi];
+                if (_njQe._startMs) {
+                    local._timeline.entries.push({
+                        label: 'n1ql:' + (_njQe.trigger || 'query'),
+                        cat: 'db',
+                        startMs: _njQe._startMs,
+                        endMs: _njQe._startMs + (_njQe.durationMs || 0),
+                        durationMs: _njQe.durationMs || 0,
+                        detail: (_njQe.statement || '').substring(0, 80)
+                    });
+                }
+            }
+        }
+        data.page.flow = {
+            requestStart: local._timeline.requestStart,
+            entries: local._timeline.entries
+        };
+    }
+
     // Two deep clones — one labelled gina (metadata for the Inspector
     // sidebar), one labelled user (mirrors what application code sees).
     // JSON.parse(JSON.stringify(...)) is intentional: it drops functions,
@@ -1085,6 +1113,13 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         try { console.warn('[render-nunjucks] inspector injection skipped: ' + injectErr.message); } catch (e) {}
     }
 
+    // #FI — snapshot the timeline length AFTER the __ginaData payload was
+    // serialised (inside injectInspectorScripts, which also pushed any QI
+    // entries). The response-write/total entries pushed below are therefore
+    // "late entries" appended client-side via _njFlowPatch. Mirrors
+    // render-swig.js:1077-1080.
+    var _njFlowSnapshotCount = (local._timeline) ? local._timeline.entries.length : 0;
+
     // #NJ3 — static HTML cache write. Must run BEFORE sendHtmlResponse so
     // the cached bytes reflect the final output AND the miss-path
     // Cache-Control header we set next is committed alongside the response.
@@ -1124,20 +1159,46 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         }
     }
 
-    // Late-bind Inspector View tab Weight + Load metrics into the already-
-    // serialised `window.__ginaData` so the badges work under COOP without
-    // `window.opener`. Mirrors render-swig.js:1601-1622 (cache-miss late-bind),
-    // minus the `_flowPatch` ternary which is Flow-tab scope. `server.isaac.js`
-    // cache-hits serve the pre-patch bytes (weightBytes=null + emit-time
-    // serverMs) — same state as render-swig.js cache-hits today.
+    // #FI — response write + total timing for the Inspector Flow tab. Pushed
+    // after the __ginaData snapshot was serialised, so they are late entries
+    // appended client-side by _njFlowPatch below. Mirrors render-swig.js:1583-1599.
+    var _njLateEntries = [];
+    if (local._timeline) {
+        var _njRespEnd = Date.now();
+        var _njRwStart = local._timeline._renderStart || local._timeline._actionStart || local._timeline.requestStart;
+        local._timeline.entries.push({
+            label: 'response-write', cat: 'response',
+            startMs: _njRwStart, endMs: _njRespEnd,
+            durationMs: _njRespEnd - _njRwStart,
+            detail: null
+        });
+        local._timeline.entries.push({
+            label: 'total', cat: 'total',
+            startMs: local._timeline.requestStart,
+            endMs: _njRespEnd,
+            durationMs: _njRespEnd - local._timeline.requestStart,
+            detail: null
+        });
+        _njLateEntries = local._timeline.entries.slice(_njFlowSnapshotCount);
+    }
+
+    // Late-bind Inspector View tab Weight + Load metrics AND Flow tab late
+    // entries into the already-serialised `window.__ginaData` so both work
+    // under COOP without `window.opener`. Mirrors render-swig.js:1608-1622
+    // (cache-miss late-bind). `server.isaac.js` cache-hits serve the pre-patch
+    // bytes (weightBytes=null + emit-time serverMs + base flow entries only).
     if ((displayInspector || self.isCacheless()) && /<\/body>/i.test(html)) {
         try {
             var _njWeightBytesFinal = Buffer.byteLength(html, 'utf8');
             var _njServerMsFinal    = (local._timeline && typeof local._timeline.requestStart === 'number')
                 ? Date.now() - local._timeline.requestStart
                 : null;
+            var _njFlowPatch = (_njLateEntries.length > 0)
+                ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_njLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
+                : '';
             var _njPatchScript = '<script>(function(d){'
                 + 'var u=d&&d.user,g=d&&d.gina;'
+                + _njFlowPatch
                 + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';u.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
                 + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';g.environment.metrics.serverMs=' + _njServerMsFinal + ';}'
                 + '}(window.__ginaData));</script>';
