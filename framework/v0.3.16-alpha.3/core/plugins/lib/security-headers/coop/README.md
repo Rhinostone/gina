@@ -139,6 +139,7 @@ for the full feature gate.
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |
 | OAuth popup flow with `same-origin`                      | Popup gets `null` opener; `window.opener.postMessage(...)` fails silently — see the three escape hatches above |
+| Dev Inspector active under `same-origin`                 | View tab can't read client timing via `window.opener.performance` (opener severed under COOP). Server-side metrics fallback restores the **Weight** + **Load** badges; **FCP** (browser-only) stays unavailable. Dev-only — the Inspector is `NODE_ENV_IS_DEV`-gated. |
 
 The idempotent behaviour makes the plugin safe to register more than
 once or alongside another middleware that emits the same header — the
