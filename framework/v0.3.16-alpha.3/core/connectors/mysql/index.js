@@ -152,9 +152,12 @@ function Mysql(conn, infos) {
                     return _cb(null, 'mysql', infos.database, _knownIndexes);
                 }
                 try {
+                    // #QI Phase C.2 — capture per-index columns too: STATISTICS has
+                    // one row per index column; SEQ_IN_INDEX is the leftmost-first order.
                     conn.execute(
-                        'SELECT TABLE_NAME, INDEX_NAME, NON_UNIQUE FROM INFORMATION_SCHEMA.STATISTICS'
-                        + ' WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, INDEX_NAME',
+                        'SELECT TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME, NON_UNIQUE'
+                        + ' FROM INFORMATION_SCHEMA.STATISTICS'
+                        + ' WHERE TABLE_SCHEMA = ? ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX',
                         [infos.database],
                         function(err, rows) {
                             if (err) return _cb(err, 'mysql', infos.database, _knownIndexes);
@@ -163,16 +166,22 @@ function Mysql(conn, infos) {
                                 var tbl = rows[r].TABLE_NAME.toLowerCase();
                                 var idx = rows[r].INDEX_NAME;
                                 if (!map[tbl]) map[tbl] = [];
-                                // Dedup by index name within the same table
-                                var dup = false;
+                                // Find-or-create the index entry, then append this
+                                // row's column (rows arrive in SEQ_IN_INDEX order).
+                                var entry = null;
                                 for (var d = 0; d < map[tbl].length; d++) {
-                                    if (map[tbl][d].name === idx) { dup = true; break; }
+                                    if (map[tbl][d].name === idx) { entry = map[tbl][d]; break; }
                                 }
-                                if (!dup) {
-                                    map[tbl].push({
-                                        name: idx,
-                                        primary: idx === 'PRIMARY'
-                                    });
+                                if (!entry) {
+                                    entry = { name: idx, primary: idx === 'PRIMARY', columns: [] };
+                                    map[tbl].push(entry);
+                                }
+                                // COLUMN_NAME is null for functional key parts (MySQL 8+) —
+                                // skip those; a bare-name coverage match can't apply.
+                                var _col = rows[r].COLUMN_NAME;
+                                if (_col) {
+                                    _col = String(_col).toLowerCase();
+                                    if (entry.columns.indexOf(_col) === -1) entry.columns.push(_col);
                                 }
                             }
                             // Merge live data into _knownIndexes (live wins)

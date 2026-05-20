@@ -7369,3 +7369,108 @@ describe('61 - QI Phase C: column-level index coverage matching (#QI Phase C)', 
     });
 
 });
+
+
+// ── 62 — Phase C.2: live-introspection column capture (#QI Phase C.2) ───────
+
+describe('62 - QI Phase C.2: live-introspection column capture (#QI Phase C.2)', function() {
+
+    var sqlParser = require(path.join(FW, 'core/connectors/sql-parser'));
+
+    var MYSQL_SRC_62  = path.join(FW, 'core/connectors/mysql/index.js');
+    var PG_SRC_62     = path.join(FW, 'core/connectors/postgresql/index.js');
+    var SQLITE_SRC_62 = path.join(FW, 'core/connectors/sqlite/index.js');
+    var _my62, _pg62, _sq62;
+    function getMy62() { return _my62 || (_my62 = fs.readFileSync(MYSQL_SRC_62, 'utf8')); }
+    function getPg62() { return _pg62 || (_pg62 = fs.readFileSync(PG_SRC_62, 'utf8')); }
+    function getSq62() { return _sq62 || (_sq62 = fs.readFileSync(SQLITE_SRC_62, 'utf8')); }
+
+    // ── parseIndexDefColumns — the new sql-parser export (PostgreSQL indexdef) ─
+
+    it('exports parseIndexDefColumns', function() {
+        assert.strictEqual(typeof sqlParser.parseIndexDefColumns, 'function');
+    });
+
+    it('parses a multi-column indexdef (leftmost-first, lowercased)', function() {
+        assert.deepStrictEqual(
+            sqlParser.parseIndexDefColumns('CREATE INDEX i ON public.users USING btree (email, status)'),
+            ['email', 'status']
+        );
+    });
+
+    it('parses a single-column pkey indexdef', function() {
+        assert.deepStrictEqual(
+            sqlParser.parseIndexDefColumns('CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)'),
+            ['id']
+        );
+    });
+
+    it('drops direction keywords and works without an explicit USING method', function() {
+        assert.deepStrictEqual(
+            sqlParser.parseIndexDefColumns('CREATE INDEX i ON t (created_at DESC, status)'),
+            ['created_at', 'status']
+        );
+    });
+
+    it('reduces a functional expression to its leading token (conservative — no false coverage)', function() {
+        // lower(email) → 'lower' won't match a bare WHERE column, so no coverage is claimed.
+        assert.deepStrictEqual(
+            sqlParser.parseIndexDefColumns('CREATE INDEX i ON t USING btree (lower(email))'),
+            ['lower']
+        );
+    });
+
+    it('returns [] for empty / null / non-indexdef input', function() {
+        assert.deepStrictEqual(sqlParser.parseIndexDefColumns(''), []);
+        assert.deepStrictEqual(sqlParser.parseIndexDefColumns(null), []);
+        assert.deepStrictEqual(sqlParser.parseIndexDefColumns('NOT AN INDEX DEFINITION'), []);
+    });
+
+    // ── End-to-end: a live-shaped descriptor carrying columns yields coverage ─
+
+    it('annotateCoverage marks covers=true when a live descriptor carries columns', function() {
+        var cols = sqlParser.parseIndexDefColumns('CREATE INDEX idx_email ON users USING btree (email, status)');
+        var cov  = sqlParser.annotateCoverage(
+            [{ name: 'idx_email', primary: false, columns: cols }],
+            'SELECT * FROM users WHERE email = ?'
+        );
+        assert.strictEqual(cov.anyCovered, true);
+        assert.strictEqual(cov.indexes[0].covers, true);
+    });
+
+    it('annotateCoverage yields covers=false for a columnless descriptor (the pre-C.2 gap this closes)', function() {
+        var cov = sqlParser.annotateCoverage(
+            [{ name: 'idx_email', primary: false }],
+            'SELECT * FROM users WHERE email = ?'
+        );
+        assert.strictEqual(cov.anyCovered, false);
+        assert.strictEqual(cov.indexes[0].covers, false);
+    });
+
+    // ── Source pins: each live-introspection block now captures columns ───────
+
+    it('MySQL live introspection selects SEQ_IN_INDEX and COLUMN_NAME', function() {
+        var src = getMy62();
+        assert.ok(src.indexOf('SEQ_IN_INDEX') > -1, 'expected SEQ_IN_INDEX in the STATISTICS query');
+        assert.ok(src.indexOf('COLUMN_NAME')  > -1, 'expected COLUMN_NAME in the STATISTICS query');
+    });
+
+    it('MySQL live introspection accumulates a columns array', function() {
+        assert.ok(/columns:\s*\[\]/.test(getMy62()), 'expected a columns: [] accumulator in the MySQL live block');
+    });
+
+    it('PostgreSQL live introspection parses columns from indexdef', function() {
+        assert.ok(
+            getPg62().indexOf('parseIndexDefColumns(def)') > -1,
+            'expected parseIndexDefColumns(def) in the PostgreSQL live block'
+        );
+    });
+
+    it('SQLite live introspection reads PRAGMA index_info', function() {
+        assert.ok(
+            getSq62().indexOf('PRAGMA index_info') > -1,
+            'expected PRAGMA index_info in the SQLite live block'
+        );
+    });
+
+});

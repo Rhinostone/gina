@@ -165,7 +165,9 @@ function Postgresql(conn, infos) {
                                 if (!map[tbl]) map[tbl] = [];
                                 map[tbl].push({
                                     name: idx,
-                                    primary: /_pkey$/.test(idx) || /PRIMARY KEY/.test(def)
+                                    primary: /_pkey$/.test(idx) || /PRIMARY KEY/.test(def),
+                                    // #QI Phase C.2 — parse the indexed columns out of indexdef
+                                    columns: sqlParser.parseIndexDefColumns(def)
                                 });
                             }
                             // Merge live data into _knownIndexes (live wins)

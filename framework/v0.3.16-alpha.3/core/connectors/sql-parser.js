@@ -355,6 +355,31 @@ function parseIndexColumns(listStr) {
 
 
 /**
+ * parseIndexDefColumns — extract the indexed column list from a PostgreSQL
+ * `pg_indexes.indexdef` statement (e.g.
+ * `CREATE INDEX i ON public.users USING btree (email, status)`) into an
+ * ordered array of bare lowercase column names. Reuses parseIndexColumns on
+ * the parenthesised column body, so the same direction-keyword / opclass /
+ * functional-expression handling applies. Returns [] when no column list can
+ * be located. Used by #QI Phase C.2 to give live-introspected PostgreSQL
+ * indexes the same `columns` shape as the indexes.sql (Phase A) path.
+ * @inner
+ * @param  {string} indexDef  A CREATE INDEX statement (pg_indexes.indexdef)
+ * @return {Array<string>}    Leftmost-first lowercase column names, or []
+ * @example
+ *   parseIndexDefColumns('CREATE INDEX i ON public.users USING btree (email, status)')
+ *   // → ['email', 'status']
+ */
+function parseIndexDefColumns(indexDef) {
+    if (!indexDef) return [];
+    // Column list = first parenthesised group after "ON <table> [USING method]".
+    var m = String(indexDef).match(/\bON\b[\s\S]*?\(([^)]*)\)/i);
+    if (!m) return [];
+    return parseIndexColumns(m[1]);
+}
+
+
+/**
  * Unquote a SQL identifier — strips surrounding `"`, `` ` ``, or `[` `]`.
  * @inner
  * @param  {string} id
@@ -399,5 +424,6 @@ module.exports = {
     parseCreateIndexes      : parseCreateIndexes,
     extractTargetTable      : extractTargetTable,
     extractWhereColumns     : extractWhereColumns,
-    annotateCoverage        : annotateCoverage
+    annotateCoverage        : annotateCoverage,
+    parseIndexDefColumns    : parseIndexDefColumns
 };

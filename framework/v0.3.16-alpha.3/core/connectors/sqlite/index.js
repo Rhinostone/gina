@@ -167,9 +167,24 @@ function Sqlite(conn, infos) {
                         if (idxList.length > 0) {
                             map[tbl] = [];
                             for (var ii = 0; ii < idxList.length; ii++) {
+                                // #QI Phase C.2 — PRAGMA index_info lists the index's
+                                // columns in position order (name is null for an
+                                // expression column — skip those).
+                                var cols = [];
+                                try {
+                                    var info = conn.prepare(
+                                        'PRAGMA index_info("' + idxList[ii].name + '")'
+                                    ).all();
+                                    for (var ci = 0; ci < info.length; ci++) {
+                                        if (info[ci].name != null) {
+                                            cols.push(String(info[ci].name).toLowerCase());
+                                        }
+                                    }
+                                } catch (_e2) { /* leave cols empty for this index */ }
                                 map[tbl].push({
                                     name: idxList[ii].name,
-                                    primary: idxList[ii].origin === 'pk'
+                                    primary: idxList[ii].origin === 'pk',
+                                    columns: cols
                                 });
                             }
                         }
