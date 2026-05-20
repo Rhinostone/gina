@@ -2540,6 +2540,11 @@ details[open] > summary.bm-summary::before {
   background: rgba(239, 83, 80, 0.12);
 }
 
+.bm-idx-uncovered {
+  color: #e6b800;
+  background: rgba(230, 184, 0, 0.12);
+}
+
 .bm-idx-na {
   color: var(--text-dim);
   opacity: 0.5;
@@ -2569,6 +2574,10 @@ details[open] > summary.bm-summary::before {
 [data-theme=light] .bm-idx-none {
   color: #c62828;
   background: rgba(198, 40, 40, 0.1);
+}
+[data-theme=light] .bm-idx-uncovered {
+  color: #8a6d00;
+  background: rgba(138, 109, 0, 0.1);
 }
 [data-theme=light] .bm-idx-na {
   color: var(--text-dim);
@@ -3631,5 +3640,3 @@ details[open] > summary.bm-summary::before {
     text-align: left;
   }
 }
-
-/*# sourceMappingURL=inspector.css.map */

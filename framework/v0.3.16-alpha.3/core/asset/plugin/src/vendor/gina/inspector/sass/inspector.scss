@@ -2087,6 +2087,10 @@ details[open] > summary.bm-summary::before { transform: rotate(90deg); }
     color: #ef5350;
     background: rgba(239,83,80,.12);
 }
+.bm-idx-uncovered {
+    color: #e6b800;
+    background: rgba(230,184,0,.12);
+}
 .bm-idx-na {
     color: var(--text-dim);
     opacity: 0.5;
@@ -2105,6 +2109,7 @@ details[open] > summary.bm-summary::before { transform: rotate(90deg); }
     .bm-idx-secondary { color: #2e7d32; background: rgba(46,125,50,.1); }
     .bm-idx-primary   { color: #e65100; background: rgba(230,81,0,.1); }
     .bm-idx-none      { color: #c62828; background: rgba(198,40,40,.1); }
+    .bm-idx-uncovered { color: #8a6d00; background: rgba(138,109,0,.1); }
     .bm-idx-na        { color: var(--text-dim); background: rgba(0,0,0,.05); }
 }
 

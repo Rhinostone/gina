@@ -161,9 +161,10 @@ function extractFirstBlockComment(src) {
  * only the table part.
  *
  * @param  {string} src  Raw SQL source (may contain comments)
- * @return {Object.<string, Array<{name: string, primary: boolean}>>}
- *         Map of lowercase table name → array of index descriptors.
- *         Returns an empty object when no CREATE INDEX statements are found.
+ * @return {Object.<string, Array<{name: string, primary: boolean, columns: Array<string>}>>}
+ *         Map of lowercase table name → array of index descriptors. Each
+ *         descriptor carries its indexed `columns` (leftmost-first) for the
+ *         #QI Phase C column-coverage check. Empty object when none found.
  */
 function parseCreateIndexes(src) {
     var map = {};
@@ -172,9 +173,11 @@ function parseCreateIndexes(src) {
     // Strip comments first so -- or /* inside strings doesn't confuse us
     var clean = stripComments(src);
 
-    // Match CREATE [UNIQUE] INDEX [IF NOT EXISTS] <name> ON <table>
-    // Captures: (1) index name, (2) table name
-    var re = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)\s+ON\s+(\S+)/gi;
+    // Match CREATE [UNIQUE] INDEX [IF NOT EXISTS] <name> ON <table> [USING <m>] (<cols>)
+    // Captures: (1) index name, (2) table name, (3) column-list body (optional).
+    // The table token stops at whitespace or "(" so "ON users(email)" still
+    // splits cleanly; an optional "USING <method>" (PostgreSQL) is skipped.
+    var re = /CREATE\s+(?:UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?(\S+)\s+ON\s+([^\s(]+)(?:\s+USING\s+\w+)?\s*(?:\(([^)]*)\))?/gi;
     var m;
 
     while ((m = re.exec(clean)) !== null) {
@@ -185,12 +188,12 @@ function parseCreateIndexes(src) {
         var dotPos = tableName.lastIndexOf('.');
         if (dotPos > -1) tableName = tableName.substring(dotPos + 1);
 
-        // Strip trailing parenthesis if captured (e.g. "users(" from "ON users(email)")
-        tableName = tableName.replace(/\(.*$/, '');
-
         tableName = tableName.toLowerCase();
 
         if (!map[tableName]) map[tableName] = [];
+
+        // #QI Phase C — capture the indexed column list (leftmost-first order)
+        var columns = parseIndexColumns(m[3]);
 
         // Deduplicate by index name
         var exists = false;
@@ -198,7 +201,7 @@ function parseCreateIndexes(src) {
             if (map[tableName][i].name === idxName) { exists = true; break; }
         }
         if (!exists) {
-            map[tableName].push({ name: idxName, primary: false });
+            map[tableName].push({ name: idxName, primary: false, columns: columns });
         }
     }
 
@@ -245,6 +248,113 @@ function extractTargetTable(queryString) {
 
 
 /**
+ * extractWhereColumns — heuristic extraction of the column names a query
+ * filters on. Returns the bare lowercase identifiers that appear immediately
+ * to the left of a comparison operator inside the WHERE clause.
+ *
+ * Heuristic, NOT a full parser: table/alias qualifiers are stripped
+ * (`t.email` → `email`); ORDER BY / GROUP BY / HAVING columns are not
+ * included; functional predicates (`LOWER(email) = ?`) yield no column (the
+ * left-of-operator token is `)`, so nothing is captured — an index cannot be
+ * matched on a bare name there anyway). Used by #QI Phase C column-coverage.
+ *
+ * @param  {string} queryString  Raw SQL (comments stripped internally)
+ * @return {Array<string>}       Ordered, de-duplicated lowercase column names
+ * @example
+ *   extractWhereColumns("SELECT * FROM users WHERE t.email = ? AND status IN (?)")
+ *   // → ['email', 'status']
+ */
+function extractWhereColumns(queryString) {
+    if (!queryString) return [];
+    var clean = stripComments(String(queryString));
+
+    // Isolate the WHERE clause up to the next major clause or statement end.
+    var wm = clean.match(/\bWHERE\b([\s\S]*?)(?:\bGROUP\s+BY\b|\bORDER\s+BY\b|\bHAVING\b|\bLIMIT\b|\bUNION\b|\bRETURNING\b|;|$)/i);
+    if (!wm) return [];
+
+    var cols = [];
+    var seen = {};
+    // Identifier (optionally table-qualified) immediately left of a comparison op.
+    var re = /([A-Za-z_][\w$]*(?:\.[A-Za-z_][\w$]*)?)\s*(?:<=|>=|<>|!=|=|<|>|\bLIKE\b|\bIN\b|\bBETWEEN\b|\bIS\b)/gi;
+    var m;
+    while ((m = re.exec(wm[1])) !== null) {
+        var col = m[1];
+        var dot = col.lastIndexOf('.');
+        if (dot > -1) col = col.substring(dot + 1);   // strip table/alias qualifier
+        col = col.toLowerCase();
+        if (col === 'and' || col === 'or' || col === 'not') continue;
+        if (!seen[col]) { seen[col] = true; cols.push(col); }
+    }
+    return cols;
+}
+
+
+/**
+ * annotateCoverage — given a table's index descriptors and a query, compute
+ * per-index column coverage using the leftmost-prefix rule: an index is
+ * usable for the query's filter only if its FIRST column is among the queried
+ * columns. Descriptors are cloned — the shared `_knownIndexes` entry is never
+ * mutated. Used by #QI Phase C.
+ *
+ * @param  {Array<{name:string, primary:boolean, columns?:Array<string>}>} tableIndexes
+ * @param  {string} queryString
+ * @return {{whereColumns: Array<string>, indexes: Array<{name:string, primary:boolean, columns:Array<string>, covers:boolean}>, anyCovered: boolean}}
+ * @example
+ *   annotateCoverage([{name:'idx', primary:false, columns:['email','status']}],
+ *                    "SELECT * FROM users WHERE email = ?")
+ *   // → { whereColumns:['email'], indexes:[{..., covers:true}], anyCovered:true }
+ */
+function annotateCoverage(tableIndexes, queryString) {
+    var whereColumns = extractWhereColumns(queryString);
+    var out          = [];
+    var anyCovered   = false;
+
+    for (var i = 0; i < (tableIndexes ? tableIndexes.length : 0); i++) {
+        var idx  = tableIndexes[i];
+        var cols = idx.columns || [];
+        // Leftmost-prefix: usable only if the index's leading column is filtered.
+        var covers = (cols.length > 0 && whereColumns.length > 0 &&
+                      whereColumns.indexOf(cols[0]) > -1);
+        if (covers) anyCovered = true;
+        out.push({
+            name    : idx.name,
+            primary : !!idx.primary,
+            columns : cols.slice(),
+            covers  : covers
+        });
+    }
+
+    return { whereColumns: whereColumns, indexes: out, anyCovered: anyCovered };
+}
+
+
+/**
+ * parseIndexColumns — parse a CREATE INDEX column-list body (the text between
+ * the parens) into an ordered array of bare lowercase column names. Direction
+ * keywords (ASC/DESC), operator classes, collations and prefix-length
+ * specifiers are dropped; expression / functional parts (e.g. `lower(email)`)
+ * reduce to their leading token and simply won't match a bare WHERE column
+ * (conservative — no false coverage claim).
+ * @inner
+ * @param  {string} listStr
+ * @return {Array<string>}
+ */
+function parseIndexColumns(listStr) {
+    if (!listStr) return [];
+    var parts = listStr.split(',');
+    var cols  = [];
+    for (var i = 0; i < parts.length; i++) {
+        var p = parts[i].trim();
+        if (!p) continue;
+        // Leading token: drops "DESC"/"ASC"/opclass and any "(...)" wrapping.
+        var tok = unquoteIdentifier(p.split(/[\s(]/)[0]);
+        if (tok) cols.push(tok.toLowerCase());
+    }
+    return cols;
+}
+
+
+/**
  * Unquote a SQL identifier — strips surrounding `"`, `` ` ``, or `[` `]`.
  * @inner
  * @param  {string} id
@@ -287,5 +397,7 @@ module.exports = {
     stripComments           : stripComments,
     extractFirstBlockComment: extractFirstBlockComment,
     parseCreateIndexes      : parseCreateIndexes,
-    extractTargetTable      : extractTargetTable
+    extractTargetTable      : extractTargetTable,
+    extractWhereColumns     : extractWhereColumns,
+    annotateCoverage        : annotateCoverage
 };

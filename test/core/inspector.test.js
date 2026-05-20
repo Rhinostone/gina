@@ -3302,7 +3302,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('renderQueryContent handles indexes === null (N/A badge)', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         assert.ok(
             block.indexOf('bm-idx-na') > -1,
             'expected bm-idx-na class for null indexes'
@@ -3312,7 +3312,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('renderQueryContent handles indexes === [] (no index badge)', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         assert.ok(
             block.indexOf('bm-idx-none') > -1,
             'expected bm-idx-none class for empty indexes array'
@@ -3322,7 +3322,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('renderQueryContent handles populated indexes with primary detection', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         assert.ok(
             block.indexOf('bm-idx-primary') > -1,
             'expected bm-idx-primary class for primary index'
@@ -3336,7 +3336,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('index badges check idx.primary for primary vs secondary', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         assert.ok(
             /idx\.primary/.test(block),
             'expected idx.primary check in index badge rendering'
@@ -3346,7 +3346,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('null indexes branch requires q.connector to show N/A', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         // N/A badge should only render when connector info is available
         assert.ok(
             /q\.connector/.test(block),
@@ -3357,7 +3357,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('empty indexes branch shows "no index" warning text', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         assert.ok(
             /no index/.test(block),
             'expected "no index" text for empty indexes array'
@@ -3367,7 +3367,7 @@ describe('31 - Query: renderQueryContent index badge rendering in Inspector', fu
     it('N/A badge has tooltip explaining unavailability', function() {
         var js = getInsp31();
         var idx = js.indexOf('function renderQueryContent');
-        var block = js.substring(idx, idx + 6000);
+        var block = js.substring(idx, idx + 9000);
         assert.ok(
             /not available/.test(block) || /not supported/.test(block),
             'expected tooltip text explaining index info unavailability'
@@ -3873,7 +3873,7 @@ describe('40 - MySQL connector QI: AsyncLocalStorage instrumentation', function(
         var src = getMysqlSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 1500), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 2000), pushIdx);
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -4430,7 +4430,7 @@ describe('41 - PostgreSQL connector QI: AsyncLocalStorage instrumentation', func
         var src = getPgSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 1500), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 2000), pushIdx);
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -4607,7 +4607,7 @@ describe('42 - SQLite connector QI: AsyncLocalStorage instrumentation', function
         var src = getSqliteSrc();
         var pushIdx = src.indexOf('_devLog.push(_queryEntry)');
         assert.ok(pushIdx > -1, '_devLog push must exist');
-        var before = src.substring(Math.max(0, pushIdx - 1500), pushIdx);
+        var before = src.substring(Math.max(0, pushIdx - 2000), pushIdx);
         assert.ok(
             before.indexOf('envIsDev') > -1,
             '_devLog push must be inside envIsDev guard'
@@ -7218,6 +7218,154 @@ describe('60 - Flow tab nunjucks parity — data.page.flow build + late-entry _n
         assert.ok(flowIdx > -1,    'expected + _njFlowPatch in the _njPatchScript concat');
         assert.ok(metricsIdx > -1, 'expected the metrics late-bind in the _njPatchScript concat');
         assert.ok(flowIdx < metricsIdx, 'expected _njFlowPatch to come BEFORE the metrics late-bind (mirrors render-swig.js ordering)');
+    });
+
+});
+
+
+describe('61 - QI Phase C: column-level index coverage matching (#QI Phase C)', function() {
+
+    var sqlParser = require(path.join(FW, 'core/connectors/sql-parser'));
+
+    var INSPECTOR_61 = path.join(BM_DIR, 'inspector.js');
+    var CSS_61       = path.join(BM_DIR, 'inspector.css');
+    var _insp61, _css61;
+    function getInsp61() { return _insp61 || (_insp61 = fs.readFileSync(INSPECTOR_61, 'utf8')); }
+    function getCss61()  { return _css61  || (_css61  = fs.readFileSync(CSS_61, 'utf8')); }
+
+    // ── parseCreateIndexes now captures columns (additive to §46) ─────────────
+
+    it('parseCreateIndexes captures the indexed column list (leftmost-first)', function() {
+        var map = sqlParser.parseCreateIndexes('CREATE INDEX idx ON users (email, status);');
+        assert.deepStrictEqual(map['users'][0].columns, ['email', 'status']);
+    });
+
+    it('parseCreateIndexes captures a single column', function() {
+        var map = sqlParser.parseCreateIndexes('CREATE INDEX idx ON orders (user_id);');
+        assert.deepStrictEqual(map['orders'][0].columns, ['user_id']);
+    });
+
+    it('parseCreateIndexes handles PostgreSQL USING <method> before the column list', function() {
+        var map = sqlParser.parseCreateIndexes('CREATE INDEX idx ON public.users USING btree (email);');
+        assert.deepStrictEqual(map['users'][0].columns, ['email']);
+    });
+
+    it('parseCreateIndexes drops ASC/DESC direction keywords from columns', function() {
+        var map = sqlParser.parseCreateIndexes('CREATE INDEX i ON "orders" (created_at DESC, "user_id");');
+        assert.deepStrictEqual(map['orders'][0].columns, ['created_at', 'user_id']);
+    });
+
+    it('parseCreateIndexes reduces a prefix-length spec to the bare column', function() {
+        var map = sqlParser.parseCreateIndexes('CREATE INDEX i ON t (email(10));');
+        assert.deepStrictEqual(map['t'][0].columns, ['email']);
+    });
+
+    it('parseCreateIndexes still exposes name + primary (back-compat with §46)', function() {
+        var map = sqlParser.parseCreateIndexes('CREATE INDEX idx ON users (email);');
+        assert.strictEqual(map['users'][0].name, 'idx');
+        assert.strictEqual(map['users'][0].primary, false);
+    });
+
+    // ── extractWhereColumns ──────────────────────────────────────────────────
+
+    it('extractWhereColumns is exported', function() {
+        assert.strictEqual(typeof sqlParser.extractWhereColumns, 'function');
+    });
+
+    it('extractWhereColumns pulls equality + IN columns, strips qualifiers, ignores ORDER BY', function() {
+        var cols = sqlParser.extractWhereColumns('SELECT * FROM users WHERE t.email = ? AND status IN (?) ORDER BY created');
+        assert.deepStrictEqual(cols, ['email', 'status']);
+    });
+
+    it('extractWhereColumns handles range + BETWEEN', function() {
+        var cols = sqlParser.extractWhereColumns('SELECT * FROM o WHERE price > 10 AND created BETWEEN ? AND ?');
+        assert.deepStrictEqual(cols, ['price', 'created']);
+    });
+
+    it('extractWhereColumns returns [] for a query with no WHERE clause', function() {
+        assert.deepStrictEqual(sqlParser.extractWhereColumns('SELECT * FROM users'), []);
+    });
+
+    it('extractWhereColumns yields no column for a functional predicate (conservative)', function() {
+        assert.deepStrictEqual(sqlParser.extractWhereColumns('SELECT * FROM users WHERE LOWER(email) = ?'), []);
+    });
+
+    // ── annotateCoverage — leftmost-prefix ───────────────────────────────────
+
+    it('annotateCoverage is exported', function() {
+        assert.strictEqual(typeof sqlParser.annotateCoverage, 'function');
+    });
+
+    it('annotateCoverage marks covers=true when the index leads with a filtered column', function() {
+        var idxs = [{ name: 'i1', primary: false, columns: ['email', 'status'] }];
+        var cov  = sqlParser.annotateCoverage(idxs, 'SELECT * FROM users WHERE email = ?');
+        assert.strictEqual(cov.anyCovered, true);
+        assert.strictEqual(cov.indexes[0].covers, true);
+        assert.deepStrictEqual(cov.whereColumns, ['email']);
+    });
+
+    it('annotateCoverage marks covers=false when only a non-leading column is filtered', function() {
+        var idxs = [{ name: 'i1', primary: false, columns: ['email', 'status'] }];
+        var cov  = sqlParser.annotateCoverage(idxs, 'SELECT * FROM users WHERE status = ?');
+        assert.strictEqual(cov.anyCovered, false);
+        assert.strictEqual(cov.indexes[0].covers, false);
+    });
+
+    it('annotateCoverage reports anyCovered=false when no index covers the filter', function() {
+        var idxs = [
+            { name: 'i1', primary: false, columns: ['email'] },
+            { name: 'i2', primary: false, columns: ['status'] }
+        ];
+        var cov = sqlParser.annotateCoverage(idxs, 'SELECT * FROM users WHERE name = ?');
+        assert.strictEqual(cov.anyCovered, false);
+    });
+
+    it('annotateCoverage does not mutate the source descriptors', function() {
+        var idxs = [{ name: 'i1', primary: false, columns: ['email'] }];
+        sqlParser.annotateCoverage(idxs, 'SELECT * FROM users WHERE email = ?');
+        assert.strictEqual(idxs[0].covers, undefined, 'source descriptor must not gain a covers field');
+    });
+
+    // ── Inspector UI — bm-idx-uncovered badge (source-scan, mirrors §31) ──────
+
+    it('renderQueryContent has a bm-idx-uncovered branch', function() {
+        var js    = getInsp61();
+        var idx   = js.indexOf('function renderQueryContent');
+        var block = js.substring(idx, idx + 8000);
+        assert.ok(block.indexOf('bm-idx-uncovered') > -1, 'expected bm-idx-uncovered class in renderQueryContent');
+    });
+
+    it('uncovered branch reads q.whereColumns and per-index covers', function() {
+        var js    = getInsp61();
+        var idx   = js.indexOf('function renderQueryContent');
+        var block = js.substring(idx, idx + 8000);
+        assert.ok(/q\.whereColumns/.test(block), 'expected q.whereColumns check');
+        assert.ok(/\.covers/.test(block),         'expected per-index .covers check');
+    });
+
+    it('uncovered branch is gated on a WHERE filter being present (no false uncovered)', function() {
+        var js    = getInsp61();
+        var idx   = js.indexOf('function renderQueryContent');
+        var block = js.substring(idx, idx + 8000);
+        assert.ok(/_hasWhere\s*&&\s*!_anyCovers/.test(block), 'expected the (_hasWhere && !_anyCovers) gate');
+    });
+
+    it('existing green/amber/red/N-A branches are preserved', function() {
+        var js    = getInsp61();
+        var idx   = js.indexOf('function renderQueryContent');
+        var block = js.substring(idx, idx + 8000);
+        assert.ok(block.indexOf('bm-idx-secondary') > -1, 'green preserved');
+        assert.ok(block.indexOf('bm-idx-primary') > -1,   'amber preserved');
+        assert.ok(block.indexOf('bm-idx-none') > -1,      'red preserved');
+        assert.ok(block.indexOf('bm-idx-na') > -1,        'N/A preserved');
+    });
+
+    // ── Inspector CSS — .bm-idx-uncovered (dark + light) ─────────────────────
+
+    it('inspector.css defines .bm-idx-uncovered for dark and light themes', function() {
+        var css = getCss61();
+        assert.ok(/\.bm-idx-uncovered\s*\{/.test(css),                          'expected dark .bm-idx-uncovered rule');
+        assert.ok(/\[data-theme=light\]\s*\.bm-idx-uncovered\s*\{/.test(css),   'expected light-theme .bm-idx-uncovered rule');
     });
 
 });

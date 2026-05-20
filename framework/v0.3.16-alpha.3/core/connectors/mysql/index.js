@@ -331,10 +331,15 @@ function Mysql(conn, infos) {
                 _devLog = _alsStore ? _alsStore._devQueryLog : null;
                 if (_devLog) {
                     // #QI1 — resolve indexes from _knownIndexes map
+                    // #QI Phase C — annotate per-index column coverage vs the WHERE filter
                     var _indexes = null;
+                    var _whereColumns = null;
                     if (_knownIndexes !== null) {
                         var _tbl = sqlParser.extractTargetTable(queryString);
-                        _indexes = (_tbl && _knownIndexes[_tbl]) ? _knownIndexes[_tbl] : [];
+                        var _tblIdx = (_tbl && _knownIndexes[_tbl]) ? _knownIndexes[_tbl] : [];
+                        var _cov = sqlParser.annotateCoverage(_tblIdx, queryString);
+                        _indexes = _cov.indexes;
+                        _whereColumns = _cov.whereColumns;
                     }
                     _queryEntry = {
                         type        : 'MySQL',
@@ -345,6 +350,7 @@ function Mysql(conn, infos) {
                         resultCount : 0,
                         resultSize  : 0,
                         indexes     : _indexes,
+                        whereColumns: _whereColumns,
                         table       : _tbl || null,
                         error       : null,
                         source      : source || '',

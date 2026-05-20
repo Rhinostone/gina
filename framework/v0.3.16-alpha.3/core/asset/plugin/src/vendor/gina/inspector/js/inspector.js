@@ -2392,15 +2392,34 @@
                         indexHtml = '<span class="bm-query-idx bm-idx-none" title="No index used — full bucket scan">'
                             + _svgIdxWarn + ' no index</span>';
                     } else {
-                        for (var ix = 0; ix < q.indexes.length; ix++) {
-                            var idx = q.indexes[ix];
-                            var idxCls = idx.primary ? 'bm-idx-primary' : 'bm-idx-secondary';
-                            var idxTip = (idx.primary ? 'Primary index scan (consider adding a secondary index)' : 'Secondary index')
-                                + ' — click to copy';
-                            indexHtml += '<span class="bm-query-idx bm-idx-copy ' + idxCls + '" title="' + idxTip
-                                + '" data-idx-name="' + escHtml(idx.name) + '">'
-                                + (idx.primary ? _svgIdxWarn : _svgIdx) + ' '
-                                + escHtml(idx.name) + '</span>';
+                        // #QI Phase C — the table has indexes; if none lead with a
+                        // filtered column (leftmost-prefix), this query's filter
+                        // cannot use them — surface that gap rather than implying
+                        // coverage. covers/whereColumns are heuristic (declared
+                        // indexes vs WHERE columns), not a planner verdict.
+                        var _hasWhere  = q.whereColumns && q.whereColumns.length > 0;
+                        var _anyCovers = false;
+                        if (_hasWhere) {
+                            for (var _ci = 0; _ci < q.indexes.length; _ci++) {
+                                if (q.indexes[_ci].covers) { _anyCovers = true; break; }
+                            }
+                        }
+                        if (_hasWhere && !_anyCovers) {
+                            var _wc = q.whereColumns.join(', ');
+                            indexHtml = '<span class="bm-query-idx bm-idx-uncovered" title="Indexes exist on this table, but none lead with a filtered column ('
+                                + escHtml(_wc) + ') — this query cannot use them. Add an index starting with one of these columns.">'
+                                + _svgIdxWarn + ' no index for filter</span>';
+                        } else {
+                            for (var ix = 0; ix < q.indexes.length; ix++) {
+                                var idx = q.indexes[ix];
+                                var idxCls = idx.primary ? 'bm-idx-primary' : 'bm-idx-secondary';
+                                var idxTip = (idx.primary ? 'Primary index scan (consider adding a secondary index)' : 'Secondary index')
+                                    + ' — click to copy';
+                                indexHtml += '<span class="bm-query-idx bm-idx-copy ' + idxCls + '" title="' + idxTip
+                                    + '" data-idx-name="' + escHtml(idx.name) + '">'
+                                    + (idx.primary ? _svgIdxWarn : _svgIdx) + ' '
+                                    + escHtml(idx.name) + '</span>';
+                            }
                         }
                     }
                 } else if (q.connector) {
