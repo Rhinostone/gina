@@ -7035,7 +7035,7 @@ describe('58 - View tab Weight / Load fallback via server-side metrics', functio
         // The dual branch must use bm-vbadge-res (dimmed) + bm-vbadge-sep.
         var dualIdx = src.search(/if\s*\(\s*_clientW\s*&&\s*_serverW\s*\)/);
         var block = src.substring(dualIdx, dualIdx + 600);
-        assert.ok(/bm-vbadge-res/.test(block),  'expected bm-vbadge-res in weight dual');
+        assert.ok(/bm-vbadge-svr/.test(block),  'expected bm-vbadge-svr (server-emitted dim) in weight dual');
         assert.ok(/bm-vbadge-sep/.test(block),  'expected bm-vbadge-sep in weight dual');
     });
 
@@ -7047,7 +7047,7 @@ describe('58 - View tab Weight / Load fallback via server-side metrics', functio
         );
         var dualIdx = src.search(/if\s*\(\s*_ld\s*&&\s*_srvLd\s*\)/);
         var block = src.substring(dualIdx, dualIdx + 600);
-        assert.ok(/bm-vbadge-res/.test(block),  'expected bm-vbadge-res in load dual');
+        assert.ok(/bm-vbadge-svr/.test(block),  'expected bm-vbadge-svr (server-emitted dim) in load dual');
         assert.ok(/bm-vbadge-sep/.test(block),  'expected bm-vbadge-sep in load dual');
     });
 
@@ -7079,6 +7079,63 @@ describe('58 - View tab Weight / Load fallback via server-side metrics', functio
             /_emSrvMet/.test(stretch),
             'expected _emSrvMet check (server metrics fallback) in empty-state guard'
         );
+    });
+
+});
+
+describe('59 - View tab server-emitted dim differentiation (bm-vbadge-svr)', function() {
+
+    var INSPECTOR_JS_59  = path.join(BM_DIR, 'inspector.js');
+    var INSPECTOR_CSS_59 = path.join(BM_DIR, 'inspector.css');
+    var _iJs59, _iCss59;
+    function getInspectorJs59() { return _iJs59  || (_iJs59  = fs.readFileSync(INSPECTOR_JS_59,  'utf8')); }
+    function getInspectorCss59(){ return _iCss59 || (_iCss59 = fs.readFileSync(INSPECTOR_CSS_59, 'utf8')); }
+
+    it('inspector.css defines a .bm-vbadge-svr rule', function() {
+        assert.ok(
+            /\.bm-vbadge-svr\s*\{/.test(getInspectorCss59()),
+            'expected .bm-vbadge-svr rule in compiled CSS'
+        );
+    });
+
+    it('.bm-vbadge-svr applies italic + deeper opacity (.55), distinct from .bm-vbadge-res (.65)', function() {
+        var css   = getInspectorCss59();
+        var match = css.match(/\.bm-vbadge-svr\s*\{[^}]+\}/);
+        assert.ok(match, 'expected a .bm-vbadge-svr rule body');
+        var body = match[0];
+        assert.ok(/font-style:\s*italic/.test(body), 'expected font-style: italic in .bm-vbadge-svr');
+        assert.ok(/opacity:\s*0?\.55/.test(body),    'expected opacity: 0.55 in .bm-vbadge-svr');
+    });
+
+    it('.bm-vbadge-svr is standalone — NOT scoped under .bm-vbadge-engine (engine version stays bm-vbadge-ver)', function() {
+        assert.ok(
+            !/\.bm-vbadge-engine\s+\.bm-vbadge-svr/.test(getInspectorCss59()),
+            'bm-vbadge-svr must not be nested under .bm-vbadge-engine'
+        );
+    });
+
+    it('inspector.js applies bm-vbadge-svr to BOTH the weight + load server-emitted dims', function() {
+        var hits = (getInspectorJs59().match(/bm-vbadge-svr/g) || []);
+        assert.ok(hits.length >= 2, 'expected >= 2 bm-vbadge-svr usages (weight + load server dims), got ' + hits.length);
+    });
+
+    it('inspector.js server dim wraps formatBytes(_serverW) and fmtMs(_srvLd)', function() {
+        var src = getInspectorJs59();
+        assert.ok(
+            /bm-vbadge-svr[\s\S]{0,40}formatBytes\(_serverW\)/.test(src),
+            'expected bm-vbadge-svr span around formatBytes(_serverW) (weight server dim)'
+        );
+        assert.ok(
+            /bm-vbadge-svr[\s\S]{0,40}fmtMs\(_srvLd\)/.test(src),
+            'expected bm-vbadge-svr span around fmtMs(_srvLd) (load server dim)'
+        );
+    });
+
+    it('inspector.js leaves the legacy client-only dims on bm-vbadge-res (not server-emitted)', function() {
+        // The resource-vs-transfer (weight) + load-vs-transfer (load) legacy
+        // dual dims are client-measured, so they keep bm-vbadge-res — 3 sites.
+        var resHits = (getInspectorJs59().match(/bm-vbadge-res/g) || []);
+        assert.ok(resHits.length >= 3, 'expected the 3 legacy client dims to still use bm-vbadge-res, got ' + resHits.length);
     });
 
 });

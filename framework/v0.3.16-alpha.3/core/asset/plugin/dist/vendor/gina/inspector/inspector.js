@@ -1094,7 +1094,7 @@
                 var _wtTitle, _wtBody;
                 if (_clientW && _serverW) {
                     _wtTitle = 'Server: ' + formatBytes(_serverW) + ' (response body) | Client: ' + formatBytes(_clientW) + ' (browser transferSize)';
-                    _wtBody  = '<span class="bm-vbadge-res">' + formatBytes(_serverW) + '</span>'
+                    _wtBody  = '<span class="bm-vbadge-svr">' + formatBytes(_serverW) + '</span>'
                              + '<span class="bm-vbadge-sep">|</span>'
                              + formatBytes(_clientW);
                 } else if (_clientW && _res && _res !== _clientW) {
@@ -1134,7 +1134,7 @@
                 var _ltTitle, _ltBody;
                 if (_ld && _srvLd) {
                     _ltTitle = 'Server: ' + fmtMs(_srvLd) + ' (backend processing) | Client: ' + fmtMs(_ld) + ' (full page load: network + parse + paint)';
-                    _ltBody  = '<span class="bm-vbadge-res">' + fmtMs(_srvLd) + '</span>'
+                    _ltBody  = '<span class="bm-vbadge-svr">' + fmtMs(_srvLd) + '</span>'
                              + '<span class="bm-vbadge-sep">|</span>'
                              + fmtMs(_ld);
                 } else if (_ld && _tf && _ld !== _tf) {

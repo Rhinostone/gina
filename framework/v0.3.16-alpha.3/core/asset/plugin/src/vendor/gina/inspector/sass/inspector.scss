@@ -1016,6 +1016,12 @@ body {
     svg { fill: #5ba1cf; }
 }
 .bm-vbadge-res { opacity: .65; }
+/* Server-emitted fallback value (the dimmed first half of a dual badge).
+   Italic + a slightly deeper dim so a value sourced from the server reads
+   distinctly from the client-measured primary AND from the engine-version
+   dim (.bm-vbadge-ver). Pure opacity + font-style — no color — keeps it
+   theme-safe (no [data-theme] mirror needed). */
+.bm-vbadge-svr { opacity: .55; font-style: italic; }
 .bm-vbadge-sep { margin: 0 1px; opacity: .4; }
 /* Engine version — dimmed, normal-case (overrides the uppercase + tracking
    that `.bm-vbadge-engine` applies). */
