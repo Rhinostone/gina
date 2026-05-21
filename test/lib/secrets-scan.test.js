@@ -472,7 +472,7 @@ describe('09 - scope overlay + env-file', function () {
     // back-fills omitted keys), then getRequiredKeys on the effective config.
     function effectiveKeys(baseContent, scopeContent) {
         var effective = scopeContent
-            ? merge(JSON.clone(scopeContent), baseContent || {})
+            ? merge(JSON.clone(scopeContent), baseContent || {}, false)
             : baseContent;
         return secrets.getRequiredKeys(effective || {});
     }
@@ -538,8 +538,8 @@ describe('09 - scope overlay + env-file', function () {
             assert.match(src, /absDir\s*\+\s*['"]_['"]\s*\+\s*self\.scopeName/);
         });
 
-        it(name + '.js deep-merges scope over base via merge(JSON.clone(scopeContent), ...)', function () {
-            assert.match(src, /merge\(\s*JSON\.clone\(scopeContent\)/);
+        it(name + '.js deep-merges scope over base via merge(JSON.clone(scopeContent), ..., false) (explicit override)', function () {
+            assert.match(src, /merge\(\s*JSON\.clone\(scopeContent\)[^)]*,\s*false\s*\)/);
         });
     });
 

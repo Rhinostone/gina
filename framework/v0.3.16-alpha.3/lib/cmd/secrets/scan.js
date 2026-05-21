@@ -240,8 +240,10 @@ function Scan(opt, cmd) {
             var baseContent  = (baseNames.indexOf(name) > -1) ? readJsonSafe(_(absDir + '/' + name, true)) : null;
             var scopeContent = (scopeAbsDir && scopeNames.indexOf(name) > -1) ? readJsonSafe(_(scopeAbsDir + '/' + name, true)) : null;
 
-            // effective config for this scope: scope deep-merges over base (scope wins)
-            var effective = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}) : baseContent;
+            // effective config for this scope: scope deep-merges over base (scope wins).
+            // override=false is explicit (not merge's default) so scope precedence stays
+            // correct even if lib/merge's default override ever changes.
+            var effective = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}, false) : baseContent;
             if (!effective) continue;
 
             var keys      = secrets.getRequiredKeys(effective);

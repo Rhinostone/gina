@@ -275,7 +275,10 @@ function Check(opt, cmd) {
             var name         = names[f];
             var baseContent  = (baseNames.indexOf(name) > -1) ? readJsonSafe(_(absDir + '/' + name, true)) : null;
             var scopeContent = (scopeAbsDir && scopeNames.indexOf(name) > -1) ? readJsonSafe(_(scopeAbsDir + '/' + name, true)) : null;
-            var effective    = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}) : baseContent;
+            // scope deep-merges over base (scope wins); override=false is explicit (not
+            // merge's default) so scope precedence stays correct even if lib/merge's
+            // default override ever changes.
+            var effective    = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}, false) : baseContent;
             if (!effective) continue;
             var keys = secrets.getRequiredKeys(effective);
             for (var k = 0; k < keys.length; k++) {
