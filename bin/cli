@@ -325,6 +325,7 @@ async function onExec() {
         'project:',
         'protocol:',
         'scheme:',
+        'secrets:',
         'service:',
         'view:',
         '--', //options or other aliases.

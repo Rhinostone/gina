@@ -30,6 +30,10 @@
  * in an internal `WeakMap`; callers can retrieve them via
  * `getResolvedPaths(config)` to support future log-redaction wrappers.
  *
+ * **Introspection.** `getRequiredKeys(config)` enumerates the placeholder
+ * keys a config requires without resolving them — read-only and
+ * non-throwing. It backs the `gina secrets:scan` / `secrets:check` CLI.
+ *
  * @example
  * var secrets = lib.secrets;
  * process.env.DB_PASSWORD = 's3cret';
@@ -122,6 +126,52 @@ function walkAndResolve(node, paths, currentPath, backend) {
 }
 
 /**
+ * Walk `node` recursively, collecting the KEY of every string value that
+ * matches `SECRET_RE` into `keys`. Unlike `walkAndResolve`, this never
+ * calls a backend and never mutates `node` — it only enumerates the
+ * placeholder keys present, so it cannot throw on unset / empty values.
+ * Mixed-content strings (`'prefix-${secret:K}-suffix'`) do not match,
+ * exactly as `walkAndResolve` leaves them untouched.
+ *
+ * @inner
+ * @private
+ * @param {*}      node - Current subtree (object, array, or scalar)
+ * @param {object} keys - Mutable null-proto set; each required key name maps to `true`
+ * @returns {void}
+ */
+function walkAndCollect(node, keys) {
+    if (node === null || typeof node !== 'object') {
+        return;
+    }
+    if (Array.isArray(node)) {
+        for (var i = 0; i < node.length; i++) {
+            if (typeof node[i] === 'string') {
+                var match = node[i].match(SECRET_RE);
+                if (match) {
+                    keys[match[1]] = true;
+                }
+            } else if (node[i] !== null && typeof node[i] === 'object') {
+                walkAndCollect(node[i], keys);
+            }
+        }
+        return;
+    }
+    for (var key in node) {
+        if (!Object.prototype.hasOwnProperty.call(node, key)) {
+            continue;
+        }
+        if (typeof node[key] === 'string') {
+            var keyMatch = node[key].match(SECRET_RE);
+            if (keyMatch) {
+                keys[keyMatch[1]] = true;
+            }
+        } else if (node[key] !== null && typeof node[key] === 'object') {
+            walkAndCollect(node[key], keys);
+        }
+    }
+}
+
+/**
  * Resolve all `${secret:KEY}` placeholders in `config` in place. Returns
  * the same `config` reference (for chaining).
  *
@@ -193,8 +243,43 @@ function getResolvedPaths(config) {
     return _resolvedPathsByConfig.get(config) || [];
 }
 
+/**
+ * Enumerate the distinct `${secret:KEY}` placeholder keys present in
+ * `config`, without resolving any of them. Read-only and non-throwing:
+ * unlike `resolve()`, it never calls a backend, never mutates `config`,
+ * and never fails on unset / empty values — it answers only the question
+ * "which keys would this config require?".
+ *
+ * Backs the `gina secrets:scan` / `secrets:check` introspection CLI.
+ * Mirrors `resolve()`'s matching rule exactly (anchored `SECRET_RE`), so
+ * the reported set is precisely the set `resolve()` would substitute:
+ * mixed-content strings (`'prefix-${secret:K}-suffix'`) are NOT reported.
+ *
+ * @memberof module:lib/secrets
+ * @function getRequiredKeys
+ * @param {object|Array} config - A bundle config object (or any subtree)
+ * @returns {string[]} Sorted, de-duplicated list of required key names. Empty for non-object inputs or configs with no bare placeholders.
+ *
+ * @example
+ * secrets.getRequiredKeys({
+ *     db: { password: '${secret:DB_PASSWORD}' },
+ *     api: { key: '${secret:API_KEY}', url: 'https://${secret:API_KEY}/v1' }
+ * });
+ * // → ['API_KEY', 'DB_PASSWORD']
+ * // The mixed-content `url` is not reported (mirrors resolve()).
+ */
+function getRequiredKeys(config) {
+    if (config === null || typeof config !== 'object') {
+        return [];
+    }
+    var keys = Object.create(null);
+    walkAndCollect(config, keys);
+    return Object.keys(keys).sort();
+}
+
 module.exports = {
     resolve: resolve,
     getResolvedPaths: getResolvedPaths,
+    getRequiredKeys: getRequiredKeys,
     SECRET_RE: SECRET_RE
 };

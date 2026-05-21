@@ -486,3 +486,82 @@ describe('11 - source-inspection: lib/secrets wired into framework', function ()
         );
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 12 — getRequiredKeys: read-only placeholder enumeration (backs secrets:scan)
+// ---------------------------------------------------------------------------
+
+describe('12 - getRequiredKeys enumeration', function () {
+
+    it('exports getRequiredKeys as a function', function () {
+        assert.equal(typeof secrets.getRequiredKeys, 'function');
+    });
+
+    it('enumerates bare placeholders — sorted and de-duplicated', function () {
+        var conf = {
+            db: { password: '${secret:DB_PASSWORD}' },
+            cache: { token: '${secret:DB_PASSWORD}' },   // duplicate key
+            api: { key: '${secret:API_KEY}' }
+        };
+        assert.deepStrictEqual(secrets.getRequiredKeys(conf), ['API_KEY', 'DB_PASSWORD']);
+    });
+
+    it('does NOT report mixed-content placeholders (mirrors resolve())', function () {
+        var conf = {
+            bare: '${secret:BARE}',
+            mixed: 'https://${secret:HOST}/v1',
+            trailing: '${secret:TRAIL} '
+        };
+        assert.deepStrictEqual(secrets.getRequiredKeys(conf), ['BARE']);
+    });
+
+    it('walks nested objects and arrays (including object-valued elements)', function () {
+        var conf = {
+            a: { b: { c: '${secret:DEEP}' } },
+            items: ['${secret:ARR0}', 'literal', { k: '${secret:ARR_OBJ}' }]
+        };
+        assert.deepStrictEqual(secrets.getRequiredKeys(conf), ['ARR0', 'ARR_OBJ', 'DEEP']);
+    });
+
+    it('returns [] for non-object inputs', function () {
+        assert.deepStrictEqual(secrets.getRequiredKeys(null), []);
+        assert.deepStrictEqual(secrets.getRequiredKeys(undefined), []);
+        assert.deepStrictEqual(secrets.getRequiredKeys('string'), []);
+        assert.deepStrictEqual(secrets.getRequiredKeys(42), []);
+    });
+
+    it('returns [] for configs with no bare placeholders', function () {
+        assert.deepStrictEqual(secrets.getRequiredKeys({ a: 'literal', n: 1, b: true, z: null }), []);
+        assert.deepStrictEqual(secrets.getRequiredKeys({}), []);
+        assert.deepStrictEqual(secrets.getRequiredKeys([]), []);
+    });
+
+    it('never calls a backend — non-throwing even when the env var is unset', function () {
+        delete process.env.GINA_GRK_UNSET;   // resolve() would throw here; getRequiredKeys must not
+        assert.doesNotThrow(function () {
+            var keys = secrets.getRequiredKeys({ a: '${secret:GINA_GRK_UNSET}' });
+            assert.deepStrictEqual(keys, ['GINA_GRK_UNSET']);
+        });
+    });
+
+    it('does not mutate the config (read-only)', function () {
+        var conf = { a: '${secret:KEEP_ME}', nested: { b: '${secret:KEEP_TOO}' } };
+        secrets.getRequiredKeys(conf);
+        assert.equal(conf.a, '${secret:KEEP_ME}');
+        assert.equal(conf.nested.b, '${secret:KEEP_TOO}');
+    });
+
+    it('reports exactly the keys resolve() would substitute (consistency)', function () {
+        // Use a custom backend so no env mutation is needed. The count of
+        // required keys must equal the count of resolved paths — mixed-content
+        // is excluded from both.
+        var probeA = { x: '${secret:C1}', y: { z: '${secret:C2}' }, mixed: 'p-${secret:C1}' };
+        var probeB = { x: '${secret:C1}', y: { z: '${secret:C2}' }, mixed: 'p-${secret:C1}' };
+        var required = secrets.getRequiredKeys(probeA);
+        secrets.resolve(probeB, { resolve: function (k) { return 'val:' + k; } });
+        var resolvedPaths = secrets.getResolvedPaths(probeB);
+        assert.deepStrictEqual(required, ['C1', 'C2']);
+        assert.equal(resolvedPaths.length, 2);   // mixed not substituted, not counted
+    });
+});

@@ -1,0 +1,455 @@
+/**
+ * lib/cmd/secrets/{scan,check}.js — argv parsing, manifest-driven config
+ * resolution, placeholder enumeration, env cross-reference, exit codes,
+ * text + JSON output.
+ *
+ * Source-inspection tests (same style as i18n-scan.test.js): the handlers
+ * run inside the CLI daemon context (CmdHelper, project registry, globals
+ * injected by gna.js). Replicating that is heavy for near-zero extra
+ * coverage, so these assertions prove the source structure of:
+ *
+ *   (a) module shape + CmdHelper wiring (scan + check)
+ *   (b) argv loop — `--format=<x>` capture, CmdHelper-driven project/bundle
+ *   (c) config resolution — manifest `src`, JSON glob, shared/config merge
+ *   (d) pure-logic placeholder enumeration (real lib.secrets + aggregation)
+ *   (e) check exit-code logic — fail-closed `isEnvSet`, anyUnset
+ *   (f) JSON + text output shape
+ *   (g) help.js + help.txt + arguments.json
+ *   (h) bin/cli wiring (secrets: in allowedOffline)
+ */
+
+'use strict';
+
+var fs   = require('fs');
+var path = require('path');
+var { describe, it } = require('node:test');
+var assert = require('node:assert/strict');
+
+var FW           = require('../fw');
+var SCAN_SOURCE  = path.join(FW, 'lib/cmd/secrets/scan.js');
+var CHECK_SOURCE = path.join(FW, 'lib/cmd/secrets/check.js');
+var HELP_SOURCE  = path.join(FW, 'lib/cmd/secrets/help.js');
+var HELP_TXT     = path.join(FW, 'lib/cmd/secrets/help.txt');
+var ARGS_FILE    = path.join(FW, 'lib/cmd/secrets/arguments.json');
+var CLI_SOURCE   = path.join(__dirname, '..', '..', 'bin', 'cli');
+var SECRETS_LIB  = path.join(FW, 'lib/secrets');
+
+var scanSrc  = fs.readFileSync(SCAN_SOURCE, 'utf8');
+var checkSrc = fs.readFileSync(CHECK_SOURCE, 'utf8');
+var helpSrc  = fs.readFileSync(HELP_SOURCE, 'utf8');
+var helpTxt  = fs.readFileSync(HELP_TXT, 'utf8');
+var argsArr  = JSON.parse(fs.readFileSync(ARGS_FILE, 'utf8'));
+var cliSrc   = fs.readFileSync(CLI_SOURCE, 'utf8');
+var secrets  = require(SECRETS_LIB);
+
+// Handlers that share the project/bundle-resolution skeleton.
+var HANDLERS = [['scan', scanSrc], ['check', checkSrc]];
+
+
+// ---------------------------------------------------------------------------
+// 01 — Module shape (scan + check)
+// ---------------------------------------------------------------------------
+
+describe('01 - module shape', function () {
+
+    it('scan.js exports the Scan constructor', function () {
+        assert.match(scanSrc, /module\.exports\s*=\s*Scan;?/);
+        assert.match(scanSrc, /function\s+Scan\s*\(\s*opt\s*,\s*cmd\s*\)\s*\{/);
+    });
+
+    it('check.js exports the Check constructor', function () {
+        assert.match(checkSrc, /module\.exports\s*=\s*Check;?/);
+        assert.match(checkSrc, /function\s+Check\s*\(\s*opt\s*,\s*cmd\s*\)\s*\{/);
+    });
+
+    HANDLERS.forEach(function (h) {
+        var name = h[0], src = h[1];
+
+        it(name + '.js requires CmdHelper from ./../helper', function () {
+            assert.match(src, /var\s+CmdHelper\s*=\s*require\(\s*['"]\.\/?\.\.\/helper['"]/);
+        });
+
+        it(name + '.js binds console = lib.logger', function () {
+            assert.match(src, /var\s+console\s*=\s*lib\.logger/);
+        });
+
+        it(name + '.js consumes the secrets primitive via the lib registry (var secrets = lib.secrets)', function () {
+            assert.match(src, /var\s+secrets\s*=\s*lib\.secrets;/);
+            // Must NOT use the bare-module form, which does not resolve in cmd daemon scope.
+            assert.equal(/require\(\s*['"]lib\/secrets['"]\s*\)/.test(src), false);
+        });
+
+        it(name + '.js initialises self.format = "text"', function () {
+            assert.match(src, /var\s+self\s*=\s*\{\s*format:\s*['"]text['"]/);
+        });
+
+        it(name + '.js calls init() at the bottom of the constructor', function () {
+            assert.match(src, new RegExp('init\\(\\);\\s*\\}\\s*module\\.exports\\s*=\\s*' + (name === 'scan' ? 'Scan' : 'Check')));
+        });
+    });
+
+    it('check.js seeds self.anyUnset = false (exit-code accumulator)', function () {
+        assert.match(checkSrc, /anyUnset:\s*false/);
+        assert.match(checkSrc, /self\.anyUnset\s*=\s*false;/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 02 — argv parsing & dispatch (shared skeleton)
+// ---------------------------------------------------------------------------
+
+describe('02 - argv parsing & dispatch', function () {
+
+    HANDLERS.forEach(function (h) {
+        var name = h[0], src = h[1];
+
+        it(name + '.js instantiates CmdHelper with debugPort + brkEnabled', function () {
+            assert.match(src, /new\s+CmdHelper\(\s*self,\s*opt\.client,\s*\{\s*port:\s*opt\.debugPort,\s*brkEnabled:\s*opt\.debugBrkEnabled\s*\}\s*\)/);
+        });
+
+        it(name + '.js gates execution on isCmdConfigured()', function () {
+            assert.match(src, /if\s*\(\s*!isCmdConfigured\(\)\s*\)\s*return\s+false/);
+        });
+
+        it(name + '.js iterates process.argv from index 3', function () {
+            assert.match(src, /for\s*\(\s*var\s+i\s*=\s*3\s*,/);
+        });
+
+        it(name + '.js captures --format=<x> from argv', function () {
+            assert.match(src, /\/\^\\-\\-format\\=\/\.test\(arg\)/);
+            assert.match(src, /self\.format\s*=\s*arg\.split\(\/\\=\/\)\[1\]/);
+        });
+
+        it(name + '.js rejects --format values other than text or json', function () {
+            assert.match(src, /self\.format\s*!==\s*['"]text['"]\s*&&\s*self\.format\s*!==\s*['"]json['"]/);
+            assert.match(src, /--format must be `text` or `json`/);
+        });
+
+        it(name + '.js errors when a bundle filter is given without @<project>', function () {
+            assert.match(src, /requires\s*`@<project>`/);
+        });
+
+        it(name + '.js errors when the project is not registered', function () {
+            assert.match(src, /is not registered/);
+        });
+
+        it(name + '.js validates the bundle exists in the manifest', function () {
+            assert.match(src, /manifest\.bundles\s*&&\s*!manifest\.bundles\[bundleFilter\]/);
+        });
+    });
+
+    it('scan.js routes to scanAll / scanProjectOnly / scanBundleOnly', function () {
+        assert.match(scanSrc, /scanAll\(\);/);
+        assert.match(scanSrc, /scanProjectOnly\(self\.projectName\)/);
+        assert.match(scanSrc, /scanBundleOnly\(self\.projectName,\s*bundleFilter\)/);
+    });
+
+    it('check.js routes to checkAll / checkProjectOnly / checkBundleOnly', function () {
+        assert.match(checkSrc, /checkAll\(\);/);
+        assert.match(checkSrc, /checkProjectOnly\(self\.projectName\)/);
+        assert.match(checkSrc, /checkBundleOnly\(self\.projectName,\s*bundleFilter\)/);
+    });
+
+    it('scan.js exits 0 on the success path', function () {
+        assert.match(scanSrc, /process\.exit\(0\);/);
+    });
+
+    it('check.js exits non-zero when any required key is unset', function () {
+        // Two exit sites: the no-project (checkAll) branch and the project/bundle branch.
+        var matches = checkSrc.match(/process\.exit\(\s*self\.anyUnset\s*\?\s*1\s*:\s*0\s*\)/g) || [];
+        assert.ok(matches.length >= 2, 'expected >= 2 anyUnset-driven exit sites, found ' + matches.length);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03 — config-dir resolution (manifest src + JSON glob + shared/config)
+// ---------------------------------------------------------------------------
+
+describe('03 - config-dir resolution', function () {
+
+    HANDLERS.forEach(function (h) {
+        var name = h[0], src = h[1];
+
+        it(name + '.js resolves the bundle dir from manifest.bundles[name].src (openapi precedent)', function () {
+            assert.match(src, /manifest\.bundles\[bundleName\]\.src/);
+            assert.match(src, /return\s+manifest\.bundles\[bundleName\]\.src;/);
+        });
+
+        it(name + '.js falls back to the bundle name when src is absent', function () {
+            assert.match(src, /return\s+bundleName;/);
+        });
+
+        it(name + '.js declares JSON_EXT = /\\.json$/', function () {
+            assert.match(src, /var\s+JSON_EXT\s*=\s*\/\\\.json\$\//);
+        });
+
+        it(name + '.js skips dotfiles and "* copy" siblings (matching loadBundleConfig)', function () {
+            assert.match(src, /\/\^\\\.\/\.test\(name\)/);    // /^\./.test(name)
+            assert.match(src, /\/\\s\+copy\/i\.test\(name\)/); // /\s+copy/i.test(name)
+        });
+
+        it(name + '.js walks the project-level shared/config dir', function () {
+            assert.match(src, /\/shared\/config/);
+        });
+
+        it(name + '.js reads JSON via requireJSON (comment-tolerant), never plain require', function () {
+            assert.match(src, /return\s+requireJSON\(filePath\)/);
+            assert.equal(/require\(\s*filePath\s*\)/.test(src), false);
+        });
+
+        it(name + '.js enumerates keys via lib.secrets.getRequiredKeys', function () {
+            assert.match(src, /secrets\.getRequiredKeys\(conf\)/);
+        });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 04 — pure-logic placeholder enumeration (real lib.secrets + aggregation)
+// ---------------------------------------------------------------------------
+
+describe('04 - placeholder enumeration', function () {
+
+    // Replica of scan.js collectFromConfigDir aggregation over an in-memory
+    // { filename: confObject } map, using the REAL lib.secrets.getRequiredKeys.
+    function aggregate(filesByName, relBase) {
+        var byKey = Object.create(null);
+        var names = Object.keys(filesByName).sort();
+        for (var i = 0; i < names.length; i++) {
+            var keys  = secrets.getRequiredKeys(filesByName[names[i]]);
+            var label = relBase + '/' + names[i];
+            for (var k = 0; k < keys.length; k++) {
+                if (!byKey[keys[k]]) byKey[keys[k]] = [];
+                if (byKey[keys[k]].indexOf(label) < 0) byKey[keys[k]].push(label);
+            }
+        }
+        return byKey;
+    }
+
+    it('aggregates KEY -> originating file(s)', function () {
+        var byKey = aggregate({
+            'connectors.json': { db: { password: '${secret:DB_PASSWORD}' } },
+            'settings.json'  : { api: { key: '${secret:API_KEY}' } }
+        }, 'src/demo/config');
+        assert.deepStrictEqual(byKey['DB_PASSWORD'], ['src/demo/config/connectors.json']);
+        assert.deepStrictEqual(byKey['API_KEY'], ['src/demo/config/settings.json']);
+    });
+
+    it('lists multiple files for a key used in more than one config', function () {
+        var byKey = aggregate({
+            'a.json': { x: '${secret:SHARED}' },
+            'b.json': { y: '${secret:SHARED}' }
+        }, 'src/demo/config');
+        assert.deepStrictEqual(byKey['SHARED'].sort(), ['src/demo/config/a.json', 'src/demo/config/b.json']);
+    });
+
+    it('excludes mixed-content placeholders from the aggregate', function () {
+        var byKey = aggregate({
+            'settings.json': { key: '${secret:API_KEY}', url: 'https://${secret:API_KEY}/v1' }
+        }, 'src/demo/config');
+        assert.deepStrictEqual(Object.keys(byKey), ['API_KEY']);
+        assert.equal(byKey['API_KEY'].length, 1);
+    });
+
+    it('shared/config keys merge into a bundle (loader merges shared into every bundle)', function () {
+        var shared = aggregate({ 'app.json': { t: '${secret:SHARED_TOKEN}' } }, 'shared/config');
+        var bundle = Object.create(null);
+        for (var sk in shared) { bundle[sk] = shared[sk].slice(); }
+        var own = aggregate({ 'connectors.json': { db: '${secret:DB_PASSWORD}' } }, 'src/demo/config');
+        for (var ok in own) { bundle[ok] = (bundle[ok] || []).concat(own[ok]); }
+        assert.deepStrictEqual(Object.keys(bundle).sort(), ['DB_PASSWORD', 'SHARED_TOKEN']);
+        assert.deepStrictEqual(bundle['SHARED_TOKEN'], ['shared/config/app.json']);
+    });
+
+    it('empty config dir contributes nothing', function () {
+        assert.deepStrictEqual(aggregate({}, 'src/demo/config'), Object.create(null));
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 05 — check exit-code logic (fail-closed isEnvSet + anyUnset)
+// ---------------------------------------------------------------------------
+
+describe('05 - check fail-closed env logic', function () {
+
+    // Replica of check.js isEnvSet — a key is "set" only when it is a
+    // non-empty string, the same condition under which the env backend
+    // resolves successfully.
+    function isEnvSet(env, key) {
+        return typeof env[key] === 'string' && env[key] !== '';
+    }
+
+    it('non-empty string is SET', function () {
+        assert.equal(isEnvSet({ K: 'value' }, 'K'), true);
+        assert.equal(isEnvSet({ K: '0' }, 'K'), true);
+        assert.equal(isEnvSet({ K: ' ' }, 'K'), true);
+    });
+
+    it('unset is UNSET', function () {
+        assert.equal(isEnvSet({}, 'K'), false);
+    });
+
+    it('empty string is UNSET (fail-closed, matches env backend)', function () {
+        assert.equal(isEnvSet({ K: '' }, 'K'), false);
+    });
+
+    it('anyUnset flips true on the first missing key (CI gate)', function () {
+        var env = { A: 'x', C: 'z' };       // B missing
+        var keys = ['A', 'B', 'C'];
+        var anyUnset = false;
+        var set = 0;
+        for (var i = 0; i < keys.length; i++) {
+            if (isEnvSet(env, keys[i])) { set++; } else { anyUnset = true; }
+        }
+        assert.equal(set, 2);
+        assert.equal(anyUnset, true);
+    });
+
+    it('anyUnset stays false when every key is set', function () {
+        var env = { A: 'x', B: 'y' };
+        var keys = ['A', 'B'];
+        var anyUnset = false;
+        for (var i = 0; i < keys.length; i++) {
+            if (!isEnvSet(env, keys[i])) anyUnset = true;
+        }
+        assert.equal(anyUnset, false);
+    });
+
+    it('check.js source defines isEnvSet as a non-empty-string test', function () {
+        assert.match(checkSrc, /typeof\s+process\.env\[key\]\s*===\s*['"]string['"]\s*&&\s*process\.env\[key\]\s*!==\s*['"]['"]/);
+    });
+
+    it('check.js flips self.anyUnset when a key is not set', function () {
+        assert.match(checkSrc, /self\.anyUnset\s*=\s*true/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 06 — output structure
+// ---------------------------------------------------------------------------
+
+describe('06 - report output', function () {
+
+    HANDLERS.forEach(function (h) {
+        var name = h[0], src = h[1];
+
+        it(name + '.js emits JSON via JSON.stringify(report, null, 2)', function () {
+            assert.match(src, /JSON\.stringify\(report,\s*null,\s*2\)/);
+        });
+
+        it(name + '.js text path branches on report.projects vs single project', function () {
+            assert.match(src, /report\.projects[\s\S]{0,40}\?[\s\S]{0,80}:[\s\S]{0,120}\[\s*\{\s*project:\s*report\.project,\s*bundles:\s*report\.bundles\s*\}\s*\]/);
+        });
+
+        it(name + '.js text output prefixes project lines with `@<name>:`', function () {
+            assert.match(src, /'\\n@'\s*\+\s*proj\.project\s*\+\s*':'/);
+        });
+
+        it(name + '.js text output reports `(no bundles)` for empty projects', function () {
+            assert.match(src, /\(no bundles\)/);
+        });
+
+        it(name + '.js text output reports the no-placeholder case', function () {
+            assert.match(src, /No \$\{secret:KEY\} placeholders found in config\./);
+        });
+    });
+
+    it('scan.js bundle report shape — bundle, totalKeys, byKey', function () {
+        ['bundle', 'totalKeys', 'byKey'].forEach(function (field) {
+            assert.match(scanSrc, new RegExp(field + '\\s*:'));
+        });
+    });
+
+    it('scan.js text output labels the required-secrets block', function () {
+        assert.match(scanSrc, /Required secrets \(/);
+    });
+
+    it('check.js bundle report shape — bundle, totalKeys, set, unset, keys', function () {
+        ['bundle', 'totalKeys', 'set', 'unset', 'keys'].forEach(function (field) {
+            assert.match(checkSrc, new RegExp(field + '\\s*:'));
+        });
+    });
+
+    it('check.js text output prints SET / UNSET and a per-bundle summary', function () {
+        assert.match(checkSrc, /'SET'/);
+        assert.match(checkSrc, /'UNSET'/);
+        assert.match(checkSrc, /required:/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 07 — help + arguments
+// ---------------------------------------------------------------------------
+
+describe('07 - help + arguments', function () {
+
+    it('help.js exports the Help constructor', function () {
+        assert.match(helpSrc, /module\.exports\s*=\s*Help;?/);
+    });
+
+    it('help.js calls getHelp() to print group help', function () {
+        assert.match(helpSrc, /getHelp\(\);/);
+    });
+
+    it('help.txt documents the secrets: usage line', function () {
+        assert.match(helpTxt, /Usage:\s*gina\s+secrets:/);
+    });
+
+    it('help.txt documents the scan, check and help actions', function () {
+        ['scan', 'check', 'help'].forEach(function (action) {
+            assert.match(helpTxt, new RegExp('\\b' + action + '\\b'));
+        });
+    });
+
+    it('help.txt documents the honest caveats (process.env scope + authored-on-disk)', function () {
+        assert.match(helpTxt, /process\.env|environment of THIS CLI process/i);
+        assert.match(helpTxt, /authored on disk|not the merged\s+runtime config/i);
+    });
+
+    it('help.txt links to the secrets guide', function () {
+        assert.match(helpTxt, /gina\.io\/docs\/guides\/secrets/);
+    });
+
+    it('arguments.json includes --format', function () {
+        assert.ok(argsArr.indexOf('--format') > -1, 'expected --format in arguments.json');
+    });
+
+    it('arguments.json avoids framework-reserved flag names', function () {
+        var reserved = ['--port', '--mq-port', '--host-v4', '--hostname', '--debug-port',
+                        '--inspect', '--inspect-brk', '--debug', '--version',
+                        '--prefix', '--env', '--scope', '--gina-version'];
+        reserved.forEach(function (flag) {
+            assert.equal(argsArr.indexOf(flag), -1, 'arguments.json must not contain reserved flag ' + flag);
+        });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 08 — bin/cli wiring
+// ---------------------------------------------------------------------------
+
+describe('08 - bin/cli wiring', function () {
+
+    it("bin/cli adds 'secrets:' to the allowedOffline array", function () {
+        var m = cliSrc.match(/var\s+allowedOffline\s*=\s*\[([\s\S]*?)\]/);
+        assert.ok(m, 'allowedOffline array not found in bin/cli');
+        assert.match(m[1], /['"]secrets:['"]/);
+    });
+
+    it("'secrets:' is positioned alphabetically (between scheme: and service:)", function () {
+        var m = cliSrc.match(/var\s+allowedOffline\s*=\s*\[([\s\S]*?)\]/);
+        var listed       = m[1];
+        var schemeIdx    = listed.indexOf("'scheme:'");
+        var secretsIdx   = listed.indexOf("'secrets:'");
+        var serviceIdx   = listed.indexOf("'service:'");
+        assert.ok(schemeIdx > -1 && secretsIdx > -1 && serviceIdx > -1, 'one or more expected entries missing');
+        assert.ok(schemeIdx < secretsIdx, "'secrets:' must come after 'scheme:'");
+        assert.ok(secretsIdx < serviceIdx, "'secrets:' must come before 'service:'");
+    });
+});
