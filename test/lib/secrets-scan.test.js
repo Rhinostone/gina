@@ -41,6 +41,7 @@ var helpTxt  = fs.readFileSync(HELP_TXT, 'utf8');
 var argsArr  = JSON.parse(fs.readFileSync(ARGS_FILE, 'utf8'));
 var cliSrc   = fs.readFileSync(CLI_SOURCE, 'utf8');
 var secrets  = require(SECRETS_LIB);
+var merge    = require(path.join(FW, 'lib/merge'));   // also sets JSON.clone if undefined
 
 // Handlers that share the project/bundle-resolution skeleton.
 var HANDLERS = [['scan', scanSrc], ['check', checkSrc]];
@@ -199,8 +200,8 @@ describe('03 - config-dir resolution', function () {
             assert.equal(/require\(\s*filePath\s*\)/.test(src), false);
         });
 
-        it(name + '.js enumerates keys via lib.secrets.getRequiredKeys', function () {
-            assert.match(src, /secrets\.getRequiredKeys\(conf\)/);
+        it(name + '.js enumerates keys via lib.secrets.getRequiredKeys (on the effective merged config)', function () {
+            assert.match(src, /secrets\.getRequiredKeys\(effective\)/);
         });
     });
 });
@@ -318,8 +319,9 @@ describe('05 - check fail-closed env logic', function () {
         assert.equal(anyUnset, false);
     });
 
-    it('check.js source defines isEnvSet as a non-empty-string test', function () {
-        assert.match(checkSrc, /typeof\s+process\.env\[key\]\s*===\s*['"]string['"]\s*&&\s*process\.env\[key\]\s*!==\s*['"]['"]/);
+    it('check.js source defines isEnvSet against the active env source (env-file map or process.env)', function () {
+        assert.match(checkSrc, /var\s+source\s*=\s*self\.envMap\s*\|\|\s*process\.env/);
+        assert.match(checkSrc, /typeof\s+source\[key\]\s*===\s*['"]string['"]\s*&&\s*source\[key\]\s*!==\s*['"]['"]/);
     });
 
     it('check.js flips self.anyUnset when a key is not set', function () {
@@ -345,8 +347,8 @@ describe('06 - report output', function () {
             assert.match(src, /report\.projects[\s\S]{0,40}\?[\s\S]{0,80}:[\s\S]{0,120}\[\s*\{\s*project:\s*report\.project,\s*bundles:\s*report\.bundles\s*\}\s*\]/);
         });
 
-        it(name + '.js text output prefixes project lines with `@<name>:`', function () {
-            assert.match(src, /'\\n@'\s*\+\s*proj\.project\s*\+\s*':'/);
+        it(name + '.js text output prefixes project lines with `@<name>:` (with optional scope/env suffix)', function () {
+            assert.match(src, /'\\n@'\s*\+\s*proj\.project/);
         });
 
         it(name + '.js text output reports `(no bundles)` for empty projects', function () {
@@ -415,14 +417,18 @@ describe('07 - help + arguments', function () {
         assert.match(helpTxt, /gina\.io\/docs\/guides\/secrets/);
     });
 
-    it('arguments.json includes --format', function () {
-        assert.ok(argsArr.indexOf('--format') > -1, 'expected --format in arguments.json');
+    it('arguments.json includes --format, --scope, --env-file', function () {
+        ['--format', '--scope', '--env-file'].forEach(function (flag) {
+            assert.ok(argsArr.indexOf(flag) > -1, 'expected ' + flag + ' in arguments.json');
+        });
     });
 
     it('arguments.json avoids framework-reserved flag names', function () {
+        // NB: --scope and --env are legitimate scope/env group flags (bundle:* declares
+        // both); the forbidden set here is node/framework-infra flags only.
         var reserved = ['--port', '--mq-port', '--host-v4', '--hostname', '--debug-port',
                         '--inspect', '--inspect-brk', '--debug', '--version',
-                        '--prefix', '--env', '--scope', '--gina-version'];
+                        '--prefix', '--gina-version'];
         reserved.forEach(function (flag) {
             assert.equal(argsArr.indexOf(flag), -1, 'arguments.json must not contain reserved flag ' + flag);
         });
@@ -451,5 +457,95 @@ describe('08 - bin/cli wiring', function () {
         assert.ok(schemeIdx > -1 && secretsIdx > -1 && serviceIdx > -1, 'one or more expected entries missing');
         assert.ok(schemeIdx < secretsIdx, "'secrets:' must come after 'scheme:'");
         assert.ok(secretsIdx < serviceIdx, "'secrets:' must come before 'service:'");
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 09 — --scope overlay (config_<scope>/ deep-merge) + --env-file
+// ---------------------------------------------------------------------------
+
+describe('09 - scope overlay + env-file', function () {
+
+    // Replica of the collectFromConfigDir scope overlay using the REAL lib.merge:
+    // scope content deep-merges over base (scope wins on leaf collisions, base
+    // back-fills omitted keys), then getRequiredKeys on the effective config.
+    function effectiveKeys(baseContent, scopeContent) {
+        var effective = scopeContent
+            ? merge(JSON.clone(scopeContent), baseContent || {})
+            : baseContent;
+        return secrets.getRequiredKeys(effective || {});
+    }
+
+    it('scope overlay swaps a base secret key for the scope one (scope wins on the leaf)', function () {
+        var base  = { db: { password: '${secret:LOCAL_DB}', host: 'localhost' } };
+        var scope = { db: { password: '${secret:PROD_DB}',  host: 'prod' } };
+        assert.deepStrictEqual(effectiveKeys(base, scope), ['PROD_DB']);   // LOCAL_DB overridden → gone
+    });
+
+    it('scope overlay back-fills base-only secret keys the scope file omits', function () {
+        var base  = { db: { password: '${secret:DB_PW}' }, cache: { token: '${secret:CACHE_PW}' } };
+        var scope = { db: { password: '${secret:PROD_DB_PW}' } };          // omits cache
+        assert.deepStrictEqual(effectiveKeys(base, scope), ['CACHE_PW', 'PROD_DB_PW']);  // cache survives
+    });
+
+    it('no scope content → base keys unchanged', function () {
+        assert.deepStrictEqual(effectiveKeys({ db: { password: '${secret:DB_PW}' } }, null), ['DB_PW']);
+    });
+
+    // Replica of check.js loadEnvFile.
+    function parseEnv(raw) {
+        var map = Object.create(null);
+        raw.split(/\r?\n/).forEach(function (line) {
+            line = line.trim();
+            if (!line || /^#/.test(line)) return;
+            line = line.replace(/^export\s+/, '');
+            var eq = line.indexOf('=');
+            if (eq < 0) return;
+            var key = line.slice(0, eq).trim();
+            var val = line.slice(eq + 1).trim();
+            if (/^".*"$/.test(val) || /^'.*'$/.test(val)) val = val.slice(1, -1);
+            map[key] = val;
+        });
+        return map;
+    }
+
+    it('env-file parser handles KEY=val, comments, export prefix, quotes, empty', function () {
+        var m = parseEnv('# comment\nexport DB_PW=secret\nAPI_KEY="quoted"\nEMPTY=\nNOEQ\n\nC=\'single\'\n');
+        assert.equal(m.DB_PW, 'secret');
+        assert.equal(m.API_KEY, 'quoted');
+        assert.equal(m.C, 'single');
+        assert.equal(m.EMPTY, '');
+        assert.equal('NOEQ' in m, false);   // no '=' → skipped
+    });
+
+    it('isEnvSet against an env-file map: non-empty SET, empty/absent UNSET', function () {
+        var map = parseEnv('SET_KEY=v\nEMPTY_KEY=\n');
+        function isEnvSet(source, key) { return typeof source[key] === 'string' && source[key] !== ''; }
+        assert.equal(isEnvSet(map, 'SET_KEY'), true);
+        assert.equal(isEnvSet(map, 'EMPTY_KEY'), false);
+        assert.equal(isEnvSet(map, 'ABSENT_KEY'), false);
+    });
+
+    HANDLERS.forEach(function (h) {
+        var name = h[0], src = h[1];
+
+        it(name + '.js reads the scope from self.params.scope (framework scope flag, not manual argv)', function () {
+            assert.match(src, /self\.scopeName\s*=\s*\(self\.params\s*&&\s*self\.params\.scope\)/);
+        });
+
+        it(name + '.js derives the config_<scope>/ sibling from absDir + "_" + scope', function () {
+            assert.match(src, /absDir\s*\+\s*['"]_['"]\s*\+\s*self\.scopeName/);
+        });
+
+        it(name + '.js deep-merges scope over base via merge(JSON.clone(scopeContent), ...)', function () {
+            assert.match(src, /merge\(\s*JSON\.clone\(scopeContent\)/);
+        });
+    });
+
+    it('check.js reads --env-file from self.params, defines loadEnvFile, and switches the env source', function () {
+        assert.match(checkSrc, /self\.envFile\s*=\s*\(self\.params\s*&&\s*self\.params\[['"]env-file['"]\]\)/);
+        assert.match(checkSrc, /var\s+loadEnvFile\s*=\s*function/);
+        assert.match(checkSrc, /self\.envMap\s*\|\|\s*process\.env/);
     });
 });

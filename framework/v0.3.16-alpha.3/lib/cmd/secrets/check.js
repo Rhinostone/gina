@@ -17,16 +17,24 @@ var CmdHelper = require('./../helper');
  *  gina secrets:check @<project>
  *  gina secrets:check <bundle> @<project>
  *  gina secrets:check @<project> --format=json
+ *  gina secrets:check @<project> --scope=<scope>
+ *  gina secrets:check @<project> --scope=<scope> --env-file=<path>
  *
  * "Set" matches the env backend's fail-closed rule exactly: a key counts
- * as satisfied only when `process.env[KEY]` is a **non-empty string** — the
- * same condition under which `secrets.resolve()` would succeed at bundle
- * start. So an `UNSET` here is precisely a key that would throw at load.
+ * as satisfied only when its value is a **non-empty string** — the same
+ * condition under which `secrets.resolve()` would succeed at bundle start.
+ * So an `UNSET` here is precisely a key that would throw at load.
  *
- * Caveat: this checks the env of THIS CLI process, not a detached bundle's
- * runtime/container environment. Real value: a CI step that exports the
- * secrets and runs `secrets:check` before shipping, or a shell that sourced
- * the same env file. It cannot introspect an already-running bundle's env.
+ * `--scope=<s>`: enumerate the *effective* keys for that scope by read-only
+ * overlaying the sibling `config_<s>/` dirs over the base (see `secrets:scan`).
+ * `--env-file=<path>`: validate against a `.env`-style file's vars instead of
+ * the live `process.env` — e.g. a decrypted SOPS export or a CI-exported env.
+ *
+ * Caveat: without `--env-file` this checks the env of THIS CLI process, not a
+ * detached bundle's runtime/container environment. Real value: a CI step that
+ * exports (or decrypts) the scope's secrets and runs `secrets:check --scope=…
+ * --env-file=…` before shipping. It cannot introspect an already-running
+ * bundle's env.
  *
  * @class Check
  * @constructor
@@ -38,9 +46,10 @@ var CmdHelper = require('./../helper');
  * @param {object} cmd - The cmd dispatcher object (lib/cmd/index.js)
  */
 function Check(opt, cmd) {
-    var self = { format: 'text', anyUnset: false };
+    var self = { format: 'text', anyUnset: false, scopeName: null, envFile: null, envMap: null };
 
     var secrets = lib.secrets;
+    var merge   = lib.merge;
 
     /**
      * Config files are JSON. The loader globs every `.json` in a config
@@ -76,6 +85,20 @@ function Check(opt, cmd) {
             console.error('--format must be `text` or `json` (got `' + self.format + '`)');
             process.exit(1);
             return;
+        }
+
+        // --scope + --env-file are declared in arguments.json and captured into
+        // self.params by CmdHelper (filterArgs skips them for GINA_ mapping but
+        // leaves them in argv for getParams — same path bundle:* --scope uses).
+        self.scopeName = (self.params && self.params.scope) ? self.params.scope : null;
+        self.envFile   = (self.params && self.params['env-file']) ? self.params['env-file'] : null;
+        if (self.envFile) {
+            self.envMap = loadEnvFile(_(self.envFile, true));
+            if (self.envMap === null) {
+                console.error('--env-file not readable: ' + self.envFile);
+                process.exit(1);
+                return;
+            }
         }
 
         var bundleFilter = self.name || null;
@@ -128,6 +151,44 @@ function Check(opt, cmd) {
         } catch (e) {
             return null;
         }
+    };
+
+    /**
+     * Parses a `.env`-style file into a `{ KEY: value }` map. Lines are
+     * `KEY=value`; blank lines and `#` comments are skipped, an optional
+     * `export ` prefix is stripped, and surrounding single/double quotes are
+     * removed. Returns `null` when the file cannot be read (so the caller can
+     * surface the error). Used by `--env-file`: validate a scope's exported /
+     * decrypted env (e.g. SOPS output) instead of the live `process.env`.
+     *
+     * @inner
+     * @private
+     * @param {string} filePath
+     * @returns {Object<string,string>|null}
+     */
+    var loadEnvFile = function (filePath) {
+        var raw;
+        try {
+            raw = fs.readFileSync(filePath, 'utf8');
+        } catch (e) {
+            return null;
+        }
+        var map   = Object.create(null);
+        var lines = raw.split(/\r?\n/);
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line || /^#/.test(line)) continue;
+            line = line.replace(/^export\s+/, '');
+            var eq = line.indexOf('=');
+            if (eq < 0) continue;
+            var key = line.slice(0, eq).trim();
+            var val = line.slice(eq + 1).trim();
+            if ( /^".*"$/.test(val) || /^'.*'$/.test(val) ) {
+                val = val.slice(1, -1);
+            }
+            map[key] = val;
+        }
+        return map;
     };
 
     /**
@@ -186,20 +247,37 @@ function Check(opt, cmd) {
     };
 
     /**
-     * Reads every `.json` under `absDir` and adds each required secret key
-     * to `keySet` (a null-proto set). Mutates `keySet` in place.
+     * Reads every `.json` under `absDir`, enumerates its required secret
+     * keys, and adds them to `keySet` (a null-proto set). Mutates `keySet`.
+     *
+     * When `--scope=<s>` is active, the sibling `<absDir>_<scope>/` dir is
+     * read-only deep-merged over the base per config file (scope wins) before
+     * enumeration — mirroring a deploy's per-scope overlay — so the keys are
+     * the *effective* ones that scope will require. Read-only introspection;
+     * never touches the runtime config loader.
      *
      * @inner
      * @private
-     * @param {string} absDir - Absolute config directory to read
+     * @param {string} absDir - Absolute base config directory to read
      * @param {object} keySet - Mutable null-proto set; key name -> true
      */
     var collectKeysFromConfigDir = function (absDir, keySet) {
-        var files = listJsonFiles(absDir);
-        for (var f = 0; f < files.length; f++) {
-            var conf = readJsonSafe(_(absDir + '/' + files[f], true));
-            if (!conf) continue;
-            var keys = secrets.getRequiredKeys(conf);
+        var scopeAbsDir = self.scopeName ? (absDir + '_' + self.scopeName) : null;
+        var baseNames   = listJsonFiles(absDir);
+        var scopeNames  = scopeAbsDir ? listJsonFiles(scopeAbsDir) : [];
+
+        var names = baseNames.slice();
+        for (var s = 0; s < scopeNames.length; s++) {
+            if (names.indexOf(scopeNames[s]) < 0) names.push(scopeNames[s]);
+        }
+
+        for (var f = 0; f < names.length; f++) {
+            var name         = names[f];
+            var baseContent  = (baseNames.indexOf(name) > -1) ? readJsonSafe(_(absDir + '/' + name, true)) : null;
+            var scopeContent = (scopeAbsDir && scopeNames.indexOf(name) > -1) ? readJsonSafe(_(scopeAbsDir + '/' + name, true)) : null;
+            var effective    = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}) : baseContent;
+            if (!effective) continue;
+            var keys = secrets.getRequiredKeys(effective);
             for (var k = 0; k < keys.length; k++) {
                 keySet[keys[k]] = true;
             }
@@ -223,8 +301,10 @@ function Check(opt, cmd) {
     };
 
     /**
-     * Returns true when `process.env[key]` is a non-empty string — the
-     * exact condition under which the env backend resolves successfully.
+     * Returns true when the key resolves to a non-empty string in the active
+     * env source — the exact condition under which the env backend resolves
+     * successfully. The source is the `--env-file` map when given, otherwise
+     * the live `process.env`.
      *
      * @inner
      * @private
@@ -232,7 +312,8 @@ function Check(opt, cmd) {
      * @returns {boolean}
      */
     var isEnvSet = function (key) {
-        return typeof process.env[key] === 'string' && process.env[key] !== '';
+        var source = self.envMap || process.env;
+        return typeof source[key] === 'string' && source[key] !== '';
     };
 
     /**
@@ -365,7 +446,10 @@ function Check(opt, cmd) {
             : [{ project: report.project, bundles: report.bundles }];
         for (var p = 0; p < projects.length; p++) {
             var proj = projects[p];
-            console.log('\n@' + proj.project + ':');
+            console.log('\n@' + proj.project
+                + (self.scopeName ? ' (scope: ' + self.scopeName + ')' : '')
+                + (self.envFile ? ' [env: ' + self.envFile + ']' : '')
+                + ':');
             if (proj.bundles.length === 0) {
                 console.log('  (no bundles)');
                 continue;

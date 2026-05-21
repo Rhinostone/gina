@@ -17,6 +17,7 @@ var CmdHelper = require('./../helper');
  *  gina secrets:scan @<project>
  *  gina secrets:scan <bundle> @<project>
  *  gina secrets:scan @<project> --format=json
+ *  gina secrets:scan @<project> --scope=<scope>
  *
  * Config sources walked, matching `core/config.js::loadBundleConfig`:
  *   - `<bundleSrc>/config/` per bundle, where `bundleSrc` comes from
@@ -25,6 +26,14 @@ var CmdHelper = require('./../helper');
  *     every bundle — so its keys are attributed to each bundle.
  * Every `.json` in those dirs is read (the loader globs the dir rather
  * than using a fixed whitelist); dotfiles and `* copy` files are skipped.
+ *
+ * With `--scope=<s>`, the sibling `config_<s>/` dir of each config dir
+ * (e.g. `shared/config_production/`) is read-only overlaid on top of the
+ * base via deep-merge (scope wins) — mirroring how a deploy applies its
+ * per-scope config — so the report shows the *effective* keys that scope's
+ * deploy will require. This is pure introspection: it does NOT change the
+ * runtime config loader, which stays scope-agnostic (the deploy owns
+ * per-scope selection).
  *
  * Caveat: this reports the *authored* placeholders on disk, not the merged
  * runtime config — correct today because placeholders are always authored
@@ -40,9 +49,10 @@ var CmdHelper = require('./../helper');
  * @param {object} cmd - The cmd dispatcher object (lib/cmd/index.js)
  */
 function Scan(opt, cmd) {
-    var self = { format: 'text' };
+    var self = { format: 'text', scopeName: null };
 
     var secrets = lib.secrets;
+    var merge   = lib.merge;
 
     /**
      * Config files are JSON. The loader globs every `.json` in a config
@@ -76,6 +86,10 @@ function Scan(opt, cmd) {
             process.exit(1);
             return;
         }
+
+        // --scope is the framework scope flag (declared in arguments.json, like
+        // bundle:*; CmdHelper captures it into self.params). null when absent.
+        self.scopeName = (self.params && self.params.scope) ? self.params.scope : null;
 
         var bundleFilter = self.name || null;
 
@@ -192,20 +206,49 @@ function Scan(opt, cmd) {
      * its originating file (labelled with `relBase + '/' + filename`).
      * Mutates `byKey` in place.
      *
+     * When `--scope=<s>` is active (`self.scopeName`), the sibling
+     * `<absDir>_<scope>/` directory (e.g. `shared/config_production/`) is
+     * read-only overlaid on top of the base dir per config file, mirroring
+     * how a deploy applies its per-scope config: the scope file deep-merges
+     * over the base (scope wins on collisions, base back-fills) so the keys
+     * reported are the *effective* ones that scope's deploy will require.
+     * The scope file is JSON.clone'd before merge so cached content is not
+     * mutated. This is read-only introspection — it never touches the
+     * runtime config loader.
+     *
      * @inner
      * @private
-     * @param {string} absDir  - Absolute config directory to read
+     * @param {string} absDir  - Absolute base config directory to read
      * @param {string} relBase - Display prefix for file labels (e.g. `src/demo/config`)
      * @param {Object<string, string[]>} byKey - Mutable KEY -> [files] map
      */
     var collectFromConfigDir = function (absDir, relBase, byKey) {
-        var files = listJsonFiles(absDir);
-        for (var f = 0; f < files.length; f++) {
-            var conf = readJsonSafe(_(absDir + '/' + files[f], true));
-            if (!conf) continue;
-            var keys = secrets.getRequiredKeys(conf);
-            var label = relBase + '/' + files[f];
+        var scopeAbsDir  = self.scopeName ? (absDir + '_' + self.scopeName) : null;
+        var scopeRelBase = self.scopeName ? (relBase + '_' + self.scopeName) : null;
+
+        var baseNames  = listJsonFiles(absDir);
+        var scopeNames = scopeAbsDir ? listJsonFiles(scopeAbsDir) : [];
+
+        // union of config file names across base + scope-overlay dirs
+        var names = baseNames.slice();
+        for (var s = 0; s < scopeNames.length; s++) {
+            if (names.indexOf(scopeNames[s]) < 0) names.push(scopeNames[s]);
+        }
+
+        for (var f = 0; f < names.length; f++) {
+            var name         = names[f];
+            var baseContent  = (baseNames.indexOf(name) > -1) ? readJsonSafe(_(absDir + '/' + name, true)) : null;
+            var scopeContent = (scopeAbsDir && scopeNames.indexOf(name) > -1) ? readJsonSafe(_(scopeAbsDir + '/' + name, true)) : null;
+
+            // effective config for this scope: scope deep-merges over base (scope wins)
+            var effective = scopeContent ? merge(JSON.clone(scopeContent), baseContent || {}) : baseContent;
+            if (!effective) continue;
+
+            var keys      = secrets.getRequiredKeys(effective);
+            var scopeKeys = scopeContent ? secrets.getRequiredKeys(scopeContent) : [];
             for (var k = 0; k < keys.length; k++) {
+                // attribute the key to the layer that actually provides it in the effective config
+                var label = (scopeKeys.indexOf(keys[k]) > -1) ? (scopeRelBase + '/' + name) : (relBase + '/' + name);
                 if (!byKey[keys[k]]) byKey[keys[k]] = [];
                 if (byKey[keys[k]].indexOf(label) < 0) byKey[keys[k]].push(label);
             }
@@ -347,7 +390,7 @@ function Scan(opt, cmd) {
             : [{ project: report.project, bundles: report.bundles }];
         for (var p = 0; p < projects.length; p++) {
             var proj = projects[p];
-            console.log('\n@' + proj.project + ':');
+            console.log('\n@' + proj.project + (self.scopeName ? ' (scope: ' + self.scopeName + ')' : '') + ':');
             if (proj.bundles.length === 0) {
                 console.log('  (no bundles)');
                 continue;

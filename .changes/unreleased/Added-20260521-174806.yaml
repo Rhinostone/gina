@@ -1,0 +1,3 @@
+kind: Added
+body: 'gina secrets:scan and secrets:check gain --scope=<scope> to report the effective required secrets for a deployment scope (read-only deep-merge of the sibling config_<scope>/ dirs over base config, scope wins), and secrets:check gains --env-file=<path> to validate against a .env-style file (e.g. a decrypted SOPS export) instead of the live process.env. The runtime config loader is unchanged — per-scope config selection stays a deploy-time concern.'
+time: 2026-05-21T17:48:06.539853+01:00
