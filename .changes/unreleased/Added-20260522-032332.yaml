@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added opt-in HTTP/2 response trailer support via self.sendTrailers(fields). A controller registers trailing headers before rendering, and the render pipeline sets waitForTrailers on the HTTP/2 stream and emits them after the response body (in the wantTrailers event) — useful for gRPC-style streaming (a final grpc-status / grpc-message) or a content-integrity Digest after a chunked body. Pseudo-header keys (those beginning with a colon) are stripped. The feature is fully opt-in: a no-op on HTTP/1.1 and when no trailers are registered, so existing responses are byte-for-byte unchanged.'
+time: 2026-05-22T03:23:32.744708+01:00

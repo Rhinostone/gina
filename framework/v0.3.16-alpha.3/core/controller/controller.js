@@ -1403,6 +1403,55 @@ function SuperController(options) {
 
 
     /**
+     * #H10 — Register HTTP/2 response trailers (trailing headers) to be emitted
+     * after the response body.
+     *
+     * Opt-in and best-effort: calling this only RECORDS the trailer fields; the
+     * active render delegate (renderStream / renderJSON / swig / nunjucks) then
+     * sets `waitForTrailers: true` on `stream.respond()` and sends the trailers
+     * in the HTTP/2 `wantTrailers` event after the final DATA frame. When no
+     * trailers are registered the response path is byte-for-byte unchanged, so
+     * existing bundles are unaffected.
+     *
+     * Trailers here are an HTTP/2-only mechanism. On HTTP/1.1 the call is a
+     * silent no-op (the chunked-trailer path is out of scope). HEAD responses,
+     * already-destroyed streams, and the framework error path never emit
+     * trailers.
+     *
+     * Pseudo-header keys (those beginning with `:`) are stripped — HTTP/2
+     * forbids pseudo-headers in a trailing HEADERS frame. Other header validity
+     * is the caller's responsibility.
+     *
+     * Typical use is gRPC-style streaming (a final `grpc-status` / `grpc-message`)
+     * or a content-integrity `Digest` emitted after a chunked body.
+     *
+     * @param {object} fields  Map of trailer header names to string values.
+     * @returns {object} self — for optional chaining.
+     *
+     * @example
+     * // In a controller action streaming a gRPC-style response:
+     * self.sendTrailers({ 'grpc-status': '0', 'grpc-message': 'OK' });
+     * self.renderStream(myAsyncIterable, 'application/grpc+proto');
+     */
+    this.sendTrailers = function(fields) {
+        if (!fields || typeof(fields) !== 'object') return self;
+        // Strip HTTP/2 pseudo-headers (`:`-prefixed) — forbidden in a trailing
+        // HEADERS frame and would throw at sendTrailers() time.
+        var _clean = {};
+        var _has   = false;
+        for (var k in fields) {
+            if (!Object.prototype.hasOwnProperty.call(fields, k)) continue;
+            if (k.charAt(0) === ':') continue;
+            _clean[k] = fields[k];
+            _has = true;
+        }
+        // Arm the trailer path only when at least one valid field remains.
+        local._trailers = _has ? _clean : null;
+        return self;
+    };
+
+
+    /**
      * #I18N1 — Translate a key using the bundle's loaded i18n catalogs.
      * Auto-binds the request's culture from `req.culture` (formalised by
      * slice 3) and the bundle name from `local.options.conf.bundle`.

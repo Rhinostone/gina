@@ -468,3 +468,86 @@ describe('09 - renderStream: cleanup (locals nulled)', function() {
         assert.strictEqual(deps.local.next, null);
     });
 });
+
+
+// ─── 10 — HTTP/2 response trailers (#H10) ────────────────────────────────────
+
+describe('10 - renderStream: HTTP/2 trailers (#H10)', function() {
+
+    function makeHttp2TrailerDeps(pendingHeaders) {
+        var responded = null, respondOpts = null, written = [], ended = false;
+        var sentTrailers = null, wantTrailersCb = null;
+        var stream2 = {
+            headersSent : false,
+            destroyed   : false,
+            closed      : false,
+            respond     : function(h, opts) { responded = h; respondOpts = (typeof opts === 'undefined') ? null : opts; stream2.headersSent = true; },
+            write       : function(d) { written.push(d); },
+            // With waitForTrailers, Node fires 'wantTrailers' on end() instead of closing.
+            end         : function() { ended = true; if (wantTrailersCb) wantTrailersCb(); },
+            once        : function(ev, cb) { if (ev === 'wantTrailers') wantTrailersCb = cb; },
+            sendTrailers: function(f) { sentTrailers = f; }
+        };
+        var deps = makeDeps();
+        deps.local.res.stream      = stream2;
+        deps.local.res.getHeaders  = function() { return pendingHeaders || {}; };
+        deps.local.res.headersSent = false;
+        return {
+            deps: deps, stream2: stream2,
+            get responded()    { return responded; },
+            get respondOpts()  { return respondOpts; },
+            get written()      { return written; },
+            get ended()        { return ended; },
+            get sentTrailers() { return sentTrailers; }
+        };
+    }
+
+    // ── source-structure pins ──
+
+    it('render-stream source wires waitForTrailers + wantTrailers + sendTrailers', function() {
+        var src = fs.readFileSync(RENDER_STREAM, 'utf8');
+        assert.ok(src.indexOf('waitForTrailers') > -1, 'expected waitForTrailers in render-stream source');
+        assert.ok(src.indexOf("'wantTrailers'") > -1, 'expected the wantTrailers listener');
+        assert.ok(src.indexOf('sendTrailers') > -1, 'expected the sendTrailers call');
+        assert.ok(src.indexOf('#H10') > -1, 'expected #H10 marker');
+    });
+
+    it('trailer wiring is gated on registered trailers (if (_trailers))', function() {
+        var src = fs.readFileSync(RENDER_STREAM, 'utf8');
+        assert.ok(/if\s*\(\s*_trailers\s*\)/.test(src), 'expected `if (_trailers)` gate around the trailer path');
+    });
+
+    // ── execution: opt-in ──
+
+    it('sets waitForTrailers and sends the registered trailers after the body', async function() {
+        var h = makeHttp2TrailerDeps();
+        h.deps.local._trailers = { 'grpc-status': '0', 'grpc-message': 'OK' };
+        renderStream(from(['payload']), 'application/grpc+proto', h.deps);
+        await sleep(50);
+        assert.ok(h.respondOpts, 'expected respond() called with an options object');
+        assert.strictEqual(h.respondOpts.waitForTrailers, true, 'expected waitForTrailers: true');
+        assert.ok(h.ended, 'stream.end() should have been called');
+        assert.deepEqual(h.sentTrailers, { 'grpc-status': '0', 'grpc-message': 'OK' });
+    });
+
+    // ── execution: opt-out (zero behavioural change) ──
+
+    it('does NOT set waitForTrailers or call sendTrailers when no trailers registered', async function() {
+        var h = makeHttp2TrailerDeps();
+        // no h.deps.local._trailers set
+        renderStream(from(['payload']), 'text/event-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.respondOpts, null, 'respond() should be called with no options object');
+        assert.strictEqual(h.sentTrailers, null, 'sendTrailers must not be called without registered trailers');
+        assert.ok(h.ended, 'stream.end() still called on the normal path');
+    });
+
+    it('ignores a non-object _trailers value (treated as no trailers)', async function() {
+        var h = makeHttp2TrailerDeps();
+        h.deps.local._trailers = 'nope';
+        renderStream(from([]), 'text/event-stream', h.deps);
+        await sleep(50);
+        assert.strictEqual(h.respondOpts, null);
+        assert.strictEqual(h.sentTrailers, null);
+    });
+});

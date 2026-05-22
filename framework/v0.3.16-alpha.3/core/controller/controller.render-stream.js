@@ -44,6 +44,8 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
 
     var response = local.res;
     var stream   = (typeof(response.stream) !== 'undefined') ? response.stream : null;
+    // #H10 — opt-in HTTP/2 response trailers (registered via self.sendTrailers()).
+    var _trailers = (local._trailers && typeof(local._trailers) === 'object') ? local._trailers : null;
 
     if (headersSent(response)) {
         local.req = null; local.res = null; local.next = null;
@@ -83,7 +85,18 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
                     for (var k in _pending) {
                         if (!(k in _headers)) _headers[k] = _pending[k];
                     }
-                    stream.respond(_headers);
+                    // #H10 — when trailers were registered, defer the stream close so the
+                    // wantTrailers event can flush them after the final DATA frame.
+                    if (_trailers) {
+                        stream.once('wantTrailers', function() {
+                            try {
+                                if (!stream.destroyed && !stream.closed) stream.sendTrailers(_trailers);
+                            } catch (_e) { /* trailers are best-effort — never fail the response */ }
+                        });
+                        stream.respond(_headers, { waitForTrailers: true });
+                    } else {
+                        stream.respond(_headers);
+                    }
                 }
 
                 for await (chunk of asyncIterable) {

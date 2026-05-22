@@ -2050,3 +2050,98 @@ describe('14 - throwError 2-arg form: (statusCode, Error|string) preserves statu
     });
 
 });
+
+
+// 15 — source structure: sendTrailers (#H10)
+describe('15 - source structure: sendTrailers (#H10)', function() {
+
+    it('sendTrailers is defined in source', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf('this.sendTrailers = function(') > -1,
+            'expected `this.sendTrailers = function(` — #H10 not applied'
+        );
+    });
+
+    it('source contains #H10 marker', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(src.indexOf('#H10') > -1, 'expected #H10 marker in source');
+    });
+
+    it('stashes registered trailers on local._trailers', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.sendTrailers = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('local._trailers') > -1, 'expected local._trailers assignment');
+    });
+
+    it('strips `:`-prefixed pseudo-header keys and returns self', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.sendTrailers = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf("charAt(0) === ':'") > -1, 'expected pseudo-header (`:`-prefixed) strip');
+        assert.ok(block.indexOf('return self') > -1, 'expected `return self` for chaining');
+    });
+});
+
+
+// 16 — sendTrailers: pure logic
+describe('16 - sendTrailers: pure logic', function() {
+
+    // Minimal replica of the sendTrailers body for isolated testing.
+    function makeTrailerEnv() {
+        var local = {};
+        var self  = {};
+        function sendTrailers(fields) {
+            if (!fields || typeof(fields) !== 'object') return self;
+            var _clean = {};
+            var _has   = false;
+            for (var k in fields) {
+                if (!Object.prototype.hasOwnProperty.call(fields, k)) continue;
+                if (k.charAt(0) === ':') continue;
+                _clean[k] = fields[k];
+                _has = true;
+            }
+            local._trailers = _has ? _clean : null;
+            return self;
+        }
+        return { local: local, self: self, sendTrailers: sendTrailers };
+    }
+
+    it('stashes a clean object on local._trailers', function() {
+        var env = makeTrailerEnv();
+        env.sendTrailers({ 'grpc-status': '0' });
+        assert.deepEqual(env.local._trailers, { 'grpc-status': '0' });
+    });
+
+    it('strips `:`-prefixed pseudo-headers', function() {
+        var env = makeTrailerEnv();
+        env.sendTrailers({ ':status': '200', 'grpc-status': '0' });
+        assert.deepEqual(env.local._trailers, { 'grpc-status': '0' });
+    });
+
+    it('sets local._trailers to null when only pseudo-headers are given', function() {
+        var env = makeTrailerEnv();
+        env.sendTrailers({ ':status': '200' });
+        assert.strictEqual(env.local._trailers, null);
+    });
+
+    it('no-ops on a non-object argument and returns self', function() {
+        var env = makeTrailerEnv();
+        var r1 = env.sendTrailers('nope');
+        var r2 = env.sendTrailers(null);
+        var r3 = env.sendTrailers(undefined);
+        assert.strictEqual(r1, env.self);
+        assert.strictEqual(r2, env.self);
+        assert.strictEqual(r3, env.self);
+        assert.strictEqual(typeof env.local._trailers, 'undefined');
+    });
+
+    it('returns self for chaining on the success path', function() {
+        var env = makeTrailerEnv();
+        var r = env.sendTrailers({ 'x-foo': 'bar' });
+        assert.strictEqual(r, env.self);
+    });
+});
