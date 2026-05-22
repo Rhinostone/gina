@@ -295,7 +295,7 @@ A cold audit of the Couchbase connector identified two critical security vulnera
 | --- | --- | --- | --- |
 | ✅ | **AI connector** — Declare any LLM provider in `connectors.json` via named protocol (`anthropic://`, `openai://`, `deepseek://`, `qwen://`, `groq://`, `mistral://`, `gemini://`, `xai://`, `perplexity://`, `ollama://`). Unified `.infer(messages, options)` normaliser + raw `.client` for advanced use. | `0.3.0` | Q1 2026 |
 | ✅ | **`renderStream` — streaming responses** — `self.renderStream(asyncIterable, contentType)` streams SSE or chunked JSON without buffering. Required for LLM token streaming without bypassing the render pipeline. | `0.3.0` | 2026-03-31 |
-| 📋 | **Async job pattern for slow AI calls** — First-class "start job → return jobId → poll or webhook on completion" pattern integrated with the cron/queue infrastructure. Prevents LLM latency (1–30s) from blocking the response pipeline. | `0.4.0` | Q4 2026 |
+| ✅ | **Async job pattern for slow AI calls** — First-class "start job → return jobId → poll or webhook on completion" pattern, backed by the `lib/job` primitive (`self.startJob` / `self.inferAsync`, always-on `/_gina/jobs/:id` polling, opt-in completion webhook). Prevents LLM latency (1–30s) from blocking the response pipeline. | `0.4.0` | 2026-05-22 |
 
 ### Phase 3 — AI agents can consume Gina apps
 

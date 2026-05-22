@@ -323,6 +323,27 @@ ai.client.chat.completions.create({ stream: true, ... });
 
 ---
 
+## Async jobs (#AI6)
+
+Run slow work (e.g. a 1–30s `.infer()`) out-of-band so it doesn't tie up the request pipeline. `lib.job.create(fn, opts)` enqueues a deferred async function on a concurrency-limited worker (default 4) and returns a `jobId` immediately; state moves `pending → running → completed | failed`. Records live in an in-memory store behind a callback-shaped `set/get/remove/list/sweep` seam (connector-backed for multi-pod is a follow-up) with a self-contained unref'd `setInterval` TTL sweep — `lib/cron` is NOT involved.
+
+```javascript
+// In a controller action — return immediately, work runs out-of-band:
+var jobId = self.startJob(function() {
+    return getModel('myModel').infer([{ role: 'user', content: prompt }]);
+});
+self.renderJSON({ jobId: jobId });
+
+// One-call AI convenience (result trimmed to { content, model, usage }):
+var jobId = self.inferAsync([{ role: 'user', content: prompt }], { connector: 'myModel' });
+```
+
+- Poll the built-in always-on `GET /_gina/jobs/:id` for `{ id, state, createdAt, updatedAt }` — state-only, never the result/error payload, works on both the Isaac and Express engines. Read a completed job's result from your own authenticated route via `self.jobStatus(id, cb)`.
+- Opt-in completion webhook: pass `{ callbackUrl }` to `create` / `startJob` and the framework POSTs `{ id, state, result, error }` on completion — best-effort with retry + exponential backoff (`webhookFailed` recorded after exhaustion, never affecting the job outcome). Set `app.json jobs.webhookSecret` to sign each payload with an `X-Gina-Signature` HMAC-SHA256 header.
+- Always-on with sane defaults; tune via `app.json jobs.*` (`maxConcurrency`, `ttl`, `sweepInterval`, `idSize`, `webhook*`). The deferred function runs after the response, so capture plain values — never `req`/`res`.
+
+---
+
 ## Route radix trie
 
 `lib/routing/src/radix.js` — built once at startup from `routing.json`. Never mutated at runtime.
