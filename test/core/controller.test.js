@@ -2145,3 +2145,93 @@ describe('16 - sendTrailers: pure logic', function() {
         assert.strictEqual(r, env.self);
     });
 });
+
+
+// 17 — source structure: startJob / jobStatus (#AI6)
+describe('17 - source structure: startJob / jobStatus (#AI6)', function() {
+
+    it('startJob and jobStatus are defined in source', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(src.indexOf('this.startJob = function(')  > -1, 'expected `this.startJob = function(` — #AI6 slice 2 not applied');
+        assert.ok(src.indexOf('this.jobStatus = function(') > -1, 'expected `this.jobStatus = function(` — #AI6 slice 2 not applied');
+    });
+
+    it('source contains the #AI6 marker', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(src.indexOf('#AI6') > -1, 'expected #AI6 marker in source');
+    });
+
+    it('startJob is a pass-through to lib.job.create that returns (the id)', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.startJob = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('lib.job.create') > -1, 'expected delegation to lib.job.create');
+        assert.ok(block.indexOf('return') > -1,         'expected the job id to be returned');
+    });
+
+    it('startJob stashes NOTHING on local (the job outlives the request)', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.startJob = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('local.') === -1, 'startJob must not touch the per-request local closure (contrast with sendTrailers)');
+    });
+
+    it('jobStatus is a pass-through to lib.job.get', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.jobStatus = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('lib.job.get') > -1, 'expected delegation to lib.job.get');
+    });
+});
+
+
+// 18 — startJob / jobStatus: pure logic
+describe('18 - startJob / jobStatus: pure logic (#AI6)', function() {
+
+    // Minimal replica mirroring the real method bodies, with lib.job faked.
+    function makeJobEnv() {
+        var calls   = { create: [], get: [] };
+        var fakeJob = {
+            create: function(fn, opts) { calls.create.push({ fn: fn, opts: opts }); return 'JOBID123'; },
+            get:    function(id, cb)   { calls.get.push({ id: id, cb: cb }); cb(null, { id: id, state: 'completed', result: 42 }); }
+        };
+        var local = {};
+        var self  = {};
+        self.startJob  = function(fn, opts) { return fakeJob.create(fn, opts); };
+        self.jobStatus = function(id, cb)   { fakeJob.get(id, cb); };
+        return { calls: calls, local: local, self: self };
+    }
+
+    it('startJob returns the id from lib.job.create and forwards fn', function() {
+        var env = makeJobEnv();
+        var fn  = function() { return 1; };
+        var id  = env.self.startJob(fn);
+        assert.equal(id, 'JOBID123');
+        assert.equal(env.calls.create.length, 1);
+        assert.strictEqual(env.calls.create[0].fn, fn, 'fn forwarded by reference');
+    });
+
+    it('startJob forwards opts', function() {
+        var env = makeJobEnv();
+        env.self.startJob(function() {}, { meta: { kind: 'infer' }, callbackUrl: 'https://x/y' });
+        assert.deepEqual(env.calls.create[0].opts, { meta: { kind: 'infer' }, callbackUrl: 'https://x/y' });
+    });
+
+    it('startJob does not stash anything on the per-request local closure', function() {
+        var env = makeJobEnv();
+        env.self.startJob(function() {});
+        assert.equal(Object.keys(env.local).length, 0, 'local must remain untouched');
+    });
+
+    it('jobStatus forwards id + cb to lib.job.get', function() {
+        var env = makeJobEnv();
+        var got = null;
+        env.self.jobStatus('abc', function(err, rec) { got = rec; });
+        assert.equal(env.calls.get.length, 1);
+        assert.equal(env.calls.get[0].id, 'abc');
+        assert.deepEqual(got, { id: 'abc', state: 'completed', result: 42 });
+    });
+});

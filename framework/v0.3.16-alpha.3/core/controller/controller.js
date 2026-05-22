@@ -1452,6 +1452,60 @@ function SuperController(options) {
 
 
     /**
+     * #AI6 — Start an async job. Runs `fn` out-of-band on the framework's
+     * concurrency-limited job worker and returns a job id immediately, so the
+     * action can respond before the slow work (e.g. a 1-30s model `.infer()`)
+     * finishes. Thin pass-through to `lib.job.create`.
+     *
+     * Unlike `sendTrailers` / `setEarlyHints`, this stashes NOTHING on the
+     * per-request `local` closure: the job outlives the request, so there is no
+     * in-request reader. The deferred function runs AFTER this request has
+     * completed, so it MUST NOT close over `req` / `res` (the controller nulls
+     * `local.req` / `local.res` at response exit) — capture plain values.
+     *
+     * @param {function(): (Promise<*>|*)} fn - Deferred work. May be `async`, return a Promise, or return a value synchronously.
+     * @param {Object} [opts]                 - Forwarded to `lib.job.create` (e.g. `meta`, `callbackUrl`, `maxAttempts`).
+     * @returns {string}                      - The job id; return it to the client to poll `/_gina/jobs/:id`.
+     *
+     * @example
+     *   this.summarise = function(req, res, next) {
+     *       var prompt = req.post.text;
+     *       var jobId  = self.startJob(function() {
+     *           return getModel('myModel').infer([{ role: 'user', content: prompt }]);
+     *       });
+     *       self.renderJSON({ jobId: jobId });
+     *   };
+     */
+    this.startJob = function(fn, opts) {
+        return lib.job.create(fn, opts);
+    };
+
+
+    /**
+     * #AI6 — Read a job's full record by id (state, result, error, timestamps).
+     * Thin pass-through to `lib.job.get`. Use this from your OWN authenticated
+     * route to return a completed job's `result` — the built-in
+     * `/_gina/jobs/:id` endpoint is state-only and never exposes `result`.
+     *
+     * @param {string} id                    - The job id returned by {@link startJob}.
+     * @param {function(?Error, ?Object)} cb - Node-style callback `cb(err, record|null)`.
+     * @returns {void}
+     *
+     * @example
+     *   this.jobResult = function(req, res, next) {
+     *       self.jobStatus(req.params.id, function(err, job) {
+     *           if (err || !job)               return self.throwError(404, 'unknown job');
+     *           if (job.state !== 'completed') return self.renderJSON({ state: job.state });
+     *           return self.renderJSON({ state: job.state, result: job.result });
+     *       });
+     *   };
+     */
+    this.jobStatus = function(id, cb) {
+        lib.job.get(id, cb);
+    };
+
+
+    /**
      * #I18N1 — Translate a key using the bundle's loaded i18n catalogs.
      * Auto-binds the request's culture from `req.culture` (formalised by
      * slice 3) and the bundle name from `local.options.conf.bundle`.
