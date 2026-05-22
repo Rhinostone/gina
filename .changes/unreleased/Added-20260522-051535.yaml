@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added a built-in /_gina/jobs/:id status endpoint that reports an async job state (pending, running, completed, or failed). It is always-on and state-only (it never returns the result or error payload) and works under both the Isaac and Express engines. Retrieve a completed job result from your own authenticated route via self.jobStatus.'
+time: 2026-05-22T05:15:35.002712+01:00

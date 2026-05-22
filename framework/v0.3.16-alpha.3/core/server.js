@@ -2456,6 +2456,27 @@ function Server(options) {
                 });
             }
 
+            // ── /_gina/jobs/:id — async-job status (always-on, state-only) ──────────
+            // (#AI6 slice 3) Engine-agnostic mirror of the Isaac handler. GET only.
+            // Returns lib.job.toStatusView (id + state + timestamps) — never the
+            // result / error payload (authenticated result retrieval goes through a
+            // user route via self.jobStatus). 404 for an unknown / malformed id.
+            var _ginaJobsMatch = (request.method.toUpperCase() === 'GET')
+                ? request.url.match(/\/_gina\/jobs\/([A-Za-z0-9_-]+)\/?(\?.*)?$/)
+                : null;
+            if ( _ginaJobsMatch ) {
+                var _ginaJobId = _ginaJobsMatch[1];
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                return lib.job.get(_ginaJobId, function(_jErr, _jRec) {
+                    if (_jErr || !_jRec) {
+                        response.statusCode = 404;
+                        return response.end(JSON.stringify({ error: 'not_found', message: '/_gina/jobs/' + _ginaJobId + ': unknown job id' }));
+                    }
+                    return response.end(JSON.stringify(lib.job.toStatusView(_jRec)));
+                });
+            }
+
             // ── Inspector SPA — served at /_gina/inspector/ in dev mode ──────────
             if (
                 process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true'

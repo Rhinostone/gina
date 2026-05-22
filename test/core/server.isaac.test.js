@@ -1288,10 +1288,10 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
     });
 
-    it('exactly 14 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+    it('exactly 15 object-literal sites wrap headers via _setPoweredByHeader({', function() {
         var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
-        assert.equal(matches && matches.length, 14,
-            'expected 14 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+        assert.equal(matches && matches.length, 15,
+            'expected 15 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
     });
 
     it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {
@@ -1300,6 +1300,7 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
             'metricsForbiddenHeaders', 'metricsDisabledHeaders', 'metricsHeaders', 'metricsErrHeaders',
             'infoForbiddenHeaders',    'infoHeaders',
             'cacheStatsForbiddenHeaders', 'cacheStatsHeaders',
+            '_jobsHeaders',
             '_inspHeaders', '_sseHeaders', '_agHeaders',
             '_ixHeaders', '_rvHeaders'
         ];
@@ -1537,4 +1538,105 @@ describe('09c - #HDR8 Phase 2 framework gate documentation cross-references', fu
             'failure-modes table must document Isaac with the flag enabled');
     });
 
+});
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// 10 — /_gina/jobs/:id async-job status endpoint (#AI6 slice 3)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// Always-on, state-only status endpoint. The Isaac handler (this SOURCE) is
+// the HTTP/2 fast-path; server.js carries the engine-agnostic mirror per the
+// framework's "/_gina/* built-in endpoint sync" rule. Both project the record
+// through lib.job.toStatusView so result / error payloads never reach the
+// public polling surface.
+
+describe('10 - /_gina/jobs/:id status endpoint source structure (#AI6 slice 3)', function() {
+
+    var isaacSrc  = fs.readFileSync(SOURCE, 'utf8');
+    var serverSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.js'), 'utf8');
+
+    it('Isaac source defines a /_gina/jobs/:id GET handler with the #AI6 marker', function() {
+        assert.ok(isaacSrc.indexOf('_gina\\/jobs\\/([A-Za-z0-9_-]+)') > -1, 'jobs route regex missing from Isaac');
+        assert.ok(isaacSrc.indexOf('#AI6') > -1, '#AI6 marker missing from Isaac');
+    });
+
+    it('Isaac handler is state-only (toStatusView, never reads .result)', function() {
+        var at    = isaacSrc.indexOf('_gina\\/jobs\\/([A-Za-z0-9_-]+)');
+        var end   = isaacSrc.indexOf('Inspector SPA', at);
+        var block = isaacSrc.slice(at, end);
+        assert.ok(block.indexOf('lib.job.toStatusView') > -1, 'must project via toStatusView');
+        assert.ok(block.indexOf('.result') === -1, 'handler must NOT read the result payload (state-only)');
+    });
+
+    it('Isaac handler 404s an unknown id and uses the dual HTTP/2 + HTTP/1.1 shape', function() {
+        var at    = isaacSrc.indexOf('_gina\\/jobs\\/([A-Za-z0-9_-]+)');
+        var end   = isaacSrc.indexOf('Inspector SPA', at);
+        var block = isaacSrc.slice(at, end);
+        assert.ok(block.indexOf("'not_found'") > -1,           'must return not_found for unknown id');
+        assert.ok(block.indexOf('response.stream.respond') > -1, 'HTTP/2 stream path present');
+        assert.ok(block.indexOf('response.writeHead') > -1,      'HTTP/1.1 fallback path present');
+    });
+
+    it('server.js carries the engine-agnostic mirror (/_gina/* sync rule)', function() {
+        assert.ok(serverSrc.indexOf('_gina\\/jobs\\/([A-Za-z0-9_-]+)') > -1, 'jobs route regex missing from server.js');
+        var at    = serverSrc.indexOf('_gina\\/jobs\\/([A-Za-z0-9_-]+)');
+        var end   = serverSrc.indexOf('Inspector SPA', at);
+        var block = serverSrc.slice(at, end);
+        assert.ok(block.indexOf('lib.job.toStatusView') > -1, 'server.js handler must project via toStatusView');
+        assert.ok(block.indexOf("'not_found'") > -1,          'server.js handler must 404 unknown id');
+        assert.ok(block.indexOf('.result') === -1,            'server.js handler must be state-only');
+    });
+});
+
+
+describe('10b - /_gina/jobs/:id handler logic: pure replica (#AI6)', function() {
+
+    var job = require(path.join(require('../fw'), 'lib/job/src/main'));
+
+    // Replica of the per-engine handler decision (status + body), using the
+    // REAL toStatusView so the state-only guarantee is actually exercised.
+    function handleJob(rec, jobId) {
+        if (!rec) {
+            return { status: 404, body: { error: 'not_found', message: '/_gina/jobs/' + jobId + ': unknown job id' } };
+        }
+        return { status: 200, body: job.toStatusView(rec) };
+    }
+
+    it('404s an unknown id with a not_found body naming the id', function() {
+        var out = handleJob(null, 'ABC');
+        assert.equal(out.status, 404);
+        assert.equal(out.body.error, 'not_found');
+        assert.ok(out.body.message.indexOf('ABC') > -1);
+    });
+
+    it('200s a known job with a state-only body (no result / error / callbackUrl leak)', function() {
+        var rec = {
+            id: 'XYZ', state: 'completed', createdAt: 1, updatedAt: 2,
+            result: 'SECRET', error: { message: 'oops' }, callbackUrl: 'https://x/y'
+        };
+        var out = handleJob(rec, 'XYZ');
+        assert.equal(out.status, 200);
+        assert.deepEqual(out.body, { id: 'XYZ', state: 'completed', createdAt: 1, updatedAt: 2 });
+        assert.ok(!('result' in out.body),      'result must not leak to the status endpoint');
+        assert.ok(!('error'  in out.body),      'error must not leak to the status endpoint');
+        assert.ok(!('callbackUrl' in out.body), 'callbackUrl must not leak to the status endpoint');
+    });
+
+    it('reflects whatever lifecycle state the record carries', function() {
+        ['pending', 'running', 'failed'].forEach(function(st) {
+            var out = handleJob({ id: 'i', state: st, createdAt: 1, updatedAt: 2 }, 'i');
+            assert.equal(out.status, 200);
+            assert.equal(out.body.state, st);
+        });
+    });
+
+    it('the route regex captures a valid id and rejects traversal / empty id', function() {
+        var re = /\/_gina\/jobs\/([A-Za-z0-9_-]+)\/?(\?.*)?$/;
+        assert.equal('/_gina/jobs/AbC123_-'.match(re)[1], 'AbC123_-');
+        assert.equal('/_gina/jobs/AbC123?x=1'.match(re)[1], 'AbC123', 'ignores query string');
+        assert.equal('/sub/_gina/jobs/AbC123'.match(re)[1], 'AbC123', 'matches under a webroot prefix');
+        assert.equal('/_gina/jobs/../etc'.match(re), null, 'rejects path traversal');
+        assert.equal('/_gina/jobs/'.match(re), null, 'rejects empty id');
+    });
 });

@@ -803,6 +803,40 @@ function ServerEngineClass(options) {
                 return response.end(cacheStatsData);
             }
 
+            // ── /_gina/jobs/:id — async-job status (#AI6 slice 3) ────────────────
+            // Always-on, state-only: returns lib.job.toStatusView (id + state +
+            // timestamps), never result / error. Engine-agnostic handler lives in
+            // server.js; this is the Isaac (HTTP/2) fast-path. 404 on unknown /
+            // malformed id.
+            var _jobsMatch = (request.method.toUpperCase() === 'GET')
+                ? request.url.match(/\/_gina\/jobs\/([A-Za-z0-9_-]+)\/?(\?.*)?$/)
+                : null;
+            if ( _jobsMatch ) {
+                var _jobsId      = _jobsMatch[1];
+                var _jobsHeaders = _setPoweredByHeader({
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    'pragma': 'no-cache',
+                    'expires': '0',
+                    'content-type': 'application/json; charset=utf8'
+                });
+                return lib.job.get(_jobsId, function(_jErr, _jRec) {
+                    var _jobsStatus, _jobsBody;
+                    if (_jErr || !_jRec) {
+                        _jobsStatus = 404;
+                        _jobsBody   = JSON.stringify({ error: 'not_found', message: '/_gina/jobs/' + _jobsId + ': unknown job id' });
+                    } else {
+                        _jobsStatus = 200;
+                        _jobsBody   = JSON.stringify(lib.job.toStatusView(_jRec));
+                    }
+                    if (response.stream) {
+                        response.stream.respond({ ':status': _jobsStatus, ..._jobsHeaders });
+                        return response.stream.end(_jobsBody);
+                    }
+                    response.writeHead(_jobsStatus, _jobsHeaders);
+                    return response.end(_jobsBody);
+                });
+            }
+
             // ── Inspector SPA — served at /_gina/inspector/ in dev mode ──────────
             if (
                 isCacheless
