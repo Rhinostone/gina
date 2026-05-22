@@ -1,0 +1,3 @@
+kind: Removed
+body: 'Removed the Couchbase SDK v2 ORM connector and session store (connector.v2.js and session-store.v2.js). Couchbase Server SDK v2 reached end-of-life in 2021, so only SDK v3 and v4 are now supported, and the connector defaults to v3 when no couchbase version is pinned. Migrating is a driver bump rather than a config change — upgrade the couchbase dependency in your project to ^3 or ^4 (for example, npm install couchbase@^4). Bundles still resolving to SDK v2 now fail fast at connector load with an explicit upgrade message instead of loading the removed code path.'
+time: 2026-05-22T03:11:07.908055+01:00

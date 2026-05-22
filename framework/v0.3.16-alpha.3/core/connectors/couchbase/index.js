@@ -478,7 +478,7 @@ function Couchbase(conn, infos) {
                         cast(args, paramTypes)
                     }
 
-                    var sdkVersion = conn.sdk.version || 2;
+                    var sdkVersion = conn.sdk.version || 3;
                     var queryParams = [];
                     // #sql-dev-nocache: in dev mode re-read the .sql file from disk on
                     // every call so edits are picked up without restarting the server.
@@ -557,7 +557,7 @@ function Couchbase(conn, infos) {
                                         // qStr = qStr.replace( new RegExp('\\'+ inl[i], 'g'), '"' + p[matched] + '"')
                                     }
                                 }
-                            } else { // v2 & v > 3
+                            } else { // SDK v4+ (v3 handled in the branch above)
 
                                 // April 2023 patch - Replaced p[i] by args[i]
                                 index = 0; i = 0; len = params.length;
@@ -640,119 +640,64 @@ function Couchbase(conn, infos) {
                     // fallback in onQueryCallback handles index extraction instead. The
                     // profile option is kept so that future SDK versions that fix the
                     // binding will work via the fast path without code changes.
-                    if (envIsDev && sdkVersion > 2) {
+                    if (envIsDev) {
                         queryOptions.profile = 'timings';
                     }
 
                     // NOT_BOUNDED, but REQUEST_PLUS should be set for SELECT operation following an INSERT or an UPDATE
                     // starting from SDK v3
                     var userConsistencyOpt = null;
-                    if ( sdkVersion > 2 ) {
-                        queryOptions.scanConsistency = couchbase.QueryScanConsistency.NotBounded;
-                        if (options && typeof(options.consistency) != 'undefined') {
-                            // request_plus -> RequestPlus
-                            userConsistencyOpt = options.consistency.replace(/(^[a-z]{0,1}|_[a-z]{0,1})/g, str => str.toUpperCase().replace(/\_/, ''));
-                            if ( typeof(couchbase.QueryScanConsistency[userConsistencyOpt]) != 'undefined' ) {
-                                queryOptions.scanConsistency = couchbase.QueryScanConsistency[userConsistencyOpt];
-                            } else {
-                                console.warn('couchbase.QueryScanConsistency['+ userConsistencyOpt +'] option is being ignore: might not be a real option or the optoins is not handled by your SDK.\nFound on: '+ queryStatement );
-                            }
-
-                            for (let o in options) {
-                                if (o == 'consistency') continue;
-                                queryOptions[o] = options[o];
-                            }
+                    queryOptions.scanConsistency = couchbase.QueryScanConsistency.NotBounded;
+                    if (options && typeof(options.consistency) != 'undefined') {
+                        // request_plus -> RequestPlus
+                        userConsistencyOpt = options.consistency.replace(/(^[a-z]{0,1}|_[a-z]{0,1})/g, str => str.toUpperCase().replace(/\_/, ''));
+                        if ( typeof(couchbase.QueryScanConsistency[userConsistencyOpt]) != 'undefined' ) {
+                            queryOptions.scanConsistency = couchbase.QueryScanConsistency[userConsistencyOpt];
+                        } else {
+                            console.warn('couchbase.QueryScanConsistency['+ userConsistencyOpt +'] option is being ignore: might not be a real option or the optoins is not handled by your SDK.\nFound on: '+ queryStatement );
                         }
-                    }
-                    // v2
-                    else {
-                        queryOptions.consistency = N1qlQuery.Consistency.NOT_BOUNDED;
-                        if (options && typeof(options.consistency) != 'undefined') {
-                            // request_plus -> REQUEST_PLUS
-                            userConsistencyOpt = options.consistency.toUpperCase();
-                            if ( typeof(N1qlQuery.Consistency[userConsistencyOpt]) != 'undefined' ) {
-                                queryOptions.consistency = N1qlQuery.Consistency[userConsistencyOpt];
-                            } else {
-                                console.warn('N1qlQuery.Consistency['+ userConsistencyOpt +'] option is being ignore: might not be a real option or the optoins is not handled by your SDK.\nFound on: '+ queryStatement );
-                            }
 
-                            for (let o in options) {
-                                if (o == 'consistency') continue;
-                                queryOptions[o] = options[o];
-                            }
+                        for (let o in options) {
+                            if (o == 'consistency') continue;
+                            queryOptions[o] = options[o];
                         }
                     }
 
 
-                    // if ( /^(insert\ into|update)/i.test(queryStatement) ) {
-                    //     queryOptions.adhoc = true;
-                    //     if ( sdkVersion > 2 ) {
-                    //         queryOptions.scanConsistency = couchbase.QueryScanConsistency.RequestPlus;
-                    //     }
-                    //     // v2
-                    //     else {
-                    //         queryOptions.consistency = N1qlQuery.Consistency.REQUEST_PLUS;
+                    // _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
+                    // if (_collection.length > 0) {
+                    //     _collection = _collection[0];
+                    //     if ( /\_collection/.test(_collection) ) {
+                    //         _collection = _collection.replace(/\_collection|\W+/ig, '');
+                    //     } else {
+                    //         _collection = null
                     //     }
                     // }
 
-                    if ( sdkVersion > 2 ) { // starting from SDK v3
-                        // _collection = queryStatement.match(/\_collection(\s+\=|=)(.*)(\'|\")/);
-                        // if (_collection.length > 0) {
-                        //     _collection = _collection[0];
-                        //     if ( /\_collection/.test(_collection) ) {
-                        //         _collection = _collection.replace(/\_collection|\W+/ig, '');
-                        //     } else {
-                        //         _collection = null
-                        //     }
-                        // }
+                    //var scope = conn.scope(conn._name);
+                    //var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();
+                    //execQuery = conn._cluster.query;
+                    execQuery = inherits(conn, conn._cluster.query);
 
-                        //var scope = conn.scope(conn._name);
-                        //var coll = (_collection) ? scope.collection(_collection) :  scope.defaultCollection();
-                        //execQuery = conn._cluster.query;
-                        execQuery = inherits(conn, conn._cluster.query);
-
-                        query = queryStatement;
-                        // Replace $scope placeholder with the connector's resolved scope value.
-                        // Uses a string literal (not a positional param) so existing $1, $2…
-                        // numbering is preserved and no call-site changes are needed.
-                        if ( query.indexOf('$scope') > -1 ) {
-                            query = query.replace(/\$scope/g, "'" + (infos.scope || process.env.NODE_SCOPE) + "'");
-                        }
-                        queryOptions.parameters = queryParams;
-
-                    } else { // version 2
-                        // prepared statement
-                        query = N1qlQuery.fromString(queryStatement);
-                        // query options
-                        // @param {object} options
-                        // @param {string} options.sample
-
-
-                        // Setting up consistency
-                        query.consistency(queryOptions.consistency);
-                        // merge options
-                        for (var qOpt in queryOptions) {
-                            if ( typeof(query[ qOpt ]) == 'undefined' ) {
-                                console.warn('[N1QL]['+entityName.toLowerCase()+ '#'+ name + '] `'+ qOpt +'` is not a valid queryOption. Ignorig...');
-                                continue;
-                            }
-                            query[ qOpt ]( queryOptions[ qOpt ] );
-                        }
-
+                    query = queryStatement;
+                    // Replace $scope placeholder with the connector's resolved scope value.
+                    // Uses a string literal (not a positional param) so existing $1, $2…
+                    // numbering is preserved and no call-site changes are needed.
+                    if ( query.indexOf('$scope') > -1 ) {
+                        query = query.replace(/\$scope/g, "'" + (infos.scope || process.env.NODE_SCOPE) + "'");
                     }
+                    queryOptions.parameters = queryParams;
 
                     // JUNE 2021 patch
-                    // Adding support for FTS since it is not implemented in sdkVersion 2:
-                    // variables not replaced by value
+                    // FTS (Full Text Search): N1QL parameters are not interpolated into
+                    // SEARCH() predicates by the SDK, so substitute them into the statement manually.
                     // looking for FTS (Full Text Search)
-                    var ftsClause = ( sdkVersion > 2 ) ? query.match(/(search\(|search\s+\().*\)/i) : query.options.statement.match(/(search\(|search\s+\().*\)/i);
+                    var ftsClause = query.match(/(search\(|search\s+\().*\)/i);
                     if (ftsClause && Array.isArray(queryParams) ) {
                         var originalFtsClauses = JSON.clone(ftsClause), _queryParams = null;
 
-                        if ( sdkVersion > 2 && Array.isArray(queryOptions.parameters) ) {
+                        if ( Array.isArray(queryOptions.parameters) ) {
                             _queryParams = queryOptions.parameters;
-                        } else if (sdkVersion <=2 && Array.isArray(queryParams) ) {
-                            _queryParams = queryParams;
                         }
 
                         for (let s = 0, sLen = ftsClause.length; s < sLen; s++) {
@@ -763,11 +708,7 @@ function Couchbase(conn, infos) {
                                 ftsClause[s] = ftsClause[s].replace( new RegExp('\\$'+ (p+1),'g'), searchValue)
                             }
 
-                            if ( sdkVersion > 2 ) {
-                                query = query.replace(originalFtsClauses[s], ftsClause[s]);
-                            } else {
-                                query.options.statement = query.options.statement.replace(originalFtsClauses[s], ftsClause[s]);
-                            }
+                            query = query.replace(originalFtsClauses[s], ftsClause[s]);
                         }
 
                         originalFtsClauses = null;
@@ -779,7 +720,7 @@ function Couchbase(conn, infos) {
 
                     // trick to set event on the fly
                     var trigger = 'N1QL:'+entityName.toLowerCase()+ '#'+ name;
-                    var statement = (sdkVersion <= 2) ? query.options.statement : query;
+                    var statement = query;
 
                     // #QI — dev-mode query instrumentation: push a query entry into the
                     // request-scoped _devQueryLog via AsyncLocalStorage. Timing starts
@@ -788,7 +729,6 @@ function Couchbase(conn, infos) {
                     // concurrent requests interleave.
                     var _queryEntry = null;
                     if (envIsDev) {
-                        //var statement = (sdkVersion <= 2) ? query.options.statement : query;
                         console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
                         if (queryParams.length > 0) {
@@ -834,7 +774,7 @@ function Couchbase(conn, infos) {
                             if (meta && meta.profile) {
                                 // Fast path: SDK returned profile data (SDK v3 or future fix)
                                 _queryEntry.indexes = extractIndexes(meta.profile);
-                            } else if (sdkVersion > 2) {
+                            } else {
                                 // Fallback: SDK C++ binding does not surface meta.profile.
                                 // Use cached EXPLAIN result or trigger one asynchronously.
                                 var _stmt = _queryEntry.statement;
@@ -980,38 +920,34 @@ function Couchbase(conn, infos) {
                             //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
                             // }
 
-                            if (sdkVersion > 2) {
-                                if ( /^true$/i.test(conn.useRestApi) ) {
-                                    conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
-                                    return;
-                                }
-
-                                conn._cluster.query(query, queryOptions)
-                                    .catch( function onError(err) {
-                                        try {
-                                            var error = new Error(err.cause.first_error_message);
-                                            error.stack = trigger +'\n'+ err.cause.http_body;
-                                            onQueryCallback(error);
-                                        } catch (_err) {
-                                            console.error(_err.stack);
-                                        }
-                                    })
-                                    .then( function onResult(data, meta) {
-                                        try {
-                                            if ( typeof(data) == 'undefined' ) {
-                                                data = { rows: []}
-                                            }
-                                            onQueryCallback(false, data.rows, data.meta);
-                                        } catch (_err) {
-                                            _err.stack = '[ ' + trigger + '] onQueryCallbackError: \n\t- Did you leave any bad comments ?\n\t- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
-                                            console.error(_err.stack);
-                                        }
-                                    });
-                                // Added on 2023-03-25
+                            if ( /^true$/i.test(conn.useRestApi) ) {
+                                conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
                                 return;
-                            } else {
-                                conn.query(query, queryParams, onQueryCallback);
                             }
+
+                            conn._cluster.query(query, queryOptions)
+                                .catch( function onError(err) {
+                                    try {
+                                        var error = new Error(err.cause.first_error_message);
+                                        error.stack = trigger +'\n'+ err.cause.http_body;
+                                        onQueryCallback(error);
+                                    } catch (_err) {
+                                        console.error(_err.stack);
+                                    }
+                                })
+                                .then( function onResult(data, meta) {
+                                    try {
+                                        if ( typeof(data) == 'undefined' ) {
+                                            data = { rows: []}
+                                        }
+                                        onQueryCallback(false, data.rows, data.meta);
+                                    } catch (_err) {
+                                        _err.stack = '[ ' + trigger + '] onQueryCallbackError: \n\t- Did you leave any bad comments ?\n\t- Did you try to run your query ?\r\n'+ query +'\r\n'+ _err.stack;
+                                        console.error(_err.stack);
+                                    }
+                                });
+                            // Added on 2023-03-25
+                            return;
 
 
                         } // else  promise case
@@ -1023,33 +959,29 @@ function Couchbase(conn, infos) {
                             //     console.log('[ ' + trigger + '] onQuery => ', query, queryParams);
                             // }
 
-                            if (sdkVersion > 2) {
-                                if ( /^true$/i.test(conn.useRestApi) ) {
-                                    conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
-                                    return;
-                                }
-                                conn._cluster.query(query, queryOptions)
-                                    .catch( function onError(err) {
-                                        try {
-                                            var error = new Error(err.cause.first_error_message);
-                                            error.stack = trigger +'\n'+ err.cause.http_body;
-                                            onQueryCallback(error);
-                                        } catch (_err) {
-                                            console.error(_err.stack);
-                                        }
-                                    })
-                                    .then( function onResult(data) {
-                                        try {
-                                            let rows = (data && typeof(data.rows) != 'undefined') ? data.rows : [];
-                                            let meta = (data && typeof(data.meta) != 'undefined') ? data.meta : {};
-                                            onQueryCallback(false, rows, meta);
-                                        } catch (_err) {
-                                            console.error(_err.stack);
-                                        }
-                                    });
-                            } else {
-                                conn.query(query, queryParams, onQueryCallback);
+                            if ( /^true$/i.test(conn.useRestApi) ) {
+                                conn._cluster.restQuery(trigger, query, queryParams, onQueryCallback);
+                                return;
                             }
+                            conn._cluster.query(query, queryOptions)
+                                .catch( function onError(err) {
+                                    try {
+                                        var error = new Error(err.cause.first_error_message);
+                                        error.stack = trigger +'\n'+ err.cause.http_body;
+                                        onQueryCallback(error);
+                                    } catch (_err) {
+                                        console.error(_err.stack);
+                                    }
+                                })
+                                .then( function onResult(data) {
+                                    try {
+                                        let rows = (data && typeof(data.rows) != 'undefined') ? data.rows : [];
+                                        let meta = (data && typeof(data.meta) != 'undefined') ? data.meta : {};
+                                        onQueryCallback(false, rows, meta);
+                                    } catch (_err) {
+                                        console.error(_err.stack);
+                                    }
+                                });
                         }
                     } //EO register
 
@@ -1142,11 +1074,7 @@ function Couchbase(conn, infos) {
                         // await db.accountEntity.getAllOwnedCompaniesIds() (Promise path)
                         // hit the guard and skipped register() — query never fired.
                         setTimeout(function() {
-                            if ( sdkVersion > 2 ) {
-                                register(trigger, queryOptions, onQueryCallback, _internalCb);
-                            } else {
-                                register(trigger, queryParams,  onQueryCallback, _internalCb);
-                            }
+                            register(trigger, queryOptions, onQueryCallback, _internalCb);
                         }, 0);
 
                         return _promise;
@@ -1157,11 +1085,7 @@ function Couchbase(conn, infos) {
                         // _mainCallback is already in onQueryCallback's closure and will
                         // be called there directly. register() runs the query via the
                         // !self._isRegisteredFromProto fallback block.
-                        if ( sdkVersion > 2 ) {
-                            register(trigger, queryOptions, onQueryCallback, null)
-                        } else {
-                            register(trigger, queryParams, onQueryCallback, null)
-                        }
+                        register(trigger, queryOptions, onQueryCallback, null)
                     }
                 }
 
@@ -1200,13 +1124,12 @@ function Couchbase(conn, infos) {
             //     newConn.sdk = conn.sdk;
             //     conn = newConn;
             // }
-            var sdkVersion  = conn.sdk.version || 2;
             // by default
             var queryOptions = {
                 adhoc: true
             };
             // #QI — enable query profiling in dev mode for index extraction
-            if (envIsDev && sdkVersion > 2) {
+            if (envIsDev) {
                 queryOptions.profile = 'timings';
             }
 
@@ -1243,28 +1166,15 @@ function Couchbase(conn, infos) {
             queryString += '\nRETURNING '+ this.database +'.*;';
 
 
-            var query = null;
-            if ( sdkVersion > 2) { // starting SDK v3
-                query = queryString;
-            } else {
-                // prepared statement
-                query = N1qlQuery.fromString(queryString);
-                query.consistency(N1qlQuery.Consistency.REQUEST_PLUS);
-                // merge options
-                for (var qOpt in queryOptions) {
-                    if ( typeof(query[ qOpt ]) == 'undefined' ) {
-                        console.warn('[N1QL]['+entityName.toLowerCase()+ '#'+ name + '] `'+ qOpt +'` is not a valid queryOption. Ignorig...');
-                        continue;
-                    }
-                    query[ qOpt ]( queryOptions[ qOpt ] )
-                }
-            }
+            // starting SDK v3, the query is the raw N1QL string (prepared-statement
+            // builder objects were SDK v2 only — removed in #CN8).
+            var query = queryString;
 
 
             // trick to set event on the fly
             var trigger = 'N1QL:'+ this.name.toLowerCase()+ '#'+ name;
             // trick to set event on the fly
-            var statement = (sdkVersion <= 2) ? query.options.statement : query;
+            var statement = query;
 
             // #QI — dev-mode query instrumentation for bulkInsert
             var _biQueryEntry = null;
@@ -1295,103 +1205,69 @@ function Couchbase(conn, infos) {
 
             var self = this;
 
-            if (sdkVersion > 2) {
-                var err = false;
-                conn._scope._bucket._cluster.query(query, queryOptions)
-                    .catch( function onError(err) {
-                        try {
-                            // #QI — finalize bulkInsert query entry on error
-                            if (_biQueryEntry) {
-                                _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
-                                // _startMs is kept for the Flow tab timeline (#FI)
-                                _biQueryEntry.error = err.message || String(err);
-                            }
-                            var error = new Error(err.cause.first_error_message);
-                            error.stack = trigger +'\n'+ err.cause.http_body;
-                            self.emit(trigger, error);
-                        } catch (_err) {
-                            console.error(_err.stack);
+            var err = false;
+            conn._scope._bucket._cluster.query(query, queryOptions)
+                .catch( function onError(err) {
+                    try {
+                        // #QI — finalize bulkInsert query entry on error
+                        if (_biQueryEntry) {
+                            _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
+                            // _startMs is kept for the Flow tab timeline (#FI)
+                            _biQueryEntry.error = err.message || String(err);
                         }
-                    })
-                    .then( function onResult(data) {
-                        try {
-                            var _data = data.rows, _meta = data.meta;
-                            if (!_data || _data.length == 0) {
-                                _data = null
-                            }
+                        var error = new Error(err.cause.first_error_message);
+                        error.stack = trigger +'\n'+ err.cause.http_body;
+                        self.emit(trigger, error);
+                    } catch (_err) {
+                        console.error(_err.stack);
+                    }
+                })
+                .then( function onResult(data) {
+                    try {
+                        var _data = data.rows, _meta = data.meta;
+                        if (!_data || _data.length == 0) {
+                            _data = null
+                        }
 
-                            // #QI — finalize bulkInsert query entry on success
-                            if (_biQueryEntry) {
-                                _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
-                                // _startMs is kept for the Flow tab timeline (#FI)
-                                _biQueryEntry.resultCount = _data ? (Array.isArray(_data) ? _data.length : 1) : 0;
-                                try { _biQueryEntry.resultSize = _data ? JSON.stringify(_data).length : 0; } catch(_e) { _biQueryEntry.resultSize = 0; }
-                                // #QI — extract index usage from query profile or EXPLAIN cache
-                                if (_meta && _meta.profile) {
-                                    _biQueryEntry.indexes = extractIndexes(_meta.profile);
-                                } else if (sdkVersion > 2) {
-                                    var _biStmt = _biQueryEntry.statement;
-                                    if (_explainCache.has(_biStmt)) {
-                                        _biQueryEntry.indexes = _explainCache.get(_biStmt);
-                                    } else {
-                                        explainForIndexes(conn, _biStmt, _biQueryEntry, queryOptions);
-                                    }
+                        // #QI — finalize bulkInsert query entry on success
+                        if (_biQueryEntry) {
+                            _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
+                            // _startMs is kept for the Flow tab timeline (#FI)
+                            _biQueryEntry.resultCount = _data ? (Array.isArray(_data) ? _data.length : 1) : 0;
+                            try { _biQueryEntry.resultSize = _data ? JSON.stringify(_data).length : 0; } catch(_e) { _biQueryEntry.resultSize = 0; }
+                            // #QI — extract index usage from query profile or EXPLAIN cache
+                            if (_meta && _meta.profile) {
+                                _biQueryEntry.indexes = extractIndexes(_meta.profile);
+                            } else {
+                                var _biStmt = _biQueryEntry.statement;
+                                if (_explainCache.has(_biStmt)) {
+                                    _biQueryEntry.indexes = _explainCache.get(_biStmt);
+                                } else {
+                                    explainForIndexes(conn, _biStmt, _biQueryEntry, queryOptions);
                                 }
                             }
-
-                            if (!err && _meta && typeof(_meta.errors) != 'undefined' ) {
-                                err = new Error('`GenericN1QLError::bulkInsert`\n'+_meta.errors[0].msg);
-                                err.status = 403;
-                                if (_biQueryEntry) _biQueryEntry.error = err.message;
-                            } else if (err) {
-                                err.status  = 500;
-                                err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
-                                err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
-                                if (_biQueryEntry) _biQueryEntry.error = err.message;
-                            }
-                            if (envIsDev) {
-                                console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(_meta) +'\n data :\n'+ JSON.stringify(_data) );
-                            }
-
-                            self.emit(trigger, err, data.rows, data.meta);
-
-                        } catch (_err) {
-                            console.error(_err.stack);
                         }
-                    });
-            } else {
-                conn.query(query, rec, function(err, data, meta) {
-                    if (!data || data.length == 0) {
-                        data = null
-                    }
 
-                    // #QI — finalize bulkInsert query entry (SDK v2)
-                    if (_biQueryEntry) {
-                        _biQueryEntry.durationMs = Date.now() - _biQueryEntry._startMs;
-                        delete _biQueryEntry._startMs;
-                        if (err) {
-                            _biQueryEntry.error = err.message || String(err);
-                        } else {
-                            _biQueryEntry.resultCount = data ? (Array.isArray(data) ? data.length : 1) : 0;
-                            try { _biQueryEntry.resultSize = data ? JSON.stringify(data).length : 0; } catch(_e) { _biQueryEntry.resultSize = 0; }
+                        if (!err && _meta && typeof(_meta.errors) != 'undefined' ) {
+                            err = new Error('`GenericN1QLError::bulkInsert`\n'+_meta.errors[0].msg);
+                            err.status = 403;
+                            if (_biQueryEntry) _biQueryEntry.error = err.message;
+                        } else if (err) {
+                            err.status  = 500;
+                            err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
+                            err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
+                            if (_biQueryEntry) _biQueryEntry.error = err.message;
                         }
-                    }
+                        if (envIsDev) {
+                            console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(_meta) +'\n data :\n'+ JSON.stringify(_data) );
+                        }
 
-                    if (!err && meta && typeof(meta.errors) != 'undefined' ) {
-                        err = new Error('`GenericN1QLError::bulkInsert`\n'+meta.errors[0].msg);
-                        err.status = 403;
-                    } else if (err) {
-                        err.status  = 500;
-                        err.message = '`GenericN1QLError::bulkInsert`\n'+ err.message;
-                        err.stack   = '`GenericN1QLError::bulkInsert`\n'+ err.stack;
-                    }
-                    if (envIsDev) {
-                        console.debug('[ bulkInsert response ] : err ? '+ err + ', meta : \n'+ JSON.stringify(meta) +'\n data :\n'+ JSON.stringify(data) );
-                    }
+                        self.emit(trigger, err, data.rows, data.meta);
 
-                    self.emit(trigger, err, data, meta);
+                    } catch (_err) {
+                        console.error(_err.stack);
+                    }
                 });
-            }
 
 
             // CB-QUAL-3 fix: bulkInsert previously returned a plain {onComplete} _proto object.

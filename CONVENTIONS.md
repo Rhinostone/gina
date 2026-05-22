@@ -209,7 +209,7 @@ Document all globals injected by `gna.js` with `@global` JSDoc so IDEs can disco
 | Element | Convention | Example |
 | --- | --- | --- |
 | Files (multi-word) | dot-separated namespacing | `controller.render-json.js`, `server.isaac.js` |
-| Files (versioned) | `.vN` suffix | `connector.v4.js`, `session-store.v2.js` |
+| Files (versioned) | `.vN` suffix | `connector.v4.js`, `session-store.v4.js` |
 | Files (kebab) | kebab-case | `link-dev.js`, `api-error.js` |
 | Files (test) | numeric prefix + snake | `01-init_new_project.js` |
 | Constructors | PascalCase | `SuperController`, `EntitySuper`, `CmdHelper` |

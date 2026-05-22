@@ -3697,14 +3697,18 @@ describe('33 - EXPLAIN fallback: explainForIndexes and _explainCache', function(
         );
     });
 
-    it('EXPLAIN fallback is gated by sdkVersion > 2', function() {
+    it('EXPLAIN fallback runs in the meta.profile-absent else branch (#CN8: no SDK-version gate)', function() {
         var src = getCbSrc33();
-        var idx = src.indexOf('_explainCache.has(');
-        // Look back to find the sdkVersion guard (may be up to ~350 chars before)
-        var region = src.substring(Math.max(0, idx - 400), idx);
+        // #CN8 removed the Couchbase SDK v2 connector. The EXPLAIN fallback is no longer
+        // gated by `sdkVersion > 2`; it now runs whenever the SDK does not surface
+        // meta.profile — i.e. inside the `else` of the meta.profile fast-path check.
+        var profileIdx = src.indexOf('if (meta && meta.profile)');
+        assert.ok(profileIdx > -1, 'expected the meta.profile fast-path check');
+        var elseIdx    = src.indexOf('} else {', profileIdx);
+        var explainIdx = src.indexOf('_explainCache.has(', elseIdx);
         assert.ok(
-            /sdkVersion\s*>\s*2/.test(region),
-            'expected sdkVersion > 2 guard before EXPLAIN fallback'
+            elseIdx > profileIdx && explainIdx > elseIdx,
+            'expected EXPLAIN fallback inside the meta.profile-absent else branch'
         );
     });
 
