@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added lib.job, an async-job primitive for running slow work out-of-band. lib.job.create(fn) enqueues a deferred async function and returns a job id immediately; the function runs on a concurrency-limited worker and its outcome moves through pending, running, then completed or failed, and is queryable via lib.job.get(id, cb). Stale terminal jobs are purged on a configurable TTL by a self-contained sweep. Tune via the app.json jobs block (maxConcurrency, ttl, sweepInterval, idSize); sane defaults apply when the block is omitted.'
+time: 2026-05-22T04:45:58.241046+01:00

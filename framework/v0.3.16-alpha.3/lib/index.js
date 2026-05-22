@@ -89,6 +89,14 @@ function Lib() {
         // lifecycle hook that populates the HTTP counter + histogram. Opt-in
         // via app.json `metrics.enabled`.
         metrics         : _require('./metrics'),
+        // #AI6 — Async-job primitive. Holds an in-memory job registry, a
+        // concurrency-limited worker, and a self-contained unref'd setInterval
+        // sweep timer at module scope. Like State / logger below, it MUST use a
+        // plain require (not _require): refreshCore() re-runs Lib() on every
+        // dev-mode HTTP request, and _require would delete + re-require the
+        // module, discarding the live registry and orphaning the sweep timer on
+        // each request. Plain require = cache hit = the singleton survives.
+        job             : require('./job'),
         // replaced: _require('./state') — StateStore is a singleton backed by node:sqlite
         // (DatabaseSync). Hot-reloading it in dev mode would close and re-open the DB
         // connection on every HTTP request, racing with in-flight writes. Use plain

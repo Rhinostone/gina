@@ -1181,6 +1181,27 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._adminAllowList = ['127.0.0.1', '::1'];
                                 }
 
+                                // #AI6 — initialise the async-job primitive. Always-on (unlike
+                                // metrics): self.startJob() / lib.job.create() must work out of the
+                                // box, so this is NOT gated on an `enabled` flag. The app.json `jobs`
+                                // block only tunes knobs (maxConcurrency, ttl, sweepInterval, idSize);
+                                // an absent block means sane defaults. Idempotent across server
+                                // restarts within the same process.
+                                try {
+                                    var _jobsAppConf = (typeof gna.getConfig === 'function') ? gna.getConfig('app') : null;
+                                    var _jobsConf    = (_jobsAppConf && _jobsAppConf.jobs && typeof _jobsAppConf.jobs === 'object')
+                                        ? _jobsAppConf.jobs
+                                        : {};
+                                    lib.job.start({
+                                        maxConcurrency: _jobsConf.maxConcurrency,
+                                        ttl:            _jobsConf.ttl,
+                                        sweepInterval:  _jobsConf.sweepInterval,
+                                        idSize:         _jobsConf.idSize
+                                    });
+                                } catch (jobsErr) {
+                                    console.warn('[lib.job] init skipped: ' + (jobsErr.message || jobsErr));
+                                }
+
                                 // setting default global middlewares
                                 if ( typeof(instance.use) == 'function' ) {
 

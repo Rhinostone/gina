@@ -1,0 +1,19 @@
+{
+  "name": "gina-lib-job",
+  "version": "1.0.0",
+  "description": "Async-job primitive — run a deferred async function out-of-band (start -> jobId -> poll/webhook). Concurrency-limited worker, pluggable store (memory in v1), self-contained TTL sweep. Backs self.startJob() / self.inferAsync() and the built-in /_gina/jobs/:id status endpoint.",
+  "author": {
+    "name": "Martin-Luther ETOUMAN",
+    "email": "contact@gina.io"
+  },
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "main": "src/main",
+  "scripts": {
+    "test": "node --test test"
+  },
+  "license": "MIT",
+  "readmeFilename": "README.md"
+}
