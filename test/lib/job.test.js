@@ -389,3 +389,177 @@ describe('10 - framework wiring (#AI6)', function() {
     });
 
 });
+
+
+// ─── Webhook helpers (slice 5) ───────────────────────────────────────────────
+
+function waitUntil(pred, timeoutMs) {
+    return new Promise(function(resolve, reject) {
+        var deadline = Date.now() + (timeoutMs || 2000);
+        (function poll() {
+            var ok = false;
+            try { ok = pred(); } catch (e) { ok = false; }
+            if (ok) return resolve(true);
+            if (Date.now() >= deadline) return reject(new Error('waitUntil timed out'));
+            setTimeout(poll, 5);
+        })();
+    });
+}
+
+async function waitForField(id, field, timeoutMs) {
+    var deadline = Date.now() + (timeoutMs || 2000);
+    var rec;
+    while (Date.now() < deadline) {
+        rec = await getJob(id);
+        if (rec && rec[field]) return rec;
+        await tick(5);
+    }
+    return rec;
+}
+
+function startWebhookServer(handler) {
+    return new Promise(function(resolve) {
+        var http   = require('http');
+        var server = http.createServer(handler);
+        server.listen(0, '127.0.0.1', function() {
+            resolve({ server: server, url: 'http://127.0.0.1:' + server.address().port + '/hook' });
+        });
+    });
+}
+
+
+// ─── 11 — webhook completion delivery ────────────────────────────────────────
+
+describe('11 - webhook completion delivery (#AI6 slice 5)', function() {
+
+    it('POSTs { id, state, result } to callbackUrl on completion', async function() {
+        job.start({ sweepInterval: 0 });
+        var received = null;
+        var ctx = await startWebhookServer(function(req, res) {
+            var body = '';
+            req.on('data', function(c) { body += c; });
+            req.on('end',  function() {
+                received = { method: req.method, headers: req.headers, body: JSON.parse(body) };
+                res.writeHead(200, { 'content-type': 'text/plain' });
+                res.end('ok');
+            });
+        });
+        var id  = job.create(function() { return { answer: 42 }; }, { callbackUrl: ctx.url });
+        var rec = await waitForField(id, 'webhookDeliveredAt', 3000);
+        ctx.server.close();
+        assert.ok(rec && rec.webhookDeliveredAt, 'webhookDeliveredAt set on success');
+        assert.ok(!rec.webhookFailed,            'not marked failed on success');
+        assert.ok(received,                      'server received the POST');
+        assert.equal(received.method, 'POST');
+        assert.equal(received.headers['content-type'], 'application/json');
+        assert.equal(received.body.id, id);
+        assert.equal(received.body.state, 'completed');
+        assert.deepEqual(received.body.result, { answer: 42 });
+    });
+
+    it('delivers the error payload for a failed job', async function() {
+        job.start({ sweepInterval: 0 });
+        var received = null;
+        var ctx = await startWebhookServer(function(req, res) {
+            var body = '';
+            req.on('data', function(c) { body += c; });
+            req.on('end',  function() { received = JSON.parse(body); res.writeHead(200); res.end(); });
+        });
+        job.create(function() { throw new Error('boom'); }, { callbackUrl: ctx.url });
+        await waitUntil(function() { return received !== null; }, 3000);
+        ctx.server.close();
+        assert.equal(received.state, 'failed');
+        assert.equal(received.result, null);
+        assert.equal(received.error.message, 'boom');
+    });
+
+    it('signs the payload with HMAC-SHA256 when webhookSecret is configured', async function() {
+        job.start({ sweepInterval: 0, webhookSecret: 's3cr3t' });
+        var received = null;
+        var ctx = await startWebhookServer(function(req, res) {
+            var body = '';
+            req.on('data', function(c) { body += c; });
+            req.on('end',  function() { received = { sig: req.headers['x-gina-signature'], raw: body }; res.writeHead(200); res.end(); });
+        });
+        job.create(function() { return 'x'; }, { callbackUrl: ctx.url });
+        await waitUntil(function() { return received !== null; }, 3000);
+        ctx.server.close();
+        var crypto   = require('crypto');
+        var expected = 'sha256=' + crypto.createHmac('sha256', 's3cr3t').update(received.raw).digest('hex');
+        assert.equal(received.sig, expected, 'X-Gina-Signature must be HMAC-SHA256 of the raw body');
+    });
+
+    it('omits the signature header when no secret is configured', async function() {
+        job.start({ sweepInterval: 0 }); // beforeEach reset() cleared any prior secret
+        var received = null;
+        var ctx = await startWebhookServer(function(req, res) {
+            received = { sig: req.headers['x-gina-signature'] };
+            req.resume();
+            res.writeHead(200); res.end();
+        });
+        job.create(function() { return 'x'; }, { callbackUrl: ctx.url });
+        await waitUntil(function() { return received !== null; }, 3000);
+        ctx.server.close();
+        assert.equal(received.sig, undefined, 'no X-Gina-Signature without a secret');
+    });
+
+    it('retries on failure and marks webhookFailed after exhausting attempts', async function() {
+        job.start({ sweepInterval: 0, webhookMaxAttempts: 2, webhookBackoffMs: 5 });
+        var hits = 0;
+        var ctx  = await startWebhookServer(function(req, res) {
+            hits++;
+            req.resume();
+            res.writeHead(500); res.end('no');
+        });
+        var id  = job.create(function() { return 1; }, { callbackUrl: ctx.url });
+        var rec = await waitForField(id, 'webhookFailed', 4000);
+        ctx.server.close();
+        assert.ok(rec && rec.webhookFailed, 'webhookFailed set after exhausting retries');
+        assert.ok(hits >= 2,               'server hit at least webhookMaxAttempts (2) times; got ' + hits);
+        assert.ok(!rec.webhookDeliveredAt, 'not marked delivered');
+    });
+
+    it('attempts no webhook when no callbackUrl is set', async function() {
+        job.start({ sweepInterval: 0 });
+        var id  = job.create(function() { return 1; });
+        var rec = await waitForState(id, 'completed');
+        assert.ok(!rec.webhookDeliveredAt, 'no delivery attempted');
+        assert.ok(!rec.webhookFailed,      'no webhook attempted');
+    });
+});
+
+
+// ─── 12 — source structure: webhook delivery ────────────────────────────────
+
+describe('12 - source structure: webhook delivery (#AI6 slice 5)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('defines deliverWebhook / postWebhook / retryWebhook', function() {
+        assert.ok(src.indexOf('function deliverWebhook(') > -1, 'deliverWebhook');
+        assert.ok(src.indexOf('function postWebhook(')    > -1, 'postWebhook');
+        assert.ok(src.indexOf('function retryWebhook(')   > -1, 'retryWebhook');
+    });
+
+    it('selects http/https transport by URL protocol', function() {
+        assert.ok(src.indexOf("require('https')") > -1, 'https transport');
+        assert.ok(src.indexOf("require('http')")  > -1, 'http transport');
+    });
+
+    it('signs with HMAC-SHA256 when a secret is set', function() {
+        assert.ok(src.indexOf('createHmac') > -1,         'uses createHmac');
+        assert.ok(src.indexOf('x-gina-signature') > -1,   'sets X-Gina-Signature header');
+    });
+
+    it('retries with exponential backoff and marks webhookFailed', function() {
+        assert.ok(src.indexOf('Math.pow(2,') > -1,  'exponential backoff');
+        assert.ok(src.indexOf('webhookFailed') > -1, 'marks the record failed after retries');
+    });
+
+    it('settle fires the webhook only when callbackUrl is set', function() {
+        var at    = src.indexOf('function settle(');
+        var block = src.slice(at, src.indexOf('\n}', at) + 2);
+        assert.ok(block.indexOf('deliverWebhook(') > -1, 'settle triggers deliverWebhook');
+        assert.ok(block.indexOf('rec.callbackUrl') > -1, 'gated on callbackUrl');
+    });
+});

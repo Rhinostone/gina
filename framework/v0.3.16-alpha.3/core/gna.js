@@ -1196,7 +1196,11 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         maxConcurrency: _jobsConf.maxConcurrency,
                                         ttl:            _jobsConf.ttl,
                                         sweepInterval:  _jobsConf.sweepInterval,
-                                        idSize:         _jobsConf.idSize
+                                        idSize:         _jobsConf.idSize,
+                                        webhookMaxAttempts: _jobsConf.webhookMaxAttempts,
+                                        webhookBackoffMs:   _jobsConf.webhookBackoffMs,
+                                        webhookTimeoutMs:   _jobsConf.webhookTimeoutMs,
+                                        webhookSecret:      _jobsConf.webhookSecret
                                     });
                                 } catch (jobsErr) {
                                     console.warn('[lib.job] init skipped: ' + (jobsErr.message || jobsErr));

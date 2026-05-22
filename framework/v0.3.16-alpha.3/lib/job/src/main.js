@@ -129,6 +129,19 @@ var DEFAULT_SWEEP_INTERVAL = 300;
 var DEFAULT_ID_SIZE = 21;
 
 /**
+ * Default webhook delivery knobs — best-effort completion POST.
+ *
+ * @memberof module:gina/lib/job
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_WEBHOOK_MAX_ATTEMPTS = 3;
+/** Backoff base (ms); doubles each retry. @memberof module:gina/lib/job @constant @type {number} */
+var DEFAULT_WEBHOOK_BACKOFF_MS = 500;
+/** Per-attempt request timeout (ms). @memberof module:gina/lib/job @constant @type {number} */
+var DEFAULT_WEBHOOK_TIMEOUT_MS = 5000;
+
+/**
  * The active record store (memory store by default). `null` until the first
  * {@link create} or {@link start}.
  *
@@ -164,6 +177,20 @@ var _sweepInterval = DEFAULT_SWEEP_INTERVAL;
 var _idSize = DEFAULT_ID_SIZE;
 /** @inner @type {*} */
 var _sweepTimer = null;
+/** @inner @type {number} */
+var _webhookMaxAttempts = DEFAULT_WEBHOOK_MAX_ATTEMPTS;
+/** @inner @type {number} */
+var _webhookBackoffMs = DEFAULT_WEBHOOK_BACKOFF_MS;
+/** @inner @type {number} */
+var _webhookTimeoutMs = DEFAULT_WEBHOOK_TIMEOUT_MS;
+/**
+ * Per-bundle HMAC secret for signing webhook payloads (`X-Gina-Signature:
+ * sha256=...`). `null` disables signing. Set via `start({ webhookSecret })`
+ * from app.json (use a `${secret:KEY}` placeholder rather than hardcoding).
+ * @inner
+ * @type {?string}
+ */
+var _webhookSecret = null;
 
 /**
  * No-op callback used when a caller omits one.
@@ -180,13 +207,16 @@ function noop() {}
  * @property {?{name:string, message:string, stack:?string}} error - Serialised error once `failed`; `null` otherwise.
  * @property {number}      attempts    - How many times the worker has run the function.
  * @property {number}      maxAttempts - Retry ceiling (1 in v1 — retry is a follow-up).
- * @property {?string}     callbackUrl - Webhook URL for completion delivery (consumed by the webhook slice).
+ * @property {?string}     callbackUrl - Webhook URL POSTed `{ id, state, result, error }` on completion when set.
  * @property {?Object}     meta        - Caller-supplied opaque metadata.
  * @property {number}      createdAt   - Epoch ms at creation.
  * @property {number}      updatedAt   - Epoch ms of the last transition.
  * @property {?number}     startedAt   - Epoch ms the worker began; `null` while pending.
  * @property {?number}     finishedAt  - Epoch ms of the terminal transition; `null` until then.
  * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal.
+ * @property {?number}     webhookDeliveredAt - Epoch ms a completion webhook succeeded; absent until delivered.
+ * @property {?boolean}    webhookFailed      - `true` once webhook delivery exhausts its retries; absent otherwise.
+ * @property {?string}     webhookError       - Last webhook failure reason; absent on success.
  */
 
 /**
@@ -375,10 +405,112 @@ function settle(id, result, err) {
         ? { state: STATES.FAILED,    error: serializeError(err), finishedAt: now, expiresAt: now + _ttl * 1000 }
         : { state: STATES.COMPLETED, result: result,             finishedAt: now, expiresAt: now + _ttl * 1000 };
 
-    update(id, patch, function() {
+    update(id, patch, function(uErr, rec) {
         _running--;
         drain();
+        // Best-effort completion webhook (opt-in via opts.callbackUrl). Fired
+        // after drain() so the next job starts promptly; never affects the
+        // worker or the job outcome (delivery != job result).
+        if (rec && rec.callbackUrl) {
+            try { deliverWebhook(rec); } catch (_e) { /* webhook never crashes the worker */ }
+        }
     });
+}
+
+/**
+ * Best-effort completion webhook. POSTs `{ id, state, result, error }` to the
+ * record's `callbackUrl` with retry/backoff and an optional HMAC signature.
+ * Fire-and-forget: failures are recorded on the job (`webhookFailed`) but never
+ * propagate to the worker or change the job outcome.
+ *
+ * @inner
+ * @param   {JobRecord} record
+ * @returns {void}
+ */
+function deliverWebhook(record) {
+    if (!record || !record.callbackUrl) return;
+    var payload;
+    try {
+        payload = JSON.stringify({ id: record.id, state: record.state, result: record.result, error: record.error });
+    } catch (e) {
+        update(record.id, { webhookFailed: true, webhookError: 'payload_serialize_failed' }, noop);
+        return;
+    }
+    postWebhook(record, payload, 1);
+}
+
+/**
+ * Single webhook POST attempt. Selects http/https by URL protocol, signs when
+ * a secret is configured, and routes non-2xx / network errors to
+ * {@link retryWebhook}. A `done` guard ensures exactly one outcome per attempt.
+ *
+ * @inner
+ * @param   {JobRecord} record
+ * @param   {string}    payload - Pre-serialised JSON body.
+ * @param   {number}    attempt - 1-based attempt counter.
+ * @returns {void}
+ */
+function postWebhook(record, payload, attempt) {
+    var url;
+    try {
+        url = new URL(record.callbackUrl);
+    } catch (e) {
+        update(record.id, { webhookFailed: true, webhookError: 'invalid_callback_url' }, noop);
+        return;
+    }
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+        update(record.id, { webhookFailed: true, webhookError: 'unsupported_protocol' }, noop);
+        return;
+    }
+    var transport = (url.protocol === 'https:') ? require('https') : require('http');
+    var headers = {
+        'content-type':   'application/json',
+        'content-length': Buffer.byteLength(payload)
+    };
+    if (_webhookSecret) {
+        headers['x-gina-signature'] = 'sha256=' +
+            require('crypto').createHmac('sha256', _webhookSecret).update(payload).digest('hex');
+    }
+    var done = false;
+    var fail = function(reason) { if (done) return; done = true; retryWebhook(record, payload, attempt, reason); };
+    var ok   = function()       { if (done) return; done = true; update(record.id, { webhookDeliveredAt: Date.now() }, noop); };
+    var req;
+    try {
+        req = transport.request(url, { method: 'POST', headers: headers, timeout: _webhookTimeoutMs }, function(res) {
+            var good = (res.statusCode >= 200 && res.statusCode < 300);
+            res.resume(); // drain so the socket frees
+            if (good) { ok(); } else { fail('http_status_' + res.statusCode); }
+        });
+    } catch (e) {
+        fail((e && e.message) || 'request_failed');
+        return;
+    }
+    req.on('error',   function(err) { fail((err && err.message) || 'request_error'); });
+    req.on('timeout', function()    { req.destroy(new Error('webhook_timeout')); });
+    req.write(payload);
+    req.end();
+}
+
+/**
+ * Schedule the next webhook attempt with exponential backoff, or mark the job
+ * `webhookFailed` once {@link DEFAULT_WEBHOOK_MAX_ATTEMPTS} (configurable) is
+ * reached. The retry timer is unref'd so it never holds the process open.
+ *
+ * @inner
+ * @param   {JobRecord} record
+ * @param   {string}    payload
+ * @param   {number}    attempt - The attempt that just failed (1-based).
+ * @param   {string}    reason
+ * @returns {void}
+ */
+function retryWebhook(record, payload, attempt, reason) {
+    if (attempt >= _webhookMaxAttempts) {
+        update(record.id, { webhookFailed: true, webhookError: reason }, noop);
+        return;
+    }
+    var delay = _webhookBackoffMs * Math.pow(2, attempt - 1);
+    var t = setTimeout(function() { postWebhook(record, payload, attempt + 1); }, delay);
+    if (t && typeof t.unref === 'function') t.unref();
 }
 
 /**
@@ -550,6 +682,10 @@ function sweep(cb) {
  * @param   {number}   [opts.ttl=3600]           - Terminal-record TTL (seconds).
  * @param   {number}   [opts.sweepInterval=300]  - Sweep interval (seconds); `0` disables the internal timer.
  * @param   {number}   [opts.idSize=21]          - jobId length (characters).
+ * @param   {number}   [opts.webhookMaxAttempts=3]   - Completion-webhook retry ceiling.
+ * @param   {number}   [opts.webhookBackoffMs=500]   - Webhook backoff base (ms); doubles each retry.
+ * @param   {number}   [opts.webhookTimeoutMs=5000]  - Per-attempt webhook request timeout (ms).
+ * @param   {string}   [opts.webhookSecret]          - HMAC secret for signing webhook payloads (X-Gina-Signature). Omit to disable signing.
  * @param   {JobStore} [opts.store]              - Custom store (e.g. connector-backed). Defaults to the in-memory store.
  * @returns {boolean}                            - Always `true`.
  *
@@ -570,6 +706,18 @@ function start(opts) {
     }
     if (typeof opts.idSize === 'number' && opts.idSize > 0) {
         _idSize = Math.floor(opts.idSize);
+    }
+    if (typeof opts.webhookMaxAttempts === 'number' && opts.webhookMaxAttempts > 0) {
+        _webhookMaxAttempts = Math.floor(opts.webhookMaxAttempts);
+    }
+    if (typeof opts.webhookBackoffMs === 'number' && opts.webhookBackoffMs >= 0) {
+        _webhookBackoffMs = Math.floor(opts.webhookBackoffMs);
+    }
+    if (typeof opts.webhookTimeoutMs === 'number' && opts.webhookTimeoutMs > 0) {
+        _webhookTimeoutMs = Math.floor(opts.webhookTimeoutMs);
+    }
+    if (typeof opts.webhookSecret === 'string' && opts.webhookSecret.length > 0) {
+        _webhookSecret = opts.webhookSecret;
     }
     if (!_store) {
         _store = (opts.store && typeof opts.store === 'object') ? opts.store : createMemoryStore();
@@ -631,6 +779,10 @@ function reset() {
     _ttl            = DEFAULT_TTL;
     _sweepInterval  = DEFAULT_SWEEP_INTERVAL;
     _idSize         = DEFAULT_ID_SIZE;
+    _webhookMaxAttempts = DEFAULT_WEBHOOK_MAX_ATTEMPTS;
+    _webhookBackoffMs   = DEFAULT_WEBHOOK_BACKOFF_MS;
+    _webhookTimeoutMs   = DEFAULT_WEBHOOK_TIMEOUT_MS;
+    _webhookSecret      = null;
 }
 
 module.exports = {
@@ -647,5 +799,8 @@ module.exports = {
     DEFAULT_MAX_CONCURRENCY: DEFAULT_MAX_CONCURRENCY,
     DEFAULT_TTL:            DEFAULT_TTL,
     DEFAULT_SWEEP_INTERVAL: DEFAULT_SWEEP_INTERVAL,
-    DEFAULT_ID_SIZE:        DEFAULT_ID_SIZE
+    DEFAULT_ID_SIZE:        DEFAULT_ID_SIZE,
+    DEFAULT_WEBHOOK_MAX_ATTEMPTS: DEFAULT_WEBHOOK_MAX_ATTEMPTS,
+    DEFAULT_WEBHOOK_BACKOFF_MS:   DEFAULT_WEBHOOK_BACKOFF_MS,
+    DEFAULT_WEBHOOK_TIMEOUT_MS:   DEFAULT_WEBHOOK_TIMEOUT_MS
 };
