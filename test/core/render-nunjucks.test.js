@@ -319,3 +319,33 @@ describe('02 - terminal-exit closure nulling (#M1 retrofit follow-up)', function
         );
     });
 });
+
+
+// 03 — HTTP/2 response trailers (#H10)
+describe('03 - HTTP/2 response trailers (#H10)', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('captures _trailers from local._trailers', function() {
+        assert.ok(/var _trailers\s*=.*local\._trailers/.test(src()), 'expected _trailers capture from local._trailers');
+    });
+
+    it('wires waitForTrailers + wantTrailers + sendTrailers in the body path', function() {
+        var s = src();
+        assert.ok(s.indexOf('#H10') > -1, 'expected #H10 marker');
+        assert.ok(s.indexOf('waitForTrailers') > -1, 'expected waitForTrailers');
+        assert.ok(s.indexOf("'wantTrailers'") > -1, 'expected wantTrailers listener');
+        assert.ok(s.indexOf('sendTrailers') > -1, 'expected sendTrailers call');
+    });
+
+    it('gates the trailer wiring on registered trailers (if (_trailers))', function() {
+        assert.ok(/if\s*\(\s*_trailers\s*\)/.test(src()), 'expected `if (_trailers)` gate');
+    });
+
+    it('passes waitForTrailers conditionally to the body-path stream.respond()', function() {
+        assert.ok(
+            /stream\.respond\(_streamHeaders,\s*_trailers\s*\?\s*\{\s*waitForTrailers:\s*true\s*\}\s*:\s*undefined\)/.test(src()),
+            'expected single conditional stream.respond(_streamHeaders, _trailers ? {...} : undefined) in Case 3 (body)'
+        );
+    });
+});

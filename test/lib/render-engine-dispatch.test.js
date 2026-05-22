@@ -285,7 +285,9 @@ describe('05a - sendHtmlResponse four-way branch (class.controller.md §7b)', fu
 
     it('HTTP/2 body path calls stream.respond with content-type + :status', function () {
         assert.match(RENDER_NJ_SRC, /_streamHeaders\s*=\s*\{[\s\S]*?'content-type':[\s\S]*?':status':[\s\S]*?\}/);
-        assert.match(RENDER_NJ_SRC, /stream\.respond\(_streamHeaders\)/);
+        // #H10 — the body-path respond now passes a conditional waitForTrailers 2nd arg
+        // (stream.respond(_streamHeaders, _trailers ? { waitForTrailers: true } : undefined)).
+        assert.match(RENDER_NJ_SRC, /stream\.respond\(_streamHeaders,\s*_trailers/);
     });
 
     it('HTTP/2 body path calls stream.end(html)', function () {

@@ -184,6 +184,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     var req         = local.req;
     var res         = local.res;
     var _next       = local.next;
+    // #H10 — opt-in HTTP/2 response trailers (registered via self.sendTrailers()).
+    var _trailers   = (local._trailers && typeof(local._trailers) === 'object') ? local._trailers : null;
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
 
@@ -956,7 +958,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             for (var _rhk in _pendingHeaders) {
                                 if (!(_rhk in _streamHeaders)) _streamHeaders[_rhk] = _pendingHeaders[_rhk];
                             }
-                            stream.respond(_streamHeaders);
+                            // #H10 — register the trailer flush, then defer the stream close
+                            // via waitForTrailers so the trailers follow the final DATA frame.
+                            if (_trailers) {
+                                stream.once('wantTrailers', function() {
+                                    try { if (!stream.destroyed && !stream.closed) stream.sendTrailers(_trailers); } catch (_e) { /* best-effort */ }
+                                });
+                            }
+                            stream.respond(_streamHeaders, _trailers ? { waitForTrailers: true } : undefined);
                         }
                         stream.end(htmlContent);
                         res.headersSent = true;
@@ -1660,7 +1669,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             for (var _rhk2 in _pendingHeaders2) {
                                 if (!(_rhk2 in _streamHeaders2)) _streamHeaders2[_rhk2] = _pendingHeaders2[_rhk2];
                             }
-                            stream.respond(_streamHeaders2);
+                            // #H10 — register the trailer flush, then defer the stream close
+                            // via waitForTrailers so the trailers follow the final DATA frame.
+                            if (_trailers) {
+                                stream.once('wantTrailers', function() {
+                                    try { if (!stream.destroyed && !stream.closed) stream.sendTrailers(_trailers); } catch (_e) { /* best-effort */ }
+                                });
+                            }
+                            stream.respond(_streamHeaders2, _trailers ? { waitForTrailers: true } : undefined);
                         }
                         stream.end(htmlContent);
                         res.headersSent = true;

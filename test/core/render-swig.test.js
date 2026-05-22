@@ -406,8 +406,10 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
         var src = getSrc();
         var first = src.indexOf('res.end( htmlContent )');
         var second = src.indexOf('res.end( htmlContent )', first + 1);
-        // Look for HEAD check before the second .end(htmlContent)
-        var before = src.substring(second - 3000, second);
+        // Look for HEAD check before the second .end(htmlContent).
+        // Window widened 3000 -> 3400 for #H10 (trailer wiring added ~7 lines in the
+        // cache-miss HTTP/2 body branch; the HEAD check now sits ~3205 chars back).
+        var before = src.substring(second - 3400, second);
         assert.ok(
             /HEAD.*\.test\(req\.method\)/.test(before),
             'expected HEAD method check on cache-miss path'
@@ -706,11 +708,13 @@ describe('10 - HTTP/2 direct stream implementation (#H8)', function() {
 
     // ── All 5 patterns from render-json.js are now present ───────────────
 
-    it('stream.destroyed guard exists in active code (3 body/error paths)', function() {
+    it('stream.destroyed guard exists in active code (3 response-path + 2 trailer-callback guards)', function() {
         var stripped = stripComments(getSrc());
         var matches = stripped.match(/stream\.destroyed/g);
         assert.ok(matches, 'no stream.destroyed guard found');
-        assert.strictEqual(matches.length, 3, 'expected 3 stream.destroyed guards (cache-hit, cache-miss, error)');
+        // 3 response-path guards (cache-hit body, cache-miss body, error) + 2 #H10
+        // trailer-callback guards (cache-hit + cache-miss wantTrailers handlers).
+        assert.strictEqual(matches.length, 5, 'expected 5 stream.destroyed guards (3 response-path + 2 trailer-callback)');
     });
 
     it('res.getHeaders merge exists in active code (5 paths)', function() {
@@ -1164,4 +1168,39 @@ describe('12 - function-scoped captures of per-request refs (#M1 race fix)', fun
         assert.equal(value, 'object', 'captured `req[method]` returns the per-method bucket — no TypeError on null');
     });
 
+});
+
+
+// 13 — HTTP/2 response trailers (#H10)
+describe('13 - HTTP/2 response trailers (#H10)', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('captures _trailers from local._trailers', function() {
+        assert.ok(/var _trailers\s*=.*local\._trailers/.test(src()), 'expected _trailers capture from local._trailers');
+    });
+
+    it('wires waitForTrailers + wantTrailers + sendTrailers (#H10 marker present)', function() {
+        var s = src();
+        assert.ok(s.indexOf('#H10') > -1, 'expected #H10 marker');
+        assert.ok(s.indexOf('waitForTrailers') > -1, 'expected waitForTrailers');
+        assert.ok(s.indexOf("'wantTrailers'") > -1, 'expected wantTrailers listener');
+        assert.ok(s.indexOf('sendTrailers') > -1, 'expected sendTrailers call');
+    });
+
+    it('wires trailers on BOTH body paths (cache-hit + cache-miss), each gated on if (_trailers)', function() {
+        var s = src();
+        assert.ok(/stream\.respond\(_streamHeaders,\s*_trailers\s*\?/.test(s),  'expected conditional respond on the cache-hit body path');
+        assert.ok(/stream\.respond\(_streamHeaders2,\s*_trailers\s*\?/.test(s), 'expected conditional respond on the cache-miss body path');
+        var ifMatches = s.match(/if\s*\(\s*_trailers\s*\)/g) || [];
+        assert.ok(ifMatches.length >= 2, 'expected an `if (_trailers)` gate on each body path');
+    });
+
+    it('does not add extra stream.respond() calls — single-conditional-arg form keeps the 5-path count (section 10)', function() {
+        // The trailer wiring uses stream.respond(headers, _trailers ? {...} : undefined),
+        // so each path still has exactly one respond() call; section 10 pins the total at 5.
+        var stripped = src().replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+        var matches = stripped.match(/stream\.respond\(/g) || [];
+        assert.strictEqual(matches.length, 5, 'expected 5 stream.respond() calls — trailers must not add respond calls');
+    });
 });

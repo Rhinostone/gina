@@ -467,6 +467,8 @@ function sendHtmlResponse(local, html, req, res) {
     var statusCode = res.statusCode || 200;
     var stream     = (res && typeof res.stream !== 'undefined') ? res.stream : null;
     var isHead     = /^HEAD$/i.test(req.method);
+    // #H10 — opt-in HTTP/2 response trailers (registered via self.sendTrailers()).
+    var _trailers  = (local && local._trailers && typeof(local._trailers) === 'object') ? local._trailers : null;
     var byteLength = Buffer.byteLength(html, 'utf8');
     // Ensure content-type is set on the HTTP/1.1 response so header merge
     // picks it up for the stream paths and setHeader()-only paths alike.
@@ -521,7 +523,14 @@ function sendHtmlResponse(local, html, req, res) {
             for (var _shk in _pendingHeaders) {
                 if (!(_shk in _streamHeaders)) { _streamHeaders[_shk] = _pendingHeaders[_shk]; }
             }
-            stream.respond(_streamHeaders);
+            // #H10 — register the trailer flush, then defer the stream close via
+            // waitForTrailers so the trailers follow the final DATA frame.
+            if (_trailers) {
+                stream.once('wantTrailers', function() {
+                    try { if (!stream.destroyed && !stream.closed) stream.sendTrailers(_trailers); } catch (_e) { /* best-effort */ }
+                });
+            }
+            stream.respond(_streamHeaders, _trailers ? { waitForTrailers: true } : undefined);
         }
         stream.end(html);
         res.headersSent = true;
