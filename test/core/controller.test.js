@@ -2235,3 +2235,89 @@ describe('18 - startJob / jobStatus: pure logic (#AI6)', function() {
         assert.deepEqual(got, { id: 'abc', state: 'completed', result: 42 });
     });
 });
+
+
+// 19 — source structure: inferAsync (#AI6)
+describe('19 - source structure: inferAsync (#AI6)', function() {
+
+    it('inferAsync is defined in source', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(src.indexOf('this.inferAsync = function(') > -1, 'expected `this.inferAsync = function(` — #AI6 slice 4 not applied');
+    });
+
+    it('inferAsync composes getModel().infer() through self.startJob', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.inferAsync = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('self.startJob(') > -1, 'must defer through self.startJob');
+        assert.ok(block.indexOf('getModel(')      > -1, 'must resolve the connector via getModel');
+        assert.ok(block.indexOf('.infer(')        > -1, 'must call .infer on the connector');
+    });
+
+    it('inferAsync trims the result to content/model/usage (drops raw)', function() {
+        var src   = fs.readFileSync(SOURCE, 'utf8');
+        var start = src.indexOf('this.inferAsync = function(');
+        var end   = src.indexOf('\n    };', start) + 7;
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('content:') > -1 && block.indexOf('model:') > -1 && block.indexOf('usage:') > -1,
+            'must build a trimmed { content, model, usage } result');
+        assert.ok(block.indexOf('raw') === -1, 'must NOT carry the raw provider response into the job result');
+    });
+});
+
+
+// 20 — inferAsync: pure logic
+describe('20 - inferAsync: pure logic (#AI6)', function() {
+
+    // Replica mirroring the real inferAsync body, with getModel + startJob faked.
+    function makeInferEnv() {
+        var calls  = { startJob: [], getModel: [], infer: [] };
+        var fakeAi = {
+            infer: function(messages, options) {
+                calls.infer.push({ messages: messages, options: options });
+                return Promise.resolve({ content: 'hi', model: 'm', usage: { inputTokens: 1, outputTokens: 2 }, raw: { huge: true } });
+            }
+        };
+        var getModel = function(name) { calls.getModel.push(name); return fakeAi; };
+        var self = {};
+        self.startJob  = function(fn, opts) { calls.startJob.push({ fn: fn, opts: opts }); return 'JID'; };
+        self.inferAsync = function(messages, options, jobOpts) {
+            options = options || {};
+            var _connector = options.connector;
+            return self.startJob(function() {
+                return getModel(_connector).infer(messages, options).then(function(_r) {
+                    return { content: _r.content, model: _r.model, usage: _r.usage };
+                });
+            }, jobOpts);
+        };
+        return { calls: calls, self: self };
+    }
+
+    it('returns the job id from startJob', function() {
+        var env = makeInferEnv();
+        var id  = env.self.inferAsync([{ role: 'user', content: 'x' }], { connector: 'myModel' });
+        assert.equal(id, 'JID');
+        assert.equal(env.calls.startJob.length, 1);
+    });
+
+    it('the deferred fn calls getModel(connector).infer(messages, options) and trims raw', async function() {
+        var env  = makeInferEnv();
+        var msgs = [{ role: 'user', content: 'hi' }];
+        env.self.inferAsync(msgs, { connector: 'myModel', maxTokens: 9 });
+        var fn     = env.calls.startJob[0].fn;
+        var result = await fn();
+        assert.deepEqual(env.calls.getModel, ['myModel'], 'getModel called with the connector name');
+        assert.equal(env.calls.infer.length, 1);
+        assert.strictEqual(env.calls.infer[0].messages, msgs, 'messages forwarded by reference');
+        assert.equal(env.calls.infer[0].options.maxTokens, 9, 'infer options forwarded');
+        assert.deepEqual(result, { content: 'hi', model: 'm', usage: { inputTokens: 1, outputTokens: 2 } });
+        assert.ok(!('raw' in result), 'raw provider response dropped from the job result');
+    });
+
+    it('forwards jobOpts to startJob', function() {
+        var env = makeInferEnv();
+        env.self.inferAsync([{ role: 'user', content: 'x' }], { connector: 'c' }, { meta: { kind: 'summary' }, callbackUrl: 'https://x/y' });
+        assert.deepEqual(env.calls.startJob[0].opts, { meta: { kind: 'summary' }, callbackUrl: 'https://x/y' });
+    });
+});

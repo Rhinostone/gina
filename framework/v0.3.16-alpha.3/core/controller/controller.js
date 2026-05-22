@@ -1506,6 +1506,48 @@ function SuperController(options) {
 
 
     /**
+     * #AI6 — Start an async job that runs a model inference out-of-band and
+     * return its job id immediately. Convenience wrapper composing the AI
+     * connector (`getModel(connector).infer(...)`) through `self.startJob`,
+     * since the 1-30s `.infer()` latency is the motivating case for #AI6.
+     *
+     * The job `result` is the trimmed inference `{ content, model, usage }` —
+     * the raw provider response is dropped to keep the record lean and
+     * serialisable for a connector-backed store. Poll `/_gina/jobs/:id` for
+     * state; read the result from your own authenticated route via
+     * `self.jobStatus`.
+     *
+     * `messages` / `options` are captured as plain values, and the connector
+     * is resolved lazily inside the worker via the global `getModel` — so the
+     * deferred function never touches `req` / `res` (safe after response exit).
+     *
+     * @param {Array<{role:string, content:string}>} messages - Chat messages for the model.
+     * @param {Object} [options]            - Inference options forwarded to `.infer()` (`model`, `maxTokens`, `temperature`, `system`).
+     * @param {string} [options.connector]  - Name of the AI connector (the key from connectors.json) passed to `getModel`. Required to resolve a model.
+     * @param {Object} [jobOpts]            - Forwarded to `lib.job.create` (`meta`, `callbackUrl`, `maxAttempts`).
+     * @returns {string}                    - The job id; return it to the client to poll `/_gina/jobs/:id`.
+     *
+     * @example
+     *   this.summarise = function(req, res, next) {
+     *       var jobId = self.inferAsync(
+     *           [{ role: 'user', content: req.post.text }],
+     *           { connector: 'myModel', maxTokens: 500 }
+     *       );
+     *       self.renderJSON({ jobId: jobId });
+     *   };
+     */
+    this.inferAsync = function(messages, options, jobOpts) {
+        options = options || {};
+        var _connector = options.connector;
+        return self.startJob(function() {
+            return getModel(_connector).infer(messages, options).then(function(_r) {
+                return { content: _r.content, model: _r.model, usage: _r.usage };
+            });
+        }, jobOpts);
+    };
+
+
+    /**
      * #I18N1 — Translate a key using the bundle's loaded i18n catalogs.
      * Auto-binds the request's culture from `req.culture` (formalised by
      * slice 3) and the bundle name from `local.options.conf.bundle`.

@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added the self.inferAsync(messages, options) controller helper, which runs a model inference as an async job in one call and returns a job id immediately. It wraps the AI connector through self.startJob; the stored job result is the trimmed inference (content, model, usage). Select the connector with options.connector, poll /_gina/jobs/:id for state, and read the result from your own authenticated route via self.jobStatus.'
+time: 2026-05-22T05:19:46.734547+01:00
