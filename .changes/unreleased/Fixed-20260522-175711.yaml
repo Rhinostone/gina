@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Swig template engine updated to 2.4.1. Macros that call other macros imported at the top of their own defining file now resolve correctly (previously they rendered empty), recursively across import depth.'
+time: 2026-05-22T17:57:11.96276+01:00
