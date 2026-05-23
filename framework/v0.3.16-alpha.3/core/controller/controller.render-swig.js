@@ -510,6 +510,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
         if (!userData) {
             userData = { page: { view: {}}}
+        } else if ( isWithoutLayout ) {
+            // Layoutless renders (self.renderWithoutLayout) have no page envelope
+            // — no `view.layout`, no breadcrumb, no session card — so the
+            // `page`-key-presence gating used below for full pages serves no
+            // purpose here and only buries the controller's context under
+            // `data.page.data`, where the fragment template's top-level
+            // {{ var }} references can't reach it. Merge user context at
+            // top level unconditionally for fragments.
+            data = (isRenderingCustomError) ? userData : merge(userData, data)
         } else if ( userData && !userData['page']) {
 
             if ( typeof(data['page']['data']) == 'undefined' )
