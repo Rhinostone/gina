@@ -3,6 +3,7 @@
  * @module gina/core/server.isaac
  */
 const fs                    = require('fs');
+const crypto                = require('crypto');
 const { execSync, exec }    = require('child_process');
 const {EventEmitter}        = require('events');
 // #B10 fix: engine.io is only needed when options.ioServer is configured (WebSocket support).
@@ -75,6 +76,45 @@ function isAdminClientAllowed(req) {
           || '';
     if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
     return list.indexOf(ip) >= 0;
+}
+
+/**
+ * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
+ * exposed outside dev mode (#INS9b). The configured key lives on
+ * `process.gina._inspectorAgentKey` (set by gna.js from settings.json
+ * `inspector.agent.key`). The request presents the key via the
+ * `x-gina-inspector-key` header or a `?key=` query param — browsers using
+ * EventSource cannot set request headers, so the query param is the browser
+ * path; programmatic callers should prefer the header.
+ *
+ * Fail-closed: when no key is configured this returns false, so the endpoint
+ * stays closed even if `inspector.agent.enabled` is true. Uses
+ * `crypto.timingSafeEqual` with a length guard so a length mismatch can't
+ * throw and the compare does not early-exit on the first differing byte.
+ *
+ * @inner
+ * @param {http.IncomingMessage|http2.Http2ServerRequest} req
+ * @returns {boolean} true when the presented key matches the configured key
+ */
+function _agentKeyValid(req) {
+    var configured = (typeof process.gina === 'object' && process.gina && typeof process.gina._inspectorAgentKey === 'string')
+        ? process.gina._inspectorAgentKey
+        : '';
+    if (!configured) return false;
+    var presented = (req.headers && req.headers['x-gina-inspector-key']) || '';
+    if (!presented && typeof req.url === 'string') {
+        var _qi = req.url.indexOf('?');
+        if (_qi >= 0) {
+            try {
+                presented = new URLSearchParams(req.url.slice(_qi + 1)).get('key') || '';
+            } catch (e) { presented = ''; }
+        }
+    }
+    if (!presented) return false;
+    var a = Buffer.from(String(presented));
+    var b = Buffer.from(configured);
+    if (a.length !== b.length) return false;
+    try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
 }
 
 /**
@@ -956,10 +996,26 @@ function ServerEngineClass(options) {
 
             // ── Inspector agent — combined SSE at /_gina/agent in dev mode ──
             if (
-                isCacheless
+                (isCacheless || (process.gina && process.gina._inspectorAgentEnabled))
                 && request.method.toUpperCase() === 'GET'
-                && /\/_gina\/agent$/.test(request.url)
+                && /\/_gina\/agent(?:\?|$)/.test(request.url)
             ) {
+                // #INS9b — outside dev mode the agent endpoint requires a valid
+                // key (x-gina-inspector-key header or ?key= query param). In dev
+                // (isCacheless) it stays open with no key, preserving #INS9a.
+                if (!isCacheless && !_agentKeyValid(request)) {
+                    var _agDenyBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/agent: invalid or missing inspector key' });
+                    var _agDenyHeaders = _setPoweredByHeader({
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type':  'application/json; charset=utf8'
+                    });
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 401, ..._agDenyHeaders });
+                        return response.stream.end(_agDenyBody);
+                    }
+                    response.writeHead(401, _agDenyHeaders);
+                    return response.end(_agDenyBody);
+                }
                 if (!process.gina._inspectorActive) process.gina._inspectorActive = true;
                 var _agAnsiRe = /\x1B\[\d+m/g;
 

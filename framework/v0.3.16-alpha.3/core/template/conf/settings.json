@@ -123,6 +123,26 @@
     "safeMethods": ["GET", "HEAD", "OPTIONS"],
     "allowedOrigins": []
   },
+  // #INS9b — authenticated /_gina/agent SSE endpoint. The agent stream
+  // (combined Inspector data + server-log SSE) is dev-only by default. Set
+  // agent.enabled=true and provide a key to expose it OUTSIDE dev mode (e.g.
+  // staging) for remote server-log streaming + connection identity. Requests
+  // authenticate via the `x-gina-inspector-key` header or a `?key=` query
+  // param (browser EventSource cannot set headers, so it uses the query
+  // param). In dev the endpoint stays open and no key is required.
+  //
+  //   enabled — expose the agent endpoint outside dev mode (default false).
+  //   key     — shared secret, compared in constant time. Supports
+  //             ${secret:KEY} placeholders (lib/secrets fills them from
+  //             process.env at config-load time). Example:
+  //             "key": "${secret:INSPECTOR_AGENT_KEY}". When enabled is true
+  //             but key is empty, the endpoint stays closed (fail-closed).
+  "inspector": {
+    "agent": {
+      "enabled": false,
+      "key": ""
+    }
+  },
   // #HDR1 — X-Content-Type-Options: nosniff response header applied by
   // gina.plugins.XContentTypeOptions(). The header instructs browsers to
   // honour the declared Content-Type strictly, blocking MIME-sniffing

@@ -3761,6 +3761,15 @@
         target = target.replace(/\/+$/, '');
         var url = target + '/_gina/agent';
 
+        // #INS9b — when the target bundle's agent endpoint is auth-gated
+        // (settings.json inspector.agent.enabled outside dev mode), pass the key
+        // via ?key=. EventSource cannot set request headers, so the browser path
+        // is the query param. Optional — omitted when no key was supplied.
+        var agentKey = params.get('key');
+        if (agentKey) {
+            url += '?key=' + encodeURIComponent(agentKey);
+        }
+
         source = 'agent';
         qs('#bm-dot').className = 'bm-dot warn';
         qs('#bm-label').textContent = 'Connecting\u2026';
@@ -4925,6 +4934,14 @@
                     raw = raw.replace(/\/+$/, '');
                     // Navigate with ?target= to activate agent mode
                     var loc = window.location.pathname + '?target=' + encodeURIComponent(raw);
+                    // #INS9b — append the optional inspector key (?key=) for an
+                    // auth-gated agent endpoint. Kept in the URL only (ephemeral);
+                    // never persisted to localStorage.
+                    var keyInput = qs('#bm-connect-key');
+                    var keyRaw = keyInput ? (keyInput.value || '').trim() : '';
+                    if (keyRaw) {
+                        loc += '&key=' + encodeURIComponent(keyRaw);
+                    }
                     window.location.href = loc;
                 });
             }

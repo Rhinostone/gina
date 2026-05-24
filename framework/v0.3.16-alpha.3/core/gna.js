@@ -1181,6 +1181,29 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._adminAllowList = ['127.0.0.1', '::1'];
                                 }
 
+                                // #INS9b — capture the /_gina/agent auth toggle + key from
+                                // settings.json `inspector.agent`. The agent SSE endpoint is
+                                // dev-only by default; when `enabled` is true and a key is set,
+                                // it is reachable outside dev mode behind that key (constant-time
+                                // compared in server.js / server.isaac.js). Read here so
+                                // getConfig('settings') is resolved (incl. ${secret:KEY}) before
+                                // any /_gina/agent request can land. Stored on process.gina so
+                                // both engine handlers read the same slot. Fail-closed.
+                                try {
+                                    var _inspSettings = (typeof gna.getConfig === 'function') ? gna.getConfig('settings') : null;
+                                    var _inspAgent    = (_inspSettings && _inspSettings.inspector && _inspSettings.inspector.agent && typeof _inspSettings.inspector.agent === 'object')
+                                        ? _inspSettings.inspector.agent
+                                        : {};
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorAgentEnabled = (_inspAgent.enabled === true);
+                                    process.gina._inspectorAgentKey     = (typeof _inspAgent.key === 'string' && _inspAgent.key) ? _inspAgent.key : null;
+                                } catch (inspAgentErr) {
+                                    console.warn('[inspector-agent] init skipped: ' + (inspAgentErr.message || inspAgentErr));
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorAgentEnabled = false;
+                                    process.gina._inspectorAgentKey     = null;
+                                }
+
                                 // #AI6 — initialise the async-job primitive. Always-on (unlike
                                 // metrics): self.startJob() / lib.job.create() must work out of the
                                 // box, so this is NOT gated on an `enabled` flag. The app.json `jobs`

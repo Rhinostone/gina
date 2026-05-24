@@ -1225,13 +1225,13 @@ describe('08b - #S7 admin allowlist: pure logic replica', function() {
 // ─────────────────────────────────────────────────────────────────────────
 //
 // Phase 2 closes the Isaac-engine gap that the Phase 1
-// gina.plugins.HidePoweredBy() middleware cannot reach: 15 direct
+// gina.plugins.HidePoweredBy() middleware cannot reach: 17 direct
 // response.writeHead({ 'X-Powered-By': ... }) emissions that bypass
 // the setHeader/removeHeader interface. Wiring:
 //   - settings.json > server.hidePoweredBy boolean (default false)
 //   - _setPoweredByHeader(headers) closure inside onPath, defined
 //     once at server boot, capturing `options` from ServerEngineClass
-//   - 14 object-literal header blocks wrap via _setPoweredByHeader({...})
+//   - 16 object-literal header blocks wrap via _setPoweredByHeader({...})
 //   - 1 routing.json asset handler wraps response.setHeader in an
 //     inline `if (!options.hidePoweredBy)` (different writeHead shape)
 //
@@ -1288,10 +1288,10 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
     });
 
-    it('exactly 15 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+    it('exactly 16 object-literal sites wrap headers via _setPoweredByHeader({', function() {
         var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
-        assert.equal(matches && matches.length, 15,
-            'expected 15 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+        assert.equal(matches && matches.length, 16,
+            'expected 16 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
     });
 
     it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {
@@ -1301,7 +1301,7 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
             'infoForbiddenHeaders',    'infoHeaders',
             'cacheStatsForbiddenHeaders', 'cacheStatsHeaders',
             '_jobsHeaders',
-            '_inspHeaders', '_sseHeaders', '_agHeaders',
+            '_inspHeaders', '_sseHeaders', '_agHeaders', '_agDenyHeaders',
             '_ixHeaders', '_rvHeaders'
         ];
         names.forEach(function(name) {

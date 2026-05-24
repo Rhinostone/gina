@@ -40,6 +40,7 @@ const EventEmitter  = require('events').EventEmitter;
 const Busboy        = require('./deps/busboy-1.6.0');
 const Stream        = require('stream');
 const util          = require('util');
+const crypto        = require('crypto');
 var https           = require('https');
 // ssl-checker dependency removed in 0.3.1 — replaced by inline verifyCertificate().
 
@@ -72,6 +73,45 @@ var swigResolver    = lib.swigResolver;
 var nunjucksResolver = lib.nunjucksResolver;
 var Domain          = lib.Domain;
 var domainLib       = new Domain();
+
+/**
+ * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
+ * exposed outside dev mode (#INS9b). Engine-agnostic mirror of the helper in
+ * server.isaac.js. The configured key lives on `process.gina._inspectorAgentKey`
+ * (set by gna.js from settings.json `inspector.agent.key`). The request
+ * presents the key via the `x-gina-inspector-key` header or a `?key=` query
+ * param — browsers using EventSource cannot set request headers, so the query
+ * param is the browser path; programmatic callers should prefer the header.
+ *
+ * Fail-closed: when no key is configured this returns false, so the endpoint
+ * stays closed even if `inspector.agent.enabled` is true. Uses
+ * `crypto.timingSafeEqual` with a length guard so a length mismatch can't
+ * throw and the compare does not early-exit on the first differing byte.
+ *
+ * @inner
+ * @param {http.IncomingMessage|http2.Http2ServerRequest} req
+ * @returns {boolean} true when the presented key matches the configured key
+ */
+function _agentKeyValid(req) {
+    var configured = (typeof process.gina === 'object' && process.gina && typeof process.gina._inspectorAgentKey === 'string')
+        ? process.gina._inspectorAgentKey
+        : '';
+    if (!configured) return false;
+    var presented = (req.headers && req.headers['x-gina-inspector-key']) || '';
+    if (!presented && typeof req.url === 'string') {
+        var _qi = req.url.indexOf('?');
+        if (_qi >= 0) {
+            try {
+                presented = new URLSearchParams(req.url.slice(_qi + 1)).get('key') || '';
+            } catch (e) { presented = ''; }
+        }
+    }
+    if (!presented) return false;
+    var a = Buffer.from(String(presented));
+    var b = Buffer.from(configured);
+    if (a.length !== b.length) return false;
+    try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
+}
 
 function Server(options) {
 
@@ -2568,10 +2608,23 @@ function Server(options) {
             // a single SSE connection. The standalone Inspector connects here
             // instead of using window.opener polling + separate /_gina/logs.
             if (
-                process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true'
+                (
+                    (process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true')
+                    || (process.gina && process.gina._inspectorAgentEnabled)
+                )
                 && request.method.toUpperCase() === 'GET'
-                && /\/_gina\/agent$/.test(request.url)
+                && /\/_gina\/agent(?:\?|$)/.test(request.url)
             ) {
+                // #INS9b — outside dev mode the agent endpoint requires a valid
+                // key (x-gina-inspector-key header or ?key= query param). In dev
+                // it stays open with no key, preserving #INS9a.
+                var _agIsDev = (process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true');
+                if (!_agIsDev && !_agentKeyValid(request)) {
+                    response.setHeader('content-type',  'application/json; charset=utf8');
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    response.statusCode = 401;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/agent: invalid or missing inspector key' }));
+                }
                 if (!process.gina._inspectorActive) process.gina._inspectorActive = true;
                 var _agAnsiRe = /\x1B\[\d+m/g;
 

@@ -4169,10 +4169,18 @@ describe('36 - /_gina/agent SSE handler is in server.isaac.js (Isaac fast-path)'
 
 describe('37 - /_gina/agent URL pattern matching', function() {
 
-    var pattern = /\/_gina\/agent$/;
+    var pattern = /\/_gina\/agent(?:\?|$)/;
 
     it('matches /_gina/agent', function() {
         assert.ok(pattern.test('/_gina/agent'));
+    });
+
+    it('matches /_gina/agent?key=abc (#INS9b auth query param)', function() {
+        assert.ok(pattern.test('/_gina/agent?key=abc'));
+    });
+
+    it('matches /myapp/_gina/agent?key=abc (webroot + auth query param)', function() {
+        assert.ok(pattern.test('/myapp/_gina/agent?key=abc'));
     });
 
     it('matches /webroot/_gina/agent', function() {
@@ -4272,7 +4280,7 @@ describe('39 - Inspector SPA tryAgent() remote data source', function() {
     it('tryAgent connects to {target}/_gina/agent via EventSource', function() {
         var src = getInspJs39();
         var agentIdx = src.indexOf('function tryAgent');
-        var block = src.substring(agentIdx, agentIdx + 800);
+        var block = src.substring(agentIdx, agentIdx + 1200);
         assert.ok(
             block.indexOf('/_gina/agent') > -1,
             'expected /_gina/agent URL construction'
@@ -4286,7 +4294,7 @@ describe('39 - Inspector SPA tryAgent() remote data source', function() {
     it('tryAgent sets source to agent', function() {
         var src = getInspJs39();
         var agentIdx = src.indexOf('function tryAgent');
-        var block = src.substring(agentIdx, agentIdx + 600);
+        var block = src.substring(agentIdx, agentIdx + 1000);
         assert.ok(
             /source\s*=\s*'agent'/.test(block),
             'expected source = "agent" in tryAgent'
@@ -4306,7 +4314,7 @@ describe('39 - Inspector SPA tryAgent() remote data source', function() {
     it('tryAgent listens for named log events', function() {
         var src = getInspJs39();
         var agentIdx = src.indexOf('function tryAgent');
-        var block = src.substring(agentIdx, agentIdx + 3000);
+        var block = src.substring(agentIdx, agentIdx + 3300);
         assert.ok(
             block.indexOf("addEventListener('log'") > -1,
             'expected es.addEventListener("log") in tryAgent'
@@ -6600,7 +6608,7 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         assert.ok(isAgentIdx > -1);
         // grep forward through the !isAgent block — tryAgentPassive should be
         // called there, not inside the agent branch
-        var block = src.slice(isAgentIdx, isAgentIdx + 2500);
+        var block = src.slice(isAgentIdx, isAgentIdx + 3000);
         assert.ok(
             block.indexOf('if (!isAgent)') > -1,
             'expected if (!isAgent) guard'
@@ -6614,7 +6622,7 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
     it('init skips tryServerLogs when passive agent succeeds (no duplicate log entries)', function() {
         var src = getInspSrc55();
         var isAgentIdx = src.indexOf('var isAgent = tryAgent()');
-        var block = src.slice(isAgentIdx, isAgentIdx + 2500);
+        var block = src.slice(isAgentIdx, isAgentIdx + 3000);
         // Expect the call sequence: tryAgentPassive(), then conditional tryServerLogs()
         assert.ok(
             /tryAgentPassive\(\)[\s\S]*?if\s*\(\s*!_passiveAgentActive[\s\S]*?tryServerLogs\(\)/.test(block),
@@ -7577,6 +7585,241 @@ describe('63 - QI Phase C.3: retroactive live-index coverage on the SPA (#QI Pha
         var blk = js.substring(i, i + 8000);
         assert.ok(/q\.indexes\s*=\s*_resolved/.test(blk), 'expected live-resolved indexes assigned to q.indexes');
         assert.ok(blk.indexOf('bm-idx-uncovered') > -1,   'expected the uncovered branch to remain reachable');
+    });
+
+});
+
+
+// ── 64 — #INS9b: /_gina/agent API-key auth gate in server.js ─────────────────
+
+describe('64 - #INS9b /_gina/agent auth gate in server.js', function() {
+
+    it('server.js defines the _agentKeyValid helper', function() {
+        assert.ok(
+            getServerSrc().indexOf('function _agentKeyValid') > -1,
+            'expected a file-scope _agentKeyValid(req) helper in server.js'
+        );
+    });
+
+    it('_agentKeyValid reads the x-gina-inspector-key header and ?key= query param', function() {
+        var src = getServerSrc();
+        var i = src.indexOf('function _agentKeyValid');
+        var blk = src.substring(i, i + 900);
+        assert.ok(blk.indexOf("'x-gina-inspector-key'") > -1, 'expected the x-gina-inspector-key header read');
+        assert.ok(blk.indexOf('URLSearchParams') > -1,        'expected ?key= parsing via URLSearchParams');
+        assert.ok(blk.indexOf(".get('key')") > -1,            'expected the key query-param read');
+    });
+
+    it('_agentKeyValid compares in constant time with a length guard', function() {
+        var src = getServerSrc();
+        var i = src.indexOf('function _agentKeyValid');
+        var blk = src.substring(i, i + 900);
+        assert.ok(blk.indexOf('crypto.timingSafeEqual') > -1, 'expected crypto.timingSafeEqual');
+        assert.ok(/a\.length\s*!==\s*b\.length/.test(blk),     'expected an equal-length guard before timingSafeEqual');
+    });
+
+    it('_agentKeyValid fails closed when no key is configured', function() {
+        var src = getServerSrc();
+        var i = src.indexOf('function _agentKeyValid');
+        var blk = src.substring(i, i + 900);
+        assert.ok(/if\s*\(!configured\)\s*return\s*false/.test(blk),
+            'expected fail-closed when process.gina._inspectorAgentKey is empty');
+    });
+
+    it('server.js requires the crypto module', function() {
+        assert.ok(/require\('crypto'\)/.test(getServerSrc()), "expected const crypto = require('crypto')");
+    });
+
+    it('the agent gate opens on dev OR _inspectorAgentEnabled', function() {
+        var src = getServerSrc();
+        var agentIdx = src.indexOf('Inspector agent');
+        var block = src.substring(agentIdx, src.indexOf('(SSE agent)'));
+        assert.ok(block.indexOf('_inspectorAgentEnabled') > -1, 'expected the _inspectorAgentEnabled toggle in the gate');
+        assert.ok(block.indexOf('NODE_ENV_IS_DEV') > -1,        'expected the dev path preserved in the gate');
+    });
+
+    it('the agent gate returns 401 on a missing/invalid key outside dev', function() {
+        var src = getServerSrc();
+        var agentIdx = src.indexOf('Inspector agent');
+        var block = src.substring(agentIdx, src.indexOf('(SSE agent)'));
+        assert.ok(block.indexOf('_agentKeyValid(request)') > -1, 'expected the key check before opening the stream');
+        assert.ok(/statusCode\s*=\s*401/.test(block),            'expected a 401 deny status');
+        assert.ok(block.indexOf('invalid or missing inspector key') > -1, 'expected the deny message');
+    });
+
+    it('the dev path requires no key (back-compat with #INS9a)', function() {
+        var src = getServerSrc();
+        var agentIdx = src.indexOf('Inspector agent');
+        var block = src.substring(agentIdx, src.indexOf('(SSE agent)'));
+        assert.ok(/!_agIsDev\s*&&\s*!_agentKeyValid/.test(block),
+            'expected the key check to be skipped in dev mode');
+    });
+
+});
+
+
+// ── 65 — #INS9b: /_gina/agent API-key auth gate in server.isaac.js ───────────
+
+describe('65 - #INS9b /_gina/agent auth gate in server.isaac.js', function() {
+
+    var _isaacSrc65;
+    function getIsaacSrc65() { return _isaacSrc65 || (_isaacSrc65 = fs.readFileSync(ISAAC_SOURCE, 'utf8')); }
+
+    it('server.isaac.js defines the _agentKeyValid helper', function() {
+        assert.ok(getIsaacSrc65().indexOf('function _agentKeyValid') > -1, 'expected _agentKeyValid in server.isaac.js');
+    });
+
+    it('_agentKeyValid reads header + ?key= and compares in constant time', function() {
+        var src = getIsaacSrc65();
+        var i = src.indexOf('function _agentKeyValid');
+        var blk = src.substring(i, i + 900);
+        assert.ok(blk.indexOf("'x-gina-inspector-key'") > -1, 'expected the header read');
+        assert.ok(blk.indexOf('URLSearchParams') > -1,        'expected ?key= parsing');
+        assert.ok(blk.indexOf('crypto.timingSafeEqual') > -1, 'expected constant-time compare');
+        assert.ok(/if\s*\(!configured\)\s*return\s*false/.test(blk), 'expected fail-closed when unconfigured');
+    });
+
+    it('server.isaac.js requires the crypto module', function() {
+        assert.ok(/require\('crypto'\)/.test(getIsaacSrc65()), "expected const crypto = require('crypto')");
+    });
+
+    it('the agent gate opens on isCacheless OR _inspectorAgentEnabled', function() {
+        var src = getIsaacSrc65();
+        var agentIdx = src.indexOf('Inspector agent');
+        var block = src.substring(agentIdx, src.indexOf('Proxy detection'));
+        assert.ok(block.indexOf('_inspectorAgentEnabled') > -1, 'expected the toggle in the gate');
+        assert.ok(block.indexOf('isCacheless') > -1,            'expected the dev path preserved');
+    });
+
+    it('the agent gate returns 401 on missing/invalid key outside dev (both transports)', function() {
+        var src = getIsaacSrc65();
+        var agentIdx = src.indexOf('Inspector agent');
+        var block = src.substring(agentIdx, src.indexOf('Proxy detection'));
+        assert.ok(block.indexOf('_agentKeyValid(request)') > -1,   'expected the key check');
+        assert.ok(/':status':\s*401/.test(block),                  'expected HTTP/2 401 via response.stream.respond');
+        assert.ok(/writeHead\(401/.test(block),                    'expected HTTP/1.1 401 via response.writeHead');
+        assert.ok(block.indexOf('invalid or missing inspector key') > -1, 'expected the deny message');
+        assert.ok(block.indexOf('_setPoweredByHeader') > -1,       'expected the deny headers via _setPoweredByHeader');
+    });
+
+    it('the dev path requires no key (back-compat with #INS9a)', function() {
+        var src = getIsaacSrc65();
+        var agentIdx = src.indexOf('Inspector agent');
+        var block = src.substring(agentIdx, src.indexOf('Proxy detection'));
+        assert.ok(/!isCacheless\s*&&\s*!_agentKeyValid/.test(block), 'expected the key check skipped in dev mode');
+    });
+
+});
+
+
+// ── 66 — #INS9b: _agentKeyValid behavioral replica ───────────────────────────
+
+describe('66 - #INS9b _agentKeyValid behavioral replica', function() {
+
+    var crypto = require('crypto');
+
+    // Inline replica of the _agentKeyValid helper (identical logic in both
+    // server.js and server.isaac.js). `configured` is a parameter so we can
+    // exercise the unconfigured (fail-closed) branch without process.gina.
+    function agentKeyValid(req, configured) {
+        if (!configured) return false;
+        var presented = (req.headers && req.headers['x-gina-inspector-key']) || '';
+        if (!presented && typeof req.url === 'string') {
+            var _qi = req.url.indexOf('?');
+            if (_qi >= 0) {
+                try { presented = new URLSearchParams(req.url.slice(_qi + 1)).get('key') || ''; } catch (e) { presented = ''; }
+            }
+        }
+        if (!presented) return false;
+        var a = Buffer.from(String(presented));
+        var b = Buffer.from(configured);
+        if (a.length !== b.length) return false;
+        try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
+    }
+
+    var KEY = 'sekret-inspector-key-123';
+
+    it('accepts a matching key via the x-gina-inspector-key header', function() {
+        var req = { headers: { 'x-gina-inspector-key': KEY }, url: '/_gina/agent' };
+        assert.equal(agentKeyValid(req, KEY), true);
+    });
+
+    it('accepts a matching key via the ?key= query param', function() {
+        var req = { headers: {}, url: '/_gina/agent?key=' + encodeURIComponent(KEY) };
+        assert.equal(agentKeyValid(req, KEY), true);
+    });
+
+    it('accepts the key when extra query params precede it', function() {
+        var req = { headers: {}, url: '/_gina/agent?foo=1&key=' + encodeURIComponent(KEY) };
+        assert.equal(agentKeyValid(req, KEY), true);
+    });
+
+    it('rejects a wrong key', function() {
+        var req = { headers: { 'x-gina-inspector-key': 'wrong-key-value-here' }, url: '/_gina/agent' };
+        assert.equal(agentKeyValid(req, KEY), false);
+    });
+
+    it('rejects a same-length-but-different key (constant-time path)', function() {
+        assert.equal(agentKeyValid({ headers: { 'x-gina-inspector-key': 'abcd' }, url: '/x' }, 'abce'), false);
+    });
+
+    it('rejects when no key is presented (no header, no query)', function() {
+        var req = { headers: {}, url: '/_gina/agent' };
+        assert.equal(agentKeyValid(req, KEY), false);
+    });
+
+    it('fails closed when no key is configured, even with a presented key', function() {
+        var req = { headers: { 'x-gina-inspector-key': KEY }, url: '/_gina/agent?key=' + KEY };
+        assert.equal(agentKeyValid(req, ''), false);
+    });
+
+    it('the header takes precedence over the query param', function() {
+        // Header is wrong, query is right → header is read first → denied.
+        var req = { headers: { 'x-gina-inspector-key': 'wrong' }, url: '/_gina/agent?key=' + encodeURIComponent(KEY) };
+        assert.equal(agentKeyValid(req, KEY), false);
+    });
+
+    it('rejects a url with no query string and no header', function() {
+        assert.equal(agentKeyValid({ headers: {}, url: '/_gina/agent' }, KEY), false);
+    });
+
+});
+
+
+// ── 67 — #INS9b: Inspector SPA threads the optional ?key= ────────────────────
+
+describe('67 - #INS9b Inspector SPA threads ?key= for an auth-gated agent', function() {
+
+    var _inspJs67, _inspHtml67;
+    function getInspJs67()   { return _inspJs67   || (_inspJs67   = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8')); }
+    function getInspHtml67() { return _inspHtml67 || (_inspHtml67 = fs.readFileSync(path.join(BM_DIR, 'index.html'), 'utf8')); }
+
+    it('tryAgent() appends ?key= to the agent URL when a key param is present', function() {
+        var js = getInspJs67();
+        var i = js.indexOf('function tryAgent');
+        assert.ok(i > -1, 'expected tryAgent in dist inspector.js');
+        var blk = js.substring(i, i + 900);
+        assert.ok(blk.indexOf("params.get('key')") > -1, 'expected the ?key= param read in tryAgent');
+        assert.ok(blk.indexOf("'?key='") > -1,            'expected ?key= appended to the agent EventSource URL');
+    });
+
+    it('the manual connect form composes &key= into the ?target= redirect', function() {
+        var js = getInspJs67();
+        var i = js.indexOf("qs('#bm-connect-form')");
+        assert.ok(i > -1, 'expected the connect-form handler');
+        var blk = js.substring(i, i + 1400);
+        assert.ok(blk.indexOf('#bm-connect-key') > -1, 'expected the key input read');
+        assert.ok(blk.indexOf("'&key='") > -1,         'expected &key= appended to the redirect URL');
+    });
+
+    it('index.html has the optional inspector key input', function() {
+        assert.ok(getInspHtml67().indexOf('id="bm-connect-key"') > -1, 'expected #bm-connect-key input in the overlay form');
+    });
+
+    it('the key is not persisted to localStorage (ephemeral)', function() {
+        var js = getInspJs67();
+        assert.ok(js.indexOf('__gina_inspector_key') === -1,
+            'inspector key must not be written to localStorage');
     });
 
 });
