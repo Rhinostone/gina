@@ -7823,3 +7823,175 @@ describe('67 - #INS9b Inspector SPA threads ?key= for an auth-gated agent', func
     });
 
 });
+
+
+// ── 68 — #INS10: /_gina/instrument control endpoint in server.js ─────────────
+
+describe('68 - #INS10 /_gina/instrument control endpoint in server.js', function() {
+
+    function instrBlock() {
+        var src = getServerSrc();
+        var s = src.indexOf('process.gina._inspectorInstrumentEnabled');
+        var e = src.indexOf('Inspector SPA', s);
+        return src.substring(s, e);
+    }
+
+    it('defines the _instrumentKeyValid helper reading the SEPARATE instrument key', function() {
+        var src = getServerSrc();
+        assert.ok(src.indexOf('function _instrumentKeyValid') > -1, 'expected a _instrumentKeyValid(req) helper');
+        var i = src.indexOf('function _instrumentKeyValid');
+        var h = src.substring(i, i + 900);
+        assert.ok(h.indexOf('_inspectorInstrumentKey') > -1, 'expected it to read _inspectorInstrumentKey');
+        assert.ok(h.indexOf('_inspectorAgentKey') === -1,    'must NOT read the agent key — instrumentation is a separate authority');
+        assert.ok(h.indexOf('crypto.timingSafeEqual') > -1,  'expected constant-time compare');
+        assert.ok(/if\s*\(!configured\)\s*return\s*false/.test(h), 'expected fail-closed when no key configured');
+    });
+
+    it('defines a bounded _readInstrumentBody with a req.body fast-path + timeout', function() {
+        var src = getServerSrc();
+        var i = src.indexOf('function _readInstrumentBody');
+        assert.ok(i > -1, 'expected a _readInstrumentBody helper');
+        var b = src.substring(i, i + 1300);
+        assert.ok(b.indexOf('4096') > -1,                          'expected a 4KB body cap');
+        assert.ok(/req\.body\s*&&\s*typeof\s*req\.body/.test(b),   'expected the req.body fast-path');
+        assert.ok(b.indexOf('body read timeout') > -1,             'expected the stream-consumed timeout guard');
+        assert.ok(b.indexOf('.unref(') > -1,                       'expected the timeout to be unref()d');
+    });
+
+    it('the endpoint gate requires the instrumentation opt-in and accepts GET + POST', function() {
+        var block = instrBlock();
+        assert.ok(block.indexOf('_inspectorInstrumentEnabled') > -1, 'expected the opt-in gate');
+        assert.ok(block.indexOf("=== 'GET'") > -1,  'expected GET handling');
+        assert.ok(block.indexOf("=== 'POST'") > -1, 'expected POST handling');
+    });
+
+    it('requires the key EVEN in dev (no dev bypass)', function() {
+        var block = instrBlock();
+        assert.ok(/if\s*\(!_instrumentKeyValid\(request\)\)/.test(block), 'expected an unconditional key check');
+        assert.ok(block.indexOf('_agIsDev') === -1, 'must NOT carry a dev key-bypass (unlike /_gina/agent)');
+        assert.ok(/statusCode\s*=\s*401/.test(block), 'expected a 401 on missing/invalid key');
+    });
+
+    it('GET returns lib.instrument.status(); POST opens/closes via lib.instrument', function() {
+        var block = instrBlock();
+        assert.ok(block.indexOf('lib.instrument.status()') > -1, 'expected GET → status()');
+        assert.ok(block.indexOf('lib.instrument.open(')   > -1, 'expected POST enable → open()');
+        assert.ok(block.indexOf('lib.instrument.close()') > -1, 'expected POST disable → close()');
+    });
+
+    it('400s on a malformed / unrecognised body', function() {
+        var block = instrBlock();
+        assert.ok(/statusCode\s*=\s*400/.test(block), 'expected a 400 status path');
+        assert.ok(block.indexOf('bad_request') > -1,  'expected the bad_request error');
+    });
+
+});
+
+
+// ── 69 — #INS10: /_gina/instrument control endpoint in server.isaac.js ───────
+
+describe('69 - #INS10 /_gina/instrument control endpoint in server.isaac.js', function() {
+
+    var _isaacSrc69;
+    function getIsaacSrc69() { return _isaacSrc69 || (_isaacSrc69 = fs.readFileSync(ISAAC_SOURCE, 'utf8')); }
+    function instrBlock() {
+        var src = getIsaacSrc69();
+        var s = src.indexOf('process.gina._inspectorInstrumentEnabled');
+        var e = src.indexOf('Inspector SPA', s);
+        return src.substring(s, e);
+    }
+
+    it('defines _instrumentKeyValid + _readInstrumentBody (mirrors server.js)', function() {
+        var src = getIsaacSrc69();
+        assert.ok(src.indexOf('function _instrumentKeyValid') > -1, 'expected _instrumentKeyValid in server.isaac.js');
+        assert.ok(src.indexOf('function _readInstrumentBody') > -1, 'expected _readInstrumentBody in server.isaac.js');
+        var i = src.indexOf('function _instrumentKeyValid');
+        var h = src.substring(i, i + 900);
+        assert.ok(h.indexOf('_inspectorInstrumentKey') > -1, 'expected the separate instrument key read');
+        assert.ok(h.indexOf('_inspectorAgentKey') === -1,    'must NOT read the agent key');
+    });
+
+    it('the endpoint gate requires the opt-in and accepts GET + POST', function() {
+        var block = instrBlock();
+        assert.ok(block.indexOf('_inspectorInstrumentEnabled') > -1, 'expected the opt-in gate');
+        assert.ok(block.indexOf("=== 'GET'") > -1,  'expected GET handling');
+        assert.ok(block.indexOf("=== 'POST'") > -1, 'expected POST handling');
+    });
+
+    it('requires the key EVEN in dev (no isCacheless bypass)', function() {
+        var block = instrBlock();
+        assert.ok(/if\s*\(!_instrumentKeyValid\(request\)\)/.test(block), 'expected an unconditional key check');
+        assert.ok(block.indexOf('isCacheless') === -1, 'must NOT carry a dev (isCacheless) key-bypass');
+    });
+
+    it('replies over both transports (HTTP/2 :status + HTTP/1.1 writeHead) via _setPoweredByHeader', function() {
+        var block = instrBlock();
+        assert.ok(block.indexOf('_setPoweredByHeader') > -1,  'expected headers via _setPoweredByHeader (#HDR8 parity)');
+        assert.ok(block.indexOf("':status': _code") > -1,    'expected the HTTP/2 stream.respond path');
+        assert.ok(/writeHead\(_code/.test(block),             'expected the HTTP/1.1 writeHead path');
+        assert.ok(block.indexOf('_instrSend(401') > -1,       'expected a 401 deny');
+    });
+
+    it('GET → status(); POST → open()/close() via lib.instrument', function() {
+        var block = instrBlock();
+        assert.ok(block.indexOf('lib.instrument.status()') > -1, 'expected GET → status()');
+        assert.ok(block.indexOf('lib.instrument.open(')   > -1, 'expected POST enable → open()');
+        assert.ok(block.indexOf('lib.instrument.close()') > -1, 'expected POST disable → close()');
+    });
+
+});
+
+
+// ── 70 — #INS10: _instrumentKeyValid separate-key pin + behavioral replica ───
+
+describe('70 - #INS10 _instrumentKeyValid (separate key) behavioral replica', function() {
+
+    var crypto = require('crypto');
+
+    it('both engines read _inspectorInstrumentKey, never _inspectorAgentKey', function() {
+        [getServerSrc(), fs.readFileSync(ISAAC_SOURCE, 'utf8')].forEach(function(src) {
+            var i = src.indexOf('function _instrumentKeyValid');
+            var blk = src.substring(i, i + 900);
+            assert.ok(blk.indexOf('_inspectorInstrumentKey') > -1, 'expected the separate instrument key');
+            assert.ok(blk.indexOf('_inspectorAgentKey') === -1,    'instrument auth must not borrow the agent key');
+        });
+    });
+
+    // Inline replica of _instrumentKeyValid (identical compare logic to
+    // _agentKeyValid; only the configured-key SOURCE differs, parameterised here).
+    function instrumentKeyValid(req, configured) {
+        if (!configured) return false;
+        var presented = (req.headers && req.headers['x-gina-inspector-key']) || '';
+        if (!presented && typeof req.url === 'string') {
+            var _qi = req.url.indexOf('?');
+            if (_qi >= 0) {
+                try { presented = new URLSearchParams(req.url.slice(_qi + 1)).get('key') || ''; } catch (e) { presented = ''; }
+            }
+        }
+        if (!presented) return false;
+        var a = Buffer.from(String(presented));
+        var b = Buffer.from(configured);
+        if (a.length !== b.length) return false;
+        try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
+    }
+
+    var KEY = 'instrument-key-xyz-456';
+
+    it('accepts a matching key via the x-gina-inspector-key header', function() {
+        assert.equal(instrumentKeyValid({ headers: { 'x-gina-inspector-key': KEY }, url: '/_gina/instrument' }, KEY), true);
+    });
+
+    it('accepts a matching key via the ?key= query param', function() {
+        assert.equal(instrumentKeyValid({ headers: {}, url: '/_gina/instrument?key=' + encodeURIComponent(KEY) }, KEY), true);
+    });
+
+    it('rejects a wrong key and a same-length-different key', function() {
+        assert.equal(instrumentKeyValid({ headers: { 'x-gina-inspector-key': 'nope' }, url: '/x' }, KEY), false);
+        assert.equal(instrumentKeyValid({ headers: { 'x-gina-inspector-key': 'abcd' }, url: '/x' }, 'abce'), false);
+    });
+
+    it('fails closed when no key is configured, even with a presented key', function() {
+        assert.equal(instrumentKeyValid({ headers: { 'x-gina-inspector-key': KEY }, url: '/_gina/instrument?key=' + KEY }, ''), false);
+    });
+
+});

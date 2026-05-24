@@ -1,0 +1,8 @@
+{
+    "name": "instrument",
+    "version": "0.0.1",
+    "description": "#INS10 — toggleable Inspector instrumentation window (time-boxed, prod-safe).",
+    "main": "src/main",
+    "private": true,
+    "license": "MIT"
+}

@@ -113,6 +113,87 @@ function _agentKeyValid(req) {
     try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
 }
 
+/**
+ * Validate the inspector instrumentation control key (#INS10). Mirrors
+ * {@link _agentKeyValid} but reads the SEPARATE `process.gina._inspectorInstrumentKey`
+ * — turning on raw query/flow capture is more sensitive than agent log-streaming,
+ * so it carries its own opt-in + key and is required EVEN in dev. Reads the
+ * `x-gina-inspector-key` header or a `?key=` query param; constant-time compare
+ * with a length guard; fail-closed when no key is configured.
+ *
+ * @inner
+ * @param {http.IncomingMessage|http2.Http2ServerRequest} req
+ * @returns {boolean} true when the presented key matches the configured instrument key
+ */
+function _instrumentKeyValid(req) {
+    var configured = (typeof process.gina === 'object' && process.gina && typeof process.gina._inspectorInstrumentKey === 'string')
+        ? process.gina._inspectorInstrumentKey
+        : '';
+    if (!configured) return false;
+    var presented = (req.headers && req.headers['x-gina-inspector-key']) || '';
+    if (!presented && typeof req.url === 'string') {
+        var _qi = req.url.indexOf('?');
+        if (_qi >= 0) {
+            try {
+                presented = new URLSearchParams(req.url.slice(_qi + 1)).get('key') || '';
+            } catch (e) { presented = ''; }
+        }
+    }
+    if (!presented) return false;
+    var a = Buffer.from(String(presented));
+    var b = Buffer.from(configured);
+    if (a.length !== b.length) return false;
+    try { return crypto.timingSafeEqual(a, b); } catch (e) { return false; }
+}
+
+/**
+ * Read a small JSON request body for the POST /_gina/instrument control
+ * endpoint (#INS10). Bounded at 4 KB — the control body is tiny
+ * (`{enable, ttlSeconds}`). Uses `req.body` when an upstream parser already
+ * populated it; otherwise drains the request stream (works for HTTP/1.1
+ * IncomingMessage and HTTP/2 Http2ServerRequest). A 2s timeout guards against
+ * an already-consumed stream that never re-fires `end`. Calls back exactly once.
+ *
+ * @inner
+ * @param {http.IncomingMessage|http2.Http2ServerRequest} req
+ * @param {function(Error|null, object=):void} cb - `(err, parsedBody)`
+ * @returns {void}
+ */
+function _readInstrumentBody(req, cb) {
+    if (req.body && typeof req.body === 'object') {
+        return cb(null, req.body);
+    }
+    var _chunks = [];
+    var _size   = 0;
+    var _done   = false;
+    var _MAX    = 4096;
+    var _timer  = null;
+    var _finish = function(err, val) {
+        if (_done) return;
+        _done = true;
+        if (_timer) { clearTimeout(_timer); _timer = null; }
+        cb(err, val);
+    };
+    _timer = setTimeout(function() { _finish(new Error('body read timeout')); }, 2000);
+    if (_timer && typeof _timer.unref === 'function') { _timer.unref(); }
+    req.on('data', function(chunk) {
+        _size += chunk.length;
+        if (_size > _MAX) {
+            _finish(new Error('body too large'));
+            try { req.destroy(); } catch (e) {}
+            return;
+        }
+        _chunks.push(chunk);
+    });
+    req.on('end', function() {
+        var _raw = Buffer.concat(_chunks).toString('utf8').trim();
+        if (!_raw) return _finish(null, {});
+        try { _finish(null, JSON.parse(_raw)); }
+        catch (e) { _finish(new Error('invalid JSON body')); }
+    });
+    req.on('error', function(e) { _finish(e); });
+}
+
 function Server(options) {
 
     // switching logger flow
@@ -2514,6 +2595,49 @@ function Server(options) {
                         return response.end(JSON.stringify({ error: 'not_found', message: '/_gina/jobs/' + _ginaJobId + ': unknown job id' }));
                     }
                     return response.end(JSON.stringify(lib.job.toStatusView(_jRec)));
+                });
+            }
+
+            // ── /_gina/instrument — toggleable instrumentation window (#INS10) ──
+            // Opt-in (settings.json inspector.instrumentation.enabled) + key-auth
+            // (required EVEN in dev — turning on raw query/flow capture outside dev
+            // is more sensitive than the dev-open agent stream). GET returns the
+            // window status; POST {enable:bool, ttlSeconds?:int} opens/closes it.
+            // When the opt-in is off the block does not match → the request 404s
+            // through normal routing (endpoint invisible unless explicitly enabled).
+            if (
+                process.gina && process.gina._inspectorInstrumentEnabled
+                && (request.method.toUpperCase() === 'GET' || request.method.toUpperCase() === 'POST')
+                && /\/_gina\/instrument(?:\?|$)/.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('access-control-allow-origin', '*');
+                if (!_instrumentKeyValid(request)) {
+                    response.statusCode = 401;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/instrument: invalid or missing inspector key' }));
+                }
+                if (request.method.toUpperCase() === 'GET') {
+                    return response.end(JSON.stringify(lib.instrument.status()));
+                }
+                // POST — mutate the window
+                return _readInstrumentBody(request, function(_bErr, _body) {
+                    if (_bErr) {
+                        response.statusCode = 400;
+                        return response.end(JSON.stringify({ error: 'bad_request', message: '/_gina/instrument: ' + _bErr.message }));
+                    }
+                    if (_body && _body.enable === false) {
+                        var _stClose = lib.instrument.close();
+                        console.warn('[inspector-instrument] window closed via /_gina/instrument');
+                        return response.end(JSON.stringify(_stClose));
+                    }
+                    if (_body && _body.enable === true) {
+                        var _stOpen = lib.instrument.open(_body.ttlSeconds);
+                        console.warn('[inspector-instrument] window opened via /_gina/instrument for ' + Math.round(_stOpen.remainingMs / 1000) + 's');
+                        return response.end(JSON.stringify(_stOpen));
+                    }
+                    response.statusCode = 400;
+                    return response.end(JSON.stringify({ error: 'bad_request', message: '/_gina/instrument: body must be {"enable":true|false[,"ttlSeconds":N]}' }));
                 });
             }
 

@@ -1204,6 +1204,39 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._inspectorAgentKey     = null;
                                 }
 
+                                // #INS10 — capture the instrumentation-window opt-in + key + window
+                                // bounds from settings.json `inspector.instrumentation`. The window
+                                // lets Inspector query/flow capture run outside dev mode for a bounded
+                                // period (POST /_gina/instrument). Read here so getConfig('settings') is
+                                // resolved (incl. ${secret:KEY}) before any request lands. Stored on
+                                // process.gina so both engine handlers + lib/instrument read the same
+                                // slots. Fail-closed. The window deadline slot is seeded to 0 (closed).
+                                try {
+                                    var _instrSettings = (typeof gna.getConfig === 'function') ? gna.getConfig('settings') : null;
+                                    var _instrConf     = (_instrSettings && _instrSettings.inspector && _instrSettings.inspector.instrumentation && typeof _instrSettings.inspector.instrumentation === 'object')
+                                        ? _instrSettings.inspector.instrumentation
+                                        : {};
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorInstrumentEnabled = (_instrConf.enabled === true);
+                                    process.gina._inspectorInstrumentKey     = (typeof _instrConf.key === 'string' && _instrConf.key) ? _instrConf.key : null;
+                                    var _instrDef = parseInt(_instrConf.defaultWindowSeconds, 10);
+                                    var _instrMax = parseInt(_instrConf.maxWindowSeconds, 10);
+                                    process.gina._inspectorWindowDefaultSec = (!isNaN(_instrDef) && _instrDef > 0) ? _instrDef : 300;
+                                    // Hard ceiling 3600s — config may lower but never raise it.
+                                    process.gina._inspectorWindowMaxSec = (!isNaN(_instrMax) && _instrMax > 0) ? Math.min(_instrMax, 3600) : 3600;
+                                    if (typeof process.gina._inspectorWindowUntil !== 'number') {
+                                        process.gina._inspectorWindowUntil = 0;
+                                    }
+                                } catch (instrErr) {
+                                    console.warn('[inspector-instrument] init skipped: ' + (instrErr.message || instrErr));
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorInstrumentEnabled = false;
+                                    process.gina._inspectorInstrumentKey     = null;
+                                    process.gina._inspectorWindowDefaultSec  = 300;
+                                    process.gina._inspectorWindowMaxSec      = 3600;
+                                    process.gina._inspectorWindowUntil       = 0;
+                                }
+
                                 // #AI6 — initialise the async-job primitive. Always-on (unlike
                                 // metrics): self.startJob() / lib.job.create() must work out of the
                                 // box, so this is NOT gated on an `enabled` flag. The app.json `jobs`

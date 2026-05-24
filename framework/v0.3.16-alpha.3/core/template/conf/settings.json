@@ -141,6 +141,32 @@
     "agent": {
       "enabled": false,
       "key": ""
+    },
+    // #INS10 — time-boxed instrumentation window. Lets the Inspector's query +
+    // flow capture run OUTSIDE dev mode for a bounded period, without enabling
+    // full dev mode, so a production issue can be traced over the authenticated
+    // /_gina/agent SSE stream. Toggled at runtime via POST /_gina/instrument
+    // (and queried via GET /_gina/instrument). The control endpoint authenticates
+    // with the `key` below (constant-time compared) and requires the key EVEN in
+    // dev — turning on raw query capture is more sensitive than dev being open.
+    //
+    //   enabled              — allow the window to be opened at all (default
+    //                          false / fail-closed). A bundle that never opts in
+    //                          cannot be remotely instrumented even with a key.
+    //   key                  — shared secret for POST/GET /_gina/instrument.
+    //                          Supports ${secret:KEY} (lib/secrets fills it from
+    //                          process.env at config-load). Distinct from
+    //                          inspector.agent.key on purpose.
+    //   defaultWindowSeconds — window length when the request omits ttlSeconds
+    //                          (default 300).
+    //   maxWindowSeconds     — operator ceiling for a single window; clamped to
+    //                          the absolute 3600s hard cap (can lower, never
+    //                          raise). A forgotten window auto-closes by then.
+    "instrumentation": {
+      "enabled": false,
+      "key": "",
+      "defaultWindowSeconds": 300,
+      "maxWindowSeconds": 3600
     }
   },
   // #HDR1 — X-Content-Type-Options: nosniff response header applied by
