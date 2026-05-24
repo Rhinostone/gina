@@ -7995,3 +7995,55 @@ describe('70 - #INS10 _instrumentKeyValid (separate key) behavioral replica', fu
     });
 
 });
+
+
+// ── 71 — #INS10: capture gates honour the instrumentation window ─────────────
+
+describe('71 - #INS10 capture gates honour the instrumentation window', function() {
+
+    var WINDOW = 'process.gina._inspectorWindowUntil > Date.now()';
+
+    it('the ALS-entry gate (controller.js) opens on the window, header path stays behind _isDev', function() {
+        var src = fs.readFileSync(path.join(FW, 'core/controller/controller.js'), 'utf8');
+        var i = src.indexOf("x-gina-inspector'] === 'true'");
+        assert.ok(i > -1, 'expected the ALS-entry gate');
+        var gate = src.substring(src.lastIndexOf('if (', i), i + 140);
+        assert.ok(gate.indexOf(WINDOW) > -1, 'expected the window predicate in the ALS gate');
+        assert.ok(gate.indexOf('_isDev') > -1, 'expected the dev path preserved');
+        // Prod-safety invariant: the spoofable x-gina-inspector header path stays
+        // gated behind _isDev, so an external request cannot trigger capture in
+        // production by setting the header — only an opened window does.
+        assert.ok(/_isDev\s*&&\s*\(process\.gina\._inspectorActive/.test(gate),
+            'the x-gina-inspector header path must remain behind _isDev (no prod capture via spoofed header)');
+    });
+
+    it('both flow-create gates open on the window', function() {
+        var s  = getServerSrc();
+        var si = s.indexOf('request._devTimeline = {');
+        assert.ok(si > -1, 'expected server.js flow-create');
+        assert.ok(s.substring(s.lastIndexOf('if (', si), si).indexOf(WINDOW) > -1,
+            'server.js flow-create must open on the window');
+
+        var is = fs.readFileSync(ISAAC_SOURCE, 'utf8');
+        var ii = is.indexOf('request._devTimeline = {');
+        assert.ok(ii > -1, 'expected server.isaac.js flow-create');
+        assert.ok(is.substring(is.lastIndexOf('if (', ii), ii).indexOf(WINDOW) > -1,
+            'server.isaac.js flow-create must open on the window');
+    });
+
+    it('every connector query-capture gate ORs the window onto envIsDev (dev preserved)', function() {
+        ['couchbase', 'mysql', 'postgresql', 'sqlite', 'mongodb', 'scylladb'].forEach(function(c) {
+            var src = fs.readFileSync(path.join(FW, 'core/connectors/' + c + '/index.js'), 'utf8');
+            assert.ok(/envIsDev\s*\|\|\s*\(process\.gina && process\.gina\._inspectorWindowUntil > Date\.now\(\)\)/.test(src),
+                c + ' must OR the window predicate onto envIsDev');
+        });
+    });
+
+    it('couchbase broadens BOTH the main-query and bulkInsert capture gates', function() {
+        var src = fs.readFileSync(path.join(FW, 'core/connectors/couchbase/index.js'), 'utf8');
+        var matches = src.match(/envIsDev \|\| \(process\.gina && process\.gina\._inspectorWindowUntil > Date\.now\(\)\)/g);
+        assert.ok(matches && matches.length >= 2,
+            'expected the window predicate on both couchbase capture gates, found ' + (matches ? matches.length : 0));
+    });
+
+});

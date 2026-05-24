@@ -728,7 +728,8 @@ function Couchbase(conn, infos) {
                     // request's async callbacks push to the correct array, even when
                     // concurrent requests interleave.
                     var _queryEntry = null;
-                    if (envIsDev) {
+                    // #INS10 — capture during a prod instrumentation window too (not just dev mode).
+                    if (envIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now())) {
                         console.debug('[ ' + trigger +' ] '+ statement);
                         //console.debug('[ ' + trigger +' ] options: '+ JSON.stringify(queryOptions, null, 2));
                         if (queryParams.length > 0) {
@@ -1178,7 +1179,8 @@ function Couchbase(conn, infos) {
 
             // #QI — dev-mode query instrumentation for bulkInsert
             var _biQueryEntry = null;
-            if (envIsDev) {
+            // #INS10 — capture during a prod instrumentation window too (not just dev mode).
+            if (envIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now())) {
                 console.debug('[ ' + trigger +' ] '+statement);
 
                 var _biAlsStore = process.gina && process.gina._queryALS ? process.gina._queryALS.getStore() : null;

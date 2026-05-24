@@ -275,7 +275,8 @@ function Scylladb(conn, infos) {
             }
 
             var _devLog = null, _queryEntry = null;
-            if (envIsDev) {
+            // #INS10 — capture during a prod instrumentation window too (not just dev mode).
+            if (envIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now())) {
                 var _alsStore = process.gina && process.gina._queryALS
                     ? process.gina._queryALS.getStore() : null;
                 _devLog = _alsStore ? _alsStore._devQueryLog : null;

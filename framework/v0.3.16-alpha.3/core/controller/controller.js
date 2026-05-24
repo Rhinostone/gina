@@ -45,6 +45,13 @@ if (!process.gina._queryALS) {
 if (typeof process.gina._inspectorActive === 'undefined') {
     process.gina._inspectorActive = false;
 }
+// #INS10 — instrumentation-window deadline (epoch ms; 0 = closed). Capture gates
+// read this slot directly (process.gina._inspectorWindowUntil > Date.now()) so a
+// time-boxed window can open query/flow capture OUTSIDE dev mode. gna.js seeds it
+// plus the opt-in/key/bounds at server start; this guard covers very-early/test use.
+if (typeof process.gina._inspectorWindowUntil === 'undefined') {
+    process.gina._inspectorWindowUntil = 0;
+}
 var merge           = lib.merge;
 var inherits        = lib.inherits;
 var console         = lib.logger;
@@ -264,7 +271,10 @@ function SuperController(options) {
         // the request came from a cross-bundle self.query() call with the Inspector
         // header (x-gina-inspector). This ensures QI captures queries on target
         // bundles (e.g. coreapi) without always-on overhead.
-        if (_isDev && (process.gina._inspectorActive || (req.headers && req.headers['x-gina-inspector'] === 'true'))) {
+        // #INS10 — also enter capture during a prod instrumentation window. Window-only in prod:
+        // the x-gina-inspector header path still requires _isDev, so a spoofed header cannot
+        // trigger capture in production (only an explicitly-opened window does).
+        if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (_isDev && (process.gina._inspectorActive || (req.headers && req.headers['x-gina-inspector'] === 'true')))) {
             if (!req._devQueryLog) {
                 req._devQueryLog = [];
             }

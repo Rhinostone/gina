@@ -2453,7 +2453,8 @@ function Server(options) {
 
             // #FI — dev-mode request timeline for Inspector Flow tab
             // Only initialized when the Inspector has been opened (process.gina._inspectorActive)
-            if (self.isCacheless() && process.gina._inspectorActive) {
+            // #INS10 — or during a prod instrumentation window (process.gina._inspectorWindowUntil).
+            if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (self.isCacheless() && process.gina._inspectorActive)) {
                 request._devTimeline = { requestStart: Date.now(), entries: [] };
             }
             // #OBS1 slice 3 — HTTP request lifecycle hook for Prometheus metrics.
