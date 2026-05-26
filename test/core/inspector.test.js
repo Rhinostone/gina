@@ -8106,3 +8106,148 @@ describe('72 - #INS10 window egress is authenticated + leak-safe', function() {
     });
 
 });
+
+
+// ── 73 — #INS10 follow-up: server-rendered HTML page egress (swig + nunjucks) ─
+// The dev-mode inspector#data emit in render-swig.js / render-nunjucks.js is
+// entangled with the __ginaData script injection + </body> rewrite, so its
+// gate cannot be broadened to prod windows without corrupting cached renders.
+// A separate HTML-free emit path (inspector-window-emit.js) mirrors the
+// render-json v1 emit and is wired at the swig cache-hit + cache-miss tails and
+// the nunjucks fresh-render tail, gated window-open-AND-not-dev so it is
+// mutually exclusive with the dev block (no double emit, no prod HTML mutation).
+
+describe('73 - #INS10 follow-up: server-rendered HTML page egress', function() {
+
+    var WINDOW = 'process.gina._inspectorWindowUntil > Date.now()';
+    var RSWIG  = path.join(FW, 'core/controller/controller.render-swig.js');
+    var RNJK   = path.join(FW, 'core/controller/controller.render-nunjucks.js');
+    var HELPER = path.join(FW, 'core/controller/inspector-window-emit.js');
+
+    // ── source pins ──
+
+    it('both HTML delegates require the window-emit helper', function() {
+        assert.ok(/require\(\s*['"]\.\/inspector-window-emit['"]\s*\)/.test(fs.readFileSync(RSWIG, 'utf8')),
+            'render-swig.js must require ./inspector-window-emit');
+        assert.ok(/require\(\s*['"]\.\/inspector-window-emit['"]\s*\)/.test(fs.readFileSync(RNJK, 'utf8')),
+            'render-nunjucks.js must require ./inspector-window-emit');
+    });
+
+    it('render-swig.js wires the emit at BOTH cache paths (cache-hit + cache-miss)', function() {
+        var calls = (fs.readFileSync(RSWIG, 'utf8').match(/emitInspectorWindowData\(self,\s*local\)/g) || []);
+        assert.equal(calls.length, 2,
+            'expected 2 swig emit call sites (cache-hit + cache-miss), found ' + calls.length);
+    });
+
+    it('render-nunjucks.js wires exactly one emit (fresh-render path)', function() {
+        var calls = (fs.readFileSync(RNJK, 'utf8').match(/emitInspectorWindowData\(self,\s*local\)/g) || []);
+        assert.equal(calls.length, 1, 'expected 1 nunjucks emit call site, found ' + calls.length);
+    });
+
+    it('every call site is gated window-open AND not-dev (mutually exclusive with the dev block)', function() {
+        // !self.isCacheless() means the new path NEVER co-runs with the dev-only
+        // injection block (which requires isCacheless()/displayInspector === true)
+        // — no double emit, and dev-path HTML mutation never runs in prod.
+        [RSWIG, RNJK].forEach(function(f) {
+            var src = fs.readFileSync(f, 'utf8');
+            var idx = src.indexOf('emitInspectorWindowData(self, local)');
+            var n = 0;
+            while (idx > -1) {
+                var gate = src.substring(src.lastIndexOf('if (', idx), idx);
+                assert.ok(gate.indexOf(WINDOW) > -1, f + ': a call site is missing the window predicate');
+                assert.ok(gate.indexOf('!self.isCacheless()') > -1, f + ': a call site is missing !self.isCacheless()');
+                n++;
+                idx = src.indexOf('emitInspectorWindowData(self, local)', idx + 1);
+            }
+            assert.ok(n > 0, f + ': expected at least one emit call site');
+        });
+    });
+
+    it('the helper is leak-safe + minimal (no unredacted slot, no user.data; builds env+queries+flow, redacts, emits)', function() {
+        var stripped = fs.readFileSync(HELPER, 'utf8')
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .replace(/\/\/[^\n]*/g, '');
+        assert.ok(!/_lastGinaDataUnredacted\s*=/.test(stripped),
+            'the window emit must not write the unredacted slot (a prod window is never local scope)');
+        assert.ok(!/\buser\.data\b/.test(stripped) && !/\bdata\s*:\s*jsonObj\b/.test(stripped),
+            'the minimal payload must not carry user.data');
+        assert.ok(/_gdUser\s*=\s*\{\s*environment/.test(stripped), 'payload must carry user.environment');
+        assert.ok(/_gdUser\.queries\s*=\s*local\._queryLog/.test(stripped), 'payload must attach queries from local._queryLog');
+        assert.ok(/_gdUser\.flow\s*=/.test(stripped), 'payload must attach flow from local._timeline');
+        assert.ok(/inspectorRedact\.redact\(/.test(stripped), 'payload must be redacted before any sink');
+        assert.ok(/self\.serverInstance\._lastGinaData\s*=/.test(stripped), 'must store the redacted snapshot for SSE replay');
+        assert.ok(/process\.emit\(\s*['"]inspector#data['"]/.test(stripped), 'must emit inspector#data');
+    });
+
+    // ── behavioral ──
+
+    it('emits a redacted environment+queries+flow payload over inspector#data (no user.data)', function() {
+        var emit = require(HELPER);
+        var prevGetContext = global.getContext;
+        var prevGetEnvVar  = global.getEnvVar;
+        global.getContext = function(k) { return (k === 'gina') ? { version: '9.9.9-test' } : {}; };
+        global.getEnvVar  = function(k) { return (k === 'GINA_PID') ? '4242' : null; };
+
+        var captured = null;
+        var listener = function(p) { captured = p; };
+        process.once('inspector#data', listener);
+
+        var serverInstance = {};
+        var self  = { serverInstance: serverInstance, isCacheless: function() { return false; } };
+        var local = {
+            options: { conf: {
+                bundle: 'demo',
+                projectName: 'demoProj',
+                server: { engine: 'isaac', protocol: 'http/2.0', scheme: 'https', port: 3000, webroot: '/' },
+                content: { settings: { inspector: { url: 'http://localhost:4001' } } }
+            } },
+            // `password` is a deliberately-planted secret-NAMED key to prove the
+            // redaction pass runs end-to-end (a real query entry has no such key).
+            _queryLog: [ { type: 'N1QL', statement: 'SELECT 1', params: [], password: 'sekret' } ],
+            _timeline: { requestStart: 1000, entries: [ { label: 'total', cat: 'total', startMs: 1000, endMs: 1012, durationMs: 12 } ] }
+        };
+
+        try {
+            emit(self, local);
+        } finally {
+            process.removeListener('inspector#data', listener);
+            if (prevGetContext === undefined) { delete global.getContext; } else { global.getContext = prevGetContext; }
+            if (prevGetEnvVar === undefined)  { delete global.getEnvVar;  } else { global.getEnvVar  = prevGetEnvVar;  }
+        }
+
+        assert.ok(captured, 'inspector#data must fire');
+        // envelope mirrors render-json v1
+        assert.ok(captured.gina && captured.gina.environment, 'gina.environment present');
+        assert.equal(captured.gina.environment.gina, '9.9.9-test', 'environment sourced from getContext("gina")');
+        assert.equal(captured.gina.environment['gina pid'], '4242', 'gina pid sourced from getEnvVar');
+        assert.equal(captured.gina.inspectorUrl, 'http://localhost:4001', 'inspectorUrl from settings');
+        assert.ok(captured.user && captured.user.environment, 'user.environment present');
+        assert.ok(Array.isArray(captured.user.queries) && captured.user.queries.length === 1, 'user.queries present');
+        assert.ok(captured.user.flow && captured.user.flow.entries.length === 1, 'user.flow present');
+        // minimal payload — NO user.data
+        assert.ok(!('data' in captured.user), 'user.data must be absent (minimal payload)');
+        // redaction ran (key-name match on the planted secret)
+        assert.equal(captured.user.queries[0].password, '[redacted]', 'secret-named field must be redacted');
+        // original buffer untouched (redact returns a deep clone)
+        assert.equal(local._queryLog[0].password, 'sekret', 'redact must not mutate the source query log');
+        // snapshot stored for SSE replay; unredacted slot NOT written in a prod window
+        assert.equal(serverInstance._lastGinaData, captured, '_lastGinaData stored for SSE replay');
+        assert.ok(!('_lastGinaDataUnredacted' in serverInstance), 'unredacted slot must NOT be written in a prod window');
+    });
+
+    it('is no-op-safe on incomplete args (never throws, never emits)', function() {
+        var emit = require(HELPER);
+        var fired = false;
+        var listener = function() { fired = true; };
+        process.on('inspector#data', listener);
+        try {
+            assert.doesNotThrow(function() { emit(null, null); });
+            assert.doesNotThrow(function() { emit({}, {}); });                    // no serverInstance
+            assert.doesNotThrow(function() { emit({ serverInstance: {} }, {}); }); // no local.options
+        } finally {
+            process.removeListener('inspector#data', listener);
+        }
+        assert.equal(fired, false, 'must not emit when args are incomplete');
+    });
+
+});

@@ -7,6 +7,8 @@ const cache           = new lib.Cache();
 var statusCodes       = requireJSON( _( getPath('gina').core + '/status.codes') );
 // Inspector secret redaction (dev-mode only — never touches the actual response body)
 var inspectorRedact   = require('lib/inspector-redact');
+// #INS10 follow-up — prod-window HTML egress (no-HTML, render-json-style emit).
+var emitInspectorWindowData = require('./inspector-window-emit');
 // Precompiled regex — avoids per-request RegExp allocation (#P3)
 var blacklistRe       = /[<>]/g;
 
@@ -914,6 +916,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     }
                 }
 
+                // #INS10 follow-up — prod-window HTML egress (cache-hit path).
+                // Window-open AND not-dev: mutually exclusive with the dev-only
+                // __ginaData injection block above (which requires isCacheless),
+                // so no double emit. Emits the captured query log + flow timeline
+                // (now complete with the response-write/total bars pushed above)
+                // over the authenticated /_gina/agent SSE, touching no HTML.
+                if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) && !self.isCacheless()) {
+                    emitInspectorWindowData(self, local);
+                }
+
                 console.info(req.method +' ['+res.statusCode +'] '+ req.url);
                 // HEAD: send headers only — body suppressed (HTTP spec §4.3.2)
                 if ( /^HEAD$/i.test(req.method) ) {
@@ -1629,6 +1641,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             + '}(window.__ginaData));</script>';
                         htmlContent = htmlContent.replace(/<\/body>/i, _patchScript + '</body>');
                     }
+                }
+
+                // #INS10 follow-up — prod-window HTML egress (cache-miss path).
+                // Window-open AND not-dev: mutually exclusive with the dev-only
+                // __ginaData injection block (which requires isCacheless). Emits
+                // the captured query log + flow timeline (complete with the
+                // response-write/total bars just pushed) over the authenticated
+                // /_gina/agent SSE, touching no HTML.
+                if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) && !self.isCacheless()) {
+                    emitInspectorWindowData(self, local);
                 }
 
                 console.info(req.method +' ['+res.statusCode +'] '+ req.url);

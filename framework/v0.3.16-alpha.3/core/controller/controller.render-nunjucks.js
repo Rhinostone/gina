@@ -123,6 +123,8 @@
 var fs              = require('fs');
 var nodePath        = require('path');
 var inspectorRedact = require('lib/inspector-redact');
+// #INS10 follow-up — prod-window HTML egress (no-HTML, render-json-style emit).
+var emitInspectorWindowData = require('./inspector-window-emit');
 // Collection — small data-query helper used to filter the asset list when
 // rendering without a layout (mirrors render-swig.js:494-498). Fetched via
 // the lib registry so the dev-mode hot-reload evictions of `lib/index.js`
@@ -1215,6 +1217,15 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         } catch (lateBindErr) {
             try { console.warn('[render-nunjucks] view-fallback late-bind skipped: ' + (lateBindErr.message || lateBindErr)); } catch (e) {}
         }
+    }
+
+    // #INS10 follow-up — prod-window HTML egress (nunjucks). Window-open AND
+    // not-dev: mutually exclusive with injectInspectorScripts() above (which
+    // requires isCacheless/displayInspector). Emits the captured query log +
+    // flow timeline (complete with the response-write/total bars pushed above)
+    // over the authenticated /_gina/agent SSE, touching no HTML.
+    if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) && !self.isCacheless()) {
+        emitInspectorWindowData(self, local);
     }
 
     sendHtmlResponse(local, html, req, res);
