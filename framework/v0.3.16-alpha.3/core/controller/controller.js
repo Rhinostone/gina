@@ -2958,7 +2958,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         // #QI — propagate Inspector profiling to the target bundle so it
         // captures queries and timeline entries for cross-bundle propagation.
-        if (_isDev && process.gina._inspectorActive) {
+        // #INS10 — also propagate to the target bundle during a prod instrumentation window.
+        if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (_isDev && process.gina._inspectorActive)) {
             options.headers['x-gina-inspector'] = 'true';
         }
 
@@ -4071,14 +4072,16 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         // #QI — extract upstream query log from the response and
                         // merge into the current request's log. This surfaces
                         // coreapi queries in the dashboard Inspector automatically.
-                        if (_isDev && data && data.__ginaQueries && local._queryLog) {
+                        // #INS10 — extract + strip the upstream query sidecar during a prod window too.
+                        if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && data && data.__ginaQueries && local._queryLog) {
                             for (var _qi = 0; _qi < data.__ginaQueries.length; _qi++) {
                                 local._queryLog.push(data.__ginaQueries[_qi]);
                             }
                             delete data.__ginaQueries;
                         }
                         // #FI — record query call duration and merge upstream timeline
-                        if (_isDev && local._timeline) {
+                        // #INS10 — also during a prod instrumentation window.
+                        if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && local._timeline) {
                             if (options._timelineStart) {
                                 local._timeline.entries.push({
                                     label: options._targetBundle ? ('query \u2192 ' + options._targetBundle) : 'query',

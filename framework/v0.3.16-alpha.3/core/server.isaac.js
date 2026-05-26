@@ -1178,7 +1178,10 @@ function ServerEngineClass(options) {
                 // Send current snapshot immediately if available; otherwise
                 // send a lightweight "connected" frame so the Inspector shows
                 // the bundle identity without waiting for the first request.
-                if (server._lastGinaData) {
+                // #INS10 — only replay the last snapshot to a connecting client in dev OR
+                // during an active instrumentation window; never leak a post-window snapshot
+                // to a late client (the redacted snapshot lingers in memory until overwritten).
+                if ((isCacheless || lib.instrument.isActive()) && server._lastGinaData) {
                     try {
                         _agWrite('event: data\ndata: ' + JSON.stringify(server._lastGinaData) + '\n\n');
                     } catch (e) {}
@@ -1846,9 +1849,13 @@ function ServerEngineClass(options) {
                     if ( typeof(payload.session) != 'undefined' ) {
                         this.sessionId = payload.session.id;
                     }
-                    // Inspector: respond to data pull request
+                    // Inspector: respond to data pull request. #INS10 — the engine.io
+                    // channel is UNAUTHENTICATED, so never serve the captured snapshot
+                    // over it outside dev mode. An instrumentation window can populate
+                    // _lastGinaData in prod; that data must only leave via the
+                    // authenticated /_gina/agent SSE, never this socket.
                     if ( payload.type === 'getGinaData' ) {
-                        var _gd = server._lastGinaData;
+                        var _gd = options.isCacheless ? server._lastGinaData : null;
                         if (_gd) {
                             socket.send(JSON.stringify({ type: 'ginaData', data: _gd }));
                         }

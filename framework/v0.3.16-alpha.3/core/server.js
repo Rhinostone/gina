@@ -2763,7 +2763,9 @@ function Server(options) {
                 // Send current snapshot immediately if available; otherwise
                 // send a lightweight "connected" frame so the Inspector shows
                 // the bundle identity without waiting for the first request.
-                if (self.instance && self.instance._lastGinaData) {
+                // #INS10 — only replay the last snapshot in dev OR during an active window;
+                // never leak a post-window snapshot to a late authenticated client.
+                if ((_agIsDev || lib.instrument.isActive()) && self.instance && self.instance._lastGinaData) {
                     try {
                         response.write('event: data\ndata: ' + JSON.stringify(self.instance._lastGinaData) + '\n\n');
                     } catch (e) {}

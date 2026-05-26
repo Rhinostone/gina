@@ -222,7 +222,8 @@ module.exports = function renderJSON(jsonObj, deps) {
 
         // #FI — push response-write + total timing to the timeline so the
         // Flow waterfall has closing bars for JSON responses.
-        if (self.isCacheless() && process.gina._inspectorActive && local._timeline) {
+        // #INS10 — also during a prod instrumentation window (window-only in prod).
+        if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (self.isCacheless() && process.gina._inspectorActive)) && local._timeline) {
             var _jsonRespEnd = Date.now();
             var _jsonRwStart = local._timeline._renderStart || local._timeline._actionStart || local._timeline.requestStart;
             local._timeline.entries.push({
@@ -247,7 +248,8 @@ module.exports = function renderJSON(jsonObj, deps) {
         // Data tab, Flow tab, and footer status bar work for APIs that only
         // use self.renderJSON(). Gated on _inspectorActive to avoid overhead
         // when the Inspector has not been opened.
-        if (self.isCacheless() && process.gina._inspectorActive) {
+        // #INS10 — also emit over the authenticated agent SSE during a prod window.
+        if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (self.isCacheless() && process.gina._inspectorActive)) {
             var _ctx = getContext('gina') || {};
             var _conf = local.options.conf || {};
             var _mem = process.memoryUsage();
@@ -326,13 +328,17 @@ module.exports = function renderJSON(jsonObj, deps) {
         // back as __ginaQueries in the JSON response body. A's query()
         // callback extracts, merges into its own _queryLog, and deletes
         // the field before the data reaches the controller action.
-        if (self.isCacheless() && local._queryLog && local._queryLog.length > 0) {
+        // #INS10 — in a prod window, attach the RAW cross-bundle query sidecar ONLY when the
+        // request came from an internal caller (inbound x-gina-inspector header) that will
+        // strip it (controller.js extract path); never to an external client. Dev unchanged.
+        if ((self.isCacheless() || ((process.gina && process.gina._inspectorWindowUntil > Date.now()) && request && request.headers && request.headers['x-gina-inspector'] === 'true')) && local._queryLog && local._queryLog.length > 0) {
             jsonObj.__ginaQueries = local._queryLog;
         }
 
         // #FI — embed timeline entries as a sidecar for cross-bundle flow
         // propagation (mirrors __ginaQueries pattern).
-        if (self.isCacheless() && local._timeline && local._timeline.entries && local._timeline.entries.length > 0) {
+        // #INS10 — same internal-caller gating as __ginaQueries above (no external leak in a window).
+        if ((self.isCacheless() || ((process.gina && process.gina._inspectorWindowUntil > Date.now()) && request && request.headers && request.headers['x-gina-inspector'] === 'true')) && local._timeline && local._timeline.entries && local._timeline.entries.length > 0) {
             jsonObj.__ginaFlow = local._timeline.entries;
         }
 

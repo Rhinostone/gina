@@ -8047,3 +8047,62 @@ describe('71 - #INS10 capture gates honour the instrumentation window', function
     });
 
 });
+
+
+// ── 72 — #INS10: window egress is authenticated + leak-safe ──────────────────
+
+describe('72 - #INS10 window egress is authenticated + leak-safe', function() {
+
+    var WINDOW = 'process.gina._inspectorWindowUntil > Date.now()';
+
+    it('render-json emit + flow-close gates open on the window', function() {
+        var src = fs.readFileSync(path.join(FW, 'core/controller/controller.render-json.js'), 'utf8');
+        var emitIdx = src.indexOf('#INS — emit Inspector payload');
+        assert.ok(emitIdx > -1 && src.substring(emitIdx, emitIdx + 500).indexOf(WINDOW) > -1,
+            'the JSON emit gate must open on the window');
+        var fcIdx = src.indexOf('Flow waterfall has closing bars');
+        assert.ok(fcIdx > -1 && src.substring(fcIdx, fcIdx + 500).indexOf(WINDOW) > -1,
+            'the flow-close gate must open on the window');
+    });
+
+    it('render-json cross-bundle sidecars emit raw data ONLY to internal callers in a window', function() {
+        var src = fs.readFileSync(path.join(FW, 'core/controller/controller.render-json.js'), 'utf8');
+        var qi = src.indexOf('jsonObj.__ginaQueries = local._queryLog;');
+        var qGate = src.substring(src.lastIndexOf('if (', qi), qi);
+        assert.ok(qGate.indexOf('self.isCacheless()') > -1, 'dev path preserved (sidecar emits in dev)');
+        assert.ok(qGate.indexOf(WINDOW) > -1, 'window path present');
+        assert.ok(qGate.indexOf("x-gina-inspector'] === 'true'") > -1,
+            'in a window the raw sidecar must be gated on the inbound internal header (no external leak)');
+        var fi = src.indexOf('jsonObj.__ginaFlow = local._timeline.entries;');
+        var fGate = src.substring(src.lastIndexOf('if (', fi), fi);
+        assert.ok(fGate.indexOf("x-gina-inspector'] === 'true'") > -1, '__ginaFlow sidecar also header-gated in a window');
+    });
+
+    it('controller cross-bundle header-set + extract open on the window', function() {
+        var src = fs.readFileSync(path.join(FW, 'core/controller/controller.js'), 'utf8');
+        var hi = src.indexOf("options.headers['x-gina-inspector'] = 'true';");
+        assert.ok(src.substring(src.lastIndexOf('if (', hi), hi).indexOf(WINDOW) > -1, 'header-set must open on the window');
+        var xi = src.indexOf('data.__ginaQueries && local._queryLog');
+        assert.ok(src.substring(src.lastIndexOf('if (', xi), xi).indexOf(WINDOW) > -1, 'sidecar extract must open on the window');
+    });
+
+    it('engine.io getGinaData never serves the snapshot outside dev (unauthenticated channel)', function() {
+        var src = fs.readFileSync(ISAAC_SOURCE, 'utf8');
+        var gi = src.indexOf("payload.type === 'getGinaData'");
+        var blk = src.substring(gi, gi + 250);
+        assert.ok(/options\.isCacheless\s*\?\s*server\._lastGinaData\s*:\s*null/.test(blk),
+            'getGinaData must dev-gate the snapshot (null outside dev) — no leak over the unauthenticated socket');
+    });
+
+    it('agent SSE replays the snapshot only in dev OR an active window (both engines)', function() {
+        var s = getServerSrc();
+        var si = s.indexOf('self.instance && self.instance._lastGinaData');
+        assert.ok(s.substring(s.lastIndexOf('if (', si), si).indexOf('lib.instrument.isActive()') > -1,
+            'server.js agent snapshot replay must be gated on dev-or-window');
+        var is = fs.readFileSync(ISAAC_SOURCE, 'utf8');
+        var ii = is.indexOf('JSON.stringify(server._lastGinaData)');
+        assert.ok(is.substring(is.lastIndexOf('if (', ii), ii).indexOf('lib.instrument.isActive()') > -1,
+            'isaac agent snapshot replay must be gated on dev-or-window');
+    });
+
+});
