@@ -1391,3 +1391,151 @@ describe('16 - CSP nonce: page.cspNonce template var + statusbar include', funct
     });
 
 });
+
+
+// 17 — browser-session cookie: a null _expires must be SKIPPED, not .format()-ed (HTTP 500 fix)
+// A session with no expiry (express-session `cookie.expires` unset) presents
+// `req.session.cookie._expires === null` after one store round-trip (the store
+// serialises to JSON, dropping the key; express-session's Cookie constructor
+// then rebuilds it with a null `_expires`). `typeof null === 'object'`, so the
+// old `!= 'undefined'` guard passed, `dateEnd` became null, and
+// `null.format('isoDateTime')` threw — HTTP 500 for every request on that
+// session. The guard is now `instanceof Date` (the block also subtracts dates
+// and calls `.format`, both of which require a real Date). render-v1.js (the
+// legacy delegate) carries the byte-identical fix.
+describe('17 - browser-session cookie: null _expires skipped, not .format()-ed (HTTP 500 fix)', function() {
+
+    var SOURCE_V1 = path.join(require('../fw'), 'core/controller/controller.render-v1.js');
+
+    // Comment-strip so the explanatory comments above each guard (which mention
+    // the historical `!= 'undefined'` wording) cannot satisfy the source pins.
+    function strip(s) { return s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''); }
+    function swigCode() { return strip(fs.readFileSync(SOURCE, 'utf8')); }
+    function v1Code()   { return strip(fs.readFileSync(SOURCE_V1, 'utf8')); }
+
+    // ── (a) source pins: the FIXED guard is in place, the OLD buggy guard is gone ──
+
+    it('render-swig.js gates the expiry block on `_expires instanceof Date`', function() {
+        assert.ok(
+            /req\.session\.cookie\._expires\s+instanceof\s+Date/.test(swigCode()),
+            'expected `req.session.cookie._expires instanceof Date` guard in render-swig.js'
+        );
+    });
+
+    it("render-swig.js no longer uses the `typeof(... _expires) != 'undefined'` guard (null passes it)", function() {
+        assert.ok(
+            !/typeof\(\s*req\.session\.cookie\._expires\s*\)\s*!=\s*'undefined'/.test(swigCode()),
+            "the buggy `typeof(req.session.cookie._expires) != 'undefined'` guard must be gone"
+        );
+    });
+
+    it("render-swig.js still calls .format('isoDateTime') INSIDE the Date-gated block (happy path intact)", function() {
+        assert.ok(
+            /req\.session\.cookie\._expires\s+instanceof\s+Date[\s\S]{0,1000}?\.format\('isoDateTime'\)/.test(swigCode()),
+            "expected .format('isoDateTime') to remain inside the instanceof-Date-gated block"
+        );
+    });
+
+    it('render-v1.js (legacy delegate) carries the identical instanceof-Date fix', function() {
+        var s = v1Code();
+        assert.ok(
+            /local\.req\.session\.cookie\._expires\s+instanceof\s+Date/.test(s),
+            'expected `local.req.session.cookie._expires instanceof Date` guard in render-v1.js'
+        );
+        assert.ok(
+            !/typeof\(\s*local\.req\.session\.cookie\._expires\s*\)\s*!=\s*'undefined'/.test(s),
+            'the buggy typeof guard must be gone from render-v1.js too'
+        );
+    });
+
+    // ── (b) pure-logic replica of the session-expiry-display block ──
+    // The guard is injected so the SAME body can be exercised under the FIXED
+    // guard and the OLD buggy guard (the subtract check in (c)). The source pins
+    // in (a) lock that the shipped delegates use the `instanceof Date` form, so
+    // this replica cannot silently drift from the real code.
+    function runSessionExpiryBlock(reqSession, dataPage, guard) {
+        if ( typeof(reqSession) != 'undefined' ) {
+            if ( typeof(dataPage.data) == 'undefined' ) {
+                dataPage.data = {};
+            }
+            if ( guard(reqSession) ) {
+                var dateEnd = reqSession.cookie._expires;
+                var dateStart = ( typeof(reqSession.lastModified) != 'undefined' )
+                                ? new Date(reqSession.lastModified)
+                                : new Date();
+                var elapsed = dateEnd - dateStart;
+                if ( typeof(dataPage.data.session) == 'undefined' ) {
+                    dataPage.data.session = {
+                        id          : reqSession.id,
+                        lastModified: reqSession.lastModified
+                    };
+                }
+                dataPage.data.session.createdAt = reqSession.createdAt;
+                dataPage.data.session.expiresAt = dateEnd.format('isoDateTime');
+                dataPage.data.session.timeout   = elapsed;
+            }
+        }
+        return dataPage;
+    }
+
+    var FIXED_GUARD = function(s) { return s.cookie._expires instanceof Date; };
+    var OLD_GUARD   = function(s) { return typeof(s.cookie._expires) != 'undefined'; };
+
+    function makeSession(expires) {
+        return {
+            id          : 'sess-abc',
+            createdAt   : '2026-05-28T00:00:00.000Z',
+            lastModified: '2026-05-28T00:00:00.000Z',
+            cookie      : { _expires: expires }
+        };
+    }
+
+    // A real Date (so `instanceof Date` holds) carrying a `.format` stub. The stub
+    // keeps this unit isolated from the dateFormat Date.prototype augmentation
+    // while still proving the block invokes `.format('isoDateTime')`.
+    function realExpiry() {
+        var d = new Date('2026-05-28T00:30:00.000Z'); // +30 min after lastModified
+        d.format = function(fmt) { return 'FMT(' + fmt + ')'; };
+        return d;
+    }
+
+    it('FIXED guard: null _expires (browser-session cookie) does NOT throw and leaves session absent', function() {
+        var page;
+        assert.doesNotThrow(function() {
+            page = runSessionExpiryBlock(makeSession(null), {}, FIXED_GUARD);
+        });
+        assert.strictEqual(page.data.session, undefined, 'no expiry → page.data.session must stay absent');
+    });
+
+    it('FIXED guard: undefined _expires also skips cleanly (session absent, no throw)', function() {
+        var page;
+        assert.doesNotThrow(function() {
+            page = runSessionExpiryBlock(makeSession(undefined), {}, FIXED_GUARD);
+        });
+        assert.strictEqual(page.data.session, undefined, 'undefined expiry → page.data.session must stay absent');
+    });
+
+    it('FIXED guard: a real Date expiry STILL produces a formatted expiresAt + numeric timeout (happy path)', function() {
+        var page = runSessionExpiryBlock(makeSession(realExpiry()), {}, FIXED_GUARD);
+        assert.ok(page.data.session, 'real expiry → page.data.session must be present');
+        assert.strictEqual(page.data.session.expiresAt, 'FMT(isoDateTime)', 'expiresAt must be the formatted value');
+        assert.strictEqual(page.data.session.timeout, 30 * 60 * 1000, 'timeout = dateEnd - dateStart (30 min)');
+        assert.strictEqual(page.data.session.id, 'sess-abc', 'session id still carried through on the happy path');
+    });
+
+    // ── (c) subtract check: the OLD guard is what caused the crash ──
+
+    it('SUBTRACT: the OLD `!= undefined` guard THROWS on a null _expires (proves the guard is the fix)', function() {
+        assert.throws(
+            function() { runSessionExpiryBlock(makeSession(null), {}, OLD_GUARD); },
+            /Cannot read propert(y|ies) of null|null is not an object|\.format/,
+            'old guard let null reach null.format() — must throw (this is the bug being fixed)'
+        );
+    });
+
+    it('SUBTRACT: the OLD guard was fine for a real Date (only null/object slipped past it)', function() {
+        var page = runSessionExpiryBlock(makeSession(realExpiry()), {}, OLD_GUARD);
+        assert.strictEqual(page.data.session.expiresAt, 'FMT(isoDateTime)');
+    });
+
+});

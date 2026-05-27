@@ -268,7 +268,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 data.page.data = {};
             }
 
-            if ( typeof(req.session.cookie._expires) != 'undefined' ) {
+            // A browser-session cookie has no expiry: _expires is null after a
+            // store round-trip. `typeof null === 'object'` slipped past the old
+            // `!= 'undefined'` guard, then null.format() threw (HTTP 500). This
+            // block needs a real Date (date subtraction + .format), so gate on that.
+            if ( req.session.cookie._expires instanceof Date ) {
                 var dateEnd = req.session.cookie._expires;
                 var dateStart = ( typeof(req.session.lastModified) != 'undefined')
                                 ? new Date(req.session.lastModified)

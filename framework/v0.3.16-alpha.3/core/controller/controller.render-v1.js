@@ -68,7 +68,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 data.page.data = {};
             }
 
-            if ( typeof(local.req.session.cookie._expires) != 'undefined' ) {
+            // Same browser-session-cookie crash as render-swig.js: _expires is
+            // null after a store round-trip, `typeof null === 'object'` passed
+            // the old `!= 'undefined'` guard, then null.format() threw (HTTP 500).
+            // Gate on a real Date (date subtraction + .format both require one).
+            if ( local.req.session.cookie._expires instanceof Date ) {
                 var dateEnd = local.req.session.cookie._expires;
                 var dateStart = ( typeof(local.req.session.lastModified) != 'undefined')
                                 ? new Date(local.req.session.lastModified)
