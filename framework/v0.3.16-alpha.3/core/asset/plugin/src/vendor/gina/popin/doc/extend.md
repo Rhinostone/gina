@@ -36,7 +36,7 @@ docs](https://developer.chrome.com/webstore/inline_installation).
 ### Smart App Banners in iOS 6+ Safari
 
 Stop bothering everyone with gross modals advertising your entry in the
-App Store. Include the following [meta tag](https://developer.apple.com/library/IOS/documentation/AppleApplications/Reference/SafariWebContent/PromotingAppswithAppBanners/PromotingAppswithAppBanners.html#//apple_ref/doc/uid/TP40002051-CH6-SW2)
+App Store. Include the following [meta tag](https://developer.apple.com/documentation/webkit/promoting-apps-with-smart-app-banners)
 will unintrusively allow the user the option to download your iOS app,
 or open it with some data about the user's current state on the website.
 
@@ -546,7 +546,7 @@ Home Screen icon. This works since iOS 6.
 ```
 
 For further information please read the [official
-documentation](https://developer.apple.com/library/safari/#documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html)
+documentation](https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html)
 on Apple's site.
 
 

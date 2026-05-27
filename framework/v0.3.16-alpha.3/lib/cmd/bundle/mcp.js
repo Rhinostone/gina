@@ -107,7 +107,7 @@ function MCP(opt, cmd) {
             var tools = buildTools(bundle, routing, bundleNames);
 
             var doc = {
-                '$schema': 'https://spec.modelcontextprotocol.io/specification/' + MCP_PROTOCOL_VERSION + '/schema/',
+                '$schema': 'https://modelcontextprotocol.io/specification/' + MCP_PROTOCOL_VERSION + '/schema/',
                 protocolVersion: MCP_PROTOCOL_VERSION,
                 generatedBy: 'gina bundle:mcp',
                 generatedAt: new Date().toISOString(),

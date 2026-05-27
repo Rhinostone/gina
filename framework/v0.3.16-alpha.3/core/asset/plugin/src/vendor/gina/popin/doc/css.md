@@ -35,7 +35,7 @@ As opposed to CSS resets, Normalize.css:
 * has better documentation
 
 For more information about Normalize.css, please refer to its [project
-page](https://necolas.github.com/normalize.css/), as well as this
+page](https://necolas.github.io/normalize.css/), as well as this
 [blog post](http://nicolasgallagher.com/about-normalize-css/).
 
 
@@ -146,8 +146,8 @@ At printing time, these styles will:
   [supporting browsers](https://en.wikipedia.org/wiki/Comparison_of_layout_engines_%28Cascading_Style_Sheets%29#Grammar_and_rules)
   that they should:
 
-  * ensure the table header (`<thead>`) is [printed on each page spanned by the
-    table](http://css-discuss.incutio.com/wiki/Printing_Tables)
+  * ensure the table header (`<thead>`) is printed on each page spanned by the
+    table
   * prevent block quotations, preformatted text, images and table rows from
     being split onto two different pages
   * ensure that headings never appear on a different page than the text they
