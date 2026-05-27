@@ -13,7 +13,7 @@
   "version": "0.0.1",
   "repository" : {
     "type" : "git",
-    "url" : "https://github.com/Rhinostone/gina.lib.inherits.git"
+    "url" : "https://github.com/gina-io/gina.git"
   },
   "author": {
     "name": "Rhinostone",

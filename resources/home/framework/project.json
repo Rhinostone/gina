@@ -7,21 +7,13 @@
         "gina" : {
             "comment" : "Framework module - Source path must be relative.",
             "version" : "${version}",
-            "src" : "node_modules/${version}/gina.framework",
-            "repo" : {
-                "ssh" : "git@wgit.rhinostone.net:gina/gina.module.framework.git",
-                "https" : "http://wgit.rhinostone.net:45980/gina/gina.module.framework.git"
-            }
+            "src" : "node_modules/${version}/gina.framework"
         },
         "updater" : {
             "comment" : "Updater bundle - Source path must be relative.",
             "use_https" : false,
             "version" : "0.0.1",
             "src" : "src/updater",
-            "repo" : {
-                "ssh" : "git@wgit.rhinostone.net:gina/gina.bundle.updater.git",
-                "https" : "http://wgit.rhinostone.net:45980/gina/gina.bundle.updater.git"
-            },
             "release" : {
                 "version" : "0.0.1",
                 "target" : "releases/updater/0.0.1",
@@ -33,10 +25,6 @@
             "comment" : "shutdown bundle - Source path must be relative.",
             "version" : "0.0.1",
             "src" : "src/shutdown",
-            "repo" : {
-                "ssh" : "git@github.com:Rhinostone/gina.bundle.shutdown.git",
-                "https" : "https://github.com/gina-io/gina.bundle.shutdown.git"
-            },
             "release" : {
                 "version" : "0.0.1",
                 "target" : "releases/shutdown/0.0.1",

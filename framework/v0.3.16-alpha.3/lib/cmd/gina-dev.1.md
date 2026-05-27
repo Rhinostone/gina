@@ -59,8 +59,8 @@ Copyright (c) 2009-{year} Rhinostone <{email}>
 ## COLOPHON
 
 This page is part of release {version} of the **gina** project. A description of the project,
-and informations about reporting bugs can be found on the official web site: <http://www.gina.io/>
+and informations about reporting bugs can be found on the official web site: <https://gina.io/>
 
-The project is also on GitHub: <https://github.com/rhinostone/gina>
+The project is also on GitHub: <https://github.com/gina-io/gina>
 
 Here is the mailling list: <https://groups.google.com/g/ginajs>

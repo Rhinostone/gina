@@ -18,7 +18,7 @@ There is two way of inheriting from a superclass:
 - inheriting by exposing **only** `protected` members of the superclass
 
 The result of the operation will return a class with both properties.
-`inherits()` is a function from gina.lib. Althought, it can be required without having to install the [framework](https://github.com/rhinostone/gina).
+`inherits()` is a function from gina.lib. Althought, it can be required without having to install the [framework](https://github.com/gina-io/gina).
 
 ## Syntax
 *inherits(ClassA, ClassB)*

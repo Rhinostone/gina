@@ -9,7 +9,7 @@
         "1" : "no argument found",
         "2" : "illegal option",
         "4" : "Gina Project v",
-        "5" : "Gina Framework not found! Please visite http://www.gina.io/ to get the latest version or try to run : npm install gina"
+        "5" : "Gina Framework not found! Please visite https://gina.io/ to get the latest version or try to run : npm install gina"
     },
     "app" : {
         "1" : "%option%: option not found",

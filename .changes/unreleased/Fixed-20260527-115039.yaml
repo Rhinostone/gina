@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Refreshed stale external references shipped with the framework. The man-page COLOPHON sections and the CLI framework-not-found messages now point to https://gina.io (previously http://www.gina.io); GitHub references in the man pages, the bundled lib READMEs, and the generated-project package.json template now use the gina-io organisation (previously the former rhinostone org); the vendored lib/inherits package metadata now references the canonical repository; and the framework project template no longer ships unreachable internal git-server URLs. Documentation and metadata only - no runtime or API change.'
+time: 2026-05-27T11:50:39.546489+01:00
