@@ -451,3 +451,40 @@ describe('05 - CSP nonce: dev-only Inspector + patch inline scripts', function()
     });
 
 });
+
+
+// 06 — CSP nonce app-template helper: top-level cspNonce in the render context (#HDR16 follow-up)
+describe('06 - CSP nonce: cspNonce template var in the nunjucks render context', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('exposes the nonce on top-level data.cspNonce, guarded so the key is absent when no nonce', function() {
+        assert.ok(
+            /if \(_cspNonce\) \{ data\.cspNonce = _cspNonce; \}/.test(src()),
+            'expected `if (_cspNonce) { data.cspNonce = _cspNonce; }` guard in the render context'
+        );
+    });
+
+    it('sets data.cspNonce before the render branch (covers env.render + env.renderString)', function() {
+        var s = src();
+        var nonceIdx  = s.indexOf('data.cspNonce = _cspNonce');
+        var renderIdx = s.indexOf('html = env.render(templateRel, data)');
+        var strIdx    = s.indexOf('html = env.renderString(_errSource, data)');
+        assert.ok(nonceIdx > -1, 'data.cspNonce assignment present');
+        assert.ok(renderIdx > nonceIdx, 'data.cspNonce must be set before env.render()');
+        assert.ok(strIdx  > nonceIdx, 'data.cspNonce must be set before env.renderString()');
+    });
+
+    // pure-logic replica of the guarded assignment
+    function applyNonce(ctx, nonce) {
+        if (nonce) { ctx.cspNonce = nonce; }
+        return ctx;
+    }
+
+    it('replica: sets cspNonce when present, leaves the key absent otherwise', function() {
+        assert.strictEqual(applyNonce({}, 'Xy9+/=').cspNonce, 'Xy9+/=');
+        assert.ok(!('cspNonce' in applyNonce({}, null)),      'absent when null');
+        assert.ok(!('cspNonce' in applyNonce({}, undefined)), 'absent when undefined');
+    });
+
+});

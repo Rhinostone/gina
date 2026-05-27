@@ -974,6 +974,13 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         data.data = data.page.data;
     }
 
+    // #HDR5 — expose the per-request CSP nonce to nunjucks templates as the
+    // top-level {{ cspNonce }} (matching the framework's top-level promotion
+    // idiom above). Set on the render-data context before both env.render() and
+    // env.renderString() below; the key stays absent when no nonce, so it never
+    // renders for bundles without gina.plugins.Csp({ useNonce: true }).
+    if (_cspNonce) { data.cspNonce = _cspNonce; }
+
     var env;
     try {
         env = getEnvironment(nunjucks, templateRoot, {

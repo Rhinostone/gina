@@ -1312,3 +1312,82 @@ describe('15 - CSP nonce: dev-only Inspector + patch inline scripts', function()
     });
 
 });
+
+
+// 16 — CSP nonce app-template helper: data.page.cspNonce + statusbar.html (#HDR16 follow-up)
+describe('16 - CSP nonce: page.cspNonce template var + statusbar include', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    var FW             = require('../fw');
+    var STATUSBAR_SRC  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/statusbar.html');
+    var STATUSBAR_DIST = path.join(FW, 'core/asset/plugin/dist/vendor/gina/html/statusbar.html');
+
+    // ── data.page.cspNonce wiring (the application-template nonce helper) ──
+
+    it('exposes the nonce on data.page.cspNonce, guarded so the key is absent when no nonce', function() {
+        assert.ok(
+            /if \(_cspNonce\) \{ data\.page\.cspNonce = _cspNonce; \}/.test(src()),
+            'expected `if (_cspNonce) { data.page.cspNonce = _cspNonce; }` guard'
+        );
+    });
+
+    it('sets data.page.cspNonce before BOTH compiledTemplate(data) sites (cache-hit + cache-miss)', function() {
+        var s = src();
+        var assigns = (s.match(/data\.page\.cspNonce = _cspNonce/g) || []);
+        assert.strictEqual(assigns.length, 2,
+            'expected exactly 2 data.page.cspNonce assignments — one before each compiledTemplate(data) call');
+        // each assignment must immediately precede a compiledTemplate(data) call
+        var paired = (s.match(/data\.page\.cspNonce = _cspNonce;[\s\S]{0,200}?htmlContent = compiledTemplate\(data\);/g) || []);
+        assert.strictEqual(paired.length, 2,
+            'expected both data.page.cspNonce assignments immediately before a compiledTemplate(data) call');
+    });
+
+    // ── statusbar.html — dev-only swig include carries the nonce attribute ──
+
+    var NONCE_COND = '<script{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>';
+
+    it('dist statusbar.html OPENS with the page.cspNonce conditional (runtime include artifact)', function() {
+        var dist = fs.readFileSync(STATUSBAR_DIST, 'utf8');
+        assert.strictEqual(dist.indexOf(NONCE_COND), 0,
+            'expected dist statusbar.html to open with the page.cspNonce conditional <script> tag');
+    });
+
+    it('src statusbar.html carries the same conditional', function() {
+        var srcSb = fs.readFileSync(STATUSBAR_SRC, 'utf8');
+        assert.strictEqual(srcSb.indexOf(NONCE_COND), 0,
+            'expected src statusbar.html to open with the page.cspNonce conditional <script> tag');
+    });
+
+    it('src and dist statusbar.html are byte-identical (dist is a plain copy, not in build.json)', function() {
+        var srcSb = fs.readFileSync(STATUSBAR_SRC, 'utf8');
+        var dist  = fs.readFileSync(STATUSBAR_DIST, 'utf8');
+        assert.strictEqual(srcSb, dist, 'src and dist statusbar.html must stay byte-identical');
+    });
+
+    it('statusbar.html JS body has no swig delimiters beyond the line-1 conditional (no collision)', function() {
+        var dist = fs.readFileSync(STATUSBAR_DIST, 'utf8');
+        // The only swig constructs are on line 1 ({% if %}, {{ }}, {% endif %});
+        // the JS body must contain none or swig would try to interpret it.
+        var body = dist.slice(dist.indexOf('\n'));
+        assert.ok(!/\{\{|\}\}|\{%|%\}|\{#|#\}/.test(body),
+            'statusbar.html JS body must contain no swig delimiters (template-processing collision)');
+    });
+
+    // ── pure-logic replica of the guarded page.cspNonce assignment ──
+
+    function applyPageNonce(page, nonce) {
+        if (nonce) { page.cspNonce = nonce; }
+        return page;
+    }
+
+    it('replica: sets page.cspNonce when a nonce is present', function() {
+        assert.strictEqual(applyPageNonce({}, 'AbC+/==').cspNonce, 'AbC+/==');
+    });
+
+    it('replica: leaves the key ABSENT when no nonce (back-compat for non-useNonce bundles)', function() {
+        assert.ok(!('cspNonce' in applyPageNonce({}, null)),      'absent when null');
+        assert.ok(!('cspNonce' in applyPageNonce({}, undefined)), 'absent when undefined');
+    });
+
+});

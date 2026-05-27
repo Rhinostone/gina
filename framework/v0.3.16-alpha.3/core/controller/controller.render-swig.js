@@ -859,6 +859,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
                 // #FI — template execution timing (cache hit — no compile phase)
                 var _cacheExecStart = (local._timeline) ? Date.now() : 0;
+                // #HDR5 — {{ page.cspNonce }} app-template nonce helper. Absent when no nonce.
+                if (_cspNonce) { data.page.cspNonce = _cspNonce; }
                 htmlContent = compiledTemplate(data);
                 if (_cacheExecStart && local._timeline) {
                     local._timeline.entries.push({
@@ -1584,6 +1586,10 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 }
                 // #FI — template execution timing
                 var _execStart = (local._timeline) ? Date.now() : 0;
+                // #HDR5 — expose the per-request nonce as {{ page.cspNonce }} for the
+                // app-template helper + the dev-only statusbar include. Set before each
+                // compiledTemplate(data) (swig re-evaluates the var per execute); absent when no nonce.
+                if (_cspNonce) { data.page.cspNonce = _cspNonce; }
                 htmlContent = compiledTemplate(data);
                 if (_execStart && local._timeline) {
                     local._timeline.entries.push({
