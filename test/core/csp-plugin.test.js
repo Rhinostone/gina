@@ -808,3 +808,250 @@ describe('09 - settings.json template advertises csp slot', function () {
     });
 
 });
+
+
+// ─── 10 — Source inspection: per-request nonce (useNonce) patterns ─────────
+
+describe('10 - source inspection: nonce patterns are present', function () {
+
+    var src;
+    before(function () { src = fs.readFileSync(PLUGIN, 'utf8'); });
+
+    it('requires the crypto module', function () {
+        assert.ok(/require\(\s*['"]crypto['"]\s*\)/.test(src), 'expected require("crypto")');
+    });
+
+    it('generates a 16-byte (128-bit) base64 nonce', function () {
+        assert.ok(/NONCE_BYTES\s*=\s*16/.test(src), 'expected NONCE_BYTES = 16 (W3C CSP3 floor)');
+        assert.ok(
+            /randomBytes\(\s*NONCE_BYTES\s*\)\s*\.toString\(\s*['"]base64['"]\s*\)/.test(src),
+            'expected crypto.randomBytes(NONCE_BYTES).toString("base64")'
+        );
+    });
+
+    it('stamps the per-request carrier req._ginaCspNonce', function () {
+        assert.ok(/req\._ginaCspNonce\s*=\s*nonce/.test(src), 'expected req._ginaCspNonce = nonce');
+    });
+
+    it('resolves useNonce + nonce target at factory time (fail-fast)', function () {
+        assert.ok(/resolveUseNonce\(\s*merged\.useNonce\s*\)/.test(src),
+            'expected useNonce resolution from merged options');
+        assert.ok(/useNonce\s*\?\s*resolveNonceTarget\(\s*directives\s*\)\s*:\s*null/.test(src),
+            'expected nonce-target resolution gated on useNonce at factory time');
+    });
+
+    it('appends the nonce only to the resolved target directive', function () {
+        assert.ok(/name === nonceTarget/.test(src),
+            'expected the nonce token appended only to nonceTarget');
+    });
+
+});
+
+
+// ─── 11 — _resolveUseNonce: strict boolean coercion ────────────────────────
+
+describe('11 - _resolveUseNonce: strict boolean coercion', function () {
+
+    it('defaults to false when undefined', function () {
+        assert.equal(Csp._resolveUseNonce(undefined), false);
+    });
+
+    it('defaults to false when null', function () {
+        assert.equal(Csp._resolveUseNonce(null), false);
+    });
+
+    it('returns the boolean as-is', function () {
+        assert.equal(Csp._resolveUseNonce(true), true);
+        assert.equal(Csp._resolveUseNonce(false), false);
+    });
+
+    it('throws on non-boolean', function () {
+        assert.throws(function () { Csp._resolveUseNonce('yes'); }, /useNonce must be a boolean/);
+        assert.throws(function () { Csp._resolveUseNonce(1); }, /useNonce must be a boolean/);
+    });
+
+    it('DEFAULT_USE_NONCE is false', function () {
+        assert.equal(Csp._DEFAULT_USE_NONCE, false);
+    });
+
+});
+
+
+// ─── 11b — _resolveNonceTarget: script-src preferred, default-src fallback ──
+
+describe('11b - _resolveNonceTarget: target directive resolution', function () {
+
+    it('returns script-src when present', function () {
+        assert.equal(Csp._resolveNonceTarget({ 'script-src': ["'self'"] }), 'script-src');
+    });
+
+    it('prefers script-src even when default-src is also present', function () {
+        assert.equal(
+            Csp._resolveNonceTarget({ 'default-src': ["'self'"], 'script-src': ["'self'"] }),
+            'script-src'
+        );
+    });
+
+    it('falls back to default-src when script-src is absent', function () {
+        assert.equal(Csp._resolveNonceTarget({ 'default-src': ["'self'"] }), 'default-src');
+    });
+
+    it('throws when neither script-src nor default-src is present', function () {
+        assert.throws(function () {
+            Csp._resolveNonceTarget({ 'img-src': ["'self'"] });
+        }, /requires a "script-src"/);
+    });
+
+});
+
+
+// ─── 12 — _buildHeaderValue: nonce token appended to target only ───────────
+
+describe('12 - _buildHeaderValue: nonce serialisation', function () {
+
+    it('is identical to the no-nonce output when called with one arg (back-compat)', function () {
+        assert.equal(
+            Csp._buildHeaderValue({ 'script-src': ["'self'"], 'img-src': ["'self'"] }),
+            "script-src 'self'; img-src 'self'"
+        );
+    });
+
+    it("appends 'nonce-XXX' to an array target directive", function () {
+        assert.equal(
+            Csp._buildHeaderValue({ 'script-src': ["'self'"] }, 'abc123', 'script-src'),
+            "script-src 'self' 'nonce-abc123'"
+        );
+    });
+
+    it("appends 'nonce-XXX' to a string-valued target directive", function () {
+        assert.equal(
+            Csp._buildHeaderValue({ 'script-src': "'self' https:" }, 'abc123', 'script-src'),
+            "script-src 'self' https: 'nonce-abc123'"
+        );
+    });
+
+    it('appends the nonce ONLY to the target, leaving siblings untouched', function () {
+        assert.equal(
+            Csp._buildHeaderValue(
+                { 'default-src': ["'self'"], 'script-src': ["'self'"], 'img-src': ["'self'"] },
+                'abc123',
+                'script-src'
+            ),
+            "default-src 'self'; script-src 'self' 'nonce-abc123'; img-src 'self'"
+        );
+    });
+
+    it('does not append when the nonce is falsy even if the target matches', function () {
+        assert.equal(
+            Csp._buildHeaderValue({ 'script-src': ["'self'"] }, '', 'script-src'),
+            "script-src 'self'"
+        );
+    });
+
+});
+
+
+// ─── 13 — Factory + middleware: useNonce end-to-end ────────────────────────
+
+describe('13 - useNonce factory + middleware behaviour', function () {
+
+    function makeRes(initial) {
+        var headers = initial || {};
+        return {
+            statusCode: 200,
+            getHeader: function (n) { return headers[String(n).toLowerCase()] || null; },
+            setHeader: function (n, v) { headers[String(n).toLowerCase()] = v; },
+            _headers: headers
+        };
+    }
+
+    it('factory throws when useNonce:true and neither script-src nor default-src present', function () {
+        assert.throws(function () {
+            Csp({ directives: { 'img-src': ["'self'"] }, useNonce: true });
+        }, /requires a "script-src"/);
+    });
+
+    it('factory throws on non-boolean useNonce', function () {
+        assert.throws(function () {
+            Csp({ directives: { 'script-src': ["'self'"] }, useNonce: 'yes' });
+        }, /useNonce must be a boolean/);
+    });
+
+    it('stamps req._ginaCspNonce with a 24-char base64 string (16 bytes)', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"] }, useNonce: true });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(typeof req._ginaCspNonce, 'string');
+        assert.equal(req._ginaCspNonce.length, 24);  // base64 of 16 bytes
+    });
+
+    it("appends 'nonce-<req._ginaCspNonce>' to script-src in the header", function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"] }, useNonce: true });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(
+            res.getHeader('content-security-policy'),
+            "script-src 'self' 'nonce-" + req._ginaCspNonce + "'"
+        );
+    });
+
+    it('generates a distinct nonce per request', function () {
+        var mw = Csp({ directives: { 'script-src': ["'self'"] }, useNonce: true });
+        var r1 = { method: 'GET', url: '/' }, s1 = makeRes();
+        var r2 = { method: 'GET', url: '/' }, s2 = makeRes();
+        mw(r1, s1, function () {});
+        mw(r2, s2, function () {});
+        assert.notEqual(r1._ginaCspNonce, r2._ginaCspNonce);
+        assert.notEqual(
+            s1.getHeader('content-security-policy'),
+            s2.getHeader('content-security-policy')
+        );
+    });
+
+    it('falls back to default-src when script-src is absent', function () {
+        var mw  = Csp({ directives: { 'default-src': ["'self'"] }, useNonce: true });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(
+            res.getHeader('content-security-policy'),
+            "default-src 'self' 'nonce-" + req._ginaCspNonce + "'"
+        );
+    });
+
+    it('idempotent — does NOT stamp a nonce when the header is already set', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"] }, useNonce: true });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes({ 'content-security-policy': "default-src 'none'" });
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('content-security-policy'), "default-src 'none'");
+        assert.equal(typeof req._ginaCspNonce, 'undefined');
+    });
+
+    it('useNonce:false (default) emits a static value and stamps no nonce', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"] } });
+        var req = { method: 'GET', url: '/' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(res.getHeader('content-security-policy'), "script-src 'self'");
+        assert.equal(typeof req._ginaCspNonce, 'undefined');
+    });
+
+    it('static path returns a stable header value across requests', function () {
+        var mw = Csp({ directives: { 'script-src': ["'self'"] } });
+        var s1 = makeRes(), s2 = makeRes();
+        mw({ method: 'GET' }, s1, function () {});
+        mw({ method: 'GET' }, s2, function () {});
+        assert.equal(s1.getHeader('content-security-policy'), s2.getHeader('content-security-policy'));
+    });
+
+    it('middleware calls next() exactly once in the nonce path', function () {
+        var mw    = Csp({ directives: { 'script-src': ["'self'"] }, useNonce: true });
+        var calls = 0;
+        mw({ method: 'GET' }, makeRes(), function () { calls++; });
+        assert.equal(calls, 1);
+    });
+
+});

@@ -669,14 +669,14 @@ describe('05d - #NJ2 asset injection / setResources port', function () {
     // -----------------------------------------------------------------------
 
     it('declares the injectAssets helper as an inner function', function () {
-        assert.match(RENDER_NJ_SRC, /function\s+injectAssets\s*\(\s*html\s*,\s*data\s*,\s*localOptions\s*\)/);
+        assert.match(RENDER_NJ_SRC, /function\s+injectAssets\s*\(\s*html\s*,\s*data\s*,\s*localOptions\s*,\s*cspNonce\s*\)/);
     });
 
     it('calls injectAssets BEFORE injectInspectorScripts in the main render function', function () {
         // Ordering matters — asset injection must settle the <head>/<body>
         // content before Inspector scripts are appended near </body> so the
         // Inspector payload sits last.
-        var assetIdx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions)');
+        var assetIdx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
         var inspIdx  = RENDER_NJ_SRC.indexOf('html = injectInspectorScripts(html, data, self, local, displayInspector)');
         assert.ok(assetIdx > 0, 'injectAssets call-site present');
         assert.ok(inspIdx > 0, 'injectInspectorScripts call-site present');
@@ -684,7 +684,7 @@ describe('05d - #NJ2 asset injection / setResources port', function () {
     });
 
     it('wraps the injectAssets call in try/catch so a mis-shaped template config never breaks rendering', function () {
-        var idx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions)');
+        var idx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
         assert.ok(idx > 0);
         var block = RENDER_NJ_SRC.slice(idx, idx + 500);
         assert.match(block, /catch\s*\(\s*assetErr\s*\)/);
@@ -1117,7 +1117,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
     });
 
     it('writeCache runs AFTER injectAssets AND injectInspectorScripts', function () {
-        var assetIdx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions)');
+        var assetIdx = RENDER_NJ_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
         var inspIdx  = RENDER_NJ_SRC.indexOf('html = injectInspectorScripts(html, data, self, local, displayInspector)');
         var writeIdx = RENDER_NJ_SRC.indexOf('await writeCache(local, self, localOptions.bundle');
         assert.ok(assetIdx > 0 && inspIdx > 0 && writeIdx > 0);

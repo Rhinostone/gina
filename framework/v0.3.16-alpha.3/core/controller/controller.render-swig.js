@@ -188,6 +188,22 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     var _next       = local.next;
     // #H10 — opt-in HTTP/2 response trailers (registered via self.sendTrailers()).
     var _trailers   = (local._trailers && typeof(local._trailers) === 'object') ? local._trailers : null;
+    // #HDR5 — per-request CSP nonce (set on req by gina.plugins.Csp({useNonce:true})).
+    // When present, every framework-injected inline <script> carries a matching
+    // nonce="..." attribute so a bundle can drop 'unsafe-inline' from script-src.
+    var _cspNonce   = (req && req._ginaCspNonce) ? req._ginaCspNonce : null;
+    // Stamp the onGinaLoaded bootstrap <script> with the nonce. The loader tag is
+    // a cached, immutable string (config.js builds it once) — .replace() returns a
+    // fresh string and never mutates the shared cache. No-op when no nonce is set.
+    var _nonceLoader = function (loaderTag) {
+        if (_cspNonce && typeof loaderTag === 'string') {
+            return loaderTag.replace(
+                '<script type="text/javascript">',
+                '<script type="text/javascript" nonce="' + _cspNonce + '">'
+            );
+        }
+        return loaderTag;
+    };
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
 
@@ -1310,7 +1326,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     && !/window\.onGinaLoaded/.test(layout)
 
             ) {
-                layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                layout = layout.replace(/\<\/head\>/i, '\t'+ _nonceLoader(localOptions.template.ginaLoader) +'\n</head>');
             }
 
         } else if ( hasViews() && self.isCacheless() && self.isXMLRequest() ) {
@@ -1356,7 +1372,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         && !/window\.onGinaLoaded/.test(layout)
 
                 ) {
-                    layout += '\t'+ localOptions.template.ginaLoader +'\n';
+                    layout += '\t'+ _nonceLoader(localOptions.template.ginaLoader) +'\n';
                 }
             } else {
                 // placed in the HEAD
@@ -1386,7 +1402,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         && !/window\.onGinaLoaded/.test(layout)
 
                 ) {
-                    layout = layout.replace(/\<\/head\>/i, '\t'+ localOptions.template.ginaLoader +'\n</head>');
+                    layout = layout.replace(/\<\/head\>/i, '\t'+ _nonceLoader(localOptions.template.ginaLoader) +'\n</head>');
                 }
             }
         }

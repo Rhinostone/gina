@@ -154,18 +154,43 @@ require('gina').plugins.Csp({
 });
 ```
 
-## Per-response nonce wiring — deferred
+## Per-response CSP nonce (`useNonce`)
 
-v0 ships **static directives only**. Per-response nonce wiring (e.g.
-emitting `script-src 'nonce-<random>'` with a fresh nonce per render that
-the template engine then writes onto inline `<script>` tags) requires
-template-render integration and defers to a separate CSP-aware view-layer
-plugin that can co-operate with swig / nunjucks template rendering.
+Set `useNonce: true` to drop `'unsafe-inline'` from `script-src` without
+breaking the framework's injected inline scripts:
 
-For now, inline scripts and styles must use `'unsafe-inline'` (loosens
-the policy — only acceptable when the rest of the policy is strict
-enough to make XSS injection of inline content hard) or be moved to
-external files served from a script-src-allowed origin.
+```js
+require('gina').plugins.Csp({
+    directives: { 'script-src': ["'self'"] },
+    useNonce: true
+});
+// → Content-Security-Policy: script-src 'self' 'nonce-<base64>'
+```
+
+When enabled, the middleware generates a fresh cryptographically-random
+nonce per response (`crypto.randomBytes(16).toString('base64')` — 128 bits,
+the W3C CSP3 entropy floor), stamps it on `req._ginaCspNonce`, and appends
+`'nonce-<value>'` to the `script-src` directive (falling back to
+`default-src` when `script-src` is absent; the factory throws at call time
+if neither is present, since the nonce would have nowhere to attach).
+
+The swig and nunjucks render delegates read `req._ginaCspNonce` and set a
+matching `nonce="<value>"` attribute on every framework-injected inline
+`<script>` — the `onGinaLoaded` bootstrap (always emitted) plus the
+dev-only Inspector blocks. No application template changes are required;
+the framework injection sites carry the nonce automatically.
+
+`req._ginaCspNonce` is the documented per-request carrier (it mirrors the
+`req._ginaProxyPrefix` precedent). It is written **only** when gina is the
+one setting the CSP header — the idempotent first-writer-wins guard means
+that if an upstream proxy / ingress already set the header, no nonce is
+generated and none is emitted on the tags, so the header and the tags stay
+consistent.
+
+`useNonce` defaults to `false`: the header value is then computed once at
+factory time and reused per response (zero per-request allocation), no
+`req` slot is written, and inline scripts require `'unsafe-inline'` (or
+must be moved to external files served from a `script-src`-allowed origin).
 
 ## Spec note — strict whitelist tradeoff
 

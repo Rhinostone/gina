@@ -30,9 +30,29 @@
  *         event.emit('complete', app);
  *     });
  *
- * v0 ships STATIC DIRECTIVES ONLY. Per-response nonce wiring requires
- * template-render integration and defers to a separate CSP-aware view-layer
- * plugin that can co-operate with swig / nunjucks template rendering.
+ * **Per-response CSP nonce (`useNonce: true`)** — opt-in (default `false`).
+ * When enabled, the middleware generates a fresh cryptographically-random
+ * nonce per response (`crypto.randomBytes(16).toString('base64')` — 128 bits,
+ * the W3C CSP3 nonce-entropy floor), stamps it on `req._ginaCspNonce`, and
+ * appends `'nonce-XXXX'` to the `script-src` directive (falling back to
+ * `default-src` when `script-src` is absent; throws at factory call time if
+ * neither is present, since the nonce would have nowhere to attach). The swig
+ * and nunjucks render delegates read `req._ginaCspNonce` and set a matching
+ * `nonce="XXXX"` attribute on every framework-injected inline `<script>` (the
+ * `onGinaLoaded` bootstrap, plus the dev-only Inspector blocks). This lets a
+ * bundle drop `'unsafe-inline'` from `script-src` without breaking the
+ * framework bootstrap.
+ *
+ * When `useNonce` is `false`, the header value is computed once at factory
+ * time and reused on every response (zero per-request allocation) and no
+ * `req` slot is written — applications that don't opt in get the exact
+ * pre-nonce behaviour.
+ *
+ * `req._ginaCspNonce` is the documented per-request carrier (mirrors the
+ * `req._ginaProxyPrefix` precedent). It is written ONLY when gina is the one
+ * setting the CSP header (the idempotent first-writer-wins guard): if an
+ * upstream proxy / ingress already set the header, no nonce is generated and
+ * none is emitted on the tags, keeping the header and the tags consistent.
  *
  * **Configuration is the primary API surface** — there is no sensible
  * cross-bundle default. Every bundle has its own resource graph; a default
@@ -65,9 +85,13 @@
  * @module plugins/security-headers/csp
  */
 
+var crypto = require('crypto');
+
 var HEADER_NAME             = 'content-security-policy';
 var HEADER_NAME_REPORT_ONLY = 'content-security-policy-report-only';
 var DEFAULT_REPORT_ONLY     = false;
+var DEFAULT_USE_NONCE       = false;
+var NONCE_BYTES             = 16;   // 128 bits — the W3C CSP3 nonce-entropy floor
 
 /**
  * CSP Level 3 standard directives, alphabetical within category.
@@ -361,26 +385,88 @@ function resolveReportOnly(value) {
  * consists of a directive name + space + space-separated source-list
  * values (or just the directive name for boolean-only / empty `sandbox`).
  *
- * @param {object} normalised
+ * When `nonce` is supplied, the matching `'nonce-<value>'` source-expression
+ * is appended to the `nonceTarget` directive only (the rest are untouched).
+ * Called with one argument (the static path), `nonce` is `undefined` and the
+ * output is identical to the pre-nonce behaviour.
+ *
+ * @param {object}  normalised
+ * @param {string} [nonce]       — raw base64 nonce value (no `nonce-` prefix).
+ * @param {string} [nonceTarget] — directive name to append the nonce to.
  * @returns {string}
  * @inner
  * @private
  */
-function buildHeaderValue(normalised) {
+function buildHeaderValue(normalised, nonce, nonceTarget) {
     var parts = [];
     var keys  = Object.keys(normalised);
     for (var i = 0; i < keys.length; i++) {
         var name  = keys[i];
         var value = normalised[name];
+        var extra = (nonce && name === nonceTarget) ? (" 'nonce-" + nonce + "'") : '';
         if (value === true) {
-            parts.push(name);
+            parts.push(name + extra);
         } else if (typeof value === 'string') {
-            parts.push(name + ' ' + value);
+            parts.push(name + ' ' + value + extra);
         } else if (Array.isArray(value)) {
-            parts.push(name + ' ' + value.join(' '));
+            parts.push(name + ' ' + value.join(' ') + extra);
         }
     }
     return parts.join('; ');
+}
+
+
+/**
+ * Coerce `useNonce` to a strict boolean. Defaults to `false` (static header,
+ * no per-request nonce). `true` opts into per-response nonce generation.
+ *
+ * @param {*} value
+ * @returns {boolean}
+ * @throws  {Error}
+ * @inner
+ * @private
+ */
+function resolveUseNonce(value) {
+    if (typeof value === 'undefined' || value === null) {
+        return DEFAULT_USE_NONCE;
+    }
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    throw new Error(
+        '[gina.plugins.Csp] useNonce must be a boolean (true generates a '
+        + 'per-response nonce and appends it to script-src; false emits a '
+        + 'static policy); received ' + typeof value + '.'
+    );
+}
+
+
+/**
+ * Resolve which directive the per-response nonce attaches to. Prefers
+ * `script-src` (the directive governing inline `<script>` execution), falling
+ * back to `default-src`. Throws at factory call time when neither is present —
+ * `useNonce: true` is meaningless if there is no script-governing directive
+ * for the nonce to extend.
+ *
+ * @param {object} normalised — the validated directive dict.
+ * @returns {string}
+ * @throws  {Error}
+ * @inner
+ * @private
+ */
+function resolveNonceTarget(normalised) {
+    if (Object.prototype.hasOwnProperty.call(normalised, 'script-src')) {
+        return 'script-src';
+    }
+    if (Object.prototype.hasOwnProperty.call(normalised, 'default-src')) {
+        return 'default-src';
+    }
+    throw new Error(
+        '[gina.plugins.Csp] useNonce:true requires a "script-src" (or '
+        + '"default-src") directive for the per-response nonce to attach to; '
+        + 'neither is present. Add "script-src" to your directives — that is '
+        + 'the directive governing inline <script> execution.'
+    );
 }
 
 
@@ -403,6 +489,16 @@ function buildHeaderValue(normalised) {
  * });
  * app.use(csp);
  *
+ * @example
+ * // Per-response nonce — drop 'unsafe-inline' from script-src. The framework
+ * // bootstrap + Inspector inline <script>s automatically carry the nonce.
+ * var csp = require('gina').plugins.Csp({
+ *     directives: { 'script-src': ["'self'"] },
+ *     useNonce: true
+ * });
+ * app.use(csp);
+ * // → Content-Security-Policy: script-src 'self' 'nonce-<base64>'
+ *
  * @param   {object}  opts
  * @param   {object}  opts.directives          — CSP Level 3 directives.
  *                                               Required; throws if missing
@@ -418,12 +514,21 @@ function buildHeaderValue(normalised) {
  *                                               Content-Security-Policy-
  *                                               Report-Only instead of
  *                                               Content-Security-Policy.
+ * @param   {boolean} [opts.useNonce=false]    — generate a per-response
+ *                                               nonce, stamp it on
+ *                                               `req._ginaCspNonce`, and
+ *                                               append `'nonce-XXXX'` to
+ *                                               script-src (fallback
+ *                                               default-src). Lets bundles
+ *                                               drop `'unsafe-inline'`.
  * @returns {function}                         — express middleware
  *                                               `(req, res, next) => void`
  * @throws  {Error}                            — when `directives` is
  *                                               missing/empty, contains an
- *                                               unknown directive name, or
- *                                               has invalid value shapes.
+ *                                               unknown directive name, has
+ *                                               invalid value shapes, or
+ *                                               `useNonce:true` with no
+ *                                               script-src/default-src.
  */
 function Csp(opts) {
     var defaults    = resolveSettingsDefaults();
@@ -431,15 +536,27 @@ function Csp(opts) {
 
     var directives  = resolveDirectives(merged.directives);
     var reportOnly  = resolveReportOnly(merged.reportOnly);
+    var useNonce    = resolveUseNonce(merged.useNonce);
 
-    var headerValue = buildHeaderValue(directives);
     var headerName  = reportOnly ? HEADER_NAME_REPORT_ONLY : HEADER_NAME;
+    // Static value — reused on every response when useNonce is off.
+    var headerValue = buildHeaderValue(directives);
+    // Fail-fast at factory time: a nonce needs a script-governing directive.
+    var nonceTarget = useNonce ? resolveNonceTarget(directives) : null;
 
     return function ginaCsp(req, res, next) {
         if (typeof res.getHeader === 'function' && res.getHeader(headerName)) {
             return next();
         }
-        res.setHeader(headerName, headerValue);
+        if (useNonce) {
+            // Fresh per-response nonce; stamp the per-request carrier so the
+            // render delegates can mirror it onto framework inline <script>s.
+            var nonce = crypto.randomBytes(NONCE_BYTES).toString('base64');
+            if (req) { req._ginaCspNonce = nonce; }
+            res.setHeader(headerName, buildHeaderValue(directives, nonce, nonceTarget));
+        } else {
+            res.setHeader(headerName, headerValue);
+        }
         next();
     };
 }
@@ -449,6 +566,8 @@ function Csp(opts) {
 Csp._HEADER_NAME              = HEADER_NAME;
 Csp._HEADER_NAME_REPORT_ONLY  = HEADER_NAME_REPORT_ONLY;
 Csp._DEFAULT_REPORT_ONLY      = DEFAULT_REPORT_ONLY;
+Csp._DEFAULT_USE_NONCE        = DEFAULT_USE_NONCE;
+Csp._NONCE_BYTES              = NONCE_BYTES;
 Csp._VALID_DIRECTIVES         = VALID_DIRECTIVES;
 Csp._BOOLEAN_ONLY_DIRECTIVES  = BOOLEAN_ONLY_DIRECTIVES;
 Csp._HYBRID_DIRECTIVES        = HYBRID_DIRECTIVES;
@@ -456,6 +575,8 @@ Csp._resolveSettingsDefaults  = resolveSettingsDefaults;
 Csp._mergeOptions             = mergeOptions;
 Csp._resolveDirectives        = resolveDirectives;
 Csp._resolveReportOnly        = resolveReportOnly;
+Csp._resolveUseNonce          = resolveUseNonce;
+Csp._resolveNonceTarget       = resolveNonceTarget;
 Csp._buildHeaderValue         = buildHeaderValue;
 
 module.exports = Csp;

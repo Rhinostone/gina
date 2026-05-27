@@ -349,3 +349,59 @@ describe('03 - HTTP/2 response trailers (#H10)', function() {
         );
     });
 });
+
+
+// 04 — CSP nonce on framework-injected inline scripts (#HDR5)
+describe('04 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('captures _cspNonce from req._ginaCspNonce', function() {
+        assert.ok(
+            /var _cspNonce\s*=\s*\(req && req\._ginaCspNonce\)\s*\?\s*req\._ginaCspNonce\s*:\s*null/.test(src()),
+            'expected _cspNonce captured from req._ginaCspNonce'
+        );
+    });
+
+    it('threads cspNonce into injectAssets (param + call site)', function() {
+        var s = src();
+        assert.ok(/function injectAssets\(html, data, localOptions, cspNonce\)/.test(s),
+            'expected injectAssets to accept a cspNonce param');
+        assert.ok(/injectAssets\(html, data, localOptions, _cspNonce\)/.test(s),
+            'expected the call site to pass _cspNonce');
+    });
+
+    it('stamps the bootstrap <script> with the nonce inside injectAssets (#HDR5)', function() {
+        var s = src();
+        assert.ok(s.indexOf('#HDR5') > -1, 'expected #HDR5 marker');
+        assert.ok(
+            /'<script type="text\/javascript" nonce="'\s*\+\s*cspNonce\s*\+\s*'">'/.test(s),
+            'expected the nonce attribute injected into the bootstrap script tag'
+        );
+    });
+
+    // pure-logic replica (mirrors the injectAssets nonce transform)
+    function nonceLoader(loaderTag, cspNonce) {
+        if (cspNonce && typeof loaderTag === 'string') {
+            return loaderTag.replace(
+                '<script type="text/javascript">',
+                '<script type="text/javascript" nonce="' + cspNonce + '">'
+            );
+        }
+        return loaderTag;
+    }
+
+    var LOADER = '\n\t\t<script type="text/javascript">\n\t\t<!--\n\t\tvar x=1;\n\t\t//-->\n\t\t</script>';
+
+    it('replica: injects the nonce attribute when a nonce is present', function() {
+        var out = nonceLoader(LOADER, 'ABC+/=');
+        assert.ok(out.indexOf('<script type="text/javascript" nonce="ABC+/=">') > -1);
+        assert.strictEqual(out.indexOf('<script type="text/javascript">'), -1, 'bare tag rewritten');
+    });
+
+    it('replica: returns the loader unchanged when no nonce (back-compat)', function() {
+        assert.strictEqual(nonceLoader(LOADER, null), LOADER);
+        assert.strictEqual(nonceLoader(LOADER, undefined), LOADER);
+    });
+
+});

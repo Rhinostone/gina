@@ -112,11 +112,11 @@ var ${bundle} = require('gina');
 //    // cross-bundle default; populate settings.json > csp.directives
 //    // before mounting (see example in settings.json comment) or pass
 //    // them directly here. Strict CSP Level 3 whitelist on directive
-//    // names — typos throw at factory call time. v0 ships static
-//    // directives only; per-response nonce wiring defers to a future
-//    // CSP-aware view-layer plugin. reportOnly:true emits
+//    // names — typos throw at factory call time. reportOnly:true emits
 //    // Content-Security-Policy-Report-Only for non-enforcing migration
-//    // testing.
+//    // testing. useNonce:true generates a per-response nonce, appends it
+//    // to script-src, and stamps it on every framework-injected inline
+//    // <script> so the bundle can drop 'unsafe-inline' from script-src.
 //    // var csp = ${bundle}.plugins.Csp();
 //    // app.use(csp);
 //

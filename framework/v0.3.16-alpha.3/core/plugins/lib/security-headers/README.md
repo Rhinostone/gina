@@ -186,8 +186,9 @@ The standalone plugins continue to work independently:
 var csp = require('gina').plugins.Csp({
     directives: {
         'default-src': ["'self'"],
-        'script-src':  ["'self'", "'nonce-XXXXX'"]
-    }
+        'script-src':  ["'self'"]
+    },
+    useNonce: true   // per-response nonce → drop 'unsafe-inline'
 });
 app.use(csp);
 ```

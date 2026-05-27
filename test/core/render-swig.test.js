@@ -1204,3 +1204,68 @@ describe('13 - HTTP/2 response trailers (#H10)', function() {
         assert.strictEqual(matches.length, 5, 'expected 5 stream.respond() calls — trailers must not add respond calls');
     });
 });
+
+
+// 14 — CSP nonce on framework-injected inline scripts (#HDR5)
+describe('14 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('captures _cspNonce from req._ginaCspNonce', function() {
+        assert.ok(
+            /var _cspNonce\s*=\s*\(req && req\._ginaCspNonce\)\s*\?\s*req\._ginaCspNonce\s*:\s*null/.test(src()),
+            'expected _cspNonce captured from req._ginaCspNonce'
+        );
+    });
+
+    it('defines the _nonceLoader helper that stamps the bootstrap <script> (#HDR5)', function() {
+        var s = src();
+        assert.ok(/var _nonceLoader\s*=\s*function/.test(s), 'expected the _nonceLoader helper');
+        assert.ok(s.indexOf('#HDR5') > -1, 'expected #HDR5 marker');
+        assert.ok(
+            /'<script type="text\/javascript" nonce="'\s*\+\s*_cspNonce\s*\+\s*'">'/.test(s),
+            'expected the nonce attribute injected into the bootstrap script tag'
+        );
+    });
+
+    it('routes every ginaLoader injection site through _nonceLoader()', function() {
+        var s = src();
+        var direct  = s.match(/localOptions\.template\.ginaLoader/g) || [];
+        var wrapped = s.match(/_nonceLoader\(localOptions\.template\.ginaLoader\)/g) || [];
+        assert.ok(wrapped.length >= 3, 'expected all 3 ginaLoader injection sites wrapped in _nonceLoader()');
+        assert.strictEqual(direct.length, wrapped.length,
+            'every localOptions.template.ginaLoader occurrence should be inside a _nonceLoader() call');
+    });
+
+    // pure-logic replica of the _nonceLoader transform
+    function nonceLoader(loaderTag, cspNonce) {
+        if (cspNonce && typeof loaderTag === 'string') {
+            return loaderTag.replace(
+                '<script type="text/javascript">',
+                '<script type="text/javascript" nonce="' + cspNonce + '">'
+            );
+        }
+        return loaderTag;
+    }
+
+    var LOADER = '\n\t\t<script type="text/javascript">\n\t\t<!--\n\t\tvar x=1;\n\t\t//-->\n\t\t</script>';
+
+    it('replica: injects the nonce attribute when a nonce is present (base64 chars allowed)', function() {
+        var out = nonceLoader(LOADER, 'ABC+/=');
+        assert.ok(out.indexOf('<script type="text/javascript" nonce="ABC+/=">') > -1);
+        assert.strictEqual(out.indexOf('<script type="text/javascript">'), -1,
+            'the bare opening tag should be rewritten');
+    });
+
+    it('replica: returns the loader unchanged when no nonce (back-compat)', function() {
+        assert.strictEqual(nonceLoader(LOADER, null), LOADER);
+        assert.strictEqual(nonceLoader(LOADER, undefined), LOADER);
+    });
+
+    it('replica: only the opening tag is rewritten (closing </script> untouched)', function() {
+        var out = nonceLoader(LOADER, 'XYZ');
+        assert.ok(out.indexOf('</script>') > -1, 'closing tag preserved');
+        assert.strictEqual((out.match(/<script/g) || []).length, 1, 'exactly one <script opening');
+    });
+
+});

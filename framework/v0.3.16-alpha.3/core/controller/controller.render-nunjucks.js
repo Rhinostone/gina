@@ -668,9 +668,10 @@ function registerGinaFilters(env, self, local, localOptions, req, res) {
  * @param {string}  html             - Rendered HTML from `env.render()` / `env.renderString()`
  * @param {object}  data             - Template data (has `data.page.view.stylesheets`/`.scripts`)
  * @param {object}  localOptions     - Controller's localOptions (has `template.ginaLoader`, `.externalPlugins`, etc.)
+ * @param {string} [cspNonce]        - #HDR5 per-request CSP nonce; when set, the onGinaLoaded bootstrap <script> carries a matching nonce="..." attribute.
  * @returns {string} HTML with asset tags injected where appropriate
  */
-function injectAssets(html, data, localOptions) {
+function injectAssets(html, data, localOptions, cspNonce) {
     if (typeof html !== 'string' || html.length === 0) { return html; }
     if (!data || !data.page || !data.page.view) { return html; }
 
@@ -680,6 +681,14 @@ function injectAssets(html, data, localOptions) {
     var isDeferMode     = !!(tpl && tpl.javascriptsDeferEnabled);
     var jsExcluded      = tpl && tpl.javascriptsExcluded;
     var ginaLoader      = tpl && tpl.ginaLoader;
+    // #HDR5 — stamp the bootstrap <script> with the per-request nonce when present.
+    // The loader is a cached, immutable string; .replace() returns a fresh copy.
+    if (cspNonce && typeof ginaLoader === 'string') {
+        ginaLoader = ginaLoader.replace(
+            '<script type="text/javascript">',
+            '<script type="text/javascript" nonce="' + cspNonce + '">'
+        );
+    }
     var externalPlugins = (tpl && Array.isArray(tpl.externalPlugins)) ? tpl.externalPlugins : [];
     var hasHead         = /<\/head>/i.test(html);
     var hasBody         = /<\/body>/i.test(html);
@@ -843,6 +852,12 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     var req   = local.req;
     var res   = local.res;
     var _next = local.next;
+
+    // #HDR5 — per-request CSP nonce (set on req by gina.plugins.Csp({useNonce:true})).
+    // Mirrored onto every framework-injected inline <script> so a bundle can drop
+    // 'unsafe-inline' from script-src. Threaded into injectAssets() and the Inspector
+    // injector below, since those helpers don't receive `req` directly.
+    var _cspNonce = (req && req._ginaCspNonce) ? req._ginaCspNonce : null;
 
     // #NJ3 — point the module-level `cache` at the server's shared in-memory
     // store for this request. Same pattern as render-swig.js:171 and
@@ -1078,7 +1093,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     // appended near the end of <body>. Any error falls through with the
     // un-mutated HTML so a mis-shaped template config never breaks the render.
     try {
-        html = injectAssets(html, data, localOptions);
+        html = injectAssets(html, data, localOptions, _cspNonce);
     } catch (assetErr) {
         try { console.warn('[render-nunjucks] asset injection skipped: ' + (assetErr.message || assetErr)); } catch (e) {}
     }

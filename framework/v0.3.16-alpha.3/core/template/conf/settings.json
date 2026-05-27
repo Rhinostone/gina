@@ -228,10 +228,7 @@
   //                pre-formatted string, true (boolean-only directives
   //                + "sandbox"), or false (omit). There is no sensible
   //                cross-bundle default — every bundle has its own
-  //                resource graph. v0 ships STATIC DIRECTIVES ONLY —
-  //                per-response nonce wiring requires template-render
-  //                integration and defers to a future CSP-aware
-  //                view-layer plugin. Example:
+  //                resource graph. Example:
   //                  "csp": {
   //                    "directives": {
   //                      "default-src": ["'self'"],
@@ -246,6 +243,14 @@
   //                as Content-Security-Policy-Report-Only — browsers
   //                report violations but do not block resources. Useful
   //                for non-enforcing migration testing.
+  //   useNonce   — boolean (default false). When true, a fresh
+  //                cryptographic nonce is generated per response, stamped
+  //                on req._ginaCspNonce, and appended to script-src (or
+  //                default-src) as 'nonce-XXXX'. Every framework-injected
+  //                inline <script> (the onGinaLoaded bootstrap + the dev-
+  //                only Inspector blocks) then carries the matching nonce
+  //                attribute, so the bundle can drop 'unsafe-inline' from
+  //                script-src. Requires a script-src/default-src directive.
   "csp": {},
   // #HDR6 — Cross-Origin-Embedder-Policy response header applied by
   // gina.plugins.Coep(). Controls which cross-origin resources the page
