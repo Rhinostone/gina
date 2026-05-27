@@ -275,6 +275,14 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
     // No `</body>` anchor → nothing safe to inject into. Don't force it.
     if (!/<\/body>/i.test(html)) { return html; }
 
+    // #HDR5 — per-request CSP nonce attribute for the Inspector inline <script>s.
+    // Read the stable `local._cspNonce` (stamped from the captured req in the main
+    // render scope), NOT volatile `local.req` — per the #M1 discipline local.req is
+    // the only slot that gets nulled, and this helper already reads per-request
+    // state off `local` (local._timeline / local._queryLog) the same way.
+    var _cspNonce     = (local && local._cspNonce) ? local._cspNonce : null;
+    var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
+
     // #FI — inject the dev-mode request timeline for the Inspector Flow tab,
     // and convert QI entries into timeline entries so the waterfall shows N1QL
     // queries alongside the routing/controller/template phases. Mirrors
@@ -406,9 +414,9 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
         .replace(/<\/script>/gi, '<\\/script>')
         .replace(/<!--/g, '<\\!--');
 
-    var __gdScript   = '<script>window.__ginaData = ' + _safeJson + ';</script>\n';
+    var __gdScript   = '<script' + _cspNonceAttr + '>window.__ginaData = ' + _safeJson + ';</script>\n';
     var _bundleName  = (__gdUser.environment && __gdUser.environment.bundle) || '';
-    var __logsScript = '<script>'
+    var __logsScript = '<script' + _cspNonceAttr + '>'
         + 'window.__ginaLogs = window.__ginaLogs || [];'
         + '(function(w){'
         + 'var _c=w.console,_l=w.__ginaLogs,_b=' + JSON.stringify(_bundleName) + ';'
@@ -855,9 +863,13 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
 
     // #HDR5 — per-request CSP nonce (set on req by gina.plugins.Csp({useNonce:true})).
     // Mirrored onto every framework-injected inline <script> so a bundle can drop
-    // 'unsafe-inline' from script-src. Threaded into injectAssets() and the Inspector
-    // injector below, since those helpers don't receive `req` directly.
+    // 'unsafe-inline' from script-src. Threaded into injectAssets() (which has no
+    // `req`); the main-scope value also nonces the late-bind patch script below.
+    // Stamped onto `local._cspNonce` (a stable slot, never nulled like local.req)
+    // so injectInspectorScripts() can read it without touching volatile local.req.
     var _cspNonce = (req && req._ginaCspNonce) ? req._ginaCspNonce : null;
+    var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
+    local._cspNonce = _cspNonce;
 
     // #NJ3 — point the module-level `cache` at the server's shared in-memory
     // store for this request. Same pattern as render-swig.js:171 and
@@ -1222,7 +1234,7 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
             var _njFlowPatch = (_njLateEntries.length > 0)
                 ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_njLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
                 : '';
-            var _njPatchScript = '<script>(function(d){'
+            var _njPatchScript = '<script' + _cspNonceAttr + '>(function(d){'
                 + 'var u=d&&d.user,g=d&&d.gina;'
                 + _njFlowPatch
                 + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _njWeightBytesFinal + ';u.environment.metrics.serverMs=' + _njServerMsFinal + ';}'

@@ -1269,3 +1269,46 @@ describe('14 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', fun
     });
 
 });
+
+
+// 15 — CSP nonce on the dev-only Inspector + metrics-patch inline scripts (#HDR16)
+describe('15 - CSP nonce: dev-only Inspector + patch inline scripts', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('derives _cspNonceAttr from the captured _cspNonce', function() {
+        assert.ok(
+            /var _cspNonceAttr\s*=\s*_cspNonce\s*\?\s*\(\s*' nonce="'\s*\+\s*_cspNonce\s*\+\s*'"'\s*\)\s*:\s*''/.test(src()),
+            'expected _cspNonceAttr derived from _cspNonce'
+        );
+    });
+
+    it('injects _cspNonceAttr into every framework-assembled inline <script> opening', function() {
+        var nonced = (src().match(/'<script' \+ _cspNonceAttr \+ '>/g) || []);
+        // __gdScript, __logsScript, _cachePatchScript, _patchScript = 4 dev-script sites
+        assert.ok(nonced.length >= 4,
+            'expected all 4 dev-script openings to carry _cspNonceAttr (got ' + nonced.length + ')');
+    });
+
+    it('leaves no bare framework-assembled <script> opening assignment', function() {
+        var s = src();
+        assert.ok(!/=\s*'<script>'/.test(s),          'no bare <script> assignment should remain');
+        assert.ok(!/=\s*'<script>\(function/.test(s), 'no bare <script>(function assignment should remain');
+        assert.ok(!/=\s*'<script>window/.test(s),     'no bare <script>window assignment should remain');
+    });
+
+    // pure-logic replica of the _cspNonceAttr fragment
+    function nonceAttr(nonce) { return nonce ? (' nonce="' + nonce + '"') : ''; }
+
+    it('replica: emits a nonce attribute when a nonce is present (base64 chars)', function() {
+        assert.strictEqual(nonceAttr('AbC+/=='), ' nonce="AbC+/=="');
+        assert.strictEqual('<script' + nonceAttr('AbC+/==') + '>', '<script nonce="AbC+/==">');
+    });
+
+    it('replica: emits nothing (back-compat bare tag) when no nonce', function() {
+        assert.strictEqual(nonceAttr(null), '');
+        assert.strictEqual('<script' + nonceAttr(null) + '>', '<script>');
+        assert.strictEqual('<script' + nonceAttr(undefined) + '>', '<script>');
+    });
+
+});

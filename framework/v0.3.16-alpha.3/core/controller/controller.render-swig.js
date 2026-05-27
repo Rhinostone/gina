@@ -204,6 +204,9 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         }
         return loaderTag;
     };
+    // #HDR5 — nonce attribute fragment for the dev-only Inspector + metrics-patch
+    // inline <script>s (assembled as JS strings below). '' when no nonce is set.
+    var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
 
@@ -922,7 +925,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         var _cacheFlowPatch = (_cacheLateEntries.length > 0)
                             ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_cacheLateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
                             : '';
-                        var _cachePatchScript = '<script>(function(d){'
+                        var _cachePatchScript = '<script' + _cspNonceAttr + '>(function(d){'
                             + 'var u=d&&d.user,g=d&&d.gina;'
                             + _cacheFlowPatch
                             + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _cacheWeightBytes + ';u.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
@@ -1226,7 +1229,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 replacement      : _redactConf.replacement
             });
 
-            var __gdScript = '<script>window.__ginaData = '
+            var __gdScript = '<script' + _cspNonceAttr + '>window.__ginaData = '
                 + JSON.stringify(__gdPayload)
                     .replace(/<\/script>/gi, '<\\/script>')
                     .replace(/<!--/g, '<\\!--')
@@ -1242,7 +1245,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             }
             process.emit('inspector#data', __gdPayload);
 
-            var __logsScript = '<script>'
+            var __logsScript = '<script' + _cspNonceAttr + '>'
                 + 'window.__ginaLogs = window.__ginaLogs || [];'
                 + '(function(w){'
                 + 'var _c=w.console,_l=w.__ginaLogs,_b="' + (__gdUser.environment && __gdUser.environment.bundle || '') + '";'
@@ -1649,7 +1652,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         var _flowPatch = (_lateEntries.length > 0)
                             ? 'if(u&&u.flow){var _e=u.flow.entries,_p=' + JSON.stringify(_lateEntries) + ';for(var _i=0;_i<_p.length;_i++){_e.push(_p[_i])}}'
                             : '';
-                        var _patchScript = '<script>(function(d){'
+                        var _patchScript = '<script' + _cspNonceAttr + '>(function(d){'
                             + 'var u=d&&d.user,g=d&&d.gina;'
                             + _flowPatch
                             + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _weightBytesFinal + ';u.environment.metrics.serverMs=' + _serverMsFinal + ';}'

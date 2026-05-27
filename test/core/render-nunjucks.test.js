@@ -405,3 +405,49 @@ describe('04 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', fun
     });
 
 });
+
+
+// 05 — CSP nonce on the dev-only Inspector + patch inline scripts (#HDR16)
+describe('05 - CSP nonce: dev-only Inspector + patch inline scripts', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('injectInspectorScripts reads the stable local._cspNonce (NOT volatile local.req)', function() {
+        var s = src();
+        assert.ok(
+            /var _cspNonce\s*=\s*\(local && local\._cspNonce\)\s*\?\s*local\._cspNonce\s*:\s*null/.test(s),
+            'expected injectInspectorScripts to read local._cspNonce'
+        );
+        assert.ok(/local\._cspNonce\s*=\s*_cspNonce/.test(s),
+            'expected the main scope to stamp local._cspNonce from the captured nonce');
+    });
+
+    it('defines _cspNonceAttr in both the Inspector helper and the main render scope', function() {
+        var defs = (src().match(/var _cspNonceAttr\s*=\s*_cspNonce\s*\?/g) || []);
+        assert.ok(defs.length >= 2,
+            'expected _cspNonceAttr defined in injectInspectorScripts AND the main scope (got ' + defs.length + ')');
+    });
+
+    it('injects _cspNonceAttr into the Inspector + patch inline <script> openings', function() {
+        var nonced = (src().match(/'<script' \+ _cspNonceAttr \+ '>/g) || []);
+        // __gdScript, __logsScript (injectInspectorScripts) + _njPatchScript (main) = 3 sites
+        assert.ok(nonced.length >= 3,
+            'expected all 3 dev-script openings to carry _cspNonceAttr (got ' + nonced.length + ')');
+    });
+
+    it('leaves no bare framework-assembled <script> opening assignment', function() {
+        var s = src();
+        assert.ok(!/=\s*'<script>'/.test(s),          'no bare <script> assignment should remain');
+        assert.ok(!/=\s*'<script>\(function/.test(s), 'no bare <script>(function assignment should remain');
+        assert.ok(!/=\s*'<script>window/.test(s),     'no bare <script>window assignment should remain');
+    });
+
+    // pure-logic replica of the _cspNonceAttr fragment
+    function nonceAttr(nonce) { return nonce ? (' nonce="' + nonce + '"') : ''; }
+
+    it('replica: emits a nonce attribute when present, nothing otherwise', function() {
+        assert.strictEqual('<script' + nonceAttr('Xy9+/=') + '>', '<script nonce="Xy9+/=">');
+        assert.strictEqual('<script' + nonceAttr(null) + '>', '<script>');
+    });
+
+});
