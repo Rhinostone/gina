@@ -23,11 +23,14 @@
  *
  *  1. **Package name allowlist** — only the configured `package` (default
  *     `@rhinostone/swig`) is honoured. `swig.package: "@rhinostone/swig-twig"`
- *     lets a project opt into the Twig frontend without re-keying anything.
- *     The abandoned upstream `swig` package name is never resolvable — it is
- *     not in the default or the known alternate, so a project that only has
- *     `"swig"` in node_modules gets the framework copy (which fixes
- *     CVE-2023-25345 at the controller layer).
+ *     lets a project opt into the Twig frontend, and
+ *     `swig.package: "@rhinostone/swig-jinja2"` opts into the Jinja2 frontend
+ *     (sibling packages from the same multi-flavor release as
+ *     `@rhinostone/swig`), without re-keying anything. The abandoned upstream
+ *     `swig` package name is never resolvable — it is not in the default or
+ *     any of the known alternates, so a project that only has `"swig"` in
+ *     node_modules gets the framework copy (which fixes CVE-2023-25345 at
+ *     the controller layer).
  *
  *  2. **Same-major rule** — the project's version must share the major
  *     component with the floor. Different major → fall back, because the
