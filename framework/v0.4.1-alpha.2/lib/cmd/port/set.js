@@ -107,6 +107,18 @@ function Set(opt, cmd) {
      * @private
      */
     var promptMissing = function() {
+        // Non-interactive guard: without a TTY (container, CI, piped/detached
+        // stdin) the readline below closes on stdin EOF and rl.question() would
+        // throw ERR_USE_AFTER_CLOSE. Fail fast pointing at the value flags. (rl is
+        // created lazily just below, so only the isTTY check applies here.)
+        if ( !process.stdin.isTTY ) {
+            console.error(
+                'port:set is missing values and stdin is not interactive (no TTY) to prompt for them.\n'
+                + 'Re-run providing all of --protocol, --scheme, --port and --env:\n'
+                + '  gina port:set '+ self.name +' @'+ self.projectName +' --protocol=<http/1.1|http/2.0> --scheme=<http|https> --port=<n> --env=<env>'
+            );
+            return process.exit(1);
+        }
         var rl = readline.createInterface({ input: process.stdin, output: process.stdout });
         var steps = [];
 

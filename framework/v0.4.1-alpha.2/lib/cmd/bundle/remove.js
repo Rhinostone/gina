@@ -114,6 +114,17 @@ function Remove(opt, cmd) {
      */
     var check = function() {
 
+        // Non-interactive guard: the module-scope readline closes on stdin EOF
+        // when there is no TTY (container, CI, piped/detached stdin), so the
+        // rl.prompt() below would throw ERR_USE_AFTER_CLOSE. Fail fast instead.
+        if ( !process.stdin.isTTY || rl.closed ) {
+            console.error(
+                'Bundle [ '+ local.bundle +'@'+ self.projectName +' ] removal needs a confirmation that cannot be read: stdin is not interactive (no TTY).\n'
+                + 'Re-run with --force to remove the bundle and its files non-interactively:\n'
+                + '  gina bundle:remove '+ local.bundle +' @'+ self.projectName +' --force'
+            );
+            return process.exit(1);
+        }
 
         rl.setPrompt('['+ local.bundle +'@'+ self.projectName +'] Also remove bundle files ? (Y/n):\n');
 

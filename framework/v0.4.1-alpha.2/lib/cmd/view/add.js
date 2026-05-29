@@ -237,6 +237,19 @@ function Add(opt, cmd) {
         var folder  = _(local.src + '/templates');
 
         if ( fs.existsSync(target) || fs.existsSync(folder) ) {
+            // Non-interactive guard: without a TTY (container, CI, piped/detached
+            // stdin) the module-scope readline closes on stdin EOF and rl.prompt()
+            // would throw ERR_USE_AFTER_CLOSE. view:add has no skip flag, so fail
+            // fast and point at the existing files to remove for a clean recreate.
+            if ( !process.stdin.isTTY || rl.closed ) {
+                console.error(
+                    'Templates already exist for [ '+ local.bundle +'@'+ self.projectName +' ], and stdin is not interactive (no TTY) to confirm an override.\n'
+                    + 'Re-run in an interactive terminal, or remove the existing files first to recreate them:\n'
+                    + '  '+ target +'\n'
+                    + '  '+ folder
+                );
+                return process.exit(1);
+            }
             rl.setPrompt('Found templates for [ '+ local.bundle +'@'+ self.projectName +' ]. Do you want to override ? (yes|no) > \n');
             rl.prompt();
 

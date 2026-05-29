@@ -135,6 +135,18 @@ function Set(opt, cmd) {
             return;
         }
 
+        // Non-interactive guard: without a TTY (container, CI, piped/detached
+        // stdin) the module-scope readline closes on stdin EOF and the rl.prompt()
+        // below would throw ERR_USE_AFTER_CLOSE. Fail fast pointing at the flags.
+        if ( !process.stdin.isTTY || rl.closed ) {
+            console.error(
+                'protocol:set needs interactive input for '+ actionType +' ('+ name +') that cannot be read: stdin is not interactive (no TTY).\n'
+                + 'Re-run passing both --protocol and --scheme:\n'
+                + '  gina protocol:set <your args> --protocol=<http/1.1|http/2.0> --scheme=<http|https>'
+            );
+            return process.exit(1);
+        }
+
         choicesOpt.push('cancel');
 
         for (var p = 0, len = choicesOpt.length; p < len; ++p) {

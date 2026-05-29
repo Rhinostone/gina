@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Extended the non-interactive (no-TTY) guard to the remaining interactive CLI commands — `bundle:remove`, `project:remove`, `protocol:set`, `port:set`, and `view:add`. When run without a terminal (container, CI, or piped stdin) and missing the values they would otherwise prompt for, they now fail fast with guidance (e.g. `--force`, or `--protocol`/`--scheme`/`--port`/`--env`) instead of throwing an opaque `ERR_USE_AFTER_CLOSE` ("readline was closed").'
+time: 2026-05-30T00:55:26.871377+01:00

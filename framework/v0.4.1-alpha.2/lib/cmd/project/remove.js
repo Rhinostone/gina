@@ -106,6 +106,17 @@ function Remove(opt, cmd) {
      */
     var prompt = function(force, cb) {
         if (!force) {
+            // Non-interactive guard: without a TTY (container, CI, piped/detached
+            // stdin) the module-scope readline closes on stdin EOF and rl.prompt()
+            // would throw ERR_USE_AFTER_CLOSE. Fail fast pointing at --force.
+            if ( !process.stdin.isTTY || rl.closed ) {
+                console.error(
+                    'Project [ '+ self.projectName +' ] removal needs a confirmation that cannot be read: stdin is not interactive (no TTY).\n'
+                    + 'Re-run with --force to remove the project and its sources non-interactively:\n'
+                    + '  gina project:rm @'+ self.projectName +' --force'
+                );
+                return process.exit(1);
+            }
             rl.setPrompt('Also remove project sources ? (Y/n):\n');
             rl.prompt();
         } else {
