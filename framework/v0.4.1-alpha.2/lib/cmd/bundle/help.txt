@@ -20,6 +20,16 @@
     $ gina bundle:add <bundle_name_1> <bundle_name_2> <bundle_name_3> @<project_name>
 
 
+    When the bundle already exists
+    ----------
+    You are prompted to replace, import, or cancel. Pass a flag to skip the
+    prompt — required when running without an interactive terminal (container,
+    CI, or piped stdin):
+
+    $ gina bundle:add <bundle_name> @<project_name> --import     (register the existing source)
+    $ gina bundle:add <bundle_name> @<project_name> --replace    (overwrite; existing files are lost)
+
+
 
 [ Removing an existing bundle ]
 
