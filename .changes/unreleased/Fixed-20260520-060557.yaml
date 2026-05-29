@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Inspector Flow tab — restored the request-lifecycle timeline for bundles using the nunjucks template engine. The nunjucks render delegate now builds `data.page.flow` (with N1QL queries converted into timeline entries) and late-binds the response-write/total entries via the same `_flowPatch` mechanism as the swig delegate, so the Flow waterfall is populated for nunjucks pages (previously entirely empty). Closes the deferred Flow-tab follow-up from the earlier swig-side restoration.'
-time: 2026-05-20T06:05:57.595497+01:00

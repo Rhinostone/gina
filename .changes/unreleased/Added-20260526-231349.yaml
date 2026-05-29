@@ -1,3 +1,0 @@
-kind: Added
-body: 'Inspector instrumentation windows now stream the controller queries and flow timeline of a server-rendered HTML page over the authenticated agent SSE, not just JSON and XHR responses. The page HTML is never modified; the capture leaves only over the key-authenticated channel while a window is open.'
-time: 2026-05-26T23:13:49.26246+01:00

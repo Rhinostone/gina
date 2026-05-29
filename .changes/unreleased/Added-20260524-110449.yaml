@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added an opt-in API-key gate for the dev-mode /_gina/agent Inspector SSE stream. Set inspector.agent.enabled and inspector.agent.key in settings.json to reach the endpoint outside dev mode (e.g. staging) for authenticated remote server-log streaming; the key is presented via the x-gina-inspector-key header or a ?key= query param and compared in constant time. In dev the endpoint stays open with no key (unchanged).'
-time: 2026-05-24T11:04:49.424918+01:00

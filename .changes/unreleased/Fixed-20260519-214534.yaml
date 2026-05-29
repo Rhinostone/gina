@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Inspector View tab — restored the Weight and Load badges for bundles using the nunjucks template engine. Closes the deferred follow-up from the earlier swig-side restoration, so both engines now surface the metrics consistently under `Cross-Origin-Opener-Policy` (no `window.opener`).'
-time: 2026-05-19T21:45:34.955547+01:00

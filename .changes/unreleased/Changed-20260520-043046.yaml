@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Inspector View tab — the server-emitted Weight and Load fallback values now render in italic with a slightly deeper dim (new `bm-vbadge-svr` style), so a value sourced from the server reads distinctly from the client-measured primary and the engine-version dim.'
-time: 2026-05-20T04:30:46.052767+01:00

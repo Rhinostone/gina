@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Refreshed more stale external references flagged by the link-health sweep. The popin plugin CSS doc now links the live normalize.css domain (necolas.github.io) and drops a dead community-wiki citation (prose retained); the popin extend doc now points to current Apple developer documentation for Smart App Banners and Safari meta tags; and gina bundle:mcp emits a resolvable manifest $schema host (modelcontextprotocol.io; the retired spec. subdomain no longer resolved). Documentation and generated-metadata only - no runtime or API change.'
-time: 2026-05-27T12:30:02.63336+01:00

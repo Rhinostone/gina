@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added opt-in completion webhooks for async jobs. Pass a callbackUrl when creating a job (lib.job.create(fn, { callbackUrl }) or self.startJob(fn, { callbackUrl })) and the framework POSTs { id, state, result, error } to it when the job finishes. Delivery is best-effort with retry and exponential backoff; persistent failures are recorded on the job as webhookFailed and never affect the job outcome. Configure a per-bundle webhookSecret (app.json jobs.webhookSecret, ideally a secret placeholder) to sign each payload with an X-Gina-Signature HMAC-SHA256 header.'
-time: 2026-05-22T05:29:48.659786+01:00

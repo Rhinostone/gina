@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'SQL Inspector index-coverage badges now stay accurate after a live /_gina/indexes refresh — the MySQL, PostgreSQL and SQLite introspection paths capture each index column, so column-level coverage no longer degrades to a false no-index-for-filter badge once live introspection has run.'
-time: 2026-05-20T14:45:55.205213+01:00

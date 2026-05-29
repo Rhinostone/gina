@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a toggleable Inspector instrumentation window (#INS10): POST /_gina/instrument opens a time-boxed, key-authenticated window that runs query + flow capture outside dev mode and streams it over the authenticated /_gina/agent SSE (JSON/XHR responses + cross-bundle queries). Opt-in via settings.json inspector.instrumentation; 300s default window, 3600s hard cap, auto-revert.'
-time: 2026-05-26T09:51:19.461758+01:00

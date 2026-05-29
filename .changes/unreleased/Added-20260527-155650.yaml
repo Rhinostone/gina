@@ -1,3 +1,0 @@
-kind: Added
-body: 'gina.plugins.Csp({ useNonce: true }) now exposes the per-response nonce to your templates as {{ page.cspNonce }} (swig) / {{ cspNonce }} (nunjucks), so you can add a matching nonce attribute to your own inline <script> tags and drop ''unsafe-inline'' from script-src. The dev-mode Inspector status bar inline script carries it automatically. Opt-in (default false); bundles that don''t set useNonce are unaffected.'
-time: 2026-05-27T15:56:50.531769+01:00

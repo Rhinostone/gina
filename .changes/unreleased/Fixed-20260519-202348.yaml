@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'throwError(statusCode, Error|string) 2-arg form now honors the explicit status code. Previously the inner status-coercion read .status from the wrapped error rather than from the number itself, so any explicit code other than 500 was silently lost. The 2-arg-with-errorObj shape was unaffected and stays unchanged. Documented in types/index.d.ts as a new overload.'
-time: 2026-05-19T20:23:48.707211+01:00

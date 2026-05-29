@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Inspector View tab — restored the Weight and Load badges when `window.opener.performance` is unreachable (e.g. host page sets `Cross-Origin-Opener-Policy`, which nulls the popup opener reference). Server-side metrics (`weightBytes` from the response body byte length, `serverMs` from the request timeline) are now emitted on `__ginaData.user.environment.metrics` and used as fallback by the client. When both client + server values are available, the badge renders as a dual `<server-dim> | <client-primary>` pair — surfacing the compression ratio for Weight and the network/parse/paint cost for Load.'
-time: 2026-05-19T20:25:40.276255+01:00

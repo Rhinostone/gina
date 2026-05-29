@@ -1,3 +1,0 @@
-kind: Added
-body: 'Inspector View tab now shows the template engine version next to the engine name (e.g. `Swig | 2.4.0`). The version is sourced server-side from the cached swig / nunjucks resolver decisions and falls back to a name-only badge when no version is resolvable (very-early bootstrap, test stubs, legacy render paths).'
-time: 2026-05-19T19:55:09.304252+01:00

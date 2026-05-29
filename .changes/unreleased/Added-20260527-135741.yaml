@@ -1,3 +1,0 @@
-kind: Added
-body: 'gina.plugins.Csp({ useNonce: true }) generates a fresh per-response CSP nonce, stamps it on req._ginaCspNonce, and appends a nonce source-expression to script-src (fallback default-src). The swig and nunjucks renderers set a matching nonce attribute on the framework-injected onGinaLoaded bootstrap script — letting bundles drop unsafe-inline from script-src. Opt-in (default false); existing bundles are unaffected.'
-time: 2026-05-27T13:57:41.412135+01:00

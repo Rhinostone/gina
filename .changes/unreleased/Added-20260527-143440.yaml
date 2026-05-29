@@ -1,3 +1,0 @@
-kind: Added
-body: 'The dev-mode Inspector inline scripts (window.__ginaData snapshot + console-capture) and the client-side metrics-patch scripts now carry the gina.plugins.Csp({ useNonce: true }) per-response nonce in both the swig and nunjucks renderers, so a bundle running strict CSP in dev no longer reports violations for those framework-injected inline scripts. Extends the #HDR16 onGinaLoaded bootstrap nonce.'
-time: 2026-05-27T14:34:40.131522+01:00
