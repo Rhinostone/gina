@@ -182,6 +182,14 @@ function Add(opt, cmd) {
     /**
      * Checks if the bundle already exists and prompts for replace/import/cancel.
      *
+     * When the bundle already exists and neither `--replace` nor `--import` was
+     * passed, an interactive prompt is shown. In a non-interactive context (no
+     * TTY — container entrypoint, CI, piped/detached stdin) that prompt cannot be
+     * answered: the module-scope readline closes on stdin EOF before this async
+     * scan callback runs, so `rl.prompt()` would throw ERR_USE_AFTER_CLOSE. The
+     * guard below fails fast with guidance to re-run with `--import` or
+     * `--replace` instead of surfacing an opaque "readline was closed" rollback.
+     *
      * @inner
      * @private
      */
@@ -213,6 +221,22 @@ function Add(opt, cmd) {
                     makeBundle(local.bundle, true);
                 }
                 return;
+            }
+
+            // Interactive prompt requires a TTY. In a non-interactive context
+            // (container entrypoint, CI, piped or detached stdin) the module-scope
+            // readline closes on stdin EOF before this async scan callback runs, so
+            // rl.prompt() below would throw ERR_USE_AFTER_CLOSE — caught upstream and
+            // surfaced as an opaque "could not complete bundle creation: readline was
+            // closed" rollback. Fail fast with actionable guidance instead.
+            if ( !process.stdin.isTTY || rl.closed ) {
+                console.error(
+                    'Bundle [ '+ local.bundle +' ] already exists, but no choice can be read: stdin is not interactive (no TTY).\n'
+                    + 'Re-run with --import to register the existing source, or --replace to overwrite it (existing files will be lost):\n'
+                    + '  gina bundle:add '+ local.bundle +' @'+ self.projectName +' --import\n'
+                    + '  gina bundle:add '+ local.bundle +' @'+ self.projectName +' --replace'
+                );
+                return process.exit(1);
             }
 
             rl.setPrompt('Bundle [ '+ local.bundle +' ] already exists !\n(r) Replace - All existing files will be lost !\n(c) Cancel\n(i) Import\n> ');
