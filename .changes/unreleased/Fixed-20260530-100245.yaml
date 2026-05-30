@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the `gina` CLI crashing with an opaque `could not load package.json` / `MODULE_NOT_FOUND` when `GINA_VERSION` resolves to a framework version that is not installed (a stale version pin, or a bind-mounted development tree at a different version). `bin/cli` now verifies the framework directory exists before requiring from it and fails fast with a clear message pointing at `gina framework:install <version>`, instead of letting every CLI command fail opaquely.'
+time: 2026-05-30T10:02:45.812338+01:00

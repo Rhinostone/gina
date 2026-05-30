@@ -63,6 +63,18 @@ async function onExec() {
         var packObj         = require(pack);
         var version         = getEnvVar('GINA_VERSION') || packObj.version;// jshint ignore:line
         frameworkPath   = ginaPath + '/framework/v' + version;
+        // Validate the framework dir exists BEFORE requiring from it. GINA_VERSION
+        // (env/state) can point at a version that is not installed here — a stale
+        // pin, or a bind-mounted dev tree whose version differs from the expected
+        // one. Without this guard the require() below throws an opaque
+        // MODULE_NOT_FOUND that the catch mislabels as "could not load
+        // package.json", and every CLI command silently fails (e.g. project
+        // registration never runs). The sibling guard further down (resolving
+        // GINA_FRAMEWORK_DIR) runs too late — after this require.
+        if ( !fs.existsSync(frameworkPath) ) {
+            process.stderr.write('gina: framework version ' + version + ' is not installed (expected at ' + frameworkPath + ').\nInstalled package version is ' + packObj.version + '.\nTry:\n  $ gina framework:install ' + version + '\n');
+            return process.exit(1);
+        }
         var generator   = require(frameworkPath + '/lib/generator');
 
         require(frameworkPath + '/lib');
