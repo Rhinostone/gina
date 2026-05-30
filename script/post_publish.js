@@ -222,6 +222,10 @@ function PostPublish() {
 
         var docsRepoPath = _(os.homedir() + '/Sites/gina/docs/repo', true);
         var initialDir = process.cwd();
+        // Fail-closed flag for the develop→main merge. Stays true unless the
+        // lockfile-regen failure path below cannot guarantee a consistent
+        // package.json / package-lock.json pair (see sync_docs_deps.js).
+        var docsMergeSafe = true;
         process.chdir(docsRepoPath);
         try {
             execSync('$(which git) checkout develop');
@@ -250,10 +254,47 @@ function PostPublish() {
                     cmd: '$(which npm) install --package-lock-only --ignore-scripts'
                 });
                 if (!lockResult.ok) {
-                    console.warn('[syncDocs] devDep / lockfile sync failed after ' + lockResult.attempts + ' attempts (non-fatal — fix manually): ' + (lockResult.lastErr.message || lockResult.lastErr));
+                    // Registry lag: the just-published version stayed unresolvable
+                    // past the retry window, so package-lock.json was NOT
+                    // regenerated and still pins the previous version, while
+                    // package.json was bumped to the new one above. Committing +
+                    // merging that mismatched pair to docs main breaks Vercel
+                    // `npm ci`. Fail closed: revert devDependencies.gina to match
+                    // the version still locked in package-lock.json so the
+                    // committed pair stays consistent and the docs CONTENT still
+                    // deploys (only the version badge lags). If the locked
+                    // version can't be read, skip the merge rather than ship a
+                    // mismatch.
+                    var syncDocsDeps = require(scriptPath + '/sync_docs_deps');
+                    var lockfileContent = fs.existsSync('package-lock.json')
+                        ? fs.readFileSync('package-lock.json', 'utf8')
+                        : null;
+                    var depState = syncDocsDeps.resolveDocsDepState({
+                        lockResult      : lockResult,
+                        lockfileContent : lockfileContent,
+                        newVersion      : self.publishedVersion
+                    });
+
+                    console.warn('[syncDocs] lockfile regen failed after ' + lockResult.attempts + ' attempts (registry lag): ' + (lockResult.lastErr.message || lockResult.lastErr));
+
+                    if (depState.devDep) {
+                        execSync('$(which npm) pkg set devDependencies.gina="' + depState.devDep + '"');
+                        console.warn('[syncDocs] reverted devDependencies.gina to ' + depState.devDep + ' to match the unregenerated lockfile — content will deploy; the docs version badge may lag until a follow-up bump:');
+                        console.warn('[syncDocs]   cd ~/Sites/gina/docs/repo && npm pkg set devDependencies.gina="^' + self.publishedVersion + '" && npm install --package-lock-only --ignore-scripts && git commit -am "Updating package-lock for gina@' + self.publishedVersion + '" && git checkout main && git merge --ff-only develop && git push origin main && git checkout develop');
+                    }
+
+                    if (!depState.mergeToMain) {
+                        docsMergeSafe = false;
+                        console.warn('[syncDocs] could not read the locked gina version — skipping the develop→main merge to avoid shipping a mismatched pair. Manual recovery (regenerate the lockfile on develop, then ff-merge to main):');
+                        console.warn('[syncDocs]   cd ~/Sites/gina/docs/repo && npm pkg set devDependencies.gina="^' + self.publishedVersion + '" && npm install --package-lock-only --ignore-scripts && git commit -am "Updating package-lock for gina@' + self.publishedVersion + '" && git checkout main && git merge --ff-only develop && git push origin main && git checkout develop');
+                    }
                 }
             } catch (lockErr) {
-                console.warn('[syncDocs] devDep / lockfile sync failed (non-fatal — fix manually): ' + (lockErr.message || lockErr));
+                // A throw here (npm pkg set, fs read, or helper require) means we
+                // cannot guarantee a consistent pair — fail closed by skipping
+                // the merge.
+                docsMergeSafe = false;
+                console.warn('[syncDocs] devDep / lockfile sync failed (non-fatal — fix manually, merge skipped): ' + (lockErr.message || lockErr));
             }
 
             // Commit + push develop — tolerate "nothing to commit" locally so
@@ -267,7 +308,7 @@ function PostPublish() {
                 if (!/nothing to commit/i.test(commitOut)) { throw commitErr; }
             }
 
-            if (!self.isAlpha) {
+            if (!self.isAlpha && docsMergeSafe) {
                 // Stable / beta — merge develop into main and push; GitHub Actions deploys automatically.
                 // Runs whether or not this invocation wrote a new ginaVersion, so that docs content
                 // commits (migration, roadmap, guides) made earlier on develop still reach main.
@@ -276,6 +317,8 @@ function PostPublish() {
                 execSync('$(which git) push origin main');
                 execSync('$(which git) checkout develop');
                 console.info('[syncDocs] Merged develop → main and pushed — deployment triggered');
+            } else if (!self.isAlpha && !docsMergeSafe) {
+                console.warn('[syncDocs] develop→main merge skipped — docs content committed/pushed to develop but NOT deployed. See the manual recovery recipe above.');
             } else {
                 console.info('[syncDocs] Alpha release — docs committed and pushed to develop');
             }
