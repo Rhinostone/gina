@@ -38,6 +38,22 @@
     $ gina project:list [ [ --more ] | [-b | --with-bundles] | [-e | --with-envs] ]
 
 
+[ Show project status ]
+
+    Shows the running/stopped state, PID, and port of each bundle in the project.
+    With no @<project>, reports every registered project.
+
+    $ gina project:status @<project_name>
+
+    or for every registered project
+
+    $ gina project:status
+
+    or as JSON
+
+    $ gina project:status @<project_name> --format=json
+
+
 [ Start project ]
 
     $ gina project:start @<project_name> [ --env=dev, --scope=local, --inspect-brk=5000 ]

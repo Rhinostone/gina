@@ -46,6 +46,15 @@
     $ gina bundle:list
 
 
+[ Showing a bundle's status ]
+
+    $ gina bundle:status <bundle_name> @<project_name>
+
+    or as JSON
+
+    $ gina bundle:status <bundle_name> @<project_name> --format=json
+
+
 [ Starting a bundle ]
 
     $ gina bundle:start <bundle_name> @<project_name>

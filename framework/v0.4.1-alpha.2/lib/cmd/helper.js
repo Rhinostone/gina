@@ -477,7 +477,7 @@ function CmdHelper(cmd, client, debug) {
             // project name : passed or using the current folder as project name by default
             if ( cmd.projectName == null || typeof(cmd.projectName) == 'undefined' || cmd.projectName == '' ) {
 
-                if (!/\:list$/.test(cmd.task)) {// ignore this cases
+                if (!/\:list$/.test(cmd.task) && !/^project\:status$/.test(cmd.task)) {// ignore this cases ( project:status is all-projects like project:list )
                     var folder = new _(process.cwd()).toArray().last();
 
                     if (isDefined('project', folder)) {
