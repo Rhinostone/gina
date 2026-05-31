@@ -189,32 +189,38 @@ describe('06 - copy flow', function () {
 
 
 // ---------------------------------------------------------------------------
-// 07 — name-rewrite operators (lock the regexes for the §12 replica)
+// 07 — delegates the name rewrite to the shared engine
+//      (the operators themselves are tested in bundle-name-rewrite.test.js)
 // ---------------------------------------------------------------------------
 
-describe('07 - name-rewrite operators', function () {
+describe('07 - delegates name rewrite to the shared engine', function () {
 
-    it('escapeRegex + capitalize helpers exist', function () {
-        assert.match(src, /replace\(\/\[\.\*\+\?\^\$\{\}\(\)\|\[\\\]\\\\\]\/g, '\\\\\$&'\)/);
-        assert.match(src, /s\.charAt\(0\)\.toUpperCase\(\) \+ s\.slice\(1\)/);
+    it('requires the shared name-rewrite module', function () {
+        assert.match(src, /var nameRewrite = require\('\.\/inc\/name-rewrite'\)/);
     });
 
-    it('capitalized PascalCase-prefix pass: \\b<SrcCap> -> DstCap', function () {
-        assert.match(src, /new RegExp\('\\\\b' \+ escapeRegex\(SrcCap\), 'g'\), DstCap/);
+    it('rewriteTree delegates to nameRewrite.renameContent with the webroot toggle', function () {
+        assert.match(src, /nameRewrite\.renameContent\(content, source, dest, \{ fixWebroot: isServerSettings \}\)/);
     });
 
-    it('lowercase whole-word pass: \\b<source>\\b -> dest', function () {
-        assert.match(src, /new RegExp\('\\\\b' \+ escapeRegex\(source\) \+ '\\\\b', 'g'\), dest/);
+    it('removeDest uses nameRewrite.escapeRegex for the ports regex', function () {
+        assert.match(src, /nameRewrite\.escapeRegex\(dest\)/);
+        assert.match(src, /nameRewrite\.escapeRegex\(project\)/);
     });
 
-    it('first-bundle webroot collision fix on settings.server.json only', function () {
-        assert.match(src, /"webroot"\\s\*:\\s\*\)"/);
-        assert.match(src, /'\$1"\/' \+ dest \+ '"'/);
-        assert.match(src, /if \( isServerSettings \)/);
+    it('report uses nameRewrite.capitalize for the dry-run wording', function () {
+        assert.match(src, /nameRewrite\.capitalize\(source\)/);
+        assert.match(src, /nameRewrite\.capitalize\(dest\)/);
     });
 
     it('rewrite is limited to .js / .json files', function () {
         assert.match(src, /\/\\\.\(js\|json\)\$\/i\.test\(f\)/);
+    });
+
+    it('no longer defines the engine inline (moved to the shared module)', function () {
+        assert.doesNotMatch(src, /var renameContent = function/);
+        assert.doesNotMatch(src, /var escapeRegex = function/);
+        assert.doesNotMatch(src, /var capitalize = function/);
     });
 });
 
@@ -253,9 +259,9 @@ describe('09 - dry-run', function () {
         assert.match(src, /if \( dryRun \) \{\s*\n\s*return report\(true, format, source, dest, project, srcPath, destPath, destExists, previewRewrite\(srcPath, source, dest\)\)/);
     });
 
-    it('previewRewrite scans the SOURCE tree (no copy yet) and counts occurrences', function () {
+    it('previewRewrite scans the SOURCE tree (no copy yet) via nameRewrite.countOccurrences', function () {
         assert.match(src, /var previewRewrite = function\(srcPath, source, dest\)/);
-        assert.match(src, /capM\.length \+ lowM\.length/);
+        assert.match(src, /nameRewrite\.countOccurrences\(content, source\)/);
     });
 
     it('preview wording differs from the success wording', function () {
@@ -310,110 +316,11 @@ describe('11 - help + arguments + alias', function () {
 
 
 // ---------------------------------------------------------------------------
-// 12 — pure-logic replica: renameContent
-//      (mirrors copy.js renameContent; §07 pins lock its operators)
+// 12 — pure-logic replica: manifest clone + releases repoint
+//      (the name-rewrite engine's own tests live in bundle-name-rewrite.test.js)
 // ---------------------------------------------------------------------------
 
-describe('12 - renameContent replica', function () {
-
-    function escapeRegex(s) {
-        return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-    function capitalize(s) {
-        return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-    function renameContent(content, source, dest, isServerSettings) {
-        var SrcCap = capitalize(source), DstCap = capitalize(dest);
-        content = content.replace(new RegExp('\\b' + escapeRegex(SrcCap), 'g'), DstCap);
-        content = content.replace(new RegExp('\\b' + escapeRegex(source) + '\\b', 'g'), dest);
-        if (isServerSettings) {
-            content = content.replace(/("webroot"\s*:\s*)"\/"/, '$1"/' + dest + '"');
-        }
-        return content;
-    }
-
-    it('renames the PascalCase controller class identifiers', function () {
-        assert.equal(renameContent('function ApiController() {}', 'api', 'web'), 'function WebController() {}');
-        assert.equal(renameContent('module.exports = ApiContentController', 'api', 'web'), 'module.exports = WebContentController');
-    });
-
-    it('renames the require-var and all its uses (whole-word lowercase)', function () {
-        assert.equal(
-            renameContent("var api = require('gina'); api.onError(); api.start();", 'api', 'web'),
-            "var web = require('gina'); web.onError(); web.start();"
-        );
-    });
-
-    it('renames the app.json "name" value', function () {
-        assert.equal(renameContent('"name": "api"', 'api', 'web'), '"name": "web"');
-    });
-
-    it('renames a standalone capitalized word in a comment', function () {
-        assert.equal(renameContent(' * Api bundle', 'api', 'web'), ' * Web bundle');
-    });
-
-    it('first-bundle webroot "/" -> "/<dest>" (settings.server only), preserving comments', function () {
-        assert.equal(
-            renameContent('    "webroot": "/" // keep me', 'api', 'web', true),
-            '    "webroot": "/web" // keep me'
-        );
-    });
-
-    it('non-first webroot "/api" -> "/web" via the lowercase pass', function () {
-        assert.equal(renameContent('    "webroot": "/api"', 'api', 'web', true), '    "webroot": "/web"');
-    });
-
-    it('does NOT touch a name embedded inside a larger token (no false positives)', function () {
-        assert.equal(renameContent('var apiKey = 1; var myapi = 2; rapid;', 'api', 'web'), 'var apiKey = 1; var myapi = 2; rapid;');
-        assert.equal(renameContent('apiClient.fetch()', 'api', 'web'), 'apiClient.fetch()');
-    });
-
-    it('DOES rewrite a name that is a whole path segment (documented — the reason --dry-run exists)', function () {
-        assert.equal(renameContent('"/api/v1"', 'api', 'web'), '"/web/v1"');
-    });
-
-    it('escapes regex metacharacters in the bundle name', function () {
-        // a name with a dot must be treated literally, not as a regex "any char"
-        assert.equal(renameContent('var a.b = 1; axb;', 'a.b', 'web'), 'var web = 1; axb;');
-    });
-});
-
-
-// ---------------------------------------------------------------------------
-// 13 — pure-logic replica: preview occurrence count
-// ---------------------------------------------------------------------------
-
-describe('13 - preview occurrence count replica', function () {
-
-    function escapeRegex(s) {
-        return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-    function capitalize(s) {
-        return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-    function countOccurrences(content, source) {
-        var reCap = new RegExp('\\b' + escapeRegex(capitalize(source)), 'g');
-        var reLow = new RegExp('\\b' + escapeRegex(source) + '\\b', 'g');
-        return (content.match(reCap) || []).length + (content.match(reLow) || []).length;
-    }
-
-    it('counts capitalized + lowercase whole-word hits, ignores embedded', function () {
-        var content = "var api = require('gina');\nfunction ApiController(){}\napi.start();\nvar apiKey = 1;";
-        // hits: api (var), ApiController (cap), api (start)  -> 3 ; apiKey embedded -> 0
-        assert.equal(countOccurrences(content, 'api'), 3);
-    });
-
-    it('returns 0 when the name is absent', function () {
-        assert.equal(countOccurrences('var x = 1;', 'api'), 0);
-    });
-});
-
-
-// ---------------------------------------------------------------------------
-// 14 — pure-logic replica: manifest clone + releases repoint
-// ---------------------------------------------------------------------------
-
-describe('14 - manifest repoint replica', function () {
+describe('12 - manifest repoint replica', function () {
 
     function repointEntry(srcEntry, source, dest) {
         var entry = JSON.parse(JSON.stringify(srcEntry));

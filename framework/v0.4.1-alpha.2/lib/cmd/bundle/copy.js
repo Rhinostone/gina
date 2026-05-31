@@ -3,6 +3,7 @@ var console = lib.logger;
 
 var CmdHelper = require('./../helper');
 var scan      = require('./../port/inc/scan');
+var nameRewrite = require('./inc/name-rewrite');
 
 /**
  * @module gina/lib/cmd/bundle/copy
@@ -95,67 +96,10 @@ function Copy(opt, cmd) {
     }
 
 
-    /**
-     * Escapes regular-expression metacharacters in a bundle name so it can be
-     * embedded safely in a dynamically-built `RegExp`.
-     *
-     * @inner
-     * @private
-     * @param {string} s
-     * @returns {string}
-     */
-    var escapeRegex = function(s) {
-        return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }
-
-
-    /**
-     * Returns the name with its first character upper-cased (the `${Bundle}`
-     * convention the scaffolder uses for controller class names, etc.).
-     *
-     * @inner
-     * @private
-     * @param {string} s
-     * @returns {string}
-     */
-    var capitalize = function(s) {
-        return s.charAt(0).toUpperCase() + s.slice(1);
-    }
-
-
-    /**
-     * Rewrites the bundle-name footprint in a single file's content:
-     *  - `\b<Source>` (PascalCase prefix + standalone, e.g. `ApiController`, `Api`) → `<Dest>`
-     *  - `\b<source>\b` (lowercase whole-word, e.g. require-var, `"name"`, webroot path) → `<dest>`
-     *  - for `settings.server.json`: a first-bundle webroot of `"/"` → `"/<dest>"`
-     *
-     * Word boundaries keep the rewrite off names embedded inside a larger token
-     * (`apiClient`, `rapid`, `api_key`). The two case-disjoint passes never collide.
-     *
-     * @inner
-     * @private
-     * @param {string} content
-     * @param {string} source
-     * @param {string} dest
-     * @param {boolean} isServerSettings
-     * @returns {string}
-     */
-    var renameContent = function(content, source, dest, isServerSettings) {
-        var SrcCap = capitalize(source)
-            , DstCap = capitalize(dest);
-
-        // PascalCase-prefix + standalone capitalized form (ApiController, "Api bundle")
-        content = content.replace(new RegExp('\\b' + escapeRegex(SrcCap), 'g'), DstCap);
-        // lowercase whole-word form (var api, "api", /api, api@project)
-        content = content.replace(new RegExp('\\b' + escapeRegex(source) + '\\b', 'g'), dest);
-
-        // first-bundle webroot collision: a verbatim "/" would clash with the
-        // source bundle — repoint to "/<dest>" (string op preserves comments).
-        if ( isServerSettings ) {
-            content = content.replace(/("webroot"\s*:\s*)"\/"/, '$1"/' + dest + '"');
-        }
-        return content;
-    }
+    // escapeRegex / capitalize / renameContent live in ./inc/name-rewrite.js
+    // (the pure rewrite engine shared with bundle:rename). Consumed below as
+    // `nameRewrite.*`; the fs-walking wrappers (walkFiles/rewriteTree/
+    // previewRewrite) stay here because they touch fs + lib.generator.
 
 
     /**
@@ -204,7 +148,7 @@ function Copy(opt, cmd) {
             var content;
             try { content = fs.readFileSync(f, 'utf8'); } catch (e) { continue; }
             var isServerSettings = /config\/settings\.server\.json$/.test(f);
-            var updated = renameContent(content, source, dest, isServerSettings);
+            var updated = nameRewrite.renameContent(content, source, dest, { fixWebroot: isServerSettings });
             if ( updated !== content ) {
                 lib.generator.createFileFromDataSync(updated, f);
                 touched.push(f);
@@ -229,17 +173,13 @@ function Copy(opt, cmd) {
      */
     var previewRewrite = function(srcPath, source, dest) {
         var files = walkFiles(srcPath)
-            , sites = []
-            , reCap = new RegExp('\\b' + escapeRegex(capitalize(source)), 'g')
-            , reLow = new RegExp('\\b' + escapeRegex(source) + '\\b', 'g');
+            , sites = [];
         for (var i = 0; i < files.length; i++) {
             var f = files[i];
             if ( !/\.(js|json)$/i.test(f) ) continue;
             var content;
             try { content = fs.readFileSync(f, 'utf8'); } catch (e) { continue; }
-            var capM = content.match(reCap) || [];
-            var lowM = content.match(reLow) || [];
-            var n = capM.length + lowM.length;
+            var n = nameRewrite.countOccurrences(content, source);
             if ( n > 0 ) {
                 sites.push({ file: f.replace(srcPath, '').replace(/^\//, ''), occurrences: n });
             }
@@ -289,7 +229,7 @@ function Copy(opt, cmd) {
         for (var protocol in ports) {
             for (var scheme in ports[protocol]) {
                 for (var port in ports[protocol][scheme]) {
-                    re = new RegExp('^' + escapeRegex(dest) + '@' + escapeRegex(project) + '/');
+                    re = new RegExp('^' + nameRewrite.escapeRegex(dest) + '@' + nameRewrite.escapeRegex(project) + '/');
                     if ( re.test(ports[protocol][scheme][port]) ) {
                         delete ports[protocol][scheme][port];
                     }
@@ -387,7 +327,7 @@ function Copy(opt, cmd) {
             console.log('  target : '+ destPath + (overwrite ? '  (EXISTS — would be overwritten)' : ''));
             console.log('  files  : '+ fileCount + ' file(s) copied verbatim');
             if ( rewriteSites.length > 0 ) {
-                console.log('  rename : `'+ source +'`/`'+ capitalize(source) +'` → `'+ dest +'`/`'+ capitalize(dest) +'` in '+ rewriteSites.length +' .js/.json file(s):');
+                console.log('  rename : `'+ source +'`/`'+ nameRewrite.capitalize(source) +'` → `'+ dest +'`/`'+ nameRewrite.capitalize(dest) +'` in '+ rewriteSites.length +' .js/.json file(s):');
                 for (var i = 0; i < rewriteSites.length; i++) {
                     var occ = rewriteSites[i].occurrences;
                     console.log('    - '+ rewriteSites[i].file +' ('+ occ +' occurrence'+ (occ === 1 ? '' : 's') +')');
