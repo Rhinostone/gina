@@ -34,25 +34,18 @@ var HELP_TXT      = path.join(FW, 'lib/cmd/bundle/help.txt');
 var src     = fs.readFileSync(STATUS_SOURCE, 'utf8');
 var helpTxt = fs.existsSync(HELP_TXT) ? fs.readFileSync(HELP_TXT, 'utf8') : '';
 
-describe('01 - readPidfile helper', function () {
-    it('builds the pidfile path under GINA_HOMEDIR/run', function () {
-        assert.match(src, /GINA_HOMEDIR \+ '\/run\/' \+ bundleName \+ '@' \+ projectName \+ '\.pid'/);
+describe('01 - run-state via lib.cmdStatusFormat', function () {
+    it('imports the shared primitive as `var fmt = lib.cmdStatusFormat`', function () {
+        assert.match(src, /var fmt = lib\.cmdStatusFormat;/);
     });
 
-    it('probes liveness with process.kill(pid, 0)', function () {
-        assert.match(src, /process\.kill\(pid, 0\)/);
+    it('probes run state via fmt.readPidfile (no inline copy)', function () {
+        assert.match(src, /fmt\.readPidfile\(/);
+        assert.doesNotMatch(src, /var readPidfile = function/);
     });
 
-    it('returns a running flag and pid', function () {
-        assert.match(src, /running:\s*true,\s*pid:\s*pid/);
-    });
-
-    it('returns running:false on a missing or stale pidfile', function () {
-        assert.match(src, /running:\s*false,\s*pid:\s*null/);
-    });
-
-    it('does NOT delete the pidfile (cleanup stays with bundle:stop)', function () {
-        assert.doesNotMatch(src, /fs\.unlink\w*\(pidPath/);
+    it('passes the run directory to fmt.readPidfile', function () {
+        assert.match(src, /fmt\.readPidfile\(GINA_HOMEDIR \+ '\/run', /);
     });
 });
 
@@ -66,13 +59,10 @@ describe('02 - status uses readPidfile', function () {
     });
 });
 
-describe('03 - pickPreferredPort helper', function () {
-    it('prefers the dev env', function () {
-        assert.match(src, /ports\.dev \? 'dev'/);
-    });
-
-    it('prefers http/2.0 https', function () {
-        assert.match(src, /http\/2\.0/);
+describe('03 - pickPreferredPort via lib.cmdStatusFormat', function () {
+    it('resolves the preferred port via fmt.pickPreferredPort (no inline copy)', function () {
+        assert.match(src, /fmt\.pickPreferredPort\(ports\)/);
+        assert.doesNotMatch(src, /var pickPreferredPort = function/);
     });
 });
 
