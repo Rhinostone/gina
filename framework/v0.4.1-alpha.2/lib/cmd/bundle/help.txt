@@ -37,6 +37,35 @@
 
 
 
+[ Copying a bundle under a new name ]
+
+    Duplicate a bundle's source + config under a new name inside the SAME
+    project. gina copies the source tree, rewrites the bundle-name footprint
+    (controller class names, the gina require-var, app.json name, webroot) in
+    the copied .js/.json files, allocates a fresh full protocol/scheme/env port
+    matrix for the new name, and registers it in manifest.json + env.json +
+    ~/.gina/ports.json. User content in templates / SQL / CSS is copied verbatim.
+
+    $ gina bundle:copy <source_bundle_name> <new_bundle_name> @<project_name>
+
+    Alias
+    ----------
+    $ gina bundle:cp <source_bundle_name> <new_bundle_name> @<project_name>
+
+    Preview without writing anything
+    ----------
+    Lists every file the name rewrite would touch (and the planned port /
+    manifest changes) so coincidental matches can be reviewed before any write.
+
+    $ gina bundle:copy <source_bundle_name> <new_bundle_name> @<project_name> --dry-run
+    $ gina bundle:copy <source_bundle_name> <new_bundle_name> @<project_name> --dry-run --format=json
+
+    Overwrite an existing target
+    ----------
+    $ gina bundle:copy <source_bundle_name> <new_bundle_name> @<project_name> --force
+
+
+
 [ Listing all bundles inside your project ]
 
     $ gina bundle:list @<project_name>

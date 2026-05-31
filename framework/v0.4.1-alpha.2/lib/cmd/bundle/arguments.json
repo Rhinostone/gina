@@ -13,5 +13,7 @@
   "--http-port",
   "--max-in-flight",
   "--auth-token",
-  "--cors-origin"
+  "--cors-origin",
+  "--dry-run",
+  "--format"
 ]
