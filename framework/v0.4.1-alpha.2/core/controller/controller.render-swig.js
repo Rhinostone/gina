@@ -312,7 +312,18 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         }
         file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
         // making path thru [namespace &] file
-        if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
+        // #27 — self.setTemplate(file, ext) override wins and fully replaces
+        // the path with NO namespace prefixing (mirrors render-nunjucks
+        // resolveTemplatePath), so a catch-all dispatcher can target any
+        // template under the templates root. Skipped during custom-error
+        // rendering, which renders the framework error template instead.
+        if ( !isRenderingCustomError && localOptions._templateOverride && typeof(localOptions._templateOverride.file) === 'string' && localOptions._templateOverride.file ) {
+            file = data.page.view.file = localOptions._templateOverride.file;
+            if ( typeof(localOptions._templateOverride.ext) === 'string' && localOptions._templateOverride.ext ) {
+                data.page.view.ext = localOptions._templateOverride.ext;
+            }
+            path = _(localOptions.template.html + '/' + file);
+        } else if ( typeof(localOptions.namespace) != 'undefined' && localOptions.namespace ) {
             // excepted for custom paths
             var fileNamingConvention = file.replace(localOptions.namespace+'-', '');
             // replaced: !/^(\.|\/|\\)/.test(file) → charAt(0) checks (#P9)
