@@ -1,0 +1,3 @@
+kind: Added
+body: 'gina protocol:remove <bundle> @<project> reverts a bundle to the project default protocol and scheme by removing its protocol override from the bundle settings; supports --dry-run and --format=json, and guards against reverting to an unallocated port.'
+time: 2026-05-31T20:48:38.976556+01:00

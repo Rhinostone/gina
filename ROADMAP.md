@@ -62,7 +62,7 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 | --- | --- | --- | --- |
 | ✅ | **`bundle:status`** — Show the running/stopped state, PID, port, and active env for a specific bundle. | `0.4.1-alpha.2` | 2026-05-30 |
 | 📋 | **`bundle:rename`** — Rename a bundle within a project, updating `manifest.json`, routing config, and the `src/` directory name. Handler is comments only (7 lines). | `0.4.0` | Q4 2026 |
-| 📋 | **`protocol:remove`** — Remove a protocol assignment from a bundle. No handler file exists. Also requires fixing the `help.txt` typo ("remouve"). | `0.4.0` | Q4 2026 |
+| ✅ | **`protocol:remove`** — Revert a bundle to the project's default protocol/scheme by removing its `settings.json` override (no shared `ports*.json` mutation), with `--dry-run` / `--force`. | `0.4.1-alpha.2` | 2026-05-31 |
 | ✅ | **`minion:list`** — List the running bundle child-processes ("minions") of a project, or of every project, grouped by project. `--format=json` supported. | `0.4.1-alpha.2` | 2026-05-31 |
 | ✅ | **`minion:kill`** — Reap a project's running bundle child-processes ("minions") — both pidfile-tracked and `ps`-discovered orphans — with a graceful SIGTERM/SIGKILL escalation and a `--dry-run` preview. | `0.4.1-alpha.2` | 2026-05-31 |
 | 📋 | **`gina --status` / `-t`** — Top-level health check: print whether the framework daemon is running, its version, and active bundle count. Requires adding `--status`/`-t` entries to `aliases.json` and implementing `framework/status.js`. | `0.4.0` | Q4 2026 |
