@@ -2178,7 +2178,25 @@ function Server(options) {
                                 !isBinary
                                 && typeof(self._options.template.assets[request.url]) == 'undefined'
                             ) {
-                                self._options.template.assets = getAssets(bundleConf, file);
+                                // #assets-guard — getAssets() returns the assets map SERIALIZED as a
+                                // string (its render-path consumers in controller.render-swig.js /
+                                // controller.render-v1.js embed it verbatim). `template.assets` must
+                                // stay an OBJECT here: assigning the raw string and then writing
+                                // `template.assets[request.url]` below throws under 'use strict'
+                                // (TypeError: Cannot create property '<url>' on string '{}'), killing the
+                                // bundle under concurrent static requests (Chrome HTTP/2 favicon/manifest
+                                // prefetch). Parse it back into the object form it represents.
+                                try {
+                                    self._options.template.assets = JSON.parse( getAssets(bundleConf, file) || '{}' );
+                                } catch (e) {
+                                    self._options.template.assets = {};
+                                }
+                            }
+
+                            // #assets-guard — defense-in-depth: never write a property on a non-object
+                            // assets map (binary requests skip the coercion above).
+                            if ( typeof(self._options.template.assets) != 'object' || self._options.template.assets == null ) {
+                                self._options.template.assets = {};
                             }
 
                             if (
@@ -2261,6 +2279,10 @@ function Server(options) {
                                         contentType = contentType +'; charset='+ bundleConf.encoding;
                                         ext = request.url.match(/\.([A-Za-z0-9]+)$/);
                                         request.url = ( ext != null && typeof(ext[0]) != 'undefined' ) ? request.url : request.url + 'index.html';
+                                        // #assets-guard — defense-in-depth before the property writes below.
+                                        if ( typeof(self._options.template.assets) != 'object' || self._options.template.assets == null ) {
+                                            self._options.template.assets = {};
+                                        }
                                         if (
                                             !isPathMatchingUrl
                                             && typeof(self._options.template.assets[request.url]) == 'undefined'
