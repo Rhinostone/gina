@@ -136,6 +136,7 @@ var emitInspectorWindowData = require('./inspector-window-emit');
 // undefined and crashes the module-level read. Push upstream to gina-io/gina.
 var libRef          = require('../../lib') || require.cache[require.resolve('../../lib')];
 var Collection      = libRef.Collection;
+var merge           = libRef.merge;
 // #NJ3 — static HTML cache writes. Module-scoped `cache` instance mirrors
 // `render-swig.js:6` and `render-json.js:5`. Per-request, the main render
 // function re-points it at the server's shared in-memory store (key:
@@ -204,6 +205,17 @@ function getEnvironment(nunjucks, templateRoot, options) {
  * @returns {string} relative template path
  */
 function resolveTemplatePath(data, localOptions) {
+    // Honour controller-set override from self.setTemplate(file, ext).
+    // When set, the override fully replaces the rule's default path —
+    // no namespace prefixing — so a catch-all dispatcher can drop the
+    // controller anywhere under the templates root.
+    if (localOptions && localOptions._templateOverride && localOptions._templateOverride.file) {
+        var ovFile = localOptions._templateOverride.file;
+        var ovExt  = localOptions._templateOverride.ext || data.page.view.ext || '';
+        if (ovExt && !ovFile.endsWith(ovExt)) ovFile += ovExt;
+        return ovFile;
+    }
+
     var file = data.page.view.file;
     var ext  = data.page.view.ext || '';
 
@@ -640,6 +652,70 @@ function registerGinaFilters(env, self, local, localOptions, req, res) {
 }
 
 /**
+ * Invoke the bundle's `controllers/setup.js` (if any) with `this.engine`
+ * bound to the cached `nunjucks.Environment`, so user code can call
+ * `engine.addFilter(name, fn)` to extend filters on the nunjucks side
+ * the same way it already can on swig (where `self.engine = swig` is
+ * set by `controller.js` before setup runs).
+ *
+ * Without this hook, every nunjucks bundle that uses the documented
+ * setup.js pattern (`var engine = this.engine; engine.addFilter(...)`)
+ * silently no-ops because `this.engine` arrives as the controller's
+ * default `{}` — the nunjucks engine is created lazily here in the
+ * render delegate, after the controller's onReady->setup chain has
+ * already fired.
+ *
+ * Run once per `nunjucks.Environment` instance: marker `_userSetupDone`
+ * is stamped on the env itself so re-renders are no-ops, and a fresh
+ * env (e.g. after `nunjucksResolver.reset()`) re-runs setup.
+ *
+ * @inner
+ * @param {*}        env          - cached `nunjucks.Environment`
+ * @param {object}   self         - SuperController instance (provides throwError)
+ * @param {object}   local        - per-request closure (`req`, `res`, `next`)
+ * @param {object}   localOptions - controller's localOptions (has `bundle`, `conf.bundlesPath`)
+ * @param {object}   req          - function-scoped capture of `local.req` (#M1 async-race guard)
+ * @param {object}   res          - function-scoped capture of `local.res`
+ * @param {Function} _next        - function-scoped capture of `local.next`
+ * @returns {void}
+ */
+function registerUserFilters(env, self, local, localOptions, req, res, _next) {
+    if (env._userSetupDone) return;
+    if (!localOptions || !localOptions.bundle || !localOptions.conf || !localOptions.conf.bundlesPath) return;
+
+    var setupFile = localOptions.conf.bundlesPath + '/' + localOptions.bundle + '/controllers/setup.js';
+    if (!fs.existsSync(setupFile)) {
+        env._userSetupDone = true; // no setup.js — nothing to do, don't recheck
+        return;
+    }
+
+    var Setup;
+    try {
+        Setup = require(setupFile);
+    } catch (loadErr) {
+        try { console.warn('[render-nunjucks] failed to load user setup.js (' + setupFile + '): ' + (loadErr.message || loadErr)); } catch (e) {}
+        env._userSetupDone = true;
+        return;
+    }
+
+    if (typeof Setup !== 'function') {
+        env._userSetupDone = true;
+        return;
+    }
+
+    Setup.engine     = env;
+    Setup.throwError = self.throwError;
+
+    try {
+        Setup.apply(Setup, [req, res, _next]);
+    } catch (setupErr) {
+        try { console.warn('[render-nunjucks] user setup.js threw: ' + (setupErr.message || setupErr)); } catch (e) {}
+    }
+
+    env._userSetupDone = true;
+}
+
+/**
  * Post-render asset injection — the nunjucks counterpart to the pre-compile
  * layout mutation in `render-swig.js:963-1195`. Idempotent and safe to call
  * on arbitrary HTML: every insertion is guarded against double-injection
@@ -949,18 +1025,42 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         ));
     }
 
-    // Merge user data into page.data so templates can access via {{ page.data.foo }}
-    // or {{ foo }} at top level (promoted for ergonomic parity with swig).
-    // FRAMEWORK PATCH: the comment promised top-level promotion but
-    // the original code only wrote to data.page.data. Mirror to top-level too.
+    // Merge user data into the render context, mirroring `render-swig.js`.
+    //
+    //   (a) Branching stash — if userData has no `page` key, copy it into
+    //       `data.page.data` (so `{{ page.data.foo }}` works). userData with
+    //       a `page` key skips the stash.
+    //   (b) Unconditional top-level merge — userData wins on collision;
+    //       userData.page merges INTO data.page (per-key) so a controller
+    //       passing `page.*` does not wholesale-replace the subtree.
+    //   (c) Framework-data restore — re-overlay getData() so the deep merge
+    //       brings back any framework-injected page.environment/page.view/
+    //       page.data.session keys that (b)'s per-key page write dropped.
+    //       This is the `render-swig.js:593` step nunjucks was missing; without
+    //       it a controller passing a partial `page.environment` clobbers
+    //       webroot/hostname/version (§4 parity rule).
     if (userData && typeof(userData) === 'object') {
-        if (!data.page.data) { data.page.data = {}; }
+        // (a) Branching stash
+        if (!userData.page) {
+            if (!data.page.data) { data.page.data = {}; }
+            Object.keys(userData).forEach(function (k) {
+                data.page.data[k] = userData[k];
+            });
+        }
+        // (b) Unconditional top-level merge — userData wins; userData.page
+        // merges INTO data.page (preserves framework-injected page.view etc.).
         Object.keys(userData).forEach(function (k) {
-            data.page.data[k] = userData[k];
-            if (typeof(data[k]) === 'undefined') {
+            if (k === 'page' && data.page && typeof userData.page === 'object') {
+                Object.keys(userData.page).forEach(function (pk) {
+                    data.page[pk] = userData.page[pk];
+                });
+            } else {
                 data[k] = userData[k];
             }
         });
+        // (c) Restore framework page.* — deep-merge getData() back on top so
+        // page.environment/page.view/page.data.session survive (b).
+        data = merge(data, getData());
     }
 
     // FRAMEWORK PATCH: Bug J — alias `data.data` to `data.page.data`
@@ -999,6 +1099,16 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         registerGinaFilters(env, self, local, localOptions, req, res);
     } catch (filterErr) {
         return self.throwError(filterErr);
+    }
+
+    // #NJ1b — give the bundle's controllers/setup.js a chance to extend
+    // filters via `this.engine.addFilter(...)`, mirroring the swig path
+    // where `self.engine = swig` is set in controller.js before setup runs.
+    // No-op if no setup.js exists or it doesn't add filters.
+    try {
+        registerUserFilters(env, self, local, localOptions, req, res, _next);
+    } catch (userFilterErr) {
+        try { console.warn('[render-nunjucks] registerUserFilters failed: ' + (userFilterErr.message || userFilterErr)); } catch (e) {}
     }
 
     // #NJ2 — build the per-request template config and populate
