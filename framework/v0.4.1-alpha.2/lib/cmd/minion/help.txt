@@ -13,6 +13,6 @@
 
     $ gina minion:list @<project_name>
 
-    or to list all minons by project
+    or to list all running minions grouped by project
 
     $ gina minion:list

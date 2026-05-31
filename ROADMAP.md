@@ -63,7 +63,8 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 | ✅ | **`bundle:status`** — Show the running/stopped state, PID, port, and active env for a specific bundle. | `0.4.1-alpha.2` | 2026-05-30 |
 | 📋 | **`bundle:rename`** — Rename a bundle within a project, updating `manifest.json`, routing config, and the `src/` directory name. Handler is comments only (7 lines). | `0.4.0` | Q4 2026 |
 | 📋 | **`protocol:remove`** — Remove a protocol assignment from a bundle. No handler file exists. Also requires fixing the `help.txt` typo ("remouve"). | `0.4.0` | Q4 2026 |
-| 📋 | **`minion:kill` / `minion:list`** — Kill all orphaned Node.js child processes for a project (`kill`), or list active minion PIDs grouped by bundle (`list`). No handler files exist despite both being documented in `minion/help.txt`. | `0.4.0` | Q4 2026 |
+| ✅ | **`minion:list`** — List the running bundle child-processes ("minions") of a project, or of every project, grouped by project. `--format=json` supported. | `0.4.1-alpha.2` | 2026-05-31 |
+| 📋 | **`minion:kill`** — Kill all orphaned Node.js child processes for a project. No handler file exists despite being documented in `minion/help.txt`. | `0.4.0` | Q4 2026 |
 | 📋 | **`gina --status` / `-t`** — Top-level health check: print whether the framework daemon is running, its version, and active bundle count. Requires adding `--status`/`-t` entries to `aliases.json` and implementing `framework/status.js`. | `0.4.0` | Q4 2026 |
 | 📋 | **`bundle:copy` / `bundle:cp`** — Duplicate a bundle (source files + config) under a new name within the same project. Handler is comments only (17 lines). | `0.4.0` | Q4 2026 |
 | ✅ | **`project:status`** — Show the running/stopped state of each bundle in a project with PID and port info. | `0.4.1-alpha.2` | 2026-05-30 |
