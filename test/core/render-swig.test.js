@@ -1539,3 +1539,46 @@ describe('17 - browser-session cookie: null _expires skipped, not .format()-ed (
     });
 
 });
+
+
+// Layoutless renders: userData merged at top level (commit a0b40e0a)
+describe('layoutless renders — isWithoutLayout branch merges userData at top level (commit a0b40e0a)', function() {
+
+    var src = function() { return fs.readFileSync(SOURCE, 'utf8'); };
+
+    it('has an `isWithoutLayout` branch in the userData-merge chain', function() {
+        var s = src();
+        // Branch sits between the `!userData` initialiser and the existing `userData && !userData["page"]` gate
+        assert.ok(
+            /if\s*\(!userData\)\s*\{[\s\S]{0,200}\}\s*else if\s*\(\s*isWithoutLayout\s*\)/.test(s),
+            'expected `else if ( isWithoutLayout )` immediately after the `!userData` initialiser — layoutless top-level scope branch was reverted'
+        );
+    });
+
+    it('layoutless branch merges userData at top level (sets `data = merge(userData, data)` shape)', function() {
+        var s = src();
+        // Within the isWithoutLayout branch the assignment must be `data = ... merge(userData, data) ...`
+        // (matches the JSON/raw path), not the `data.page.data = ...` shape used for full pages.
+        var branchMatch = s.match(/else if\s*\(\s*isWithoutLayout\s*\)\s*\{([\s\S]*?)\}\s*else if/);
+        assert.ok(branchMatch, 'could not locate `else if ( isWithoutLayout )` branch body');
+        var body = branchMatch[1];
+        assert.ok(
+            /data\s*=\s*\(isRenderingCustomError\)\s*\?\s*userData\s*:\s*merge\(\s*userData,\s*data\s*\)/.test(body),
+            'expected layoutless branch to assign `data = (isRenderingCustomError) ? userData : merge(userData, data)` — top-level merge was reverted'
+        );
+        assert.ok(
+            !/data\['page'\]\['data'\]\s*=/.test(body),
+            'layoutless branch must NOT bury userData under data.page.data — that is the full-page-render shape'
+        );
+    });
+
+    it('full-page branch (userData has no `page` key) keeps the data.page.data nesting', function() {
+        var s = src();
+        // Zero-change-for-full-pages invariant: the original branch must still exist with its original shape.
+        assert.ok(
+            /else if\s*\(\s*userData\s*&&\s*!userData\['page'\]\s*\)\s*\{[\s\S]*?data\['page'\]\['data'\]\s*=/.test(s),
+            'full-page branch (`userData && !userData["page"]`) must still bury userData under data.page.data — invariant violated'
+        );
+    });
+
+});

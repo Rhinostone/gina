@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed renderWithoutLayout returning an empty body when the template referenced controller data as top-level variables.'
+time: 2026-05-31T21:17:51.245364+01:00
