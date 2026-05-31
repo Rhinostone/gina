@@ -7,6 +7,10 @@
 
     $ gina minion:kill @<project_name>
 
+    or preview without killing (no processes are terminated)
+
+    $ gina minion:kill @<project_name> --dry-run
+
 
 
 [ Listing all minions inside your project ]
