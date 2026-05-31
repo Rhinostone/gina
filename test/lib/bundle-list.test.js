@@ -21,31 +21,19 @@ var src         = fs.readFileSync(LIST_SOURCE, 'utf8');
 // 01 — readPidfile helper
 // ---------------------------------------------------------------------------
 
-describe('01 - readPidfile helper', function () {
+describe('01 - run-state via lib.cmdStatusFormat', function () {
 
-    it('declares readPidfile(bundleName, projectName)', function () {
-        assert.match(src, /var readPidfile = function\(bundleName, projectName\) \{/);
+    it('imports the shared primitive as `var fmt = lib.cmdStatusFormat`', function () {
+        assert.match(src, /var fmt = lib\.cmdStatusFormat;/);
     });
 
-    it('builds ~/.gina/run/<bundle>@<project>.pid path', function () {
-        assert.match(src, /GINA_HOMEDIR \+ '\/run\/' \+ bundleName \+ '@' \+ projectName \+ '\.pid'/);
+    it('probes run state via fmt.readPidfile (no inline copy)', function () {
+        assert.match(src, /fmt\.readPidfile\(/);
+        assert.doesNotMatch(src, /var readPidfile = function/);
     });
 
-    it('returns { running: false, pid: null } when pidfile missing', function () {
-        assert.match(src, /if \(\s*!fs\.existsSync\(pidPath\)\s*\)\s*\{\s*return \{ running: false, pid: null \};/);
-    });
-
-    it('probes liveness via process.kill(pid, 0)', function () {
-        assert.match(src, /process\.kill\(pid, 0\);/);
-    });
-
-    it('catches ESRCH (stale pidfile) without deleting the file', function () {
-        // no fs.unlink or rm call in readPidfile
-        assert.doesNotMatch(src, /fs\.unlink[A-Za-z]*\(pidPath/);
-    });
-
-    it('rejects NaN / non-positive pid values', function () {
-        assert.match(src, /if \(\s*isNaN\(pid\) \|\| pid <= 0\s*\)/);
+    it('passes the run directory to fmt.readPidfile', function () {
+        assert.match(src, /fmt\.readPidfile\(GINA_HOMEDIR \+ '\/run', /);
     });
 });
 
@@ -57,7 +45,7 @@ describe('01 - readPidfile helper', function () {
 describe('02 - listAll uses readPidfile', function () {
 
     it('calls readPidfile(b, list[p]) for the current bundle', function () {
-        assert.match(src, /var runState = readPidfile\(b, list\[p\]\);/);
+        assert.match(src, /var runState = fmt\.readPidfile\(GINA_HOMEDIR \+ '\/run', b, list\[p\]\);/);
     });
 
     it('pushes running + pid onto jsonBundle (listAll branch)', function () {
@@ -76,7 +64,7 @@ describe('02 - listAll uses readPidfile', function () {
 describe('03 - listProjectOnly uses readPidfile', function () {
 
     it('calls readPidfile(b, self.projectName)', function () {
-        assert.match(src, /var runState = readPidfile\(b, self\.projectName\);/);
+        assert.match(src, /var runState = fmt\.readPidfile\(GINA_HOMEDIR \+ '\/run', b, self\.projectName\);/);
     });
 });
 
@@ -101,14 +89,11 @@ describe('04 - text suffix shape', function () {
 // 05 — pad helper
 // ---------------------------------------------------------------------------
 
-describe('05 - pad helper', function () {
+describe('05 - pad via lib.cmdStatusFormat', function () {
 
-    it('declares pad(s, width)', function () {
-        assert.match(src, /var pad = function\(s, width\) \{/);
-    });
-
-    it('right-pads with spaces until width reached', function () {
-        assert.match(src, /while \(out\.length < width\) \{\s*out \+= ' ';/);
+    it('aligns columns via fmt.pad (no inline copy)', function () {
+        assert.match(src, /fmt\.pad\(/);
+        assert.doesNotMatch(src, /var pad = function/);
     });
 });
 
@@ -117,27 +102,11 @@ describe('05 - pad helper', function () {
 // 06 — pickPreferredPort helper
 // ---------------------------------------------------------------------------
 
-describe('06 - pickPreferredPort helper', function () {
+describe('06 - pickPreferredPort via lib.cmdStatusFormat', function () {
 
-    it('declares pickPreferredPort(ports)', function () {
-        assert.match(src, /var pickPreferredPort = function\(ports\) \{/);
-    });
-
-    it('prefers dev env when present', function () {
-        assert.match(src, /var envKey = ports\.dev \? 'dev' : Object\.keys\(ports\)\[0\];/);
-    });
-
-    it('returns null when no port record', function () {
-        assert.match(src, /if \(!ports\) return null;/);
-    });
-
-    it('prefers http/2.0 https over http/1.1', function () {
-        assert.match(src, /if \(env\['http\/2\.0'\] && env\['http\/2\.0'\]\.https\)/);
-    });
-
-    it('falls back to http/1.1 https before http/1.1 http', function () {
-        assert.match(src, /if \(env\['http\/1\.1'\] && env\['http\/1\.1'\]\.https\)/);
-        assert.match(src, /if \(env\['http\/1\.1'\] && env\['http\/1\.1'\]\.http\)/);
+    it('resolves the preferred port via fmt.pickPreferredPort (no inline copy)', function () {
+        assert.match(src, /fmt\.pickPreferredPort\(ports\)/);
+        assert.doesNotMatch(src, /var pickPreferredPort = function/);
     });
 });
 
@@ -184,7 +153,7 @@ describe('08 - port column output', function () {
     });
 
     it('renders padded bundle name + space + port label', function () {
-        assert.match(src, /str \+= prefix \+ pad\(b, 16\) \+ ' ' \+ portLabel;/);
+        assert.match(src, /str \+= prefix \+ fmt\.pad\(b, 16\) \+ ' ' \+ portLabel;/);
     });
 
     it('pushes ports onto jsonBundle (both branches)', function () {
