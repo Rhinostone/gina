@@ -1,5 +1,6 @@
 var fs      = require('fs');
 var console = lib.logger;
+var fmt     = lib.cmdStatusFormat;
 
 var CmdHelper = require('./../helper');
 
@@ -98,23 +99,6 @@ function List(opt, cmd) {
         }
 
         process.exit(0);
-    };
-
-    /**
-     * Right-pads `s` with spaces to reach `width`.
-     *
-     * @inner
-     * @private
-     * @param {string} s
-     * @param {number} width
-     * @returns {string}
-     */
-    var pad = function (s, width) {
-        var out = String(s || '');
-        while (out.length < width) {
-            out += ' ';
-        }
-        return out;
     };
 
     /**
@@ -426,7 +410,7 @@ function List(opt, cmd) {
             sourceLabel = '[' + r.bundle + ']';
         }
 
-        var line = statusFlag + ' ' + pad(r.name, 16) + ' ' + pad(r.connector, 12) + ' ' + pad(sourceLabel, 24);
+        var line = statusFlag + ' ' + fmt.pad(r.name, 16) + ' ' + fmt.pad(r.connector, 12) + ' ' + fmt.pad(sourceLabel, 24);
 
         if (r.builtin) {
             line += r.note ? ('(' + r.note + ')') : '(built-in)';
