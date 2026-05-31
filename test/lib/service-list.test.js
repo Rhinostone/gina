@@ -139,26 +139,15 @@ describe('04 - ports.reverse.json merge', function () {
 // 05 — pickPreferredPort precedence
 // ---------------------------------------------------------------------------
 
-describe('05 - pickPreferredPort precedence', function () {
+describe('05 - pickPreferredPort via lib.cmdStatusFormat', function () {
 
-    it('prefers dev env, falls back to the first env key', function () {
-        assert.match(src, /var envKey\s*=\s*ports\.dev\s*\?\s*'dev'\s*:\s*Object\.keys\(ports\)\[0\];/);
+    it('imports the shared primitive as `var fmt = lib.cmdStatusFormat`', function () {
+        assert.match(src, /var fmt\s*=\s*lib\.cmdStatusFormat;/);
     });
 
-    it('first choice: http/2.0 https', function () {
-        assert.match(src, /env\['http\/2\.0'\]\s*&&\s*env\['http\/2\.0'\]\.https/);
-    });
-
-    it('second choice: http/1.1 https', function () {
-        assert.match(src, /env\['http\/1\.1'\]\s*&&\s*env\['http\/1\.1'\]\.https/);
-    });
-
-    it('third choice: http/1.1 http', function () {
-        assert.match(src, /env\['http\/1\.1'\]\s*&&\s*env\['http\/1\.1'\]\.http\b/);
-    });
-
-    it('returns null when no port is available', function () {
-        assert.match(src, /if \(!ports\) return null;/);
+    it('resolves the preferred port via fmt.pickPreferredPort (no inline copy)', function () {
+        assert.match(src, /fmt\.pickPreferredPort\(ports\)/);
+        assert.doesNotMatch(src, /var pickPreferredPort = function/);
     });
 });
 
@@ -167,26 +156,15 @@ describe('05 - pickPreferredPort precedence', function () {
 // 06 — readPidfile (running state)
 // ---------------------------------------------------------------------------
 
-describe('06 - readPidfile running state', function () {
+describe('06 - readPidfile via lib.cmdStatusFormat', function () {
 
-    it('reads ~/.gina/run/<name>@gina.pid', function () {
-        assert.match(src, /GINA_HOMEDIR \+ '\/run\/' \+ name \+ '@gina\.pid'/);
+    it('probes run state via fmt.readPidfile (no inline copy)', function () {
+        assert.match(src, /fmt\.readPidfile\(/);
+        assert.doesNotMatch(src, /var readPidfile = function/);
     });
 
-    it('returns stopped when pidfile is missing', function () {
-        assert.match(src, /if \(\s*!fs\.existsSync\(pidPath\)\s*\)\s*\{\s*return \{ running: false, pid: null \};/);
-    });
-
-    it('probes the pid with process.kill(pid, 0)', function () {
-        assert.match(src, /process\.kill\(pid, 0\);/);
-    });
-
-    it('returns stopped on stale pidfile (ESRCH via catch)', function () {
-        assert.match(src, /catch \(e\)\s*\{\s*return \{ running: false, pid: null \};/);
-    });
-
-    it('rejects negative or NaN pid values', function () {
-        assert.match(src, /if \(\s*isNaN\(pid\) \|\| pid <= 0\s*\)/);
+    it('passes the run directory and the @gina project to fmt.readPidfile', function () {
+        assert.match(src, /fmt\.readPidfile\(GINA_HOMEDIR \+ '\/run', name, 'gina'\)/);
     });
 });
 

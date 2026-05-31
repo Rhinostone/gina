@@ -1,5 +1,6 @@
 var fs      = require('fs');
 var console = lib.logger;
+var fmt     = lib.cmdStatusFormat;
 
 var CmdHelper = require('./../helper');
 
@@ -105,8 +106,8 @@ function List(opt, cmd) {
             var srcExists  = src && fs.existsSync(_(ginaProject.path + '/' + src));
             var status     = srcExists ? 'ok' : '?!';
             var ports      = portsReverse[name + '@gina'] || null;
-            var preferred  = pickPreferredPort(ports);
-            var runState   = readPidfile(name);
+            var preferred  = fmt.pickPreferredPort(ports);
+            var runState   = fmt.readPidfile(GINA_HOMEDIR + '/run', name, 'gina');
 
             json.push({
                 service : name,
@@ -121,7 +122,7 @@ function List(opt, cmd) {
             var portLabel  = preferred
                 ? preferred.scheme + ' ' + preferred.env + ' ' + preferred.protocol + ' ' + preferred.port
                 : '(no port)';
-            var line = stateLabel + ' ' + pad(name, 14) + ' ' + portLabel;
+            var line = stateLabel + ' ' + fmt.pad(name, 14) + ' ' + portLabel;
             if (runState.running && runState.pid) {
                 line += '  pid ' + runState.pid;
             }
@@ -143,85 +144,6 @@ function List(opt, cmd) {
             console.log(lines.join('\n\r'));
         }
         process.exit(0);
-    };
-
-    /**
-     * Right-pads `s` with spaces to reach `width`. Used for column alignment
-     * in the text output.
-     *
-     * @inner
-     * @private
-     * @param {string} s
-     * @param {number} width
-     * @returns {string}
-     */
-    var pad = function (s, width) {
-        var out = String(s || '');
-        while (out.length < width) {
-            out += ' ';
-        }
-        return out;
-    };
-
-    /**
-     * Picks the "preferred" port to display for a service: dev env, http/2.0
-     * https first, falling back to http/1.1 https, then http/1.1 http.
-     *
-     * @inner
-     * @private
-     * @param {object|null} ports - Port record from ports.reverse.json
-     * @returns {{env: string, scheme: string, protocol: string, port: number}|null}
-     */
-    var pickPreferredPort = function (ports) {
-        if (!ports) return null;
-        var envKey = ports.dev ? 'dev' : Object.keys(ports)[0];
-        if (!envKey) return null;
-        var env = ports[envKey];
-        if (!env) return null;
-
-        if (env['http/2.0'] && env['http/2.0'].https) {
-            return { env: envKey, scheme: 'http/2.0', protocol: 'https', port: env['http/2.0'].https };
-        }
-        if (env['http/1.1'] && env['http/1.1'].https) {
-            return { env: envKey, scheme: 'http/1.1', protocol: 'https', port: env['http/1.1'].https };
-        }
-        if (env['http/1.1'] && env['http/1.1'].http) {
-            return { env: envKey, scheme: 'http/1.1', protocol: 'http', port: env['http/1.1'].http };
-        }
-        return null;
-    };
-
-    /**
-     * Reads `~/.gina/run/<name>@gina.pid` and probes the process with
-     * `process.kill(pid, 0)`. Returns `running: false` on a stale pidfile
-     * but does not delete it — clean-up is bundle:stop's job.
-     *
-     * @inner
-     * @private
-     * @param {string} name - Service name (without the @gina suffix)
-     * @returns {{running: boolean, pid: number|null}}
-     */
-    var readPidfile = function (name) {
-        var pidPath = _(GINA_HOMEDIR + '/run/' + name + '@gina.pid');
-        if ( !fs.existsSync(pidPath) ) {
-            return { running: false, pid: null };
-        }
-        var raw;
-        try {
-            raw = fs.readFileSync(pidPath, 'utf8').trim();
-        } catch (e) {
-            return { running: false, pid: null };
-        }
-        var pid = parseInt(raw, 10);
-        if ( isNaN(pid) || pid <= 0 ) {
-            return { running: false, pid: null };
-        }
-        try {
-            process.kill(pid, 0);
-            return { running: true, pid: pid };
-        } catch (e) {
-            return { running: false, pid: null };
-        }
     };
 
     init();
