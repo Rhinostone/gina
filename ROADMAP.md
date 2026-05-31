@@ -181,6 +181,16 @@ HTTP security response headers as opt-in `gina.plugins.*` middlewares, mirroring
 
 ---
 
+## Accessibility
+
+Client-side form-validation accessibility — keeping `FormValidator`'s ARIA state in sync with field validity so screen-reader users get the same error feedback sighted users already get from native `:user-invalid` styling. No new public API; behaviour applies to fields that opt in through their existing ARIA markup. Models the `isInList` rule + CSP-nonce (#HDR16) rollout: ship behind the existing validator API, default-on for opted-in markup, no consuming-app code change.
+
+| Status | Feature | Version | Target |
+| --- | --- | --- | --- |
+| 📋 | **`aria-invalid` validity reflection (#A11Y1)** — `FormValidator` keeps `aria-invalid` in sync with each managed field's effective validity, so a field's `aria-errormessage` (and error `aria-describedby`) association is actually exposed to assistive technology. Per WAI-ARIA those associations are inert unless the field also carries `aria-invalid="true"`, so today screen-reader users are never told which field is invalid or what the error says even when the markup wires `aria-errormessage`. On every blur and submit pass — plus on `input` once a field has errored at least once — the validator sets `aria-invalid="true"` when invalid and `aria-invalid="false"` when valid; a pristine, never-validated field carries no attribute (three-state: absent / `false` / `true`, where `false` is a DOM-observable touched-and-valid signal the post-error `input` revalidation reads off the element). Where the field has native HTML constraints the native `ValidityState` (`element.validity.valid`) is the source of truth, so the attribute never disagrees with the `:user-invalid` styling that already drives the visible error. When the field already references an error element via `aria-errormessage`, the validator does NOT inject its `form-item-error-message` div (no duplicate message) — setting `aria-invalid` is enough to expose the existing element; legacy forms with no association keep the injected div and additionally gain an `aria-errormessage` wire to it. On a failed submit, focus moves to the first invalid field; blur-time errors (focus already gone) are announced through a dedicated visually-hidden `aria-live="polite"` status region rather than the static message, since a CSS `:user-invalid` display toggle is not reliably announced — suppressed for any field that simultaneously receives focus to avoid double-speaking. No new public API; existing `form-item-error` / `form-item-warning` / `form-item-error-message` / `error-message` / `data-gina-form-errors` classes and the submit-button `aria-disabled` / `disabled` toggling are unchanged. Acceptance: VoiceOver + NVDA announce the invalid field and its `aria-errormessage` text on a failed blur and submit, and stop once corrected; no visual regression on forms already using `form-item-error` / `error-message`. First consumer: freelancer-app-v3 public contact form. | `0.4.2-alpha` | Q3 2026 |
+
+---
+
 ## Secrets & Configuration
 
 Secrets handling for bundle JSON configs without baking plaintext values into source. Pluggable-backend design with `process.env` as the default; the reserved API surface allows future Vault / SOPS / K8s Secrets backends to slot in without changing call sites or the placeholder syntax.
