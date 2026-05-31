@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-cmd-status-format",
+  "version": "1.0.0",
+  "description": "Shared run-state / port display primitives (pad, pickPreferredPort, readPidfile) for the bundle:list / service:list / bundle:status / project:status CLI commands.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

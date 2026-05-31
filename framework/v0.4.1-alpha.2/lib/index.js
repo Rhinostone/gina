@@ -114,6 +114,10 @@ function Lib() {
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.
         routingIntrospect: _require('./routing-introspect'),
+        // Shared run-state / port display primitives (pad, pickPreferredPort,
+        // readPidfile) for the bundle:list / service:list / bundle:status /
+        // project:status CLI handlers. Pure (same contract as routing-introspect).
+        cmdStatusFormat : _require('./cmd-status-format'),
         // Single source of truth for the connector driver → npm package + semver
         // range mapping. Consumed by the connector:* CLI handlers (connector:add
         // install hint + connector:add --install range resolution + connector:list
