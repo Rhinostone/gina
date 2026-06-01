@@ -1,3 +1,0 @@
-kind: Added
-body: 'New `gina bundle:status` and `gina project:status` CLI commands report the running/stopped state, PID, port, and active env of bundles (human-readable or --format=json).'
-time: 2026-05-30T17:04:08.123186+01:00

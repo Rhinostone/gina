@@ -1,3 +1,0 @@
-kind: Added
-body: 'gina minion:list lists the running bundle child-processes ("minions") of a project, or of every registered project, grouped by project. Supports --format=json for machine-readable output.'
-time: 2026-05-31T14:44:24.356988+01:00

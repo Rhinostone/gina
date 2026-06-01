@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `gina bundle:add` surfacing an opaque `ERR_USE_AFTER_CLOSE` ("readline was closed") rollback when the target bundle already exists and the command runs without an interactive terminal (container entrypoint, CI, or piped stdin). It now fails fast with a clear message to re-run with `--import` (register the existing source) or `--replace` (overwrite it).'
-time: 2026-05-30T00:44:57.482079+01:00

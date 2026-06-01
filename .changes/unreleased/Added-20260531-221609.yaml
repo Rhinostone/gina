@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added bundle:copy (alias bundle:cp) to duplicate a bundle under a new name within the same project. It copies the source tree, rewrites the bundle-name footprint (controller class names, the gina require-var, app.json name, webroot) in the copied .js/.json files, allocates a fresh full port matrix, and registers the new bundle in manifest.json + env.json + the ports registry. Supports --dry-run (preview every rewrite site before writing), --force (overwrite an existing target), and --format=json.'
-time: 2026-05-31T22:16:09.105756+01:00

@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Brought the nunjucks render path to parity with swig: self.setTemplate() runtime overrides are now honoured, a bundle''s controllers/setup.js can register filters via this.engine.addFilter(), and a controller passing a partial page object no longer drops framework-injected page data (webroot, view metadata, session).'
-time: 2026-05-31T22:02:41.14548+01:00

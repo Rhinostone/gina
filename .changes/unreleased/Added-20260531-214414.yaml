@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added self.setTemplate(file, ext) to override the rendered template from a controller action at run time (e.g. a catch-all dispatcher); honoured by the swig render path.'
-time: 2026-05-31T21:44:14.890263+01:00

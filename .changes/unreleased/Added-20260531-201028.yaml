@@ -1,3 +1,0 @@
-kind: Added
-body: 'gina minion:kill reaps the running bundle child-processes ("minions") of a project (both pidfile-tracked and orphaned ps-discovered ones) with a graceful SIGTERM-then-SIGKILL escalation, a --dry-run preview, and --format=json output.'
-time: 2026-05-31T20:10:28.209412+01:00
