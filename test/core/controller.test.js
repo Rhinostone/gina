@@ -2321,3 +2321,63 @@ describe('20 - inferAsync: pure logic (#AI6)', function() {
         assert.deepEqual(env.calls.startJob[0].opts, { meta: { kind: 'summary' }, callbackUrl: 'https://x/y' });
     });
 });
+
+
+// self.setTemplate(file, ext) — runtime template override (commit a5f1faa3)
+describe('self.setTemplate(file, ext) — runtime template override', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('declares this.setTemplate = function (file, ext)', function() {
+        assert.ok(
+            /this\.setTemplate\s*=\s*function\s*\(\s*file\s*,\s*ext\s*\)/.test(src),
+            'expected `this.setTemplate = function (file, ext)` on BaseController — runtime override API was reverted'
+        );
+    });
+
+    it('bails safely when setOptions has not run (no local.options)', function() {
+        var fnMatch = src.match(/this\.setTemplate\s*=\s*function[\s\S]*?\n    \};/);
+        assert.ok(fnMatch, 'setTemplate body not found');
+        var body = fnMatch[0];
+        assert.ok(
+            /if\s*\(!local\.options\)\s*return/.test(body),
+            'expected early-return guard `if (!local.options) return` — would crash when called before setOptions()'
+        );
+    });
+
+    it('writes file/ext under local.options._templateOverride', function() {
+        var fnMatch = src.match(/this\.setTemplate\s*=\s*function[\s\S]*?\n    \};/);
+        var body = fnMatch[0];
+        assert.ok(
+            /local\.options\._templateOverride\.file\s*=\s*file/.test(body),
+            'expected `local.options._templateOverride.file = file` assignment'
+        );
+        assert.ok(
+            /local\.options\._templateOverride\.ext\s*=/.test(body),
+            'expected `local.options._templateOverride.ext = ...` assignment'
+        );
+    });
+
+    it('normalises ext to a leading-dot form', function() {
+        var fnMatch = src.match(/this\.setTemplate\s*=\s*function[\s\S]*?\n    \};/);
+        var body = fnMatch[0];
+        assert.ok(
+            /ext\.charAt\(0\)\s*===\s*'\.'/.test(body),
+            'expected leading-dot normalisation `ext.charAt(0) === "."` — would cause double-dot or missing-dot paths'
+        );
+    });
+
+    it('only accepts string arguments (ignores non-string file/ext)', function() {
+        var fnMatch = src.match(/this\.setTemplate\s*=\s*function[\s\S]*?\n    \};/);
+        var body = fnMatch[0];
+        assert.ok(
+            /typeof\s+file\s*===\s*'string'/.test(body),
+            'expected `typeof file === "string"` guard'
+        );
+        assert.ok(
+            /typeof\s+ext\s*===\s*'string'/.test(body),
+            'expected `typeof ext === "string"` guard'
+        );
+    });
+
+});

@@ -1539,3 +1539,135 @@ describe('17 - browser-session cookie: null _expires skipped, not .format()-ed (
     });
 
 });
+
+
+// Layoutless renders: userData merged at top level (commit a0b40e0a)
+describe('layoutless renders — isWithoutLayout branch merges userData at top level (commit a0b40e0a)', function() {
+
+    var src = function() { return fs.readFileSync(SOURCE, 'utf8'); };
+
+    it('has an `isWithoutLayout` branch in the userData-merge chain', function() {
+        var s = src();
+        // Branch sits between the `!userData` initialiser and the existing `userData && !userData["page"]` gate
+        assert.ok(
+            /if\s*\(!userData\)\s*\{[\s\S]{0,200}\}\s*else if\s*\(\s*isWithoutLayout\s*\)/.test(s),
+            'expected `else if ( isWithoutLayout )` immediately after the `!userData` initialiser — layoutless top-level scope branch was reverted'
+        );
+    });
+
+    it('layoutless branch merges userData at top level (sets `data = merge(userData, data)` shape)', function() {
+        var s = src();
+        // Within the isWithoutLayout branch the assignment must be `data = ... merge(userData, data) ...`
+        // (matches the JSON/raw path), not the `data.page.data = ...` shape used for full pages.
+        var branchMatch = s.match(/else if\s*\(\s*isWithoutLayout\s*\)\s*\{([\s\S]*?)\}\s*else if/);
+        assert.ok(branchMatch, 'could not locate `else if ( isWithoutLayout )` branch body');
+        var body = branchMatch[1];
+        assert.ok(
+            /data\s*=\s*\(isRenderingCustomError\)\s*\?\s*userData\s*:\s*merge\(\s*userData,\s*data\s*\)/.test(body),
+            'expected layoutless branch to assign `data = (isRenderingCustomError) ? userData : merge(userData, data)` — top-level merge was reverted'
+        );
+        assert.ok(
+            !/data\['page'\]\['data'\]\s*=/.test(body),
+            'layoutless branch must NOT bury userData under data.page.data — that is the full-page-render shape'
+        );
+    });
+
+    it('full-page branch (userData has no `page` key) keeps the data.page.data nesting', function() {
+        var s = src();
+        // Zero-change-for-full-pages invariant: the original branch must still exist with its original shape.
+        assert.ok(
+            /else if\s*\(\s*userData\s*&&\s*!userData\['page'\]\s*\)\s*\{[\s\S]*?data\['page'\]\['data'\]\s*=/.test(s),
+            'full-page branch (`userData && !userData["page"]`) must still bury userData under data.page.data — invariant violated'
+        );
+    });
+
+});
+
+
+// #27 — self.setTemplate() override reader (render-swig path resolution)
+describe('setTemplate override — render-swig honours _templateOverride with no namespace prefix (#27)', function() {
+
+    var src = function() { return fs.readFileSync(SOURCE, 'utf8'); };
+
+    it('has a _templateOverride branch ahead of the namespace branch', function() {
+        var s = src();
+        assert.ok(
+            /if\s*\(\s*!isRenderingCustomError\s*&&\s*localOptions\._templateOverride[\s\S]*?\}\s*else if\s*\(\s*typeof\(localOptions\.namespace\)/.test(s),
+            'expected `if ( !isRenderingCustomError && localOptions._templateOverride... )` immediately before the namespace `else if` — setTemplate swig reader missing'
+        );
+    });
+
+    it('builds the override path with NO namespace prefix', function() {
+        var s = src();
+        var m = s.match(/localOptions\._templateOverride\.file\s*\)\s*\{([\s\S]*?)\}\s*else if/);
+        assert.ok(m, 'override branch body not found');
+        var body = m[1];
+        assert.ok(
+            /path\s*=\s*_\(\s*localOptions\.template\.html\s*\+\s*'\/'\s*\+\s*file\s*\)/.test(body),
+            'override path must be _(localOptions.template.html + "/" + file) — no namespace segment'
+        );
+        assert.ok(
+            !/localOptions\.namespace/.test(body),
+            'override branch must NOT reference localOptions.namespace'
+        );
+    });
+
+    // Pure-logic replica of the render-swig path-resolution branch order
+    // (override -> namespace -> plain), mirroring controller.render-swig.js.
+    function resolvePath(opts) {
+        var localOptions = opts.localOptions;
+        var data = opts.data;
+        var isRenderingCustomError = !!opts.isRenderingCustomError;
+        var file = (isRenderingCustomError) ? localOptions.file : data.page.view.file;
+        var path;
+        if ( !isRenderingCustomError && localOptions._templateOverride && typeof(localOptions._templateOverride.file) === 'string' && localOptions._templateOverride.file ) {
+            file = data.page.view.file = localOptions._templateOverride.file;
+            if ( typeof(localOptions._templateOverride.ext) === 'string' && localOptions._templateOverride.ext ) {
+                data.page.view.ext = localOptions._templateOverride.ext;
+            }
+            path = localOptions.template.html + '/' + file;
+        } else if ( typeof(localOptions.namespace) !== 'undefined' && localOptions.namespace ) {
+            path = (isRenderingCustomError) ? file : (localOptions.template.html + '/' + localOptions.namespace + '/' + file);
+        } else {
+            path = (isRenderingCustomError) ? file : (localOptions.template.html + '/' + file);
+        }
+        if ( data.page.view.ext && !file.endsWith(data.page.view.ext) ) {
+            path += data.page.view.ext;
+        }
+        return path;
+    }
+
+    it('override bypasses the namespace directory (errors/404 -> <root>/errors/404)', function() {
+        var path = resolvePath({
+            localOptions: { template: { html: '/t' }, namespace: 'content', _templateOverride: { file: 'errors/404' } },
+            data: { page: { view: { file: 'home', ext: '.html' } } }
+        });
+        assert.strictEqual(path, '/t/errors/404.html');
+    });
+
+    it('without an override, the namespace prefix is still applied', function() {
+        var path = resolvePath({
+            localOptions: { template: { html: '/t' }, namespace: 'content', _templateOverride: undefined },
+            data: { page: { view: { file: 'list', ext: '.html' } } }
+        });
+        assert.strictEqual(path, '/t/content/list.html');
+    });
+
+    it('override honours an explicit ext and avoids a double extension', function() {
+        var path = resolvePath({
+            localOptions: { template: { html: '/t' }, namespace: 'content', _templateOverride: { file: 'mail/welcome', ext: '.njk' } },
+            data: { page: { view: { file: 'home', ext: '.html' } } }
+        });
+        assert.strictEqual(path, '/t/mail/welcome.njk');
+    });
+
+    it('override is ignored during custom-error rendering (no override path leakage)', function() {
+        var path = resolvePath({
+            isRenderingCustomError: true,
+            localOptions: { template: { html: '/t' }, file: 'errors/500', namespace: 'content', _templateOverride: { file: 'hijack/attempt' } },
+            data: { page: { view: { file: 'home', ext: '.html' } } }
+        });
+        assert.strictEqual(path.indexOf('hijack/attempt'), -1, 'custom-error render must not use the setTemplate override');
+    });
+
+});

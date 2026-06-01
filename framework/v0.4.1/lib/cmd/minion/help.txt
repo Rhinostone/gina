@@ -1,0 +1,22 @@
+******************************
+* Minion command lines e.g. *
+******************************
+
+
+[ Killing existing minions for a project ]
+
+    $ gina minion:kill @<project_name>
+
+    or preview without killing (no processes are terminated)
+
+    $ gina minion:kill @<project_name> --dry-run
+
+
+
+[ Listing all minions inside your project ]
+
+    $ gina minion:list @<project_name>
+
+    or to list all running minions grouped by project
+
+    $ gina minion:list

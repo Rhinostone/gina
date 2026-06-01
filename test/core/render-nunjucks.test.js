@@ -488,3 +488,182 @@ describe('06 - CSP nonce: cspNonce template var in the nunjucks render context',
     });
 
 });
+
+
+// Bundle-compat parity with swig (commit bf474621): three independent edits.
+describe('bundle-compat parity with render-swig (commit bf474621)', function() {
+
+    var _src;
+    function src() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // (1) resolveTemplatePath honours self.setTemplate() override
+    describe('resolveTemplatePath honours _templateOverride', function() {
+
+        it('declares resolveTemplatePath(data, localOptions)', function() {
+            assert.ok(
+                /function\s+resolveTemplatePath\s*\(\s*data\s*,\s*localOptions\s*\)/.test(src()),
+                'expected `function resolveTemplatePath(data, localOptions)` — helper signature changed or reverted'
+            );
+        });
+
+        it('checks localOptions._templateOverride.file before falling back to data.page.view.file', function() {
+            var s = src();
+            var fnMatch = s.match(/function\s+resolveTemplatePath[\s\S]*?\n\}/);
+            assert.ok(fnMatch, 'resolveTemplatePath body not found');
+            var body = fnMatch[0];
+            assert.ok(
+                /localOptions\s*&&\s*localOptions\._templateOverride\s*&&\s*localOptions\._templateOverride\.file/.test(body),
+                'expected _templateOverride.file guard in resolveTemplatePath — setTemplate() honour was reverted'
+            );
+            assert.ok(
+                /var\s+ovFile\s*=\s*localOptions\._templateOverride\.file/.test(body),
+                'expected `var ovFile = localOptions._templateOverride.file` capture'
+            );
+        });
+
+        it('override path skips the namespace prefix block', function() {
+            var s = src();
+            var fnMatch = s.match(/function\s+resolveTemplatePath[\s\S]*?\n\}/);
+            var body = fnMatch[0];
+            var overrideReturn = body.indexOf('return ovFile');
+            var nsBlock = body.indexOf('localOptions.namespace');
+            assert.ok(overrideReturn > -1, 'expected `return ovFile` early-exit in override branch');
+            assert.ok(nsBlock > overrideReturn, 'override must return before reaching the namespace block (no namespace prefixing)');
+        });
+    });
+
+    // (2) registerUserFilters invokes setup.js with this.engine bound
+    describe('registerUserFilters invokes setup.js with this.engine bound to nunjucks env', function() {
+
+        it('declares registerUserFilters with captured req/res/_next params (#M1 async-race guard)', function() {
+            assert.ok(
+                /function\s+registerUserFilters\s*\(\s*env\s*,\s*self\s*,\s*local\s*,\s*localOptions\s*,\s*req\s*,\s*res\s*,\s*_next\s*\)/.test(src()),
+                'expected `function registerUserFilters(env, self, local, localOptions, req, res, _next)` — captured-locals pattern (mirrors registerGinaFilters); reading local.req/res/next inside the helper would re-introduce the #M1 async-race read'
+            );
+        });
+
+        it('Setup.apply uses captured req/res/_next, not local.req/res/next', function() {
+            var s = src();
+            assert.ok(
+                /Setup\.apply\(\s*Setup\s*,\s*\[\s*req\s*,\s*res\s*,\s*_next\s*\]\s*\)/.test(s),
+                'expected `Setup.apply(Setup, [req, res, _next])` using captured locals — reading local.req/res/next here defeats the #M1 retrofit'
+            );
+            assert.ok(
+                !/Setup\.apply\(\s*Setup\s*,\s*\[\s*local\.req/.test(s),
+                'must NOT call Setup.apply with [local.req, local.res, local.next] — captured locals only'
+            );
+        });
+
+        it('is guarded by an `env._userSetupDone` idempotency marker', function() {
+            var s = src();
+            assert.ok(
+                /if\s*\(\s*env\._userSetupDone\s*\)\s*return/.test(s),
+                'expected idempotency early-return `if (env._userSetupDone) return` — would re-run setup.js per render'
+            );
+            assert.ok(
+                /env\._userSetupDone\s*=\s*true/.test(s),
+                'expected env._userSetupDone marker to be set after setup invocation'
+            );
+        });
+    });
+
+    // (3) userData merge mirrors render-swig.js — unconditional top-level merge
+    describe('userData merge mirrors render-swig (unconditional top-level merge; userData.page merges INTO data.page)', function() {
+
+        it('merges userData.page INTO data.page rather than clobbering it', function() {
+            var s = src();
+            assert.ok(
+                /k\s*===\s*'page'[\s\S]{0,160}Object\.keys\(\s*userData\.page\s*\)\.forEach/.test(s),
+                'expected `k === "page"` branch with `Object.keys(userData.page).forEach` — clobber-mode (data.page = userData.page) would erase view metadata'
+            );
+            assert.ok(
+                /data\.page\[\s*pk\s*\]\s*=\s*userData\.page\[\s*pk\s*\]/.test(s),
+                'expected per-key write `data.page[pk] = userData.page[pk]` inside the page-merge branch'
+            );
+        });
+
+        it('keeps the data.page.data stash for the !userData.page branch', function() {
+            var s = src();
+            assert.ok(
+                /data\.page\.data\s*=/.test(s),
+                'expected data.page.data assignment to remain for full-page-shape stash'
+            );
+        });
+
+    });
+
+});
+
+
+// #29 gap-3 — page.* clobber regression: framework page.environment survives a
+// controller passing a partial page subtree, via the merge(data, getData())
+// restoration (render-swig.js:593) that nunjucks was missing.
+describe('userData merge — framework page.* survives a partial page override (#29 gap-3)', function() {
+
+    var merge = require(path.join(require('../fw'), 'lib/merge'));
+
+    // Pure-logic replica of the render-nunjucks userData merge block (a)+(b)+(c),
+    // exercising the REAL framework deep-merge.
+    function applyMerge(userData, getData) {
+        var data = getData();
+        if (userData && typeof(userData) === 'object') {
+            if (!userData.page) {
+                if (!data.page.data) { data.page.data = {}; }
+                Object.keys(userData).forEach(function (k) { data.page.data[k] = userData[k]; });
+            }
+            Object.keys(userData).forEach(function (k) {
+                if (k === 'page' && data.page && typeof userData.page === 'object') {
+                    Object.keys(userData.page).forEach(function (pk) { data.page[pk] = userData.page[pk]; });
+                } else {
+                    data[k] = userData[k];
+                }
+            });
+            data = merge(data, getData());
+        }
+        return data;
+    }
+
+    function freshFrameworkData() {
+        return { page: {
+            environment: { webroot: '/', hostname: 'h', version: '0.4.1' },
+            view: { file: 'home' },
+            data: { session: { id: 'sid' } }
+        } };
+    }
+
+    it('preserves page.environment.webroot/hostname/version when userData passes a partial page.environment', function() {
+        var out = applyMerge({ page: { environment: { custom: 'x' } } }, freshFrameworkData);
+        assert.strictEqual(out.page.environment.webroot, '/', 'webroot must survive the partial page.environment override');
+        assert.strictEqual(out.page.environment.hostname, 'h', 'hostname must survive');
+        assert.strictEqual(out.page.environment.version, '0.4.1', 'version must survive');
+        assert.strictEqual(out.page.environment.custom, 'x', 'the userData-supplied page.environment key is still present');
+    });
+
+    it('preserves framework page.view and page.data.session across a userData.page override', function() {
+        var out = applyMerge({ page: { view: { extra: 1 } } }, freshFrameworkData);
+        assert.strictEqual(out.page.view.file, 'home', 'framework page.view.file must survive');
+        assert.ok(out.page.data && out.page.data.session && out.page.data.session.id === 'sid', 'page.data.session must survive');
+    });
+
+    it('promotes flat userData to top level (no page key) and stashes under page.data', function() {
+        var out = applyMerge({ client: 'acme', total: 42 }, freshFrameworkData);
+        assert.strictEqual(out.client, 'acme', 'flat userData promoted to top-level ({{ client }} resolves)');
+        assert.strictEqual(out.total, 42);
+        assert.strictEqual(out.page.data.client, 'acme', 'flat userData also stashed under page.data');
+    });
+
+    it('SUBTRACT: without the merge(data, getData()) restore, the clobber drops webroot (proves the restore is load-bearing)', function() {
+        function noRestore(userData, getData) {
+            var data = getData();
+            Object.keys(userData).forEach(function (k) {
+                if (k === 'page') {
+                    Object.keys(userData.page).forEach(function (pk) { data.page[pk] = userData.page[pk]; });
+                } else { data[k] = userData[k]; }
+            });
+            return data;
+        }
+        var out = noRestore({ page: { environment: { custom: 'x' } } }, freshFrameworkData);
+        assert.strictEqual(out.page.environment.webroot, undefined, 'without the restore, webroot is clobbered — this is the bug #29 fixes');
+    });
+
+});

@@ -99,3 +99,53 @@ describe('02 - bin/cli: file exists and is valid', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 — Source: framework-dir existence guard runs BEFORE requiring from it
+//
+// GINA_VERSION (env/state) can resolve to a version whose framework dir is not
+// installed (stale pin, or a bind-mounted dev tree at a different version).
+// The require(frameworkPath + '/lib/generator') must be guarded by an
+// fs.existsSync(frameworkPath) check that runs FIRST — otherwise the require
+// throws an opaque MODULE_NOT_FOUND that the catch mislabels as "could not
+// load package.json", and every CLI command silently fails.
+// ---------------------------------------------------------------------------
+describe('03 - bin/cli: framework version existence guard precedes the require', function() {
+
+    it('guards on !fs.existsSync(frameworkPath) before requiring lib/generator', function() {
+        var src        = fs.readFileSync(CLI_SOURCE, 'utf8');
+        var guardIdx   = src.indexOf('!fs.existsSync(frameworkPath)');
+        var requireIdx = src.indexOf("require(frameworkPath + '/lib/generator')");
+        assert.ok(guardIdx > -1, 'expected an !fs.existsSync(frameworkPath) guard');
+        assert.ok(requireIdx > -1, "expected require(frameworkPath + '/lib/generator')");
+        assert.ok(
+            guardIdx < requireIdx,
+            'expected the framework-dir existence guard to run BEFORE require(.../lib/generator)'
+        );
+    });
+
+    it('the early guard points the user at `gina framework:install <version>`', function() {
+        var src      = fs.readFileSync(CLI_SOURCE, 'utf8');
+        var guardIdx = src.indexOf('!fs.existsSync(frameworkPath)');
+        var window   = src.slice(guardIdx, guardIdx + 500);
+        assert.ok(/framework:install/.test(window), 'expected framework:install hint in the early guard');
+    });
+
+    it('the early guard fails fast via process.exit(1)', function() {
+        var src      = fs.readFileSync(CLI_SOURCE, 'utf8');
+        var guardIdx = src.indexOf('!fs.existsSync(frameworkPath)');
+        var window   = src.slice(guardIdx, guardIdx + 500);
+        assert.ok(/process\.exit\(1\)/.test(window), 'expected the early guard to exit non-zero');
+    });
+
+    it('uses process.stderr.write (logger is not loaded yet at this point)', function() {
+        var src      = fs.readFileSync(CLI_SOURCE, 'utf8');
+        var guardIdx = src.indexOf('!fs.existsSync(frameworkPath)');
+        var window   = src.slice(guardIdx, guardIdx + 500);
+        assert.ok(
+            /process\.stderr\.write/.test(window),
+            'expected process.stderr.write (console.alert is undefined before lib loads)'
+        );
+    });
+});

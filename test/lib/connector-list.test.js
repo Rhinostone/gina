@@ -116,6 +116,10 @@ describe('03 - connector registry consumption', function () {
         assert.match(src, /var registry = lib\.connectorRegistry;/);
     });
 
+    it('declares `var fmt = lib.cmdStatusFormat;`', function () {
+        assert.match(src, /var fmt\s+= lib\.cmdStatusFormat;/);
+    });
+
     it('does NOT declare an inline DRIVER_MAP — moved to the registry', function () {
         assert.doesNotMatch(src, /var DRIVER_MAP\s*=\s*\{/, 'DRIVER_MAP must live in lib/connector-registry, not inline');
     });
@@ -396,8 +400,9 @@ describe('11 - formatRow', function () {
         assert.match(src, /\(built-in\)/);
     });
 
-    it('pad() right-pads with spaces to a target width', function () {
-        assert.match(src, /while \(out\.length < width\) \{\s*out \+= ' ';/);
+    it('pad() delegates to lib.cmdStatusFormat (no inline copy)', function () {
+        assert.match(src, /fmt\.pad\(/);
+        assert.doesNotMatch(src, /var pad = function/);
     });
 });
 
