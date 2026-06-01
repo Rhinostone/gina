@@ -66,6 +66,32 @@
 
 
 
+[ Renaming a bundle ]
+
+    Rename a bundle IN PLACE inside the SAME project. gina moves the source
+    tree to the new name, rewrites the bundle-name footprint (controller class
+    names, the gina require-var, app.json name, webroot) in the moved .js/.json
+    files, and rekeys manifest.json + env.json + the ports registry to the new
+    name. The existing port numbers are preserved (rekeyed, not reallocated).
+    User content in templates / SQL / CSS is moved verbatim. The bundle must be
+    stopped first.
+
+    $ gina bundle:rename <old_bundle_name> <new_bundle_name> @<project_name>
+
+    Preview without writing anything
+    ----------
+    Lists every file the name rewrite would touch so coincidental matches can be
+    reviewed before any write.
+
+    $ gina bundle:rename <old_bundle_name> <new_bundle_name> @<project_name> --dry-run
+    $ gina bundle:rename <old_bundle_name> <new_bundle_name> @<project_name> --dry-run --format=json
+
+    Overwrite an existing target
+    ----------
+    $ gina bundle:rename <old_bundle_name> <new_bundle_name> @<project_name> --force
+
+
+
 [ Listing all bundles inside your project ]
 
     $ gina bundle:list @<project_name>

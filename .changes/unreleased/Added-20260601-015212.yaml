@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added bundle:rename to rename a bundle in place under a new name within the same project. It moves the source tree, rewrites the bundle-name footprint (controller class names, the gina require-var, app.json name, webroot) in the moved .js/.json files, and rekeys manifest.json + env.json + the ports registry preserving the existing port numbers. The bundle must be stopped first (a running bundle is refused, with no --force bypass). Supports --dry-run (preview every rewrite site before writing), --force (overwrite an existing bundle that already holds the new name), and --format=json.'
+time: 2026-06-01T01:52:12.13382+01:00
