@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina-container` (the Docker/K8s foreground launcher) no longer returns HTTP 500 on every HTML-rendering route. The controller read the `GINA_PID` and `GINA_CULTURE` globals directly, which the daemonless launcher does not inject; it now falls back to the bundle process id and the default culture.'
+time: 2026-06-01T22:45:46.155116+01:00

@@ -449,7 +449,8 @@ function SuperController(options) {
             }
 
             set('page.environment.gina', version.number);
-            set('page.environment.gina pid', GINA_PID);
+            // gina-container (daemonless launcher) injects no GINA_PID global — fall back to this pid
+            set('page.environment.gina pid', getEnvVar('GINA_PID') || String(process.pid));
             set('page.environment.nodejs', version.nodejs +' '+ version.platform +' '+ version.arch);
             set('page.environment.engine', options.conf.server.engine);//version.middleware
             set('page.environment.uvThreadpoolSize', process.env.UV_THREADPOOL_SIZE);
@@ -704,7 +705,8 @@ function SuperController(options) {
             set('page.view.route', rule);
 
 
-            var acceptLanguage = GINA_CULTURE; // by default : language-COUNTRY
+            // gina-container injects no GINA_CULTURE global — fall back to the framework default
+            var acceptLanguage = getEnvVar('GINA_CULTURE') || 'en_CM'; // by default : language-COUNTRY
             if ( typeof(req.headers['accept-language']) != 'undefined' ) {
                 acceptLanguage = req.headers['accept-language']
             } else if ( typeof(local.options.conf.server.response.header['accept-language']) != 'undefined' ) {
