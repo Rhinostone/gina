@@ -19734,9 +19734,6 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
     define( 'lib/inherits',[],function() { return Inherits(); });
 };
 
-if ( typeof(module) !== 'undefined' && module.exports ) {
-    var lib = require('../../index');
-}
 
 /**
  * @module lib/collection

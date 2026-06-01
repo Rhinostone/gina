@@ -1,7 +1,4 @@
 'use strict';
-if ( typeof(module) !== 'undefined' && module.exports ) {
-    const lib = require('../../index');
-}
 
 /**
  * @module lib/cache

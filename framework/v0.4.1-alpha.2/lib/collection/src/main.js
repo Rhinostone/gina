@@ -1,7 +1,4 @@
 'use strict';
-if ( typeof(module) !== 'undefined' && module.exports ) {
-    var lib = require('../../index');
-}
 
 /**
  * @module lib/collection
