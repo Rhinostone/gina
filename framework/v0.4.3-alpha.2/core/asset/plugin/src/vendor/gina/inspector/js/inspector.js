@@ -3751,6 +3751,8 @@
      * @returns {boolean} `true` if a `target` param was found and connection initiated
      */
     function tryAgent() {
+        // #INS8 — if the WebSocket transport already claimed the channel, no-op.
+        if (source === 'agent') return true;
         if (typeof EventSource === 'undefined') return false;
 
         var params = new URLSearchParams(window.location.search);
@@ -3836,6 +3838,127 @@
                 // EventSource reconnects automatically.
                 // Show warning state while disconnected.
                 qs('#bm-dot').className = 'bm-dot warn';
+            };
+        } catch (e) {
+            return false;
+        }
+
+        return true;
+    }
+
+
+    // ── WebSocket /_gina/agent transport (#INS8) ─────────────────────────
+
+    /**
+     * #INS8 — WebSocket variant of {@link tryAgent}. Activated when the
+     * Inspector is opened with `?target=<bundle_url>&transport=ws` (opt-in for
+     * this slice; #INS9b promotes WS to the default with an SSE fallback).
+     * Connects to `{target}/_gina/agent` over a WebSocket, parsing the same
+     * `{event, data}` envelopes the SSE channel emits. Threads the optional
+     * `?key=` on the WS URL (browsers cannot set WebSocket handshake headers,
+     * same constraint as EventSource). Falls back to SSE ({@link tryAgent}) once
+     * if the socket never opens (e.g. an HTTP/2-only target that cannot upgrade).
+     *
+     * @inner
+     * @returns {boolean} `true` if a `target` param was found and a socket was opened
+     */
+    function tryAgentWS() {
+        if (typeof WebSocket === 'undefined') return false;
+
+        var params = new URLSearchParams(window.location.search);
+        var target = params.get('target');
+        if (!target) return false;
+
+        // Normalise: strip trailing slash, switch scheme to ws/wss.
+        target = target.replace(/\/+$/, '');
+        var wsUrl = target.replace(/^http/i, 'ws') + '/_gina/agent';
+
+        var agentKey = params.get('key');
+        if (agentKey) {
+            wsUrl += '?key=' + encodeURIComponent(agentKey);
+        }
+
+        qs('#bm-dot').className = 'bm-dot warn';
+        qs('#bm-label').textContent = 'Connecting…';
+
+        var _opened = false, _fellBack = false;
+
+        try {
+            var ws = new WebSocket(wsUrl);
+            // Claim the channel only after the socket is constructed, so a
+            // constructor throw leaves source unset and tryAgent() opens SSE.
+            source = 'agent';
+
+            ws.onopen = function () {
+                _opened = true;
+                qs('#bm-dot').className = 'bm-dot ok';
+            };
+
+            ws.onmessage = function (ev) {
+                try {
+                    var frame = JSON.parse(ev.data);
+                    if (!frame || !frame.event) return;
+                    if (frame.event === 'data') {
+                        var gd = frame.data;
+                        if (!gd) return;
+                        var str = JSON.stringify(gd);
+                        if (str === lastGdStr) return;
+                        showLoader();
+                        lastGdStr = str;
+                        ginaData = gd;
+                        var env = (gd.user && gd.user.environment) || {};
+                        qs('#bm-label').textContent = (env.bundle || '?') + '@' + (env.env || '?');
+                        qs('#bm-dot').className = 'bm-dot ok';
+                        document.title = 'Inspector — ' + (env.bundle || '?') + '@' + (env.env || '?');
+                        qs('#bm-no-source').classList.add('hidden');
+                        renderEnvironmentInfo();
+                        updateRevealVisibility();
+                        var tab = activeTab();
+                        if (tab !== 'logs') renderTab(tab);
+                        if (tab !== 'query') {
+                            var _u = gd.user || {};
+                            var _hasXhr = typeof _u['data-xhr'] !== 'undefined';
+                            var _qd = _hasXhr && _u['data-xhr'] && _u['data-xhr'].queries
+                                ? _u['data-xhr'].queries : _u.queries;
+                            updateQueryToolbar(_qd || null);
+                        }
+                        if (tab !== 'view') {
+                            var _u2 = gd.user || {};
+                            var _isXhr2 = typeof _u2['view-xhr'] !== 'undefined';
+                            var _vm = getPageMetrics(_isXhr2);
+                            var _dxhr = typeof _u2['data-xhr'] !== 'undefined';
+                            var _vq = _dxhr && _u2['data-xhr'] && _u2['data-xhr'].queries
+                                ? _u2['data-xhr'].queries : _u2.queries;
+                            updateViewDot(checkPerfAnomalies(_vm, _vq || []));
+                        }
+                        hideLoader();
+                    } else if (frame.event === 'log') {
+                        if (paused) return;
+                        var entry = frame.data;
+                        if (!entry) return;
+                        entry._id = ++_logIdCounter;
+                        logs.push(entry);
+                        if (logs.length > MAX_LOG_ENTRIES) logs.shift();
+                        updateLogDot([entry]);
+                        scheduleRender();
+                    }
+                } catch (e) {}
+            };
+
+            ws.onerror = function () {
+                qs('#bm-dot').className = 'bm-dot warn';
+            };
+
+            ws.onclose = function () {
+                qs('#bm-dot').className = 'bm-dot warn';
+                // If the socket never opened, fall back to SSE once so the
+                // Inspector still connects (e.g. an HTTP/2-only target whose
+                // server cannot upgrade a WebSocket).
+                if (!_opened && !_fellBack && source === 'agent') {
+                    _fellBack = true;
+                    source = null;
+                    tryAgent();
+                }
             };
         } catch (e) {
             return false;
@@ -4898,6 +5021,14 @@
         // Agent mode (?target= param) is the highest-priority source — it
         // provides both data and logs via a single SSE stream.  When active,
         // opener/localStorage polling and tryServerLogs() are unnecessary.
+        // #INS8 — opt into the WebSocket transport with ?transport=ws (SSE is
+        // the default; #INS9b promotes WS to default). On a successful handshake
+        // tryAgentWS() sets source='agent', so the tryAgent() call below
+        // short-circuits to a no-op; otherwise SSE (or the SSE fallback) is used.
+        if (typeof URLSearchParams !== 'undefined'
+            && new URLSearchParams(window.location.search).get('transport') === 'ws') {
+            tryAgentWS();
+        }
         var isAgent = tryAgent();
 
         if (!isAgent) {

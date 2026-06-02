@@ -1,0 +1,3 @@
+kind: Added
+body: 'The standalone Inspector SPA can stream a bundle data + log feed over the WebSocket transport by opening with ?transport=ws (SSE stays the default and the automatic fallback if the socket cannot open). The optional ?key= is threaded on the WebSocket URL for an auth-gated endpoint.'
+time: 2026-06-02T13:31:19.045727+01:00

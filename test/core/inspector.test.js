@@ -8460,3 +8460,91 @@ describe('76 - #INS8 WebSocket upgrade gate/auth/origin behavioral replica', fun
     });
 
 });
+
+
+// ── 77 — #INS8: Inspector SPA WebSocket transport (tryAgentWS opt-in) ─────────
+
+describe('77 - #INS8 Inspector SPA WebSocket transport (tryAgentWS)', function() {
+
+    var _inspJs77;
+    function getInspJs77() { return _inspJs77 || (_inspJs77 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8')); }
+
+    function wsFnBlk() {
+        var js = getInspJs77();
+        var i = js.indexOf('function tryAgentWS');
+        assert.ok(i > -1, 'expected tryAgentWS in dist inspector.js');
+        return js.substring(i, i + 4400);
+    }
+
+    it('dist inspector.js defines tryAgentWS()', function() {
+        assert.ok(getInspJs77().indexOf('function tryAgentWS') > -1, 'expected tryAgentWS()');
+    });
+
+    it('connects via a native WebSocket to {target}/_gina/agent', function() {
+        var blk = wsFnBlk();
+        assert.ok(/typeof WebSocket === 'undefined'/.test(blk), 'expected a WebSocket feature check');
+        assert.ok(blk.indexOf('new WebSocket(wsUrl)') > -1,      'expected new WebSocket(wsUrl)');
+        assert.ok(blk.indexOf("'/_gina/agent'") > -1,           'expected the /_gina/agent path');
+    });
+
+    it('switches the scheme to ws/wss and threads ?key=', function() {
+        var blk = wsFnBlk();
+        assert.ok(/replace\(\/\^http\/i,\s*'ws'\)/.test(blk), 'expected http→ws scheme swap (preserves https→wss)');
+        assert.ok(blk.indexOf("params.get('key')") > -1,      'expected the ?key= read');
+        assert.ok(blk.indexOf("'?key='") > -1,                'expected ?key= appended to the WS URL');
+    });
+
+    it('parses {event, data} envelopes for data and log frames', function() {
+        var blk = wsFnBlk();
+        assert.ok(blk.indexOf('JSON.parse(ev.data)') > -1,    'expected JSON parse of the frame');
+        assert.ok(blk.indexOf("frame.event === 'data'") > -1, 'expected the data envelope branch');
+        assert.ok(blk.indexOf("frame.event === 'log'") > -1,  'expected the log envelope branch');
+    });
+
+    it('falls back to SSE once when the socket never opens', function() {
+        var blk = wsFnBlk();
+        assert.ok(/ws\.onclose\s*=/.test(blk),           'expected an onclose handler');
+        assert.ok(/!_opened\s*&&\s*!_fellBack/.test(blk), 'expected a one-shot fallback guard');
+        assert.ok(blk.indexOf('tryAgent()') > -1,        'expected the SSE fallback call');
+    });
+
+    it('source acquisition opts into WS via ?transport=ws (SSE entry preserved)', function() {
+        var js = getInspJs77();
+        assert.ok(js.indexOf("get('transport') === 'ws'") > -1, 'expected the ?transport=ws opt-in read');
+        assert.ok(js.indexOf('var isAgent = tryAgent()') > -1,  'expected the preserved SSE entry point');
+        var wsIdx  = js.indexOf('tryAgentWS();');
+        var sseIdx = js.indexOf('var isAgent = tryAgent()');
+        assert.ok(wsIdx > -1 && wsIdx < sseIdx, 'expected tryAgentWS() invoked before the tryAgent() entry');
+    });
+
+    it('tryAgent() short-circuits when the WebSocket already claimed the channel', function() {
+        var js = getInspJs77();
+        var i = js.indexOf('function tryAgent()');
+        var blk = js.substring(i, i + 200);
+        assert.ok(/if \(source === 'agent'\) return true;/.test(blk),
+            'expected the source===agent no-op guard at the top of tryAgent');
+    });
+
+    it('claims source=agent only after the socket is constructed', function() {
+        var blk = wsFnBlk();
+        var wsIdx  = blk.indexOf('new WebSocket(wsUrl)');
+        var srcIdx = blk.indexOf("source = 'agent'");
+        assert.ok(wsIdx > -1 && srcIdx > wsIdx,
+            'expected source=agent set AFTER new WebSocket (constructor throw leaves SSE as fallback)');
+    });
+
+    // Behavioral replica of the WS URL construction (scheme swap + key append).
+    function wsUrl(target, key) {
+        target = String(target).replace(/\/+$/, '');
+        var u = target.replace(/^http/i, 'ws') + '/_gina/agent';
+        if (key) { u += '?key=' + encodeURIComponent(key); }
+        return u;
+    }
+
+    it('builds ws:// for http targets and wss:// for https targets', function() {
+        assert.equal(wsUrl('http://localhost:3100'),  'ws://localhost:3100/_gina/agent');
+        assert.equal(wsUrl('https://example.com/'),   'wss://example.com/_gina/agent');
+        assert.equal(wsUrl('http://localhost:3100/', 'k e y'), 'ws://localhost:3100/_gina/agent?key=k%20e%20y');
+    });
+
+});
