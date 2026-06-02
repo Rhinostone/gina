@@ -1541,8 +1541,8 @@ describe('17 - browser-session cookie: null _expires skipped, not .format()-ed (
 });
 
 
-// Layoutless renders: userData merged at top level (commit a0b40e0a)
-describe('layoutless renders — isWithoutLayout branch merges userData at top level (commit a0b40e0a)', function() {
+// Layoutless renders: userData exposed at top level AND under page.data (nunjucks parity)
+describe('layoutless renders — isWithoutLayout branch exposes userData at top level AND under page.data', function() {
 
     var src = function() { return fs.readFileSync(SOURCE, 'utf8'); };
 
@@ -1555,20 +1555,30 @@ describe('layoutless renders — isWithoutLayout branch merges userData at top l
         );
     });
 
-    it('layoutless branch merges userData at top level (sets `data = merge(userData, data)` shape)', function() {
+    it('layoutless branch exposes userData both at top level AND under page.data (nunjucks parity)', function() {
         var s = src();
-        // Within the isWithoutLayout branch the assignment must be `data = ... merge(userData, data) ...`
-        // (matches the JSON/raw path), not the `data.page.data = ...` shape used for full pages.
+        // Within the isWithoutLayout branch userData must reach the template two ways:
+        //   (1) top level via `data = ... merge(userData, data) ...` (bare `{{ var }}`), and
+        //   (2) under page.data via a per-key copy BEFORE that merge (`{% set data = page.data %}`
+        //       / data.X consumers — the layoutless contract popins rely on).
         var branchMatch = s.match(/else if\s*\(\s*isWithoutLayout\s*\)\s*\{([\s\S]*?)\}\s*else if/);
         assert.ok(branchMatch, 'could not locate `else if ( isWithoutLayout )` branch body');
         var body = branchMatch[1];
         assert.ok(
             /data\s*=\s*\(isRenderingCustomError\)\s*\?\s*userData\s*:\s*merge\(\s*userData,\s*data\s*\)/.test(body),
-            'expected layoutless branch to assign `data = (isRenderingCustomError) ? userData : merge(userData, data)` — top-level merge was reverted'
+            'expected layoutless branch to assign `data = (isRenderingCustomError) ? userData : merge(userData, data)` — top-level merge missing'
         );
         assert.ok(
-            !/data\['page'\]\['data'\]\s*=/.test(body),
-            'layoutless branch must NOT bury userData under data.page.data — that is the full-page-render shape'
+            /data\['page'\]\['data'\]\[\s*_udk\s*\]\s*=\s*userData\[\s*_udk\s*\]/.test(body),
+            'expected layoutless branch to copy userData keys into data.page.data (per-key) for data.X / page.data.X consumers'
+        );
+        // The page.data stash must precede the top-level merge — afterwards `data === userData`
+        // and a page.data write would alias `data` (circular ref → JSON.stringify throw).
+        var stashIdx = body.indexOf("data['page']['data'][_udk]");
+        var mergeIdx = body.search(/data\s*=\s*\(isRenderingCustomError\)\s*\?\s*userData\s*:\s*merge\(\s*userData,\s*data\s*\)/);
+        assert.ok(
+            stashIdx > -1 && mergeIdx > -1 && stashIdx < mergeIdx,
+            'page.data stash must run BEFORE the top-level merge to avoid a circular reference'
         );
     });
 
@@ -1579,6 +1589,71 @@ describe('layoutless renders — isWithoutLayout branch merges userData at top l
             /else if\s*\(\s*userData\s*&&\s*!userData\['page'\]\s*\)\s*\{[\s\S]*?data\['page'\]\['data'\]\s*=/.test(s),
             'full-page branch (`userData && !userData["page"]`) must still bury userData under data.page.data — invariant violated'
         );
+    });
+
+});
+
+
+// Layoutless render context — behavioural replica (real merge): top-level + page.data, no circular ref
+describe('layoutless userData merge — top-level + page.data, JSON-serializable (real merge)', function() {
+
+    var merge = require(path.join(require('../fw'), 'lib/merge'));
+
+    // Pure-logic replica of the render-swig isWithoutLayout branch: the page.data
+    // stash + the top-level merge + the framework-data restore (render-swig.js:610),
+    // exercising the REAL framework deep-merge.
+    function applyLayoutlessMerge(userData, getData) {
+        var data = getData();
+        if ( userData && !userData['page'] ) {
+            if ( typeof(data['page']) == 'undefined' ) { data['page'] = {}; }
+            if ( typeof(data['page']['data']) == 'undefined' ) { data['page']['data'] = {}; }
+            for ( var _udk in userData ) {
+                if ( Object.prototype.hasOwnProperty.call(userData, _udk) ) {
+                    data['page']['data'][_udk] = userData[_udk];
+                }
+            }
+        }
+        data = merge(userData, data);
+        data = merge(data, getData()); // framework page.* restore (render-swig.js:610)
+        return data;
+    }
+
+    function freshFrameworkData() {
+        return { page: {
+            environment: { webroot: '/', hostname: 'h', version: '0.4.2' },
+            view: { file: 'fragment' },
+            data: { session: { id: 'sid' } }
+        } };
+    }
+
+    it('promotes flat userData to top level AND stashes it under page.data', function() {
+        var out = applyLayoutlessMerge({ note: 'hello', total: 42 }, freshFrameworkData);
+        assert.strictEqual(out.note, 'hello', 'flat userData promoted to top-level ({{ note }} resolves)');
+        assert.strictEqual(out.total, 42);
+        assert.strictEqual(out.page.data.note, 'hello', 'flat userData also stashed under page.data (data.note / page.data.note)');
+        assert.strictEqual(out.page.data.total, 42);
+    });
+
+    it('keeps framework page.data.session across the layoutless merge', function() {
+        var out = applyLayoutlessMerge({ note: 'hello' }, freshFrameworkData);
+        assert.ok(out.page.data.session && out.page.data.session.id === 'sid', 'framework page.data.session must survive');
+    });
+
+    it('render context is JSON-serializable — stash-before-merge avoids a circular ref', function() {
+        var out = applyLayoutlessMerge({ note: 'hello', n: 1 }, freshFrameworkData);
+        assert.doesNotThrow(function() { JSON.stringify(out.page.data); }, 'JSON.stringify(page.data) must not throw (layoutless XHR-data serialization)');
+        assert.doesNotThrow(function() { JSON.stringify(out); }, 'JSON.stringify(renderContext) must not throw');
+    });
+
+    it('SUBTRACT: stashing AFTER the top-level merge creates a circular ref (proves the ordering is load-bearing)', function() {
+        function stashAfter(userData, getData) {
+            var data = getData();
+            data = merge(userData, data);                                  // now data === userData
+            data['page']['data'] = merge(userData, data['page']['data']);  // aliases data → cycle
+            return data;
+        }
+        var out = stashAfter({ note: 'hello' }, freshFrameworkData);
+        assert.throws(function() { JSON.stringify(out.page.data); }, /circular/i, 'stashing after the merge must create a circular structure');
     });
 
 });

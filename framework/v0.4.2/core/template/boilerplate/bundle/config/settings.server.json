@@ -32,6 +32,16 @@
     // },
 
     /**
+    * `http3Advertisement` setting (#H11)
+    * Opt-in Alt-Svc header advertising HTTP/3 (QUIC) at the edge.
+    * Set true to emit `Alt-Svc: h3=":443"; ma=86400` on every routed
+    * response. Gina does not implement QUIC — a QUIC-capable proxy
+    * (Caddy / nginx-QUIC / Cloudflare) terminates HTTP/3 on :443.
+    * Idempotent (first-writer-wins); off by default.
+    */
+    // "http3Advertisement": true,
+
+    /**
     * `response` settings
     * This section is mostly used to setup CORS
     */

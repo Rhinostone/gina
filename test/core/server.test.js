@@ -382,3 +382,141 @@ describe('Bug I — createNextMiddleware factory isolates per-request dispatch s
             'dispatcher A must continue to see request A\'s session — the regression case');
     });
 });
+
+
+// ─── #H11 — opt-in Alt-Svc HTTP/3-advertisement header (completeHeaders gate) ──
+//
+// When server.http3Advertisement is true, completeHeaders() emits
+// `Alt-Svc: h3=":443"; ma=86400` on every routed (user-facing) response via
+// response.setHeader, covering BOTH engines: completeHeaders runs for Isaac
+// routed requests through the composeHeadersMiddleware drain and for the
+// Express engine alike, and the render delegates fold response.getHeaders()
+// into the HTTP/2 stream.respond. Gina does NOT implement QUIC — advertise
+// only (a QUIC-capable edge proxy terminates HTTP/3 on :443). Idempotent /
+// first-writer-wins (an upstream-set Alt-Svc is never clobbered); off by
+// default (zero behaviour change when the flag is unset).
+
+describe('#H11 — Alt-Svc HTTP/3-advertisement gate in completeHeaders', function () {
+
+    var src, settingsSrc;
+
+    before(function () {
+        src         = fs.readFileSync(SOURCE, 'utf8');
+        settingsSrc = fs.readFileSync(path.join(require('../fw'), 'core/template/conf/settings.json'), 'utf8');
+    });
+
+    // region = the completeHeaders function body
+    function completeHeadersRegion() {
+        var startIdx = src.indexOf('var completeHeaders = function(responseHeaders');
+        var endIdx   = src.indexOf('this.onHttp2Stream', startIdx);
+        return src.slice(startIdx, endIdx);
+    }
+
+    it('source: completeHeaders carries the #H11 marker', function () {
+        assert.ok(/#H11/.test(completeHeadersRegion()),
+            'completeHeaders must carry the #H11 marker so intent is greppable');
+    });
+
+    it('source: gate reads conf.server.http3Advertisement', function () {
+        assert.match(completeHeadersRegion(), /conf\.server\.http3Advertisement/,
+            'gate must read conf.server.http3Advertisement');
+    });
+
+    it('source: gate is typeof-guarded and idempotent (first-writer-wins via response.getHeader)', function () {
+        var region = completeHeadersRegion();
+        assert.match(region, /typeof\s*\(\s*response\.getHeader\s*\)\s*==\s*['"]function['"]/,
+            'gate must guard `typeof(response.getHeader) == function`');
+        assert.match(region, /!\s*response\.getHeader\(\s*['"]alt-svc['"]\s*\)/,
+            'gate must skip when alt-svc is already set (first-writer-wins)');
+    });
+
+    it('source: gate emits the exact RFC 7838 value via response.setHeader', function () {
+        assert.ok(
+            completeHeadersRegion().indexOf("response.setHeader('alt-svc', 'h3=\":443\"; ma=86400')") > -1,
+            "gate must emit response.setHeader('alt-svc', 'h3=\":443\"; ma=86400')"
+        );
+    });
+
+    it('source: exactly one alt-svc setHeader emit in server.js (no drift)', function () {
+        var matches = src.match(/setHeader\(\s*['"]alt-svc['"]/gi);
+        assert.ok(matches && matches.length === 1,
+            'expected exactly one setHeader(\'alt-svc\', …) emit; found ' + (matches ? matches.length : 0));
+    });
+
+    it('settings.json template declares server.http3Advertisement: false (opt-in default)', function () {
+        assert.ok(settingsSrc.indexOf('"http3Advertisement": false') > -1,
+            'settings.json template must declare `"http3Advertisement": false` as the default');
+    });
+
+    it('settings.json http3Advertisement key sits inside the top-level server.* block', function () {
+        var serverIdx = settingsSrc.indexOf('"server"');
+        var uploadIdx = settingsSrc.indexOf('"upload"');
+        var h3Idx     = settingsSrc.indexOf('"http3Advertisement"');
+        assert.ok(serverIdx > -1 && uploadIdx > serverIdx, 'sanity: server then upload blocks present');
+        assert.ok(h3Idx > serverIdx && h3Idx < uploadIdx,
+            'http3Advertisement must live inside the server.* block (sibling of hidePoweredBy)');
+    });
+
+    // ── Pure-logic replica of the gate (mirrors the source) ──
+    function altSvcGate(conf, response) {
+        if (
+            conf.server.http3Advertisement
+            && typeof(response.getHeader) === 'function'
+            && !response.getHeader('alt-svc')
+        ) {
+            response.setHeader('alt-svc', 'h3=":443"; ma=86400');
+        }
+    }
+
+    function makeRes() {
+        var headers = {};
+        return {
+            setHeader: function (h, v) { headers[h.toLowerCase()] = v; },
+            getHeader: function (h)    { return headers[h.toLowerCase()]; },
+            _keys:     function ()     { return Object.keys(headers); }
+        };
+    }
+
+    it('replica: flag unset → no Alt-Svc (zero behaviour change)', function () {
+        var res = makeRes();
+        altSvcGate({ server: {} }, res);
+        assert.equal(res.getHeader('alt-svc'), undefined, 'no Alt-Svc when the flag is unset');
+    });
+
+    it('replica: flag false → no Alt-Svc', function () {
+        var res = makeRes();
+        altSvcGate({ server: { http3Advertisement: false } }, res);
+        assert.equal(res.getHeader('alt-svc'), undefined, 'no Alt-Svc when the flag is false');
+    });
+
+    it('replica: flag true → Alt-Svc: h3=":443"; ma=86400', function () {
+        var res = makeRes();
+        altSvcGate({ server: { http3Advertisement: true } }, res);
+        assert.equal(res.getHeader('alt-svc'), 'h3=":443"; ma=86400', 'exact RFC 7838 advertise-only value');
+    });
+
+    it('replica: first-writer-wins — an upstream/proxy Alt-Svc is never clobbered', function () {
+        var res = makeRes();
+        res.setHeader('Alt-Svc', 'h3=":8443"; ma=3600'); // simulate an upstream proxy
+        altSvcGate({ server: { http3Advertisement: true } }, res);
+        assert.equal(res.getHeader('alt-svc'), 'h3=":8443"; ma=3600',
+            'gate must not overwrite an already-present Alt-Svc');
+    });
+
+    it('replica: idempotent on repeat calls — single value, one key', function () {
+        var res  = makeRes();
+        var conf = { server: { http3Advertisement: true } };
+        altSvcGate(conf, res);
+        altSvcGate(conf, res);
+        assert.equal(res.getHeader('alt-svc'), 'h3=":443"; ma=86400', 'value stays correct after repeat calls');
+        assert.equal(res._keys().filter(function (k) { return k === 'alt-svc'; }).length, 1,
+            'alt-svc key must be unique after repeat calls');
+    });
+
+    it('replica: missing response.getHeader → no throw, no emit (defensive typeof guard)', function () {
+        var bareRes = { setHeader: function () { throw new Error('setHeader should not be called'); } };
+        assert.doesNotThrow(function () {
+            altSvcGate({ server: { http3Advertisement: true } }, bareRes);
+        }, 'gate must not throw or emit when response.getHeader is absent');
+    });
+});

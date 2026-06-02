@@ -39,11 +39,10 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.1
+## What's in 0.4.2
 
-- **CLI Tier 2 — run-state + lifecycle commands.** `bundle:status` / `project:status` report a bundle's (or every bundle's) running/stopped state, PID, port, and active env — human-readable or `--format=json`. `minion:list` / `minion:kill` list and reap a project's running bundle child-processes (both pidfile-tracked and `ps`-discovered orphans) with a graceful SIGTERM→SIGKILL escalation and a `--dry-run` preview. `bundle:copy` (alias `bundle:cp`) duplicates a bundle under a new name and `bundle:rename` renames one in place — both rewrite the bundle-name footprint and update the manifest / env / ports registry, with `--dry-run` / `--force`. `protocol:remove` reverts a bundle to the project's default protocol and scheme.
-- **Runtime template override** — `self.setTemplate(file, ext)` lets a controller action choose its template at request time (e.g. a catch-all dispatcher), resolved verbatim under the templates root. Honoured by both the swig and nunjucks render paths.
-- **Fixes** — nunjucks↔swig render parity (`self.setTemplate()` overrides, `controllers/setup.js` filter registration via `this.engine.addFilter()`, and a controller passing a partial `page` object no longer dropping framework-injected page data — webroot, view metadata, session); a crash that could kill a bundle serving static assets over HTTP/2 in dev mode under concurrent requests; `renderWithoutLayout` returning an empty body when the template referenced controller data as top-level variables; and clearer fail-fast errors when the `gina` CLI hits an uninstalled `GINA_VERSION` or when an interactive command (`bundle:add`/`bundle:remove`/`project:remove`/`protocol:set`/`port:set`/`view:add`) runs without a TTY.
+- **HTTP/3 advertisement (opt-in `Alt-Svc`).** Set `server.http3Advertisement: true` to emit `Alt-Svc: h3=":443"; ma=86400` on every routed response, so QUIC-capable browsers upgrade to HTTP/3 via a QUIC-capable edge proxy (Caddy, nginx-QUIC, Cloudflare) — **without Gina implementing QUIC itself.** Off by default; idempotent (an upstream-set `Alt-Svc` is never overwritten).
+- **Fixes** — `gina-container` (the Docker/K8s foreground launcher) no longer returns HTTP 500 on every HTML route (it read the `GINA_PID` / `GINA_CULTURE` globals the daemonless launcher doesn't inject); and layoutless (`renderWithoutLayout`) fragment renders again expose controller data under `page.data` as well as at top level, so templates reading `data.X` / `page.data.X` keep working alongside the 0.4.1 top-level-variable fix — matching the nunjucks engine.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 

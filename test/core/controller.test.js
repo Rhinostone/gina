@@ -2381,3 +2381,85 @@ describe('self.setTemplate(file, ext) — runtime template override', function()
     });
 
 });
+
+
+// 21 — gina-container bare-global fallbacks (GINA_PID / GINA_CULTURE)
+// The Docker/K8s foreground launcher (bin/gina-container) bypasses the daemon and
+// never defines the GINA_PID / GINA_CULTURE globals, so a bare read of either in
+// setOptions threw `ReferenceError: <NAME> is not defined` (HTTP 500) on every
+// view-rendering route. Both reads now go through getEnvVar() with a safe fallback,
+// matching the siblings (render-json.js, inspector-window-emit.js) and the
+// culture-default precedent (config.js / init.js).
+describe('21 - gina-container bare-global fallbacks (GINA_PID / GINA_CULTURE)', function() {
+
+    // ---- source structure ----
+
+    it('reads GINA_PID via getEnvVar with a String(process.pid) fallback', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf("getEnvVar('GINA_PID') || String(process.pid)") > -1,
+            "expected `getEnvVar('GINA_PID') || String(process.pid)` — a bare GINA_PID read ReferenceErrors under gina-container"
+        );
+    });
+
+    it('no longer reads a bare GINA_PID global in the page.environment setter', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf("'page.environment.gina pid', GINA_PID)") === -1,
+            'expected the bare `GINA_PID` read to be gone — it throws ReferenceError under the daemonless launcher'
+        );
+    });
+
+    it('reads GINA_CULTURE via getEnvVar with an en_CM fallback', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf("getEnvVar('GINA_CULTURE') || 'en_CM'") > -1,
+            "expected `getEnvVar('GINA_CULTURE') || 'en_CM'` — a bare GINA_CULTURE read ReferenceErrors under gina-container"
+        );
+    });
+
+    it('no longer reads a bare GINA_CULTURE global for acceptLanguage', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(
+            src.indexOf('var acceptLanguage = GINA_CULTURE;') === -1,
+            'expected the bare `GINA_CULTURE` read to be gone — it throws ReferenceError under the daemonless launcher'
+        );
+    });
+
+    // ---- pure logic: the getEnvVar() || fallback resolution ----
+
+    // Replica of the reader-side resolution used at both sites: getEnvVar('X')
+    // returns the daemon-set value when present, else undefined (the daemonless
+    // launcher case), in which case the fallback wins.
+    function resolve(getEnvVar, key, fallback) {
+        return getEnvVar(key) || fallback;
+    }
+
+    it('GINA_PID: the daemon-set value wins over the fallback', function() {
+        var getEnvVar = function(k) { return k === 'GINA_PID' ? '4242' : undefined; };
+        assert.strictEqual(resolve(getEnvVar, 'GINA_PID', String(99)), '4242');
+    });
+
+    it('GINA_PID: falls back to String(process.pid) when unset (gina-container)', function() {
+        var getEnvVar = function() { return undefined; };
+        var resolved  = resolve(getEnvVar, 'GINA_PID', String(12345));
+        assert.strictEqual(resolved, '12345');
+        assert.strictEqual(typeof resolved, 'string', 'fallback must yield a string pid');
+    });
+
+    it('GINA_CULTURE: daemon value wins; unset falls back to en_CM (gina-container)', function() {
+        var daemon  = function() { return 'fr_FR'; };
+        var missing = function() { return undefined; };
+        assert.strictEqual(resolve(daemon,  'GINA_CULTURE', 'en_CM'), 'fr_FR');
+        assert.strictEqual(resolve(missing, 'GINA_CULTURE', 'en_CM'), 'en_CM');
+    });
+
+    it('a bare read of an undeclared global throws ReferenceError (the pre-fix failure mode)', function() {
+        // getEnvVar() returns undefined for an unset key; a bare identifier read
+        // of the same omitted name throws — which is exactly why the daemonless
+        // launcher 500'd before the fix.
+        assert.throws(function() {
+            return GINA_PID_zzz_never_defined; // eslint-disable-line no-undef
+        }, ReferenceError);
+    });
+});

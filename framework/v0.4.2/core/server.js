@@ -1483,6 +1483,8 @@ function Server(options) {
      * Merges configured response headers (CORS, cache-control, etc.) into the
      * response. Resolves `Access-Control-Allow-Origin` against the bundle's
      * allowed origins list and normalises HTTP/1.1 vs HTTP/2 header names.
+     * When `server.http3Advertisement` is enabled, also emits the opt-in
+     * `Alt-Svc: h3=":443"; ma=86400` HTTP/3-advertisement header (#H11).
      *
      * @inner
      * @private
@@ -1506,6 +1508,25 @@ function Server(options) {
 
         if ( typeof(responseHeaders) == 'undefined' || !responseHeaders) {
             responseHeaders = {};
+        }
+
+        // #H11 — opt-in Alt-Svc HTTP/3-advertisement header on every routed
+        // (user-facing) response. When server.http3Advertisement is true,
+        // advertise an HTTP/3 (QUIC) alternative on :443 so QUIC-capable
+        // clients upgrade via a QUIC-capable edge proxy (Caddy / nginx-QUIC /
+        // Cloudflare). Gina does NOT implement QUIC — advertise only; the edge
+        // terminates HTTP/3 on :443 (NOT the bundle's own listen port). Set via
+        // response.setHeader so it is carried onto both engines: completeHeaders
+        // runs for Isaac routed requests through the composeHeadersMiddleware
+        // drain and for the Express engine alike, and the render delegates fold
+        // response.getHeaders() into the HTTP/2 stream.respond. First-writer-
+        // wins: an upstream-set Alt-Svc is never clobbered. Off by default.
+        if (
+            conf.server.http3Advertisement
+            && typeof(response.getHeader) == 'function'
+            && !response.getHeader('alt-svc')
+        ) {
+            response.setHeader('alt-svc', 'h3=":443"; ma=86400');
         }
 
         // Copy to avoid override
