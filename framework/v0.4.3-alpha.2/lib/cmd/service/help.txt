@@ -3,6 +3,10 @@
 
   Actions:
 
+    start <service> [@gina]      Start a framework-internal service (a bundle of
+                                 the @gina project, e.g. `inspector`) via the
+                                 daemon-free gina-container launcher. No-op when
+                                 the service is already running.
     list [@gina]                 List framework-internal services registered
                                  under @gina, with ports and running state.
     help                         Show this message.
@@ -11,6 +15,8 @@
 
     --format=json                Emit machine-readable JSON instead of the
                                  human-readable text table.
+    --dry-run                    (service:start) Print the launch command that
+                                 would run, without spawning anything.
 
   Notes:
 
@@ -22,8 +28,16 @@
     with `process.kill(pid, 0)` — a stale pidfile (process gone) reports
     the service as stopped.
 
+    `service:start` spawns the service detached via bin/gina-container, so it
+    does not need the `gina start` socket daemon. The service runs in @gina's
+    own dev/local defaults; use `bundle:start` for explicit env/scope control.
+    Stop a service with `bundle:stop <service> @gina`.
+
   Examples:
 
+    gina service:start inspector Start the Inspector standalone bundle (dev)
+    gina service:start inspector --dry-run
+                                 Show the launch command without spawning
     gina service:list            List all services with ports + running state
     gina service:list @gina      Same (explicit @gina)
     gina service:list --format=json

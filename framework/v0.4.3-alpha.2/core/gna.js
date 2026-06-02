@@ -1241,6 +1241,56 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._inspectorWindowUntil       = 0;
                                 }
 
+                                // #INS8 — dev-only auto-start of the standalone Inspector
+                                // bundle (inspector@gina). Best-effort + fail-closed.
+                                // Gated on:
+                                //  - isDev: never fires outside the project's dev env.
+                                //  - projectName !== 'gina': a @gina service (inspector /
+                                //    proxy) must never trigger this — otherwise the
+                                //    Inspector would re-spawn itself when it boots. This is
+                                //    the timing-proof guard; the not-running check below is
+                                //    a second line of defense.
+                                //  - srcExists: the @gina project is registered AND
+                                //    services/src/inspector is on disk. services/ is
+                                //    gitignored + npmignored, so it is absent in any
+                                //    `npm install gina` — the auto-start no-ops for everyone
+                                //    but a maintainer who scaffolded the services/ project.
+                                //  - not-running: a live inspector@gina pidfile skips the
+                                //    spawn (no duplicate Inspector).
+                                // Launches via the daemon-free bin/gina-container, so no
+                                // `gina start` socket server is required. Keep the spawn
+                                // shape in sync with lib/cmd/service/start.js.
+                                if (isDev && projectName !== 'gina') {
+                                    try {
+                                        var _inspProj = projects['gina'];
+                                        // 'src/inspector' mirrors @gina manifest.bundles.inspector.src
+                                        var _inspSrc  = _inspProj ? _(_inspProj.path + '/src/inspector') : null;
+                                        if (_inspProj && _inspSrc && require('fs').existsSync(_inspSrc)) {
+                                            var _inspRun = lib.cmdStatusFormat.readPidfile(getEnvVar('GINA_HOMEDIR') + '/run', 'inspector', 'gina');
+                                            if (!_inspRun.running) {
+                                                var _inspContainer = getEnvVar('GINA_DIR') + '/bin/gina-container';
+                                                if (require('fs').existsSync(_inspContainer)) {
+                                                    var _inspEnv = Object.assign({}, process.env);
+                                                    delete _inspEnv.NODE_ENV;
+                                                    delete _inspEnv.NODE_SCOPE;
+                                                    delete _inspEnv.NODE_PORT;
+                                                    delete _inspEnv.NODE_BUNDLE;
+                                                    delete _inspEnv.NODE_PROJECT;
+                                                    var _inspChild = require('child_process').spawn(
+                                                        process.execPath,
+                                                        [_inspContainer, 'inspector', '@gina'],
+                                                        { detached: true, stdio: 'ignore', env: _inspEnv }
+                                                    );
+                                                    _inspChild.unref();
+                                                    console.debug('[inspector-autostart] started inspector@gina (pid ' + ((_inspChild && _inspChild.pid) || '?') + ')');
+                                                }
+                                            }
+                                        }
+                                    } catch (inspAutoErr) {
+                                        console.warn('[inspector-autostart] skipped: ' + (inspAutoErr.message || inspAutoErr));
+                                    }
+                                }
+
                                 // #AI6 — initialise the async-job primitive. Always-on (unlike
                                 // metrics): self.startJob() / lib.job.create() must work out of the
                                 // box, so this is NOT gated on an `enabled` flag. The app.json `jobs`
