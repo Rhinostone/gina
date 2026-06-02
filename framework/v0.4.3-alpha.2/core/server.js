@@ -147,6 +147,152 @@ function _instrumentKeyValid(req) {
 }
 
 /**
+ * #INS8 — Attach the authenticated WebSocket transport for `/_gina/agent` to
+ * the raw HTTP server. The standalone Inspector (services/src/inspector on
+ * :4101) can connect over a WebSocket as an alternative to the SSE channel —
+ * same data + log frames, same #INS9b auth — but over a single bidirectional
+ * socket, the substrate for future bidirectional commands (#INS11 multi-bundle
+ * dashboard, #INS12 browser extension).
+ *
+ * Engine-agnostic by design: `rawServer` is the value returned by
+ * `self.instance.listen()`, and server.js owns the single `listen()` call for
+ * BOTH engines (the isaac instance IS the raw server; express's `app.listen()`
+ * returns it), so one `upgrade` listener here covers both. There is deliberately
+ * NO isaac-specific mirror — the isaac engine.io upgrade handler defers to this
+ * one via a `/_gina/agent` skip-guard (see server.isaac.js).
+ *
+ * Auth parity with the SSE endpoint: dev stays open + keyless; outside dev the
+ * upgrade requires a valid key (`x-gina-inspector-key` header or `?key=` query
+ * param) via the shared {@link _agentKeyValid}, fail-closed. When an Origin
+ * allowlist is configured (`process.gina._inspectorAgentAllowedOrigins`), the
+ * upgrade `Origin` must be in it; unconfigured ⇒ allow (parity with the SSE
+ * endpoint's `access-control-allow-origin: *`; cross-origin is the norm here,
+ * Inspector on :4101 → target on another port). Denials are written as a raw
+ * HTTP status line on the upgrade socket (no `ServerResponse` exists yet), then
+ * the socket is destroyed.
+ *
+ * Snapshot replay + capture egress mirror the SSE handler: the last snapshot is
+ * only sent in dev OR during an active instrumentation window (#INS10), never a
+ * post-window snapshot to a late authenticated client.
+ *
+ * Fail-graceful: if the `ws` module cannot be loaded the attach is skipped with
+ * a warning and SSE remains the transport — the WebSocket is an enhancement,
+ * not a hard dependency of the inspector channel.
+ *
+ * @inner
+ * @param {http.Server|https.Server|http2.Http2Server} rawServer - the raw server returned by listen()
+ * @param {object} ctx - the Server instance (provides `ctx.instance._lastGinaData`, `ctx.appName`, `ctx.env`)
+ * @returns {void}
+ * @example
+ * // Browser (standalone Inspector), non-dev target with a configured key:
+ * //   new WebSocket('ws://host:port/_gina/agent?key=' + encodeURIComponent(key))
+ * // Frames: {"event":"data","data":{...}} and {"event":"log","data":{t,l,b,s,src}}
+ */
+function attachInspectorAgentWs(rawServer, ctx) {
+    if (!rawServer || typeof rawServer.on !== 'function') { return; }
+    var WebSocketServer;
+    try {
+        var _wsMod = require('ws');
+        WebSocketServer = _wsMod.WebSocketServer || _wsMod.Server;
+    } catch (wsErr) {
+        console.warn('[inspector-agent] WebSocket transport disabled — ws module unavailable: ' + (wsErr.message || wsErr));
+        return;
+    }
+    if (typeof WebSocketServer !== 'function') { return; }
+
+    var _wss     = new WebSocketServer({ noServer: true });
+    var _agAnsiRe = /\x1B\[\d+m/g;
+
+    rawServer.on('upgrade', function(req, socket, head) {
+        // Only handle the agent WS path; leave every other upgrade (e.g.
+        // engine.io in ioServer-attach mode) for its own listener.
+        if (!/\/_gina\/agent(?:\?|$)/.test(req.url || '')) { return; }
+
+        var _agIsDev = (process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true');
+
+        // Gate: dev OR explicitly enabled outside dev — otherwise the endpoint
+        // does not exist (404), matching the SSE handler's opt-in invisibility.
+        if (!_agIsDev && !(process.gina && process.gina._inspectorAgentEnabled)) {
+            try { socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n'); } catch (e) {}
+            try { socket.destroy(); } catch (e) {}
+            return;
+        }
+
+        // #INS9b auth — outside dev a valid key is required (header or ?key=).
+        if (!_agIsDev && !_agentKeyValid(req)) {
+            try { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); } catch (e) {}
+            try { socket.destroy(); } catch (e) {}
+            return;
+        }
+
+        // Optional Origin allowlist — enforced only when configured (parity with
+        // the SSE endpoint, open by default). The operator lists the Inspector
+        // origin(s) for production use.
+        var _allowed = (process.gina && Array.isArray(process.gina._inspectorAgentAllowedOrigins))
+            ? process.gina._inspectorAgentAllowedOrigins : [];
+        if (_allowed.length > 0) {
+            var _origin = (req.headers && req.headers.origin) || '';
+            if (_allowed.indexOf(_origin) < 0) {
+                try { socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n'); } catch (e) {}
+                try { socket.destroy(); } catch (e) {}
+                return;
+            }
+        }
+
+        _wss.handleUpgrade(req, socket, head, function(ws) {
+            if (!process.gina._inspectorActive) { process.gina._inspectorActive = true; }
+
+            // Initial snapshot — dev OR an active instrumentation window only,
+            // never a post-window snapshot to a late authenticated client (#INS10).
+            try {
+                if ((_agIsDev || (lib.instrument && lib.instrument.isActive())) && ctx.instance && ctx.instance._lastGinaData) {
+                    ws.send(JSON.stringify({ event: 'data', data: ctx.instance._lastGinaData }));
+                } else {
+                    var _initEnv = { bundle: ctx.appName || '', env: ctx.env || '' };
+                    ws.send(JSON.stringify({ event: 'data', data: { gina: { environment: _initEnv }, user: { environment: _initEnv } } }));
+                }
+            } catch (e) {}
+
+            // Data updates — emitted by the render delegates on every render.
+            var _wsDataListener = function(payload) {
+                try { ws.send(JSON.stringify({ event: 'data', data: payload })); } catch (e) {}
+            };
+            // Log entries — same source + frame shape as the SSE endpoint.
+            var _wsLogListener = function(payload) {
+                try {
+                    var entry = JSON.parse(payload);
+                    var level = entry.level === 'catch' ? 'log' : (entry.level || 'log');
+                    var msg   = (entry.content || '').replace(_agAnsiRe, '').replace(/\n$/, '');
+                    if (!msg) { return; }
+                    ws.send(JSON.stringify({ event: 'log', data: { t: Date.now(), l: level, b: entry.group || '', s: msg, src: 'server' } }));
+                } catch (e) {}
+            };
+
+            process.on('inspector#data', _wsDataListener);
+            process.on('logger#default', _wsLogListener);
+
+            var _cleanup = function() {
+                process.removeListener('inspector#data', _wsDataListener);
+                process.removeListener('logger#default', _wsLogListener);
+            };
+            ws.on('close', _cleanup);
+            ws.on('error', _cleanup);
+
+            // Inbound frames are reserved for future bidirectional commands
+            // (#INS11/#INS12). For now, answer only a lightweight heartbeat.
+            ws.on('message', function(raw) {
+                try {
+                    var m = JSON.parse(raw.toString());
+                    if (m && m.type === 'ping') { ws.send(JSON.stringify({ event: 'pong', data: Date.now() })); }
+                } catch (e) {}
+            });
+
+            try { console.info((req.method || 'GET') + ' [101] ' + req.url + ' (WS agent)'); } catch (e) {}
+        });
+    });
+}
+
+/**
  * Read a small JSON request body for the POST /_gina/instrument control
  * endpoint (#INS10). Bounded at 4 KB — the control body is tiny
  * (`{enable, ttlSeconds}`). Uses `req.body` when an upstream parser already
@@ -3377,6 +3523,11 @@ function Server(options) {
         // internally and returns it — without capturing here it is unreachable.
         var _rawServer = self.instance.listen(self.conf[self.appName][self.env].server.port);
         process.server = (_rawServer && typeof _rawServer.close === 'function') ? _rawServer : self.instance;
+
+        // #INS8 — attach the authenticated WebSocket transport for /_gina/agent
+        // to the raw server. Covers both the isaac and express engines (server.js
+        // owns the single listen() call), so no engine-specific mirror is needed.
+        attachInspectorAgentWs(process.server, self);
 
         self.emit('started', self.conf[self.appName][self.env], true);
     }

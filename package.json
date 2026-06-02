@@ -96,7 +96,8 @@
   "dependencies": {
     "@rhinostone/swig": "^2.5.1",
     "engine.io": "^6.6.7",
-    "psl": "^1.15.0"
+    "psl": "^1.15.0",
+    "ws": "^8.20.1"
   },
   "devDependencies": {
     "csso-cli": "4.0.2",

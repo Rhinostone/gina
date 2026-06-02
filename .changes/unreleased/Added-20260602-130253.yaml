@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added an authenticated WebSocket transport for the Inspector agent endpoint (/_gina/agent), alongside the existing SSE channel. The standalone Inspector can stream a bundle data + log feed over a single WebSocket. Outside dev mode the upgrade requires the configured inspector.agent.key (presented via ?key= or the x-gina-inspector-key header) and honours an optional inspector.agent.allowedOrigins Origin allowlist.'
+time: 2026-06-02T13:02:53.094608+01:00

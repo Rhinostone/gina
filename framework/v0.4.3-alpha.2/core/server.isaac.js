@@ -1900,6 +1900,9 @@ function ServerEngineClass(options) {
         });
 
         server.on('upgrade', function(req, socket, head){
+            // #INS8 — defer /_gina/agent upgrades to the WebSocket agent handler
+            // attached in server.js; engine.io owns only its own upgrade path.
+            if (/\/_gina\/agent(?:\?|$)/.test(req.url || '')) { return; }
             console.debug('[IO SERVER ] upgrading socket #'+ this.id);
             ioServer.handleUpgrade(req, socket, head);
         });

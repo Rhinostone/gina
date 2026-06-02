@@ -4,6 +4,7 @@
   "dependencies": {
     "@rhinostone/swig": "^2.5.1",
     "intl-messageformat": "^11.2.4",
-    "psl": "^1.15.0"
+    "psl": "^1.15.0",
+    "ws": "^8.20.1"
   }
 }

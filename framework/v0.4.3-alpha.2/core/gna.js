@@ -1197,11 +1197,15 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     if (!process.gina) process.gina = {};
                                     process.gina._inspectorAgentEnabled = (_inspAgent.enabled === true);
                                     process.gina._inspectorAgentKey     = (typeof _inspAgent.key === 'string' && _inspAgent.key) ? _inspAgent.key : null;
+                                    // #INS8 — Origin allowlist for the WebSocket /_gina/agent upgrade
+                                    // (empty ⇒ allow any origin; enforced only when non-empty).
+                                    process.gina._inspectorAgentAllowedOrigins = Array.isArray(_inspAgent.allowedOrigins) ? _inspAgent.allowedOrigins : [];
                                 } catch (inspAgentErr) {
                                     console.warn('[inspector-agent] init skipped: ' + (inspAgentErr.message || inspAgentErr));
                                     if (!process.gina) process.gina = {};
                                     process.gina._inspectorAgentEnabled = false;
                                     process.gina._inspectorAgentKey     = null;
+                                    process.gina._inspectorAgentAllowedOrigins = [];
                                 }
 
                                 // #INS10 — capture the instrumentation-window opt-in + key + window

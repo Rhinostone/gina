@@ -145,10 +145,14 @@
   //             process.env at config-load time). Example:
   //             "key": "${secret:INSPECTOR_AGENT_KEY}". When enabled is true
   //             but key is empty, the endpoint stays closed (fail-closed).
+  //   allowedOrigins — #INS8: when non-empty, a WebSocket /_gina/agent upgrade
+  //             is accepted only if its Origin header is in this list. Empty ⇒
+  //             allow any origin (the SSE channel is open by CORS * regardless).
   "inspector": {
     "agent": {
       "enabled": false,
-      "key": ""
+      "key": "",
+      "allowedOrigins": []
     },
     // #INS10 — time-boxed instrumentation window. Lets the Inspector's query +
     // flow capture run OUTSIDE dev mode for a bounded period, without enabling
