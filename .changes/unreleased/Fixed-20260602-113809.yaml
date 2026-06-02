@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Layoutless renders (`self.renderWithoutLayout`) now expose controller data both at top level and under `page.data` again. The 0.4.1 top-level-variable change populated only the top level, so fragment templates reading `data.X` / `page.data.X` (via `{% set data = page.data %}`) rendered empty; this restores the `page.data` copy alongside the top-level merge, matching the nunjucks engine. The copy runs before the top-level merge to avoid a circular reference in the layoutless XHR-data serialization.'
-time: 2026-06-02T11:38:09.193369+01:00

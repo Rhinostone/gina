@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added an opt-in `Alt-Svc` HTTP/3-advertisement response header. Set `server.http3Advertisement: true` to emit `Alt-Svc: h3=":443"; ma=86400` on every routed response, advertising HTTP/3 (QUIC) availability so QUIC-capable clients upgrade via a QUIC-capable edge proxy (Caddy / nginx-QUIC / Cloudflare). Gina does not implement QUIC — advertise only. Idempotent (an upstream-set Alt-Svc is never clobbered); off by default.'
-time: 2026-06-02T09:53:09.852545+01:00
