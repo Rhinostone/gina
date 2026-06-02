@@ -548,12 +548,28 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             userData = { page: { view: {}}}
         } else if ( isWithoutLayout ) {
             // Layoutless renders (self.renderWithoutLayout) have no page envelope
-            // — no `view.layout`, no breadcrumb, no session card — so the
-            // `page`-key-presence gating used below for full pages serves no
-            // purpose here and only buries the controller's context under
-            // `data.page.data`, where the fragment template's top-level
-            // {{ var }} references can't reach it. Merge user context at
-            // top level unconditionally for fragments.
+            // — no `view.layout`, no breadcrumb, no session card. Expose the
+            // controller's userData two ways so both fragment-template idioms work:
+            //   (1) at top level, so bare `{{ var }}` references resolve; and
+            //   (2) under `page.data`, so templates using `{% set data = page.data %}`
+            //       / `data.X` (the layoutless contract popins rely on) keep working.
+            // The page.data copy MUST run BEFORE the top-level merge below: while
+            // userData still has no `page` key and `data` is the distinct page
+            // envelope, the per-key copy creates only shared leaf refs. Running it
+            // AFTER `data = merge(userData, data)` (where `merge` returns its first
+            // arg, so `data === userData`) would make `data.page.data` alias `data`
+            // — a circular ref that throws in the layoutless XHR-data `JSON.stringify`.
+            // Mirrors the render-nunjucks userData stash; additive (page.data already
+            // carried these keys before the top-level-only change).
+            if ( !isRenderingCustomError && userData && !userData['page'] ) {
+                if ( typeof(data['page']) == 'undefined' ) { data['page'] = {}; }
+                if ( typeof(data['page']['data']) == 'undefined' ) { data['page']['data'] = {}; }
+                for ( var _udk in userData ) {
+                    if ( Object.prototype.hasOwnProperty.call(userData, _udk) ) {
+                        data['page']['data'][_udk] = userData[_udk];
+                    }
+                }
+            }
             data = (isRenderingCustomError) ? userData : merge(userData, data)
         } else if ( userData && !userData['page']) {
 
