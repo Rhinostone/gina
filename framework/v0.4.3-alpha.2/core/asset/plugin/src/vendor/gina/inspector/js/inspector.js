@@ -3850,9 +3850,9 @@
     // ── WebSocket /_gina/agent transport (#INS8) ─────────────────────────
 
     /**
-     * #INS8 — WebSocket variant of {@link tryAgent}. Activated when the
-     * Inspector is opened with `?target=<bundle_url>&transport=ws` (opt-in for
-     * this slice; #INS9b promotes WS to the default with an SSE fallback).
+     * #INS8/#INS9b — WebSocket variant of {@link tryAgent}, the DEFAULT agent
+     * transport (since #INS9b). Runs whenever the Inspector is opened with a
+     * `?target=<bundle_url>` unless `?transport=sse` forces SSE.
      * Connects to `{target}/_gina/agent` over a WebSocket, parsing the same
      * `{event, data}` envelopes the SSE channel emits. Threads the optional
      * `?key=` on the WS URL (browsers cannot set WebSocket handshake headers,
@@ -5021,12 +5021,14 @@
         // Agent mode (?target= param) is the highest-priority source — it
         // provides both data and logs via a single SSE stream.  When active,
         // opener/localStorage polling and tryServerLogs() are unnecessary.
-        // #INS8 — opt into the WebSocket transport with ?transport=ws (SSE is
-        // the default; #INS9b promotes WS to default). On a successful handshake
-        // tryAgentWS() sets source='agent', so the tryAgent() call below
-        // short-circuits to a no-op; otherwise SSE (or the SSE fallback) is used.
-        if (typeof URLSearchParams !== 'undefined'
-            && new URLSearchParams(window.location.search).get('transport') === 'ws') {
+        // #INS9b — WebSocket is the DEFAULT agent transport; SSE is the automatic
+        // fallback (tryAgentWS() falls back to tryAgent() on a failed open, and
+        // only acts when a ?target= is present). ?transport=sse forces SSE. On a
+        // successful handshake tryAgentWS() claims source='agent', so the
+        // tryAgent() call below short-circuits to a no-op.
+        var _agentTransport = (typeof URLSearchParams !== 'undefined')
+            ? new URLSearchParams(window.location.search).get('transport') : null;
+        if (_agentTransport !== 'sse') {
             tryAgentWS();
         }
         var isAgent = tryAgent();

@@ -8508,10 +8508,11 @@ describe('77 - #INS8 Inspector SPA WebSocket transport (tryAgentWS)', function()
         assert.ok(blk.indexOf('tryAgent()') > -1,        'expected the SSE fallback call');
     });
 
-    it('source acquisition opts into WS via ?transport=ws (SSE entry preserved)', function() {
+    it('source acquisition uses WS by default; ?transport=sse forces SSE (#INS9b)', function() {
         var js = getInspJs77();
-        assert.ok(js.indexOf("get('transport') === 'ws'") > -1, 'expected the ?transport=ws opt-in read');
-        assert.ok(js.indexOf('var isAgent = tryAgent()') > -1,  'expected the preserved SSE entry point');
+        assert.ok(js.indexOf("get('transport')") > -1,             'expected the ?transport read');
+        assert.ok(js.indexOf("_agentTransport !== 'sse'") > -1,    'expected WS-by-default gated on ?transport !== sse (SSE escape hatch)');
+        assert.ok(js.indexOf('var isAgent = tryAgent()') > -1,     'expected the preserved SSE entry point');
         var wsIdx  = js.indexOf('tryAgentWS();');
         var sseIdx = js.indexOf('var isAgent = tryAgent()');
         assert.ok(wsIdx > -1 && wsIdx < sseIdx, 'expected tryAgentWS() invoked before the tryAgent() entry');
