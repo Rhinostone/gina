@@ -13,6 +13,14 @@
     // suspenders bundles can mount both.
     // Default `false` preserves shipped behaviour; opt-in by setting to `true`.
     "hidePoweredBy": false,
+    // #H11 — opt-in Alt-Svc HTTP/3-advertisement header. When `true`, every
+    // routed (user-facing) response carries `Alt-Svc: h3=":443"; ma=86400`,
+    // advertising HTTP/3 (QUIC) availability so QUIC-capable clients upgrade
+    // via a QUIC-capable edge proxy (Caddy / nginx-QUIC / Cloudflare). Gina
+    // does NOT implement QUIC — this only advertises it; the edge terminates
+    // HTTP/3 on :443. Idempotent (first-writer-wins: an upstream-set Alt-Svc
+    // is never clobbered). Default `false` = zero behaviour change.
+    "http3Advertisement": false,
     // [Listen] Binding address: `0.0.0.0` by default or `127.0.0.1` for ipv4 only, `::` for ipv6 only, `:::` for both
     "address": "0.0.0.0",
     // [Listen] Queue length limited to os values : tcp_max_syn_backlog, somaxconn
