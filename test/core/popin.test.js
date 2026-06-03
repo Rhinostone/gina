@@ -441,3 +441,66 @@ describe('13 - dist/gina.min.js reflects source changes', function() {
         );
     });
 });
+
+
+// ── 14 — Popin: no inline onclick injection on close (CSP script-src-attr) ─────
+//
+// The close-binding loop used to inject `onclick="return false;"` on every
+// .gina-popin-close element. Under a nonce-based CSP (a 'nonce-…' in script-src,
+// no effective 'unsafe-inline'), a nonce disables 'unsafe-inline' for inline
+// event-handler attributes (script-src-attr), so the injected handler is reported
+// (report-only) or blocked (enforce). It was redundant: register('close', …)
+// attaches a click listener that calls cancelEvent() (preventDefault) on every
+// click, so an <a href="#"> default action is already suppressed. Injection removed.
+
+describe('14 - Popin: no inline onclick injection on close (CSP-safe)', function() {
+
+    function getDistPopinBlock() {
+        var distSrc = getDistSrc();
+        var start = distSrc.indexOf("define('gina/popin'");
+        assert.ok(start > -1, 'gina/popin AMD module not found in dist bundle');
+        var next = distSrc.indexOf('\ndefine(', start + 20);
+        return (next > -1) ? distSrc.substring(start, next) : distSrc.substring(start);
+    }
+
+    it('popin source no longer injects an inline onclick handler', function() {
+        assert.equal(
+            getPopinSrc().indexOf("setAttribute('onclick'"), -1,
+            "popin/main.js must not set an inline onclick attribute (trips CSP script-src-attr under nonce policies)"
+        );
+    });
+
+    it('the dead onclickAttribute local is gone', function() {
+        assert.equal(
+            getPopinSrc().indexOf('onclickAttribute'), -1,
+            'the onclickAttribute variable (and its never-written-back append branch) should be removed'
+        );
+    });
+
+    it("close behaviour is still wired via register('close', …)", function() {
+        assert.ok(
+            /register\('close',\s*evt,\s*\$close\[b\]\)/.test(getPopinSrc()),
+            "expected register('close', evt, $close[b]) to still bind the close listener"
+        );
+    });
+
+    it('cancelEvent (relied on by the close listener) calls preventDefault', function() {
+        // This is what makes removing the inline onclick safe: the registered click
+        // listener suppresses the default <a href="#"> navigation itself.
+        var ev = getEventsSrc();
+        var start = ev.indexOf('function cancelEvent');
+        assert.ok(start > -1, 'cancelEvent function not found in events.js');
+        var body = ev.substring(start, start + 400);
+        assert.ok(
+            body.indexOf('preventDefault') > -1,
+            'cancelEvent must call preventDefault (close-listener default suppression)'
+        );
+    });
+
+    it('rebuilt dist popin module contains no inline onclick injection', function() {
+        assert.equal(
+            getDistPopinBlock().indexOf("setAttribute('onclick'"), -1,
+            'the built gina/popin module must not inject an inline onclick attribute'
+        );
+    });
+});

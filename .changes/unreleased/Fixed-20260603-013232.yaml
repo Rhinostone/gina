@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Popin close elements no longer get an inline onclick="return false;" attribute injected at bind time, so popins work under a strict nonce-based Content-Security-Policy (the inline handler tripped the script-src-attr directive). Default-action suppression is unchanged — it was already handled by the registered close listener.'
+time: 2026-06-03T01:32:32.139886+01:00

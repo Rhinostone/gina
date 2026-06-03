@@ -17762,23 +17762,16 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 }
             }
 
-            var onclickAttribute = null, evt = null;
+            var evt = null;
             // close events
+            // NB.: the close element's default action (e.g. an `<a href="#">` navigation) is already
+            //      suppressed by register('close', …) below — the click listener it attaches calls
+            //      cancelEvent() (preventDefault/stopPropagation) on every click. The previous inline
+            //      onclick="return false;" injection here was redundant with that listener AND tripped
+            //      CSP script-src-attr under nonce-based policies (a nonce in script-src disables
+            //      'unsafe-inline' for inline event-handler attributes), so it has been removed.
             b = 0; len = $close.length;
             for (; b < len; ++b) {
-                if ($close[b].tagName == 'A') {
-                    onclickAttribute = $close[b].getAttribute('onclick');
-                }
-
-                if ( !onclickAttribute ) {
-                    $close[b].setAttribute('onclick', 'return false;')
-                } else if ( typeof(onclickAttribute) != 'undefined' && !/return false/.test(onclickAttribute) ) {
-                    if ( /\;$/.test(onclickAttribute) ) {
-                        onclickAttribute += 'return false;'
-                    } else {
-                        onclickAttribute += '; return false;'
-                    }
-                }
 
                 if (!$close[b]['id']) {
 
