@@ -9017,7 +9017,6 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
                 , url               = null
                 , elId              = null
                 , onEvent           = null
-                , onclickAttribute  = null
                 // a
                 , $a                = $target.getElementsByTagName('a')
                 // buttons
@@ -9062,20 +9061,12 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
                 evt         = elId;
                 $el.setAttribute('id', evt);
 
-                if ($el.tagName == 'A') {
-                    onclickAttribute = $el.getAttribute('onclick');
-                }
-
-                if ( !onclickAttribute ) {
-                    $el.setAttribute('onclick', 'return false;')
-                } else if ( typeof(onclickAttribute) != 'undefined' && !/return false/.test(onclickAttribute) ) {
-                    if ( /\;$/.test(onclickAttribute) ) {
-                        onclickAttribute += 'return false;'
-                    } else {
-                        onclickAttribute += '; return false;'
-                    }
-                    $el.setAttribute('onclick', onclickAttribute);
-                }
+                // [CSP] Suppress the link's default action via a click listener instead of an
+                // inline onclick="return false;" attribute — the inline handler tripped CSP
+                // script-src-attr under nonce-based policies. preventDefault (NOT cancelEvent —
+                // its stopPropagation would block the document-level delegation that fires the
+                // AJAX request) covers direct AND child clicks while leaving the delegation intact.
+                addListener(gina, $el, 'click', function(e) { e.preventDefault(); });
 
                 $newLink = null;
 
@@ -15744,14 +15735,15 @@ function ValidatorPlugin(rules, data, formId) {
                 isSubmitType        = $submit.getAttribute('data-gina-form-submit');
 
                 if ( !onclickAttribute && !isSubmitType) {
-                    $submit.setAttribute('onclick', 'return false;')
-                } else if ( !/return false/i.test(onclickAttribute) && !isSubmitType) {
-                    if ( /\;$/.test(onclickAttribute) ) {
-                        onclickAttribute += 'return false;'
-                    } else {
-                        onclickAttribute += '; return false;'
-                    }
+                    // [CSP] Suppress the default action via a click listener instead of an inline
+                    // onclick="return false;" attribute (tripped CSP script-src-attr under nonce
+                    // policies). A preventDefault-only listener sets event.defaultPrevented exactly
+                    // as the inline handler did, so the form-level clickProxyHandler's
+                    // `if (event.defaultPrevented) return` guard still short-circuits identically.
+                    addListener(gina, $submit, 'click', function(e) { e.preventDefault(); });
                 }
+                // (an existing onclick is left untouched, as before; the dead else-if append
+                //  branch — it only mutated a local, never written back — was removed.)
             }
 
             if (!$submit['id']) {

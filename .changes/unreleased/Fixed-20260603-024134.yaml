@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The Link plugin and the form-validator anchor submit-triggers no longer inject an inline onclick="return false;" attribute at bind time, so they work under a strict nonce-based Content-Security-Policy (the inline handler tripped the script-src-attr directive). Default-action suppression is preserved via an addEventListener-based preventDefault listener, so behaviour is unchanged.'
+time: 2026-06-03T02:41:34.133547+01:00
