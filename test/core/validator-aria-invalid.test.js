@@ -430,3 +430,91 @@ describe('09 - source pins: first-invalid focus', function () {
         assert.match(mainSrc, /typeof\(_aField\.focus\) == 'function'/);
     });
 });
+
+
+// --- Slice 4 replica: polite live-region announcement ---
+// MUST mirror announceA11yError + the blur-path gate. Source pins (11) keep them honest.
+
+function announceA11yError(doc, $form, text) {
+    if ( !$form || !text ) return null;
+    var _fid    = ( typeof($form.id) != 'undefined' && $form.id ) ? $form.id : ( $form.getAttribute('id') || 'form' );
+    var _liveId = 'gina-aria-live-' + _fid;
+    var _live   = doc.getElementById(_liveId);
+    if ( !_live ) {
+        _live = doc.createElement('div');
+        _live.id = _liveId;
+        _live.setAttribute('role', 'status');
+        _live.setAttribute('aria-live', 'polite');
+        _live.setAttribute('aria-atomic', 'true');
+        _live.className = 'gina-visually-hidden';
+        _live.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;';
+        $form.appendChild(_live);
+    }
+    _live.textContent = text;
+    return _live;
+}
+
+function shouldAnnounceOnBlur(isWarning, fieldName, $err, $el, activeEl) {
+    return ( !isWarning && typeof(fieldName) != 'undefined' && !!$err && $el !== activeEl ) ? true : false;
+}
+
+
+// 10 - polite live region
+
+describe('10 - aria-live polite region for blur announcement', function () {
+    it('creates a visually-hidden polite status region on the form and announces text', function () {
+        var ctx  = setupDom();
+        var form = ctx.document.getElementById('contact');
+        var live = announceA11yError(ctx.document, form, 'Email is required');
+        assert.ok(live, 'region created');
+        assert.equal(live.getAttribute('role'), 'status');
+        assert.equal(live.getAttribute('aria-live'), 'polite');
+        assert.equal(live.getAttribute('aria-atomic'), 'true');
+        assert.equal(live.textContent, 'Email is required');
+        assert.equal(live.parentNode, form, 'region is appended to the form');
+        assert.match(live.style.cssText, /position:\s*absolute/);
+    });
+
+    it('reuses the same region on a second announcement', function () {
+        var ctx   = setupDom();
+        var form  = ctx.document.getElementById('contact');
+        var live1 = announceA11yError(ctx.document, form, 'first');
+        var live2 = announceA11yError(ctx.document, form, 'second');
+        assert.equal(live1, live2, 'same region element reused');
+        assert.equal(live2.textContent, 'second');
+        assert.equal(ctx.document.querySelectorAll('[aria-live="polite"]').length, 1, 'only one region');
+    });
+
+    it('returns null for empty text or missing form', function () {
+        var ctx = setupDom();
+        assert.equal(announceA11yError(ctx.document, ctx.document.getElementById('contact'), ''), null);
+        assert.equal(announceA11yError(ctx.document, null, 'x'), null);
+    });
+
+    it('announces only on the blur path: fieldName set, focus gone, committed, $err present', function () {
+        var $err = {}; // truthy stand-in for the built message div
+        assert.equal(shouldAnnounceOnBlur(false, 'email', $err, { a: 1 }, { b: 2 }), true,  'blur of an unfocused committed-error field announces');
+        assert.equal(shouldAnnounceOnBlur(true,  'email', $err, { a: 1 }, { b: 2 }), false, 'soft warning does not announce');
+        assert.equal(shouldAnnounceOnBlur(false, undefined, $err, { a: 1 }, { b: 2 }), false, 'submit path (no fieldName) uses focus, not the region');
+        var same = { a: 1 };
+        assert.equal(shouldAnnounceOnBlur(false, 'email', $err, same, same), false, 'a still-focused field is not announced via the region');
+        assert.equal(shouldAnnounceOnBlur(false, 'email', null, { a: 1 }, { b: 2 }), false, 'nothing to announce without a built message');
+    });
+});
+
+
+// 11 - source pins for slice 4
+
+describe('11 - source pins: aria-live region', function () {
+    it('defines a polite live-region helper', function () {
+        assert.match(mainSrc, /var announceA11yError = function\(\$form, text\)/);
+        assert.match(mainSrc, /setAttribute\('aria-live', 'polite'\)/);
+        assert.match(mainSrc, /'gina-aria-live-' \+ _fid/);
+    });
+
+    it('announces on the blur path only (gated on fieldName + focus-gone + not a warning)', function () {
+        assert.match(mainSrc, /announce a blur-time committed error through the form's polite/);
+        assert.match(mainSrc, /\$el !== document\.activeElement/);
+        assert.match(mainSrc, /announceA11yError\(\$form, \$err\.textContent\)/);
+    });
+});

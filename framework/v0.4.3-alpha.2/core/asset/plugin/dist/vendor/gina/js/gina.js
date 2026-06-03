@@ -10141,6 +10141,35 @@ function ValidatorPlugin(rules, data, formId) {
     }
 
     /**
+     * #A11Y1 (slice 4) — lazily create one visually-hidden aria-live="polite" status region per
+     * form and announce a blur-time committed error through it. A CSS :user-invalid display toggle
+     * is not reliably announced by screen readers, and on blur the field has lost focus so its own
+     * aria-invalid / aria-errormessage are not re-read; the polite region decouples the announcement
+     * from visual display. Submit-time errors use focus (see onValidate), not this region.
+     * @param {object} $form - the HTMLFormElement the region belongs to
+     * @param {string} text - the error text to announce
+     * @returns {object|null} the live-region element, or null when nothing was announced
+     */
+    var announceA11yError = function($form, text) {
+        if ( !$form || !text ) return null;
+        var _fid    = ( typeof($form.id) != 'undefined' && $form.id ) ? $form.id : ( $form.getAttribute('id') || 'form' );
+        var _liveId = 'gina-aria-live-' + _fid;
+        var _live   = document.getElementById(_liveId);
+        if ( !_live ) {
+            _live = document.createElement('div');
+            _live.id = _liveId;
+            _live.setAttribute('role', 'status');
+            _live.setAttribute('aria-live', 'polite');
+            _live.setAttribute('aria-atomic', 'true');
+            _live.className = 'gina-visually-hidden';
+            _live.style.cssText = 'position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0;';
+            $form.appendChild(_live);
+        }
+        _live.textContent = text;
+        return _live;
+    };
+
+    /**
      * handleErrorsDisplay
      * Attention: if you are going to handle errors display by hand, set data to `null` to prevent Toolbar refresh with empty data
      *
@@ -10348,7 +10377,17 @@ function ValidatorPlugin(rules, data, formId) {
                     insertAfter($target, $err);
                 }
 
-
+                // #A11Y1 (slice 4) — announce a blur-time committed error through the form's polite
+                // live region (submit-time errors use focus instead). Only on the per-field/blur path
+                // (fieldName set) and only once focus has left the field; soft warnings are skipped.
+                if (
+                    !isWarning
+                    && typeof(fieldName) != 'undefined'
+                    && $err
+                    && $el !== document.activeElement
+                ) {
+                    announceA11yError($form, $err.textContent);
+                }
 
             } else if (
                 errors
