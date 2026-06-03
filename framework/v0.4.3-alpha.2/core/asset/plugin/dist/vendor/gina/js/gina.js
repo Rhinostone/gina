@@ -15625,6 +15625,28 @@ function ValidatorPlugin(rules, data, formId) {
                     } else if ($form) { // just in case the form is being destroyed
                         $form.send(result['data']);
                     }
+                } else {
+                    // #A11Y1 (slice 3) — failed submit: move focus to the first invalid field so
+                    // assistive tech announces it (accessible name + aria-invalid + the
+                    // aria-errormessage text). DOM order; hidden / unfocusable fields are skipped.
+                    var _a11yErrs = result['fields'] || result['error'];
+                    if ( _a11yErrs ) {
+                        var $a11yForm = event['target'];
+                        for (var _ai = 0, _aLen = $a11yForm.length; _ai < _aLen; ++_ai) {
+                            var _aField = $a11yForm[_ai];
+                            var _aName  = _aField.getAttribute('name');
+                            if (
+                                _aName
+                                && typeof(_a11yErrs[_aName]) != 'undefined'
+                                && ( typeof(_a11yErrs[_aName].count) != 'function' || _a11yErrs[_aName].count() > 0 )
+                                && _aField.type != 'hidden'
+                                && typeof(_aField.focus) == 'function'
+                            ) {
+                                _aField.focus();
+                                break;
+                            }
+                        }
+                    }
                 }
             })
         }

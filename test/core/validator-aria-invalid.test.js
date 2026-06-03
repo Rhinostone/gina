@@ -354,3 +354,79 @@ describe('07 - source pins: aria-errormessage suppression / wiring', function ()
         assert.match(mainSrc, /delete \$el\.dataset\.ginaAriaErrormessage/);
     });
 });
+
+
+// --- Slice 3 replica: focus first invalid on failed submit ---
+// MUST mirror the failed-submit branch in onValidate. Source pins (09) keep it honest.
+
+function focusFirstInvalid($form, errs) {
+    if ( !errs ) return null;
+    for (var _ai = 0, _aLen = $form.length; _ai < _aLen; ++_ai) {
+        var _aField = $form[_ai];
+        var _aName  = _aField.getAttribute('name');
+        if (
+            _aName
+            && typeof(errs[_aName]) != 'undefined'
+            && ( typeof(errs[_aName].count) != 'function' || errs[_aName].count() > 0 )
+            && _aField.type != 'hidden'
+            && typeof(_aField.focus) == 'function'
+        ) {
+            _aField.focus();
+            return _aField;
+        }
+    }
+    return null;
+}
+
+
+// 08 - focus the first invalid field on failed submit
+
+describe('08 - first-invalid focus on failed submit', function () {
+    it('focuses the first DOM-order invalid field', function () {
+        var ctx = setupDom();
+        var focused = focusFirstInvalid(ctx.document.getElementById('contact'), { required: { isRequired: 'x' }, note: { isRequired: 'y' } });
+        assert.ok(focused, 'a field was focused');
+        assert.equal(focused.id, 'required', 'first invalid field in DOM order is focused');
+        assert.equal(ctx.document.activeElement.id, 'required');
+    });
+
+    it('picks email when it is the earliest errored field', function () {
+        var ctx = setupDom();
+        var focused = focusFirstInvalid(ctx.document.getElementById('contact'), { email: { isEmail: 'x' }, note: { isRequired: 'y' } });
+        assert.equal(focused.id, 'email');
+    });
+
+    it('skips a hidden errored field', function () {
+        var ctx = setupDom();
+        var focused = focusFirstInvalid(ctx.document.getElementById('contact'), { hid: { isRequired: 'x' } });
+        assert.equal(focused, null, 'hidden field is not focusable, nothing focused');
+    });
+
+    it('skips a field whose error count is 0', function () {
+        var ctx = setupDom();
+        var focused = focusFirstInvalid(ctx.document.getElementById('contact'), { email: { count: function () { return 0; } } });
+        assert.equal(focused, null);
+    });
+
+    it('does nothing when there are no errors', function () {
+        var ctx = setupDom();
+        assert.equal(focusFirstInvalid(ctx.document.getElementById('contact'), {}), null);
+        assert.equal(focusFirstInvalid(ctx.document.getElementById('contact'), null), null);
+    });
+});
+
+
+// 09 - source pins for slice 3
+
+describe('09 - source pins: first-invalid focus', function () {
+    it('focuses the first invalid field in the failed-submit branch', function () {
+        assert.match(mainSrc, /failed submit: move focus to the first invalid field/);
+        assert.match(mainSrc, /var _a11yErrs = result\['fields'\] \|\| result\['error'\]/);
+        assert.match(mainSrc, /_aField\.focus\(\)/);
+    });
+
+    it('skips hidden and unfocusable fields', function () {
+        assert.match(mainSrc, /_aField\.type != 'hidden'/);
+        assert.match(mainSrc, /typeof\(_aField\.focus\) == 'function'/);
+    });
+});
