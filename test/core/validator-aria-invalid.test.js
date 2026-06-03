@@ -217,3 +217,140 @@ describe('04 - source pins: handleErrorsDisplay aria-invalid logic', function ()
         assert.match(mainSrc, /reflects each managed field's committed validity into/);
     });
 });
+
+
+// --- Slice 2 replicas: aria-errormessage detection / wiring / cleanup ---
+// MUST mirror handleErrorsDisplay's slice-2 logic. Source pins (08) keep them honest.
+
+function detectConsumerErrMsg($el) {
+    var _ariaErrId         = $el.getAttribute('aria-errormessage');
+    var _ginaOwnsErrMsg    = ( typeof($el.dataset) != 'undefined' && typeof($el.dataset.ginaAriaErrormessage) != 'undefined' ) ? true : false;
+    var _hasConsumerErrMsg = ( _ariaErrId && !_ginaOwnsErrMsg ) ? true : false;
+    return { ariaErrId: _ariaErrId, ginaOwns: _ginaOwnsErrMsg, hasConsumer: _hasConsumerErrMsg };
+}
+
+function injectAndWire($el, $err, $target, id, name) {
+    var det = detectConsumerErrMsg($el);
+    if ($target.type != 'hidden' && !det.hasConsumer) {
+        if ( !$el.getAttribute('aria-errormessage') || det.ginaOwns ) {
+            $err.id = ('gina-errormessage-' + (id || 'form') + '-' + (name || 'field')).replace(/[^a-zA-Z0-9_-]+/g, '-');
+            $el.setAttribute('aria-errormessage', $err.id);
+            if ( typeof($el.dataset) != 'undefined' ) {
+                $el.dataset.ginaAriaErrormessage = 'true';
+            }
+        }
+        $target.parentNode.insertBefore($err, $target.nextSibling); // mimics insertAfter
+        return true;
+    }
+    return false;
+}
+
+function clearErrMsgWire($el) {
+    if ( typeof($el.dataset) != 'undefined' && typeof($el.dataset.ginaAriaErrormessage) != 'undefined' ) {
+        $el.removeAttribute('aria-errormessage');
+        delete $el.dataset.ginaAriaErrormessage;
+    }
+}
+
+
+// 05 - aria-errormessage: suppress duplicate vs wire legacy
+
+describe('05 - aria-errormessage suppression and auto-wiring', function () {
+    function freshDiv(ctx) {
+        var d = ctx.document.createElement('div');
+        d.className = 'form-item-error-message';
+        return d;
+    }
+
+    it('does NOT inject a div when the field has a consumer-provided aria-errormessage', function () {
+        var ctx = setupDom();
+        ctx.email.setAttribute('aria-errormessage', 'consumer-err');
+        var injected = injectAndWire(ctx.email, freshDiv(ctx), ctx.email, 'contact', 'email');
+        assert.equal(injected, false, 'must not inject a competing message div');
+        assert.equal(ctx.email.getAttribute('aria-errormessage'), 'consumer-err', 'consumer association is untouched');
+        assert.equal(ctx.email.dataset.ginaAriaErrormessage, undefined, 'we do not claim ownership of a consumer wire');
+    });
+
+    it('injects the div AND wires aria-errormessage on a legacy field (no association)', function () {
+        var ctx = setupDom();
+        var div = freshDiv(ctx);
+        var injected = injectAndWire(ctx.text, div, ctx.text, 'contact', 'text');
+        assert.equal(injected, true);
+        assert.ok(div.id && div.id.length > 0, 'injected div receives an id');
+        assert.equal(ctx.text.getAttribute('aria-errormessage'), div.id, 'field references the injected div');
+        assert.equal(ctx.text.dataset.ginaAriaErrormessage, 'true', 'wire is marked gina-owned');
+    });
+
+    it('re-wires a gina-owned association on a subsequent error (stable id)', function () {
+        var ctx = setupDom();
+        var div1 = freshDiv(ctx);
+        injectAndWire(ctx.text, div1, ctx.text, 'contact', 'text');
+        var firstId = ctx.text.getAttribute('aria-errormessage');
+        var div2 = freshDiv(ctx);
+        var injected = injectAndWire(ctx.text, div2, ctx.text, 'contact', 'text');
+        assert.equal(injected, true);
+        assert.equal(div2.id, firstId, 'gina-owned id is stable across error cycles');
+    });
+
+    it('does not inject for a hidden target', function () {
+        var ctx = setupDom();
+        var injected = injectAndWire(ctx.hid, freshDiv(ctx), ctx.hid, 'contact', 'hid');
+        assert.equal(injected, false);
+    });
+
+    it('sanitises bracketed field names into a valid id', function () {
+        var ctx = setupDom();
+        ctx.text.setAttribute('name', 'contact[email]');
+        var div = freshDiv(ctx);
+        injectAndWire(ctx.text, div, ctx.text, 'contact', 'contact[email]');
+        assert.doesNotMatch(div.id, /[\[\]]/, 'id has no bracket characters');
+        assert.equal(ctx.text.getAttribute('aria-errormessage'), div.id);
+    });
+});
+
+
+// 06 - clear cleanup of the gina-owned wire
+
+describe('06 - clear drops gina-owned aria-errormessage, preserves consumer wire', function () {
+    it('removes a gina-owned wire + marker on clear', function () {
+        var ctx = setupDom();
+        injectAndWire(ctx.text, ctx.document.createElement('div'), ctx.text, 'contact', 'text');
+        assert.equal(ctx.text.dataset.ginaAriaErrormessage, 'true');
+        clearErrMsgWire(ctx.text);
+        assert.equal(ctx.text.getAttribute('aria-errormessage'), null, 'gina wire removed on clear');
+        assert.equal(ctx.text.dataset.ginaAriaErrormessage, undefined, 'ownership marker removed');
+    });
+
+    it('leaves a consumer-provided wire intact on clear', function () {
+        var ctx = setupDom();
+        ctx.email.setAttribute('aria-errormessage', 'consumer-err');
+        clearErrMsgWire(ctx.email);
+        assert.equal(ctx.email.getAttribute('aria-errormessage'), 'consumer-err', 'consumer wire preserved');
+    });
+});
+
+
+// 07 - source pins for slice 2
+
+describe('07 - source pins: aria-errormessage suppression / wiring', function () {
+    it('hoists consumer-association detection before the branch chain', function () {
+        assert.match(mainSrc, /_hasConsumerErrMsg = \( _ariaErrId && !_ginaOwnsErrMsg \)/);
+        assert.match(mainSrc, /detect a consumer-provided aria-errormessage association/);
+    });
+
+    it('gates the error-set injection on !_hasConsumerErrMsg and wires the div', function () {
+        assert.match(mainSrc, /if \(\$target\.type != 'hidden' && !_hasConsumerErrMsg\) \{/);
+        assert.match(mainSrc, /\$el\.setAttribute\('aria-errormessage', \$err\.id\)/);
+        assert.match(mainSrc, /\$el\.dataset\.ginaAriaErrormessage = 'true'/);
+    });
+
+    it('gates the refresh injection too and preserves the owned id', function () {
+        assert.match(mainSrc, /if \(\$err && \$target\.type != 'hidden' && !_hasConsumerErrMsg\) \{/);
+        assert.match(mainSrc, /preserve the aria-errormessage wire we own across refresh/);
+    });
+
+    it('drops the gina-owned wire on clear', function () {
+        assert.match(mainSrc, /\$el\.removeAttribute\('aria-errormessage'\)/);
+        assert.match(mainSrc, /delete \$el\.dataset\.ginaAriaErrormessage/);
+    });
+});

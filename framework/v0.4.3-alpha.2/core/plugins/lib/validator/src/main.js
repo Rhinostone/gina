@@ -711,6 +711,14 @@ function ValidatorPlugin(rules, data, formId) {
 
             if (!name) continue;
 
+            // #A11Y1 (slice 2) — detect a consumer-provided aria-errormessage association. When
+            // present, the field already references its own error element, so we must NOT inject a
+            // competing form-item-error-message div (aria-invalid alone exposes it). Any wire we add
+            // ourselves is marked (data-gina-aria-errormessage) so it is not mistaken for a consumer's.
+            var _ariaErrId         = $el.getAttribute('aria-errormessage');
+            var _ginaOwnsErrMsg    = ( typeof($el.dataset) != 'undefined' && typeof($el.dataset.ginaAriaErrormessage) != 'undefined' ) ? true : false;
+            var _hasConsumerErrMsg = ( _ariaErrId && !_ginaOwnsErrMsg ) ? true : false;
+
             if (
                 errors
                 && typeof(errors[name]) != 'undefined'
@@ -759,8 +767,19 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 }
 
-                if ($target.type != 'hidden')
+                // #A11Y1 (slice 2) — skip the injected message div when the field already references
+                // a consumer-provided error element; otherwise inject it and wire aria-errormessage
+                // to it so assistive tech can resolve the message text.
+                if ($target.type != 'hidden' && !_hasConsumerErrMsg) {
+                    if ( !$el.getAttribute('aria-errormessage') || _ginaOwnsErrMsg ) {
+                        $err.id = ('gina-errormessage-' + (id || 'form') + '-' + (name || 'field')).replace(/[^a-zA-Z0-9_-]+/g, '-');
+                        $el.setAttribute('aria-errormessage', $err.id);
+                        if ( typeof($el.dataset) != 'undefined' ) {
+                            $el.dataset.ginaAriaErrormessage = 'true';
+                        }
+                    }
                     insertAfter($target, $err);
+                }
 
 
 
@@ -803,6 +822,13 @@ function ValidatorPlugin(rules, data, formId) {
                     $el.setAttribute('aria-invalid', _a11yNativeInvalid ? 'true' : 'false');
                 }
 
+                // #A11Y1 (slice 2) — the referenced div was just removed; drop the aria-errormessage
+                // wire we own (a consumer-provided association, lacking our marker, is left intact).
+                if ( typeof($el.dataset) != 'undefined' && typeof($el.dataset.ginaAriaErrormessage) != 'undefined' ) {
+                    $el.removeAttribute('aria-errormessage');
+                    delete $el.dataset.ginaAriaErrormessage;
+                }
+
             } else if (
                 errors.count() > 0
                 && typeof(errors[name]) != 'undefined'
@@ -822,6 +848,11 @@ function ValidatorPlugin(rules, data, formId) {
                         $divs[d].parentElement.removeChild($divs[d]);
                         $err = document.createElement('div');
                         $err.setAttribute('class', 'form-item-error-message');
+
+                        // #A11Y1 (slice 2) — preserve the aria-errormessage wire we own across refresh.
+                        if ( _ginaOwnsErrMsg && _ariaErrId ) {
+                            $err.id = _ariaErrId;
+                        }
 
                         // Fixed on 2025-03-09: className cleanup
                         if (
@@ -855,7 +886,7 @@ function ValidatorPlugin(rules, data, formId) {
                     }
                 }
 
-                if ($err && $target.type != 'hidden') {
+                if ($err && $target.type != 'hidden' && !_hasConsumerErrMsg) {
                     insertAfter($target, $err);
                 }
 
