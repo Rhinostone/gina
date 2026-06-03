@@ -94,7 +94,7 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
-    "@rhinostone/swig": "^2.5.3",
+    "@rhinostone/swig": "^2.6.0",
     "engine.io": "^6.6.7",
     "psl": "^1.15.0",
     "ws": "^8.20.1"
