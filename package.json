@@ -104,7 +104,7 @@
     "engine.io-client": "^6.6.4",
     "jsdom": "^29.1.1",
     "requirejs": "^2.3.7",
-    "sass": "1.99.0"
+    "sass": "1.100.0"
   },
   "overrides": {
     "ws": "^8.20.1"
