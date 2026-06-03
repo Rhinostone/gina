@@ -1,0 +1,3 @@
+kind: Added
+body: 'FormValidator now reflects each managed field''s validity into `aria-invalid` (#A11Y1): `true` on a committed error and `false` when valid — mirroring the native `ValidityState` where the field has native HTML constraints, so it agrees with the `:user-invalid` styling already shown. This exposes any `aria-errormessage` association on the field to assistive technology, which is otherwise inert without `aria-invalid`. No public API change; existing error classes and attributes (`form-item-error`, `form-item-error-message`, `data-gina-form-errors`, submit-button state) are unchanged.'
+time: 2026-06-03T21:28:32.000000+01:00

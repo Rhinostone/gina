@@ -576,6 +576,11 @@ function ValidatorPlugin(rules, data, formId) {
     /**
      * handleErrorsDisplay
      * Attention: if you are going to handle errors display by hand, set data to `null` to prevent Toolbar refresh with empty data
+     *
+     * #A11Y1 — besides toggling `form-item-error` / `form-item-warning` and the error-message div,
+     * this reflects each managed field's committed validity into `aria-invalid` ("true" on a
+     * committed error, "false" when valid — mirroring the native ValidityState where the field has
+     * native HTML constraints so it agrees with `:user-invalid`). Soft live-check warnings are not asserted.
      * @param {object} $form - Target (HTMLFormElement)
      * @param {object} errors
      * @param {object|null} data
@@ -728,6 +733,14 @@ function ValidatorPlugin(rules, data, formId) {
                     $err.className = 'form-item-error-message';
                 }
 
+                // #A11Y1 — reflect a committed invalid state into aria-invalid so any
+                // aria-errormessage association on the field is exposed to assistive tech.
+                // Soft (live-check) warnings while the field is still being edited are not
+                // asserted — only committed errors (blur/submit) are.
+                if ( !isWarning && $el.type != 'hidden' ) {
+                    $el.setAttribute('aria-invalid', 'true');
+                }
+
                 // injecting error messages
                 for (var e in errors[name]) {
 
@@ -781,6 +794,14 @@ function ValidatorPlugin(rules, data, formId) {
                 }
 
                 $parent.className = $parent.className.replace(/(\s+form\-item\-error|form\-item\-error|\s+form\-item\-warning|form\-item\-warning)/, '');
+
+                // #A11Y1 — field is valid per Gina; mirror the native ValidityState (where the
+                // field has native HTML constraints) so aria-invalid never disagrees with the
+                // :user-invalid styling already shown. Explicit "false" is a touched-and-valid signal.
+                if ( $el.type != 'hidden' ) {
+                    var _a11yNativeInvalid = ( $el.willValidate && $el.validity && !$el.validity.valid ) ? true : false;
+                    $el.setAttribute('aria-invalid', _a11yNativeInvalid ? 'true' : 'false');
+                }
 
             } else if (
                 errors.count() > 0
@@ -836,6 +857,11 @@ function ValidatorPlugin(rules, data, formId) {
 
                 if ($err && $target.type != 'hidden') {
                     insertAfter($target, $err);
+                }
+
+                // #A11Y1 — the committed error persists on refresh; keep aria-invalid asserted.
+                if ( !isWarning && $el.type != 'hidden' ) {
+                    $el.setAttribute('aria-invalid', 'true');
                 }
             }
 
