@@ -516,9 +516,9 @@ describe('09 — #SCS1e source-inspection guards', function () {
         // The previously-deferred eval(condition) site was cleared by #M21b
         // (replaced with explicit throw documenting supported condition shapes).
         // The user-validator-function-body eval remains live — it is the
-        // Pattern B site that #M21c reframed to accept-and-document after the
-        // freelancer/v3 consumer survey re-verification on 2026-05-14 surfaced
-        // a live consumer at `src/dashboard/forms/validators/isSiren/main.js`.
+        // Pattern B site that #M21c reframed to accept-and-document after a
+        // consumer survey re-verification surfaced a live consuming bundle that
+        // uses a user-defined validator-function-body eval.
         var live = stripLineComments(FORM_VAL_SRC);
         assert.ok(
             !/isValid\s*=\s*eval\s*\(\s*condition\s*\)/.test(live),
