@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a `gina service:start <service>` command to start a framework-internal @gina service (such as the standalone Inspector) via the daemon-free gina-container launcher, with double-start protection, `--dry-run` and `--format=json`. In dev mode the Inspector now auto-starts when a bundle boots (a no-op unless the framework services project is scaffolded locally).'
-time: 2026-06-02T20:29:24.651328+01:00

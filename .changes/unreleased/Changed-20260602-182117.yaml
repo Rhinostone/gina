@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Bumped the @rhinostone/swig dependency floor from ^2.5.1 to ^2.5.3 in both the root package.json and framework/v*/package.json. swig 2.5.2 fixes dynamic {% extends %} resolution on the async-loader render path in the Twig and Jinja2 frontends; 2.5.3 turns a dynamic {% extends %} on the synchronous render path into a clear error pointing to the async render path instead of a generic failure. The native @rhinostone/swig package stays drop-in compatible with the API gina depends on (swig.compile, swig.setFilter, swig.setTag, swig.renderFile). swigResolver DEFAULT_MIN stays at 2.0.0 — the framework does not depend on any new 2.5.x-only API.'
-time: 2026-06-02T18:21:17.072208+01:00

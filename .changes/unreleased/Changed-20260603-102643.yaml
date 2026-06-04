@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Bumped the @rhinostone/swig floor to ^2.6.0 in both the root and framework manifests. 2.6.0 makes the native json / json_encode filters HTML-escape their output and marks them (and url_encode) safe, so {{ data|json }} is safe to embed directly inside a <script> block (url_decode is unchanged). swigResolver DEFAULT_MIN stays at 2.0.0 — the framework depends on no new 2.6.0-only API.'
-time: 2026-06-03T10:26:43.027865+01:00

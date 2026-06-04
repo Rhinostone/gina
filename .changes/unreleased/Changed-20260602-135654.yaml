@@ -1,3 +1,0 @@
-kind: Changed
-body: 'The standalone Inspector now connects to the /_gina/agent endpoint over a WebSocket by default, falling back to SSE automatically if the socket cannot open. Open the Inspector with ?transport=sse to force the SSE transport. Authentication and the production toggle are unchanged (the WebSocket reuses the same inspector.agent key).'
-time: 2026-06-02T13:56:54.338442+01:00
