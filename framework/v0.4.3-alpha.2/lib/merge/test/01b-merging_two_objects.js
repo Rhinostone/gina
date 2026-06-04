@@ -10,7 +10,7 @@ var setVariable = function () {
         "page":{
             "view":{
                 "params":{
-                    "section":"urssaf"
+                    "section":"sectionA"
                 }
             }
         },
@@ -26,7 +26,7 @@ var setVariable = function () {
     b = {
         "page": {
             "view": {
-                "file": "factsheets"
+                "file": "fileB"
             }
         },
         "form" :{
@@ -54,11 +54,11 @@ var setVariable = function () {
             }
         ],
         "grandTotal": 930,
-        "artistCreationValue": 0,
+        "extraValueA": 0,
         "discount": 0,
         "rebate": 0,
-        "freelanceTotal": 930,
-        "organismTotal": 0
+        "subtotalA": 930,
+        "subtotalB": 0
     };
     
     defaultAmounts =  {
@@ -88,9 +88,9 @@ exports['Merge : A<-B without override'] = function(test) {
         "page":{
             "view":{
                 "params":{
-                    "section":"urssaf"
+                    "section":"sectionA"
                 },
-                "file": "factsheets"
+                "file": "fileB"
             }
         },
         "form" :{
@@ -124,11 +124,11 @@ exports['Merge : amounts<-defaultAmounts without override'] = function(test) {
             }
         ],
         "grandTotal": 930,
-        "artistCreationValue": 0,
+        "extraValueA": 0,
         "discount": 0,
         "rebate": 0,
-        "freelanceTotal": 930,
-        "organismTotal": 0
+        "subtotalA": 930,
+        "subtotalB": 0
     };
     test.equal( typeof(DefaultAmountsToAmountsWithoutOverride), 'object' );
     test.deepEqual(DefaultAmountsToAmountsWithoutOverride, res);
@@ -140,7 +140,7 @@ exports['Merge : amounts<-defaultAmounts without override'] = function(test) {
 //     var res = {
 //         "page":{
 //             "view": {
-//                 "file": "factsheets"
+//                 "file": "fileB"
 //             }
 //         }
 //     };
