@@ -61,25 +61,25 @@
         }
     },
 
-    "factsheets": {
-        "namespace": "factsheets",
+    "sections": {
+        "namespace": "sections",
         "url": [
-            "/factsheets/:section",
-            "/fiches-pratiques/:section"
+            "/sections/:section",
+            "/rubriques/:section"
         ],
         "requirements": {
-            "section": "mda-agessa|urssaf"
+            "section": "catA|catB"
         },
         "param": {
             "control":    "renderFromMock",
             "section":   ":section"
         }
     },
-    "factsheet": {
-        "namespace": "factsheets",
+    "section": {
+        "namespace": "sections",
         "url": [
-            "/factsheets/:section/:id",
-            "/fiches-pratiques/:section/:id"
+            "/sections/:section/:id",
+            "/rubriques/:section/:id"
         ],
         "param": {
             "control":    "renderFromMock",
@@ -87,7 +87,7 @@
             "id":        ":id"
         },
         "requirements": {
-            "section": "mda-agessa|urssaf",
+            "section": "catA|catB",
             "id":      "([-a-z0-9]+)"
         }
     },

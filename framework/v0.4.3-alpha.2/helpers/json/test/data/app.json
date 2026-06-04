@@ -13,7 +13,7 @@
   },
 
   "smtp": {
-    "defaultProvider": "mailjet"
+    "defaultProvider": "mailprovider"
   },
 
   "scrypt": {
@@ -26,77 +26,77 @@
   },
 
   "notes": {
-    "_comment": "Used to inform the user (e.g.: /entreprise/preferences)",
+    "_comment": "Used to inform the user (e.g.: /mybundle/preferences)",
     "terms": {
-      "estimate": {
-        "legend": "Devis",
-        "intro": "La combinaison de vos prestations et de ces conditions, constitue un contrat que vous et votre client vous engagez à respecter."
+      "sectionA": {
+        "legend": "Section A",
+        "intro": "Generic intro for section A."
       },
-      "invoice": {
-        "legend": "Facture",
-        "intro": "Attention, seules les conditions qui figurent sur un contrat préalable ou découlent d’une obligation légale ont une réelle valeur."
+      "sectionB": {
+        "legend": "Section B",
+        "intro": "Generic intro for section B."
       },
-      "amendment": {
-        "legend": "Avenant",
-        "intro": "Introduire de nouvelles conditions dans un avenant étend ou modifie le contrat préexistant."
+      "sectionC": {
+        "legend": "Section C",
+        "intro": "Generic intro for section C."
       }
     }
   },
   "documents": {
     "_comment": "see https://nodejs.org/api/util.html#util_util_format_format_args",
     "infos": {
-      "estimate-draft": "brouillon",
-      "estimate-pending": "en attente de validation",
-      "estimate-confirmed": "restant à facturer",
-      "estimate-rejected": "rejeté",
-      "estimate-expired": "périmé",
-      "estimate-canceled": "abandonné",
+      "a-draft": "draft",
+      "a-pending": "pending validation",
+      "a-confirmed": "to be processed",
+      "a-rejected": "rejected",
+      "a-expired": "expired",
+      "a-canceled": "abandoned",
 
-      "invoice-draft": "brouillon",
-      "invoice-pending": "en attente de paiement",
-      "invoice-paid": "payé",
-      "invoice-overdue": "en retard depuis le %s",
-      "invoice-canceled": "annulé"
+      "b-draft": "draft",
+      "b-pending": "pending",
+      "b-done": "done",
+      "b-overdue": "overdue since %s",
+      "b-canceled": "canceled"
     },
     "types": {
-      "estimate": "devis",
-      "estimate-the": "le devis",
-      "estimate-this": "ce devis",
-      "estimate-ofthe": "du devis",
-      "estimate-from": "devis du %s",
+      "a": "section a",
+      "a-the": "the section a",
+      "a-this": "this section a",
+      "a-ofthe": "of section a",
+      "a-from": "section a of %s",
 
-      "amendment": "avenant",
-      "amendment-the": "l’avenant",
-      "amendment-this": "ce devis",
-      "amendment-ofthe": "de l’avenant",
-      "amendment-from": "avenant du %s",
+      "b": "section b",
+      "b-the": "the section b",
+      "b-this": "this section b",
+      "b-ofthe": "of section b",
+      "b-from": "section b of %s",
 
-      "invoice": "facture",
-      "invoice-the": "la facture",
-      "invoice-this": "cette facture",
-      "invoice-ofthe": "de la facture",
-      "invoice-from": "facture du %s",
+      "c": "section c",
+      "c-the": "the section c",
+      "c-this": "this section c",
+      "c-ofthe": "of section c",
+      "c-from": "section c of %s",
 
-      "creditNote": "avoir",
-      "creditNote-the": "l’avoir",
-      "creditNote-this": "cet avoir",
-      "creditNote-ofthe": "de l’avoir",
-      "creditNote-from": "avoir du %s"
+      "d": "section d",
+      "d-the": "the section d",
+      "d-this": "this section d",
+      "d-ofthe": "of section d",
+      "d-from": "section d of %s"
     }
   },
   "legalMentions": {
-    "aga": {
-      "isAgaMember": "Membre d’une association de gestion agréé, paiement par chèque accepté"
+    "groupA": {
+      "isMemberA": "Generic membership note."
     },
-    "vat": {
-      "_comment": "Company isVatExempted",
-      "isVatExempted": "Franchise en base de TVA (article 293B du CGI)",
-      "isVatExemptedDom": "TVA non applicable (article 294 du CGI)",
-      "_comment.vat": "Client lives in the EEC and has a valid VAT number",
-      "vatExportEuropeServices": "TVA déclarée par le preneur (article 283-2 du CGI)",
-      "_comment.dom": "Client lives outside of France, the DOM or the EEC",
-      "vatExportServices": "Exonération de TVA (article 262 I du CGI)",
-      "vatTeachingRelated": "Exonération de TVA (article 261 IV du CGI)"
+    "groupB": {
+      "_comment": "Generic flag A",
+      "flagA1": "Generic note A1.",
+      "flagA2": "Generic note A2.",
+      "_comment.b": "Generic flag B",
+      "flagB1": "Generic note B1.",
+      "_comment.c": "Generic flag C",
+      "flagC1": "Generic note C1.",
+      "flagC2": "Generic note C2."
     }
   }
 }

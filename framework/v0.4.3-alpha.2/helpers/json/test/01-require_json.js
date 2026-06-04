@@ -40,103 +40,94 @@ exports['requireJSON: app.json case'] = function(test) {
         "version": "0.0.1",
         "fonts": "//fonts.gstatic.com/s/trirong/v3/gzxgezrghzh.ttf",
         "session": {
-          "secret": "864xxxxg6egc&xxxk7rah8n!$((4yls9#v@%#$8af!8%f!xxn(iwi%n267",
-          "expire": "60000*120"
+            "secret": "864xxxxg6egc&xxxk7rah8n!$((4yls9#v@%#$8af!8%f!xxn(iwi%n267",
+            "expire": "60000*120"
         },
-
         "admin": {
-          "email": "martinluther@gina.io"
+            "email": "martinluther@gina.io"
         },
-
         "smtp": {
-          "defaultProvider": "mailjet"
+            "defaultProvider": "mailprovider"
         },
-
         "scrypt": {
-          "key": "xxxyls9#v@9igltxx^x4z8zy7x+_dzf%dppdsong82uvpt6#^b)475vj_%o#_9^7",
-          "maxtime": {
-            "N": 1,
-            "r": 1,
-            "p": 1
-          }
-        },
-
-        "notes": {
-          "_comment": "Used to inform the user (e.g.: /entreprise/preferences)",
-          "terms": {
-            "estimate": {
-              "legend": "Devis",
-              "intro": "La combinaison de vos prestations et de ces conditions, constitue un contrat que vous et votre client vous engagez à respecter."
-            },
-            "invoice": {
-              "legend": "Facture",
-              "intro": "Attention, seules les conditions qui figurent sur un contrat préalable ou découlent d’une obligation légale ont une réelle valeur."
-            },
-            "amendment": {
-              "legend": "Avenant",
-              "intro": "Introduire de nouvelles conditions dans un avenant étend ou modifie le contrat préexistant."
+            "key": "xxxyls9#v@9igltxx^x4z8zy7x+_dzf%dppdsong82uvpt6#^b)475vj_%o#_9^7",
+            "maxtime": {
+                "N": 1,
+                "r": 1,
+                "p": 1
             }
-          }
         },
-
+        "notes": {
+            "_comment": "Used to inform the user (e.g.: /mybundle/preferences)",
+            "terms": {
+                "sectionA": {
+                    "legend": "Section A",
+                    "intro": "Generic intro for section A."
+                },
+                "sectionB": {
+                    "legend": "Section B",
+                    "intro": "Generic intro for section B."
+                },
+                "sectionC": {
+                    "legend": "Section C",
+                    "intro": "Generic intro for section C."
+                }
+            }
+        },
         "documents": {
-          "_comment": "see https://nodejs.org/api/util.html#util_util_format_format_args",
-          "infos": {
-            "estimate-draft": "brouillon",
-            "estimate-pending": "en attente de validation",
-            "estimate-confirmed": "restant à facturer",
-            "estimate-rejected": "rejeté",
-            "estimate-expired": "périmé",
-            "estimate-canceled": "abandonné",
-
-            "invoice-draft": "brouillon",
-            "invoice-pending": "en attente de paiement",
-            "invoice-paid": "payé",
-            "invoice-overdue": "en retard depuis le %s",
-            "invoice-canceled": "annulé"
-          },
-          "types": {
-            "estimate": "devis",
-            "estimate-the": "le devis",
-            "estimate-this": "ce devis",
-            "estimate-ofthe": "du devis",
-            "estimate-from": "devis du %s",
-
-            "amendment": "avenant",
-            "amendment-the": "l’avenant",
-            "amendment-this": "ce devis",
-            "amendment-ofthe": "de l’avenant",
-            "amendment-from": "avenant du %s",
-
-            "invoice": "facture",
-            "invoice-the": "la facture",
-            "invoice-this": "cette facture",
-            "invoice-ofthe": "de la facture",
-            "invoice-from": "facture du %s",
-
-            "creditNote": "avoir",
-            "creditNote-the": "l’avoir",
-            "creditNote-this": "cet avoir",
-            "creditNote-ofthe": "de l’avoir",
-            "creditNote-from": "avoir du %s"
-          }
+            "_comment": "see https://nodejs.org/api/util.html#util_util_format_format_args",
+            "infos": {
+                "a-draft": "draft",
+                "a-pending": "pending validation",
+                "a-confirmed": "to be processed",
+                "a-rejected": "rejected",
+                "a-expired": "expired",
+                "a-canceled": "abandoned",
+                "b-draft": "draft",
+                "b-pending": "pending",
+                "b-done": "done",
+                "b-overdue": "overdue since %s",
+                "b-canceled": "canceled"
+            },
+            "types": {
+                "a": "section a",
+                "a-the": "the section a",
+                "a-this": "this section a",
+                "a-ofthe": "of section a",
+                "a-from": "section a of %s",
+                "b": "section b",
+                "b-the": "the section b",
+                "b-this": "this section b",
+                "b-ofthe": "of section b",
+                "b-from": "section b of %s",
+                "c": "section c",
+                "c-the": "the section c",
+                "c-this": "this section c",
+                "c-ofthe": "of section c",
+                "c-from": "section c of %s",
+                "d": "section d",
+                "d-the": "the section d",
+                "d-this": "this section d",
+                "d-ofthe": "of section d",
+                "d-from": "section d of %s"
+            }
         },
         "legalMentions": {
-          "aga": {
-            "isAgaMember": "Membre d’une association de gestion agréé, paiement par chèque accepté"
-          },
-          "vat": {
-            "_comment": "Company isVatExempted",
-            "isVatExempted": "Franchise en base de TVA (article 293B du CGI)",
-            "isVatExemptedDom": "TVA non applicable (article 294 du CGI)",
-            "_comment.vat": "Client lives in the EEC and has a valid VAT number",
-            "vatExportEuropeServices": "TVA déclarée par le preneur (article 283-2 du CGI)",
-            "_comment.dom": "Client lives outside of France, the DOM or the EEC",
-            "vatExportServices": "Exonération de TVA (article 262 I du CGI)",
-            "vatTeachingRelated": "Exonération de TVA (article 261 IV du CGI)"
-          }
+            "groupA": {
+                "isMemberA": "Generic membership note."
+            },
+            "groupB": {
+                "_comment": "Generic flag A",
+                "flagA1": "Generic note A1.",
+                "flagA2": "Generic note A2.",
+                "_comment.b": "Generic flag B",
+                "flagB1": "Generic note B1.",
+                "_comment.c": "Generic flag C",
+                "flagC1": "Generic note C1.",
+                "flagC2": "Generic note C2."
+            }
         }
-      };
+    };
 
     test.equal( typeof(appCase), 'object' );
     test.deepEqual(appCase, res );
@@ -429,193 +420,59 @@ exports['requireJSON: app2.json case'] = function(test) {
 
 exports['requireJSON: app.placeholders.json case'] = function(test) {
   var res = {
-    "_comment_disabled": [
-        {
-            "key": "[NOM DU CLIENT]",
-            "label": "nom du client",
-            "value": "{% if client && client.lastName %}{{ client.lastName }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[PRÉNOM DU CLIENT]",
-            "label": "prénom du client",
-            "value": "{% if client && client.firstName %}{{ client.firstName }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[RÉFÉRENCE DU DOCUMENT]",
-            "label": "reference du document",
-            "value": "{% if document && document.documentId %}{{ document.documentId }}{% else %}null{% endif %}"
-        },
-        {
-            "key": "[LIEN D'ACCÈS CLIENT AU DOCUMENT]",
-            "label": "lien d'accès au document",
-            "value": "http://www.google.com"
-        },
-        {
-            "key": "[TAUX DES INDEMNITÉS À VERSER EN CAS DE DÉDIT]",
-            "label": "taux des indemnités à verser en cas de dédit",
-            "value": "{{ company.global.damagesRate }} %"
-        },
-        {
-            "key": "[MONTANT DE L’ACOMPTE]",
-            "label": "montant de l’acompte",
-            "value": "{% if document.depositType == 'value' %}{{ document.depositValue }} €{% else %}{{ document.depositRate }} %{% endif %}"
-        },
-        {
-            "key": "[DATE DE CONFIRMATION DU DEVIS]",
-            "label": "date de confirmation du devis",
-            "value": "5 avril 2017"
-        },
-        {
-            "key": "[ADRESSE DE L’ORGANISME]",
-            "label": "adresse de l’organisme",
-            "value": "null",
-            "isHidden": "{% if session.company.socialSecurityOrganism == 'mda' %}true{%else%}false{% endif %}"
-        },
-        {
-            "key": "[SITE DE L’ORGANISME]",
-            "label": "site de l’organisme",
-            "value": "null",
-            "isHidden": "{% if session.company.socialSecurityOrganism == 'mda' %}true{%else%}false{% endif %}"
-        }
-    ],
-    "terms": [
-        {
-            "key": "[TYPE DE DOCUMENT]",
-            "label": "document",
-            "value": "{% if document.documentType == 'estimate' %}devis{% elseif document.documentType == 'invoice' %}facture{% else %}avenant{% endif %}"
-        },
-        {
-            "key": "[LE TYPE DE DOCUMENT]",
-            "label": "le document",
-            "value": "{% if document.documentType == 'estimate' %}le devis{% elseif document.documentType == 'invoice' %}la facture{% else %}l’avenant{% endif %}"
-        },
-        {
-            "key": "[CE TYPE DE DOCUMENT]",
-            "label": "ce document",
-            "value": "{% if document.documentType == 'estimate' %}ce devis{% elseif document.documentType == 'invoice' %}cette facture{% else %}cet avenant{% endif %}"
-        },
-        {
-            "key": "[DU TYPE DE DOCUMENT]",
-            "label": "du document",
-            "value": "{% if document.documentType == 'estimate' %}du devis{% elseif document.documentType == 'invoice' %}de la facture{% else %}de l’avenant{% endif %}"
-        },
-        {
-            "key": "[DÉLAI AVANT EXPIRATION DU DEVIS]",
-            "label": "délai avant expiration",
-            "value": "{{ document.validityPeriod }} jours",
-            "isHidden": "{% if document.documentType == 'invoice' %}true{%else%}false{% endif %}"
-        },
-        {
-            "key": "[DÉLAI DE PAIEMENT DE LA FACTURE]",
-            "label": "délai de paiement de la facture",
-            "value": "{% if document.paymentPeriod == 5 %}dès réception{% else %}sous {{ document.paymentPeriod }} jours{% endif %}"
-        },
-        {
-            "key": "[DATE LIMITE DE PAIEMENT DE LA FACTURE]",
-            "label": "date limite de paiement de la facture",
-            "value": "avant le {{ document.invoicePeriod }}",
-            "isHidden": "{% if document._collection != 'invoice' %}true{%else%}false{% endif %}"
-        },
-        {
-            "key": "[L’ORGANISME]",
-            "label": "l’organisme",
-            "value": "{% if session.company.socialSecurityOrganism == 'mda' %}la Maison des Artistes{%else%}l’AGESSA{% endif %}",
-            "isHidden": "{% if session.company.socialSecurityOrganism == 'mda' %}true{%else%}false{% endif %}"
-        }
-    ],
-    "mails": [
-        {
-            "key": "[RÉFÉRENCE DU DOCUMENT]",
-            "label": "reference du document",
-            "value": "{% if document && document.documentId %}{{ document.documentId }}{% else %}null{% endif %}"
-        },
-        {
-            "key": "[LIEN D’ACCÈS CLIENT AU DOCUMENT]",
-            "label": "lien d’accès au document",
-            "value": "http://www.google.com"
-        },
-        {
-            "key": "[NOM DU PROJET]",
-            "label": "nom du projet",
-            "value": "{% if document.project && document.project.name %}{{ document.project.name }}{% else %}null{% endif %}"
-        },
-        {
-            "key": "[CHÈRE MADAME]",
-            "label": "Chère Madame, Cher Monsieur",
-            "value": "{% if session.company.firmType == 'company' %}Chère Madame, Cher Monsieur{% else %}{% if session.company.civility == 'mr' || contact.civility == 'mr' %}Cher Monsieur{% else %}Chère Madame{% endif %}{% endif %}"
-        },
-        {
-            "key": "[MADAME]",
-            "label": "Madame, Monsieur",
-            "value": "{% if recipient && recipient.type == 'company' %}Madame, Monsieur{% else %}{% if recipient.civility == 'mr' %}Monsieur{% else %}Madame{% endif %}{% endif %}"
-        },
-        {
-            "key": "[NOM DU CLIENT]",
-            "label": "Nom du client",
-            "value": "{% if recipient.lastName != '' %}{{ recipient.lastName }}{% endif %}"
-        },
-        {
-            "key": "[PRÉNOM DU CLIENT]",
-            "label": "Prénom du client",
-            "value": "{% if recipient.firstName != '' %}{{ recipient.firstName }}{% endif %}"
-        }
-    ],
-    "signatures": [
-        {
-            "_comment": "defined in dashboard/controller.settings.js -> this.editXML",
-            "key": "[NOM]",
-            "label": "nom",
-            "value": "{% if session && session.lastName != '' %}{{ session.lastName }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[PRÉNOM]",
-            "label": "prénom",
-            "value": "{% if session && session.firstName != '' %}{{ session.firstName }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[NOM DE LA SOCIÉTÉ]",
-            "label": "nom de la société",
-            "value": "{% if company && company.fullName %}{{ company.fullName }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[NOM COMMERCIAL]",
-            "label": "nom commercial",
-            "value": "{% if company && company.tradingName %}{{ company.tradingName }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[RUE]",
-            "label": "rue",
-            "value": "{% if company && company.address %}{{ company.address }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[CODE POSTAL]",
-            "label": "code postal",
-            "value": "{% if company && company.zip %}{{ company.zip }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[VILLE]",
-            "label": "ville",
-            "value": "{% if company && company.city %}{{ company.city }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[PAYS]",
-            "label": "pays",
-            "value": "{% if company && company.country %}{{ company.country }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[SITE INTERNET]",
-            "label": "site internet",
-            "value": "{% if company && company.extra && company.extra.website %}{{ company.extra.website }}{% else %}{{ null }}{% endif %}"
-        },
-        {
-            "key": "[TELEPHONE PORTABLE]",
-            "label": "telephone portable",
-            "value": "{% if company && company.extra && company.extra.mobile %}{{ company.extra.mobile }}{% else %}{{ null }}{% endif %}"
-        }
-    ]
-  };
+        "_comment_disabled": [
+            {
+                "key": "[FIELD A]",
+                "label": "field a",
+                "value": "{% if record && record.fieldA %}{{ record.fieldA }}{% else %}{{ null }}{% endif %}"
+            },
+            {
+                "key": "[FIELD B]",
+                "label": "field b",
+                "value": "{{ record.fieldB }} %"
+            }
+        ],
+        "terms": [
+            {
+                "key": "[TYPE]",
+                "label": "type",
+                "value": "{% if record.type == 'a' %}section a{% elseif record.type == 'b' %}section b{% else %}section c{% endif %}"
+            },
+            {
+                "key": "[DELAY]",
+                "label": "delay",
+                "value": "{{ record.delay }} days",
+                "isHidden": "{% if record.type == 'b' %}true{%else%}false{% endif %}"
+            }
+        ],
+        "mails": [
+            {
+                "key": "[REFERENCE]",
+                "label": "reference",
+                "value": "{% if record && record.id %}{{ record.id }}{% else %}null{% endif %}"
+            },
+            {
+                "key": "[LINK]",
+                "label": "link",
+                "value": "http://www.example.com"
+            }
+        ],
+        "signatures": [
+            {
+                "_comment": "Generic signature placeholder",
+                "key": "[NAME]",
+                "label": "name",
+                "value": "{% if session && session.name %}{{ session.name }}{% else %}{{ null }}{% endif %}"
+            },
+            {
+                "key": "[CITY]",
+                "label": "city",
+                "value": "{% if company && company.city %}{{ company.city }}{% else %}{{ null }}{% endif %}"
+            }
+        ]
+    };
 
-  test.equal( typeof(appPlaceholdersCase), 'object' );
+    test.equal( typeof(appPlaceholdersCase), 'object' );
   test.deepEqual(appPlaceholdersCase, res );
 
   test.done()
@@ -656,155 +513,154 @@ exports['requireJSON: crons.json case'] = function(test) {
 
 exports['requireJSON: routing.json case'] = function(test) {
   var res = {
-
-    "404": {
-        "url": "/404.html",
-        "param": { "control": "throw404" }
-    },
-    "home": {
-        "url": "/",
-        "param": {
-            "control": "home"
+        "404": {
+            "url": "/404.html",
+            "param": {
+                "control": "throw404"
+            }
         },
-        "middleware": [ "middlewares.session.update" ]
-    },
-    "register-xml": {
-        "namespace": "account",
-        "url": "/account/register.ajax",
-        "method": "POST",
-        "param": { "control": "registerXML" }
-    },
-    "help": {
-        "url": [
-            "/help",
-            "/resources"
-        ],
-        "param": {
-            "control": "help",
-            "title": "Resources"
-        }
-    },
-    "docs": {
-        "namespace": "docs",
-        "url": [
-            "/docs",
-            "/documentation"
-        ],
-        "param": {
-            "control": "renderFromMock"
-        }
-    },
-    "doc": {
-        "namespace": "docs",
-        "url": [
-            "/docs/:id",
-            "/documentation/:id"
-        ],
-        "param": {
-            "control":    "renderFromMock",
-            "id":        ":id"
+        "home": {
+            "url": "/",
+            "param": {
+                "control": "home"
+            },
+            "middleware": [
+                "middlewares.session.update"
+            ]
         },
-        "requirements": {
-            "id":      "([-a-z0-9]+)"
-        }
-    },
-    "tutorials": {
-        "url": [
-            "/tutorials",
-            "/tutorials"
-        ],
-        "param": {
-            "control": "tutorials"
-        }
-    },
-
-    "factsheets": {
-        "namespace": "factsheets",
-        "url": [
-            "/factsheets/:section",
-            "/fiches-pratiques/:section"
-        ],
-        "requirements": {
-            "section": "mda-agessa|urssaf"
+        "register-xml": {
+            "namespace": "account",
+            "url": "/account/register.ajax",
+            "method": "POST",
+            "param": {
+                "control": "registerXML"
+            }
         },
-        "param": {
-            "control":    "renderFromMock",
-            "section":   ":section"
-        }
-    },
-    "factsheet": {
-        "namespace": "factsheets",
-        "url": [
-            "/factsheets/:section/:id",
-            "/fiches-pratiques/:section/:id"
-        ],
-        "param": {
-            "control":    "renderFromMock",
-            "section":   ":section",
-            "id":        ":id"
+        "help": {
+            "url": [
+                "/help",
+                "/resources"
+            ],
+            "param": {
+                "control": "help",
+                "title": "Resources"
+            }
         },
-        "requirements": {
-            "section": "mda-agessa|urssaf",
-            "id":      "([-a-z0-9]+)"
-        }
-    },
-
-    "roadmap": {
-        "url": [
-            "/roadmap",
-            "/feuille-de-route"
-        ],
-        "param": {
-            "control": "roadmap"
-        }
-    },
-
-    "about": {
-        "url": [
-            "/about",
-            "/a-propos"
-        ],
-        "param": {
-            "control": "about"
-        }
-    },
-
-    "cgu": {
-        "url": [
-            "/cgu",
-            "/cgv"
-        ],
-        "param": {
-            "control": "cgu"
-        }
-    },
-
-    "privacy": {
-        "url": [
-            "/privacy",
-            "/politique-de-confidentialite"
-        ],
-        "param": {
-            "control": "privacy"
-        }
-    },
-
-    "newsletter": {
-        "url": "/:section/:file",
-        "param": {
-            "path": "${bundlesPath}/coreapi/views/emailing/src/:section/:file",
-            "control":    "renderNewsletter",
-            "section": ":section",
-            "file": ":file"
+        "docs": {
+            "namespace": "docs",
+            "url": [
+                "/docs",
+                "/documentation"
+            ],
+            "param": {
+                "control": "renderFromMock"
+            }
         },
-        "requirements": {
-            "section": "(messages|newsletters)",
-            "file":    "([-a-z0-9]+).html$"
+        "doc": {
+            "namespace": "docs",
+            "url": [
+                "/docs/:id",
+                "/documentation/:id"
+            ],
+            "param": {
+                "control": "renderFromMock",
+                "id": ":id"
+            },
+            "requirements": {
+                "id": "([-a-z0-9]+)"
+            }
+        },
+        "tutorials": {
+            "url": [
+                "/tutorials",
+                "/tutorials"
+            ],
+            "param": {
+                "control": "tutorials"
+            }
+        },
+        "sections": {
+            "namespace": "sections",
+            "url": [
+                "/sections/:section",
+                "/rubriques/:section"
+            ],
+            "requirements": {
+                "section": "catA|catB"
+            },
+            "param": {
+                "control": "renderFromMock",
+                "section": ":section"
+            }
+        },
+        "section": {
+            "namespace": "sections",
+            "url": [
+                "/sections/:section/:id",
+                "/rubriques/:section/:id"
+            ],
+            "param": {
+                "control": "renderFromMock",
+                "section": ":section",
+                "id": ":id"
+            },
+            "requirements": {
+                "section": "catA|catB",
+                "id": "([-a-z0-9]+)"
+            }
+        },
+        "roadmap": {
+            "url": [
+                "/roadmap",
+                "/feuille-de-route"
+            ],
+            "param": {
+                "control": "roadmap"
+            }
+        },
+        "about": {
+            "url": [
+                "/about",
+                "/a-propos"
+            ],
+            "param": {
+                "control": "about"
+            }
+        },
+        "cgu": {
+            "url": [
+                "/cgu",
+                "/cgv"
+            ],
+            "param": {
+                "control": "cgu"
+            }
+        },
+        "privacy": {
+            "url": [
+                "/privacy",
+                "/politique-de-confidentialite"
+            ],
+            "param": {
+                "control": "privacy"
+            }
+        },
+        "newsletter": {
+            "url": "/:section/:file",
+            "param": {
+                "path": "${bundlesPath}/coreapi/views/emailing/src/:section/:file",
+                "control": "renderNewsletter",
+                "section": ":section",
+                "file": ":file"
+            },
+            "requirements": {
+                "section": "(messages|newsletters)",
+                "file": "([-a-z0-9]+).html$"
+            }
         }
-    }
-  };
+    };
 
-  test.equal( typeof(routingCase), 'object' );
+    test.equal( typeof(routingCase), 'object' );
   test.deepEqual(routingCase, res );
 
   test.done()
