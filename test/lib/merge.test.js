@@ -139,11 +139,11 @@ describe('01b - Merging two objects (deep nested)', function () {
     var a, b, amounts, defaultAmounts;
     var setVariable = function () {
         a = {
-            "page": { "view": { "params": { "section": "urssaf" } } },
+            "page": { "view": { "params": { "section": "sectionA" } } },
             "form": { "rule": { "testField": { "isString": [25] } } }
         };
         b = {
-            "page": { "view": { "file": "factsheets" } },
+            "page": { "view": { "file": "fileB" } },
             "form": { "rule": { "testField": { "isString": [25, 25] } } }
         };
         amounts = {
@@ -151,8 +151,8 @@ describe('01b - Merging two objects (deep nested)', function () {
             "discountValue": 0, "discountType": "rate", "rebateValue": 0, "rebateType": "rate",
             "net": 775,
             "vat": [ { "20": 155 } ],
-            "grandTotal": 930, "artistCreationValue": 0, "discount": 0,
-            "rebate": 0, "freelanceTotal": 930, "organismTotal": 0
+            "grandTotal": 930, "extraValueA": 0, "discount": 0,
+            "rebate": 0, "subtotalA": 930, "subtotalB": 0
         };
         defaultAmounts = {
             "gross": 0, "deposit": 0, "depositValue": 0, "depositType": "rate",
@@ -165,7 +165,7 @@ describe('01b - Merging two objects (deep nested)', function () {
         setVariable();
         var result = merge(a, b);
         var res = {
-            "page": { "view": { "params": { "section": "urssaf" }, "file": "factsheets" } },
+            "page": { "view": { "params": { "section": "sectionA" }, "file": "fileB" } },
             "form": { "rule": { "testField": { "isString": [25, 25] } } }
         };
         assert.equal(typeof(result), 'object');
@@ -180,8 +180,8 @@ describe('01b - Merging two objects (deep nested)', function () {
             "discountValue": 0, "discountType": "rate", "rebateValue": 0, "rebateType": "rate",
             "net": 775,
             "vat": [ { "20": 155 } ],
-            "grandTotal": 930, "artistCreationValue": 0, "discount": 0,
-            "rebate": 0, "freelanceTotal": 930, "organismTotal": 0
+            "grandTotal": 930, "extraValueA": 0, "discount": 0,
+            "rebate": 0, "subtotalA": 930, "subtotalB": 0
         };
         assert.equal(typeof(result), 'object');
         assert.deepStrictEqual(result, res);
@@ -638,56 +638,56 @@ describe('05 - Merging two collections', function () {
             _comment: "force update 1",
             _uuid: "208e4cb0-1b07-4a07-8d90-c020493f7173",
             createdAt: "2017-01-01T00:00:00",
-            details: "- Le pr\u00e9sent [TYPE DE DOCUMENT] pr\u00e9voit l\u2019int\u00e9gralit\u00e9 des prestations que le prestataire s\u2019engage \u00e0 r\u00e9aliser pour le Client.\n- Toute prestation suppl\u00e9mentaire demand\u00e9e par le Client donnera lieu \u00e0 l\u2019\u00e9mission d\u2019un nouveau devis ou d\u2019un avenant.\n- Le pr\u00e9sent document est valable durant [D\u00c9LAI AVANT EXPIRATION DU DEVIS] \u00e0 compter de sa date d\u2019\u00e9mission.\n- Une fois valid\u00e9 par le Client, le pr\u00e9sent document a valeur de contrat.\n- Dans le cas d\u2019une demande d\u2019acompte, une facture d\u2019acompte \u00e0 r\u00e9gler d\u00e8s r\u00e9ception sera communiqu\u00e9e au Client \u00e0 la validation du pr\u00e9sent document.\n- Dans l\u2019hypoth\u00e8se d\u2019une rupture de contrat \u00e0 l\u2019initiative du Client, ce dernier s\u2019engage \u00e0 r\u00e9gler les prestations r\u00e9alis\u00e9es.\n- En cas d\u2019acceptation du puis de d\u00e9dit, complet ou partiel, du client, ce dernier devra r\u00e9gler une quote-part de 20% des sommes correspondant aux prestations non encore r\u00e9alis\u00e9es.",
+            details: "- Generic document clause one.\n- Generic document clause two.\n- Generic document clause three.",
             hasChanged: false, hasCopyrights: false, id: "mock-estimate-1",
-            isArtistAuthor: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
-            title: "\u00c0 propos de ce document", type: "estimate"
+            isFlagged: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
+            title: "Generic document section", type: "estimate"
         },
         {
             _uuid: "ce112986-659a-431b-964c-f0516b963fb4",
             createdAt: "2017-01-01T00:00:00",
-            details: "- La facture correspondante sera payable [D\u00c9LAI DE PAIEMENT DE LA FACTURE].\n- Cette facture pourra \u00eatre communiqu\u00e9e par courrier \u00e9lectronique.\n- Tout r\u00e8glement effectu\u00e9 apr\u00e8s expiration de ce d\u00e9lai donnera lieu \u00e0 une p\u00e9nalit\u00e9 de retard journali\u00e8re de 10 Euros ainsi qu\u2019\u00e0 l\u2019application d\u2019un int\u00e9r\u00eat \u00e9gal \u00e0 de 12 points de pourcentage. Enfin, dans le cas o\u00f9 le Client est un professionnel, une indemnit\u00e9 forfaitaire de 40 Euros sera \u00e9galement due.\n- Les p\u00e9nalit\u00e9s de retard sont exigibles sans qu\u2019un rappel soit n\u00e9cessaire.",
+            details: "- Generic payment clause one.\n- Generic payment clause two.\n- Generic payment clause three.",
             hasChanged: false, hasCopyrights: false, id: "mock-estimate-2",
-            isArtistAuthor: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
-            title: "En conformit\u00e9 de l\u2019article L 441-6 du Code de commerce", type: "estimate"
+            isFlagged: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
+            title: "Generic legal-reference section", type: "estimate"
         },
         {
             _uuid: "e81328a4-0109-4b12-803e-7f2e091eaf60",
             createdAt: "2017-01-01T00:00:00",
-            details: "- \u00c0 moins que le prestataire ne lui pr\u00e9sente une dispense \u00e0 jour, le Client doit retenir certaines cotisations bas\u00e9es le montant de la r\u00e9mun\u00e9ration artistique brute hors taxes. Il devra ensuite d\u00e9clarer et verser ce pr\u00e9compte directement \u00e0 [L\u2019ORGANISME] (article R382-27 du Code de la s\u00e9curit\u00e9 sociale).\n- Le Client doit \u00e9galement s\u2019acquitter aupr\u00e8s de [L\u2019ORGANISME] d\u2019une contribution personnelle \u00e9galement bas\u00e9e sur la r\u00e9mun\u00e9ration artistique brute hors taxes (article L382-4 du Code de la s\u00e9curit\u00e9 sociale et L6331-65 du Code du travail).\n- Pour plus d\u2019information consulter le site de http://www.secu-artistes-auteurs.fr",
+            details: "- Generic external-body clause one.\n- Generic external-body clause two.",
             hasChanged: false, hasCopyrights: false, id: "mock-estimate-3",
-            isArtistAuthor: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
-            title: "Informations concernant les artistes-auteurs", type: "estimate"
+            isFlagged: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
+            title: "Generic external-body section", type: "estimate"
         },
         {
             _uuid: "b42de67b-2469-41cb-958f-94b0ccc36e59",
             createdAt: "2017-01-01T00:00:00",
-            details: "- Le prestataire ne c\u00e8de que les droits d\u2019exploitation de la cr\u00e9ation limit\u00e9s aux termes du pr\u00e9sent document.\n- Le prestataire reste propri\u00e9taire de l\u2019int\u00e9gralit\u00e9 des cr\u00e9ations tant que la prestation n\u2019est pas enti\u00e8rement r\u00e9gl\u00e9e.\n- Toute utilisation sortant du cadre initialement pr\u00e9vu dans ce devis est interdite; sauf autorisation expresse et \u00e9crite du prestataire.",
+            details: "- Generic rights clause one.\n- Generic rights clause two.\n- Generic rights clause three.",
             hasChanged: false, hasCopyrights: true, id: "mock-estimate-5",
-            isArtistAuthor: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
-            title: "Informations concernant les droits d\u2019exploitation", type: "estimate"
+            isFlagged: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
+            title: "Generic rights section", type: "estimate"
         },
         {
             _uuid: "08b058f1-ce80-4cf8-98bc-35a6ee9b7585",
             createdAt: "2017-01-01T00:00:00",
-            details: "- Cette facture doit \u00eatre r\u00e9gl\u00e9e [D\u00c9LAI DE PAIEMENT DE LA FACTURE].\n- Tout r\u00e8glement effectu\u00e9 apr\u00e8s expiration de ce d\u00e9lai donnera lieu \u00e0 une p\u00e9nalit\u00e9 de retard journali\u00e8re de 10 Euros ainsi qu\u2019\u00e0 l\u2019application d\u2019un int\u00e9r\u00eat \u00e9gal \u00e0 de 12 points de pourcentage. Enfin, dans le cas o\u00f9 le Client est un professionnel, une indemnit\u00e9 forfaitaire de 40 Euros sera \u00e9galement due.\n- Les p\u00e9nalit\u00e9s de retard sont exigibles sans qu\u2019un rappel soit n\u00e9cessaire.",
+            details: "- Generic invoice clause one.\n- Generic invoice clause two.\n- Generic invoice clause three.",
             hasChanged: false, hasCopyrights: false, id: "mock-invoice-1",
-            isArtistAuthor: false, isDefault: true, isPassedOnAmendments: false, isPassedOnInvoices: false,
-            title: "En conformit\u00e9 de l\u2019article L 441-6 du Code de commerce", type: "invoice"
+            isFlagged: false, isDefault: true, isPassedOnAmendments: false, isPassedOnInvoices: false,
+            title: "Generic legal-reference section", type: "invoice"
         },
         {
             _uuid: "8d871f6e-8dfa-4c95-b475-b4abfb98f237",
             createdAt: "2017-12-04T15:42:34", details: "- poupou",
             hasChanged: false, hasCopyrights: false, id: "8911b6e0-7f41-4909-b725-e6498e422bea",
-            isArtistAuthor: false, isDefault: false, isPassedOnInvoices: true,
-            title: "\u00c0 propos de ce devis 5", type: "estimate"
+            isFlagged: false, isDefault: false, isPassedOnInvoices: true,
+            title: "Generic draft section 5", type: "estimate"
         },
         {
             _uuid: "b6ec2817-e89f-4175-9b89-e77b7470aea1",
             createdAt: "2017-12-04T15:53:31", details: "- bla 2",
             hasChanged: true, hasCopyrights: false, id: "75758512-00d7-4426-bb44-7b417939b57b",
-            isArtistAuthor: false, isDefault: false, isPassedOnAmendments: true, isPassedOnInvoices: true,
-            title: "\u00c0 propos de ce devis 7", type: "estimate"
+            isFlagged: false, isDefault: false, isPassedOnAmendments: true, isPassedOnInvoices: true,
+            title: "Generic draft section 7", type: "estimate"
         }
     ];
 
@@ -695,38 +695,38 @@ describe('05 - Merging two collections', function () {
         {
             _comment: "force update 1",
             createdAt: "2017-01-01T00:00:00",
-            details: "- Le pr\u00e9sent [TYPE DE DOCUMENT] pr\u00e9voit l\u2019int\u00e9gralit\u00e9 des prestations que le prestataire s\u2019engage \u00e0 r\u00e9aliser pour le Client.\n- Toute prestation suppl\u00e9mentaire demand\u00e9e par le Client donnera lieu \u00e0 l\u2019\u00e9mission d\u2019un nouveau devis ou d\u2019un avenant.\n- Le pr\u00e9sent document est valable durant [D\u00c9LAI AVANT EXPIRATION DU DEVIS] \u00e0 compter de sa date d\u2019\u00e9mission.\n- Une fois valid\u00e9 par le Client, le pr\u00e9sent document a valeur de contrat.\n- Dans le cas d\u2019une demande d\u2019acompte, une facture d\u2019acompte \u00e0 r\u00e9gler d\u00e8s r\u00e9ception sera communiqu\u00e9e au Client \u00e0 la validation du pr\u00e9sent document.\n- Dans l\u2019hypoth\u00e8se d\u2019une rupture de contrat \u00e0 l\u2019initiative du Client, ce dernier s\u2019engage \u00e0 r\u00e9gler les prestations r\u00e9alis\u00e9es.\n- En cas d\u2019acceptation du puis de d\u00e9dit, complet ou partiel, du client, ce dernier devra r\u00e9gler une quote-part de 20% des sommes correspondant aux prestations non encore r\u00e9alis\u00e9es.",
+            details: "- Generic document clause one.\n- Generic document clause two.\n- Generic document clause three.",
             hasChanged: false, hasCopyrights: false, id: "mock-estimate-1",
-            isArtistAuthor: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
-            title: "\u00c0 propos de ce document", type: "estimate"
+            isFlagged: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
+            title: "Generic document section", type: "estimate"
         },
         {
             createdAt: "2017-01-01T00:00:00",
-            details: "- La facture correspondante sera payable [D\u00c9LAI DE PAIEMENT DE LA FACTURE].\n- Cette facture pourra \u00eatre communiqu\u00e9e par courrier \u00e9lectronique.\n- Tout r\u00e8glement effectu\u00e9 apr\u00e8s expiration de ce d\u00e9lai donnera lieu \u00e0 une p\u00e9nalit\u00e9 de retard journali\u00e8re de 10 Euros ainsi qu\u2019\u00e0 l\u2019application d\u2019un int\u00e9r\u00eat \u00e9gal \u00e0 de 12 points de pourcentage. Enfin, dans le cas o\u00f9 le Client est un professionnel, une indemnit\u00e9 forfaitaire de 40 Euros sera \u00e9galement due.\n- Les p\u00e9nalit\u00e9s de retard sont exigibles sans qu\u2019un rappel soit n\u00e9cessaire.",
+            details: "- Generic payment clause one.\n- Generic payment clause two.\n- Generic payment clause three.",
             hasChanged: false, hasCopyrights: false, id: "mock-estimate-2",
-            isArtistAuthor: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
-            title: "En conformit\u00e9 de l\u2019article L 441-6 du Code de commerce", type: "estimate"
+            isFlagged: false, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: false,
+            title: "Generic legal-reference section", type: "estimate"
         },
         {
             createdAt: "2017-01-01T00:00:00",
-            details: "- \u00c0 moins que le prestataire ne lui pr\u00e9sente une dispense \u00e0 jour, le Client doit retenir certaines cotisations bas\u00e9es le montant de la r\u00e9mun\u00e9ration artistique brute hors taxes. Il devra ensuite d\u00e9clarer et verser ce pr\u00e9compte directement \u00e0 [L\u2019ORGANISME] (article R382-27 du Code de la s\u00e9curit\u00e9 sociale).\n- Le Client doit \u00e9galement s\u2019acquitter aupr\u00e8s de [L\u2019ORGANISME] d\u2019une contribution personnelle \u00e9galement bas\u00e9e sur la r\u00e9mun\u00e9ration artistique brute hors taxes (article L382-4 du Code de la s\u00e9curit\u00e9 sociale et L6331-65 du Code du travail).\n- Pour plus d\u2019information consulter le site de http://www.secu-artistes-auteurs.fr",
+            details: "- Generic external-body clause one.\n- Generic external-body clause two.",
             hasChanged: false, hasCopyrights: false, id: "mock-estimate-3",
-            isArtistAuthor: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
-            title: "Informations concernant les artistes-auteurs", type: "estimate"
+            isFlagged: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
+            title: "Generic external-body section", type: "estimate"
         },
         {
             createdAt: "2017-01-01T00:00:00",
-            details: "- Le prestataire ne c\u00e8de que les droits d\u2019exploitation de la cr\u00e9ation limit\u00e9s aux termes du pr\u00e9sent document.\n- Le prestataire reste propri\u00e9taire de l\u2019int\u00e9gralit\u00e9 des cr\u00e9ations tant que la prestation n\u2019est pas enti\u00e8rement r\u00e9gl\u00e9e.\n- Toute utilisation sortant du cadre initialement pr\u00e9vu dans ce devis est interdite; sauf autorisation expresse et \u00e9crite du prestataire.",
+            details: "- Generic rights clause one.\n- Generic rights clause two.\n- Generic rights clause three.",
             hasChanged: false, hasCopyrights: true, id: "mock-estimate-5",
-            isArtistAuthor: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
-            title: "Informations concernant les droits d\u2019exploitation", type: "estimate"
+            isFlagged: true, isDefault: true, isPassedOnAmendments: true, isPassedOnInvoices: true,
+            title: "Generic rights section", type: "estimate"
         },
         {
             createdAt: "2017-01-01T00:00:00",
-            details: "- Cette facture doit \u00eatre r\u00e9gl\u00e9e [D\u00c9LAI DE PAIEMENT DE LA FACTURE].\n- Tout r\u00e8glement effectu\u00e9 apr\u00e8s expiration de ce d\u00e9lai donnera lieu \u00e0 une p\u00e9nalit\u00e9 de retard journali\u00e8re de 10 Euros ainsi qu\u2019\u00e0 l\u2019application d\u2019un int\u00e9r\u00eat \u00e9gal \u00e0 de 12 points de pourcentage. Enfin, dans le cas o\u00f9 le Client est un professionnel, une indemnit\u00e9 forfaitaire de 40 Euros sera \u00e9galement due.\n- Les p\u00e9nalit\u00e9s de retard sont exigibles sans qu\u2019un rappel soit n\u00e9cessaire.",
+            details: "- Generic invoice clause one.\n- Generic invoice clause two.\n- Generic invoice clause three.",
             hasChanged: false, hasCopyrights: false, id: "mock-invoice-1",
-            isArtistAuthor: false, isDefault: true, isPassedOnAmendments: false, isPassedOnInvoices: false,
-            title: "En conformit\u00e9 de l\u2019article L 441-6 du Code de commerce", type: "invoice"
+            isFlagged: false, isDefault: true, isPassedOnAmendments: false, isPassedOnInvoices: false,
+            title: "Generic legal-reference section", type: "invoice"
         }
     ];
 

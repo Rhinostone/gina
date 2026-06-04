@@ -8251,3 +8251,301 @@ describe('73 - #INS10 follow-up: server-rendered HTML page egress', function() {
     });
 
 });
+
+
+// ── 74 — #INS8: authenticated WebSocket /_gina/agent transport (server.js) ────
+
+describe('74 - #INS8 authenticated WebSocket /_gina/agent transport in server.js', function() {
+
+    function wsBlk() {
+        var src = getServerSrc();
+        var i = src.indexOf('function attachInspectorAgentWs');
+        assert.ok(i > -1, 'expected attachInspectorAgentWs() in server.js');
+        return src.substring(i, i + 6200);
+    }
+
+    it('server.js defines attachInspectorAgentWs(rawServer, ctx)', function() {
+        assert.ok(getServerSrc().indexOf('function attachInspectorAgentWs(rawServer, ctx)') > -1,
+            'expected the file-scope attachInspectorAgentWs helper');
+    });
+
+    it('lazy-requires ws inside try/catch and fails graceful (SSE stays the transport)', function() {
+        var blk = wsBlk();
+        assert.ok(blk.indexOf("require('ws')") > -1,            'expected require(ws)');
+        assert.ok(/try\s*\{[\s\S]*require\('ws'\)/.test(blk),    'expected require(ws) inside a try block');
+        assert.ok(blk.indexOf('WebSocket transport disabled') > -1, 'expected a fail-graceful warn when ws is unavailable');
+        assert.ok(/catch\s*\(wsErr\)/.test(blk),                'expected a catch around the ws require');
+    });
+
+    it('creates a noServer WebSocketServer', function() {
+        var blk = wsBlk();
+        assert.ok(/new WebSocketServer\(\{\s*noServer:\s*true\s*\}\)/.test(blk),
+            'expected new WebSocketServer({ noServer: true })');
+    });
+
+    it('registers an upgrade listener that path-matches /_gina/agent (with optional query)', function() {
+        var blk = wsBlk();
+        assert.ok(/rawServer\.on\('upgrade'/.test(blk), 'expected rawServer.on(upgrade)');
+        assert.ok(blk.indexOf('/\\/_gina\\/agent(?:\\?|$)/') > -1,
+            'expected the /_gina/agent(?:\\?|$) path regex (matches query-string form)');
+    });
+
+    it('gate opens on dev OR _inspectorAgentEnabled; 404 when neither', function() {
+        var blk = wsBlk();
+        assert.ok(blk.indexOf('NODE_ENV_IS_DEV') > -1,         'expected the dev path in the gate');
+        assert.ok(blk.indexOf('_inspectorAgentEnabled') > -1,  'expected the enabled toggle in the gate');
+        assert.ok(/HTTP\/1\.1 404 Not Found/.test(blk),        'expected a raw 404 when not dev and not enabled');
+    });
+
+    it('requires a valid key outside dev and denies with a raw 401 socket write', function() {
+        var blk = wsBlk();
+        assert.ok(/!_agIsDev\s*&&\s*!_agentKeyValid\(req\)/.test(blk), 'expected the key check skipped in dev, enforced outside');
+        assert.ok(/HTTP\/1\.1 401 Unauthorized/.test(blk),     'expected a raw 401 status line on the upgrade socket');
+        assert.ok(blk.indexOf('socket.destroy()') > -1,        'expected socket.destroy() on deny');
+    });
+
+    it('enforces the Origin allowlist only when configured (403 on mismatch)', function() {
+        var blk = wsBlk();
+        assert.ok(blk.indexOf('_inspectorAgentAllowedOrigins') > -1, 'expected the Origin allowlist read');
+        assert.ok(/_allowed\.length\s*>\s*0/.test(blk),         'expected enforcement gated on a non-empty allowlist');
+        assert.ok(/HTTP\/1\.1 403 Forbidden/.test(blk),         'expected a raw 403 on Origin mismatch');
+    });
+
+    it('on upgrade registers inspector#data + logger#default listeners with cleanup', function() {
+        var blk = wsBlk();
+        assert.ok(blk.indexOf('handleUpgrade(req, socket, head') > -1, 'expected wss.handleUpgrade');
+        assert.ok(blk.indexOf("process.on('inspector#data'") > -1,     'expected the data listener');
+        assert.ok(blk.indexOf("process.on('logger#default'") > -1,     'expected the log listener');
+        assert.ok(blk.indexOf("removeListener('inspector#data'") > -1, 'expected data listener cleanup');
+        assert.ok(blk.indexOf("removeListener('logger#default'") > -1, 'expected log listener cleanup');
+        assert.ok(/ws\.on\('close'/.test(blk) && /ws\.on\('error'/.test(blk), 'expected cleanup on close + error');
+    });
+
+    it('frames are JSON envelopes {event:data} / {event:log} matching the SSE shape', function() {
+        var blk = wsBlk();
+        assert.ok(blk.indexOf("event: 'data'") > -1, 'expected the data envelope');
+        assert.ok(blk.indexOf("event: 'log'") > -1,  'expected the log envelope');
+        assert.ok(blk.indexOf("src: 'server'") > -1, 'expected the server log src tag (SSE parity)');
+    });
+
+    it('replays the last snapshot only in dev OR an active instrumentation window (#INS10 parity)', function() {
+        var blk = wsBlk();
+        assert.ok(/_agIsDev\s*\|\|\s*\(lib\.instrument\s*&&\s*lib\.instrument\.isActive\(\)\)/.test(blk),
+            'expected snapshot replay gated on dev OR an active window');
+        assert.ok(blk.indexOf('_lastGinaData') > -1, 'expected the snapshot source');
+    });
+
+    it('is attached at the unified listen() point for both engines', function() {
+        var src = getServerSrc();
+        assert.ok(src.indexOf('attachInspectorAgentWs(process.server, self)') > -1,
+            'expected the call site after listen() (covers isaac + express via the raw server)');
+    });
+
+});
+
+
+// ── 75 — #INS8: WS coexistence + config wiring (isaac, gna.js, settings, manifest) ──
+
+describe('75 - #INS8 WebSocket transport coexistence + config wiring', function() {
+
+    var _isaacSrc75; function getIsaacSrc75() { return _isaacSrc75 || (_isaacSrc75 = fs.readFileSync(ISAAC_SOURCE, 'utf8')); }
+    var GNA_SOURCE   = path.join(FW, 'core/gna.js');
+    var SETTINGS_TPL = path.join(FW, 'core/template/conf/settings.json');
+    var FW_PKG       = path.join(FW, 'package.json');
+    var ROOT_PKG     = path.join(FW, '../../package.json');
+
+    it('isaac engine.io upgrade handler defers /_gina/agent to the WS agent handler', function() {
+        var src = getIsaacSrc75();
+        var i = src.indexOf("server.on('upgrade'");
+        assert.ok(i > -1, 'expected the engine.io upgrade handler');
+        var blk = src.substring(i, i + 400);
+        assert.ok(blk.indexOf('/\\/_gina\\/agent(?:\\?|$)/') > -1, 'expected the /_gina/agent skip-guard regex');
+        assert.ok(/agent\(\?:\\\?\|\$\)\/\.test\(req\.url[\s\S]*?\{\s*return;\s*\}/.test(blk),
+            'expected an early return so engine.io does not grab the agent upgrade');
+    });
+
+    it('gna.js captures _inspectorAgentAllowedOrigins from settings (with fail-closed default)', function() {
+        var src = fs.readFileSync(GNA_SOURCE, 'utf8');
+        assert.ok(src.indexOf('_inspectorAgentAllowedOrigins') > -1, 'expected the allowlist capture');
+        assert.ok(/Array\.isArray\(_inspAgent\.allowedOrigins\)\s*\?\s*_inspAgent\.allowedOrigins\s*:\s*\[\]/.test(src),
+            'expected the array-guarded read defaulting to []');
+        // fail-closed default present in the catch block
+        assert.ok(/process\.gina\._inspectorAgentAllowedOrigins\s*=\s*\[\];/.test(src),
+            'expected the [] fail-closed default in the catch block');
+    });
+
+    it('settings.json template documents inspector.agent.allowedOrigins (default [])', function() {
+        var src = fs.readFileSync(SETTINGS_TPL, 'utf8');
+        var i = src.indexOf('"agent"');
+        var blk = src.substring(i, i + 220);
+        assert.ok(blk.indexOf('"allowedOrigins"') > -1, 'expected allowedOrigins in the agent block');
+        assert.ok(/"allowedOrigins":\s*\[\]/.test(blk), 'expected the default empty allowlist');
+    });
+
+    it('ws is declared in BOTH the framework and root manifests (dual-manifest parity)', function() {
+        var fwPkg   = JSON.parse(fs.readFileSync(FW_PKG, 'utf8'));
+        var rootPkg = JSON.parse(fs.readFileSync(ROOT_PKG, 'utf8'));
+        assert.ok(fwPkg.dependencies && fwPkg.dependencies.ws,   'expected ws in framework/v*/package.json');
+        assert.ok(rootPkg.dependencies && rootPkg.dependencies.ws, 'expected ws in root package.json');
+    });
+
+});
+
+
+// ── 76 — #INS8: WebSocket gate/auth/origin behavioral replica ─────────────────
+
+describe('76 - #INS8 WebSocket upgrade gate/auth/origin behavioral replica', function() {
+
+    // The path regex is shared by the WS upgrade handler (server.js) and the
+    // isaac skip-guard. Per the §52/§37 gotcha, exercise it against query'd URLs.
+    var AGENT_RE = /\/_gina\/agent(?:\?|$)/;
+
+    it('path regex matches /_gina/agent and its query-string form', function() {
+        assert.equal(AGENT_RE.test('/_gina/agent'), true);
+        assert.equal(AGENT_RE.test('/_gina/agent?key=abc'), true);
+        assert.equal(AGENT_RE.test('/sub/_gina/agent?key=abc&foo=1'), true);
+    });
+
+    it('path regex rejects look-alikes', function() {
+        assert.equal(AGENT_RE.test('/_gina/agentx'), false);
+        assert.equal(AGENT_RE.test('/_gina/agentstuff'), false);
+        assert.equal(AGENT_RE.test('/_gina/agent/foo'), false);
+        assert.equal(AGENT_RE.test('/_gina/agents'), false);
+    });
+
+    // Replica of the upgrade gate decision (server.js attachInspectorAgentWs).
+    // Returns the HTTP status that would be written on the raw socket, or 101
+    // when the handshake proceeds.
+    function upgradeDecision(opts) {
+        var isDev    = opts.isDev === true;
+        var enabled  = opts.enabled === true;
+        var keyOk    = opts.keyOk === true;
+        var allowed  = Array.isArray(opts.allowedOrigins) ? opts.allowedOrigins : [];
+        var origin   = opts.origin || '';
+        if (!isDev && !enabled) { return 404; }
+        if (!isDev && !keyOk)   { return 401; }
+        if (allowed.length > 0 && allowed.indexOf(origin) < 0) { return 403; }
+        return 101;
+    }
+
+    it('dev mode upgrades with no key (back-compat with #INS9a)', function() {
+        assert.equal(upgradeDecision({ isDev: true }), 101);
+    });
+
+    it('non-dev + not enabled ⇒ 404 (endpoint invisible unless opted in)', function() {
+        assert.equal(upgradeDecision({ isDev: false, enabled: false }), 404);
+    });
+
+    it('non-dev + enabled + missing/invalid key ⇒ 401', function() {
+        assert.equal(upgradeDecision({ isDev: false, enabled: true, keyOk: false }), 401);
+    });
+
+    it('non-dev + enabled + valid key ⇒ 101 when no Origin allowlist configured', function() {
+        assert.equal(upgradeDecision({ isDev: false, enabled: true, keyOk: true }), 101);
+    });
+
+    it('Origin allowlist enforced only when non-empty', function() {
+        // empty allowlist ⇒ any origin passes
+        assert.equal(upgradeDecision({ isDev: false, enabled: true, keyOk: true, allowedOrigins: [], origin: 'http://evil' }), 101);
+        // configured ⇒ mismatch is 403
+        assert.equal(upgradeDecision({ isDev: false, enabled: true, keyOk: true, allowedOrigins: ['http://localhost:4101'], origin: 'http://evil' }), 403);
+        // configured ⇒ match passes
+        assert.equal(upgradeDecision({ isDev: false, enabled: true, keyOk: true, allowedOrigins: ['http://localhost:4101'], origin: 'http://localhost:4101' }), 101);
+    });
+
+    it('dev bypasses the key check even when an allowlist is configured', function() {
+        // dev short-circuits enabled+key; allowlist still applies (defense-in-depth)
+        assert.equal(upgradeDecision({ isDev: true, allowedOrigins: ['http://localhost:4101'], origin: 'http://localhost:4101' }), 101);
+        assert.equal(upgradeDecision({ isDev: true, allowedOrigins: ['http://localhost:4101'], origin: 'http://evil' }), 403);
+    });
+
+});
+
+
+// ── 77 — #INS8: Inspector SPA WebSocket transport (tryAgentWS opt-in) ─────────
+
+describe('77 - #INS8 Inspector SPA WebSocket transport (tryAgentWS)', function() {
+
+    var _inspJs77;
+    function getInspJs77() { return _inspJs77 || (_inspJs77 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8')); }
+
+    function wsFnBlk() {
+        var js = getInspJs77();
+        var i = js.indexOf('function tryAgentWS');
+        assert.ok(i > -1, 'expected tryAgentWS in dist inspector.js');
+        return js.substring(i, i + 4400);
+    }
+
+    it('dist inspector.js defines tryAgentWS()', function() {
+        assert.ok(getInspJs77().indexOf('function tryAgentWS') > -1, 'expected tryAgentWS()');
+    });
+
+    it('connects via a native WebSocket to {target}/_gina/agent', function() {
+        var blk = wsFnBlk();
+        assert.ok(/typeof WebSocket === 'undefined'/.test(blk), 'expected a WebSocket feature check');
+        assert.ok(blk.indexOf('new WebSocket(wsUrl)') > -1,      'expected new WebSocket(wsUrl)');
+        assert.ok(blk.indexOf("'/_gina/agent'") > -1,           'expected the /_gina/agent path');
+    });
+
+    it('switches the scheme to ws/wss and threads ?key=', function() {
+        var blk = wsFnBlk();
+        assert.ok(/replace\(\/\^http\/i,\s*'ws'\)/.test(blk), 'expected http→ws scheme swap (preserves https→wss)');
+        assert.ok(blk.indexOf("params.get('key')") > -1,      'expected the ?key= read');
+        assert.ok(blk.indexOf("'?key='") > -1,                'expected ?key= appended to the WS URL');
+    });
+
+    it('parses {event, data} envelopes for data and log frames', function() {
+        var blk = wsFnBlk();
+        assert.ok(blk.indexOf('JSON.parse(ev.data)') > -1,    'expected JSON parse of the frame');
+        assert.ok(blk.indexOf("frame.event === 'data'") > -1, 'expected the data envelope branch');
+        assert.ok(blk.indexOf("frame.event === 'log'") > -1,  'expected the log envelope branch');
+    });
+
+    it('falls back to SSE once when the socket never opens', function() {
+        var blk = wsFnBlk();
+        assert.ok(/ws\.onclose\s*=/.test(blk),           'expected an onclose handler');
+        assert.ok(/!_opened\s*&&\s*!_fellBack/.test(blk), 'expected a one-shot fallback guard');
+        assert.ok(blk.indexOf('tryAgent()') > -1,        'expected the SSE fallback call');
+    });
+
+    it('source acquisition uses WS by default; ?transport=sse forces SSE (#INS9b)', function() {
+        var js = getInspJs77();
+        assert.ok(js.indexOf("get('transport')") > -1,             'expected the ?transport read');
+        assert.ok(js.indexOf("_agentTransport !== 'sse'") > -1,    'expected WS-by-default gated on ?transport !== sse (SSE escape hatch)');
+        assert.ok(js.indexOf('var isAgent = tryAgent()') > -1,     'expected the preserved SSE entry point');
+        var wsIdx  = js.indexOf('tryAgentWS();');
+        var sseIdx = js.indexOf('var isAgent = tryAgent()');
+        assert.ok(wsIdx > -1 && wsIdx < sseIdx, 'expected tryAgentWS() invoked before the tryAgent() entry');
+    });
+
+    it('tryAgent() short-circuits when the WebSocket already claimed the channel', function() {
+        var js = getInspJs77();
+        var i = js.indexOf('function tryAgent()');
+        var blk = js.substring(i, i + 200);
+        assert.ok(/if \(source === 'agent'\) return true;/.test(blk),
+            'expected the source===agent no-op guard at the top of tryAgent');
+    });
+
+    it('claims source=agent only after the socket is constructed', function() {
+        var blk = wsFnBlk();
+        var wsIdx  = blk.indexOf('new WebSocket(wsUrl)');
+        var srcIdx = blk.indexOf("source = 'agent'");
+        assert.ok(wsIdx > -1 && srcIdx > wsIdx,
+            'expected source=agent set AFTER new WebSocket (constructor throw leaves SSE as fallback)');
+    });
+
+    // Behavioral replica of the WS URL construction (scheme swap + key append).
+    function wsUrl(target, key) {
+        target = String(target).replace(/\/+$/, '');
+        var u = target.replace(/^http/i, 'ws') + '/_gina/agent';
+        if (key) { u += '?key=' + encodeURIComponent(key); }
+        return u;
+    }
+
+    it('builds ws:// for http targets and wss:// for https targets', function() {
+        assert.equal(wsUrl('http://localhost:3100'),  'ws://localhost:3100/_gina/agent');
+        assert.equal(wsUrl('https://example.com/'),   'wss://example.com/_gina/agent');
+        assert.equal(wsUrl('http://localhost:3100/', 'k e y'), 'ws://localhost:3100/_gina/agent?key=k%20e%20y');
+    });
+
+});

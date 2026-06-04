@@ -1,0 +1,102 @@
+{
+  "name": "coreapi",
+  "_comment": "`version` is the current API version: to link to the new documentation, change this value",
+  "version": "0.0.1",
+  "fonts": "//fonts.gstatic.com/s/trirong/v3/gzxgezrghzh.ttf",
+  "session": {
+    "secret": "864xxxxg6egc&xxxk7rah8n!$((4yls9#v@%#$8af!8%f!xxn(iwi%n267",
+    "expire": "60000*120"
+  },
+
+  "admin": {
+    "email": "martinluther@gina.io"
+  },
+
+  "smtp": {
+    "defaultProvider": "mailprovider"
+  },
+
+  "scrypt": {
+    "key": "xxxyls9#v@9igltxx^x4z8zy7x+_dzf%dppdsong82uvpt6#^b)475vj_%o#_9^7",
+    "maxtime": {
+      "N": 1,
+      "r": 1,
+      "p": 1
+    }
+  },
+
+  "notes": {
+    "_comment": "Used to inform the user (e.g.: /mybundle/preferences)",
+    "terms": {
+      "sectionA": {
+        "legend": "Section A",
+        "intro": "Generic intro for section A."
+      },
+      "sectionB": {
+        "legend": "Section B",
+        "intro": "Generic intro for section B."
+      },
+      "sectionC": {
+        "legend": "Section C",
+        "intro": "Generic intro for section C."
+      }
+    }
+  },
+  "documents": {
+    "_comment": "see https://nodejs.org/api/util.html#util_util_format_format_args",
+    "infos": {
+      "a-draft": "draft",
+      "a-pending": "pending validation",
+      "a-confirmed": "to be processed",
+      "a-rejected": "rejected",
+      "a-expired": "expired",
+      "a-canceled": "abandoned",
+
+      "b-draft": "draft",
+      "b-pending": "pending",
+      "b-done": "done",
+      "b-overdue": "overdue since %s",
+      "b-canceled": "canceled"
+    },
+    "types": {
+      "a": "section a",
+      "a-the": "the section a",
+      "a-this": "this section a",
+      "a-ofthe": "of section a",
+      "a-from": "section a of %s",
+
+      "b": "section b",
+      "b-the": "the section b",
+      "b-this": "this section b",
+      "b-ofthe": "of section b",
+      "b-from": "section b of %s",
+
+      "c": "section c",
+      "c-the": "the section c",
+      "c-this": "this section c",
+      "c-ofthe": "of section c",
+      "c-from": "section c of %s",
+
+      "d": "section d",
+      "d-the": "the section d",
+      "d-this": "this section d",
+      "d-ofthe": "of section d",
+      "d-from": "section d of %s"
+    }
+  },
+  "legalMentions": {
+    "groupA": {
+      "isMemberA": "Generic membership note."
+    },
+    "groupB": {
+      "_comment": "Generic flag A",
+      "flagA1": "Generic note A1.",
+      "flagA2": "Generic note A2.",
+      "_comment.b": "Generic flag B",
+      "flagB1": "Generic note B1.",
+      "_comment.c": "Generic flag C",
+      "flagC1": "Generic note C1.",
+      "flagC2": "Generic note C2."
+    }
+  }
+}

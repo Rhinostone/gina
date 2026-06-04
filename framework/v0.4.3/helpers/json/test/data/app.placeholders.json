@@ -1,0 +1,53 @@
+{
+    // "ignore this part"
+    "_comment_disabled": [
+        {
+            "key": "[FIELD A]",
+            "label": "field a",
+            "value": "{% if record && record.fieldA %}{{ record.fieldA }}{% else %}{{ null }}{% endif %}"
+        },
+        {
+            "key": "[FIELD B]",
+            "label": "field b",
+            "value": "{{ record.fieldB }} %"
+        }
+    ],
+    "terms": [
+        {
+            "key": "[TYPE]",
+            "label": "type",
+            "value": "{% if record.type == 'a' %}section a{% elseif record.type == 'b' %}section b{% else %}section c{% endif %}"
+        },
+        {
+            "key": "[DELAY]",
+            "label": "delay",
+            "value": "{{ record.delay }} days",
+            "isHidden": "{% if record.type == 'b' %}true{%else%}false{% endif %}"
+        }
+    ],
+    "mails": [
+        {
+            "key": "[REFERENCE]",
+            "label": "reference",
+            "value": "{% if record && record.id %}{{ record.id }}{% else %}null{% endif %}"
+        },
+        {
+            "key": "[LINK]",
+            "label": "link",
+            "value": "http://www.example.com"
+        }
+    ],
+    "signatures": [
+        {
+            "_comment": "Generic signature placeholder",
+            "key": "[NAME]",
+            "label": "name",
+            "value": "{% if session && session.name %}{{ session.name }}{% else %}{{ null }}{% endif %}"
+        },
+        {
+            "key": "[CITY]",
+            "label": "city",
+            "value": "{% if company && company.city %}{{ company.city }}{% else %}{{ null }}{% endif %}"
+        }
+    ]
+}
