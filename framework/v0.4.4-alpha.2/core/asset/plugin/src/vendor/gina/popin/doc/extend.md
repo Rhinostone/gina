@@ -391,7 +391,7 @@ plugin](https://www.google.com/search?ie=UTF-8&q=how+to+make+browser+search+plug
 
 * If you want to disable the automatic detection and formatting of possible
   phone numbers in Safari on iOS, use [`<meta name="format-detection"
-  content="telephone=no">`](https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html/#//apple_ref/doc/uid/TP40008193-SW5).
+  content="telephone=no">`](https://developer.apple.com/library/safari/documentation/AppleApplications/Reference/SafariHTMLRef/Articles/MetaTags.html).
 
 * Avoid development/stage websites "leaking" into SERPs (search engine results
   page) by [implementing X-Robots-tag
