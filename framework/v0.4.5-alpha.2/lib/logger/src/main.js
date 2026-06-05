@@ -364,6 +364,24 @@ function Logger() {
             if (mqIdx > -1) opt.flows.splice(mqIdx, 1);
         }
 
+        // #M12 — structured (JSON) logging opt-in. The active render format is resolved
+        // ONCE here, before loadContainers() clones `opt` into each container, so a
+        // container reads `opt.format` instead of re-testing the environment. Precedence:
+        //   1. GINA_LOG_FORMAT = json|text  (explicit; works outside container mode)
+        //   2. GINA_LOG_STDOUT truthy => json (back-compat alias for the #K8s3 flag)
+        //   3. default 'text' — the coloured, human-readable output (unchanged).
+        // Keeping the default at 'text' means interactive consumers (docker / OrbStack
+        // `docker logs`, a dev terminal) see exactly the same output as before.
+        if ( /^json$/i.test(process.env.GINA_LOG_FORMAT) ) {
+            opt.format = 'json';
+        } else if ( /^text$/i.test(process.env.GINA_LOG_FORMAT) ) {
+            opt.format = 'text';
+        } else if ( /^true$/i.test(process.env.GINA_LOG_STDOUT) ) {
+            opt.format = 'json';
+        } else {
+            opt.format = 'text';
+        }
+
         // if ( new _(optionsPath).existsSync() ) {
         //     if (userOptions.flows.indexOf('mq') < 0) {
         //         userOptions.flows.splice(0, 0, 'mq')
@@ -811,7 +829,22 @@ function Logger() {
                 // }
             // }
 
-            process.stdout.write(content + '\n');
+            // #M12 — honour the structured (JSON) render mode for the raw console.log
+            // path, which writes straight to stdout and bypasses the container dispatch.
+            // Without this, JSON mode would emit a mix of JSON lines (levelled output) and
+            // plain lines (console.log), breaking a log collector. Text mode is unchanged.
+            if ( opt.format === 'json' ) {
+                process.stdout.write(JSON.stringify({
+                    ts     : new Date().toISOString(),
+                    level  : 'info',
+                    bundle : opt.name,
+                    message: content,
+                    group  : opt.name,
+                    msg    : content
+                }) + '\n');
+            } else {
+                process.stdout.write(content + '\n');
+            }
         }
 
     };

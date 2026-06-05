@@ -40,22 +40,33 @@ function DefaultContainer(opt, loggers) {
 
     function onPayload() {
 
-        // #K8s3 — write JSON lines when GINA_LOG_STDOUT=true so that log collectors
-        // (kubectl logs, Fluentd, Datadog, etc.) can parse structured output.
-        // Otherwise write the standard formatted, coloured output for interactive terminals.
-        var isContainerMode = /^true$/i.test(process.env.GINA_LOG_STDOUT);
+        // #M12 — structured (JSON) logging. The render format is resolved once at logger
+        // init (main.js -> opt.format) and cloned into this container's `opt`. We read
+        // opt.format here; if it is absent (a logger init path that predates #M12) we fall
+        // back to the #K8s3 GINA_LOG_STDOUT env flag, so behaviour is unchanged either way.
+        // JSON mode  -> one machine-parseable object per line (kubectl logs / Fluentd /
+        //               Datadog / Loki).
+        // text mode  -> the coloured, human-readable format() output (the default).
+        var isJsonMode = (opt && opt.format)
+            ? (opt.format === 'json')
+            : /^true$/i.test(process.env.GINA_LOG_STDOUT);
 
         process.on('logger#'+self.name, function onPayload(payload) {
 
             try {
                 var payloadObj = JSON.parse(payload);
 
-                if (isContainerMode) {
+                if (isJsonMode) {
+                    // #M12 — `bundle` and `message` are the canonical keys; `group` and `msg`
+                    // are retained as back-compat aliases for pre-#M12 JSON consumers (the
+                    // shipped #K8s3 shape was {ts, level, group, msg}). Additive, non-breaking.
                     process.stdout.write(JSON.stringify({
-                        ts   : new Date().toISOString(),
-                        level: payloadObj.level,
-                        group: payloadObj.group,
-                        msg  : payloadObj.content
+                        ts     : new Date().toISOString(),
+                        level  : payloadObj.level,
+                        bundle : payloadObj.group,
+                        message: payloadObj.content,
+                        group  : payloadObj.group,
+                        msg    : payloadObj.content
                     }) + '\n');
                 } else {
                     process.stdout.write( format(payloadObj.group, payloadObj.level, payloadObj.content, payloadObj.skipFormating) );
