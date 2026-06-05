@@ -1795,6 +1795,44 @@ function Config(opt, contextResetNeeded) {
 
         var hasViews = (typeof(files['templates']) != 'undefined' && typeof(files['templates']['_common']) != 'undefined') ? true : false;
 
+        // templates.json pre-process (runs once per bundle, BEFORE the routing<->template GET
+        // auto-vivify and the _common / per-section merge loops below, so every downstream
+        // consumer sees fully-expanded single-section keys).
+        if ( typeof(files['templates']) != 'undefined' && files['templates'] !== null ) {
+
+            // gina-io/gina#10 — optional `_common.config` block: flatten it back into `_common`
+            // so the existing _common read sites keep working unchanged. Direct `_common.*` keys
+            // win over `_common.config.*` (merge keeps the first argument on a key collision).
+            if ( typeof(files['templates']._common) != 'undefined'
+                 && typeof(files['templates']._common.config) != 'undefined' ) {
+                files['templates']._common = merge(files['templates']._common, files['templates']._common.config);
+                delete files['templates']._common.config;
+            }
+
+            // gina-io/gina#8 — comma-separated section keys (e.g. `"a, b"`): replicate the block
+            // under each named section, MERGING into any section that already exists so a section's
+            // own keys win over the shared block. Route names never contain commas, so the split is
+            // unambiguous; the original comma key is removed. Collect first, then mutate, to avoid
+            // changing the object mid for-in.
+            let _commaKeys = [];
+            for (let _k in files['templates']) {
+                if ( _k.indexOf(',') > -1 ) _commaKeys.push(_k);
+            }
+            for (let _i = 0, _iLen = _commaKeys.length; _i < _iLen; ++_i) {
+                let _key      = _commaKeys[_i];
+                let _block    = files['templates'][_key];
+                let _sections = _key.split(/\s*,\s*/);
+                for (let _s = 0, _sLen = _sections.length; _s < _sLen; ++_s) {
+                    let _section = _sections[_s].trim();
+                    if ( !_section ) continue;
+                    files['templates'][_section] = ( typeof(files['templates'][_section]) != 'undefined' )
+                        ? merge(files['templates'][_section], JSON.clone(_block))
+                        : JSON.clone(_block);
+                }
+                delete files['templates'][_key];
+            }
+        }
+
         // e.g.: 404 rendering for JSON APIs by checking `env.template`: JSON response can be forced even if the bundle has views
         if ( hasViews && typeof(self.userConf[bundle][env].template) != 'undefined' && self.userConf[bundle][env].template == false) {
             conf[bundle][env].template = false
