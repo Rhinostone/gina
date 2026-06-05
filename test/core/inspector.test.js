@@ -5900,10 +5900,18 @@ describe('49 - explainForIndexes: dual conn shape and error safety', function() 
         return src.substring(idx, idx + 2000);
     }
 
+    // Cluster resolution was factored out of explainForIndexes into the shared
+    // resolveCluster() helper — slice that helper for the dual-shape pins below.
+    function getResolveBlock() {
+        var src = getCbSrc49();
+        var idx = src.indexOf('var resolveCluster = function');
+        return src.substring(idx, idx + 1000);
+    }
+
     // ── cluster resolution from two conn shapes ──
 
     it('resolves cluster from conn._cluster (entity query path)', function() {
-        var block = getExplainBlock();
+        var block = getResolveBlock();
         assert.ok(
             /conn\._cluster/.test(block),
             'expected conn._cluster probe for entity query path'
@@ -5911,7 +5919,7 @@ describe('49 - explainForIndexes: dual conn shape and error safety', function() 
     });
 
     it('resolves cluster from conn._scope._bucket._cluster (bulk insert path)', function() {
-        var block = getExplainBlock();
+        var block = getResolveBlock();
         assert.ok(
             /conn\._scope.*\._bucket.*\._cluster/.test(block),
             'expected conn._scope._bucket._cluster probe for bulk insert path'
@@ -5919,7 +5927,7 @@ describe('49 - explainForIndexes: dual conn shape and error safety', function() 
     });
 
     it('checks conn._cluster first (direct path takes priority)', function() {
-        var block = getExplainBlock();
+        var block = getResolveBlock();
         var directIdx = block.indexOf('conn._cluster');
         var nestedIdx = block.indexOf('conn._scope');
         assert.ok(directIdx > -1 && nestedIdx > -1);
@@ -5932,19 +5940,25 @@ describe('49 - explainForIndexes: dual conn shape and error safety', function() 
     // ── graceful fallback when cluster cannot be resolved ──
 
     it('returns early with a warning when cluster is null', function() {
-        var block = getExplainBlock();
+        // The null-cluster guard now lives in the shared resolveCluster() (it
+        // throws GINA_COUCHBASE_CLUSTER_UNRESOLVED); explainForIndexes catches
+        // that and degrades non-fatally (warn + return) before touching cache.
+        var resolveBlock = getResolveBlock();
         assert.ok(
-            /!cluster/.test(block),
-            'expected null cluster guard'
+            /!cluster/.test(resolveBlock),
+            'expected null cluster guard in resolveCluster'
         );
+
+        var block = getExplainBlock();
         assert.ok(
             block.indexOf('console.warn') > -1,
             'expected console.warn for unresolvable cluster'
         );
-        // Must return before setting cache or calling query
-        var guardIdx = block.indexOf('!cluster');
-        var returnIdx = block.indexOf('return;', guardIdx);
-        var cacheSetIdx = block.indexOf('_explainCache.set(statement, null)', guardIdx);
+        // Must catch the resolution error and return before marking cache pending
+        var catchIdx    = block.indexOf('catch (_clusterErr)');
+        var returnIdx   = block.indexOf('return;', catchIdx);
+        var cacheSetIdx = block.indexOf('_explainCache.set(statement, null)');
+        assert.ok(catchIdx > -1, 'explainForIndexes must catch the resolution error');
         assert.ok(
             returnIdx > -1 && returnIdx < cacheSetIdx,
             'must return before marking cache as pending'
@@ -5952,7 +5966,7 @@ describe('49 - explainForIndexes: dual conn shape and error safety', function() 
     });
 
     it('validates cluster.query is a function', function() {
-        var block = getExplainBlock();
+        var block = getResolveBlock();
         assert.ok(
             /typeof.*cluster\.query.*!==?\s*'function'/.test(block) ||
             /typeof\(cluster\.query\)\s*!==?\s*'function'/.test(block),
