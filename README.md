@@ -39,12 +39,10 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.3
+## What's in 0.4.4
 
-- **Inspector over WebSocket.** The standalone Inspector now connects to a bundle's `/_gina/agent` endpoint over an authenticated WebSocket by default — streaming the data + log feed on one socket — and falls back to SSE automatically if the socket can't open (open with `?transport=sse` to force SSE). Outside dev mode the upgrade requires the configured `inspector.agent.key` (via `?key=` or the `x-gina-inspector-key` header) and honours an optional `inspector.agent.allowedOrigins` allowlist. A new **`gina service:start <service>`** command starts framework-internal `@gina` services (such as the standalone Inspector) via the daemon-free `gina-container` launcher, and in dev mode the Inspector auto-starts when a bundle boots.
-- **Accessible form validation (`aria-invalid`, #A11Y1).** `FormValidator` now keeps each managed field's `aria-invalid` in sync with its validity (`true` on a committed error, `false` once valid), so a field's `aria-errormessage` association is actually exposed to assistive technology. A failed submit moves focus to the first invalid field; blur-time errors are announced through a per-form `aria-live` region. Automatic — no public API change.
-- **Strict-CSP client plugins.** The popin, link, and form-validator plugins no longer inject an inline `onclick="return false;"` attribute at bind time, so they work under a strict nonce-based Content-Security-Policy (the inline handler tripped `script-src-attr`). Default-action suppression is unchanged.
-- **`@rhinostone/swig` → `^2.6.0`.** The template-engine floor moves to 2.6.0; the native `json` / `json_encode` filters now HTML-escape their output and are marked safe, so `{{ data|json }}` is safe to embed directly inside a `<script>` block.
+- **`templates.json` multi-section keys.** A section key may now be comma-separated — e.g. `"products, productDetail"` — to share a stylesheet or `<script>` block across several routes at once. The block is replicated under each named section and deep-merged into any section you also declare on its own, so a section's own keys win on collision. Single-section keys behave exactly as before.
+- **`templates.json` `_common.config` block.** An optional `_common.config` block holds page-level defaults (such as `routeNameAsFilenameEnabled` or `javascriptsDeferEnabled`). It is flattened back into `_common` at load time, so existing bundles are unaffected and any direct `_common` key still overrides the config block.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 
