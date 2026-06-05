@@ -95,10 +95,10 @@ describe('01 - source pins (config.js carries the pre-process block)', function 
 describe('02 - #8 comma-separated section keys', function () {
 
     it('replicates a block under each named section and removes the comma key', function () {
-        var t = preprocessTemplates({ 'factsheets, factsheetsentry': { stylesheets: ['a.css'] } });
-        assert.deepEqual(t.factsheets, { stylesheets: ['a.css'] });
-        assert.deepEqual(t.factsheetsentry, { stylesheets: ['a.css'] });
-        assert.equal(typeof t['factsheets, factsheetsentry'], 'undefined');
+        var t = preprocessTemplates({ 'products, productDetail': { stylesheets: ['a.css'] } });
+        assert.deepEqual(t.products, { stylesheets: ['a.css'] });
+        assert.deepEqual(t.productDetail, { stylesheets: ['a.css'] });
+        assert.equal(typeof t['products, productDetail'], 'undefined');
     });
 
     it('clones (sections do not share the same object reference)', function () {
@@ -110,11 +110,11 @@ describe('02 - #8 comma-separated section keys', function () {
 
     it('merges into an existing standalone section (union of keys)', function () {
         var t = preprocessTemplates({
-            'factsheets, factsheetsentry': { stylesheets: ['page.css'] },
-            'factsheetsentry':             { javascripts: ['payroll.js'] }
+            'products, productDetail': { stylesheets: ['page.css'] },
+            'productDetail': { javascripts: ['orders.js'] }
         });
-        assert.deepEqual(t.factsheets, { stylesheets: ['page.css'] });
-        assert.deepEqual(t.factsheetsentry, { javascripts: ['payroll.js'], stylesheets: ['page.css'] });
+        assert.deepEqual(t.products, { stylesheets: ['page.css'] });
+        assert.deepEqual(t.productDetail, { javascripts: ['orders.js'], stylesheets: ['page.css'] });
     });
 
     it("a section's own keys win over the shared block on collision", function () {
