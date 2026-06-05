@@ -117,7 +117,7 @@ exports['Merge : A<-B<-C without override'] = function(test) {
 //     var res = {
 //         "page":{
 //             "view": {
-//                 "file": "factsheets"
+//                 "file": "products"
 //             }
 //         }
 //     };
