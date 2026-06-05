@@ -1,3 +1,0 @@
-kind: Added
-body: 'templates.json now accepts an optional `_common.config` block for page-level defaults (such as routeNameAsFilenameEnabled or javascriptsDeferEnabled). It is flattened back into _common at load time, so existing bundles are unaffected and any direct _common key still overrides the config block.'
-time: 2026-06-05T03:03:57.000000+01:00
