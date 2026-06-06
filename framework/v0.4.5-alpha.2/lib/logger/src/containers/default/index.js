@@ -60,14 +60,25 @@ function DefaultContainer(opt, loggers) {
                     // #M12 — `bundle` and `message` are the canonical keys; `group` and `msg`
                     // are retained as back-compat aliases for pre-#M12 JSON consumers (the
                     // shipped #K8s3 shape was {ts, level, group, msg}). Additive, non-breaking.
-                    process.stdout.write(JSON.stringify({
+                    var _jsonLine = {
                         ts     : new Date().toISOString(),
                         level  : payloadObj.level,
                         bundle : payloadObj.group,
                         message: payloadObj.content,
                         group  : payloadObj.group,
                         msg    : payloadObj.content
-                    }) + '\n');
+                    };
+                    // #M12b — stamp the per-request id + elapsed-ms when a request context
+                    // is active (process.gina._reqALS, created by server.js in JSON mode).
+                    // Absent for CLI / boot / off-request logs — the fields are then omitted.
+                    if (process.gina && process.gina._reqALS) {
+                        var _reqStore = process.gina._reqALS.getStore();
+                        if (_reqStore) {
+                            _jsonLine.requestId  = _reqStore.requestId;
+                            _jsonLine.durationMs = Date.now() - _reqStore.startMs;
+                        }
+                    }
+                    process.stdout.write(JSON.stringify(_jsonLine) + '\n');
                 } else {
                     process.stdout.write( format(payloadObj.group, payloadObj.level, payloadObj.content, payloadObj.skipFormating) );
                 }

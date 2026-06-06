@@ -834,14 +834,24 @@ function Logger() {
             // Without this, JSON mode would emit a mix of JSON lines (levelled output) and
             // plain lines (console.log), breaking a log collector. Text mode is unchanged.
             if ( opt.format === 'json' ) {
-                process.stdout.write(JSON.stringify({
+                var _jsonLine = {
                     ts     : new Date().toISOString(),
                     level  : 'info',
                     bundle : opt.name,
                     message: content,
                     group  : opt.name,
                     msg    : content
-                }) + '\n');
+                };
+                // #M12b — stamp the per-request id + elapsed-ms when a request context is
+                // active (process.gina._reqALS). Absent for CLI / boot / off-request logs.
+                if (process.gina && process.gina._reqALS) {
+                    var _reqStore = process.gina._reqALS.getStore();
+                    if (_reqStore) {
+                        _jsonLine.requestId  = _reqStore.requestId;
+                        _jsonLine.durationMs = Date.now() - _reqStore.startMs;
+                    }
+                }
+                process.stdout.write(JSON.stringify(_jsonLine) + '\n');
             } else {
                 process.stdout.write(content + '\n');
             }

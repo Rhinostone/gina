@@ -169,3 +169,86 @@ describe('05 - console.log raw path honours JSON mode', function () {
             'text-mode raw passthrough was removed');
     });
 });
+
+
+// ─── 06  per-request requestId / durationMs (#M12b) ─────────────────────────
+// The logger reads an optional per-request store (process.gina._reqALS, created
+// by server.js only in JSON mode) and stamps requestId + elapsed durationMs.
+// Absent for CLI / boot / off-request logs — the fields are then omitted.
+describe('06 - per-request requestId / durationMs (#M12b)', function () {
+
+    // mock process.gina._reqALS.getStore() around one render, then restore
+    function withReqStore(store, fn) {
+        var hadGina   = Object.prototype.hasOwnProperty.call(process, 'gina');
+        var savedGina = process.gina;
+        process.gina  = { _reqALS: { getStore: function () { return store; } } };
+        try { return fn(); }
+        finally {
+            if (hadGina) { process.gina = savedGina; } else { delete process.gina; }
+        }
+    }
+
+    it('stamps requestId + elapsed durationMs when a request store is active', function () {
+        var line = withReqStore({ requestId: 'req-abc-123', startMs: Date.now() - 7 }, function () {
+            var lines = renderLines(baseOpt('json'),
+                { group: 'public@app', level: 'warn', content: 'inside a request', skipFormating: false },
+                { GINA_LOG_FORMAT: null, GINA_LOG_STDOUT: null });
+            return findLine(lines, 'inside a request');
+        });
+        assert.ok(line, 'no JSON line captured');
+        var o = JSON.parse(line);
+        assert.equal(o.requestId, 'req-abc-123', 'requestId not stamped from the store');
+        assert.equal(typeof o.durationMs, 'number', 'durationMs missing');
+        assert.ok(o.durationMs >= 0, 'durationMs must be a non-negative elapsed value');
+        // #M12a canonical fields still present
+        assert.equal(o.bundle, 'public@app');
+        assert.equal(o.message, 'inside a request');
+    });
+
+    it('omits requestId / durationMs when no request store is active (getStore → undefined)', function () {
+        var line = withReqStore(undefined, function () {
+            var lines = renderLines(baseOpt('json'),
+                { group: 'g@p', level: 'warn', content: 'no request context', skipFormating: false },
+                { GINA_LOG_FORMAT: null, GINA_LOG_STDOUT: null });
+            return findLine(lines, 'no request context');
+        });
+        assert.ok(line, 'no JSON line captured');
+        var o = JSON.parse(line);
+        assert.ok(!('requestId' in o),  'requestId must be absent without a request store');
+        assert.ok(!('durationMs' in o), 'durationMs must be absent without a request store');
+    });
+
+    it('omits the fields entirely when process.gina._reqALS is undefined (CLI / boot)', function () {
+        var hadGina   = Object.prototype.hasOwnProperty.call(process, 'gina');
+        var savedGina = process.gina;
+        process.gina  = {}; // no _reqALS
+        var line;
+        try {
+            var lines = renderLines(baseOpt('json'),
+                { group: 'g@p', level: 'warn', content: 'boot line', skipFormating: false },
+                { GINA_LOG_FORMAT: null, GINA_LOG_STDOUT: null });
+            line = findLine(lines, 'boot line');
+        } finally {
+            if (hadGina) { process.gina = savedGina; } else { delete process.gina; }
+        }
+        assert.ok(line, 'no JSON line captured');
+        var o = JSON.parse(line);
+        assert.ok(!('requestId' in o),  'requestId must be absent when _reqALS is undefined');
+        assert.ok(!('durationMs' in o), 'durationMs must be absent when _reqALS is undefined');
+    });
+
+    it('container source reads process.gina._reqALS.getStore() and stamps the fields', function () {
+        var src = fs.readFileSync(DEFAULT_SRC, 'utf8');
+        assert.match(src, /process\.gina\s*&&\s*process\.gina\._reqALS/, 'container missing the _reqALS guard');
+        assert.match(src, /process\.gina\._reqALS\.getStore\(\)/, 'container does not read getStore()');
+        assert.match(src, /requestId\s*=\s*_reqStore\.requestId/, 'container does not stamp requestId');
+        assert.match(src, /durationMs\s*=\s*Date\.now\(\)\s*-\s*_reqStore\.startMs/, 'container durationMs not elapsed-since-startMs');
+    });
+
+    it('self.log raw path source also stamps requestId / durationMs', function () {
+        var src = fs.readFileSync(MAIN_SRC, 'utf8');
+        assert.match(src, /process\.gina\._reqALS\.getStore\(\)/, 'self.log does not read getStore()');
+        assert.match(src, /requestId\s*=\s*_reqStore\.requestId/, 'self.log does not stamp requestId');
+        assert.match(src, /durationMs\s*=\s*Date\.now\(\)\s*-\s*_reqStore\.startMs/, 'self.log durationMs not elapsed');
+    });
+});

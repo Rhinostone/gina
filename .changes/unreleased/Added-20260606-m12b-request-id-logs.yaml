@@ -1,0 +1,3 @@
+kind: Added
+body: 'Opt-in per-request `requestId` and `durationMs` fields in structured (JSON) logs. When `GINA_LOG_FORMAT=json` is active, every log line emitted during a request is tagged with a request id (an inbound `X-Request-Id` is honoured when well-formed, otherwise one is generated) and the elapsed milliseconds since the request began, so lines from a single request can be correlated in a collector such as Loki, Datadog, Fluentd or CloudWatch. Default text logging is unchanged and pays no overhead.'
+time: 2026-06-06T11:00:00Z
