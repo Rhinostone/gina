@@ -13,9 +13,6 @@
     "node": ">=0.10.22"
   },
   "main": "src/main",
-  "scripts": {
-    "test": "nodeunit test"
-  },
   "license": "MIT",
   "readmeFilename": "README.md"
 }
