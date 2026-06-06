@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a public `getCluster()` accessor on Couchbase entities that returns the underlying SDK Cluster handle, so applications can use SDK-level features the entity layer does not wrap — notably multi-document transactions via `cluster.transactions().run(...)` — without reaching into private connection internals. Transaction support depends on the Couchbase driver your project installs (SDK 3.2+ / 4.x).'
-time: 2026-06-05T16:00:00Z

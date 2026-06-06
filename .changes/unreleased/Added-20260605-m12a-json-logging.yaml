@@ -1,3 +1,0 @@
-kind: Added
-body: 'Opt-in structured (JSON) log output. Set `GINA_LOG_FORMAT=json` to emit one machine-parseable JSON object per log line (`{ts, level, bundle, message}`, with `group`/`msg` kept as back-compat aliases) for log collectors such as Loki, Datadog, Fluentd or CloudWatch. The default stays the coloured, human-readable format, so interactive `docker logs` output is unchanged. The existing `GINA_LOG_STDOUT` container flag continues to enable JSON output.'
-time: 2026-06-05T14:30:00Z
