@@ -504,3 +504,59 @@ describe('14 - Popin: no inline onclick injection on close (CSP-safe)', function
         );
     });
 });
+
+
+// ── 15 — Popin: dev/prod modal parity + in-dialog Inspector launcher ───────────
+
+describe('15 - Popin: dev modal parity + in-dialog Inspector launcher', function() {
+
+    var STATUSBAR_SRC = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/html/statusbar.html');
+    function getStatusbarSrc() { return fs.readFileSync(STATUSBAR_SRC, 'utf8'); }
+
+    it('dialog popins open as native modal in both envs (dev show() downgrade removed)', function() {
+        var src = getPopinSrc();
+        assert.ok(
+            src.indexOf('$el.showModal();') > -1,
+            'expected unconditional $el.showModal() in the dialog-open branch'
+        );
+        assert.equal(
+            src.indexOf('$el.show();'), -1,
+            'the dev non-modal $el.show() downgrade should be gone (dev/prod parity)'
+        );
+    });
+
+    it('injects an in-dialog Inspector launcher wired to ginaToolbar.openInspector()', function() {
+        var src = getPopinSrc();
+        assert.ok(
+            src.indexOf('gina-popin-inspector-launcher') > -1,
+            'expected the injected launcher class .gina-popin-inspector-launcher'
+        );
+        assert.ok(
+            /window\.ginaToolbar\.openInspector\(\)/.test(src),
+            'the launcher must call window.ginaToolbar.openInspector()'
+        );
+    });
+
+    it('launcher injection is gated on dev + dialog mode + openInspector presence', function() {
+        var src = getPopinSrc();
+        var i = src.indexOf("'gina-popin-inspector-launcher'");
+        assert.ok(i > -1, 'launcher className assignment not found');
+        var guard = src.substring(Math.max(0, i - 500), i);
+        assert.ok(/gina\.config\.envIsDev/.test(guard), 'expected envIsDev gate before launcher injection');
+        assert.ok(/self\.options\.useDialogMode/.test(guard), 'expected useDialogMode gate');
+        assert.ok(/typeof\(window\.ginaToolbar\.openInspector\)/.test(guard), 'expected openInspector presence check');
+    });
+
+    it('statusbar shim exposes openInspector()', function() {
+        var src = getStatusbarSrc();
+        assert.ok(/function openInspector\s*\(/.test(src), 'expected openInspector() function in statusbar.html');
+        assert.ok(/_shim\.openInspector\s*=\s*openInspector/.test(src), 'expected openInspector exposed on the ginaToolbar shim');
+    });
+
+    it('built dist reflects the in-dialog launcher', function() {
+        assert.ok(
+            getDistSrc().indexOf('gina-popin-inspector-launcher') > -1,
+            'expected .gina-popin-inspector-launcher string in the built dist bundle'
+        );
+    });
+});

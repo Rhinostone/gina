@@ -107,10 +107,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             $container.setAttribute('id', instance.id);
             $container.setAttribute('class', 'gina-popins');
 
-            // Dev (or non-dialog mode): create the manual .gina-popins-overlay. Dev popins
-            // open non-modal (see the show()/showModal() branch in this file) so there is
-            // no native ::backdrop — this div is the dimming/click-catcher instead.
-            if ( !self.options.useDialogMode || gina.config.envIsDev) {
+            // Non-dialog mode (useDialogMode:false) uses a manual .gina-popins-overlay for
+            // dimming/click-catching. Dialog mode (the default) uses the native modal
+            // ::backdrop instead — in BOTH dev and prod (see the showModal() branch below).
+            if ( !self.options.useDialogMode ) {
                 var $overlay = document.createElement('div');
                 $overlay.setAttribute('id', 'gina-popins-overlay');
                 $overlay.setAttribute('class', 'gina-popins-overlay');
@@ -440,10 +440,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             // bind overlay on click
             if (!$popin.isOpen && self.options.cancelOnOverlayClick) {
                 var $overlay = $popin.target;
-                // Dev (or non-dialog mode): bind cancelOnOverlayClick to the manual overlay
-                // div — the non-modal dev path has no native backdrop to click (see the
-                // show()/showModal() branch).
-                if ( !self.options.useDialogMode || gina.config.envIsDev) {
+                // Non-dialog mode binds cancelOnOverlayClick to the manual overlay div;
+                // dialog mode (both envs) uses the dialog element + native ::backdrop.
+                if ( !self.options.useDialogMode ) {
                     $overlay = instance.target.childNodes[0];
                 }
                 addListener(gina, $overlay, 'mousedown', function(event) {
@@ -1465,9 +1464,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             $el.classList.add('gina-popin-is-active');
 
-            // Dev (or non-dialog mode): activate the manual overlay — the non-modal dev
-            // path has no native ::backdrop (see the show()/showModal() branch).
-            if ( !self.options.useDialogMode || gina.config.envIsDev ) {
+            // Non-dialog mode activates the manual overlay; dialog mode (both envs) relies
+            // on the native modal ::backdrop instead.
+            if ( !self.options.useDialogMode ) {
                 // overlay
                 instance.target.firstChild.classList.add('gina-popin-is-active');
                 // overlay
@@ -1479,26 +1478,39 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             if ( self.options.useDialogMode && !$el.getAttribute('open') ) {
                 if ( typeof($el.showModal) === "function" ) {
-                    // Dev keeps the dialog NON-modal by design — do NOT "simplify" this
-                    // to showModal() alone; it is not dead code. showModal() promotes the
-                    // dialog to the top layer (native ::backdrop, rest of page inert),
-                    // which hides and disables the in-page dev Inspector statusbar — a
-                    // position:fixed launcher that installs window.ginaToolbar (see
-                    // inspector/html/statusbar.html) and that this popin feeds via
-                    // ginaToolbar.update() on open (below). show() keeps the dialog in the
-                    // normal layer so the statusbar stays visible and clickable; the manual
-                    // .gina-popins-overlay (created/bound/activated by the sibling
-                    // `envIsDev` checks above) stands in for the missing backdrop. The
-                    // statusbar is still injected in dev (render-swig.js includes
-                    // statusbar.html when isCacheless), so this branch is live.
-                    if (gina.config.envIsDev) {
-                        $el.show();
-                    } else {
-                        $el.showModal();
-                    }
+                    // Native modal in BOTH dev and prod (dev/prod parity). A modal makes
+                    // everything outside the <dialog> inert + backdrop-covered, including
+                    // the in-page dev Inspector statusbar; the dev launcher injected below
+                    // (a modal descendant, inert-exempt) keeps the Inspector reachable.
+                    $el.showModal();
                 } else {
                     $el.setAttribute('open', true)
                 }
+            }
+
+            // Dev only: a modal popin covers + inerts the in-page Inspector statusbar, so
+            // drop a small "Inspector" launcher INSIDE the dialog. A modal descendant is
+            // inert-exempt and paints above the backdrop, so it stays clickable; it calls
+            // window.ginaToolbar.openInspector() (no statusbar shadow-DOM coupling). Only
+            // the topmost/active dialog's launcher is interactive (a nested modal inerts
+            // the rest); the querySelector guard prevents a duplicate on re-open.
+            if ( gina.config.envIsDev
+                 && self.options.useDialogMode
+                 && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar
+                 && typeof(window.ginaToolbar.openInspector) === 'function'
+                 && !$el.querySelector('.gina-popin-inspector-launcher') ) {
+                var $inspLauncher = document.createElement('a');
+                $inspLauncher.className   = 'gina-popin-inspector-launcher';
+                $inspLauncher.href        = '#';
+                $inspLauncher.textContent = 'Inspector ↗';
+                $inspLauncher.style.cssText = 'position:fixed;bottom:8px;right:8px;z-index:2147483647;'
+                    + 'background:rgba(0,0,0,.78);color:#adf;font:11px/1.4 monospace;'
+                    + 'padding:3px 8px;border-radius:4px 0 0 0;text-decoration:none;cursor:pointer;';
+                $inspLauncher.addEventListener('click', function(ev) {
+                    ev.preventDefault();
+                    try { window.ginaToolbar.openInspector(); } catch(e) {}
+                });
+                $el.appendChild($inspLauncher);
             }
 
             $popin.isOpen = true;
