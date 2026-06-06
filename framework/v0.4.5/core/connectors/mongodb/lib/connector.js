@@ -136,6 +136,11 @@ function MongodbConnector(conf) {
      * Register a one-time ready callback. Async — calls `client.connect()`
      * which establishes the TCP connection and verifies authentication.
      *
+     * The yielded `Db` is decorated with `_name` (db name) and `_client` (a
+     * back-reference to the owning `MongoClient`), so entities — which are
+     * handed the `Db` — can reach client-level APIs (sessions, transactions)
+     * through the public `getClient()` accessor.
+     *
      * @param {function} fn - `fn(err, conn)` where `conn` is the mongodb Db instance.
      */
     this.onReady = function(fn) {
@@ -144,6 +149,7 @@ function MongodbConnector(conf) {
         _client.connect().then(function() {
             _db = _client.db(_dbName);
             _db._name = _dbName;
+            _db._client = _client; // back-reference to the MongoClient (one level up from the Db) so entities can reach sessions/transactions via getClient()
             console.debug('[MongodbConnector] connected to: ' + _dbName);
             fn(null, _db);
         }).catch(function(err) {

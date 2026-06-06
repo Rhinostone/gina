@@ -520,3 +520,142 @@ describe('#H11 — Alt-Svc HTTP/3-advertisement gate in completeHeaders', functi
         }, 'gate must not throw or emit when response.getHeader is absent');
     });
 });
+
+
+// ─── #M12b — per-request log context (requestId / durationMs) ──────────────────
+
+describe('#M12b — per-request log context (requestId / durationMs)', function () {
+
+    var src;
+    before(function () { src = fs.readFileSync(SOURCE, 'utf8'); });
+
+    // ---- source pins ----
+
+    it('gates the request-context ALS on JSON logging (text mode pays nothing)', function () {
+        assert.match(src, /var _reqCtxLogging\s*=/, '_reqCtxLogging gate missing');
+        // mirrors the logger opt.format precedence: GINA_LOG_FORMAT > GINA_LOG_STDOUT
+        assert.match(src, /GINA_LOG_FORMAT/, 'gate must read GINA_LOG_FORMAT');
+        assert.match(src, /GINA_LOG_STDOUT/, 'gate must fall back to GINA_LOG_STDOUT');
+    });
+
+    it('defines a sanitising requestId resolver (honour inbound X-Request-Id, else UUID)', function () {
+        assert.match(src, /var _resolveRequestId\s*=\s*function/, '_resolveRequestId missing');
+        assert.match(src, /headers\['x-request-id'\]/, 'resolver must read the inbound x-request-id header');
+        assert.match(src, /\{1,128\}/, 'resolver must length-cap the inbound id (128)');
+        assert.match(src, /crypto\.randomUUID\(\)/, 'resolver must fall back to crypto.randomUUID()');
+    });
+
+    it('stamps requestId + startMs at the onInstance request entry', function () {
+        assert.match(src, /request\._ginaReqStartMs\s*=\s*Date\.now\(\)/, 'onInstance must stamp _ginaReqStartMs');
+        assert.match(src, /request\._ginaReqId\s*=\s*_resolveRequestId\(request\)/, 'onInstance must stamp _ginaReqId');
+    });
+
+    it('establishes the store via .run() at handle() — never enterWith(), never onInstance', function () {
+        assert.match(src, /process\.gina\._reqALS\s*=\s*new AsyncLocalStorage\(\)/, '_reqALS must be parked on process.gina');
+        assert.match(src, /process\.gina\._reqALS\.run\(_reqStore,/, 'dispatch must be wrapped in _reqALS.run()');
+        assert.doesNotMatch(src, /_reqALS\.enterWith/, 'must use .run(), never enterWith() for the request store');
+        assert.match(src, /var _handleDispatch\s*=\s*async function/, 'original handle body must be renamed to _handleDispatch');
+    });
+
+    it('builds the store with {requestId, startMs} from the onInstance stash', function () {
+        assert.match(src, /requestId\s*:\s*req\._ginaReqId/, 'store.requestId from the stash');
+        assert.match(src, /startMs\s*:\s*\(typeof req\._ginaReqStartMs/, 'store.startMs from the stash (with fallback)');
+    });
+
+    // ---- pure-logic replica: _resolveRequestId (sanitisation) ----
+
+    function makeResolveRequestId(genUuid) {
+        return function (request) {
+            var _inbound = request && request.headers && request.headers['x-request-id'];
+            if (_inbound && /^[\w.\-]{1,128}$/.test(_inbound)) {
+                return _inbound;
+            }
+            return genUuid();
+        };
+    }
+
+    it('replica: honours a well-formed inbound X-Request-Id', function () {
+        var resolve = makeResolveRequestId(function () { return 'GENERATED'; });
+        assert.equal(resolve({ headers: { 'x-request-id': 'trace-abc_123.45-XY' } }), 'trace-abc_123.45-XY');
+    });
+
+    it('replica: regenerates when the inbound id has illegal chars (log-forging guard)', function () {
+        var resolve = makeResolveRequestId(function () { return 'GENERATED'; });
+        assert.equal(resolve({ headers: { 'x-request-id': 'bad id with spaces' } }), 'GENERATED');
+        assert.equal(resolve({ headers: { 'x-request-id': 'line\nbreak' } }),       'GENERATED');
+        assert.equal(resolve({ headers: { 'x-request-id': 'semi;colon' } }),         'GENERATED');
+    });
+
+    it('replica: regenerates over 128 chars; 128 is the inclusive boundary', function () {
+        var resolve = makeResolveRequestId(function () { return 'GENERATED'; });
+        assert.equal(resolve({ headers: { 'x-request-id': 'a'.repeat(129) } }), 'GENERATED');
+        assert.equal(resolve({ headers: { 'x-request-id': 'a'.repeat(128) } }), 'a'.repeat(128));
+    });
+
+    it('replica: generates when no inbound header is present', function () {
+        var resolve = makeResolveRequestId(function () { return 'GENERATED'; });
+        assert.equal(resolve({ headers: {} }), 'GENERATED');
+        assert.equal(resolve({}),              'GENERATED');
+        assert.equal(resolve(null),            'GENERATED');
+    });
+
+    // ---- pure-logic replica: _reqCtxLogging env precedence ----
+
+    function reqCtxLogging(env) {
+        if (/^json$/i.test(env.GINA_LOG_FORMAT || '')) { return true; }
+        if (/^text$/i.test(env.GINA_LOG_FORMAT || '')) { return false; }
+        return /^true$/i.test(env.GINA_LOG_STDOUT || '');
+    }
+
+    it('replica: GINA_LOG_FORMAT=json enables the context', function () {
+        assert.equal(reqCtxLogging({ GINA_LOG_FORMAT: 'json' }), true);
+    });
+    it('replica: GINA_LOG_FORMAT=text disables it even with GINA_LOG_STDOUT=true (format wins)', function () {
+        assert.equal(reqCtxLogging({ GINA_LOG_FORMAT: 'text', GINA_LOG_STDOUT: 'true' }), false);
+    });
+    it('replica: GINA_LOG_STDOUT=true (no format) enables it (back-compat alias)', function () {
+        assert.equal(reqCtxLogging({ GINA_LOG_STDOUT: 'true' }), true);
+    });
+    it('replica: neither set → disabled (default text path, zero ALS cost)', function () {
+        assert.equal(reqCtxLogging({}), false);
+    });
+
+    // ---- ALS propagation mechanism (decoupled from a running server) ----
+    // Proves the contract the handle() wrapper depends on: a store established via
+    // .run() survives the awaited dispatch chain, and concurrent runs stay isolated.
+    // (The always-on THROUGHPUT cost is a separate PoC that needs a bootable env.)
+
+    it('replica: the store survives .run() + awaited async dispatch (await, setTimeout, nesting)', async function () {
+        var { AsyncLocalStorage } = require('async_hooks');
+        var als = new AsyncLocalStorage();
+
+        async function deepRead() {
+            await Promise.resolve();
+            await new Promise(function (r) { setTimeout(r, 1); });
+            var s = als.getStore();
+            return s ? s.requestId : null;
+        }
+        async function dispatch() {
+            await Promise.resolve();
+            return deepRead();
+        }
+
+        var seen = await als.run({ requestId: 'rid-propagated', startMs: Date.now() }, dispatch);
+        assert.equal(seen, 'rid-propagated', 'store must survive awaits + setTimeout + nested async');
+    });
+
+    it('replica: concurrent .run() contexts stay isolated (no cross-request bleed)', async function () {
+        var { AsyncLocalStorage } = require('async_hooks');
+        var als = new AsyncLocalStorage();
+        async function idAfterTick() {
+            await new Promise(function (r) { setTimeout(r, 1); });
+            var s = als.getStore();
+            return s ? s.requestId : null;
+        }
+        var results = await Promise.all([
+            als.run({ requestId: 'A', startMs: 0 }, idAfterTick),
+            als.run({ requestId: 'B', startMs: 0 }, idAfterTick)
+        ]);
+        assert.deepEqual(results, ['A', 'B'], 'each concurrent run() must see only its own store');
+    });
+});

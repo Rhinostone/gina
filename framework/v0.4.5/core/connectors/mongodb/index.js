@@ -88,6 +88,36 @@ function Mongodb(conn, infos) {
         ObjectId = null;
     }
 
+    /**
+     * Resolve the underlying MongoDB driver `MongoClient` from a connection
+     * object. The entity layer is handed the `Db` instance (what
+     * `getConnection()` returns); the connector decorates that Db with a
+     * `_client` back-reference to the owning `MongoClient` one level up (see
+     * `MongodbConnector.onReady`), because session and multi-document
+     * transaction APIs live on the `MongoClient`, not the `Db`.
+     *
+     * Single source of truth for client resolution, so the lookup — and its
+     * coded failure mode — live in exactly one place.
+     *
+     * @param {object} conn - A MongoDB connection object (the `Db` from getConnection()).
+     * @returns {object} The MongoDB driver MongoClient (guaranteed to expose a `startSession()` method).
+     * @throws {Error} `GINA_MONGODB_CLIENT_UNRESOLVED` when the client cannot be resolved.
+     * @private
+     */
+    var resolveClient = function(conn) {
+        var client = (conn && conn._client) ? conn._client : null;
+
+        if (!client || typeof(client.startSession) !== 'function') {
+            var _err = new Error('[ CONNECTOR ][ mongodb ] Unable to resolve the MongoClient from the connection — '
+                + '`conn._client` does not expose a startSession() method. '
+                + 'The connection shape may have changed across a driver or framework upgrade.');
+            _err.code = 'GINA_MONGODB_CLIENT_UNRESOLVED';
+            throw _err;
+        }
+
+        return client;
+    };
+
     var init = function(conn, infos) {
         var EntitySuperClass = null;
         var entitiesPath     = getPath('bundle') + '/models/' + infos.database + '/entities';
@@ -131,6 +161,10 @@ function Mongodb(conn, infos) {
             Entity.prototype._collection = entityName;
             Entity.prototype._scope      = infos.scope || process.env.NODE_SCOPE;
             Entity.prototype._filename   = _(entitiesPath + '/' + files[f], true);
+            // public MongoClient accessor — supported entry point for driver-level
+            // features (sessions, multi-document transactions, change streams) the
+            // entity layer does not wrap; see resolveClient()/getClient().
+            Entity.prototype.getClient   = getClient;
 
             entities[className] = Entity;
         }
@@ -455,6 +489,48 @@ function Mongodb(conn, infos) {
                 });
             }
         };
+    };
+
+
+    /**
+     * getClient
+     *
+     * Returns the underlying MongoDB driver `MongoClient` backing this entity's
+     * connection. The entity layer is handed the `Db` (what `getConnection()`
+     * returns); the `MongoClient` lives one level up and is where session and
+     * multi-document transaction APIs are exposed — so this is the supported,
+     * non-underscore way to reach driver-level features the entity layer does
+     * not wrap, chiefly ACID transactions via
+     * `client.startSession()` → `session.withTransaction(...)`, plus change
+     * streams and `bulkWrite`.
+     *
+     * Note: gina does not bundle or pin the `mongodb` driver — it is resolved
+     * from your project's `node_modules`. Session/transaction support therefore
+     * depends on the driver your project installs, and multi-document
+     * transactions additionally require a replica-set or sharded deployment
+     * (not a standalone mongod). gina guarantees only that this returns the
+     * resolved client handle; it makes no promise about which driver-level
+     * capabilities that handle exposes.
+     *
+     * @returns {object} The MongoDB driver MongoClient.
+     * @throws {Error} `GINA_MONGODB_CLIENT_UNRESOLVED` when the client cannot be resolved.
+     *
+     * @example
+     * // Inside a controller action holding an entity instance:
+     * var client  = myEntity.getClient();
+     * var session = client.startSession();
+     * try {
+     *     await session.withTransaction(async function () {
+     *         var db = client.db();
+     *         await db.collection('accounts').updateOne({ _id: from }, { $inc: { balance: -100 } }, { session: session });
+     *         await db.collection('accounts').updateOne({ _id: to },   { $inc: { balance:  100 } }, { session: session });
+     *     });
+     * } finally {
+     *     await session.endSession();
+     * }
+     */
+    var getClient = function() {
+        return resolveClient(this.getConnection());
     };
 
 

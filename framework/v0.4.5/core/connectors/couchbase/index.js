@@ -94,6 +94,40 @@ function Couchbase(conn, infos) {
     var _explainCache = new Map();
 
     /**
+     * Resolve the underlying Couchbase SDK Cluster handle from a connection
+     * object, tolerating both shapes the connector produces:
+     *   - entity query path: the cluster sits directly at `conn._cluster`
+     *   - bulk-insert / scope-collection path: `conn` is scope-shaped and the
+     *     cluster is nested at `conn._scope._bucket._cluster`
+     *
+     * Single source of truth for cluster resolution — `explainForIndexes`,
+     * `bulkInsert` and the public `getCluster()` accessor all consume it, so the
+     * dual-shape lookup lives in exactly one place.
+     *
+     * @param {object} conn - A Couchbase connection object (bucket- or scope-shaped).
+     * @returns {object} The SDK Cluster (guaranteed to expose a `query()` method).
+     * @throws {Error} `GINA_COUCHBASE_CLUSTER_UNRESOLVED` when neither shape yields a usable cluster.
+     * @private
+     */
+    var resolveCluster = function(conn) {
+        var cluster = (conn && conn._cluster)
+            ? conn._cluster
+            : (conn && conn._scope && conn._scope._bucket && conn._scope._bucket._cluster)
+                ? conn._scope._bucket._cluster
+                : null;
+
+        if (!cluster || typeof(cluster.query) !== 'function') {
+            var _err = new Error('[ CONNECTOR ][ couchbase ] Unable to resolve the SDK Cluster from the connection — '
+                + 'neither `conn._cluster` nor `conn._scope._bucket._cluster` exposes a query() method. '
+                + 'The connection shape may have changed across an SDK or framework upgrade.');
+            _err.code = 'GINA_COUCHBASE_CLUSTER_UNRESOLVED';
+            throw _err;
+        }
+
+        return cluster;
+    };
+
+    /**
      * Runs EXPLAIN on a N1QL statement asynchronously and caches the
      * extracted indexes. Patches `queryEntry.indexes` in-place once
      * the EXPLAIN result is available.
@@ -106,16 +140,13 @@ function Couchbase(conn, infos) {
      * @private
      */
     var explainForIndexes = function(conn, statement, queryEntry, queryOptions) {
-        // Resolve cluster from whichever conn shape we received:
-        // - entity query path: conn._cluster exists directly
-        // - bulk insert path: conn is a scope object, cluster is at conn._scope._bucket._cluster
-        var cluster = (conn._cluster)
-            ? conn._cluster
-            : (conn._scope && conn._scope._bucket && conn._scope._bucket._cluster)
-                ? conn._scope._bucket._cluster
-                : null;
-
-        if (!cluster || typeof(cluster.query) !== 'function') {
+        // #QI is fire-and-forget instrumentation — resolve the cluster via the
+        // shared helper but keep this path non-fatal (warn + skip) so a
+        // resolution failure never breaks the actual query.
+        var cluster;
+        try {
+            cluster = resolveCluster(conn);
+        } catch (_clusterErr) {
             console.warn('[explainForIndexes] Cannot resolve cluster from conn — skipping EXPLAIN for: ' + statement.substring(0, 80));
             return;
         }
@@ -210,6 +241,10 @@ function Couchbase(conn, infos) {
 
                     // extra CRUD methods
                     Entity.prototype.bulkInsert     = bulkInsert;
+                    // public SDK Cluster accessor — supported entry point for
+                    // SDK-level features (e.g. transactions) the entity layer
+                    // does not wrap; see resolveCluster()/getCluster().
+                    Entity.prototype.getCluster     = getCluster;
 
 
                     entities[className] = Entity
@@ -441,6 +476,9 @@ function Couchbase(conn, infos) {
                     entities[entityName].prototype._collection    = entityName;
                     entities[entityName].prototype._scope         = infos.scope || process.env.NODE_SCOPE;
                     entities[entityName].prototype._filename      = _( __dirname + '/lib/n1ql.js', true );
+                    // public SDK Cluster accessor — parity with model entities so a
+                    // consumer never hits an asymmetric `undefined` (see getCluster()).
+                    entities[entityName].prototype.getCluster     = getCluster;
                 }
 
 
@@ -1208,7 +1246,9 @@ function Couchbase(conn, infos) {
             var self = this;
 
             var err = false;
-            conn._scope._bucket._cluster.query(query, queryOptions)
+            // cluster resolved via the shared dual-shape helper (was a bare
+            // conn._scope._bucket._cluster deref).
+            resolveCluster(conn).query(query, queryOptions)
                 .catch( function onError(err) {
                     try {
                         // #QI — finalize bulkInsert query entry on error
@@ -1320,6 +1360,38 @@ function Couchbase(conn, infos) {
             console.error(err.stack);
         }
     }
+
+    /**
+     * getCluster
+     *
+     * Returns the underlying Couchbase SDK Cluster handle backing this entity's
+     * connection, resolved across the connection shapes the connector produces
+     * (see `resolveCluster`). This is the supported, non-underscore way to reach
+     * SDK-level features the entity layer does not wrap — most notably
+     * multi-document ACID transactions via `cluster.transactions().run(...)`.
+     *
+     * Note: gina does not bundle or pin the `couchbase` driver — it is resolved
+     * from your project's `node_modules`. Transaction support (`.transactions()`)
+     * therefore depends on the Couchbase SDK version your project installs
+     * (3.2+ / 4.x). gina guarantees only that this returns the resolved Cluster
+     * handle; it makes no promise about which SDK-level capabilities that handle
+     * exposes.
+     *
+     * @returns {object} The Couchbase SDK Cluster.
+     * @throws {Error} `GINA_COUCHBASE_CLUSTER_UNRESOLVED` when the cluster cannot be resolved.
+     *
+     * @example
+     * // Inside a controller action holding an entity instance:
+     * var cluster = myEntity.getCluster();
+     * await cluster.transactions().run(async function (ctx) {
+     *     var doc = await ctx.get(collection, 'doc-id');
+     *     await ctx.replace(doc, Object.assign({}, doc.content, { balance: 0 }));
+     * });
+     */
+    var getCluster = function() {
+        return resolveCluster(this.getConnection());
+    };
+
 
     return init(conn, infos)
 }

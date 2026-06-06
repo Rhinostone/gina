@@ -44,6 +44,31 @@ const crypto        = require('crypto');
 var https           = require('https');
 // ssl-checker dependency removed in 0.3.1 — replaced by inline verifyCertificate().
 
+// #M12b — per-request log context (requestId / durationMs in JSON logs).
+// Active ONLY when JSON logging is on: the text formatter ('[%d] [%s][%a] %m')
+// renders no id field, so running the AsyncLocalStorage in text mode would be pure
+// overhead with no reader. Mirrors lib/logger's opt.format precedence
+// (GINA_LOG_FORMAT > GINA_LOG_STDOUT), resolved once — the format is fixed for the
+// process lifetime.
+var _reqCtxLogging = (function() {
+    if ( /^json$/i.test(process.env.GINA_LOG_FORMAT) ) { return true; }
+    if ( /^text$/i.test(process.env.GINA_LOG_FORMAT) ) { return false; }
+    return /^true$/i.test(process.env.GINA_LOG_STDOUT);
+})();
+
+// #M12b — resolve the request id: honour a sanitised inbound `X-Request-Id` (so logs
+// correlate across an upstream proxy / sibling services), else generate a UUID. The
+// inbound value is client-supplied and untrusted — cap length and restrict the
+// charset to neutralise log-forging / injection; on any violation fall back to a
+// fresh UUID.
+var _resolveRequestId = function(request) {
+    var _inbound = request && request.headers && request.headers['x-request-id'];
+    if ( _inbound && /^[\w.\-]{1,128}$/.test(_inbound) ) {
+        return _inbound;
+    }
+    return crypto.randomUUID();
+};
+
 
 // Lightweight debug logger — gated on LOG_LEVEL so zero cost in production.
 // Format mirrors lib/logger template: [date] [debug  ][gina:server] message
@@ -2640,6 +2665,16 @@ function Server(options) {
         // catch all (request urls)
         self.instance.all('*', function onInstance(request, response, next) {
 
+            // #M12b — stamp request-entry time + id so the logger can attribute every
+            // line emitted during this request to it (requestId / durationMs in JSON
+            // logs). Active only in JSON mode; the per-request .run() happens at handle()
+            // (the request.on('end') boundary between here and handle() loses async
+            // context, so the store must be established where the dispatch runs).
+            if ( _reqCtxLogging ) {
+                request._ginaReqStartMs = Date.now();
+                request._ginaReqId      = _resolveRequestId(request);
+            }
+
             // #FI — dev-mode request timeline for Inspector Flow tab
             // Only initialized when the Inspector has been opened (process.gina._inspectorActive)
             // #INS10 — or during a prod instrumentation window (process.gina._inspectorWindowUntil).
@@ -4221,7 +4256,31 @@ function Server(options) {
         return request
     }
 
+    // #M12b — wrap the async dispatch in the per-request log context so requestId /
+    // durationMs propagate through the WHOLE await chain (router, controller, render,
+    // connectors). Established here — not at onInstance — because the request.on('end')
+    // boundary between them loses the async context, whereas handle()'s awaits preserve
+    // it. The store carries {requestId, startMs} stamped at onInstance entry. Gated on
+    // JSON logging; in text mode handle === the dispatch with zero ALS overhead.
     var handle = async function(req, res, next, bundle, pathname, config) {
+        if ( _reqCtxLogging ) {
+            if ( !process.gina ) { process.gina = {}; }
+            if ( !process.gina._reqALS ) {
+                var { AsyncLocalStorage } = require('async_hooks');
+                process.gina._reqALS = new AsyncLocalStorage();
+            }
+            var _reqStore = {
+                requestId : req._ginaReqId || _resolveRequestId(req),
+                startMs   : (typeof req._ginaReqStartMs === 'number') ? req._ginaReqStartMs : Date.now()
+            };
+            return process.gina._reqALS.run(_reqStore, function() {
+                return _handleDispatch(req, res, next, bundle, pathname, config);
+            });
+        }
+        return _handleDispatch(req, res, next, bundle, pathname, config);
+    };
+
+    var _handleDispatch = async function(req, res, next, bundle, pathname, config) {
 
         // #FI — request setup time (header parsing, CORS, Inspector endpoint checks)
         if (req._devTimeline) {

@@ -774,3 +774,188 @@ describe('07 - MongoDB resolveArgs() — $arg / $oid placeholder walking', funct
         assert.equal(out.filter._id, 'xyz');
     });
 });
+
+
+// ─── 08 — source: lib/connector.js surfaces the MongoClient on the Db ─────────
+
+describe('08 - MongoDB connector: _db._client back-reference (source pins)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR_LIB, 'utf8'); });
+
+    it('decorates the Db with a _client back-reference in onReady', function() {
+        assert.ok(/_db\._client = _client;/.test(src), 'onReady must attach _client onto the yielded Db');
+    });
+
+    it('attaches _db._client after _db._name and before fn(null, _db)', function() {
+        var nameIdx   = src.indexOf('_db._name = _dbName;');
+        var clientIdx = src.indexOf('_db._client = _client;');
+        var yieldIdx  = src.indexOf('fn(null, _db)');
+        assert.ok(nameIdx > -1 && clientIdx > -1 && yieldIdx > -1, 'all three landmarks must be present');
+        assert.ok(nameIdx < clientIdx, '_db._client must follow the existing _db._name decoration');
+        assert.ok(clientIdx < yieldIdx, '_db._client must be set before the Db is yielded to the caller');
+    });
+
+    it('documents the _client back-reference in the onReady JSDoc', function() {
+        assert.ok(/back-reference to the owning `MongoClient`/.test(src), 'onReady JSDoc should explain the _client decoration');
+    });
+});
+
+
+// ─── 09 — source: index.js resolveClient helper ──────────────────────────────
+
+describe('09 - MongoDB resolveClient: shared client resolver (source pins)', function() {
+
+    var src, body;
+    before(function() {
+        src = fs.readFileSync(CONNECTOR_INDEX, 'utf8');
+        // isolate the helper body: from its declaration to the next top-level `var ` def
+        var start = src.indexOf('var resolveClient = function(conn) {');
+        var rest  = src.slice(start + 1);
+        var end   = rest.indexOf('\n    var ');
+        body      = src.slice(start, end > -1 ? start + 1 + end : src.length);
+    });
+
+    it('defines a private resolveClient(conn) helper', function() {
+        assert.ok(/var resolveClient = function\(conn\) \{/.test(src), 'expected a resolveClient helper');
+    });
+
+    it('reads the MongoClient off conn._client', function() {
+        assert.ok(/conn && conn\._client/.test(body), 'resolveClient must read conn._client');
+    });
+
+    it('guards that the resolved handle exposes startSession()', function() {
+        assert.ok(/typeof\(client\.startSession\) !== 'function'/.test(body), 'resolveClient must verify a startSession() method');
+    });
+
+    it('throws a clearly-coded error when the client cannot be resolved', function() {
+        assert.ok(/GINA_MONGODB_CLIENT_UNRESOLVED/.test(body), 'expected GINA_MONGODB_CLIENT_UNRESOLVED code on the throw');
+        assert.ok(/throw _err;/.test(body), 'resolveClient must throw on an unresolved client');
+    });
+
+    it('assigns the code via direct property mutation (not Object.assign)', function() {
+        assert.ok(/_err\.code = 'GINA_MONGODB_CLIENT_UNRESOLVED';/.test(body), 'code assigned by direct mutation');
+    });
+});
+
+
+// ─── 10 — source: index.js getClient public accessor ─────────────────────────
+
+describe('10 - MongoDB getClient: public accessor wired onto entities (source pins)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR_INDEX, 'utf8'); });
+
+    it('defines getClient delegating to getConnection + resolveClient', function() {
+        assert.ok(src.indexOf('var getClient = function() {') > -1, 'expected a getClient accessor');
+        assert.ok(
+            /return resolveClient\(this\.getConnection\(\)\);/.test(src),
+            'getClient must resolve the client from this.getConnection()'
+        );
+    });
+
+    it('is decorated onto entity prototypes', function() {
+        assert.ok(
+            /Entity\.prototype\.getClient\s*=\s*getClient;/.test(src),
+            'entities must expose getClient'
+        );
+    });
+
+    it('documents that session/transaction support depends on the project-provided driver', function() {
+        var start = src.indexOf('* getClient');
+        var doc   = src.slice(start, src.indexOf('var getClient = function'));
+        assert.ok(/startSession\(\)/.test(doc), 'JSDoc should show the startSession() use case');
+        assert.ok(/withTransaction/.test(doc), 'JSDoc should show the withTransaction() use case');
+        assert.ok(/replica-set or sharded deployment/.test(doc), 'JSDoc must note the deployment requirement for multi-document transactions');
+    });
+});
+
+
+// ─── 11 — resolveClient behaviour (pure-logic replica) ───────────────────────
+
+describe('11 - MongoDB resolveClient — pure-logic replica', function() {
+
+    // Mirrors framework/v*/core/connectors/mongodb/index.js resolveClient()
+    // line-for-line. Kept in lockstep with the source pins in §09.
+    function resolveClient(conn) {
+        var client = (conn && conn._client) ? conn._client : null;
+
+        if (!client || typeof(client.startSession) !== 'function') {
+            var _err = new Error('[ CONNECTOR ][ mongodb ] Unable to resolve the MongoClient from the connection.');
+            _err.code = 'GINA_MONGODB_CLIENT_UNRESOLVED';
+            throw _err;
+        }
+
+        return client;
+    }
+
+    var clientStub = { startSession: function() {} };
+
+    it('returns the client from a Db carrying a _client back-reference', function() {
+        var conn = { _client: clientStub };
+        assert.equal(resolveClient(conn), clientStub);
+    });
+
+    it('throws GINA_MONGODB_CLIENT_UNRESOLVED when _client is absent', function() {
+        assert.throws(
+            function() { resolveClient({}); },
+            function(err) { return err.code === 'GINA_MONGODB_CLIENT_UNRESOLVED'; },
+            'a Db with no _client must throw the named error'
+        );
+    });
+
+    it('throws on a null/undefined connection', function() {
+        assert.throws(function() { resolveClient(null); },      function(e) { return e.code === 'GINA_MONGODB_CLIENT_UNRESOLVED'; });
+        assert.throws(function() { resolveClient(undefined); }, function(e) { return e.code === 'GINA_MONGODB_CLIENT_UNRESOLVED'; });
+    });
+
+    it('throws when the resolved handle has no startSession() method', function() {
+        assert.throws(
+            function() { resolveClient({ _client: {} }); },
+            function(err) { return err.code === 'GINA_MONGODB_CLIENT_UNRESOLVED'; },
+            'a client handle without startSession() is not usable'
+        );
+    });
+});
+
+
+// ─── 12 — getClient delegation (pure-logic replica) ──────────────────────────
+
+describe('12 - MongoDB getClient — delegation (pure-logic replica)', function() {
+
+    function resolveClient(conn) {
+        var client = (conn && conn._client) ? conn._client : null;
+        if (!client || typeof(client.startSession) !== 'function') {
+            var _err = new Error('unresolved');
+            _err.code = 'GINA_MONGODB_CLIENT_UNRESOLVED';
+            throw _err;
+        }
+        return client;
+    }
+
+    // Mirrors: var getClient = function() { return resolveClient(this.getConnection()); };
+    function getClient() { return resolveClient(this.getConnection()); }
+
+    var clientStub = { startSession: function() {} };
+
+    it('returns the client from a Db-shaped getConnection()', function() {
+        var entity = { getConnection: function() { return { _client: clientStub }; }, getClient: getClient };
+        assert.equal(entity.getClient(), clientStub);
+    });
+
+    it('propagates the named error when the connection yields no client', function() {
+        var entity = { getConnection: function() { return {}; }, getClient: getClient };
+        assert.throws(
+            function() { entity.getClient(); },
+            function(err) { return err.code === 'GINA_MONGODB_CLIENT_UNRESOLVED'; }
+        );
+    });
+
+    it('re-reads the live connection on each call (delegates to this.getConnection)', function() {
+        var calls = 0;
+        var entity = { getConnection: function() { calls++; return { _client: clientStub }; }, getClient: getClient };
+        entity.getClient();
+        entity.getClient();
+        assert.equal(calls, 2, 'getClient must re-read getConnection() on each call');
+    });
+});
