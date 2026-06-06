@@ -1,0 +1,3 @@
+kind: Added
+body: 'The async template-loader extension point now supports the nunjucks engine. A bundle using render.engine "nunjucks" can configure settings.template.nunjucks.loader (the same "memory" and "http" built-ins available for swig) to render templates from a custom async backend — remote, CDN, object storage, or in-memory — instead of the local filesystem. The page template and its full extends/include chain are fetched through the loader, with the CVE-2023-25345 path-traversal guard applied on every hop. Bundles without a nunjucks loader render from the filesystem exactly as before.'
+time: 2026-06-06T23:30:00+01:00

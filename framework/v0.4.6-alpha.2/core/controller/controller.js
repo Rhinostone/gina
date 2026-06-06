@@ -1194,7 +1194,23 @@ function SuperController(options) {
 
         var _delegate;
         if (_engine === 'nunjucks') {
-            _delegate = '/controller.render-nunjucks';
+            // #TPL1 — a nunjucks bundle with a configured async loader renders
+            // through a per-request Environment in controller.render-nunjucks-async.js;
+            // every other nunjucks bundle keeps the cached-Environment filesystem
+            // path. The dispatch key is the same expression initNunjucksEngine
+            // stashed under (conf.content.templates._common.html).
+            var _njAsync = false;
+            try {
+                var _njRoot = local.options && local.options.conf && local.options.conf.content
+                    && local.options.conf.content.templates && local.options.conf.content.templates._common
+                    && local.options.conf.content.templates._common.html;
+                _njAsync = !!(
+                    _njRoot && process.gina._nunjucksLoaders && process.gina._nunjucksLoaders[_njRoot]
+                    && process.gina._nunjucksLoaders[_njRoot].loader
+                    && process.gina._nunjucksLoaders[_njRoot].loader.async === true
+                );
+            } catch (e) { /* fall back to the cached-env render-nunjucks path */ }
+            _delegate = _njAsync ? '/controller.render-nunjucks-async' : '/controller.render-nunjucks';
         } else {
             // #TPL1 — a swig bundle with a configured async loader renders through
             // the isolated per-bundle engine in controller.render-swig-async.js;
@@ -1223,6 +1239,9 @@ function SuperController(options) {
             } catch (e) { /* nunjucks delegate may not exist on older framework dirs */ }
             try {
                 delete require.cache[require.resolve( _(__dirname + '/controller.render-swig-async', true))];
+            } catch (e) { /* async delegate may not exist on older framework dirs */ }
+            try {
+                delete require.cache[require.resolve( _(__dirname + '/controller.render-nunjucks-async', true))];
             } catch (e) { /* async delegate may not exist on older framework dirs */ }
         }
 

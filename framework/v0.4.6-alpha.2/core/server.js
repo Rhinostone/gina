@@ -417,6 +417,32 @@ function Server(options) {
         // so bundle startup fails with a clear message rather than
         // deferring the failure to the first render attempt.
         nunjucksResolver.load(self.executionPath, _nunjucksSettings);
+
+        // #TPL1 — async template-loader extension point. When the bundle
+        // configures settings.template.nunjucks.loader, build + validate the
+        // loader at startup (fail-fast on bad config, same as the nunjucks
+        // load above) and stash it per-bundle keyed by the template root.
+        // controller.js routes such bundles to the async delegate
+        // (controller.render-nunjucks-async.js), which builds a PER-REQUEST
+        // nunjucks Environment over this loader. The default (no-loader) path
+        // is untouched — render-nunjucks.js's cached-Environment filesystem path.
+        var _loaderCfg = (
+            conf.content && conf.content.settings && conf.content.settings.template
+            && conf.content.settings.template.nunjucks && conf.content.settings.template.nunjucks.loader
+        ) || null;
+        if (_loaderCfg) {
+            // build() throws on a bad config; let it propagate so bundle startup
+            // fails with a clear message rather than 500-ing the first render.
+            // It does NOT reach the backend (no network probe at boot).
+            var _builtLoader = lib.templateLoaders.build(_loaderCfg, { bundle: self.appName });
+            if (_builtLoader && _builtLoader.async === true) {
+                if (!process.gina._nunjucksLoaders) { process.gina._nunjucksLoaders = Object.create(null); }
+                process.gina._nunjucksLoaders[conf.content.templates._common.html] = {
+                    loader:     _builtLoader,
+                    autoescape: (_nunjucksSettings.autoescape !== false)
+                };
+            }
+        }
     };
 
     var initSwigEngine = function(conf) {

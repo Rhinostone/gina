@@ -103,6 +103,7 @@
     "csso-cli": "4.0.2",
     "engine.io-client": "^6.6.4",
     "jsdom": "^29.1.1",
+    "nunjucks": "^3.2.4",
     "requirejs": "^2.3.7",
     "sass": "1.100.0"
   },
