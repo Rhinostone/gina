@@ -12,7 +12,8 @@
 
 var fs     = require('fs');
 var path   = require('path');
-var { describe, it, before } = require('node:test');
+var http   = require('http');
+var { describe, it, before, after } = require('node:test');
 var assert = require('node:assert/strict');
 
 var FW = require('../fw');
@@ -178,5 +179,197 @@ describe('04 - behavioural render through a guarded loader', function () {
         await assert.rejects(async function () {
             await (await evil.getTemplate('evil.html'))({});
         }, /CVE-2023-25345|traversal/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 05 - http loader: build() dispatch + config validation (no network)
+// ---------------------------------------------------------------------------
+
+describe('05 - http loader build / validation', function () {
+
+    it('builds the http built-in, flags it async, keeps the cb-arity load', function () {
+        var loader = tl.build({ type: 'http', origin: 'https://cdn.example.com', basePath: '/templates' }, { bundle: 'site' });
+        assert.equal(loader.async, true);
+        assert.equal(typeof loader.resolve, 'function');
+        assert.equal(loader.load.length, 2); // swig.getTemplate picks the callback path on load.length >= 2
+    });
+
+    it('fail-fast: throws when origin is missing', function () {
+        assert.throws(function () { tl.build({ type: 'http' }); }, /origin/);
+        assert.throws(function () { tl.build({ type: 'http', origin: '' }); }, /origin/);
+    });
+
+    it('fail-fast: throws when origin is not an http(s) URL', function () {
+        assert.throws(function () { tl.build({ type: 'http', origin: 'not a url' }); }, /origin/);
+        assert.throws(function () { tl.build({ type: 'http', origin: 'ftp://x.example' }); }, /http or https/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 06 - http loader: resolve() containment (no network)
+// ---------------------------------------------------------------------------
+
+describe('06 - http loader resolve containment', function () {
+
+    var loader;
+    before(function () {
+        loader = tl.build({ type: 'http', origin: 'https://cdn.example.com', basePath: '/templates' }, { bundle: 'site' });
+    });
+
+    it('resolves a plain identifier to an absolute URL under origin+basePath', function () {
+        assert.equal(loader.resolve('pages/home.html'), 'https://cdn.example.com/templates/pages/home.html');
+    });
+
+    it('resolves with no basePath against the origin root', function () {
+        var L = tl.build({ type: 'http', origin: 'https://cdn.example.com' }, { bundle: 'site' });
+        assert.equal(L.resolve('home.html'), 'https://cdn.example.com/home.html');
+    });
+
+    it('rejects an absolute-URL identifier that swaps the origin (containment, not the segment guard)', function () {
+        assert.throws(function () { loader.resolve('http://evil.com/x.html'); }, /escapes configured origin/);
+    });
+
+    it('rejects a protocol-relative identifier (caught by the absolute-path guard)', function () {
+        // `//evil.com/x` starts with `/`, so the segment-guard's absolute check
+        // rejects it before the http resolve's containment check even runs —
+        // either layer rejecting it is the point (the origin-swap containment
+        // path is separately covered by the http://evil.com case above).
+        assert.throws(function () { loader.resolve('//evil.com/x.html'); }, /absolute|escapes configured origin/);
+    });
+
+    it('the CVE segment-guard still fires first through the built loader', function () {
+        assert.throws(function () { loader.resolve('../../../etc/passwd'); }, /CVE-2023-25345|traversal/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 07 - http loader: load() over a localhost server + source cache + ETag
+// ---------------------------------------------------------------------------
+
+describe('07 - http loader load + source cache (localhost)', function () {
+
+    var server, port, hits, _savedCache;
+
+    before(async function () {
+        // Stand up process.gina._cache the way the request pipeline does at
+        // runtime (controller.js points the shared instance at the server Map).
+        if (!process.gina) { process.gina = {}; }
+        _savedCache = process.gina._cache;
+        var Cache = require(path.join(FW, 'lib/cache/src/main'));
+        process.gina._cache = new Cache();
+        process.gina._cache.from(new Map());
+
+        hits = {};
+        server = http.createServer(function (req, res) {
+            hits[req.url] = (hits[req.url] || 0) + 1;
+            if (req.url === '/t/page.html') {
+                var etag = '"v1"';
+                if (req.headers['if-none-match'] === etag) {
+                    res.writeHead(304, { 'ETag': etag });
+                    return res.end();
+                }
+                res.writeHead(200, { 'ETag': etag, 'Content-Type': 'text/html' });
+                return res.end('PAGE-BODY');
+            }
+            if (req.url === '/t/noetag.html') {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                return res.end('NOETAG-BODY');
+            }
+            // extends + include chain for the end-to-end swig-async render test (e)
+            if (req.url === '/t/base.html') {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                return res.end('<html><body>[BASE]{% block content %}{% endblock %}</body></html>');
+            }
+            if (req.url === '/t/partial.html') {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                return res.end('(inc:{{ name }})');
+            }
+            if (req.url === '/t/tpl.html') {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                return res.end('{% extends "base.html" %}{% block content %}P:{{ name }} {% include "partial.html" %}{% endblock %}');
+            }
+            res.writeHead(404);
+            res.end('not found');
+        });
+        await new Promise(function (resolve) {
+            server.listen(0, '127.0.0.1', function () { port = server.address().port; resolve(); });
+        });
+    });
+
+    after(function () {
+        if (server) { server.close(); }
+        try { http.globalAgent.destroy(); } catch (e) {} // drop keep-alive sockets so the test exits
+        if (process.gina && process.gina._cache) { process.gina._cache.clear(); } // clear pending TTL timers
+        process.gina._cache = _savedCache;
+    });
+
+    function mkLoader(opts) {
+        opts = opts || {};
+        return tl.build({
+            type:       'http',
+            origin:     'http://127.0.0.1:' + port,
+            basePath:   '/t',
+            revalidate: (opts.revalidate === true),
+            ttl:        60
+        }, { bundle: 'site' });
+    }
+
+    it('(a) cold load fetches and returns the source (200)', function (t, done) {
+        var L = mkLoader({ revalidate: true });
+        L.load(L.resolve('page.html'), function (err, src) {
+            assert.equal(err, null);
+            assert.equal(src, 'PAGE-BODY');
+            assert.equal(hits['/t/page.html'], 1);
+            done();
+        });
+    });
+
+    it('(b) warm load with revalidate issues a conditional GET, gets 304, serves cached', function (t, done) {
+        var L = mkLoader({ revalidate: true });
+        L.load(L.resolve('page.html'), function (err, src) {
+            assert.equal(err, null);
+            assert.equal(src, 'PAGE-BODY');        // served from cache
+            assert.equal(hits['/t/page.html'], 2); // exactly one extra (the conditional revalidation GET)
+            done();
+        });
+    });
+
+    it('(c) a non-200 surfaces as a load error', function (t, done) {
+        var L = mkLoader();
+        L.load(L.resolve('nope.html'), function (err, src) {
+            assert.ok(err);
+            assert.match(err.message, /404/);
+            done();
+        });
+    });
+
+    it('(d) revalidate:false serves a fresh cache hit WITHOUT re-fetching', function (t, done) {
+        var L = mkLoader({ revalidate: false });
+        L.load(L.resolve('noetag.html'), function (err, src) {
+            assert.equal(err, null);
+            assert.equal(src, 'NOETAG-BODY');
+            assert.equal(hits['/t/noetag.html'], 1);
+            // second load — cache hit, no revalidation → must NOT touch the server
+            L.load(L.resolve('noetag.html'), function (err2, src2) {
+                assert.equal(err2, null);
+                assert.equal(src2, 'NOETAG-BODY');
+                assert.equal(hits['/t/noetag.html'], 1); // still 1 — served from cache
+                done();
+            });
+        });
+    });
+
+    it('(e) drives swig async extends+include through the http loader end-to-end', async function () {
+        var swig   = require(path.join(FW, 'node_modules/@rhinostone/swig'));
+        var engine = new swig.Swig({ loader: mkLoader(), autoescape: false, cache: false });
+        // getTemplate('tpl.html') → resolve maps to the localhost URL → load
+        // fetches it AND its transitive {% extends %}/{% include %} over http.
+        var fn  = await engine.getTemplate('tpl.html', { filename: 'tpl.html' });
+        var out = await fn({ name: 'alice' });
+        assert.equal(out.output, '<html><body>[BASE]P:alice (inc:alice)</body></html>');
     });
 });

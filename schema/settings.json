@@ -163,13 +163,33 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "description": "Built-in loader name. \"memory\" loads templates from an inline `templates` map (no network or filesystem).",
-                  "enum": ["memory"]
+                  "description": "Built-in loader name. \"memory\" loads templates from an inline `templates` map (no network or filesystem). \"http\" fetches templates over HTTP(S) from a configured origin + basePath, with a TTL'd source cache and opt-in ETag revalidation.",
+                  "enum": ["memory", "http"]
                 },
                 "templates": {
                   "type": "object",
                   "description": "For type \"memory\": flat map of template identifier to source string.",
                   "additionalProperties": { "type": "string" }
+                },
+                "origin": {
+                  "type": "string",
+                  "description": "For type \"http\": scheme://host[:port] of the template origin (no path). http or https. Required for the http loader.",
+                  "examples": ["https://cdn.example.com", "http://127.0.0.1:8080"]
+                },
+                "basePath": {
+                  "type": "string",
+                  "description": "For type \"http\": path prefix under origin that template identifiers resolve against (root-relative, flat namespace). Defaults to \"\". Resolved URLs are containment-checked to stay under origin+basePath.",
+                  "examples": ["/templates", "/site/views"]
+                },
+                "ttl": {
+                  "type": "number",
+                  "description": "For type \"http\": source-cache TTL in seconds (absolute from fetch). Defaults to 60. Raise it for immutable CDN-published templates; 0 caches until evicted.",
+                  "default": 60
+                },
+                "revalidate": {
+                  "type": "boolean",
+                  "description": "For type \"http\": when true, a cache hit issues a conditional GET (If-None-Match) and serves cached source on 304, refreshing the TTL. Off by default (no per-hit round-trip). Turn on for live-CMS templates whose origin emits ETags.",
+                  "default": false
                 }
               }
             }

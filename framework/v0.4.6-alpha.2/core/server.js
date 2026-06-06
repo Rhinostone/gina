@@ -475,7 +475,7 @@ function Server(options) {
             // build() throws on a bad config; we let it propagate so bundle
             // startup fails with a clear message rather than 500-ing the first
             // render. It does NOT reach the backend (no network probe at boot).
-            var _builtLoader = lib.templateLoaders.build(_loaderCfg);
+            var _builtLoader = lib.templateLoaders.build(_loaderCfg, { bundle: self.appName });
             if (_builtLoader && _builtLoader.async === true) {
                 if (!process.gina._swigLoaders) { process.gina._swigLoaders = Object.create(null); }
                 process.gina._swigLoaders[dir] = {

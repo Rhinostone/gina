@@ -15,8 +15,10 @@
  * segment-safety guard applied on EVERY `resolve()`, covering the whole
  * transitive extends/include chain (stronger than a first-hop-only guard).
  *
- * Slice 1 ships the `memory` built-in (no network). The HTTP(S)-fetch built-in
- * (`http`) and a custom project-supplied loader hook land in later slices.
+ * Ships two built-ins: `memory` (inline templates, no network) and `http`
+ * (HTTP(S)-fetch from a configured origin + basePath, with a TTL'd source cache
+ * and opt-in ETag revalidation). A custom project-supplied loader hook lands in
+ * a later slice.
  *
  * @package gina.framework
  */
@@ -29,7 +31,8 @@
  * @type {Object.<string, function>}
  */
 var BUILTINS = {
-    memory: require('./loaders/memory')
+    memory: require('./loaders/memory'),
+    http:   require('./loaders/http')
 };
 
 /**
@@ -93,15 +96,17 @@ function wrapWithGuard(inner) {
  * same fail-fast contract as `initNunjucksEngine`/`NUNJUCKS_NOT_INSTALLED`.
  *
  * @param {?object} [cfg]    - `settings.template.<engine>.loader` (absent -> null)
- * @param {string}  cfg.type - Built-in loader name (Slice 1: `"memory"`)
+ * @param {string}  cfg.type - Built-in loader name (`"memory"` | `"http"`)
+ * @param {object}  [ctx]    - Build context (`{ bundle }`) forwarded to the built-in factory for cache-key namespacing
  * @returns {?{async: boolean, resolve: function, load: function}} Guarded loader, or null when `cfg` is absent
  * @throws {Error} On unknown `type`, a loader missing `resolve`/`load`, or a built-in's own config error
  *
  * @example
  * var loader = lib.templateLoaders.build({ type: 'memory', templates: { 'a.html': 'hi' } });
  * // loader.async === true
+ * var remote = lib.templateLoaders.build({ type: 'http', origin: 'https://cdn.example.com' }, { bundle: 'site' });
  */
-function build(cfg) {
+function build(cfg, ctx) {
     if (cfg === null || typeof cfg !== 'object') {
         return null;
     }
@@ -113,8 +118,10 @@ function build(cfg) {
         );
     }
     // The built-in factory validates its own flat config and throws on a bad
-    // shape; we let that propagate (fail-fast at bundle startup).
-    var inner = BUILTINS[type](cfg);
+    // shape; we let that propagate (fail-fast at bundle startup). `ctx` (e.g.
+    // `{ bundle }`) is forwarded for built-ins that namespace by bundle (the
+    // http source cache); built-ins that don't need it (memory) ignore it.
+    var inner = BUILTINS[type](cfg, ctx);
     return wrapWithGuard(inner);
 }
 

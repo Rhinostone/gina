@@ -196,10 +196,23 @@ describe('03c - #TPL1 schema / lib / server wiring', function () {
         assert.ok(loader, 'template.swig.loader present');
     });
 
-    it('loader.type is an enum of ["memory"] (Slice 1) and required', function () {
+    it('loader.type is an enum of ["memory", "http"] and required', function () {
         var loader = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
-        assert.deepEqual(loader.properties.type.enum, ['memory']);
+        assert.deepEqual(loader.properties.type.enum, ['memory', 'http']);
         assert.ok(Array.isArray(loader.required) && loader.required.indexOf('type') !== -1, 'type required');
+    });
+
+    it('loader documents the http-specific flat keys (origin / basePath / ttl / revalidate)', function () {
+        // Slice 2 — the http built-in's config keys are documented alongside
+        // the memory `templates` key (additionalProperties stays true, so they
+        // are advisory, but documenting them is the connectors.json convention).
+        var props = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader.properties;
+        assert.equal(props.origin.type, 'string');
+        assert.equal(props.basePath.type, 'string');
+        assert.equal(props.ttl.type, 'number');
+        assert.equal(props.ttl.default, 60);
+        assert.equal(props.revalidate.type, 'boolean');
+        assert.equal(props.revalidate.default, false);
     });
 
     it('loader allows additional (type-specific flat) properties — connector-style', function () {
@@ -215,8 +228,8 @@ describe('03c - #TPL1 schema / lib / server wiring', function () {
         assert.match(SERVER_SRC, /conf\.content\.settings\.template\.swig\.loader/);
     });
 
-    it('initSwigEngine builds the loader via lib.templateLoaders.build', function () {
-        assert.match(SERVER_SRC, /lib\.templateLoaders\.build\(\s*_loaderCfg\s*\)/);
+    it('initSwigEngine builds the loader via lib.templateLoaders.build, threading the bundle', function () {
+        assert.match(SERVER_SRC, /lib\.templateLoaders\.build\(\s*_loaderCfg\s*,\s*\{\s*bundle:\s*self\.appName\s*\}\s*\)/);
     });
 
     it('initSwigEngine stashes the built loader on process.gina._swigLoaders keyed by the template dir', function () {
