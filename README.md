@@ -39,10 +39,12 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.4
+## What's in 0.4.5
 
-- **`templates.json` multi-section keys.** A section key may now be comma-separated — e.g. `"products, productDetail"` — to share a stylesheet or `<script>` block across several routes at once. The block is replicated under each named section and deep-merged into any section you also declare on its own, so a section's own keys win on collision. Single-section keys behave exactly as before.
-- **`templates.json` `_common.config` block.** An optional `_common.config` block holds page-level defaults (such as `routeNameAsFilenameEnabled` or `javascriptsDeferEnabled`). It is flattened back into `_common` at load time, so existing bundles are unaffected and any direct `_common` key still overrides the config block.
+- **Opt-in structured (JSON) logging.** Set `GINA_LOG_FORMAT=json` to emit one machine-parseable JSON object per log line (`{ts, level, bundle, message}`) for collectors such as Loki, Datadog, Fluentd or CloudWatch. The default stays the coloured, human-readable format, so interactive `docker logs` output is unchanged unless you opt in.
+- **Per-request `requestId` / `durationMs` in JSON logs.** When JSON logging is on, every log line emitted during a request carries a request id (an inbound `X-Request-Id` is honoured when well-formed, otherwise one is generated) and the elapsed milliseconds since the request began, so a single request's lines can be correlated in your collector. Default text logging is unchanged and pays no overhead.
+- **Public SDK Cluster accessor on Couchbase entities.** `getCluster()` returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document transactions via `cluster.transactions().run(...)` — without reaching into private connection internals.
+- **Public MongoClient accessor on MongoDB entities.** `getClient()` returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` (which additionally require a replica-set or sharded deployment).
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 
