@@ -242,42 +242,33 @@
     var _standaloneUrl = (window.__ginaData && window.__ginaData.gina
         && window.__ginaData.gina.inspectorUrl) ? window.__ginaData.gina.inspectorUrl : null;
     var _embeddedUrl   = webroot + '_gina/inspector/';
-    // Open the Inspector — standalone SPA tab when `inspector.url` is set, else the
-    // embedded same-origin popup. Exposed on the ginaToolbar shim (below) so other dev
-    // surfaces can launch it without reaching into this statusbar's shadow DOM — notably
-    // the popin plugin, which injects its own launcher INSIDE a modal <dialog> (a modal
-    // descendant escapes the modal's inertness) and calls ginaToolbar.openInspector().
-    function openInspector() {
-        if (_standaloneUrl) {
-            var _base   = _standaloneUrl.replace(/\/+$/, '') + '/';
-            var _target = location.origin + webroot.replace(/\/$/, '');
-            window.open(_base + '?target=' + encodeURIComponent(_target), '_blank');
-            return;
-        }
-        var w = Math.round(screen.availWidth / 3);
-        var h = screen.availHeight;
-        var left = screen.availWidth - w;
-        var top  = 0;
-        try {
-            var geo = JSON.parse(localStorage.getItem('__gina_inspector_geometry'));
-            if (geo && geo.w > 100 && geo.h > 100) {
-                w = geo.w; h = geo.h; left = geo.x; top = geo.y;
-            }
-        } catch (e) {}
-        window.open(
-            _embeddedUrl,
-            'gina-inspector',
-            'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
-            + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
-        );
-    }
-    _shim.openInspector = openInspector;
     function inject() {
         if (document.body) document.body.appendChild(el);
         var link = sr.getElementById('insp');
         if (link) link.addEventListener('click', function (ev) {
             ev.preventDefault();
-            openInspector();
+            if (_standaloneUrl) {
+                var _base   = _standaloneUrl.replace(/\/+$/, '') + '/';
+                var _target = location.origin + webroot.replace(/\/$/, '');
+                window.open(_base + '?target=' + encodeURIComponent(_target), '_blank');
+                return;
+            }
+            var w = Math.round(screen.availWidth / 3);
+            var h = screen.availHeight;
+            var left = screen.availWidth - w;
+            var top  = 0;
+            try {
+                var geo = JSON.parse(localStorage.getItem('__gina_inspector_geometry'));
+                if (geo && geo.w > 100 && geo.h > 100) {
+                    w = geo.w; h = geo.h; left = geo.x; top = geo.y;
+                }
+            } catch (e) {}
+            window.open(
+                _embeddedUrl,
+                'gina-inspector',
+                'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
+                + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
+            );
         });
     }
     if (document.readyState === 'loading') {
