@@ -458,6 +458,32 @@ function Server(options) {
         } catch (err) {
             throw err;
         }
+
+        // #TPL1 — async template-loader extension point. When the bundle
+        // configures settings.template.swig.loader, build + validate the loader
+        // at startup (fail-fast on bad config, mirroring initNunjucksEngine) and
+        // stash it per-bundle keyed by the template root. controller.js routes
+        // such bundles to the async delegate (controller.render-swig-async.js),
+        // which builds an ISOLATED per-bundle swig engine from this loader — the
+        // shared singleton's setDefaults loader above is unused for them. The
+        // default (no-loader) path is untouched: byte-identical to pre-#TPL1.
+        var _loaderCfg = (
+            conf.content && conf.content.settings && conf.content.settings.template
+            && conf.content.settings.template.swig && conf.content.settings.template.swig.loader
+        ) || null;
+        if (_loaderCfg) {
+            // build() throws on a bad config; we let it propagate so bundle
+            // startup fails with a clear message rather than 500-ing the first
+            // render. It does NOT reach the backend (no network probe at boot).
+            var _builtLoader = lib.templateLoaders.build(_loaderCfg);
+            if (_builtLoader && _builtLoader.async === true) {
+                if (!process.gina._swigLoaders) { process.gina._swigLoaders = Object.create(null); }
+                process.gina._swigLoaders[dir] = {
+                    loader:     _builtLoader,
+                    autoescape: swigOptions.autoescape
+                };
+            }
+        }
     }
 
     /**

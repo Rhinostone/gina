@@ -138,6 +138,13 @@ function Lib() {
         // (getUrl, getWebroot, length, nl2br, addHours, addDays, addYears).
         // Registered via env.addFilter() in render-nunjucks.js per request.
         nunjucksFilters: _require('./nunjucks-filters'),
+        // #TPL1 — Async template-loader extension point. Builds a built-in
+        // loader (memory; http in a later slice) from its flat
+        // settings.template.<engine>.loader config and wraps it with a
+        // CVE-2023-25345 segment-guard. Consumed by initSwigEngine (startup
+        // build + validation) and controller.render-swig-async.js. Pure factory
+        // (no singleton state), so _require (hot-reloadable) is safe.
+        templateLoaders : _require('./template-loaders'),
         // #AI8b — MCP server primitives (JSON-RPC 2.0 framing, lifecycle,
         // method handlers). Transport-agnostic; wired to stdio by bundle:mcp-start.
         mcpServer       : _require('./mcp-server'),

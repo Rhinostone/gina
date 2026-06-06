@@ -1192,9 +1192,28 @@ function SuperController(options) {
             }
         } catch (e) { /* fall back to default 'swig' */ }
 
-        var _delegate = (_engine === 'nunjucks')
-            ? '/controller.render-nunjucks'
-            : '/controller.render-swig';
+        var _delegate;
+        if (_engine === 'nunjucks') {
+            _delegate = '/controller.render-nunjucks';
+        } else {
+            // #TPL1 — a swig bundle with a configured async loader renders through
+            // the isolated per-bundle engine in controller.render-swig-async.js;
+            // every other swig bundle keeps the byte-identical filesystem path.
+            // The dispatch key is the same expression initSwigEngine stashed under
+            // (conf.content.templates._common.html).
+            var _swigAsync = false;
+            try {
+                var _troot = local.options && local.options.conf && local.options.conf.content
+                    && local.options.conf.content.templates && local.options.conf.content.templates._common
+                    && local.options.conf.content.templates._common.html;
+                _swigAsync = !!(
+                    _troot && process.gina._swigLoaders && process.gina._swigLoaders[_troot]
+                    && process.gina._swigLoaders[_troot].loader
+                    && process.gina._swigLoaders[_troot].loader.async === true
+                );
+            } catch (e) { /* fall back to the filesystem render-swig path */ }
+            _delegate = _swigAsync ? '/controller.render-swig-async' : '/controller.render-swig';
+        }
 
         if  (this.isCacheless() ) {
             delete require.cache[require.resolve( _(__dirname + '/controller.render-v1', true))];
@@ -1202,6 +1221,9 @@ function SuperController(options) {
             try {
                 delete require.cache[require.resolve( _(__dirname + '/controller.render-nunjucks', true))];
             } catch (e) { /* nunjucks delegate may not exist on older framework dirs */ }
+            try {
+                delete require.cache[require.resolve( _(__dirname + '/controller.render-swig-async', true))];
+            } catch (e) { /* async delegate may not exist on older framework dirs */ }
         }
 
         return require( _(__dirname + _delegate, true) )(userData, displayInspector, errOptions, {

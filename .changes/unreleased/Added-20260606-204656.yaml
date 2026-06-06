@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added an opt-in async template-loader extension point for the swig engine (settings.template.swig.loader): render templates from a custom backend instead of the local filesystem through an isolated per-bundle engine, with a built-in in-memory loader and a CVE-2023-25345 path-traversal guard. Remote/object-storage loaders and full asset-injection parity land in follow-ups.'
+time: 2026-06-06T20:46:56.282279+01:00

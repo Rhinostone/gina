@@ -146,6 +146,37 @@
         }
       }
     },
+    "template": {
+      "type": "object",
+      "description": "Per-engine custom template loader (async loader extension point). When a loader is configured the engine resolves templates through it instead of the local filesystem, enabling remote / CDN / object-storage / in-memory template backends. Bundles without a loader render from disk exactly as before.",
+      "additionalProperties": false,
+      "properties": {
+        "swig": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "loader": {
+              "type": "object",
+              "description": "Custom async loader for the swig render path. Mirrors the connectors.json convention: a named built-in `type` plus type-specific flat keys. When present, the bundle renders via the isolated per-bundle swig engine (controller.render-swig-async.js) instead of the filesystem path.",
+              "additionalProperties": true,
+              "required": ["type"],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "description": "Built-in loader name. \"memory\" loads templates from an inline `templates` map (no network or filesystem).",
+                  "enum": ["memory"]
+                },
+                "templates": {
+                  "type": "object",
+                  "description": "For type \"memory\": flat map of template identifier to source string.",
+                  "additionalProperties": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "render": {
       "type": "object",
       "description": "Template engine dispatch. Selects which delegate file (controller.render-swig.js or controller.render-nunjucks.js) handles self.render() calls for this bundle. Switching to \"nunjucks\" requires `npm install nunjucks` in the project root — the framework does not bundle nunjucks.",

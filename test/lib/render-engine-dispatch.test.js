@@ -32,6 +32,7 @@ var assert = require('node:assert/strict');
 var FW              = require('../fw');
 var CONTROLLER_SRC  = fs.readFileSync(path.join(FW, 'core/controller/controller.js'), 'utf8');
 var RENDER_NJ_SRC   = fs.readFileSync(path.join(FW, 'core/controller/controller.render-nunjucks.js'), 'utf8');
+var RENDER_SWIG_ASYNC_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-swig-async.js'), 'utf8');
 var SERVER_SRC      = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
 var LIB_INDEX_SRC   = fs.readFileSync(path.join(FW, 'lib/index.js'), 'utf8');
 var SCHEMA_SETTINGS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'schema/settings.json'), 'utf8'));
@@ -105,9 +106,12 @@ describe('03 - controller.js engine dispatch', function () {
     });
 
     it('picks controller.render-nunjucks delegate when engine === "nunjucks"', function () {
+        // #TPL1 — dispatch refactored from a ternary to an if/else to add the
+        // third (render-swig-async) branch; the nunjucks engine still maps to
+        // the nunjucks delegate.
         assert.match(
             CONTROLLER_SRC,
-            /_engine\s*===\s*['"]nunjucks['"]\)\s*\?\s*['"]\/controller\.render-nunjucks['"]/
+            /if\s*\(\s*_engine\s*===\s*['"]nunjucks['"]\s*\)\s*\{\s*_delegate\s*=\s*['"]\/controller\.render-nunjucks['"]/
         );
     });
 
@@ -141,6 +145,145 @@ describe('03 - controller.js engine dispatch', function () {
             CONTROLLER_SRC,
             /return\s+require\(\s*_\(__dirname\s*\+\s*_delegate,\s*true\)\s*\)/
         );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03b - #TPL1 controller.js async-loader dispatch
+// ---------------------------------------------------------------------------
+
+describe('03b - #TPL1 controller.js async-loader dispatch', function () {
+
+    it('routes a swig bundle with an async loader to controller.render-swig-async', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /_swigAsync\s*\?\s*['"]\/controller\.render-swig-async['"]\s*:\s*['"]\/controller\.render-swig['"]/
+        );
+    });
+
+    it('detects the async loader via process.gina._swigLoaders[...].loader.async === true', function () {
+        assert.match(CONTROLLER_SRC, /process\.gina\._swigLoaders\[_troot\]\.loader\.async\s*===\s*true/);
+    });
+
+    it('keys the dispatch by conf.content.templates._common.html (same key initSwigEngine stashes under)', function () {
+        assert.match(CONTROLLER_SRC, /local\.options\.conf\.content\.templates\._common\.html/);
+    });
+
+    it('async detection is wrapped in try/catch (falls back to the filesystem path)', function () {
+        assert.match(CONTROLLER_SRC, /catch\s*\(e\)\s*\{[^}]*fall back to the filesystem[^}]*\}/);
+    });
+
+    it('cacheless branch evicts the render-swig-async delegate, wrapped in try/catch', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /try\s*\{\s*delete\s+require\.cache\[require\.resolve\(\s*_\(__dirname\s*\+\s*['"]\/controller\.render-swig-async['"][^)]*\)\s*\)\s*\][^}]*\}\s*catch/
+        );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03c - #TPL1 schema / lib / server wiring
+// ---------------------------------------------------------------------------
+
+describe('03c - #TPL1 schema / lib / server wiring', function () {
+
+    it('schema declares template.swig.loader', function () {
+        var loader = SCHEMA_SETTINGS.properties.template
+            && SCHEMA_SETTINGS.properties.template.properties.swig
+            && SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
+        assert.ok(loader, 'template.swig.loader present');
+    });
+
+    it('loader.type is an enum of ["memory"] (Slice 1) and required', function () {
+        var loader = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
+        assert.deepEqual(loader.properties.type.enum, ['memory']);
+        assert.ok(Array.isArray(loader.required) && loader.required.indexOf('type') !== -1, 'type required');
+    });
+
+    it('loader allows additional (type-specific flat) properties — connector-style', function () {
+        var loader = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
+        assert.equal(loader.additionalProperties, true);
+    });
+
+    it('lib/index.js registers templateLoaders via _require', function () {
+        assert.match(LIB_INDEX_SRC, /templateLoaders\s*:\s*_require\('\.\/template-loaders'\)/);
+    });
+
+    it('initSwigEngine reads settings.template.swig.loader', function () {
+        assert.match(SERVER_SRC, /conf\.content\.settings\.template\.swig\.loader/);
+    });
+
+    it('initSwigEngine builds the loader via lib.templateLoaders.build', function () {
+        assert.match(SERVER_SRC, /lib\.templateLoaders\.build\(\s*_loaderCfg\s*\)/);
+    });
+
+    it('initSwigEngine stashes the built loader on process.gina._swigLoaders keyed by the template dir', function () {
+        assert.match(SERVER_SRC, /process\.gina\._swigLoaders\[dir\]\s*=\s*\{/);
+    });
+
+    it('initSwigEngine only stashes when the built loader is async (async === true)', function () {
+        assert.match(SERVER_SRC, /_builtLoader\s*&&\s*_builtLoader\.async\s*===\s*true/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03d - #TPL1 controller.render-swig-async.js shape
+// ---------------------------------------------------------------------------
+
+describe('03d - #TPL1 controller.render-swig-async.js shape', function () {
+
+    it('exports an async function with the same deps signature as the other delegates', function () {
+        assert.match(
+            RENDER_SWIG_ASYNC_SRC,
+            /module\.exports\s*=\s*async\s+function\s+renderSwigAsync\(userData,\s*displayInspector,\s*errOptions,\s*deps\)/
+        );
+    });
+
+    it('builds an ISOLATED per-bundle engine via new swigMod.Swig({ loader })', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /new\s+swigMod\.Swig\(\s*\{/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /loader:\s*loader/);
+    });
+
+    it('the engine registry is owner-guarded against dev-mode swig hot-swap', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /process\.gina\._swigEnginesOwner\s*!==\s*swigMod/);
+    });
+
+    it('forces cache:false on the per-bundle engine (no swig-side async cache)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /cache:\s*false/);
+    });
+
+    it('renders via the async getTemplate path then awaits the compiled fn .output', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /await\s+engine\.getTemplate\(\s*templateName/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /await\s+compiled\(data\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /rendered\.output/);
+    });
+
+    it('registers gina filters onto the per-bundle engine via engine.setFilter', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engine\.setFilter\(name,\s*filters\[name\]\)/);
+    });
+
+    it('keys the loader lookup by conf.content.templates._common.html (matches the dispatch key)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /localOptions\.conf\.content\.templates\._common\.html/);
+    });
+
+    it('nulls local.req/res/next at the success terminal (per-request memory release)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /local\.req\s*=\s*null;[\s\S]{0,80}local\.res\s*=\s*null;[\s\S]{0,80}local\.next\s*=\s*null;/);
+    });
+
+    it('mirrors render-swig/nunjucks error interception for non-2xx + error data', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /!String\(data\.page\.data\.status\)\.startsWith\(['"]2['"]\)/);
+    });
+
+    it('NEGATIVE — does NOT self-read templates from the filesystem (loader owns loading)', function () {
+        assert.doesNotMatch(RENDER_SWIG_ASYNC_SRC, /fs\.promises\.readFile/);
+        assert.doesNotMatch(RENDER_SWIG_ASYNC_SRC, /readFileSync/);
+    });
+
+    it('NEGATIVE — does NOT compile a template string (uses getTemplate, not swig.compile)', function () {
+        assert.doesNotMatch(RENDER_SWIG_ASYNC_SRC, /\.compile\(/);
     });
 });
 
