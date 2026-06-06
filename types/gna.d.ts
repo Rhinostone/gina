@@ -89,7 +89,7 @@ interface GinaExports {
     formatDataFromString: (bodyStr: string | object) => object;
 
     // Text helper
-    /** i18n placeholder — currently a no-op, preserved for forward compatibility. */
+    /** Legacy one-arg translation alias. */
     __: typeof globalThis.__;
 
     // Console helper
