@@ -1,0 +1,3 @@
+kind: Changed
+body: 'CSP plugin: report-only policies (`reportOnly: true`) now omit the `sandbox` directive, which browsers ignore in report-only mode and warn about in the console. Behaviour is unchanged — `sandbox` does nothing in report-only — and it is still emitted in enforcing mode from the same config, so a single directive set works across both modes. A report-only policy whose every directive is report-only-inert now throws at startup.'
+time: 2026-06-06T21:31:44.000000+01:00

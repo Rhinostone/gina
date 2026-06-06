@@ -154,6 +154,28 @@ require('gina').plugins.Csp({
 });
 ```
 
+### Report-only-inert directives are omitted automatically
+
+The `sandbox` directive has **no effect** in a `Content-Security-Policy-Report-Only`
+header — it applies a document-level restriction rather than a load decision, so
+the browser ignores it there and logs *"Ignoring sandbox directive when delivered
+in a report-only policy"*. When `reportOnly: true`, the plugin therefore **omits**
+`sandbox` from the emitted header and logs one line at startup naming what was
+dropped. The omission is functionally identical (the directive does nothing in
+report-only) and keeps the browser console clean. `sandbox` remains in your
+configured `directives`, so an enforcing factory (`reportOnly: false`) built from
+the same config still emits it — you can keep **one directive set across both
+modes** without remove-then-re-add churn.
+
+`frame-ancestors` is **not** omitted: unlike `sandbox`, it *does* report
+violations in report-only mode (it is only restricted in `<meta>` delivery, which
+a report-only policy never uses), so it is meaningful during the observation
+phase. A report-only policy whose every directive is report-only-inert (e.g. only
+`sandbox`) **throws at factory call time**, since it would report nothing.
+
+The omitted set is intentionally conservative — `sandbox` is the only directive
+browsers are documented to ignore-and-warn in report-only mode.
+
 ## Per-response CSP nonce (`useNonce`)
 
 Set `useNonce: true` to drop `'unsafe-inline'` from `script-src` without
@@ -217,6 +239,7 @@ console at runtime. Gina favours fail-fast.
 | Source-list directive array contains a non-string entry  | Factory throws with index in message                 |
 | All directives resolve to `false` (omitted)              | Factory throws — empty CSP is invalid                |
 | `reportOnly` is non-boolean                              | Factory throws                                       |
+| `reportOnly:true` with only report-only-inert directives | Factory throws — a report-only policy would report nothing |
 | Plugin not registered                                    | Header not emitted; browser applies no CSP           |
 | Header already set by an earlier middleware              | Existing value preserved (idempotent)                |
 | Response already sent (`res.headersSent === true`)       | Node's `setHeader` no-ops; request resumes           |

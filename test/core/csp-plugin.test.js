@@ -1055,3 +1055,151 @@ describe('13 - useNonce factory + middleware behaviour', function () {
     });
 
 });
+
+
+// ─── 14 — reportOnly omits report-only-inert directives (sandbox) ──────────
+
+describe('14 - reportOnly: omit report-only-inert directives', function () {
+
+    function makeRes(initial) {
+        var headers = initial || {};
+        return {
+            statusCode: 200,
+            getHeader: function (n) { return headers[String(n).toLowerCase()] || null; },
+            setHeader: function (n, v) { headers[String(n).toLowerCase()] = v; },
+            _headers: headers
+        };
+    }
+
+    // Capture console.warn for the transparency-signal assertions.
+    var origWarn, warnings;
+    beforeEach(function () {
+        origWarn     = console.warn;
+        warnings     = [];
+        console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
+    });
+    afterEach(function () { console.warn = origWarn; });
+
+    // -- constant + helper --
+
+    it('REPORT_ONLY_IGNORED_DIRECTIVES is exactly ["sandbox"]', function () {
+        assert.deepEqual(Csp._REPORT_ONLY_IGNORED_DIRECTIVES, ['sandbox']);
+    });
+
+    it('frame-ancestors is NOT in REPORT_ONLY_IGNORED_DIRECTIVES (it reports in report-only)', function () {
+        assert.equal(Csp._REPORT_ONLY_IGNORED_DIRECTIVES.indexOf('frame-ancestors'), -1);
+    });
+
+    it('_stripReportOnlyIgnored removes sandbox, keeps siblings', function () {
+        var out = Csp._stripReportOnlyIgnored({
+            'script-src': ["'self'"], 'sandbox': true, 'frame-ancestors': ["'none'"]
+        });
+        assert.deepEqual(out, { 'script-src': ["'self'"], 'frame-ancestors': ["'none'"] });
+    });
+
+    it('_stripReportOnlyIgnored is pure — does not mutate its input + returns a new object', function () {
+        var input = { 'script-src': ["'self'"], 'sandbox': true };
+        var out   = Csp._stripReportOnlyIgnored(input);
+        assert.deepEqual(input, { 'script-src': ["'self'"], 'sandbox': true }, 'input unchanged');
+        assert.notEqual(out, input, 'returns a new object');
+    });
+
+    it('_stripReportOnlyIgnored returns a copy unchanged when no inert directive present', function () {
+        var out = Csp._stripReportOnlyIgnored({ 'script-src': ["'self'"] });
+        assert.deepEqual(out, { 'script-src': ["'self'"] });
+    });
+
+    it('source declares REPORT_ONLY_IGNORED_DIRECTIVES = ["sandbox"]', function () {
+        var src = fs.readFileSync(PLUGIN, 'utf8');
+        assert.ok(
+            /REPORT_ONLY_IGNORED_DIRECTIVES\s*=\s*\[\s*'sandbox'\s*\]/.test(src),
+            "expected REPORT_ONLY_IGNORED_DIRECTIVES = ['sandbox']"
+        );
+    });
+
+    // -- factory + middleware behaviour --
+
+    it('reportOnly:true omits sandbox from the emitted header, keeps script-src', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"], 'sandbox': true }, reportOnly: true });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(res.getHeader('content-security-policy-report-only'), "script-src 'self'");
+    });
+
+    it('reportOnly:true + sandbox warns once naming sandbox + report-only', function () {
+        Csp({ directives: { 'script-src': ["'self'"], 'sandbox': true }, reportOnly: true });
+        assert.equal(warnings.length, 1, 'expected exactly one factory-time warning');
+        assert.ok(/sandbox/.test(warnings[0]),      'expected warning to name sandbox');
+        assert.ok(/report-only/i.test(warnings[0]), 'expected warning to mention report-only');
+    });
+
+    it('reportOnly:false keeps sandbox in the header and does NOT warn', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"], 'sandbox': true }, reportOnly: false });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        var emitted = res.getHeader('content-security-policy');
+        assert.ok(/script-src 'self'/.test(emitted));
+        assert.ok(/sandbox/.test(emitted), 'sandbox kept in enforcing mode');
+        assert.equal(warnings.length, 0, 'no warning in enforcing mode');
+    });
+
+    it('reportOnly:true + frame-ancestors keeps it (reports in report-only) and does NOT warn', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'none'"] }, reportOnly: true });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(
+            res.getHeader('content-security-policy-report-only'),
+            "script-src 'self'; frame-ancestors 'none'"
+        );
+        assert.equal(warnings.length, 0, 'frame-ancestors is not inert — no warning');
+    });
+
+    it('reportOnly:true with ONLY sandbox throws (every directive inert)', function () {
+        assert.throws(function () {
+            Csp({ directives: { 'sandbox': true }, reportOnly: true });
+        }, /every configured directive is ignored/);
+    });
+
+    it('reportOnly:true does NOT strip report-uri / report-to', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'report-uri': ['/csp/report'], 'report-to': 'csp-endpoint' },
+            reportOnly: true
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        var emitted = res.getHeader('content-security-policy-report-only');
+        assert.ok(/report-uri \/csp\/report/.test(emitted), 'report-uri retained');
+        assert.ok(/report-to csp-endpoint/.test(emitted),   'report-to retained');
+        assert.equal(warnings.length, 0);
+    });
+
+    it('enforcing mode is byte-identical to pre-feature output (no strip path)', function () {
+        var mw  = Csp({ directives: { 'default-src': ["'self'"], 'sandbox': true } });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(res.getHeader('content-security-policy'), "default-src 'self'; sandbox");
+    });
+
+    // -- non-interaction with useNonce --
+
+    it('reportOnly:true + useNonce:true: nonce on script-src, sandbox omitted, req stamped', function () {
+        var mw  = Csp({ directives: { 'script-src': ["'self'"], 'sandbox': true }, reportOnly: true, useNonce: true });
+        var req = { method: 'GET' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(typeof req._ginaCspNonce, 'string');
+        assert.equal(
+            res.getHeader('content-security-policy-report-only'),
+            "script-src 'self' 'nonce-" + req._ginaCspNonce + "'"
+        );
+    });
+
+    // -- warn is stateless (per factory call, not a module-level latch) --
+
+    it('warns on EACH qualifying factory call (stateless — no module latch)', function () {
+        Csp({ directives: { 'script-src': ["'self'"], 'sandbox': true }, reportOnly: true });
+        Csp({ directives: { 'script-src': ["'self'"], 'sandbox': true }, reportOnly: true });
+        assert.equal(warnings.length, 2, 'expected a warning per factory call');
+    });
+
+});
