@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added a public `getClient()` accessor on MongoDB entities that returns the underlying driver `MongoClient`, so applications can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` — without reaching into private connection internals. Multi-document transactions additionally require a replica-set or sharded deployment and depend on the `mongodb` driver your project installs.'
+time: 2026-06-06T09:00:00Z
