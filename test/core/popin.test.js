@@ -504,3 +504,72 @@ describe('14 - Popin: no inline onclick injection on close (CSP-safe)', function
         );
     });
 });
+
+
+// ── 15 — Popin: showModal()-only (dev/prod parity), overlay gates de-env'd ─────
+//
+// Dialog popins now open as native modals in EVERY env. The dev-only downgrade
+// (non-modal show() + a manual .gina-popins-overlay, gated on gina.config.envIsDev)
+// was removed: popinOpen calls $el.showModal() unconditionally, and the three
+// overlay gates dropped their `|| gina.config.envIsDev` disjunct so the manual
+// overlay survives only for non-dialog mode (!useDialogMode). A consumer's
+// skeleton-preopen observer must also use showModal() so the dialog is born modal
+// and the !getAttribute('open') guard then skips popinOpen's own call (re-showModal
+// on an already-open dialog throws). Verified end-to-end in a real preemptive-open
+// consumer (native modal, real form, no overlay, no double-dim). Replaces the
+// reverted "Option F" dev-modal + in-dialog launcher experiment.
+
+describe('15 - Popin: showModal()-only dev/prod parity', function() {
+
+    function getDistPopinBlock() {
+        var distSrc = getDistSrc();
+        var start = distSrc.indexOf("define('gina/popin'");
+        assert.ok(start > -1, 'gina/popin AMD module not found in dist bundle');
+        var next = distSrc.indexOf('\ndefine(', start + 20);
+        return (next > -1) ? distSrc.substring(start, next) : distSrc.substring(start);
+    }
+
+    it('source: overlay gates no longer carry the gina.config.envIsDev disjunct', function() {
+        assert.equal(
+            getPopinSrc().indexOf('useDialogMode || gina.config.envIsDev'), -1,
+            'the 3 overlay gates must be `!self.options.useDialogMode` only (no `|| gina.config.envIsDev`)'
+        );
+    });
+
+    it('source: the dialog-open branch calls $el.showModal() unconditionally', function() {
+        assert.ok(
+            getPopinSrc().indexOf('$el.showModal();') > -1,
+            'popinOpen must call $el.showModal() in the dialog-open branch'
+        );
+    });
+
+    it('source: the dev-only $el.show() downgrade is gone', function() {
+        assert.equal(
+            getPopinSrc().indexOf('$el.show()'), -1,
+            'the non-modal dev $el.show() downgrade must be removed (showModal()-only)'
+        );
+    });
+
+    it("source: the `useDialogMode && !$el.getAttribute('open')` guard is preserved", function() {
+        assert.ok(
+            /useDialogMode\s*&&\s*!\$el\.getAttribute\('open'\)/.test(getPopinSrc()),
+            "popinOpen must keep the open-guard so a consumer-preopened modal is not re-shown (re-showModal throws)"
+        );
+    });
+
+    it('dist: built popin module reflects showModal()-only (no env gate, no $el.show())', function() {
+        var block = getDistPopinBlock();
+        assert.equal(
+            block.indexOf('useDialogMode || gina.config.envIsDev'), -1,
+            'built popin module must not carry the envIsDev overlay-gate disjunct'
+        );
+        assert.equal(
+            block.indexOf('$el.show()'), -1,
+            'built popin module must not contain the dev $el.show() downgrade'
+        );
+        assert.ok(
+            block.indexOf('$el.showModal()') > -1,
+            'built popin module must call $el.showModal()'
+        );
+    });
+});

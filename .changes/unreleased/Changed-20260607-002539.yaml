@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Dialog popins now render as native modals in development too, matching production (dev/prod parity). The manual overlay is retained only for non-dialog popin mode.'
+time: 2026-06-07T00:25:39.922262+01:00

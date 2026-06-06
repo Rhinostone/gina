@@ -17446,10 +17446,11 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             $container.setAttribute('id', instance.id);
             $container.setAttribute('class', 'gina-popins');
 
-            // Dev (or non-dialog mode): create the manual .gina-popins-overlay. Dev popins
-            // open non-modal (see the show()/showModal() branch in this file) so there is
-            // no native ::backdrop — this div is the dimming/click-catcher instead.
-            if ( !self.options.useDialogMode || gina.config.envIsDev) {
+            // Non-dialog mode only: the manual .gina-popins-overlay provides the dimming/
+            // click-catcher backdrop for non-dialog popins. Dialog-mode popins open as
+            // native modals in every env (see the showModal() branch in this file) and use
+            // the native ::backdrop, so they no longer need this overlay.
+            if ( !self.options.useDialogMode ) {
                 var $overlay = document.createElement('div');
                 $overlay.setAttribute('id', 'gina-popins-overlay');
                 $overlay.setAttribute('class', 'gina-popins-overlay');
@@ -17779,10 +17780,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             // bind overlay on click
             if (!$popin.isOpen && self.options.cancelOnOverlayClick) {
                 var $overlay = $popin.target;
-                // Dev (or non-dialog mode): bind cancelOnOverlayClick to the manual overlay
-                // div — the non-modal dev path has no native backdrop to click (see the
-                // show()/showModal() branch).
-                if ( !self.options.useDialogMode || gina.config.envIsDev) {
+                // Non-dialog mode only: bind cancelOnOverlayClick to the manual overlay
+                // div — the non-dialog path has no native backdrop to click. Dialog-mode
+                // popins are native modals (see the showModal() branch) and use ::backdrop.
+                if ( !self.options.useDialogMode ) {
                     $overlay = instance.target.childNodes[0];
                 }
                 addListener(gina, $overlay, 'mousedown', function(event) {
@@ -18804,9 +18805,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             $el.classList.add('gina-popin-is-active');
 
-            // Dev (or non-dialog mode): activate the manual overlay — the non-modal dev
-            // path has no native ::backdrop (see the show()/showModal() branch).
-            if ( !self.options.useDialogMode || gina.config.envIsDev ) {
+            // Non-dialog mode only: activate the manual overlay — the non-dialog path has
+            // no native ::backdrop (see the showModal() branch).
+            if ( !self.options.useDialogMode ) {
                 // overlay
                 instance.target.firstChild.classList.add('gina-popin-is-active');
                 // overlay
@@ -18818,23 +18819,17 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             if ( self.options.useDialogMode && !$el.getAttribute('open') ) {
                 if ( typeof($el.showModal) === "function" ) {
-                    // Dev keeps the dialog NON-modal by design — do NOT "simplify" this
-                    // to showModal() alone; it is not dead code. showModal() promotes the
-                    // dialog to the top layer (native ::backdrop, rest of page inert),
-                    // which hides and disables the in-page dev Inspector statusbar — a
-                    // position:fixed launcher that installs window.ginaToolbar (see
-                    // inspector/html/statusbar.html) and that this popin feeds via
-                    // ginaToolbar.update() on open (below). show() keeps the dialog in the
-                    // normal layer so the statusbar stays visible and clickable; the manual
-                    // .gina-popins-overlay (created/bound/activated by the sibling
-                    // `envIsDev` checks above) stands in for the missing backdrop. The
-                    // statusbar is still injected in dev (render-swig.js includes
-                    // statusbar.html when isCacheless), so this branch is live.
-                    if (gina.config.envIsDev) {
-                        $el.show();
-                    } else {
-                        $el.showModal();
-                    }
+                    // Always open as a native modal (dev/prod parity). showModal() promotes
+                    // the dialog to the top layer with a native ::backdrop and inerts the
+                    // rest of the page. In dev this covers + inerts the in-page Inspector
+                    // statusbar while the popin is open — expected and accepted (the
+                    // in-dialog launcher idea was dropped). The manual .gina-popins-overlay
+                    // now survives only for non-dialog mode (the !useDialogMode gates
+                    // above), so dialog popins rely on the native ::backdrop. Consumers that
+                    // preemptively open the dialog (skeleton-loading) MUST also use
+                    // showModal() so it is born modal; the !getAttribute('open') guard above
+                    // then skips this call (re-showModal on an already-open dialog throws).
+                    $el.showModal();
                 } else {
                     $el.setAttribute('open', true)
                 }
