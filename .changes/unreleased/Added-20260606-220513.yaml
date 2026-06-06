@@ -1,0 +1,3 @@
+kind: Added
+body: 'The async swig template-loader path (settings.template.swig.loader) now injects the gina client runtime — stylesheets, scripts, external plugins and the client bootstrap — into rendered pages, so a full page served from a custom/off-disk backend ships the client bundle and is production-usable. Per-request CSP nonces are honoured on the injected bootstrap script.'
+time: 2026-06-06T22:05:13+01:00

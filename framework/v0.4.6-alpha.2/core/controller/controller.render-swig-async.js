@@ -24,9 +24,12 @@
  * colliding on the swig process-singleton's shared loader (#TPL1).
  *
  * MVP scope (Slice 1): per-bundle engine isolation + loader pipeline + gina
- * filter registration + render + HTTP/1.1 & HTTP/2 send. Deferred to follow-up
- * slices (mirroring the render-nunjucks N2 -> #NJ build-out): post-render asset
- * injection, Inspector dev-payload, static HTML cache writes, error-template
+ * filter registration + render + HTTP/1.1 & HTTP/2 send + post-render asset
+ * injection — the gina client bundle / CSS / JS are injected via injectAssets()
+ * plus the gina-bootstrap whisper pass, mirroring render-nunjucks.js, so an
+ * off-disk full page ships the client runtime and is production-usable.
+ * Deferred to follow-up slices (mirroring the render-nunjucks N2 -> #NJ
+ * build-out): Inspector dev-payload, static HTML cache writes, error-template
  * routing, and Early Hints.
  *
  * @package gina.framework
@@ -34,6 +37,11 @@
 
 const libRef = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 const merge  = libRef.merge;
+// Collection — filters the asset list to common-only when rendering without a
+// layout (isWithoutLayout XHR/popin responses), mirroring render-nunjucks.js /
+// render-swig.js. Fetched via the lib registry so dev-mode hot-reload evictions
+// of lib/index.js don't poison the reference across requests.
+const Collection = libRef.Collection;
 
 /**
  * Per-bundle isolated swig engine cache. Key: the bundle template root. Value:
@@ -265,13 +273,87 @@ function sendHtmlResponse(local, html, req, res) {
 }
 
 /**
+ * Post-render asset injection. Inserts the bundle's stylesheets / scripts, the
+ * external plugins, and the gina client bootstrap (`gina.onload.min.js`) onto
+ * the `</head>` / `</body>` anchors of the rendered HTML. Direct port of
+ * render-nunjucks.js `injectAssets()` — the async swig delegate renders through
+ * the engine API (no FS `getAssets()` machinery), so it injects post-render the
+ * same way the nunjucks delegate does.
+ *
+ * Honours `javascriptsDeferEnabled` (scripts in `<head>` vs before `</body>`)
+ * and `javascriptsExcluded === '**'` (suppresses the bootstrap). Skips any
+ * asset already present in the HTML (idempotent) and any fragment missing the
+ * `</head>`/`</body>` anchor (HEAD responses, partial renders) — returning the
+ * HTML unchanged rather than growing truncated markup.
+ *
+ * @inner
+ * @param {string}  html         - Rendered HTML from the swig async engine
+ * @param {object}  data         - Template data (`data.page.view.stylesheets`/`.scripts`)
+ * @param {object}  localOptions - Controller options (`template.ginaLoader`, `.externalPlugins`, …)
+ * @param {string} [cspNonce]    - #HDR5 per-request CSP nonce; stamps the bootstrap <script>
+ * @returns {string} HTML with asset tags injected where appropriate
+ */
+function injectAssets(html, data, localOptions, cspNonce) {
+    if (typeof html !== 'string' || html.length === 0) { return html; }
+    if (!data || !data.page || !data.page.view) { return html; }
+
+    var stylesheetsHtml = data.page.view.stylesheets || '';
+    var scriptsHtml     = data.page.view.scripts     || '';
+    var tpl             = localOptions && localOptions.template;
+    var isDeferMode     = !!(tpl && tpl.javascriptsDeferEnabled);
+    var jsExcluded      = tpl && tpl.javascriptsExcluded;
+    var ginaLoader      = tpl && tpl.ginaLoader;
+    // #HDR5 — stamp the bootstrap <script> with the per-request nonce when present.
+    // The loader is a cached, immutable string; .replace() returns a fresh copy.
+    if (cspNonce && typeof ginaLoader === 'string') {
+        ginaLoader = ginaLoader.replace(
+            '<script type="text/javascript">',
+            '<script type="text/javascript" nonce="' + cspNonce + '">'
+        );
+    }
+    var externalPlugins = (tpl && Array.isArray(tpl.externalPlugins)) ? tpl.externalPlugins : [];
+    var hasHead         = /<\/head>/i.test(html);
+    var hasBody         = /<\/body>/i.test(html);
+
+    if (stylesheetsHtml && hasHead && html.indexOf(stylesheetsHtml) === -1) {
+        html = html.replace(/<\/head>/i, '\n\t' + stylesheetsHtml + '\n</head>');
+    }
+
+    if (scriptsHtml && html.indexOf(scriptsHtml) === -1) {
+        if (isDeferMode && hasHead) {
+            html = html.replace(/<\/head>/i, '\t' + scriptsHtml + '\n</head>');
+        } else if (hasBody) {
+            html = html.replace(/<\/body>/i, '\t' + scriptsHtml + '\n</body>');
+        }
+    }
+
+    if (externalPlugins.length > 0 && hasHead) {
+        var extHtml = externalPlugins.join('');
+        if (extHtml && html.indexOf(extHtml) === -1) {
+            html = html.replace(/<\/head>/i, '\t' + extHtml + '\n</head>');
+        }
+    }
+
+    if (
+        ginaLoader
+        && jsExcluded !== '**'
+        && hasHead
+        && !/window\.onGinaLoaded/.test(html)
+    ) {
+        html = html.replace(/<\/head>/i, '\t' + ginaLoader + '\n</head>');
+    }
+
+    return html;
+}
+
+/**
  * Async-loader swig render delegate. Signature matches the other delegates so
  * controller.js can dispatch to it interchangeably.
  *
  * @param {object}   userData          - Controller-supplied template data
  * @param {boolean=} displayInspector  - Dev Inspector toggle (deferred — unused in the MVP)
  * @param {object=}  errOptions        - Options when invoked from the error pipeline
- * @param {object}   deps              - Injected controller refs ({ self, local, getData, hasViews, headersSent, SwigFilters, swig })
+ * @param {object}   deps              - Injected controller refs ({ self, local, getData, hasViews, setResources, headersSent, SwigFilters, swig })
  * @returns {Promise<void>}
  *
  * @example
@@ -284,8 +366,9 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
     var getData     = deps.getData;
     var hasViews    = deps.hasViews;
     var headersSent = deps.headersSent;
-    var SwigFilters = deps.SwigFilters;
-    var swigMod     = deps.swig; // the resolved swig MODULE (exposes .Swig)
+    var SwigFilters  = deps.SwigFilters;
+    var setResources = deps.setResources; // #TPL1 — populates data.page.view.stylesheets/.scripts for asset injection
+    var swigMod      = deps.swig; // the resolved swig MODULE (exposes .Swig)
 
     // Function-scoped captures of the per-request refs (#M1 race fix — mirror of
     // render-nunjucks/render-swig). This render awaits (getTemplate + execute);
@@ -392,6 +475,46 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
         return self.throwError(filterErr);
     }
 
+    // #TPL1 asset injection — populate data.page.view.stylesheets / .scripts so
+    // injectAssets() (post-render) can auto-inject the gina client bundle, CSS
+    // and JS into the off-disk render. Mirrors render-nunjucks.js: isWithoutLayout
+    // (XHR/popin) responses filter the asset list to common-only via Collection.
+    if (typeof setResources === 'function') {
+        try {
+            var isWithoutLayout   = !!localOptions.isWithoutLayout;
+            var localTemplateConf = localOptions.template;
+            if (isWithoutLayout && localTemplateConf) {
+                localTemplateConf = JSON.clone(localTemplateConf);
+                if (Collection && Array.isArray(localTemplateConf.javascripts)) {
+                    localTemplateConf.javascripts = new Collection(localTemplateConf.javascripts)
+                        .find({ isCommon: false }, { isCommon: true, name: 'gina' });
+                }
+                if (Collection && Array.isArray(localTemplateConf.stylesheets)) {
+                    localTemplateConf.stylesheets = new Collection(localTemplateConf.stylesheets)
+                        .find({ isCommon: false }, { isCommon: true, name: 'gina' });
+                }
+            }
+            setResources(localTemplateConf);
+            // Re-overlay getData() so the freshly-set page.view.stylesheets /
+            // .scripts reach `data` — the render-swig.js:609 "needed !!" step:
+            // setResources writes via the controller's set() into local.userData,
+            // getData() rebuilds the data object, and merge fills the new keys.
+            data = merge(data, getData());
+        } catch (resourcesErr) {
+            try { console.warn('[render-swig-async] setResources failed: ' + (resourcesErr.message || resourcesErr)); } catch (e) {}
+        }
+    }
+
+    // #HDR5/#HDR16 — per-request CSP nonce (set on req by gina.plugins.Csp({useNonce:true})).
+    // Passed to injectAssets() so the injected gina bootstrap <script> carries a
+    // matching nonce, and exposed as {{ page.cspNonce }} for app templates
+    // (mirrors render-swig.js:903). Absent when the bundle sets no nonce.
+    var _cspNonce = (req && req._ginaCspNonce) ? req._ginaCspNonce : null;
+    if (_cspNonce) {
+        if (!data.page) { data.page = {}; }
+        data.page.cspNonce = _cspNonce;
+    }
+
     var templateName;
     try {
         templateName = resolveTemplatePath(data, localOptions);
@@ -409,6 +532,45 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
         html = (rendered && typeof rendered.output === 'string') ? rendered.output : String(rendered);
     } catch (renderErr) {
         return self.throwError(renderErr);
+    }
+
+    // #TPL1 — post-render asset injection (stylesheets / scripts / ginaLoader /
+    // externalPlugins) onto the </head> / </body> anchors. Falls through with
+    // un-mutated HTML on any error so a mis-shaped template config never breaks
+    // the render.
+    try {
+        html = injectAssets(html, data, localOptions, _cspNonce);
+    } catch (assetErr) {
+        try { console.warn('[render-swig-async] asset injection skipped: ' + (assetErr.message || assetErr)); } catch (e) {}
+    }
+
+    // The injected gina bootstrap (gina.onload.min.js) is a literal HTML string
+    // carrying {{ page.X }} / {{ page.environment.X }} / {{ page.data.session.X }}
+    // placeholders the engine never saw (inserted post-render); resolve them with
+    // whisper(). Mirrors render-nunjucks.js / render-swig.js:572-582+1276. Without
+    // this, window.onGinaLoaded throws a JSON.parse SyntaxError and gina.popin /
+    // gina.session / gina.forms / onGenericXhrResponse stay undefined.
+    try {
+        if (data && data.page && typeof data.page === 'object' && typeof whisper === 'function') {
+            var ginaLoaderDic = {};
+            for (var _d in data.page) {
+                ginaLoaderDic['page.' + _d] = data.page[_d];
+            }
+            if (typeof data.page.environment === 'object' && data.page.environment !== null) {
+                for (var _k in data.page.environment) {
+                    ginaLoaderDic['page.environment.' + _k] = data.page.environment[_k];
+                }
+            }
+            // gina.onload.min.js also references `{{ page.data.session.X }}` (depth 3).
+            if (data.page.data && typeof data.page.data === 'object' && data.page.data.session && typeof data.page.data.session === 'object') {
+                for (var _s in data.page.data.session) {
+                    ginaLoaderDic['page.data.session.' + _s] = data.page.data.session[_s];
+                }
+            }
+            html = whisper(ginaLoaderDic, html, /\{{ ([a-zA-Z.]+) \}}/g);
+        }
+    } catch (whisperErr) {
+        try { console.warn('[render-swig-async] ginaLoader whisper substitution skipped: ' + (whisperErr.message || whisperErr)); } catch (e) {}
     }
 
     // A concurrent throwError may have sent headers while we awaited — re-check.

@@ -289,6 +289,237 @@ describe('03d - #TPL1 controller.render-swig-async.js shape', function () {
 
 
 // ---------------------------------------------------------------------------
+// 03e - #TPL1 asset injection / setResources port (async swig delegate)
+// ---------------------------------------------------------------------------
+//
+// The async swig delegate renders through the engine API (no FS getAssets()
+// machinery), so it injects the gina client bundle / CSS / JS post-render the
+// same way render-nunjucks.js does. Source-inspection coverage for the
+// setResources wiring, the render-swig.js:609 "needed !!" re-fetch, the
+// injectAssets helper + call-site, the gina-bootstrap whisper pass, and the
+// CSP-nonce exposure — plus a behavioural eval of the (pure) injectAssets helper.
+
+describe('03e - #TPL1 asset injection / setResources port (async swig delegate)', function () {
+
+    // (a) source-level wiring -------------------------------------------------
+
+    it('consumes deps.setResources in the delegate', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /var\s+setResources\s*=\s*deps\.setResources/);
+    });
+
+    it('calls setResources(localTemplateConf) BEFORE the async getTemplate render', function () {
+        var guardIdx  = RENDER_SWIG_ASYNC_SRC.indexOf("typeof setResources === 'function'");
+        var renderIdx = RENDER_SWIG_ASYNC_SRC.indexOf('await engine.getTemplate(templateName');
+        assert.ok(guardIdx > 0, 'setResources guard present');
+        assert.ok(renderIdx > 0, 'getTemplate render present');
+        assert.ok(guardIdx < renderIdx, 'setResources guarded block must run before the render');
+        var block = RENDER_SWIG_ASYNC_SRC.slice(guardIdx, renderIdx);
+        assert.match(block, /setResources\(\s*localTemplateConf\s*\)\s*;/);
+    });
+
+    it('guards the setResources call with a typeof check so older controllers still work', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /typeof\s+setResources\s*===\s*['"]function['"]/);
+    });
+
+    it('catches setResources failures without breaking the render', function () {
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf("typeof setResources === 'function'");
+        assert.ok(idx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 1500);
+        assert.match(block, /catch\s*\(\s*resourcesErr\s*\)/);
+        assert.match(block, /\[render-swig-async\]\s*setResources failed:/);
+    });
+
+    it('re-overlays getData() AFTER setResources (render-swig.js:609 "needed !!" step)', function () {
+        // setResources writes page.view.stylesheets/.scripts into local.userData
+        // via the controller set(); getData() rebuilds the data object and the
+        // merge fills the new keys so injectAssets can see them.
+        var setIdx = RENDER_SWIG_ASYNC_SRC.indexOf('setResources(localTemplateConf)');
+        assert.ok(setIdx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(setIdx, setIdx + 500);
+        assert.match(block, /data\s*=\s*merge\(data,\s*getData\(\)\)/);
+    });
+
+    // (b) isWithoutLayout — Collection filter mirror --------------------------
+
+    it('clones localTemplateConf via JSON.clone when isWithoutLayout is true', function () {
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf('isWithoutLayout   = !!localOptions.isWithoutLayout');
+        assert.ok(idx > 0, 'isWithoutLayout locals present');
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 800);
+        assert.match(block, /JSON\.clone\(localTemplateConf\)/);
+    });
+
+    it('filters javascripts via Collection.find({isCommon:false},{isCommon:true,name:"gina"})', function () {
+        assert.match(
+            RENDER_SWIG_ASYNC_SRC,
+            /new\s+Collection\(localTemplateConf\.javascripts\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('filters stylesheets via the same Collection.find OR-clause', function () {
+        assert.match(
+            RENDER_SWIG_ASYNC_SRC,
+            /new\s+Collection\(localTemplateConf\.stylesheets\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('imports Collection via the lib registry (survives dev hot-reload eviction)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /const\s+Collection\s*=\s*libRef\.Collection/);
+    });
+
+    // (c) injectAssets helper — shape + call-site -----------------------------
+
+    it('declares the injectAssets helper as an inner function', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+injectAssets\s*\(\s*html\s*,\s*data\s*,\s*localOptions\s*,\s*cspNonce\s*\)/);
+    });
+
+    it('calls injectAssets after the render and BEFORE sendHtmlResponse', function () {
+        var assetIdx = RENDER_SWIG_ASYNC_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
+        var sendIdx  = RENDER_SWIG_ASYNC_SRC.lastIndexOf('sendHtmlResponse(local, html, req, res)');
+        assert.ok(assetIdx > 0, 'injectAssets call-site present');
+        assert.ok(sendIdx > 0, 'final sendHtmlResponse present');
+        assert.ok(assetIdx < sendIdx, 'injectAssets must run BEFORE the final sendHtmlResponse');
+    });
+
+    it('wraps the injectAssets call in try/catch so a mis-shaped config never breaks rendering', function () {
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
+        assert.ok(idx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 500);
+        assert.match(block, /catch\s*\(\s*assetErr\s*\)/);
+        assert.match(block, /\[render-swig-async\]\s*asset injection skipped:/);
+    });
+
+    it('short-circuits injectAssets on empty html input', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /if\s*\(\s*typeof\s+html\s*!==\s*['"]string['"]\s*\|\|\s*html\.length\s*===\s*0\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    it('short-circuits injectAssets when data.page.view is missing', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /if\s*\(\s*!data\s*\|\|\s*!data\.page\s*\|\|\s*!data\.page\.view\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    // (d) gina-bootstrap whisper placeholder pass + CSP nonce -----------------
+
+    it('runs the whisper() placeholder pass on the injected gina bootstrap', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /html\s*=\s*whisper\(\s*ginaLoaderDic\s*,\s*html\s*,/);
+    });
+
+    it('flattens page / page.environment / page.data.session into the whisper dict', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /ginaLoaderDic\['page\.'\s*\+\s*_d\]/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /ginaLoaderDic\['page\.environment\.'\s*\+\s*_k\]/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /ginaLoaderDic\['page\.data\.session\.'\s*\+\s*_s\]/);
+    });
+
+    it('guards the whisper pass with typeof whisper === function and try/catch', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /typeof\s+whisper\s*===\s*['"]function['"]/);
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf('whisper(ginaLoaderDic, html');
+        assert.ok(idx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 400);
+        assert.match(block, /catch\s*\(\s*whisperErr\s*\)/);
+        assert.match(block, /\[render-swig-async\]\s*ginaLoader whisper substitution skipped:/);
+    });
+
+    it('exposes the per-request CSP nonce as page.cspNonce (strict-CSP app templates)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /_cspNonce\s*=\s*\(req\s*&&\s*req\._ginaCspNonce\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /data\.page\.cspNonce\s*=\s*_cspNonce/);
+    });
+
+    // (e) injectAssets behaviour — exercised live -----------------------------
+
+    (function () {
+        var helperMatch = RENDER_SWIG_ASYNC_SRC.match(
+            /function\s+injectAssets\s*\([^\)]*\)\s*\{[\s\S]*?\n\}/
+        );
+        if (!helperMatch) {
+            it('SKIP: could not extract injectAssets source for behavioural tests', function () {
+                assert.ok(false, 'injectAssets helper not found in render-swig-async.js');
+            });
+            return;
+        }
+        var injectAssetsFn;
+        try {
+            // eslint-disable-next-line no-new-func
+            injectAssetsFn = new Function(helperMatch[0] + '\nreturn injectAssets;')();
+        } catch (e) {
+            it('SKIP: could not compile injectAssets for behavioural tests', function () {
+                assert.ok(false, 'failed to compile injectAssets: ' + e.message);
+            });
+            return;
+        }
+
+        it('auto-injects stylesheets before </head>', function () {
+            var data = { page: { view: { stylesheets: '<link href="/a.css" rel="stylesheet">' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(
+                out.indexOf('<link href="/a.css" rel="stylesheet">') < out.indexOf('</head>'),
+                'stylesheet appears BEFORE </head>'
+            );
+        });
+
+        it('skips stylesheet auto-inject when the user already placed the token', function () {
+            var stylesheets = '<link href="/app.css" rel="stylesheet">';
+            var data = { page: { view: { stylesheets: stylesheets } } };
+            var html = '<html><head><title>x</title>' + stylesheets + '</head><body></body></html>';
+            var out = injectAssetsFn(html, data, { template: {} });
+            assert.equal(out.split(stylesheets).length - 1, 1, 'stylesheets string appears exactly once');
+        });
+
+        it('auto-injects scripts before </body> by default (non-defer)', function () {
+            var data = { page: { view: { scripts: '<script src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(
+                out.indexOf('<script src="/a.js"></script>') < out.indexOf('</body>'),
+                'scripts appear BEFORE </body>'
+            );
+        });
+
+        it('places scripts in <head> when javascriptsDeferEnabled is true', function () {
+            var data = { page: { view: { scripts: '<script defer src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: { javascriptsDeferEnabled: true } });
+            assert.ok(
+                out.indexOf('<script defer src="/a.js"></script>') < out.indexOf('</head>'),
+                'defer mode: scripts appear BEFORE </head>'
+            );
+        });
+
+        it('injects the gina bootstrap (ginaLoader) before </head>', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader } });
+            assert.match(out, /window\.onGinaLoaded[\s\S]*<\/head>/);
+        });
+
+        it('stamps the gina bootstrap <script> with the CSP nonce when provided', function () {
+            var loader = '<script type="text/javascript">window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader } }, 'abc123');
+            assert.match(out, /<script type="text\/javascript" nonce="abc123">/);
+        });
+
+        it('skips the bootstrap when javascriptsExcluded === "**"', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader, javascriptsExcluded: '**' } });
+            assert.doesNotMatch(out, /window\.onGinaLoaded/);
+        });
+
+        it('does not duplicate the bootstrap when HTML already has window.onGinaLoaded', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var html = '<html><head><script>/* window.onGinaLoaded here */</script></head><body></body></html>';
+            var out = injectAssetsFn(html, { page: { view: {} } }, { template: { ginaLoader: loader } });
+            assert.equal(out.split('<script>window.onGinaLoaded').length - 1, 0, 'bootstrap not duplicated');
+        });
+
+        it('injects external plugins (array joined) before </head>', function () {
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { externalPlugins: ['\n<script src="/jquery.js"></script>'] } });
+            assert.match(out, /<script src="\/jquery\.js"><\/script>[\s\S]*<\/head>/);
+        });
+
+        it('is a no-op on fragments missing </head> and </body>', function () {
+            var frag = '<div>partial</div>';
+            var out = injectAssetsFn(frag, { page: { view: { stylesheets: '<link href="/a.css">' } } }, { template: { ginaLoader: '<script>window.onGinaLoaded=0;</script>' } });
+            assert.equal(out, frag);
+        });
+    })();
+});
+
+
+// ---------------------------------------------------------------------------
 // 04 - controller.render-nunjucks.js shape
 // ---------------------------------------------------------------------------
 
