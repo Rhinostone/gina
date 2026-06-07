@@ -145,16 +145,18 @@ function NunjucksFilters(conf) {
     };
 
     /**
-     * Resolve the bundle's web root URL.
+     * Resolve the bundle's web root URL (scheme + host[:port] + webroot).
      *
-     * Mirror of `SwigFilters.getWebroot`. Uses `ctx.options.envObj.getConf`
-     * to look up bundle config; intended for templates that need the
-     * absolute origin (scheme + host[:port] + webroot) for rendering links
-     * to other bundles.
+     * Mirror of `SwigFilters.getWebroot`. Resolves the target bundle's env
+     * config via the global Config registry
+     * (`getContext('gina').Config.instance.Env.getConf`) — the same lookup the
+     * sibling `getUrl` filter uses — for templates that need the absolute origin
+     * for rendering links to other bundles. When `obj` is omitted, `Env.getConf`
+     * defaults to the current bundle.
      *
      * @memberof NunjucksFilters
      * @param {string} input - Pipe input (typically a path string)
-     * @param {object} obj   - Bundle name passed to `envObj.getConf`
+     * @param {string} [obj] - Bundle name; defaults to the current bundle
      * @returns {string} Absolute URL: `scheme://host[:port]/webroot`
      *
      * @example
@@ -164,8 +166,15 @@ function NunjucksFilters(conf) {
 
         var ctx  = getRenderCtx();
 
+        // #B26 fix: the original line below threw on every invocation — `self.options`
+        // is the per-request wrapper ({ options, isProxyHost, throwError, req, res }), so
+        // `self.options.envObj` is undefined; and bare `options` was undeclared in this
+        // scope. Resolve the bundle env config the same way the sibling getUrl filter
+        // does, via the global Config registry.
+        //     , prop  = self.options.envObj.getConf(obj, options.conf.env)
+        var mainConf = getContext('gina').Config.instance;
         var url     = null
-            , prop  = self.options.envObj.getConf(obj, options.conf.env)
+            , prop  = mainConf.Env.getConf(obj, mainConf.env)
             , isProxyHost  = ( ctx.isProxyHost && String(ctx.isProxyHost).toLowerCase() === 'true' ) ? true : (( typeof(process.gina.PROXY_HOSTNAME) != 'undefined' ) ? true : false)
         ;
         if ( isProxyHost ) {

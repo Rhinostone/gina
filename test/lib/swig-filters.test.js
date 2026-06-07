@@ -119,3 +119,139 @@ describe('02 - length filter null/undefined guard (#FX-length-null-guard)', func
         assert.equal(simulatedLength(obj), 7);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 - getWebroot context-lookup fix (#B26)
+// ---------------------------------------------------------------------------
+//
+// getWebroot used to read `self.options.envObj.getConf(obj, options.conf.env)`.
+// `self.options` is the per-request wrapper ({ options, isProxyHost, throwError,
+// req, res }) — it has no `.envObj` — and bare `options` was undeclared in the
+// filter scope, so any invocation threw `TypeError: Cannot read properties of
+// undefined (reading 'getConf')`. Latent because getWebroot (cross-bundle
+// absolute links) is rarely invoked and no running test exercised it. The fix
+// mirrors the sibling getUrl filter: resolve the bundle env config via the
+// global Config registry (getContext('gina').Config.instance.Env.getConf).
+
+describe('03 - getWebroot context-lookup fix (#B26)', function () {
+
+    // Slice the getWebroot body out of the comment-stripped source so the
+    // commented-out old line and the explanatory patch comment don't trip the
+    // negative pins (mirrors section 02's stripComments approach).
+    var wIdx     = SF_CODE.indexOf('self.getWebroot = function');
+    var nextDecl = SF_CODE.indexOf('self.', wIdx + 1);
+    var WEBROOT  = SF_CODE.slice(wIdx, nextDecl > wIdx ? nextDecl : wIdx + 1200);
+
+    it('source: getWebroot declaration exists', function () {
+        assert.ok(wIdx > 0, 'self.getWebroot declaration must exist');
+    });
+
+    it('source: no longer reads self.options.envObj (#B26)', function () {
+        assert.doesNotMatch(WEBROOT, /self\.options\.envObj/);
+    });
+
+    it('source: no longer references the undeclared bare options.conf.env (#B26)', function () {
+        assert.doesNotMatch(WEBROOT, /getConf\(\s*obj\s*,\s*options\.conf\.env\s*\)/);
+    });
+
+    it('source: resolves config via the proven getUrl pattern (Config.instance.Env.getConf)', function () {
+        assert.match(WEBROOT, /getContext\(\s*['"]gina['"]\s*\)\.Config\.instance/);
+        assert.match(WEBROOT, /mainConf\.Env\.getConf\(\s*obj\s*,\s*mainConf\.env\s*\)/);
+    });
+
+    it('source: still reads per-request context via getRenderCtx()/ctx.isProxyHost (#B25 preserved)', function () {
+        assert.match(WEBROOT, /getRenderCtx\(\)/);
+        assert.match(WEBROOT, /ctx\.isProxyHost/);
+    });
+
+    // --- Behavioural replicas -------------------------------------------------
+    // Pure-logic mirrors with no gina globals (same convention as section 02's
+    // simulatedLength). The OLD replica proves the pre-fix throw; the FIXED
+    // replica proves the post-fix URL output for both branches.
+
+    // Mirrors the PRE-#B26 buggy line: self.options.envObj.getConf(...).
+    function simulatedGetWebrootOld(obj, selfOptions) {
+        // selfOptions is the per-request wrapper — it has no .envObj, so the
+        // `.getConf` dereference on `undefined` throws (the observable #B26
+        // symptom; the bare `options.conf.env` arg is a second, later defect).
+        var prop = selfOptions.envObj.getConf(obj);
+        return prop;
+    }
+
+    // Mirrors the FIXED body (deps stand in for the gina globals:
+    // mainConf <- getContext('gina').Config.instance,
+    // proxyHostname <- process.gina.PROXY_HOSTNAME).
+    function simulatedGetWebrootFixed(obj, ctx, mainConf, proxyHostname) {
+        var url     = null
+            , prop  = mainConf.Env.getConf(obj, mainConf.env)
+            , isProxyHost  = ( ctx.isProxyHost && String(ctx.isProxyHost).toLowerCase() === 'true' ) ? true : (( typeof(proxyHostname) != 'undefined' ) ? true : false)
+        ;
+        if ( isProxyHost ) {
+            url = prop.server.scheme + '://'+ prop.host;
+        } else {
+            url = prop.server.scheme + '://'+ prop.host +':'+ prop.port[prop.server.protocol][prop.server.scheme];
+        }
+        if ( typeof(prop.server['webroot']) != 'undefined') {
+            url += prop.server['webroot'];
+        }
+        return url;
+    }
+
+    function makeMainConf(getConfReturn, recorder) {
+        return {
+            env: 'dev',
+            Env: {
+                getConf: function (bundle, env) {
+                    if (recorder) { recorder.bundle = bundle; recorder.env = env; }
+                    return getConfReturn;
+                }
+            }
+        };
+    }
+
+    var sampleConf = {
+        server : { scheme: 'https', protocol: 'http/1.1', webroot: '/admin' },
+        host   : 'admin.example.com',
+        port   : { 'http/1.1': { https: 8443 } }
+    };
+
+    it("MEASUREMENT: the old body throws \"Cannot read properties of undefined (reading 'getConf')\"", function () {
+        var wrapper = { options: {}, isProxyHost: false, throwError: function () {}, req: {}, res: {} };
+        assert.throws(function () {
+            simulatedGetWebrootOld('admin', wrapper);
+        }, /Cannot read properties of undefined \(reading 'getConf'\)/);
+    });
+
+    it('fixed: non-proxy build returns scheme://host:port/webroot', function () {
+        var url = simulatedGetWebrootFixed('admin', { isProxyHost: false }, makeMainConf(sampleConf), undefined);
+        assert.equal(url, 'https://admin.example.com:8443/admin');
+    });
+
+    it('fixed: proxy via ctx.isProxyHost drops the port', function () {
+        var url = simulatedGetWebrootFixed('admin', { isProxyHost: 'true' }, makeMainConf(sampleConf), undefined);
+        assert.equal(url, 'https://admin.example.com/admin');
+    });
+
+    it('fixed: proxy via process.gina.PROXY_HOSTNAME drops the port', function () {
+        var url = simulatedGetWebrootFixed('admin', { isProxyHost: false }, makeMainConf(sampleConf), 'proxy.example.com');
+        assert.equal(url, 'https://admin.example.com/admin');
+    });
+
+    it('fixed: omits webroot when server.webroot is absent', function () {
+        var noWebroot = {
+            server : { scheme: 'http', protocol: 'http/1.1' },
+            host   : 'admin.example.com',
+            port   : { 'http/1.1': { http: 8080 } }
+        };
+        var url = simulatedGetWebrootFixed('admin', { isProxyHost: false }, makeMainConf(noWebroot), undefined);
+        assert.equal(url, 'http://admin.example.com:8080');
+    });
+
+    it('fixed: forwards (obj, mainConf.env) to Env.getConf', function () {
+        var rec = {};
+        simulatedGetWebrootFixed('admin', { isProxyHost: false }, makeMainConf(sampleConf, rec), undefined);
+        assert.equal(rec.bundle, 'admin');
+        assert.equal(rec.env, 'dev');
+    });
+});

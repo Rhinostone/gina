@@ -121,13 +121,35 @@ function SwigFilters(conf) {
         return _store || SwigFilters.instance._options || self.options;
     };
 
-    // Allows you to get a bundle web root
+    /**
+     * Resolve a bundle's absolute web root URL (scheme + host[:port] + webroot).
+     *
+     * Resolves the target bundle's env config via the global Config registry
+     * (`getContext('gina').Config.instance.Env.getConf`) — the same lookup the
+     * sibling `getUrl` filter uses. When `obj` is omitted, `Env.getConf` defaults
+     * to the current bundle.
+     *
+     * @memberof SwigFilters
+     * @param {string} input  - Pipe input (unused; templates pipe a placeholder)
+     * @param {string} [obj]  - Bundle name; defaults to the current bundle
+     * @returns {string} Absolute URL: `scheme://host[:port]/webroot`
+     *
+     * @example
+     *   {{ '' | getWebroot() }}
+     */
     self.getWebroot = function (input, obj) {
 
         var ctx  = getRenderCtx();
 
+        // #B26 fix: the original line below threw on every invocation — `self.options`
+        // is the per-request wrapper ({ options, isProxyHost, throwError, req, res }), so
+        // `self.options.envObj` is undefined; and bare `options` was undeclared in this
+        // scope. Resolve the bundle env config the same way the sibling getUrl filter
+        // does, via the global Config registry.
+        //     , prop  = self.options.envObj.getConf(obj, options.conf.env)
+        var mainConf = getContext('gina').Config.instance;
         var url     = null
-            , prop  = self.options.envObj.getConf(obj, options.conf.env)
+            , prop  = mainConf.Env.getConf(obj, mainConf.env)
             , isProxyHost  = ( ctx.isProxyHost && String(ctx.isProxyHost).toLowerCase() === 'true' ) ? true : (( typeof(process.gina.PROXY_HOSTNAME) != 'undefined' ) ? true : false)
         ;
         if ( isProxyHost ) {
