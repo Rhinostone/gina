@@ -439,7 +439,8 @@ function Server(options) {
                 if (!process.gina._nunjucksLoaders) { process.gina._nunjucksLoaders = Object.create(null); }
                 process.gina._nunjucksLoaders[conf.content.templates._common.html] = {
                     loader:     _builtLoader,
-                    autoescape: (_nunjucksSettings.autoescape !== false)
+                    autoescape: (_nunjucksSettings.autoescape !== false),
+                    cache:      (_loaderCfg.cache === true)   // #TPL1 Tier-2 opt-in compiled-template cache
                 };
             }
         }
@@ -506,7 +507,8 @@ function Server(options) {
                 if (!process.gina._swigLoaders) { process.gina._swigLoaders = Object.create(null); }
                 process.gina._swigLoaders[dir] = {
                     loader:     _builtLoader,
-                    autoescape: swigOptions.autoescape
+                    autoescape: swigOptions.autoescape,
+                    cache:      (_loaderCfg.cache === true)   // #TPL1 Tier-2 opt-in compiled-fn cache
                 };
             }
         }

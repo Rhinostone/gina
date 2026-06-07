@@ -32,6 +32,12 @@
  * build-out): Inspector dev-payload, static HTML cache writes, error-template
  * routing, and Early Hints.
  *
+ * #TPL1 Tier-2 (this slice): the gina filters are registered ONCE on the shared
+ * per-bundle engine and read per-request context from `process.gina._renderALS`
+ * at call time, closing the #B25 cross-request filter-table race; an opt-in
+ * (`settings.template.swig.loader.cache`, dev-disabled) compiled-fn memo per
+ * template root reintroduces cross-request compile reuse.
+ *
  * @package gina.framework
  */
 
@@ -44,43 +50,82 @@ const merge  = libRef.merge;
 const Collection = libRef.Collection;
 
 /**
- * Per-bundle isolated swig engine cache. Key: the bundle template root. Value:
- * a `new swig.Swig({ loader })` instance with its OWN options.loader, cache,
- * filters and tags — so multiple bundles sharing one process never collide on
- * a shared loader (which a per-bundle `swig.setDefaults({ loader })` on the
- * process-singleton would cause).
- *
- * Stored on `process.gina` so it survives dev-mode `refreshCoreDependencies()`
- * evictions of controller.js + this delegate. Invalidated when the resolved
- * swig MODULE is hot-swapped (`_swigEnginesOwner !== swigMod`), mirroring
- * render-nunjucks.js `getEnvironment()`'s `_nunjucksEnvsOwner` guard.
+ * Lazily construct the process-wide render-context AsyncLocalStorage, parked on
+ * `process.gina` so it survives dev-mode `require.cache` eviction of this
+ * delegate (mirrors `process.gina._reqALS` / `_queryALS`). The async delegates
+ * wrap their awaited render in
+ * `_renderALS.run({ options, isProxyHost, throwError, req, res }, …)` so the
+ * once-registered, context-free gina filters (getUrl/getWebroot/t/tIcu) read the
+ * right request's context at call time — closing the #B25 shared-filter-table
+ * race and enabling a shared engine + compiled-fn cache (#TPL1 Tier-2).
  *
  * @inner
- * @param {*}       swigMod      - The resolved swig module (exposes `.Swig`)
- * @param {string}  templateRoot - Registry key (bundle template root)
- * @param {object}  loader       - Guarded async loader (from `process.gina._swigLoaders`)
- * @param {boolean} autoescape   - Per-bundle autoescape (captured by initSwigEngine)
- * @returns {*} A cached or newly built isolated swig engine instance
+ * @returns {AsyncLocalStorage} the shared render-context store
  */
-function getSwigEngine(swigMod, templateRoot, loader, autoescape) {
+function getRenderALS() {
+    if (!process.gina._renderALS) {
+        var AsyncLocalStorage = require('async_hooks').AsyncLocalStorage;
+        process.gina._renderALS = new AsyncLocalStorage();
+    }
+    return process.gina._renderALS;
+}
+
+/**
+ * Per-bundle isolated swig engine + compiled-fn cache. Key: the bundle template
+ * root. Value: `{ engine, compiled }` — `engine` is a `new swig.Swig({ loader })`
+ * instance with its OWN options.loader, cache, filters and tags (so multiple
+ * bundles sharing one process never collide on a shared loader, which a
+ * per-bundle `swig.setDefaults({ loader })` on the process-singleton would
+ * cause); `compiled` is the #TPL1 Tier-2 per-template compiled-fn memo (consulted
+ * per render only when the bundle opts into `loader.cache` and not in dev).
+ *
+ * The gina filters are registered ONCE here (not per request): they are
+ * context-free and read per-request context from `process.gina._renderALS` at
+ * call time, so the shared filter table can't bleed context across interleaved
+ * async renders (#B25).
+ *
+ * Stored on `process.gina` so it survives dev-mode `refreshCoreDependencies()`
+ * evictions of controller.js + this delegate. The whole registry (engines AND
+ * their compiled-fn memos) is dropped when the resolved swig MODULE is
+ * hot-swapped (`_swigEnginesOwner !== swigMod`) — compiled fns are bound to the
+ * module that built them — mirroring render-nunjucks.js `_nunjucksEnvsOwner`.
+ *
+ * @inner
+ * @param {*}        swigMod      - The resolved swig module (exposes `.Swig`)
+ * @param {string}   templateRoot - Registry key (bundle template root)
+ * @param {object}   loader       - Guarded async loader (from `process.gina._swigLoaders`)
+ * @param {boolean}  autoescape   - Per-bundle autoescape (captured by initSwigEngine)
+ * @param {function} SwigFilters  - The SwigFilters factory (from `deps`), registered once
+ * @param {function} throwError   - `self.throwError`, carried into the filter set
+ * @returns {{engine:*, compiled:Map}} The cached-or-built engine + its compiled-fn memo
+ */
+function getSwigEngine(swigMod, templateRoot, loader, autoescape, SwigFilters, throwError) {
     if (!process.gina._swigEngines) {
         process.gina._swigEngines = Object.create(null);
     }
-    // Drop all cached engines when the swig module was hot-swapped (dev-mode
-    // project-swig refresh) — instances are bound to the module that built them.
+    // Drop all cached engines (and their compiled-fn memos) when the swig module
+    // was hot-swapped (dev-mode project-swig refresh) — instances and compiled
+    // fns are bound to the module that built them.
     if (process.gina._swigEnginesOwner !== swigMod) {
         process.gina._swigEngines = Object.create(null);
         process.gina._swigEnginesOwner = swigMod;
     }
     var key = templateRoot;
     if (!process.gina._swigEngines[key]) {
-        process.gina._swigEngines[key] = new swigMod.Swig({
+        var engine = new swigMod.Swig({
             loader:     loader,
             autoescape: (autoescape === true),
-            // swig forces cache:false for async-compiled templates anyway; set
-            // it explicitly. A gina-managed compiled-fn cache is a later slice.
+            // swig forces cache:false for async-compiled templates anyway; the
+            // gina Tier-2 compiled-fn reuse is the per-entry `compiled` Map below.
             cache:      false
         });
+        // #B25 / #TPL1 Tier-2 — register the gina filters ONCE on the shared
+        // engine (context-free; per-request context flows via _renderALS).
+        registerGinaFilters(engine, SwigFilters, throwError);
+        process.gina._swigEngines[key] = {
+            engine:   engine,
+            compiled: new Map()
+        };
     }
     return process.gina._swigEngines[key];
 }
@@ -130,26 +175,19 @@ function resolveTemplatePath(data, localOptions) {
 }
 
 /**
- * Register gina's SwigFilters on the per-bundle engine, per request. Filters
- * such as `getUrl` / `getWebroot` need per-request context (the request, the
- * resolved options, the proxy-host decision), so they are (re)registered before
- * each render. Mirrors the render-swig.js filter loop. Per-request mutation of
- * the cached engine is safe under Node's single-threaded loop: the
- * `getTemplate` / execute below complete before another request can touch the
- * engine's filter table.
+ * Compute the per-request proxy-host decision from the raw request headers and
+ * the resolved bundle options. Extracted so the render path can stash it in the
+ * `_renderALS` store (the gina filters read `ctx.isProxyHost` from there).
+ * Mirrors the isProxyHost derivation in render-swig.js / render-nunjucks.js.
  *
  * @inner
- * @param {*}        engine       - The per-bundle swig engine instance
- * @param {object}   self         - SuperController instance (provides `throwError`)
- * @param {object}   localOptions - Controller options (`.conf`, hostname/port)
- * @param {function} SwigFilters  - The SwigFilters factory (from `deps`)
- * @param {object}   req          - Request (captured)
- * @param {object}   res          - Response (captured)
- * @returns {void}
+ * @param {object} req          - Request (raw headers)
+ * @param {object} localOptions - Controller options (`.conf`, hostname/port)
+ * @returns {boolean} true when the request appears to arrive via a reverse proxy
  */
-function registerGinaFilters(engine, self, localOptions, SwigFilters, req, res) {
+function computeIsProxyHost(req, localOptions) {
     var localRequestPort = req.headers.port || req.headers[':port'];
-    var isProxyHost = (
+    return (
         typeof(req.headers.host) != 'undefined'
         && typeof(localRequestPort) != 'undefined'
         && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
@@ -168,14 +206,24 @@ function registerGinaFilters(engine, self, localOptions, SwigFilters, req, res) 
         ||
         typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
     ) ? true : false;
+}
 
-    var filters = SwigFilters({
-        options:     JSON.clone(localOptions),
-        isProxyHost: isProxyHost,
-        throwError:  self.throwError,
-        req:         req,
-        res:         res
-    });
+/**
+ * Register gina's SwigFilters on the shared per-bundle engine, ONCE (not per
+ * request). The filters are context-free: getUrl / getWebroot / t / tIcu read
+ * per-request context from `process.gina._renderALS` at call time, so a single
+ * shared filter table can't bleed one request's context into another's
+ * interleaved async render (#B25). The build-time conf is therefore empty —
+ * everything flows through the ALS store stamped by the render `.run()` wrap.
+ *
+ * @inner
+ * @param {*}        engine      - The per-bundle swig engine instance
+ * @param {function} SwigFilters - The SwigFilters factory (from `deps`)
+ * @param {function} throwError  - `self.throwError`, carried for the singleton-fallback path
+ * @returns {void}
+ */
+function registerGinaFilters(engine, SwigFilters, throwError) {
+    var filters = SwigFilters({ options: {}, isProxyHost: false, throwError: throwError });
 
     for (var name in filters) {
         if (typeof filters[name] === 'function' && name !== 'getConfig') {
@@ -462,17 +510,12 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
         data = merge(data, getData());
     }
 
-    var engine;
+    var engineEntry, engine;
     try {
-        engine = getSwigEngine(swigMod, loaderKey, stash.loader, stash.autoescape);
+        engineEntry = getSwigEngine(swigMod, loaderKey, stash.loader, stash.autoescape, SwigFilters, self.throwError);
+        engine      = engineEntry.engine;
     } catch (engErr) {
         return self.throwError(engErr);
-    }
-
-    try {
-        registerGinaFilters(engine, self, localOptions, SwigFilters, req, res);
-    } catch (filterErr) {
-        return self.throwError(filterErr);
     }
 
     // #TPL1 asset injection — populate data.page.view.stylesheets / .scripts so
@@ -524,12 +567,47 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
 
     var html;
     try {
-        // swig async path: getTemplate(name) resolves+loads the page template
-        // AND its transitive extends/include chain through the custom loader,
-        // returning Promise<TemplateFn>; the compiled fn returns Promise<{output}>.
-        var compiled = await engine.getTemplate(templateName, { filename: templateName });
-        var rendered = await compiled(data);
-        html = (rendered && typeof rendered.output === 'string') ? rendered.output : String(rendered);
+        // #B25 / #TPL1 Tier-2 — per-request render context for the once-registered,
+        // context-free gina filters on the shared engine. Carried through
+        // process.gina._renderALS so the filters read THIS request's context at
+        // call time (not a concurrently-interleaved render's). The .run() wrap is
+        // UNCONDITIONAL — it closes the #B25 race whether or not the compiled
+        // cache is opted in — and propagates the store across every await in the
+        // render (page template + its transitive extends/include chain).
+        var _renderStore = {
+            options:     JSON.clone(localOptions),
+            isProxyHost: computeIsProxyHost(req, localOptions),
+            throwError:  self.throwError,
+            req:         req,
+            res:         res
+        };
+        // Tier-2 compiled-fn reuse: opt-in via settings.template.swig.loader.cache,
+        // force-disabled in dev so template edits are picked up live.
+        var _useMemo = (stash.cache === true) && (process.env.NODE_ENV_IS_DEV !== 'true');
+
+        html = await getRenderALS().run(_renderStore, async function () {
+            var compiled;
+            if (_useMemo) {
+                compiled = engineEntry.compiled.get(templateName);
+                if (!compiled) {
+                    // Cache the Promise<fn> (collapses concurrent first-loads of the
+                    // same template); a rejected compile is evicted so a transient
+                    // loader failure doesn't poison the cache permanently.
+                    compiled = engine.getTemplate(templateName, { filename: templateName });
+                    engineEntry.compiled.set(templateName, compiled);
+                    compiled.catch(function () { engineEntry.compiled.delete(templateName); });
+                }
+                compiled = await compiled;
+            } else {
+                // swig async path: getTemplate(name) resolves+loads the page
+                // template AND its transitive extends/include chain through the
+                // custom loader, returning Promise<TemplateFn>; the compiled fn
+                // returns Promise<{output}>.
+                compiled = await engine.getTemplate(templateName, { filename: templateName });
+            }
+            var rendered = await compiled(data);
+            return (rendered && typeof rendered.output === 'string') ? rendered.output : String(rendered);
+        });
     } catch (renderErr) {
         return self.throwError(renderErr);
     }

@@ -104,10 +104,27 @@ function SwigFilters(conf) {
         return JSON.clone(self.options)
     }
 
+    // #TPL1 Tier-2 — per-request filter context. The async render delegates
+    // register the context-bearing filters ONCE on a shared per-bundle engine
+    // and pass each request's { options, isProxyHost, throwError, req, res }
+    // through process.gina._renderALS (an AsyncLocalStorage .run() wrap around
+    // the awaited render). getUrl / getWebroot / t / tIcu read that store at
+    // CALL time, so a single shared filter table cannot bleed one request's
+    // context into another's interleaved async render (#B25). On the sync
+    // render path the delegate never enters .run() -> getStore() is undefined
+    // -> the per-request singleton (set by the per-request SwigFilters() call)
+    // applies, byte-identical to pre-#TPL1.
+    var getRenderCtx = function () {
+        var _store = ( typeof(process) != 'undefined' && process.gina && process.gina._renderALS )
+            ? process.gina._renderALS.getStore()
+            : null;
+        return _store || SwigFilters.instance._options || self.options;
+    };
+
     // Allows you to get a bundle web root
     self.getWebroot = function (input, obj) {
 
-        var ctx  = SwigFilters.instance._options || self.options;
+        var ctx  = getRenderCtx();
 
         var url     = null
             , prop  = self.options.envObj.getConf(obj, options.conf.env)
@@ -166,7 +183,7 @@ function SwigFilters(conf) {
         if (typeof(params) == 'undefined') {
             params = {}
         }
-        var ctx  = SwigFilters.instance._options || self.options;
+        var ctx  = getRenderCtx();
 
         var config              = null
             , scheme            = null
@@ -421,7 +438,7 @@ function SwigFilters(conf) {
      *   {{ "common.items"    | t({ count: 5 }) }}
      */
     self.t = function(key, params) {
-        var ctx        = SwigFilters.instance._options || self.options;
+        var ctx        = getRenderCtx();
         var culture    = (ctx && ctx.req && ctx.req.culture)
             ? ctx.req.culture
             : (process.env.GINA_CULTURE || null);
@@ -454,7 +471,7 @@ function SwigFilters(conf) {
      *   {{ "user.greeting"  | tIcu({ gender: 'female', name: user.name }) }}
      */
     self.tIcu = function(key, params) {
-        var ctx        = SwigFilters.instance._options || self.options;
+        var ctx        = getRenderCtx();
         var culture    = (ctx && ctx.req && ctx.req.culture)
             ? ctx.req.culture
             : (process.env.GINA_CULTURE || null);

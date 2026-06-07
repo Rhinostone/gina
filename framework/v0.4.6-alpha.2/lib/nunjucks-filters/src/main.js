@@ -127,6 +127,23 @@ function NunjucksFilters(conf) {
         return JSON.clone(self.options);
     };
 
+    // #TPL1 Tier-2 — per-request filter context. The async render delegates
+    // register the context-bearing filters ONCE on a shared per-bundle env and
+    // pass each request's { options, isProxyHost, throwError, req, res } through
+    // process.gina._renderALS (an AsyncLocalStorage .run() wrap around the
+    // awaited render). getUrl / getWebroot / t / tIcu read that store at CALL
+    // time, so a single shared filter table cannot bleed one request's context
+    // into another's interleaved async render (#B25). On the sync render path
+    // the delegate never enters .run() -> getStore() is undefined -> the
+    // per-request singleton (set by the per-request NunjucksFilters() call)
+    // applies, byte-identical to pre-#TPL1.
+    var getRenderCtx = function () {
+        var _store = ( typeof(process) != 'undefined' && process.gina && process.gina._renderALS )
+            ? process.gina._renderALS.getStore()
+            : null;
+        return _store || NunjucksFilters.instance._options || self.options;
+    };
+
     /**
      * Resolve the bundle's web root URL.
      *
@@ -145,7 +162,7 @@ function NunjucksFilters(conf) {
      */
     self.getWebroot = function (input, obj) {
 
-        var ctx  = NunjucksFilters.instance._options || self.options;
+        var ctx  = getRenderCtx();
 
         var url     = null
             , prop  = self.options.envObj.getConf(obj, options.conf.env)
@@ -189,7 +206,7 @@ function NunjucksFilters(conf) {
         if (typeof(params) == 'undefined') {
             params = {};
         }
-        var ctx  = NunjucksFilters.instance._options || self.options;
+        var ctx  = getRenderCtx();
 
         var config              = null
             , scheme            = null
@@ -452,7 +469,7 @@ function NunjucksFilters(conf) {
      *   {{ "common.items"    | t({ count: 5 }) }}
      */
     self.t = function(key, params) {
-        var ctx        = NunjucksFilters.instance._options || self.options;
+        var ctx        = getRenderCtx();
         var culture    = (ctx && ctx.req && ctx.req.culture)
             ? ctx.req.culture
             : (process.env.GINA_CULTURE || null);
@@ -485,7 +502,7 @@ function NunjucksFilters(conf) {
      *   {{ "user.greeting"  | tIcu({ gender: 'female', name: user.name }) }}
      */
     self.tIcu = function(key, params) {
-        var ctx        = NunjucksFilters.instance._options || self.options;
+        var ctx        = getRenderCtx();
         var culture    = (ctx && ctx.req && ctx.req.culture)
             ? ctx.req.culture
             : (process.env.GINA_CULTURE || null);

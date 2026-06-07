@@ -36,6 +36,8 @@ var RENDER_SWIG_ASYNC_SRC = fs.readFileSync(path.join(FW, 'core/controller/contr
 var RENDER_NJ_ASYNC_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-nunjucks-async.js'), 'utf8');
 var SERVER_SRC      = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
 var LIB_INDEX_SRC   = fs.readFileSync(path.join(FW, 'lib/index.js'), 'utf8');
+var SWIG_FILTERS_SRC = fs.readFileSync(path.join(FW, 'lib/swig-filters/src/main.js'), 'utf8');
+var NJ_FILTERS_SRC   = fs.readFileSync(path.join(FW, 'lib/nunjucks-filters/src/main.js'), 'utf8');
 var SCHEMA_SETTINGS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'schema/settings.json'), 'utf8'));
 
 
@@ -705,16 +707,25 @@ describe('03h - #TPL1 controller.render-nunjucks-async.js shape', function () {
         assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /require\(\s*['"]nunjucks['"]\s*\)/);
     });
 
-    it('NEGATIVE (per-request env lock, §8.1) — does NOT reference the cached process.gina._nunjucksEnvs', function () {
-        // §8.1 invariant #1: the async path MUST build a per-request Environment,
-        // never reuse the cached-env registry (which would race the per-request
-        // addFilter table across the async await). This is the headline negative
-        // pin that mechanically distinguishes the async delegate from the sync one.
+    it('NEGATIVE (separate registry, §8.1 corrected) — does NOT reach into the sync delegate cached process.gina._nunjucksEnvs', function () {
+        // §8.1 (corrected by #TPL1 Tier-2): the sync delegate (render-nunjucks.js)
+        // is race-safe because its render is SYNCHRONOUS — NOT because of a
+        // per-request env. So the async port does NOT fix #B25 with a per-request
+        // env either; it closes the singleton race with process.gina._renderALS
+        // (the unconditional .run() wrap). It keeps a SEPARATE compiled-env registry
+        // (process.gina._nunjucksAsyncEnvs / _nunjucksAsyncEnvsOwner) and must never
+        // reach into the sync delegate's filesystem _nunjucksEnvs registry (whose
+        // loader is a FileSystemLoader, not the gina async adapter).
+        //
+        // Both pins use the `process.gina.` access prefix on purpose: the new
+        // _nunjucksAsyncEnvs* strings do NOT contain the bare sync names, and the
+        // prefix keeps the pin from tripping on the JSDoc that names the sync
+        // owner-guard for a cross-reference (jsdoc.md "negative pin trips on JSDoc").
         assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksEnvs/);
-        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /_nunjucksEnvsOwner/);
+        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksEnvsOwner/);
     });
 
-    it('POSITIVE (per-request env) — constructs a fresh new nunjucks.Environment per request', function () {
+    it('POSITIVE (env over the async loader adapter) — builds new nunjucks.Environment (fresh per request when cache off, shared when on)', function () {
         assert.match(RENDER_NJ_ASYNC_SRC, /new\s+nunjucks\.Environment\(/);
     });
 });
@@ -992,6 +1003,306 @@ describe('03j - #TPL1 nunjucks async adapter (behavioural, gated on nunjucks ins
         if (!nunjucks) { t.skip('nunjucks not installed'); return; }
         var ginaLoader = tlBuild({ type: 'memory', templates: { 'ok.njk': 'x' } });
         assert.throws(function () { ginaLoader.resolve('../etc/passwd'); }, /CVE-2023-25345/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03k - #TPL1 Tier-2 compiled-template cache + #B25 ALS render-context isolation
+// ---------------------------------------------------------------------------
+//
+// Tier-2 reintroduces cross-request compiled-template reuse on the async loader
+// path, opt-in via settings.template.{swig,nunjucks}.loader.cache (dev-disabled).
+// Reuse needs a SHARED engine/env, which means a SHARED filter table — and the
+// context-bearing gina filters (getUrl / getWebroot / t / tIcu) previously read
+// a process-global singleton (SwigFilters.instance._options / NunjucksFilters.
+// instance._options) that every per-request factory call overwrote. On a
+// synchronous render that's safe (no other request runs between the factory call
+// and the render); on an ASYNC render it is NOT — a concurrent request stomps the
+// singleton across an await, bleeding one request's host/webroot into another's
+// output (#B25). KEY FINDING: this race is NOT swig-only — BOTH async delegates
+// hit it through the same singleton, and a per-request nunjucks Environment does
+// NOT fix it (the env isolates the name->fn TABLE, not the singleton the fns
+// read). The fix: the gina filters are context-free (read per-request context
+// from process.gina._renderALS at CALL time) and the render is wrapped in an
+// UNCONDITIONAL _renderALS.run() so interleaved async renders each read their own
+// context — independent of whether the compiled cache is opted in.
+//
+// Source pins lock the shape; the behavioural tests prove the isolation through a
+// real shared engine/env (and a pure-logic replica proves the mechanism + the
+// subtract — that a singleton-read filter bleeds where the ALS one does not).
+
+describe('03k - #TPL1 Tier-2 compiled-template cache + #B25 ALS render-context isolation', function () {
+
+    var swig = null;
+    try { swig = require(path.join(FW, 'node_modules/@rhinostone/swig')); } catch (e) { /* not installed — skip */ }
+    var nunjucks = null;
+    try { nunjucks = require('nunjucks'); } catch (e) { /* not installed — skip */ }
+    var AsyncLocalStorage = require('async_hooks').AsyncLocalStorage;
+    var tlBuild = require(path.join(FW, 'lib/template-loaders/src/main.js')).build;
+
+    // (a) schema — loader.cache opt-in (both engines) -------------------------
+
+    it('schema declares template.swig.loader.cache (boolean, default false)', function () {
+        var c = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader.properties.cache;
+        assert.ok(c, 'swig loader.cache present');
+        assert.equal(c.type, 'boolean');
+        assert.equal(c.default, false);
+    });
+
+    it('schema declares template.nunjucks.loader.cache (boolean, default false)', function () {
+        var c = SCHEMA_SETTINGS.properties.template.properties.nunjucks.properties.loader.properties.cache;
+        assert.ok(c, 'nunjucks loader.cache present');
+        assert.equal(c.type, 'boolean');
+        assert.equal(c.default, false);
+    });
+
+    // (b) server.js — cache stash on the loader entry (both engines) ----------
+
+    it('initNunjucksEngine stashes cache:(_loaderCfg.cache === true) on the nunjucks loader entry', function () {
+        var njStart = SERVER_SRC.indexOf('var initNunjucksEngine');
+        var swStart = SERVER_SRC.indexOf('var initSwigEngine');
+        assert.ok(njStart > 0 && swStart > njStart, 'initNunjucksEngine precedes initSwigEngine');
+        var slice = SERVER_SRC.slice(njStart, swStart);
+        assert.match(slice, /cache:\s*\(_loaderCfg\.cache === true\)/);
+    });
+
+    it('initSwigEngine stashes cache:(_loaderCfg.cache === true) on the swig loader entry', function () {
+        var swStart = SERVER_SRC.indexOf('var initSwigEngine');
+        assert.ok(swStart > 0, 'initSwigEngine present');
+        // The literal appears exactly twice in server.js (nunjucks + swig); the
+        // nunjucks one is before swStart, so the forward slice isolates swig's.
+        assert.match(SERVER_SRC.slice(swStart), /cache:\s*\(_loaderCfg\.cache === true\)/);
+    });
+
+    // (c) filter libs — context-bearing filters read process.gina._renderALS
+    //     at CALL time via getRenderCtx() (the #B25 read site) ----------------
+
+    it('swig-filters getRenderCtx() reads process.gina._renderALS.getStore() with a singleton fallback', function () {
+        assert.match(SWIG_FILTERS_SRC, /var\s+getRenderCtx\s*=\s*function/);
+        assert.match(SWIG_FILTERS_SRC, /process\.gina\._renderALS\.getStore\(\)/);
+        assert.match(SWIG_FILTERS_SRC, /_store\s*\|\|\s*SwigFilters\.instance\._options\s*\|\|\s*self\.options/);
+    });
+
+    it('swig-filters routes getWebroot/getUrl/t/tIcu through getRenderCtx() (>= 4 call sites)', function () {
+        var n = (SWIG_FILTERS_SRC.match(/var\s+ctx\s*=\s*getRenderCtx\(\)/g) || []).length;
+        assert.ok(n >= 4, 'expected >= 4 getRenderCtx() call sites, found ' + n);
+    });
+
+    it('nunjucks-filters getRenderCtx() reads process.gina._renderALS.getStore() with a singleton fallback', function () {
+        assert.match(NJ_FILTERS_SRC, /var\s+getRenderCtx\s*=\s*function/);
+        assert.match(NJ_FILTERS_SRC, /process\.gina\._renderALS\.getStore\(\)/);
+        assert.match(NJ_FILTERS_SRC, /_store\s*\|\|\s*NunjucksFilters\.instance\._options\s*\|\|\s*self\.options/);
+    });
+
+    it('nunjucks-filters routes getWebroot/getUrl/t/tIcu through getRenderCtx() (>= 4 call sites)', function () {
+        var n = (NJ_FILTERS_SRC.match(/var\s+ctx\s*=\s*getRenderCtx\(\)/g) || []).length;
+        assert.ok(n >= 4, 'expected >= 4 getRenderCtx() call sites, found ' + n);
+    });
+
+    // (d) swig-async delegate — shared engine, register-once, memo, .run() ----
+
+    it('swig-async lazily builds the render-context ALS on process.gina._renderALS', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+getRenderALS\s*\(\s*\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /process\.gina\._renderALS\s*=\s*new\s+AsyncLocalStorage\(\)/);
+    });
+
+    it('swig-async registers the gina filters ONCE inside getSwigEngine (context-free, not per request)', function () {
+        var gsStart = RENDER_SWIG_ASYNC_SRC.indexOf('function getSwigEngine');
+        assert.ok(gsStart > 0, 'getSwigEngine present');
+        var block = RENDER_SWIG_ASYNC_SRC.slice(gsStart, gsStart + 2000);
+        assert.match(block, /registerGinaFilters\(engine,\s*SwigFilters,\s*throwError\)/);
+        // and the once-registered registerGinaFilters takes the context-free shape
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+registerGinaFilters\(engine,\s*SwigFilters,\s*throwError\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /SwigFilters\(\{\s*options:\s*\{\},\s*isProxyHost:\s*false,\s*throwError:\s*throwError\s*\}\)/);
+    });
+
+    it('swig-async getSwigEngine returns { engine, compiled:Map } (engine + compiled-fn memo)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engine:\s*engine/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /compiled:\s*new Map\(\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.engine/);
+    });
+
+    it('swig-async memo is opt-in (stash.cache === true) AND dev-disabled', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /var\s+_useMemo\s*=\s*\(stash\.cache === true\)\s*&&\s*\(process\.env\.NODE_ENV_IS_DEV !== 'true'\)/);
+    });
+
+    it('swig-async caches the compiled Promise and evicts it on reject (no permanent poison)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.compiled\.get\(templateName\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.compiled\.set\(templateName,\s*compiled\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.compiled\.delete\(templateName\)/);
+    });
+
+    it('swig-async wraps getTemplate + execute in _renderALS.run() UNCONDITIONALLY (#B25)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /getRenderALS\(\)\.run\(_renderStore,\s*async function/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /isProxyHost:\s*computeIsProxyHost\(req,\s*localOptions\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+computeIsProxyHost\(req,\s*localOptions\)/);
+    });
+
+    it('swig-async drops the whole engine registry on a swig module hot-swap (owner guard)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /process\.gina\._swigEnginesOwner\s*!==\s*swigMod/);
+    });
+
+    // (e) nunjucks-async delegate — separate registry, two-mode, .run() -------
+
+    it('nunjucks-async lazily builds the render-context ALS on process.gina._renderALS', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+getRenderALS\s*\(\s*\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /process\.gina\._renderALS\s*=\s*new\s+AsyncLocalStorage\(\)/);
+    });
+
+    it('nunjucks-async uses a SEPARATE shared-env registry (_nunjucksAsyncEnvs) owner-guarded against hot-swap', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksAsyncEnvs/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksAsyncEnvsOwner\s*!==\s*nunjucks/);
+    });
+
+    it('nunjucks-async getNunjucksAsyncEnv registers the gina filters ONCE on the shared env (context-free)', function () {
+        var gsStart = RENDER_NJ_ASYNC_SRC.indexOf('function getNunjucksAsyncEnv');
+        assert.ok(gsStart > 0, 'getNunjucksAsyncEnv present');
+        var block = RENDER_NJ_ASYNC_SRC.slice(gsStart, gsStart + 2000);
+        assert.match(block, /registerGinaFilters\(env,\s*nunjucksFilters,\s*throwError\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+registerGinaFilters\(env,\s*nunjucksFilters,\s*throwError\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /nunjucksFilters\(\{\s*options:\s*\{\},\s*isProxyHost:\s*false,\s*throwError:\s*throwError\s*\}\)/);
+    });
+
+    it('nunjucks-async is two-mode: shared env when cache on, fresh per-request env (re-registered) when off', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /var\s+_useCache\s*=\s*\(stash\.cache === true\)\s*&&\s*\(process\.env\.NODE_ENV_IS_DEV !== 'true'\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /env\s*=\s*getNunjucksAsyncEnv\(nunjucks,\s*loaderKey/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /registerGinaFilters\(env,\s*nunjucksFilters,\s*self\.throwError\)/);
+    });
+
+    it('nunjucks-async wraps env.render in _renderALS.run() UNCONDITIONALLY, preserving the await-new-Promise literal (#B25)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /getRenderALS\(\)\.run\(_renderStore,\s*async function/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /return\s+await\s+new\s+Promise/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /isProxyHost:\s*computeIsProxyHost\(req,\s*localOptions\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+computeIsProxyHost\(req,\s*localOptions\)/);
+    });
+
+    // (f) BEHAVIOURAL — pure-logic ALS replica (#M12b shape; always runs) -----
+
+    it('replica: two interleaved _renderALS.run() contexts stay isolated, while a shared singleton bleeds (#B25 mechanism)', async function () {
+        var als = new AsyncLocalStorage();
+        var _singleton = null;
+        // ALS path — each "render" reads its OWN store after an await tick.
+        function viaALS(host) {
+            return als.run({ host: host }, async function () {
+                await new Promise(function (r) { setTimeout(r, 1); });
+                var s = als.getStore();
+                return s ? s.host : null;
+            });
+        }
+        // Singleton path — each "render" stamps a shared global then yields; with
+        // interleaving the last writer wins for BOTH (the pre-#TPL1 instance race).
+        function viaSingleton(host) {
+            return (async function () {
+                _singleton = host;
+                await new Promise(function (r) { setTimeout(r, 1); });
+                return _singleton;
+            })();
+        }
+        var isolated = await Promise.all([ viaALS('A'), viaALS('B') ]);
+        assert.deepEqual(isolated, ['A', 'B'], 'ALS: each concurrent run() sees only its own store');
+
+        var bled = await Promise.all([ viaSingleton('A'), viaSingleton('B') ]);
+        assert.equal(bled[0], bled[1], 'singleton: interleaved renders collapse to the last writer (the #B25 bleed the ALS fix removes)');
+    });
+
+    // (g) BEHAVIOURAL — swig: ONE shared engine, interleaved renders ----------
+
+    it('swig: two interleaved renders through ONE shared engine read their OWN _renderALS context; a singleton-read filter bleeds', async function (t) {
+        if (!swig) { t.skip('@rhinostone/swig not installed'); return; }
+        process.gina = process.gina || {};
+        var _priorALS = process.gina._renderALS;
+        var als = new AsyncLocalStorage();
+        process.gina._renderALS = als;
+        var _singleton = null;
+        try {
+            // ONE shared engine (mirrors getSwigEngine's per-bundle shared engine).
+            var engine = new swig.Swig({
+                loader: tlBuild({ type: 'memory', templates: {
+                    'page.html': 'als={{ probe | ctxAls }};singleton={{ probe | ctxSingleton }}'
+                } }),
+                autoescape: false,
+                cache: false
+            });
+            // Registered ONCE on the shared engine. ctxAls reads the per-request
+            // context via process.gina._renderALS.getStore() — the exact filter
+            // getRenderCtx() read site (the #TPL1 Tier-2 fix shape). ctxSingleton
+            // reads a process-global stamped per render — the pre-#TPL1 shape #B25
+            // races.
+            engine.setFilter('ctxAls', function () {
+                var s = process.gina._renderALS.getStore();
+                return (s && s.host) ? s.host : 'NO-CTX';
+            });
+            engine.setFilter('ctxSingleton', function () { return _singleton || 'NO-CTX'; });
+
+            var renderOnce = function (host) {
+                return als.run({ host: host }, async function () {
+                    _singleton = host;                                  // pre-await racing write
+                    var fn  = await engine.getTemplate('page.html');
+                    var out = await fn({ probe: 'p' });
+                    return out.output;
+                });
+            };
+
+            var results = await Promise.all([ renderOnce('A.example'), renderOnce('B.example') ]);
+            // ALS column — each render reads its own host, no bleed.
+            assert.match(results[0], /als=A\.example/, 'render A reads A via _renderALS');
+            assert.match(results[1], /als=B\.example/, 'render B reads B via _renderALS (no bleed from A)');
+            // Singleton column (SUBTRACT) — both collapse to the last writer.
+            var sgA = results[0].match(/singleton=([^;]*)/)[1];
+            var sgB = results[1].match(/singleton=([^;]*)/)[1];
+            assert.equal(sgA, sgB, 'singleton-read filter bleeds: interleaved renders both see the last writer');
+        } finally {
+            if (typeof _priorALS === 'undefined') { delete process.gina._renderALS; }
+            else { process.gina._renderALS = _priorALS; }
+        }
+    });
+
+    // (h) BEHAVIOURAL — nunjucks (gated): ONE shared env, interleaved renders --
+
+    it('nunjucks (gated): two interleaved renders through ONE shared env read their OWN _renderALS context (no #B25 bleed)', async function (t) {
+        if (!nunjucks) { t.skip('nunjucks not installed'); return; }
+        process.gina = process.gina || {};
+        var _priorALS = process.gina._renderALS;
+        var als = new AsyncLocalStorage();
+        process.gina._renderALS = als;
+        try {
+            var ginaLoader = tlBuild({ type: 'memory', templates: { 'page.njk': 'host={{ probe | ctxhost }}' } });
+            var AsyncGinaLoader = nunjucks.Loader.extend({
+                async: true,
+                resolve: function (from, to) { return to; },
+                getSource: function (name, cb) {
+                    var id;
+                    try { id = ginaLoader.resolve(name); } catch (e) { return void cb(e); }
+                    ginaLoader.load(id, function (err, src) { cb(err, err ? null : { src: src, path: id, noCache: false }); });
+                }
+            });
+            // ONE shared env (mirrors getNunjucksAsyncEnv's cache-on path).
+            var env = new nunjucks.Environment(new AsyncGinaLoader(), { autoescape: false });
+            // Registered ONCE on the shared env; reads per-request context via ALS.
+            env.addFilter('ctxhost', function () {
+                var s = process.gina._renderALS.getStore();
+                return (s && s.host) ? s.host : 'NO-CTX';
+            });
+
+            var renderOnce = function (host) {
+                return als.run({ host: host }, function () {
+                    return new Promise(function (resolve, reject) {
+                        env.render('page.njk', { probe: 'p' }, function (err, out) {
+                            if (err) { return reject(err); }
+                            resolve(out);
+                        });
+                    });
+                });
+            };
+
+            var results = await Promise.all([ renderOnce('A.example'), renderOnce('B.example') ]);
+            assert.equal(results[0], 'host=A.example', 'render A reads A via _renderALS');
+            assert.equal(results[1], 'host=B.example', 'render B reads B via _renderALS (no bleed from A)');
+        } finally {
+            if (typeof _priorALS === 'undefined') { delete process.gina._renderALS; }
+            else { process.gina._renderALS = _priorALS; }
+        }
     });
 });
 

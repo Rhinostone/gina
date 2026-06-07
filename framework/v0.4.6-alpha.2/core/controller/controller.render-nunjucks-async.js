@@ -25,20 +25,34 @@
  * / object-storage / in-memory). The gina loader's CVE-2023-25345 guard runs on
  * every hop (inside `getSource`'s `ginaLoader.resolve`).
  *
- * ## Per-request Environment (NOT the sync delegate's cached `_nunjucksEnvs` registry)
+ * ## Per-request context via process.gina._renderALS (#B25 / #TPL1 Tier-2)
  *
- * This is the one place the design deliberately diverges from the swig-async
- * per-bundle-engine precedent. nunjucks-resolver.md §8.1 invariant #1 mandates
- * that any async-render port switch to a per-request env: the context-bearing
- * gina filters (`getUrl` / `getWebroot`) are registered per request via
- * `env.addFilter`, and an async `env.render` yields between that registration
- * and the actual template execution — so a shared/cached env would let request
- * B stomp request A's filter table mid-await (a §8.1-class cross-request bleed).
- * A fresh env per request isolates the filter table. The cost — no cross-request
- * compiled-template reuse — is acceptable: the loader's own source cache (e.g.
- * the http loader's Tier-1 cache) collapses the network cost, and a Tier-2
- * "shared env + per-request context via the render ctx" reuse pattern is a later
- * slice. This delegate MUST NOT reuse the sync delegate's cached `_nunjucksEnvs` registry.
+ * The context-bearing gina filters (getUrl / getWebroot / t / tIcu) read their
+ * per-request context from a process-global singleton (`NunjucksFilters.instance
+ * ._options`) that every `NunjucksFilters({…})` call overwrites. The SYNC
+ * delegate (render-nunjucks.js) is safe only because its render is synchronous —
+ * no other request runs between the factory call and the render, so the
+ * singleton is stable. An ASYNC `env.render` yields (awaited callback form), so a
+ * concurrent request can stomp the singleton between `addFilter` and the filter
+ * invocation — a cross-request context bleed (#B25). A per-request Environment
+ * does NOT fix this: it isolates the filter name→function TABLE, not the
+ * singleton the functions read. (This corrects the original Slice-3 rationale,
+ * which mis-attributed the sync-path safety to the per-request env.)
+ *
+ * The fix (this slice): the gina filters are context-free — they read the
+ * per-request context from `process.gina._renderALS` at CALL time — and the
+ * render is wrapped in `_renderALS.run({ options, isProxyHost, throwError, req,
+ * res }, …)`. ALS propagates the store across every await in the render, so
+ * interleaved async renders each read their own context. This wrap is
+ * UNCONDITIONAL (it closes #B25 whether or not the compiled cache is opted in).
+ *
+ * Tier-2 compiled-template reuse is then opt-in via
+ * `settings.template.nunjucks.loader.cache` (dev-disabled): ON shares a
+ * per-bundle Environment on `process.gina._nunjucksAsyncEnvs` (its loader.cache
+ * populates across requests); OFF builds a fresh Environment per request (still
+ * race-safe via the unconditional `.run()`). EITHER mode keeps a SEPARATE
+ * registry from the sync delegate's filesystem `_nunjucksEnvs` (whose loader is a
+ * FileSystemLoader, not the gina async adapter).
  *
  * ## Callback-form render is mandatory
  *
@@ -71,6 +85,26 @@ const merge      = libRef.merge;
 // layout (isWithoutLayout XHR/popin responses), mirroring render-nunjucks.js /
 // render-swig.js.
 const Collection = libRef.Collection;
+
+/**
+ * Lazily construct the process-wide render-context AsyncLocalStorage, parked on
+ * `process.gina` so it survives dev-mode `require.cache` eviction of this
+ * delegate (mirrors `process.gina._reqALS` / `_queryALS`). The render is wrapped
+ * in `_renderALS.run({ options, isProxyHost, throwError, req, res }, …)` so the
+ * context-free gina filters (getUrl/getWebroot/t/tIcu) read the right request's
+ * context at call time — closing the #B25 singleton race and enabling the opt-in
+ * shared-env compiled-template cache (#TPL1 Tier-2).
+ *
+ * @inner
+ * @returns {AsyncLocalStorage} the shared render-context store
+ */
+function getRenderALS() {
+    if (!process.gina._renderALS) {
+        var AsyncLocalStorage = require('async_hooks').AsyncLocalStorage;
+        process.gina._renderALS = new AsyncLocalStorage();
+    }
+    return process.gina._renderALS;
+}
 
 /**
  * Resolve the loader identifier for the page template, relative to the bundle
@@ -117,32 +151,19 @@ function resolveTemplatePath(data, localOptions) {
 }
 
 /**
- * Register gina's NunjucksFilters on the per-request Environment. Filters such
- * as `getUrl` / `getWebroot` need per-request context (the request, the resolved
- * options, the proxy-host decision), so they are registered after the env is
- * built and before the render. Mirrors render-nunjucks.js `registerGinaFilters`.
- * Because the env is per-request (see the module header), there is no
- * cross-request filter-table race.
+ * Compute the per-request proxy-host decision from the raw request headers and
+ * the resolved bundle options. Extracted so the render path can stash it in the
+ * `_renderALS` store (the gina filters read `ctx.isProxyHost` from there).
+ * Mirrors the isProxyHost derivation in render-nunjucks.js / render-swig.js.
  *
  * @inner
- * @param {*}      env          - The per-request `nunjucks.Environment`
- * @param {object} self         - SuperController instance (provides `throwError`)
- * @param {object} local        - Per-request closure
+ * @param {object} req          - Request (raw headers)
  * @param {object} localOptions - Controller options (`.conf`, hostname/port)
- * @param {object} req          - Request (captured)
- * @param {object} res          - Response (captured)
- * @returns {void}
+ * @returns {boolean} true when the request appears to arrive via a reverse proxy
  */
-function registerGinaFilters(env, self, local, localOptions, req, res) {
-    // nunjucksFilters via the registry with a require fallback so dev-mode
-    // refreshCore() lib-cache eviction doesn't return undefined here.
-    var nunjucksFilters = (libRef && libRef.nunjucksFilters)
-        || require('../../lib/nunjucks-filters');
-
-    // Same isProxyHost detection as render-nunjucks.js / render-swig.js: reads
-    // raw request headers + engine-specific localOptions.
+function computeIsProxyHost(req, localOptions) {
     var localRequestPort = req.headers.port || req.headers[':port'];
-    var isProxyHost = (
+    return (
         typeof(req.headers.host) != 'undefined'
         && typeof(localRequestPort) != 'undefined'
         && (localRequestPort === '80' || localRequestPort === '443' || localRequestPort === 80 || localRequestPort === 443)
@@ -161,14 +182,27 @@ function registerGinaFilters(env, self, local, localOptions, req, res) {
         ||
         typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
     ) ? true : false;
+}
 
-    var filters = nunjucksFilters({
-        options:     JSON.clone(localOptions),
-        isProxyHost: isProxyHost,
-        throwError:  self.throwError,
-        req:         req,
-        res:         res
-    });
+/**
+ * Register gina's NunjucksFilters on a nunjucks Environment. The filters are
+ * context-free: getUrl / getWebroot / t / tIcu read per-request context from
+ * `process.gina._renderALS` at call time, so a single shared filter table can't
+ * bleed one request's context into another's interleaved async render (#B25).
+ * The build-time conf is therefore empty — everything flows through the ALS store
+ * stamped by the render `.run()` wrap. Called once on a shared env (cache on) or
+ * per request on a fresh env (cache off). Bundle-level filter wraps registered on
+ * `process.gina._bundleFilterWraps` are applied here, parity with the sync
+ * render-nunjucks.js path.
+ *
+ * @inner
+ * @param {*}        env             - The `nunjucks.Environment` to extend
+ * @param {function} nunjucksFilters - The NunjucksFilters factory (registry/require)
+ * @param {function} throwError      - `self.throwError`, carried for the singleton-fallback path
+ * @returns {void}
+ */
+function registerGinaFilters(env, nunjucksFilters, throwError) {
+    var filters = nunjucksFilters({ options: {}, isProxyHost: false, throwError: throwError });
 
     // Apply bundle-level filter wraps registered on process state. Bundle-level
     // monkey-patches on `lib.nunjucksFilters` don't survive refreshCore() (a
@@ -399,6 +433,55 @@ function buildLoaderAdapter(nunjucks, ginaLoader) {
 }
 
 /**
+ * Shared per-bundle nunjucks Environment for the Tier-2 compiled-template cache
+ * (opt-in `settings.template.nunjucks.loader.cache`, prod only). Unlike the
+ * cache-off path's fresh-per-request env, this env is built ONCE and reused, so
+ * nunjucks' loader.cache populates across requests (the adapter's getSource
+ * returns noCache:false outside dev). The gina filters are registered once on it
+ * (context-free; per-request context flows via process.gina._renderALS).
+ *
+ * SEPARATE registry from the sync delegate's `_nunjucksEnvs` (whose loader is a
+ * FileSystemLoader, not the gina async adapter). Owner-guarded on
+ * `_nunjucksAsyncEnvsOwner !== nunjucks` so a dev-mode nunjucks hot-swap drops the
+ * cached envs (mirrors render-nunjucks.js `_nunjucksEnvsOwner`).
+ *
+ * @inner
+ * @param {*}        nunjucks        - The resolved nunjucks module (`.Environment`/`.Loader`)
+ * @param {string}   templateRoot    - Registry key (bundle template root)
+ * @param {object}   ginaLoader      - Guarded async loader (from `process.gina._nunjucksLoaders`)
+ * @param {boolean}  autoescape      - Per-bundle autoescape
+ * @param {function} nunjucksFilters - The NunjucksFilters factory, registered once
+ * @param {function} throwError      - `self.throwError`, carried into the filter set
+ * @returns {*} A cached or newly built shared nunjucks Environment
+ */
+function getNunjucksAsyncEnv(nunjucks, templateRoot, ginaLoader, autoescape, nunjucksFilters, throwError) {
+    if (!process.gina._nunjucksAsyncEnvs) {
+        process.gina._nunjucksAsyncEnvs = Object.create(null);
+    }
+    // Drop all cached async envs when the nunjucks module was hot-swapped
+    // (dev-mode project refresh) — envs are bound to the module that built them.
+    if (process.gina._nunjucksAsyncEnvsOwner !== nunjucks) {
+        process.gina._nunjucksAsyncEnvs = Object.create(null);
+        process.gina._nunjucksAsyncEnvsOwner = nunjucks;
+    }
+    var key = templateRoot;
+    if (!process.gina._nunjucksAsyncEnvs[key]) {
+        var adapter = buildLoaderAdapter(nunjucks, ginaLoader);
+        var env = new nunjucks.Environment(adapter, {
+            autoescape:       (autoescape !== false),
+            throwOnUndefined: false,
+            trimBlocks:       false,
+            lstripBlocks:     false
+        });
+        // #B25 / #TPL1 Tier-2 — register the gina filters ONCE on the shared env
+        // (context-free; per-request context flows via _renderALS).
+        registerGinaFilters(env, nunjucksFilters, throwError);
+        process.gina._nunjucksAsyncEnvs[key] = env;
+    }
+    return process.gina._nunjucksAsyncEnvs[key];
+}
+
+/**
  * Async-loader nunjucks render delegate. Signature matches the other delegates
  * so controller.js can dispatch to it interchangeably.
  *
@@ -547,25 +630,40 @@ module.exports = async function renderNunjucksAsync(userData, displayInspector, 
         data.page.cspNonce = _cspNonce;
     }
 
-    // Build the per-request Environment over the async loader adapter. PER-REQUEST
-    // (never the cached _nunjucksEnvs registry) — see the module header §8.1 rationale.
+    // #B25 / #TPL1 Tier-2 — fetch the NunjucksFilters factory (registry with a
+    // require fallback so dev-mode refreshCore() lib-cache eviction can't return
+    // undefined). The gina filters are context-free now: they read per-request
+    // context from process.gina._renderALS at call time, registered once on a
+    // shared env (cache on) or per request on a fresh env (cache off).
+    var nunjucksFilters = (libRef && libRef.nunjucksFilters)
+        || require('../../lib/nunjucks-filters');
+
+    // Tier-2 compiled-template reuse: opt-in via settings.template.nunjucks.loader.cache,
+    // force-disabled in dev so template edits are picked up live. When ON, a shared
+    // per-bundle Environment (loader.cache populates across requests) is reused;
+    // when OFF, a fresh Environment is built per request. EITHER WAY the render is
+    // wrapped in _renderALS.run() below, which closes the #B25 singleton race (the
+    // per-request env alone does NOT — the gina filters read a process-global
+    // singleton, so an async render can be stomped by a concurrent request between
+    // addFilter and the filter invocation).
+    var _useCache = (stash.cache === true) && (process.env.NODE_ENV_IS_DEV !== 'true');
+
     var env;
     try {
-        var adapter = buildLoaderAdapter(nunjucks, ginaLoader);
-        env = new nunjucks.Environment(adapter, {
-            autoescape:       (stash.autoescape !== false),
-            throwOnUndefined: false,
-            trimBlocks:       false,
-            lstripBlocks:     false
-        });
+        if (_useCache) {
+            env = getNunjucksAsyncEnv(nunjucks, loaderKey, ginaLoader, stash.autoescape, nunjucksFilters, self.throwError);
+        } else {
+            var adapter = buildLoaderAdapter(nunjucks, ginaLoader);
+            env = new nunjucks.Environment(adapter, {
+                autoescape:       (stash.autoescape !== false),
+                throwOnUndefined: false,
+                trimBlocks:       false,
+                lstripBlocks:     false
+            });
+            registerGinaFilters(env, nunjucksFilters, self.throwError);
+        }
     } catch (envErr) {
         return self.throwError(envErr);
-    }
-
-    try {
-        registerGinaFilters(env, self, local, localOptions, req, res);
-    } catch (filterErr) {
-        return self.throwError(filterErr);
     }
 
     // #TPL1 asset injection — populate data.page.view.stylesheets / .scripts so
@@ -609,12 +707,29 @@ module.exports = async function renderNunjucksAsync(userData, displayInspector, 
     // env.render(name, ctx) returns null silently on an uncached template.
     // nunjucks' async codegen drives resolve->getSource for the page template
     // AND its transitive extends/include chain through the adapter.
+    //
+    // #B25 / #TPL1 Tier-2 — per-request render context for the context-free gina
+    // filters. Carried through process.gina._renderALS so the filters read THIS
+    // request's context at call time (not a concurrently-interleaved render's).
+    // The .run() wrap is UNCONDITIONAL — it closes the #B25 singleton race whether
+    // or not the compiled cache is opted in — and propagates the store across
+    // every await in the render (page template + transitive extends/include).
+    var _renderStore = {
+        options:     JSON.clone(localOptions),
+        isProxyHost: computeIsProxyHost(req, localOptions),
+        throwError:  self.throwError,
+        req:         req,
+        res:         res
+    };
+
     var html;
     try {
-        html = await new Promise(function (resolve, reject) {
-            env.render(templateName, data, function (err, out) {
-                if (err) { return reject(err); }
-                resolve(out);
+        html = await getRenderALS().run(_renderStore, async function () {
+            return await new Promise(function (resolve, reject) {
+                env.render(templateName, data, function (err, out) {
+                    if (err) { return reject(err); }
+                    resolve(out);
+                });
             });
         });
     } catch (renderErr) {

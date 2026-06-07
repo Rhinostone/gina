@@ -190,6 +190,11 @@
                   "type": "boolean",
                   "description": "For type \"http\": when true, a cache hit issues a conditional GET (If-None-Match) and serves cached source on 304, refreshing the TTL. Off by default (no per-hit round-trip). Turn on for live-CMS templates whose origin emits ETags.",
                   "default": false
+                },
+                "cache": {
+                  "type": "boolean",
+                  "description": "#TPL1 Tier-2 opt-in: reuse compiled templates across requests via the shared per-bundle engine + AsyncLocalStorage per-request context. Off by default (per-request render, no compiled-template reuse). Force-disabled in dev mode regardless so template edits are picked up live without a restart.",
+                  "default": false
                 }
               }
             }
@@ -233,6 +238,11 @@
                 "revalidate": {
                   "type": "boolean",
                   "description": "For type \"http\": when true, a cache hit issues a conditional GET (If-None-Match) and serves cached source on 304, refreshing the TTL. Off by default (no per-hit round-trip). Turn on for live-CMS templates whose origin emits ETags.",
+                  "default": false
+                },
+                "cache": {
+                  "type": "boolean",
+                  "description": "#TPL1 Tier-2 opt-in: reuse compiled templates across requests via a shared per-request-context (AsyncLocalStorage) nunjucks Environment. Off by default (per-request Environment, no compiled-template reuse). Force-disabled in dev mode regardless so template edits are picked up live without a restart.",
                   "default": false
                 }
               }
