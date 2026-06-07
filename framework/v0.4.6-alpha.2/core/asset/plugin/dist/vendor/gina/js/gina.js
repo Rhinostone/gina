@@ -17359,6 +17359,52 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
     function _nextId(prefix) { return (prefix || 'gp') + '-' + (++_uid); }
 
     /**
+     * Module-level preload cache, keyed by URL. Warmed by the delegated
+     * mouseover/focusin listeners (installPreload) and consumed once at open time
+     * (consumePreload). Shared across popin instances so a hover-preload survives the
+     * subsequent click. A reserved-but-not-yet-loaded entry is `null` (in-flight).
+     *
+     * @inner
+     * @type {object}
+     */
+    var preloadCache = {};
+
+    /** @inner @type {object} warn-once registry, keyed by deprecated attribute name */
+    var _deprecationWarned = {};
+
+    /**
+     * warnDeprecatedOnce
+     *
+     * Emits a one-time `console.warn` for a deprecated, *developer-authored* legacy
+     * trigger attribute — only `data-gina-popin-name` and `data-gina-popin-url` reach
+     * here (at most two distinct warnings for the life of the page). The
+     * engine-managed `data-gina-popin-is-link` / `data-gina-popin-loading` attributes
+     * are written by gina itself and are NOT deprecated, so they never warn.
+     *
+     * @inner
+     * @param {string} kind - the legacy attribute name
+     * @returns {void}
+     */
+    function warnDeprecatedOnce(kind) {
+        if ( _deprecationWarned[kind] ) {
+            return;
+        }
+        _deprecationWarned[kind] = true;
+        if ( typeof(console) != 'undefined' && typeof(console.warn) == 'function' ) {
+            var replacement = ( kind === 'data-gina-popin-name' ) ? 'data-gina-dialog' : 'data-gina-dialog-src';
+            console.warn(
+                '[gina/popin] `' + kind + '` is deprecated; use `' + replacement + '` instead. '
+                + 'The legacy attribute still works (mapped onto the new dialog path).'
+            );
+        }
+    }
+
+    /** @inner @type {boolean} module guard — the delegated open listener is installed once */
+    var _ginaDialogDelegated = false;
+    /** @inner @type {boolean} module guard — the preload listeners are installed once */
+    var _ginaPreloadInstalled = false;
+
+    /**
      * Gina Popin Handler
      *
      * @param {object} options
@@ -17395,11 +17441,23 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 // Optional skeleton markup for `preOpen`: a string of HTML injected into the
                 // popin while it loads. When omitted, a generic gina-namespaced default
                 // skeleton is used (styled by `.gina-popin-skeleton*` in popin.css).
-                'loadingShell': null
+                'loadingShell': null,
+                // Per-popin modal opt-in (precedence #2 in resolveModal). `null` => fall
+                // through to the trigger `data-gina-dialog-modal` attribute, then the
+                // `gina.config.popin.modal` project default, then the framework
+                // non-modal default. Set `true`/`false` via `new Popin({ modal })`.
+                'modal': null
             },
             authorizedEvents : ['ready', 'error'],
             events: {}
         };
+
+        // Snapshot the per-popin `modal` option (precedence #2) from the constructor
+        // arg, so resolveModal() can read it. `gina.config.popin.modal` (precedence #4)
+        // is read lazily at open time — it is populated post-load via setOptions.
+        if ( options && typeof(options.modal) != 'undefined' ) {
+            self.options.modal = options.modal;
+        }
 
         var instance        = {
             plugin          : this.plugin,
@@ -17532,6 +17590,505 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             }
 
             return $popin;
+        }
+
+
+        // ─────────────────────────────────────────────────────────────────────────
+        // New `data-gina-dialog-*` entry layer (strangler — funnels into the existing
+        // popinLoad / popinBind / popinOpen engine). Additive: the legacy bindOpen scan
+        // and per-element binding below are kept intact for full parity.
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /**
+         * resolveModal
+         *
+         * Resolves whether a trigger opens a modal dialog. Precedence (highest wins):
+         *  1. legacy trigger (`data-gina-popin-name`) -> modal (today's showModal()-only parity)
+         *  2. `data-gina-dialog-modal` on the trigger -> `"false"` => non-modal, else modal
+         *  3. `new Popin({ modal })` per-popin option (`self.options.modal`)
+         *  4. `gina.config.popin.modal` project default (read lazily — populated post-load)
+         *  5. framework default -> non-modal
+         *
+         * @inner
+         * @param {HTMLElement} $trigger
+         * @param {boolean} [isLegacy] - precomputed legacy flag (resolveTrigger passes it)
+         * @returns {boolean}
+         */
+        function resolveModal($trigger, isLegacy) {
+            // 1. Legacy popins are always modal (showModal()-only, full parity).
+            if ( isLegacy || $trigger.getAttribute('data-gina-popin-name') != null ) {
+                return true;
+            }
+            // 2. Explicit attribute on the trigger. Value-parsed, no separate default:
+            //    `="false"` => non-modal; present with any other value => modal.
+            var attr = $trigger.getAttribute('data-gina-dialog-modal');
+            if ( attr != null ) {
+                return ( attr === 'false' ) ? false : true;
+            }
+            // 3. Per-popin constructor option.
+            if ( self.options.modal === true || self.options.modal === false ) {
+                return self.options.modal;
+            }
+            // 4. Project config — read lazily at open time (gina.config is populated
+            //    post-load via setOptions, so it may be unset when the constructor ran).
+            if (
+                typeof(gina) != 'undefined' && gina.config && gina.config.popin
+                && ( gina.config.popin.modal === true || gina.config.popin.modal === false )
+            ) {
+                return gina.config.popin.modal;
+            }
+            // 5. Framework default.
+            return false;
+        }
+
+        /**
+         * resolveTrigger
+         *
+         * Normalizes a trigger element (new `data-gina-dialog-*` or legacy
+         * `data-gina-popin-*`) into a single descriptor consumed by openFromTrigger().
+         * Only the two developer-authored legacy attributes are aliased + warned:
+         * `data-gina-popin-name` -> `id`, `data-gina-popin-url` -> `src`. The
+         * engine-managed `-is-link` / `-loading` attributes are read by the engine where
+         * it already reads them and are never deprecated here.
+         *
+         * @inner
+         * @param {HTMLElement} $trigger
+         * @returns {object} { id, src, isLegacy, modal, partialTarget, isLink, formSubmit }
+         */
+        function resolveTrigger($trigger) {
+            var isLegacy = false;
+            var id  = $trigger.getAttribute('data-gina-dialog');
+            var src = $trigger.getAttribute('data-gina-dialog-src');
+
+            // Legacy aliasing — only the two developer-authored attributes (warn once each).
+            if ( id == null && $trigger.getAttribute('data-gina-popin-name') != null ) {
+                isLegacy = true;
+                id = $trigger.getAttribute('data-gina-popin-name');
+                warnDeprecatedOnce('data-gina-popin-name');
+            }
+            if ( src == null && $trigger.getAttribute('data-gina-popin-url') != null ) {
+                isLegacy = true;
+                src = $trigger.getAttribute('data-gina-popin-url');
+                warnDeprecatedOnce('data-gina-popin-url');
+            }
+            // An <a href> doubles as the source for both APIs (ignore empty / "#" anchors).
+            if ( src == null && /^A$/i.test($trigger.tagName) ) {
+                var href = $trigger.getAttribute('href');
+                if ( href && href != '' && href != '#' && !/^#/.test(href) ) {
+                    src = href;
+                }
+            }
+
+            return {
+                'id'            : id
+                , 'src'         : src
+                , 'isLegacy'    : isLegacy
+                , 'modal'       : resolveModal($trigger, isLegacy)
+                , 'partialTarget' : $trigger.getAttribute('data-gina-dialog-target')
+                // engine-managed (read, not deprecated) — surfaced for openFromTrigger
+                , 'isLink'      : /^true$/i.test($trigger.getAttribute('data-gina-popin-is-link'))
+                , 'formSubmit'  : /^true$/i.test($trigger.getAttribute('data-gina-form-submit'))
+            };
+        }
+
+        /**
+         * wireTriggerAria — adds `aria-haspopup="dialog"` + `aria-controls="ID"` to a
+         * trigger so assistive tech announces the relationship.
+         *
+         * @inner
+         */
+        function wireTriggerAria($trigger, id) {
+            if ( !$trigger || !id ) {
+                return;
+            }
+            $trigger.setAttribute('aria-haspopup', 'dialog');
+            $trigger.setAttribute('aria-controls', id);
+        }
+
+        /**
+         * associateLabel — points the dialog's `aria-labelledby` at a REAL title element
+         * (an `[id$="-title"]`, else the first heading), assigning an id if missing.
+         * Fixes the legacy behavior of pointing `aria-labelledby` at the popin *name*.
+         *
+         * @inner
+         */
+        function associateLabel($el) {
+            if ( !$el || typeof($el.querySelector) != 'function' ) {
+                return;
+            }
+            var $title = $el.querySelector('[id$="-title"]') || $el.querySelector('h1, h2, h3, h4, h5, h6');
+            if ( !$title ) {
+                return;
+            }
+            if ( !$title.id ) {
+                $title.id = ( $el.id || 'gina-popin' ) + '-title';
+                $title.setAttribute('id', $title.id);
+            }
+            $el.setAttribute('aria-labelledby', $title.id);
+        }
+
+        /**
+         * focusInitial — moves focus into the dialog after content is applied, honoring
+         * an explicit `[autofocus]`, else the first focusable, else the dialog itself.
+         * (Native showModal() already does this; the non-modal `.show()` path does not.)
+         *
+         * @inner
+         */
+        function focusInitial($el) {
+            if ( !$el || typeof($el.querySelector) != 'function' ) {
+                return;
+            }
+            var $target = $el.querySelector('[autofocus]')
+                || $el.querySelector('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+            if ( $target && typeof($target.focus) == 'function' ) {
+                $target.focus();
+            } else if ( typeof($el.focus) == 'function' ) {
+                if ( $el.getAttribute('tabindex') == null ) {
+                    $el.setAttribute('tabindex', '-1');
+                }
+                $el.focus();
+            }
+        }
+
+        /**
+         * applyNonModalShims
+         *
+         * Native `<dialog>.showModal()` gives `Escape`->close, background inert, body
+         * scroll-block and a focus trap for free; `.show()` (non-modal, the new-API
+         * default) gives none of them. This restores them: an `Escape` keydown handler,
+         * a body scroll-lock attribute (CSS), and best-effort `inert` on background
+         * siblings. Torn down by removeNonModalShims() on close.
+         *
+         * @inner
+         */
+        function applyNonModalShims($popin, $el) {
+            if ( !$el ) {
+                return;
+            }
+            // body scroll-lock (styled by `body[data-gina-popin-scroll-lock]` in popin.css)
+            document.body.setAttribute('data-gina-popin-scroll-lock', 'true');
+
+            // Escape-to-close — native modal does this for free; .show() does not.
+            var onKeydown = function (e) {
+                if ( e.key === 'Escape' || e.keyCode === 27 ) {
+                    e.preventDefault();
+                    popinClose($popin.name);
+                }
+            };
+            $el.__ginaOnKeydown = onKeydown;
+            $el.addEventListener('keydown', onKeydown);
+
+            // Best-effort background inert (skip the dialog, its container and ancestors).
+            var siblings = document.body.children;
+            var b = 0, len = siblings.length;
+            for (; b < len; ++b) {
+                if ( siblings[b] === $el || siblings[b] === instance.target || siblings[b].contains($el) ) {
+                    continue;
+                }
+                if ( siblings[b].getAttribute('inert') == null ) {
+                    siblings[b].setAttribute('inert', '');
+                    siblings[b].setAttribute('data-gina-popin-inert', 'true');
+                }
+            }
+        }
+
+        /**
+         * removeNonModalShims — teardown counterpart to applyNonModalShims (called from
+         * popinClose). Idempotent — safe to call for popins that were opened modal.
+         *
+         * @inner
+         */
+        function removeNonModalShims($el) {
+            document.body.removeAttribute('data-gina-popin-scroll-lock');
+            if ( $el && $el.__ginaOnKeydown ) {
+                $el.removeEventListener('keydown', $el.__ginaOnKeydown);
+                $el.__ginaOnKeydown = null;
+            }
+            var $inert = document.querySelectorAll('[data-gina-popin-inert]');
+            var b = 0, len = $inert.length;
+            for (; b < len; ++b) {
+                $inert[b].removeAttribute('inert');
+                $inert[b].removeAttribute('data-gina-popin-inert');
+            }
+        }
+
+        /**
+         * applyContent
+         *
+         * Full (default): replace the whole element — byte-identical to the legacy
+         * `$el.innerHTML = html.trim()`, so legacy popins are unaffected.
+         * Partial (`partialTarget` set): parse the fetched HTML with DOMParser and swap
+         * only the `partialTarget` region, so chrome (close button, header/footer) and
+         * its bindings survive. Falls back to full-replace if the slot is absent.
+         *
+         * @inner
+         */
+        function applyContent($el, html, $popin, partialTarget) {
+            if ( !partialTarget ) {
+                $el.innerHTML = ( typeof(html) == 'string' ) ? html.trim() : '';
+                return;
+            }
+            var $slot = $el.querySelector(partialTarget);
+            if ( !$slot ) {
+                $el.innerHTML = ( typeof(html) == 'string' ) ? html.trim() : '';
+                return;
+            }
+            var parsed = new DOMParser().parseFromString(html, 'text/html');
+            var $incoming = parsed.querySelector(partialTarget) || parsed.body;
+            $slot.innerHTML = $incoming.innerHTML;
+        }
+
+        /**
+         * handleLoadedBody
+         *
+         * Applies a loaded HTML body (full or partial per `$popin.partialTarget`),
+         * (re)binds the dialog through the guarded popinBind path, and opens it. Used by
+         * the preload-consume path; the click-time XHR keeps its own battle-tested
+         * completion tail (redirect / JSON / CORS / toolbar) for parity.
+         *
+         * @inner
+         */
+        function handleLoadedBody(body, $popin, $el) {
+            applyContent($el, body, $popin, $popin.partialTarget);
+            popinUnbind($popin.name, true);
+            popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
+            if ( !$popin.isOpen ) {
+                popinOpen($popin.name);
+            }
+            associateLabel($el);
+            focusInitial($el);
+        }
+
+        /**
+         * preloadFetch — small same-origin GET that mirrors popinLoad's `X-Requested-With`
+         * + credentials so a preloaded response is interchangeable with a click-time load.
+         * Cross-origin URLs are left for the click-time XHR/CORS path.
+         *
+         * @inner
+         */
+        function preloadFetch(url) {
+            if (
+                /^(http|https):/.test(url)
+                && !new RegExp('^' + window.location.protocol + '//' + window.location.host).test(url)
+            ) {
+                delete preloadCache[url];
+                return;
+            }
+            var xhrPreload = new XMLHttpRequest();
+            xhrPreload.open('GET', url);
+            xhrPreload.withCredentials = false;
+            xhrPreload.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhrPreload.onreadystatechange = function () {
+                if ( xhrPreload.readyState == 4 ) {
+                    if ( /^2/.test(xhrPreload.status) ) {
+                        preloadCache[url] = xhrPreload.responseText;
+                    } else {
+                        delete preloadCache[url];
+                    }
+                }
+            };
+            xhrPreload.send();
+        }
+
+        /**
+         * consumePreload — if a warmed preload for `url` is cached, apply it to the popin
+         * (deleting the cache entry) and return `true`; else `false` so the caller falls
+         * back to a click-time XHR. A `null` entry is in-flight (reserved, not ready).
+         *
+         * @inner
+         */
+        function consumePreload(url, $popin) {
+            if ( preloadCache[url] == null ) {
+                return false;
+            }
+            var body = preloadCache[url];
+            delete preloadCache[url];
+            var $el = document.getElementById($popin.id) || $popin.target;
+            handleLoadedBody(body, $popin, $el);
+            return true;
+        }
+
+        /**
+         * installPreload — one-time delegated `mouseover` + `focusin` listeners that warm
+         * preloadCache for AJAX triggers (`data-gina-dialog-src` / legacy
+         * `data-gina-popin-url`). GET + same-origin only; disabled triggers skipped;
+         * repeated hover over descendants is a no-op (URL-cache dedup).
+         *
+         * @inner
+         */
+        function installPreload() {
+            if ( _ginaPreloadInstalled ) {
+                return;
+            }
+            _ginaPreloadInstalled = true;
+
+            var onIntent = function (e) {
+                var $trigger = ( e.target && typeof(e.target.closest) == 'function' )
+                    ? e.target.closest('[data-gina-dialog-src],[data-gina-popin-url]')
+                    : null;
+                if ( !$trigger ) {
+                    return;
+                }
+                if (
+                    $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
+                    || $trigger.getAttribute('aria-disabled') == 'true'
+                ) {
+                    return;
+                }
+                var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
+                if ( !url || typeof(preloadCache[url]) != 'undefined' ) {
+                    return; // already cached or in-flight — dedup
+                }
+                preloadCache[url] = null; // reserve in-flight slot (dedup concurrent intents)
+                preloadFetch(url);
+            };
+            document.addEventListener('mouseover', onIntent);
+            document.addEventListener('focusin', onIntent);
+        }
+
+        /**
+         * openInPageDialog
+         *
+         * Static (non-AJAX) path of the new API: opens an existing in-page
+         * `<dialog id="ID">` directly. Registers a lightweight $popin keyed by the
+         * element id (so close/getActivePopin work), wires a11y, then opens modal or
+         * non-modal per the resolved descriptor.
+         *
+         * @inner
+         */
+        function openInPageDialog(descriptor, $trigger) {
+            var id  = descriptor.id;
+            var $el = document.getElementById(id);
+            if ( !$el ) {
+                throw new Error('Popin dialog `' + id + '` not found in the DOM !');
+            }
+
+            var $dialogPopin = getPopinById(id);
+            if ( !$dialogPopin ) {
+                $dialogPopin = merge({}, $popin);
+                $dialogPopin.id            = id;
+                $dialogPopin.name          = id;
+                $dialogPopin.target        = $el;
+                $dialogPopin.options       = merge({}, self.options);
+                $dialogPopin.load          = popinLoad;
+                $dialogPopin.loadContent   = popinLoadContent;
+                $dialogPopin.open          = popinOpen;
+                $dialogPopin.close         = popinClose;
+                instance.$popins[id]       = $dialogPopin;
+            }
+            $dialogPopin.modal       = descriptor.modal;
+            $dialogPopin.openTrigger = $trigger ? ( $trigger.id || $trigger.getAttribute('id') ) : null;
+
+            wireTriggerAria($trigger, id);
+            associateLabel($el);
+
+            // Bind close buttons / forms inside the dialog (guarded — no double-bind).
+            if ( !gina.popinIsBinded ) {
+                popinBind({ target: $el, type: 'open.' + id }, $dialogPopin);
+            }
+
+            $el.classList.add('gina-popin-is-active');
+            if ( !$el.getAttribute('open') ) {
+                if ( descriptor.modal && typeof($el.showModal) === 'function' ) {
+                    $el.showModal();
+                } else if ( typeof($el.show) === 'function' ) {
+                    $el.show();
+                    applyNonModalShims($dialogPopin, $el);
+                } else {
+                    $el.setAttribute('open', true);
+                }
+            }
+            $dialogPopin.isOpen     = true;
+            instance.activePopinId  = $dialogPopin.id;
+            focusInitial($el);
+            triggerEvent(gina, instance.target, 'open.' + id, $dialogPopin);
+        }
+
+        /**
+         * openFromTrigger
+         *
+         * Single entry point for both APIs. Resolves the descriptor, records the trigger
+         * (for focus-return), then either AJAX-loads (`src`) through the existing
+         * popinLoad engine — consuming a hover/focus preload when available — or opens an
+         * in-page dialog directly.
+         *
+         * @inner
+         */
+        function openFromTrigger($trigger) {
+            if (
+                $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
+                || $trigger.getAttribute('aria-disabled') == 'true'
+            ) {
+                return;
+            }
+            var descriptor = resolveTrigger($trigger);
+            if ( !descriptor.id && !descriptor.src ) {
+                return;
+            }
+
+            var triggerId = $trigger.id || $trigger.getAttribute('id');
+            if ( !triggerId ) {
+                triggerId = 'gina-dialog-trigger-' + _nextId();
+                $trigger.setAttribute('id', triggerId);
+            }
+            wireTriggerAria($trigger, descriptor.id || descriptor.src);
+
+            if ( descriptor.src ) {
+                // AJAX path — register (or reuse) a $popin, then load through the
+                // existing battle-tested popinLoad engine.
+                var name = descriptor.id || ( 'gina-dialog-' + _nextId() );
+                var existing = getPopinByName(name);
+                if ( !existing ) {
+                    var clone = merge({}, $popin);
+                    registerPopin(clone, merge({ 'name': name }, self.options));
+                    existing = getPopinByName(name);
+                }
+                existing.openTrigger   = triggerId;
+                existing.modal         = descriptor.modal;
+                existing.partialTarget = descriptor.partialTarget || null;
+                // Consume a warmed preload if present; else fall through to a click-time XHR.
+                if ( consumePreload(descriptor.src, existing) ) {
+                    return;
+                }
+                var loadOptions = merge({ isSynchrone: false, withCredentials: false }, existing.options);
+                popinLoad(name, descriptor.src, loadOptions);
+            } else {
+                openInPageDialog(descriptor, $trigger);
+            }
+        }
+
+        /**
+         * bindDelegatedOpen
+         *
+         * One delegated `document` click listener handling new `data-gina-dialog`
+         * triggers (including dynamically-injected ones — SPA-safe). Idempotent via a
+         * module guard. Legacy `data-gina-popin-name` triggers are already wired by
+         * bindOpen's per-element listeners (kept for parity / test 02), so this handler
+         * defers to those to avoid a double-open.
+         *
+         * @inner
+         */
+        function bindDelegatedOpen() {
+            if ( _ginaDialogDelegated ) {
+                return;
+            }
+            _ginaDialogDelegated = true;
+
+            addListener(gina, document, 'click', function (event) {
+                var $trigger = ( event.target && typeof(event.target.closest) == 'function' )
+                    ? event.target.closest('[data-gina-dialog],[data-gina-popin-name]')
+                    : null;
+                if ( !$trigger ) {
+                    return;
+                }
+                // Only the new data-gina-dialog API is owned here; legacy triggers are
+                // handled by bindOpen's per-element listeners.
+                if ( $trigger.getAttribute('data-gina-dialog') == null ) {
+                    return;
+                }
+                cancelEvent(event);
+                openFromTrigger($trigger);
+            });
         }
 
 
@@ -18355,20 +18912,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     console.debug('Is request from same domain ? ', isSameDomain);
                 }
                 if (!isSameDomain) {
-                    // proxy external urls
-                    // TODO - instead of using `cors.io` or similar services, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
-                    //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
-
-
-                    url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
-                    // url = url.match(/^(https|http)\:/)[0] + '//localhost:4100/proxy/?'+ url;
-
-
-
-                    //delete options.headers['X-Requested-With']
-
-                    // remove credentials on untrusted env
-                    // if forced by user options, it will be restored with $popin.options merge
+                    // Cross-origin request: drop credentials by default — the target
+                    // server must opt in via `Access-Control-Allow-Origin` (+ `Vary: Origin`).
+                    // If forced by user options, it is restored by the `$popin.options` merge.
+                    //
+                    // SECURITY: the previous code rewrote the URL through an external CORS
+                    // proxy (`corsacme.herokuapp.com`) — an unmaintained third party that
+                    // would have routed user traffic (and any credentials) through it, and
+                    // which no longer resolves. Removed; cross-origin requests now go direct
+                    // and rely on the server's own CORS headers.
                     options.withCredentials = false;
                 }
             }
@@ -18920,19 +19472,30 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             }
 
 
+            // Fix today's name-based aria-labelledby: associate a REAL title element.
+            associateLabel($el);
+
             if ( self.options.useDialogMode && !$el.getAttribute('open') ) {
+                // Modal vs non-modal. The new `data-gina-dialog` API defaults to
+                // non-modal — openFromTrigger sets `$popin.modal`. Any path that did NOT
+                // set it (legacy `data-gina-popin-*` triggers, direct popinOpen() calls)
+                // falls back to modal, preserving today's showModal()-only parity.
+                var useModal = ( typeof($popin.modal) == 'boolean' ) ? $popin.modal : true;
                 if ( typeof($el.showModal) === "function" ) {
-                    // Always open as a native modal (dev/prod parity). showModal() promotes
-                    // the dialog to the top layer with a native ::backdrop and inerts the
-                    // rest of the page. In dev this covers + inerts the in-page Inspector
-                    // statusbar while the popin is open — expected and accepted (the
-                    // in-dialog launcher idea was dropped). The manual .gina-popins-overlay
-                    // now survives only for non-dialog mode (the !useDialogMode gates
-                    // above), so dialog popins rely on the native ::backdrop. Consumers that
-                    // preemptively open the dialog (skeleton-loading) MUST also use
-                    // showModal() so it is born modal; the !getAttribute('open') guard above
-                    // then skips this call (re-showModal on an already-open dialog throws).
-                    $el.showModal();
+                    if ( useModal ) {
+                        // showModal() promotes the dialog to the top layer with a native
+                        // ::backdrop and inerts the rest of the page. Consumers that
+                        // preemptively open the dialog (skeleton-loading) MUST also use
+                        // showModal() so it is born modal; the !getAttribute('open') guard
+                        // above then skips this call (re-showModal on an open dialog throws).
+                        $el.showModal();
+                    } else {
+                        // Non-modal: .show() loses the native ::backdrop / Escape /
+                        // scroll-block / focus-trap — applyNonModalShims() restores them.
+                        $el.show();
+                        applyNonModalShims($popin, $el);
+                        focusInitial($el);
+                    }
                 } else {
                     $el.setAttribute('open', true)
                 }
@@ -19088,12 +19651,20 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                         $popin.$headers = [];
                     }
 
+                    // Tear down the non-modal a11y shims (Escape handler, scroll-lock,
+                    // background inert). Idempotent — a no-op for popins opened modal.
+                    removeNonModalShims($el);
+
                     if ($popinTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($popinTrigger.tagName) ) {
                             $popinTrigger.removeAttribute('aria-disabled', true);
                         } else {
                             $popinTrigger.removeAttribute('disabled', true);
+                        }
+                        // a11y: return focus to the trigger that opened the popin.
+                        if ( typeof($popinTrigger.focus) == 'function' ) {
+                            $popinTrigger.focus();
                         }
                     }
                     // Fixed: clear loading state on explicit close — defensive cleanup in case
@@ -19237,6 +19808,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
         var init = function(options) {
 
             setupInstanceProto();
+
+            // New `data-gina-dialog-*` entry layer — install the delegated open + preload
+            // listeners once per page (module-guarded). Additive to the legacy bindOpen
+            // scan (which registerPopin still runs per popin).
+            bindDelegatedOpen();
+            installPreload();
             //instance.on('init', function(event) {
             addListener(gina, instance.target, 'init.'+instance.id, function(e) {
 

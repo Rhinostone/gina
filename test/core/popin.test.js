@@ -506,20 +506,21 @@ describe('14 - Popin: no inline onclick injection on close (CSP-safe)', function
 });
 
 
-// ── 15 — Popin: showModal()-only (dev/prod parity), overlay gates de-env'd ─────
+// ── 15 — Popin: modal vs non-modal split (showModal for modal, show for non-modal) ─
 //
-// Dialog popins now open as native modals in EVERY env. The dev-only downgrade
-// (non-modal show() + a manual .gina-popins-overlay, gated on gina.config.envIsDev)
-// was removed: popinOpen calls $el.showModal() unconditionally, and the three
-// overlay gates dropped their `|| gina.config.envIsDev` disjunct so the manual
-// overlay survives only for non-dialog mode (!useDialogMode). A consumer's
-// skeleton-preopen observer must also use showModal() so the dialog is born modal
-// and the !getAttribute('open') guard then skips popinOpen's own call (re-showModal
-// on an already-open dialog throws). Verified end-to-end in a real preemptive-open
-// consumer (native modal, real form, no overlay, no double-dim). Replaces the
-// reverted "Option F" dev-modal + in-dialog launcher experiment.
+// The dev-only env downgrade is still gone (the three overlay gates carry no
+// `|| gina.config.envIsDev` disjunct; the manual .gina-popins-overlay survives only
+// for non-dialog mode, !useDialogMode). What changed: the new `data-gina-dialog-*`
+// API defaults to NON-modal, so popinOpen now branches on a resolved `useModal`
+// boolean — `$el.showModal()` for the modal path, `$el.show()` (+ applyNonModalShims)
+// for the non-modal path. Any path that does NOT set `$popin.modal` (legacy
+// `data-gina-popin-*` triggers, direct popinOpen() calls) falls back to modal, so
+// legacy parity is preserved (legacy popins stay showModal()-only). The
+// `!getAttribute('open')` re-entry guard is kept (re-showModal/re-show on an
+// already-open dialog throws). Replaces the prior "showModal()-only" pins, which were
+// updated deliberately when the non-modal default was added (see plan Test 15).
 
-describe('15 - Popin: showModal()-only dev/prod parity', function() {
+describe('15 - Popin: modal/non-modal split (showModal vs show, legacy=modal)', function() {
 
     function getDistPopinBlock() {
         var distSrc = getDistSrc();
@@ -536,17 +537,28 @@ describe('15 - Popin: showModal()-only dev/prod parity', function() {
         );
     });
 
-    it('source: the dialog-open branch calls $el.showModal() unconditionally', function() {
+    it('source: the dialog-open branch calls $el.showModal() for the modal path', function() {
         assert.ok(
             getPopinSrc().indexOf('$el.showModal();') > -1,
-            'popinOpen must call $el.showModal() in the dialog-open branch'
+            'popinOpen must call $el.showModal() in the modal branch'
         );
     });
 
-    it('source: the dev-only $el.show() downgrade is gone', function() {
-        assert.equal(
-            getPopinSrc().indexOf('$el.show()'), -1,
-            'the non-modal dev $el.show() downgrade must be removed (showModal()-only)'
+    it('source: a gated non-modal $el.show() branch exists (new-API default)', function() {
+        var src = getPopinSrc();
+        assert.ok(
+            src.indexOf('$el.show()') > -1,
+            'popinOpen must have a non-modal $el.show() branch (new data-gina-dialog default is non-modal)'
+        );
+        // It is gated on a resolved modal boolean, not unconditional — legacy/direct
+        // paths fall back to modal (showModal).
+        assert.ok(
+            /var\s+useModal\s*=/.test(src),
+            'expected a resolved `useModal` gate selecting showModal() vs show()'
+        );
+        assert.ok(
+            /applyNonModalShims\s*\(/.test(src),
+            'the non-modal branch must restore Escape/scroll-lock/inert via applyNonModalShims()'
         );
     });
 
@@ -557,19 +569,19 @@ describe('15 - Popin: showModal()-only dev/prod parity', function() {
         );
     });
 
-    it('dist: built popin module reflects showModal()-only (no env gate, no $el.show())', function() {
+    it('dist: built popin module reflects the modal/non-modal split (no env gate; both show() & showModal())', function() {
         var block = getDistPopinBlock();
         assert.equal(
             block.indexOf('useDialogMode || gina.config.envIsDev'), -1,
             'built popin module must not carry the envIsDev overlay-gate disjunct'
         );
-        assert.equal(
-            block.indexOf('$el.show()'), -1,
-            'built popin module must not contain the dev $el.show() downgrade'
+        assert.ok(
+            block.indexOf('$el.show()') > -1,
+            'built popin module must contain the non-modal $el.show() branch'
         );
         assert.ok(
             block.indexOf('$el.showModal()') > -1,
-            'built popin module must call $el.showModal()'
+            'built popin module must call $el.showModal() for the modal branch'
         );
     });
 });
@@ -795,5 +807,398 @@ describe('16 - Popin: opt-in skeleton pre-open (preOpen + loadingShell)', functi
     it('dist/gina.min.css contains the skeleton rules', function () {
         var css = fs.readFileSync(path.join(FW, 'core/asset/plugin/dist/vendor/gina/css/gina.min.css'), 'utf8');
         assert.ok(css.indexOf('gina-popin-skeleton') > -1, 'expected skeleton CSS concatenated into gina.min.css');
+    });
+});
+
+
+// ── 17–22 — new `data-gina-dialog-*` entry layer ─────────────────────────────────
+//
+// Behavioral jsdom tests of the strangler entry layer (resolveTrigger / resolveModal /
+// warnDeprecatedOnce / applyContent / preload / a11y), each paired with a
+// source-inspection block — the same convention as block 16 (showLoadingShell): a
+// test-local replica exercises the logic in jsdom, and the source pins lock the
+// production source's shape to the replica so it cannot silently drift.
+//
+// jsdom ^29 has no native <dialog>.showModal()/show(); the open-path branch selection
+// is asserted via the descriptor (resolveModal) rather than the native method, and the
+// shim helpers (Escape, focus) are exercised directly.
+
+// Test-local replica factory mirroring resolveTrigger / resolveModal / warnDeprecatedOnce.
+function makeEntryLayer(opts) {
+    opts = opts || {};
+    var selfOptions = { modal: (typeof opts.optionModal != 'undefined') ? opts.optionModal : null };
+    var ginaConfig  = opts.config || null; // e.g. { popin: { modal: true } }
+    var warnLog     = [];
+    var _warned     = {};
+
+    function warnDeprecatedOnce(kind) {
+        if (_warned[kind]) { return; }
+        _warned[kind] = true;
+        warnLog.push(kind);
+    }
+    function resolveModal($trigger, isLegacy) {
+        if (isLegacy || $trigger.getAttribute('data-gina-popin-name') != null) { return true; }
+        var attr = $trigger.getAttribute('data-gina-dialog-modal');
+        if (attr != null) { return (attr === 'false') ? false : true; }
+        if (selfOptions.modal === true || selfOptions.modal === false) { return selfOptions.modal; }
+        if (ginaConfig && ginaConfig.popin && (ginaConfig.popin.modal === true || ginaConfig.popin.modal === false)) {
+            return ginaConfig.popin.modal;
+        }
+        return false;
+    }
+    function resolveTrigger($trigger) {
+        var isLegacy = false;
+        var id  = $trigger.getAttribute('data-gina-dialog');
+        var src = $trigger.getAttribute('data-gina-dialog-src');
+        if (id == null && $trigger.getAttribute('data-gina-popin-name') != null) {
+            isLegacy = true; id = $trigger.getAttribute('data-gina-popin-name'); warnDeprecatedOnce('data-gina-popin-name');
+        }
+        if (src == null && $trigger.getAttribute('data-gina-popin-url') != null) {
+            isLegacy = true; src = $trigger.getAttribute('data-gina-popin-url'); warnDeprecatedOnce('data-gina-popin-url');
+        }
+        if (src == null && /^A$/i.test($trigger.tagName)) {
+            var href = $trigger.getAttribute('href');
+            if (href && href != '' && href != '#' && !/^#/.test(href)) { src = href; }
+        }
+        return {
+              id            : id
+            , src           : src
+            , isLegacy      : isLegacy
+            , modal         : resolveModal($trigger, isLegacy)
+            , partialTarget : $trigger.getAttribute('data-gina-dialog-target')
+            , isLink        : /^true$/i.test($trigger.getAttribute('data-gina-popin-is-link'))
+            , formSubmit    : /^true$/i.test($trigger.getAttribute('data-gina-form-submit'))
+        };
+    }
+    return { resolveTrigger: resolveTrigger, resolveModal: resolveModal, warnLog: warnLog };
+}
+
+function mkTrigger(doc, tag, attrs) {
+    var $el = doc.createElement(tag || 'button');
+    for (var k in attrs) { $el.setAttribute(k, attrs[k]); }
+    doc.body.appendChild($el);
+    return $el;
+}
+
+
+// ── 17 — Attribute resolution (resolveTrigger) ────────────────────────────────────
+
+describe('17 - Popin: resolveTrigger parses id/src/target', function () {
+
+    it('new data-gina-dialog → id, no src, not legacy', function () {
+        var doc = makeDoc();
+        var d = makeEntryLayer().resolveTrigger(mkTrigger(doc, 'button', { 'data-gina-dialog': 'foo', 'type': 'button' }));
+        assert.equal(d.id, 'foo');
+        assert.equal(d.src, null);
+        assert.equal(d.isLegacy, false);
+    });
+
+    it('data-gina-dialog-src → src; data-gina-dialog-target → partialTarget', function () {
+        var doc = makeDoc();
+        var d = makeEntryLayer().resolveTrigger(mkTrigger(doc, 'button', {
+            'data-gina-dialog': 'foo', 'data-gina-dialog-src': '/load', 'data-gina-dialog-target': '#slot'
+        }));
+        assert.equal(d.src, '/load');
+        assert.equal(d.partialTarget, '#slot');
+    });
+
+    it('<a href> doubles as src; "#" anchors ignored', function () {
+        var doc = makeDoc();
+        var d1 = makeEntryLayer().resolveTrigger(mkTrigger(doc, 'a', { 'data-gina-dialog': 'foo', 'href': '/page' }));
+        assert.equal(d1.src, '/page');
+        var d2 = makeEntryLayer().resolveTrigger(mkTrigger(doc, 'a', { 'data-gina-dialog': 'foo', 'href': '#' }));
+        assert.equal(d2.src, null, '"#" href must not be treated as a src');
+    });
+
+    it('source: resolveTrigger($trigger) reads data-gina-dialog / -src / -target', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+resolveTrigger\s*\(\s*\$trigger\s*\)/.test(src), 'expected resolveTrigger($trigger)');
+        assert.ok(src.indexOf("getAttribute('data-gina-dialog')") > -1, 'expected data-gina-dialog read');
+        assert.ok(src.indexOf("getAttribute('data-gina-dialog-src')") > -1, 'expected data-gina-dialog-src read');
+        assert.ok(src.indexOf("getAttribute('data-gina-dialog-target')") > -1, 'expected data-gina-dialog-target read');
+    });
+});
+
+
+// ── 18 — Modal precedence (resolveModal) ─────────────────────────────────────────
+
+describe('18 - Popin: resolveModal precedence', function () {
+
+    it('no attr, no config → non-modal (framework default)', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer();
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'x' }), false), false);
+    });
+
+    it('config.popin.modal:true → modal', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer({ config: { popin: { modal: true } } });
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'x' }), false), true);
+    });
+
+    it('data-gina-dialog-modal (bare) and ="true" → modal', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer();
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'x', 'data-gina-dialog-modal': '' }), false), true);
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'y', 'data-gina-dialog-modal': 'true' }), false), true);
+    });
+
+    it('data-gina-dialog-modal="false" overrides config.popin.modal:true → non-modal', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer({ config: { popin: { modal: true } } });
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'x', 'data-gina-dialog-modal': 'false' }), false), false);
+    });
+
+    it('per-popin option modal:true (no attr) → modal', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer({ optionModal: true });
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'x' }), false), true);
+    });
+
+    it('legacy data-gina-popin-* → modal regardless of config/option saying false', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer({ optionModal: false, config: { popin: { modal: false } } });
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-popin-name': 'leg' }), false), true);
+        assert.equal(el.resolveModal(mkTrigger(doc, 'button', { 'data-gina-dialog': 'z' }), true), true, 'isLegacy flag also short-circuits');
+    });
+
+    it('source: resolveModal honors gina.config.popin.modal and ="false" override', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+resolveModal\s*\(\s*\$trigger/.test(src), 'expected resolveModal($trigger, …)');
+        assert.ok(/gina\.config\.popin\.modal/.test(src), 'expected lazy gina.config.popin.modal read');
+        assert.ok(src.indexOf("attr === 'false'") > -1, 'expected the data-gina-dialog-modal==="false" → non-modal rule');
+    });
+});
+
+
+// ── 19 — Legacy aliasing + warn-once ─────────────────────────────────────────────
+
+describe('19 - Popin: legacy aliasing maps name/url + warns once per kind', function () {
+
+    it('data-gina-popin-name → id, data-gina-popin-url → src, isLegacy true', function () {
+        var doc = makeDoc();
+        var d = makeEntryLayer().resolveTrigger(mkTrigger(doc, 'a', {
+            'data-gina-popin-name': 'legacy', 'data-gina-popin-url': '/old'
+        }));
+        assert.equal(d.id, 'legacy');
+        assert.equal(d.src, '/old');
+        assert.equal(d.isLegacy, true);
+    });
+
+    it('one warn per kind → at most two distinct warnings across repeated triggers', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer();
+        el.resolveTrigger(mkTrigger(doc, 'a', { 'data-gina-popin-name': 'a', 'data-gina-popin-url': '/1' }));
+        el.resolveTrigger(mkTrigger(doc, 'a', { 'data-gina-popin-name': 'b', 'data-gina-popin-url': '/2' }));
+        el.resolveTrigger(mkTrigger(doc, 'a', { 'data-gina-popin-name': 'c', 'data-gina-popin-url': '/3' }));
+        assert.deepEqual(el.warnLog.sort(), ['data-gina-popin-name', 'data-gina-popin-url']);
+    });
+
+    it('engine-managed is-link / loading emit NO deprecation warning', function () {
+        var doc = makeDoc();
+        var el = makeEntryLayer();
+        el.resolveTrigger(mkTrigger(doc, 'a', {
+            'data-gina-popin-is-link': 'true', 'data-gina-popin-loading': 'true', 'href': '/x', 'data-gina-dialog': 'newapi'
+        }));
+        assert.equal(el.warnLog.length, 0, 'is-link/loading must not be deprecated (gina writes them itself)');
+    });
+
+    it('source: warnDeprecatedOnce only ever warns name/url (not is-link/loading)', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+warnDeprecatedOnce\s*\(\s*kind\s*\)/.test(src), 'expected warnDeprecatedOnce(kind)');
+        assert.ok(src.indexOf("warnDeprecatedOnce('data-gina-popin-name')") > -1, 'expected name warn call');
+        assert.ok(src.indexOf("warnDeprecatedOnce('data-gina-popin-url')") > -1, 'expected url warn call');
+        assert.equal(src.indexOf("warnDeprecatedOnce('data-gina-popin-is-link')"), -1, 'is-link must NOT be warned');
+        assert.equal(src.indexOf("warnDeprecatedOnce('data-gina-popin-loading')"), -1, 'loading must NOT be warned');
+    });
+});
+
+
+// ── 20 — Preload on hover/focus ──────────────────────────────────────────────────
+
+// Replica of installPreload/consumePreload — same cache semantics: a reserved
+// in-flight slot is `null`; `consumePreload` treats `null` as not-ready (== null).
+function makePreload(netLog) {
+    var preloadCache = {};
+    function preloadFetch(url) { netLog.push(url); preloadCache[url] = 'BODY:' + url; } // synchronous "completion"
+    function onIntentEl($trigger) {
+        var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
+        if (!url || typeof preloadCache[url] != 'undefined') { return; }
+        preloadCache[url] = null;   // reserve (dedup concurrent intents)
+        preloadFetch(url);
+    }
+    function onMouseover(target) {
+        var $trigger = target.closest ? target.closest('[data-gina-dialog-src],[data-gina-popin-url]') : null;
+        if (!$trigger) { return; }
+        onIntentEl($trigger);
+    }
+    function consumePreload(url) {
+        if (preloadCache[url] == null) { return null; }
+        var body = preloadCache[url];
+        delete preloadCache[url];
+        return body;
+    }
+    return { onMouseover: onMouseover, consumePreload: consumePreload, cache: preloadCache };
+}
+
+describe('20 - Popin: preload cache (hover/focus warms, open consumes + dedups)', function () {
+
+    it('mouseover warms the cache; open consumes and deletes it', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makePreload(net);
+        var $trigger = mkTrigger(doc, 'button', { 'data-gina-dialog': 'd', 'data-gina-dialog-src': '/aj' });
+        pl.onMouseover($trigger);
+        assert.equal(net.length, 1, 'one network call on hover');
+        assert.equal(pl.consumePreload('/aj'), 'BODY:/aj', 'open consumes the cached body');
+        assert.equal(pl.consumePreload('/aj'), null, 'cache entry deleted after consume');
+    });
+
+    it('repeated mouseover over descendants → only one network call (URL-cache dedup)', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makePreload(net);
+        var $trigger = mkTrigger(doc, 'button', { 'data-gina-dialog': 'd', 'data-gina-dialog-src': '/aj' });
+        var $child = doc.createElement('span');
+        $trigger.appendChild($child);
+        pl.onMouseover($child);
+        pl.onMouseover($child);
+        pl.onMouseover($trigger);
+        assert.equal(net.length, 1, 'descendant re-hovers dedup to a single fetch');
+    });
+
+    it('source: preloadCache + installPreload/consumePreload + mouseover/focusin listeners', function () {
+        var src = getPopinSrc();
+        assert.ok(/var\s+preloadCache\s*=/.test(src), 'expected module-level preloadCache');
+        assert.ok(/function\s+installPreload\s*\(/.test(src), 'expected installPreload()');
+        assert.ok(/function\s+consumePreload\s*\(/.test(src), 'expected consumePreload()');
+        assert.ok(src.indexOf("addEventListener('mouseover'") > -1, 'expected mouseover listener');
+        assert.ok(src.indexOf("addEventListener('focusin'") > -1, 'expected focusin listener');
+    });
+});
+
+
+// ── 21 — Partial vs full content application (applyContent) ───────────────────────
+
+function applyContentReplica($el, html, partialTarget) {
+    if (!partialTarget) { $el.innerHTML = (typeof html == 'string') ? html.trim() : ''; return; }
+    var $slot = $el.querySelector(partialTarget);
+    if (!$slot) { $el.innerHTML = (typeof html == 'string') ? html.trim() : ''; return; }
+    var DOMParserCtor = $el.ownerDocument.defaultView.DOMParser;
+    var parsed = new DOMParserCtor().parseFromString(html, 'text/html');
+    var $incoming = parsed.querySelector(partialTarget) || parsed.body;
+    $slot.innerHTML = $incoming.innerHTML;
+}
+
+describe('21 - Popin: applyContent full vs partial', function () {
+
+    it('full (no target) replaces the whole element innerHTML', function () {
+        var doc = makeDoc();
+        var $el = doc.createElement('dialog'); doc.body.appendChild($el);
+        $el.innerHTML = '<p>old</p>';
+        applyContentReplica($el, '  <p>new</p>  ', null);
+        assert.equal($el.innerHTML, '<p>new</p>', 'full-replace trims and swaps everything');
+    });
+
+    it('partial swaps only the target slot; chrome survives', function () {
+        var doc = makeDoc();
+        var $el = doc.createElement('dialog'); doc.body.appendChild($el);
+        $el.innerHTML = '<button class="gina-popin-close">×</button><div id="slot"><p>old</p></div>';
+        var fetched = '<html><body><header>ignored</header><div id="slot"><p>fresh</p></div></body></html>';
+        applyContentReplica($el, fetched, '#slot');
+        assert.ok($el.querySelector('.gina-popin-close'), 'close-button chrome preserved');
+        assert.equal($el.querySelector('#slot').innerHTML, '<p>fresh</p>', 'only the slot content swapped');
+    });
+
+    it('partial with absent slot falls back to full replace', function () {
+        var doc = makeDoc();
+        var $el = doc.createElement('dialog'); doc.body.appendChild($el);
+        $el.innerHTML = '<p>old</p>';
+        applyContentReplica($el, '<p>whole</p>', '#missing');
+        assert.equal($el.innerHTML, '<p>whole</p>');
+    });
+
+    it('source: applyContent has a partialTarget branch using DOMParser', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+applyContent\s*\(\s*\$el\s*,\s*html\s*,\s*\$popin\s*,\s*partialTarget\s*\)/.test(src),
+            'expected applyContent($el, html, $popin, partialTarget)');
+        var fn = src.substring(src.indexOf('function applyContent('), src.indexOf('function applyContent(') + 900);
+        assert.ok(fn.indexOf('partialTarget') > -1, 'expected partialTarget branch');
+        assert.ok(/new\s+DOMParser\s*\(\s*\)/.test(fn), 'expected DOMParser parse in the partial branch');
+        assert.ok(fn.indexOf('html.trim()') > -1, 'full path must stay byte-identical to $el.innerHTML = html.trim()');
+    });
+});
+
+
+// ── 22 — Accessibility (aria wiring, focus return, Escape) ────────────────────────
+
+function wireTriggerAriaReplica($trigger, id) {
+    if (!$trigger || !id) { return; }
+    $trigger.setAttribute('aria-haspopup', 'dialog');
+    $trigger.setAttribute('aria-controls', id);
+}
+function associateLabelReplica($el) {
+    if (!$el || typeof $el.querySelector != 'function') { return; }
+    var $title = $el.querySelector('[id$="-title"]') || $el.querySelector('h1, h2, h3, h4, h5, h6');
+    if (!$title) { return; }
+    if (!$title.id) { $title.id = ($el.id || 'gina-popin') + '-title'; $title.setAttribute('id', $title.id); }
+    $el.setAttribute('aria-labelledby', $title.id);
+}
+
+describe('22 - Popin: a11y wiring (aria, focus return, Escape)', function () {
+
+    it('wireTriggerAria sets aria-haspopup="dialog" + aria-controls', function () {
+        var doc = makeDoc();
+        var $trigger = mkTrigger(doc, 'button', { 'data-gina-dialog': 'dlg' });
+        wireTriggerAriaReplica($trigger, 'dlg');
+        assert.equal($trigger.getAttribute('aria-haspopup'), 'dialog');
+        assert.equal($trigger.getAttribute('aria-controls'), 'dlg');
+    });
+
+    it('associateLabel points aria-labelledby at a REAL title element (assigns id if missing)', function () {
+        var doc = makeDoc();
+        var $el = doc.createElement('dialog'); $el.id = 'mydlg'; doc.body.appendChild($el);
+        $el.innerHTML = '<h2>Heading</h2><p>body</p>';
+        associateLabelReplica($el);
+        var labelId = $el.getAttribute('aria-labelledby');
+        assert.equal(labelId, 'mydlg-title', 'heading gets an id and aria-labelledby points at it');
+        assert.equal($el.querySelector('h2').id, 'mydlg-title');
+    });
+
+    it('focus returns to the trigger on close', function () {
+        var doc = makeDoc();
+        var $trigger = mkTrigger(doc, 'button', { 'data-gina-dialog': 'dlg', 'id': 'trg' });
+        var $dialog = doc.createElement('dialog'); $dialog.setAttribute('tabindex', '-1'); doc.body.appendChild($dialog);
+        $dialog.focus();
+        // replica of popinClose's focus-return
+        var $popinTrigger = doc.getElementById('trg');
+        if ($popinTrigger && typeof $popinTrigger.focus == 'function') { $popinTrigger.focus(); }
+        assert.equal(doc.activeElement, $trigger, 'focus returned to the opening trigger');
+    });
+
+    it('Escape closes a non-modal (div-mode) dialog via the shim handler', function () {
+        var doc = makeDoc();
+        var win = doc.defaultView;
+        var $el = doc.createElement('dialog'); doc.body.appendChild($el);
+        var closed = 0;
+        // replica of applyNonModalShims' Escape handler
+        var onKeydown = function (e) {
+            if (e.key === 'Escape' || e.keyCode === 27) { e.preventDefault(); closed++; }
+        };
+        $el.addEventListener('keydown', onKeydown);
+        $el.dispatchEvent(new win.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        assert.equal(closed, 1, 'Escape keydown closed the non-modal dialog');
+    });
+
+    it('source: aria wiring + focus-return helpers exist and popinClose returns focus', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+wireTriggerAria\s*\(/.test(src), 'expected wireTriggerAria()');
+        assert.ok(/function\s+associateLabel\s*\(/.test(src), 'expected associateLabel()');
+        assert.ok(/function\s+focusInitial\s*\(/.test(src), 'expected focusInitial()');
+        assert.ok(src.indexOf("setAttribute('aria-haspopup', 'dialog')") > -1, 'expected aria-haspopup=dialog');
+        assert.ok(src.indexOf("setAttribute('aria-controls', id)") > -1, 'expected aria-controls wiring');
+        // popinClose returns focus to the opening trigger on close
+        var closeFn = src.substring(src.indexOf('function popinClose('), src.indexOf('function popinDestroy('));
+        assert.ok(/\$popinTrigger\.focus\(\)/.test(closeFn), 'popinClose must return focus to the trigger');
     });
 });
