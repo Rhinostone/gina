@@ -1202,3 +1202,53 @@ describe('22 - Popin: a11y wiring (aria, focus return, Escape)', function () {
         assert.ok(/\$popinTrigger\.focus\(\)/.test(closeFn), 'popinClose must return focus to the trigger');
     });
 });
+
+
+// ── 23 — Served bundle (gina.min.js) reflects the dialog source ────────────────────
+//
+// The served static asset is gina.min.js, NOT the un-minified gina.js (which is only
+// the Closure input and is never served). A source change that is not rebuilt into
+// gina.min.js ships nothing that runs. Blocks 01-22 assert on source and on gina.js;
+// none read the served minified bundle — so a stale gina.min.js (source updated, dist
+// not rebuilt) passes them all while the feature reaches no browser. This block reads
+// the REAL served bundle so that gap cannot hide again. The data-gina-dialog* tokens
+// are attribute-name string literals, which survive Closure ADVANCED minification
+// (unlike renamed identifiers), making them stable freshness markers.
+
+var DIST_MIN_JS = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.min.js');
+var _distMinSrc;
+function getDistMinSrc() { return _distMinSrc || (_distMinSrc = fs.readFileSync(DIST_MIN_JS, 'utf8')); }
+
+describe('23 - Served bundle (gina.min.js) reflects the dialog source', function () {
+
+    it('served gina.min.js carries all four data-gina-dialog* attribute names', function () {
+        var min = getDistMinSrc();
+        ['data-gina-dialog', 'data-gina-dialog-src', 'data-gina-dialog-target', 'data-gina-dialog-modal']
+            .forEach(function (attr) {
+                assert.ok(
+                    min.indexOf(attr) > -1,
+                    'served gina.min.js is missing "' + attr + '" — the bundle was not rebuilt from source '
+                    + '(a stale min ships the feature nowhere)'
+                );
+            });
+    });
+
+    it('served gina.min.js no longer ships the dead external CORS proxy', function () {
+        assert.ok(
+            getDistMinSrc().indexOf('corsacme') === -1,
+            'served gina.min.js still references the removed corsacme proxy — rebuild the bundle after the source removal'
+        );
+    });
+
+    it('source feature and served bundle agree (if source declares it, the min must carry it)', function () {
+        // Cross-check guarding the exact failure mode where source is updated but the
+        // dist is left stale: if the popin source declares the entry attribute, the
+        // served minified bundle must contain it too.
+        if (getPopinSrc().indexOf('data-gina-dialog') > -1) {
+            assert.ok(
+                getDistMinSrc().indexOf('data-gina-dialog') > -1,
+                'popin source declares data-gina-dialog but the served gina.min.js does not — dist is stale'
+            );
+        }
+    });
+});
