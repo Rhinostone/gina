@@ -23,6 +23,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
      * Gina Popin Handler
      *
      * @param {object} options
+     * @param {string} options.name - unique popin name (the `data-gina-popin-name` trigger value)
+     * @param {string} [options.class='gina-popin-default'] - extra CSS class on the popin container
+     * @param {boolean} [options.useDialogMode=true] - use a native `<dialog>` (modal) instead of a `<div>` + overlay
+     * @param {boolean} [options.cancelOnOverlayClick=false] - close the popin when the backdrop/overlay is clicked
+     * @param {boolean} [options.preOpen=false] - opt-in: open the popin with a loading skeleton BEFORE the XHR
+     *        returns (no blank-screen gap), replaced by the real content on completion. See showLoadingShell().
+     * @param {string} [options.loadingShell] - custom skeleton HTML for `preOpen` (consumer markup wins);
+     *        when omitted a generic gina-namespaced default skeleton is used.
+     * @param {object} [options.validator] - a FormValidator instance to bind forms inside the popin
      * */
     function Popin(options) {
 
@@ -37,7 +46,17 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 'class': 'gina-popin-default',
                 // Support of `<dialog>` tag, set `true`
                 'useDialogMode': true,
-                'cancelOnOverlayClick': false
+                'cancelOnOverlayClick': false,
+                // Opt-in skeleton-loading pre-open: when `true`, the popin is filled with a
+                // loading skeleton and opened BEFORE the XHR returns, then the real content
+                // replaces the skeleton on completion. Off by default — pre-opening during
+                // the load is a behavior change vs the default "open on content-complete"
+                // path. See showLoadingShell().
+                'preOpen': false,
+                // Optional skeleton markup for `preOpen`: a string of HTML injected into the
+                // popin while it loads. When omitted, a generic gina-namespaced default
+                // skeleton is used (styled by `.gina-popin-skeleton*` in popin.css).
+                'loadingShell': null
             },
             authorizedEvents : ['ready', 'error'],
             events: {}
@@ -828,6 +847,88 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
         };
 
         /**
+         * Default loading skeleton injected by showLoadingShell() when `preOpen` is set but
+         * no `loadingShell` markup was provided. Generic + gina-namespaced so it never
+         * collides with a consumer's own markup; styled by the `.gina-popin-skeleton*` rules
+         * in popin.css. Static HTML (no scripts) — CSP-safe.
+         *
+         * @constant {string}
+         * @inner
+         */
+        var GINA_DEFAULT_LOADING_SHELL =
+              '<div class="gina-popin-skeleton" aria-hidden="true">'
+            +     '<div class="gina-popin-skeleton-line gina-popin-skeleton-title"></div>'
+            +     '<div class="gina-popin-skeleton-line"></div>'
+            +     '<div class="gina-popin-skeleton-line gina-popin-skeleton-line--short"></div>'
+            + '</div>';
+
+        /**
+         * showLoadingShell
+         *
+         * Opt-in skeleton-loading pre-open. When a popin is registered with `preOpen: true`,
+         * this fills the (already DOM-attached) popin element with a loading skeleton and
+         * opens it BEFORE the XHR returns, so there is no blank-screen gap while the server
+         * responds. On completion popinBind injects the real HTML over `$el.innerHTML`
+         * (replacing the skeleton) and popinOpen's `!$el.getAttribute('open')` guard then
+         * skips its own open (re-showModal() on an already-open dialog throws).
+         *
+         * Born modal in every env (dev/prod parity), matching popinOpen's showModal()-only
+         * behavior. Idempotent — the open/active guard lets the two loading-attr write sites
+         * (the synchronous readyState-1 set and the onreadystatechange set) call it at most
+         * once per load. The skeleton is the consumer's `loadingShell` option when provided
+         * (so a consumer can delete its own pre-open observer and keep its exact markup),
+         * otherwise GINA_DEFAULT_LOADING_SHELL. Injected via innerHTML — no scripts, CSP-safe.
+         *
+         * @inner
+         * @param {object} $popin - the registered popin (carries `.options.preOpen` / `.options.loadingShell`)
+         * @param {HTMLElement} $el - the popin container (`<dialog>` in dialog mode, `<div>` otherwise)
+         * @returns {void}
+         *
+         * @example
+         * // gina default skeleton:
+         * new PopinHandler({ name: 'form', preOpen: true });
+         * // consumer markup (delete your own pre-open observer, keep your look):
+         * new PopinHandler({ name: 'form', preOpen: true, loadingShell: '<div class="my-skel">…</div>' });
+         */
+        function showLoadingShell($popin, $el) {
+            // Opt-in only — off unless the popin was registered with `preOpen: true`.
+            if ( !$popin || !$el || !$popin.options || !$popin.options.preOpen ) {
+                return;
+            }
+            // Idempotent: both loading-attr write sites call this; once the element is
+            // open/active, the repeat call no-ops. hasAttribute() (not getAttribute()) —
+            // showModal() sets `open` to the empty string, which is falsy, so a
+            // getAttribute() truthiness check would not trip on the second call.
+            if ( $el.hasAttribute('open') || $el.classList.contains('gina-popin-is-active') ) {
+                return;
+            }
+
+            var shell = ( typeof($popin.options.loadingShell) == 'string' && $popin.options.loadingShell )
+                ? $popin.options.loadingShell
+                : GINA_DEFAULT_LOADING_SHELL;
+            $el.innerHTML = shell;
+
+            if ( $el.tagName === 'DIALOG' ) {
+                // Born modal (dev/prod parity). showModal() promotes the dialog to the top
+                // layer with a native ::backdrop; popinOpen's !getAttribute('open') guard
+                // then skips its own showModal() (re-showModal on an open dialog throws).
+                if ( typeof($el.showModal) === 'function' ) {
+                    try { $el.showModal(); } catch (e) {}
+                } else {
+                    $el.setAttribute('open', true);
+                }
+            } else {
+                // Non-dialog mode: no native ::backdrop — activate the container and its
+                // manual .gina-popins-overlay (mirrors popinOpen's non-dialog branch).
+                $el.classList.add('gina-popin-is-active');
+                var $overlay = $el.parentElement;
+                if ( $overlay && !$overlay.classList.contains('gina-popin-is-active') ) {
+                    $overlay.classList.add('gina-popin-is-active');
+                }
+            }
+        }
+
+        /**
          * popinLoad
          *
          * @param {string} name
@@ -1002,6 +1103,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 // Data loading ...
                 if ( /^(1|3)$/.test(xhr.readyState) ) {
                     $popin.target.setAttribute('data-gina-popin-loading', true);
+                    showLoadingShell($popin, $el);
                     if ($popinTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($popinTrigger.tagName) ) {
@@ -1017,6 +1119,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     // Data loading ...
                     if ( /^(1|3)$/.test(xhr.readyState) ) {
                         $popin.target.setAttribute('data-gina-popin-loading', true);
+                        showLoadingShell($popin, $el);
                         if ($popinTrigger) {
                             // For A tag: aria-disabled=true
                             if ( /^A$/i.test($popinTrigger.tagName) ) {

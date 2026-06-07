@@ -573,3 +573,227 @@ describe('15 - Popin: showModal()-only dev/prod parity', function() {
         );
     });
 });
+
+
+// ── 16 — Popin: opt-in skeleton-loading pre-open (preOpen + loadingShell) ──────
+//
+// showLoadingShell($popin, $el) fills a popin with a loading skeleton and opens it
+// born-modal BEFORE the XHR returns, gated on the per-popin `preOpen` option. The
+// optional `loadingShell` lets a consumer pass its own markup (so it can delete its
+// own pre-open observer and keep its look); otherwise a generic gina-namespaced
+// default skeleton (GINA_DEFAULT_LOADING_SHELL, styled by .gina-popin-skeleton* in
+// popin.css) is used. It is invoked at BOTH loading-attr write sites and is
+// idempotent (the open/active guard makes it fire at most once per load). On
+// completion popinBind replaces the skeleton with the real HTML and popinOpen's
+// !$el.getAttribute('open') guard skips its own open.
+//
+// Strategy (same convention as validator-aria-invalid / validator-isinlist):
+//  - a jsdom-backed DOM exercises a test-local replica of showLoadingShell.
+//  - the source-inspection block pins the production source to the same logic so the
+//    replica cannot silently drift. (jsdom ^29 has no native <dialog>.showModal(),
+//    so the modal branch is exercised via a showModal spy on the element.)
+
+var { JSDOM } = require('jsdom');
+
+// Test-local replica of showLoadingShell($popin, $el) — MUST mirror popin/main.js.
+// The source-inspection pins at the end lock the source-side shape to this.
+var GINA_DEFAULT_LOADING_SHELL_REPLICA =
+      '<div class="gina-popin-skeleton" aria-hidden="true">'
+    +     '<div class="gina-popin-skeleton-line gina-popin-skeleton-title"></div>'
+    +     '<div class="gina-popin-skeleton-line"></div>'
+    +     '<div class="gina-popin-skeleton-line gina-popin-skeleton-line--short"></div>'
+    + '</div>';
+
+function showLoadingShellReplica($popin, $el) {
+    if ( !$popin || !$el || !$popin.options || !$popin.options.preOpen ) {
+        return;
+    }
+    if ( $el.hasAttribute('open') || $el.classList.contains('gina-popin-is-active') ) {
+        return;
+    }
+    var shell = ( typeof($popin.options.loadingShell) == 'string' && $popin.options.loadingShell )
+        ? $popin.options.loadingShell
+        : GINA_DEFAULT_LOADING_SHELL_REPLICA;
+    $el.innerHTML = shell;
+
+    if ( $el.tagName === 'DIALOG' ) {
+        if ( typeof($el.showModal) === 'function' ) {
+            try { $el.showModal(); } catch (e) {}
+        } else {
+            $el.setAttribute('open', true);
+        }
+    } else {
+        $el.classList.add('gina-popin-is-active');
+        var $overlay = $el.parentElement;
+        if ( $overlay && !$overlay.classList.contains('gina-popin-is-active') ) {
+            $overlay.classList.add('gina-popin-is-active');
+        }
+    }
+}
+
+function makeDoc() {
+    return new JSDOM('<!DOCTYPE html><body></body>').window.document;
+}
+// jsdom has no native dialog.showModal(); attach a spy so the modal branch runs.
+function makeDialog(doc, withShowModalSpy) {
+    var $el = doc.createElement('dialog');
+    $el.className = 'gina-popin-container';
+    doc.body.appendChild($el);
+    var calls = { showModal: 0 };
+    if (withShowModalSpy) {
+        $el.showModal = function () { calls.showModal++; $el.setAttribute('open', ''); };
+    }
+    return { $el: $el, calls: calls };
+}
+function makeDiv(doc) {
+    var $overlay = doc.createElement('div');
+    $overlay.className = 'gina-popins-overlay';
+    var $el = doc.createElement('div');
+    $el.className = 'gina-popin-container';
+    $overlay.appendChild($el);
+    doc.body.appendChild($overlay);
+    return { $el: $el, $overlay: $overlay };
+}
+
+describe('16 - Popin: opt-in skeleton pre-open (preOpen + loadingShell)', function () {
+
+    // --- behavioral (jsdom + replica) ---
+
+    it('preOpen:false → no-op (no skeleton, dialog stays closed)', function () {
+        var d = makeDialog(makeDoc(), true);
+        showLoadingShellReplica({ options: { preOpen: false } }, d.$el);
+        assert.equal(d.$el.innerHTML, '', 'no skeleton injected when preOpen is off');
+        assert.equal(d.calls.showModal, 0, 'dialog not opened when preOpen is off');
+        assert.equal(d.$el.hasAttribute('open'), false);
+    });
+
+    it('preOpen:true, no loadingShell → gina default skeleton + showModal (born modal)', function () {
+        var d = makeDialog(makeDoc(), true);
+        showLoadingShellReplica({ options: { preOpen: true } }, d.$el);
+        assert.ok(d.$el.querySelector('.gina-popin-skeleton'), 'gina default skeleton injected');
+        assert.ok(d.$el.querySelector('.gina-popin-skeleton-title'), 'skeleton title line injected');
+        assert.equal(d.calls.showModal, 1, 'dialog opened as native modal');
+        assert.ok(d.$el.hasAttribute('open'), 'open attribute set by showModal');
+    });
+
+    it('preOpen:true, custom loadingShell → consumer markup wins (no gina default)', function () {
+        var d = makeDialog(makeDoc(), true);
+        var custom = '<div class="my-skel"><span>loading…</span></div>';
+        showLoadingShellReplica({ options: { preOpen: true, loadingShell: custom } }, d.$el);
+        assert.ok(d.$el.querySelector('.my-skel'), 'consumer loadingShell injected');
+        assert.equal(d.$el.querySelector('.gina-popin-skeleton'), null, 'gina default NOT used when loadingShell provided');
+        assert.equal(d.calls.showModal, 1, 'dialog still opened');
+    });
+
+    it('idempotent: second call no-ops (open dialog not re-shown)', function () {
+        var d = makeDialog(makeDoc(), true);
+        var $popin = { options: { preOpen: true } };
+        showLoadingShellReplica($popin, d.$el);   // write site 1
+        showLoadingShellReplica($popin, d.$el);   // write site 2 — dialog already open
+        assert.equal(d.calls.showModal, 1, 'showModal called once across the two loading-attr write sites');
+    });
+
+    it('showModal unavailable → setAttribute(open) fallback', function () {
+        var d = makeDialog(makeDoc(), false);   // no spy → typeof($el.showModal) !== 'function'
+        showLoadingShellReplica({ options: { preOpen: true } }, d.$el);
+        assert.ok(d.$el.querySelector('.gina-popin-skeleton'), 'skeleton injected');
+        assert.ok(d.$el.hasAttribute('open'), 'open attribute set via fallback when showModal unavailable');
+    });
+
+    it('div mode → activates container + overlay (no native modal)', function () {
+        var d = makeDiv(makeDoc());
+        showLoadingShellReplica({ options: { preOpen: true } }, d.$el);
+        assert.ok(d.$el.querySelector('.gina-popin-skeleton'), 'skeleton injected in div mode');
+        assert.ok(d.$el.classList.contains('gina-popin-is-active'), 'container activated');
+        assert.ok(d.$overlay.classList.contains('gina-popin-is-active'), 'overlay activated');
+    });
+
+    it('div mode idempotent: second call no-ops (already active)', function () {
+        var d = makeDiv(makeDoc());
+        var $popin = { options: { preOpen: true } };
+        showLoadingShellReplica($popin, d.$el);
+        var firstHtml = d.$el.innerHTML;
+        showLoadingShellReplica($popin, d.$el);
+        assert.equal(d.$el.innerHTML, firstHtml, 'skeleton not re-injected once active');
+    });
+
+    // --- source pins (lock popin/main.js to the replica above) ---
+
+    it('source: self.options declares preOpen:false default', function () {
+        assert.ok(/'preOpen'\s*:\s*false/.test(getPopinSrc()), 'expected preOpen:false default in self.options');
+    });
+
+    it('source: self.options declares loadingShell:null default', function () {
+        assert.ok(/'loadingShell'\s*:\s*null/.test(getPopinSrc()), 'expected loadingShell:null default in self.options');
+    });
+
+    it('source: showLoadingShell($popin, $el) is defined', function () {
+        assert.ok(
+            /function\s+showLoadingShell\s*\(\s*\$popin\s*,\s*\$el\s*\)/.test(getPopinSrc()),
+            'expected showLoadingShell($popin, $el) declaration'
+        );
+    });
+
+    it('source: GINA_DEFAULT_LOADING_SHELL const uses gina-namespaced skeleton classes', function () {
+        var src = getPopinSrc();
+        assert.ok(/var\s+GINA_DEFAULT_LOADING_SHELL\s*=/.test(src), 'expected GINA_DEFAULT_LOADING_SHELL const');
+        assert.ok(src.indexOf('gina-popin-skeleton') > -1, 'expected gina-namespaced skeleton class');
+    });
+
+    it('source: opt-in gate reads $popin.options.preOpen', function () {
+        assert.ok(/\$popin\.options\.preOpen/.test(getPopinSrc()), 'expected the preOpen opt-in gate');
+    });
+
+    it('source: idempotency guard uses hasAttribute(open) || is-active (not getAttribute)', function () {
+        var src = getPopinSrc();
+        var fnBlock = src.substring(src.indexOf('function showLoadingShell('), src.indexOf('function showLoadingShell(') + 2000);
+        assert.ok(
+            /hasAttribute\('open'\)\s*\|\|\s*\$el\.classList\.contains\('gina-popin-is-active'\)/.test(fnBlock),
+            'expected idempotent hasAttribute(open) || classList.contains(is-active) guard'
+        );
+    });
+
+    it('source: consumer loadingShell wins over the gina default', function () {
+        var src = getPopinSrc();
+        var fnBlock = src.substring(src.indexOf('function showLoadingShell('), src.indexOf('function showLoadingShell(') + 2000);
+        assert.ok(
+            /typeof\(\$popin\.options\.loadingShell\)\s*==\s*'string'\s*&&\s*\$popin\.options\.loadingShell/.test(fnBlock),
+            'expected loadingShell-wins ternary'
+        );
+        assert.ok(/:\s*GINA_DEFAULT_LOADING_SHELL/.test(fnBlock), 'expected gina default fallback');
+    });
+
+    it('source: helper invoked at BOTH loading-attr write sites', function () {
+        var matches = getPopinSrc().match(/showLoadingShell\(\$popin,\s*\$el\);/g);
+        assert.ok(matches && matches.length >= 2, 'expected >= 2 showLoadingShell($popin, $el) call statements');
+    });
+
+    it('source: dialog branch opens born-modal via showModal()', function () {
+        var src = getPopinSrc();
+        var fnBlock = src.substring(src.indexOf('function showLoadingShell('), src.indexOf('function showLoadingShell(') + 2000);
+        assert.ok(/\$el\.tagName\s*===\s*'DIALOG'/.test(fnBlock), 'expected dialog-tag branch');
+        assert.ok(/\$el\.showModal\(\)/.test(fnBlock), 'expected showModal() call');
+    });
+
+    // --- dist pins (built bundle + concatenated CSS reflect the source) ---
+
+    function getDistPopinBlock() {
+        var distSrc = getDistSrc();
+        var start = distSrc.indexOf("define('gina/popin'");
+        assert.ok(start > -1, 'gina/popin AMD module not found in dist bundle');
+        var next = distSrc.indexOf('\ndefine(', start + 20);
+        return (next > -1) ? distSrc.substring(start, next) : distSrc.substring(start);
+    }
+
+    it('dist: built popin module contains the gina skeleton markup', function () {
+        assert.ok(
+            getDistPopinBlock().indexOf('gina-popin-skeleton') > -1,
+            'built popin module must contain the default skeleton class'
+        );
+    });
+
+    it('dist/gina.min.css contains the skeleton rules', function () {
+        var css = fs.readFileSync(path.join(FW, 'core/asset/plugin/dist/vendor/gina/css/gina.min.css'), 'utf8');
+        assert.ok(css.indexOf('gina-popin-skeleton') > -1, 'expected skeleton CSS concatenated into gina.min.css');
+    });
+});

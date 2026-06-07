@@ -1,0 +1,3 @@
+kind: Added
+body: 'Popin plugin: opt-in `preOpen` option that fills the popin with a loading skeleton and opens it (a born native modal in dialog mode, an active overlay in div mode) before the XHR returns, then swaps in the real content on completion. Pass a `loadingShell` HTML string for custom skeleton markup, or omit it for the built-in gina skeleton. Off by default; lets a consuming app delete its own pre-open observer.'
+time: 2026-06-07T04:04:11+01:00

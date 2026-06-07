@@ -53,4 +53,43 @@ dialog::backdrop {
   backdrop-filter: blur(6px);
 }
 
+.gina-popin-skeleton {
+  padding: 1.5rem;
+  min-width: 18rem;
+  max-width: 90vw;
+}
+.gina-popin-skeleton .gina-popin-skeleton-line {
+  height: 0.85rem;
+  margin-bottom: 0.75rem;
+  border-radius: 4px;
+  background: linear-gradient(90deg, #ededed 25%, #f7f7f7 50%, #ededed 75%);
+  background-size: 200% 100%;
+  animation: gina-popin-skeleton-shimmer 1.4s ease-in-out infinite;
+}
+.gina-popin-skeleton .gina-popin-skeleton-line:last-child {
+  margin-bottom: 0;
+}
+.gina-popin-skeleton .gina-popin-skeleton-title {
+  height: 1.4rem;
+  width: 60%;
+  margin-bottom: 1.25rem;
+}
+.gina-popin-skeleton .gina-popin-skeleton-line--short {
+  width: 40%;
+}
+
+@keyframes gina-popin-skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gina-popin-skeleton .gina-popin-skeleton-line {
+    animation: none;
+  }
+}
+
 /*# sourceMappingURL=popin.css.map */
