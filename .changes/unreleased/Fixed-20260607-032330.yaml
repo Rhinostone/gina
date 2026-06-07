@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Offline project-asset CLI commands (bundle:list, secrets:scan, i18n:scan, and similar) no longer abort when a single registered project is stale (its directory exists but its manifest.json is gone). The stale project is now warned and skipped instead of crashing the whole command.'
+time: 2026-06-07T03:23:30.255515+01:00

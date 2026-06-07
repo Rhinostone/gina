@@ -715,3 +715,119 @@ describe('17 - getCoreEnv: reps dictionary contains all required substitution ke
     });
 
 });
+
+
+// 18 — loadAssets: stale-manifest project skipped, not fatal (#B24)
+//
+// loadAssets() iterates every registered project. When a project's directory
+// exists but its manifest.json is gone (a stale ~/.gina/projects.json entry),
+// it warns and `continue`s — instead of falling through to
+// requireJSON(...).bundles, which process-exits on ENOENT and aborted EVERY
+// offline asset command (secrets:scan, i18n:scan, bundle:list) when ANY one
+// registered project was stale, even when a specific @project was named.
+describe('18 - loadAssets: stale-manifest project skipped not fatal (#B24)', function () {
+
+    it('source: a `continue` sits between the missing-manifest warning and the requireJSON deref', function () {
+        var src      = fs.readFileSync(HELPER_CMD_SOURCE, 'utf8');
+        var warnIdx  = src.indexOf('not found ! Maybe, you can try to remove the project reference');
+        var derefIdx = src.indexOf('requireJSON(projectPropertiesPath).bundles');
+        assert.ok(warnIdx > -1, 'the missing-manifest warning must exist in loadAssets');
+        assert.ok(derefIdx > warnIdx, 'the requireJSON(...).bundles deref must follow the warning');
+        var between = src.slice(warnIdx, derefIdx);
+        assert.match(between, /continue\s*;/,
+            '#B24: a `continue` must skip the stale project before the unguarded requireJSON deref');
+    });
+
+    // --- Pure-logic replica of the per-project loadAssets decision ----------
+    // No daemon / CmdHelper context (loadAssets needs the full CLI bootstrap to
+    // run — same convention as cmd-noninteractive-guards.test.js). The replica
+    // mirrors helper.js:1255-1296 for one project: pre-set bundles {} (1255),
+    // dir-exists -> exists=true (1256-1257), manifest-missing -> warn+continue
+    // (#B24, 1258-1260), else load bundles (1262); dir-missing -> exists=false.
+
+    function throwingRequireJSON() {
+        var e = new Error("ENOENT: no such file or directory, open 'manifest.json'");
+        e.code = 'ENOENT';
+        throw e;
+    }
+
+    // POST-#B24 (fixed): continue on a missing manifest.
+    function loadOneProjectFixed(opts) {
+        var entry   = {};
+        var bundles = {};                 // helper.js:1255 pre-set
+        if (opts.dirExists) {
+            entry.exists = true;          // helper.js:1257
+            if (!opts.manifestExists) {
+                opts.warn();              // helper.js:1259
+                return { entry: entry, bundles: bundles };  // #B24 continue -> skip
+            }
+            bundles = opts.requireJSON().bundles;           // helper.js:1262
+        } else {
+            entry.exists = false;         // helper.js:1295
+        }
+        return { entry: entry, bundles: bundles };
+    }
+
+    // PRE-#B24 (buggy): warn but NO continue -> falls through to requireJSON.
+    function loadOneProjectOld(opts) {
+        var entry   = {};
+        var bundles = {};
+        if (opts.dirExists) {
+            entry.exists = true;
+            if (!opts.manifestExists) {
+                opts.warn();              // warns...
+            }
+            bundles = opts.requireJSON().bundles;  // ...but unguarded -> throws when manifest missing
+        } else {
+            entry.exists = false;
+        }
+        return { entry: entry, bundles: bundles };
+    }
+
+    it('MEASUREMENT: the old body aborts (throws ENOENT) on a stale manifest', function () {
+        var warned = 0;
+        assert.throws(function () {
+            loadOneProjectOld({ dirExists: true, manifestExists: false, warn: function () { warned++; }, requireJSON: throwingRequireJSON });
+        }, /ENOENT/);
+        assert.equal(warned, 1, 'old body still warns before it throws');
+    });
+
+    it('fixed: stale manifest warns + skips to {} without calling requireJSON (no abort)', function () {
+        var warned = 0, required = 0;
+        var out = loadOneProjectFixed({
+            dirExists: true, manifestExists: false,
+            warn: function () { warned++; },
+            requireJSON: function () { required++; return { bundles: { x: {} } }; }
+        });
+        assert.equal(warned, 1, 'the stale project is warned');
+        assert.equal(required, 0, 'requireJSON is NOT called for the stale project (the skip)');
+        assert.deepEqual(out.bundles, {}, 'bundlesByProject stays {} for the stale project');
+        assert.equal(out.entry.exists, true, 'dir-exists flag stays true (the dir is present)');
+    });
+
+    it('fixed: a valid project still loads its bundles', function () {
+        var warned = 0, required = 0;
+        var out = loadOneProjectFixed({
+            dirExists: true, manifestExists: true,
+            warn: function () { warned++; },
+            requireJSON: function () { required++; return { bundles: { testbundle: { version: '0.0.1' } } }; }
+        });
+        assert.equal(warned, 0, 'a valid project is not warned');
+        assert.equal(required, 1, 'requireJSON loads the manifest for a valid project');
+        assert.deepEqual(out.bundles, { testbundle: { version: '0.0.1' } });
+        assert.equal(out.entry.exists, true);
+    });
+
+    it('fixed: a project whose directory is missing is flagged exists=false (unchanged)', function () {
+        var warned = 0, required = 0;
+        var out = loadOneProjectFixed({
+            dirExists: false, manifestExists: false,
+            warn: function () { warned++; },
+            requireJSON: function () { required++; return { bundles: {} }; }
+        });
+        assert.equal(warned, 0);
+        assert.equal(required, 0);
+        assert.equal(out.entry.exists, false);
+        assert.deepEqual(out.bundles, {});
+    });
+});

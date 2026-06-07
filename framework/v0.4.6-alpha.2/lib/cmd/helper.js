@@ -613,6 +613,9 @@ function CmdHelper(cmd, client, debug) {
      * Reads all framework config files (main.json, projects.json, manifest.json,
      * env.json, ports.json, ports.reverse.json) fresh from disk (no require cache).
      * Populates cmd with scopes, envs, protocols, schemes, port maps, and bundle lists.
+     * A registered project whose directory exists but whose manifest.json is missing
+     * (a stale ~/.gina/projects.json entry) is warned and skipped (#B24) rather than
+     * aborting the whole command.
      * Also links node_modules and gina when running start/stop/restart tasks in global mode.
      * Assigns itself to the global `loadAssets`.
      *
@@ -1257,6 +1260,11 @@ function CmdHelper(cmd, client, debug) {
                 cmd.projects[project].exists    = true;
                 if ( !new _(projectPropertiesPath).existsSync() ) {
                     console.error('`'+ projectPropertiesPath +'` not found ! Maybe, you can try to remove the project reference by hand by editing: `'+ _(GINA_HOMEDIR + '/projects.json') +'`')
+                    // #B24: skip this stale project (dir present, manifest.json gone) instead of
+                    // falling through to the requireJSON(...).bundles below, which process-exits on
+                    // ENOENT — aborting every offline asset command when ANY one registered project
+                    // is stale. bundlesByProject[project] stays {} (pre-set above); exists stays true.
+                    continue;
                 }
 
                 cmd.bundlesByProject[project]   = (cmd.bundlesByProject[project].count() > 0) ? cmd.bundlesByProject[project] : requireJSON(projectPropertiesPath).bundles;
