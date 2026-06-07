@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Bumped the `@rhinostone/swig` dependency from `^2.6.0` to `^2.7.0` in both manifests. The template-engine runtime is unchanged from 2.6.0 — 2.7.0 only adds the separate `@rhinostone/swig-django` package (not used by gina) plus a changelog-only fix — so this is a version-currency update.'
+time: 2026-06-07T19:42:54.48832+01:00
