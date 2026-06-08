@@ -147,14 +147,44 @@ test.describe('data-gina-dialog runtime (real bundle)', () => {
         expect(warnings.filter((w) => /is deprecated/.test(w))).toHaveLength(0);
     });
 
-    // Partial slot-only replace (data-gina-dialog-target) — left fixme: MEASURED
-    // non-functional in the trigger-driven flow (2026-06-08). The partial swap lives in
-    // applyContent(), reached only via the `loaded.<id>` path, which popinLoad takes
-    // only when the popin is CLOSED (popin/main.js ~1787: an OPEN re-load routes through
-    // popinLoadContent, which does not honor partialTarget). But an AJAX popin's content
-    // is wiped on close (popinUnbind ~2288), so there is never a "populated + closed"
-    // dialog to slot-swap into; the cold (first) load with a target falls back to a FULL
-    // replace (the slot can't pre-exist in an empty dialog). Enable once the popin-side
-    // path is fixed to honor partialTarget on an open re-load.
-    test.fixme('partial replace (data-gina-dialog-target) swaps only the slot', async () => {});
+    test('partial replace (data-gina-dialog-target) swaps only the slot, preserving chrome', async ({ page }) => {
+        // Two triggers sharing data-gina-dialog="sp" resolve to the SAME dialog
+        // (getPopinByName dedup). Trigger 1 (no target) full-loads chrome + slot;
+        // trigger 2 (target="#slot") re-loads and swaps ONLY the slot. (Before the
+        // popinLoad partialTarget guard, an open re-load went through popinLoadContent
+        // and the swap never applied — the regression this test pins.)
+        await page.evaluate(() => {
+            const mk = (id, src, target) => {
+                const a = document.createElement('a');
+                a.id = id;
+                a.setAttribute('data-gina-dialog', 'sp');
+                a.setAttribute('data-gina-dialog-src', src);
+                if (target) { a.setAttribute('data-gina-dialog-target', target); }
+                a.setAttribute('href', '#');
+                a.textContent = id;
+                document.body.appendChild(a);
+            };
+            mk('p-full', '/frag/partial-1.html', null);
+            mk('p-slot', '/frag/partial-2.html', '#slot');
+        });
+
+        // First click: full load seeds the chrome + slot.
+        await page.click('#p-full');
+        const dialog = page.locator('dialog').filter({ hasText: 'Chrome stays' });
+        await expect(dialog.locator('#partial-chrome')).toHaveText('Chrome stays');
+        await expect(dialog.locator('#slot')).toHaveText('SLOT-ONE');
+        // Tag the chrome node so the swap's node-identity preservation is observable.
+        await dialog.locator('#partial-chrome').evaluate((el) => el.setAttribute('data-kept', 'yes'));
+
+        // Second click: partial re-load. The trigger sits under the open dialog, so
+        // dispatch the click directly (the delegated document handler still fires) —
+        // this exercises the handler's routing, not click actionability.
+        await page.dispatchEvent('#p-slot', 'click');
+
+        // Only #slot changed; the chrome text AND node identity are preserved. A full
+        // replace would instead show 'REPLACED chrome' and drop the data-kept marker.
+        await expect(dialog.locator('#slot')).toHaveText('SLOT-TWO');
+        await expect(dialog.locator('#partial-chrome')).toHaveText('Chrome stays');
+        await expect(dialog.locator('#partial-chrome')).toHaveAttribute('data-kept', 'yes');
+    });
 });

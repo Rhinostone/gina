@@ -19129,9 +19129,16 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                                 instance.eventData.success = result;
 
                                 if (
-                                    !isJsonContent && $popin.isOpen && !$popin.hasForm
+                                    // A partial re-load (data-gina-dialog-target) must reach
+                                    // applyContent's slot-swap, which lives on the loaded.<id>
+                                    // path (the `else` below). popinLoadContent full-replaces
+                                    // $el.innerHTML and ignores partialTarget, so an open re-load
+                                    // with a slot target is diverted to the else branch here;
+                                    // redirect / form / JSON re-loads (no partialTarget) keep the
+                                    // popinLoadContent path unchanged.
+                                    !isJsonContent && $popin.isOpen && !$popin.hasForm && !$popin.partialTarget
                                     ||
-                                    !isJsonContent && $popin.isOpen && isRedirecting
+                                    !isJsonContent && $popin.isOpen && isRedirecting && !$popin.partialTarget
                                 ) {
                                     // console.debug('Popin now redirecting [1]');
                                     popinLoadContent(result, isRedirecting);
