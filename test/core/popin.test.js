@@ -1127,6 +1127,21 @@ describe('21 - Popin: applyContent full vs partial', function () {
         assert.ok(/new\s+DOMParser\s*\(\s*\)/.test(fn), 'expected DOMParser parse in the partial branch');
         assert.ok(fn.indexOf('html.trim()') > -1, 'full path must stay byte-identical to $el.innerHTML = html.trim()');
     });
+
+    it('source: popinLoadContent diversion is gated on !$popin.partialTarget on both open-dialog clauses (regression lock for 7a4003e9)', function () {
+        var src = getPopinSrc();
+        // An already-open dialog re-load is diverted to popinLoadContent (full $el.innerHTML
+        // replace) ONLY when there is no partialTarget — so a data-gina-dialog-target partial
+        // re-load instead falls through to applyContent's slot-swap, preserving chrome.
+        var clauses = src.match(/\$popin\.isOpen\b[^|{}]*?!\$popin\.partialTarget/g) || [];
+        assert.ok(clauses.length >= 2,
+            'both open-dialog popinLoadContent guard clauses must carry !$popin.partialTarget (found ' + clauses.length + ')');
+        // The FINAL guard clause must directly close the if-condition and gate the
+        // popinLoadContent diversion (structural + indentation-tolerant — robust vs a char count).
+        var lastGuard = src.slice(src.lastIndexOf('!$popin.partialTarget'));
+        assert.ok(/^!\$popin\.partialTarget\s*\)\s*\{[\s\S]{0,160}?popinLoadContent\(/.test(lastGuard),
+            'the final !$popin.partialTarget guard clause must directly gate the popinLoadContent call');
+    });
 });
 
 
