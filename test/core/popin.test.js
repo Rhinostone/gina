@@ -1362,3 +1362,134 @@ describe('24 - PR #35 finish: boot-instantiation + dialog-mode close path', func
         assert.equal($ajax.innerHTML, '', 'AJAX popin content is still cleared (legacy behavior preserved)');
     });
 });
+
+
+// ── 25 — PR #35 fix: AJAX (data-gina-dialog-src) path actually opens ──────────────
+//
+// The contributor's AJAX path shipped non-functional on a clean boot — verified live,
+// BOTH sub-paths broken (see the architecture note "No plugin auto-bootstraps at page
+// boot"). Three coupled fixes, pinned here against regression:
+//   (1) Cold click was a silent no-op — openFromTrigger called popinLoad() (which only
+//       FIRES `loaded.<id>` with the body — it does not inject/open itself) but registered
+//       NO listener to consume it, so the fetched HTML resolved into the void. It now wires
+//       a `loaded.<id>` listener → handleLoadedBody (inject + bind + open), mirroring the
+//       legacy bindOpen load site.
+//   (2) Preload path threw `getElementsByTagName` of null — consumePreload short-circuits
+//       popinLoad (which is what creates the <dialog id=$popin.id>), so popinOpen's
+//       `document.getElementById(id)` returned null. A shared ensurePopinDialog() now
+//       creates the element on demand for the preload AND cold paths.
+//   (3) data-gina-dialog-src-only triggers were inert — the delegated click gate required
+//       data-gina-dialog, but `-src` is a documented peer trigger (and installPreload
+//       already warmed it). The gate now also owns [data-gina-dialog-src].
+//
+// As with block 24, a node:test pin cannot drive the real browser wiring (verified live
+// against a gina render — every path opens with content, closes clean, zero console
+// errors); these guard the source structure + served-bundle freshness, plus pure-logic
+// replicas of the ensurePopinDialog create + the loaded→inject→open contract.
+
+describe('25 - PR #35 fix: AJAX (data-gina-dialog-src) path opens', function () {
+
+    it('source: ensurePopinDialog creates/returns the popin element (#2)', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+ensurePopinDialog\s*\(/.test(src),
+            'expected an ensurePopinDialog helper');
+        var fn = src.substring(src.indexOf('function ensurePopinDialog('), src.indexOf('function consumePreload('));
+        assert.ok(fn.length > 0, 'ensurePopinDialog function not found');
+        assert.ok(/document\.getElementById\(\s*\$popin\.id\s*\)/.test(fn) && /return\s+\$el/.test(fn),
+            'ensurePopinDialog must return the existing element when present (idempotent)');
+        assert.ok(/createElement\('dialog'\)/.test(fn) && /createElement\('div'\)/.test(fn),
+            'ensurePopinDialog must create a <dialog> (dialog mode) or <div> (non-dialog mode)');
+    });
+
+    it('source: consumePreload + handleLoadedBody route through ensurePopinDialog (#2)', function () {
+        var src = getPopinSrc();
+        var consume = src.substring(src.indexOf('function consumePreload('), src.indexOf('function installPreload('));
+        assert.ok(/ensurePopinDialog\(\s*\$popin\s*\)/.test(consume),
+            'consumePreload must obtain its element via ensurePopinDialog (popinLoad never ran on this path)');
+        var handle = src.substring(src.indexOf('function handleLoadedBody('), src.indexOf('function preloadFetch('));
+        assert.ok(/\$el\s*=\s*\$el\s*\|\|\s*ensurePopinDialog\(\s*\$popin\s*\)/.test(handle),
+            'handleLoadedBody must ensure the element before injecting/opening');
+    });
+
+    it('source: openFromTrigger wires a loaded.<id> listener that opens the AJAX popin (#1)', function () {
+        var src = getPopinSrc();
+        var fn = src.substring(src.indexOf('function openFromTrigger('), src.indexOf('function bindDelegatedOpen('));
+        assert.ok(fn.length > 0, 'openFromTrigger function not found');
+        assert.ok(/addListener\(\s*gina\s*,\s*existing\.target\s*,\s*loadedEvt\s*,/.test(fn),
+            'openFromTrigger must register a loaded.<id> listener (without it the click-time XHR opens nothing)');
+        assert.ok(/handleLoadedBody\(\s*loadedEvent\.detail\s*,\s*existing\s*,/.test(fn),
+            'the loaded listener must hand the response body to handleLoadedBody');
+        assert.ok(/typeof\(gina\.events\[\s*loadedEvt\s*\]\)\s*==\s*'undefined'/.test(fn),
+            'listener registration must be guarded (register once per popin)');
+    });
+
+    it('source: the delegated gate also owns standalone data-gina-dialog-src (#3)', function () {
+        var src = getPopinSrc();
+        var fn = src.substring(src.indexOf('function bindDelegatedOpen('), src.indexOf('var bindOpen'));
+        assert.ok(fn.length > 0, 'bindDelegatedOpen function not found');
+        assert.ok(fn.indexOf("closest('[data-gina-dialog],[data-gina-dialog-src],[data-gina-popin-name]')") > -1,
+            'the gate selector must include [data-gina-dialog-src]');
+        assert.ok(/getAttribute\('data-gina-dialog'\)\s*==\s*null[\s\S]*?&&[\s\S]*?getAttribute\('data-gina-dialog-src'\)\s*==\s*null/.test(fn),
+            'the defer guard must require BOTH data-gina-dialog AND data-gina-dialog-src absent before deferring to bindOpen');
+    });
+
+    it('served gina.min.js carries the widened gate + ensurePopinDialog — rebuilt from source', function () {
+        // the widened selector is a quoted string literal → survives Closure minification
+        assert.ok(getDistMinSrc().indexOf('[data-gina-dialog],[data-gina-dialog-src],[data-gina-popin-name]') > -1,
+            'served gina.min.js is missing the widened delegated-gate selector — rebuild the bundle from source');
+        // un-minified gina.js retains the renamed-in-min helper name
+        assert.ok(getDistSrc().indexOf('ensurePopinDialog') > -1,
+            'gina.js must carry the ensurePopinDialog helper');
+    });
+
+    it('logic: ensurePopinDialog creates a <dialog> once and reuses it (#2 replica)', function () {
+        // Pure-logic replica of ensurePopinDialog's idempotent create.
+        var byId = {};
+        var created = [];
+        function mkEl(tag) {
+            var el = { tagName: tag.toUpperCase(), id: '', attrs: {}, children: [],
+                setAttribute: function (k, v) { this.attrs[k] = v; if (k === 'id') { this.id = v; byId[v] = this; } },
+                appendChild: function (c) { this.children.push(c); } };
+            return el;
+        }
+        var container = mkEl('div');
+        function ensurePopinDialog($popin, useDialogMode) {
+            var $el = byId[$popin.id] || null;
+            if ($el != null) { return $el; }
+            $el = mkEl(useDialogMode ? 'dialog' : 'div');
+            $el.setAttribute('id', $popin.id);
+            container.appendChild($el);
+            created.push($el);
+            return $el;
+        }
+        var $popin = { id: 'gina-popin-x-ajax-1', name: 'ajax-1', options: { class: 'gina-popin-container' } };
+        var first = ensurePopinDialog($popin, true);
+        assert.equal(first.tagName, 'DIALOG', 'dialog mode must create a <dialog>');
+        assert.equal(first.id, 'gina-popin-x-ajax-1');
+        var second = ensurePopinDialog($popin, true);
+        assert.equal(second, first, 'second call must return the SAME element (idempotent — no duplicate)');
+        assert.equal(created.length, 1, 'exactly one element created across two calls');
+    });
+
+    it('logic: the loaded listener injects the body then opens (cold-path #1 replica)', function () {
+        // Replica of openFromTrigger's loaded listener → handleLoadedBody contract:
+        // popinLoad fires loaded.<id> with the body; the listener injects it into the
+        // (ensured) element and opens the popin. Pre-fix there was no listener → no open.
+        var opened = false, boundCount = 0;
+        var $el = { innerHTML: '', getElementsByTagName: function () { return []; } };
+        function applyContent(el, body) { el.innerHTML = (typeof body === 'string' ? body.trim() : ''); }
+        function handleLoadedBody(body, $popin, el) {
+            el = el || $el;
+            applyContent(el, body, $popin);
+            boundCount++;                       // stands in for popinBind
+            if (!$popin.isOpen) { opened = true; } // stands in for popinOpen
+        }
+        var $popin = { id: 'p1', name: 'p1', isOpen: false };
+        var loadedEvent = { detail: '<p class="frag">FRAGMENT</p>', preventDefault: function () {} };
+        (function loadedListener(ev) { ev.preventDefault(); handleLoadedBody(ev.detail, $popin, $el); }(loadedEvent));
+
+        assert.ok($el.innerHTML.indexOf('FRAGMENT') > -1, 'the response body must be injected into the popin element');
+        assert.equal(boundCount, 1, 'the popin must be bound once');
+        assert.equal(opened, true, 'the popin must be opened (pre-fix: no listener → never opened)');
+    });
+});

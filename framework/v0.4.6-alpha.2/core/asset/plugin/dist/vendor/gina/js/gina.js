@@ -17854,6 +17854,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
          * @inner
          */
         function handleLoadedBody(body, $popin, $el) {
+            // $el may be absent on the cold-click path before popinLoad created it; ensure
+            // it so applyContent injects into — and popinOpen later scans — a real element.
+            $el = $el || ensurePopinDialog($popin);
             applyContent($el, body, $popin, $popin.partialTarget);
             popinUnbind($popin.name, true);
             popinBind({ target: $el, type: 'loaded.' + $popin.id }, $popin);
@@ -17896,6 +17899,50 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
         }
 
         /**
+         * ensurePopinDialog — returns the popin's DOM element (a native `<dialog>` in
+         * dialog mode, a `<div>` otherwise), creating + appending it under the container on
+         * first use and returning the existing one thereafter (idempotent).
+         *
+         * The hover/focus preload path (consumePreload) short-circuits popinLoad() — which
+         * is what otherwise creates the element — so without this the AJAX popin had no
+         * element with `id === $popin.id` and popinOpen() threw
+         * (`document.getElementById(id).getElementsByTagName(...)` on `null`). Mirrors the
+         * create block popinLoad() runs at click time so both paths produce the same shape.
+         *
+         * @inner
+         * @param {object} $popin
+         * @returns {HTMLElement}
+         */
+        function ensurePopinDialog($popin) {
+            var $el = document.getElementById($popin.id);
+            if ( $el != null ) {
+                return $el;
+            }
+            var className = $popin.options.class + ' ' + $popin.id;
+            if ( !self.options.useDialogMode ) {
+                // DIV + manual overlay (non-dialog mode)
+                $el = document.createElement('div');
+                $el.setAttribute('id', $popin.id);
+                $el.setAttribute('class', className);
+                instance.target.firstChild.appendChild($el);
+            } else {
+                // native <dialog> (top layer + ::backdrop)
+                $el = document.createElement('dialog');
+                $el.setAttribute('id', $popin.id);
+                $el.setAttribute('class', className);
+                $el.setAttribute('data-type', 'modal');
+                $el.setAttribute('aria-labelledby', $popin.name);
+                var $ov = document.getElementById('gina-popins-overlay');
+                if ( $ov ) {
+                    $ov.appendChild($el);
+                } else {
+                    instance.target.appendChild($el);
+                }
+            }
+            return $el;
+        }
+
+        /**
          * consumePreload — if a warmed preload for `url` is cached, apply it to the popin
          * (deleting the cache entry) and return `true`; else `false` so the caller falls
          * back to a click-time XHR. A `null` entry is in-flight (reserved, not ready).
@@ -17908,7 +17955,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             }
             var body = preloadCache[url];
             delete preloadCache[url];
-            var $el = document.getElementById($popin.id) || $popin.target;
+            var $el = ensurePopinDialog($popin);
             handleLoadedBody(body, $popin, $el);
             return true;
         }
@@ -18055,6 +18102,21 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 existing.openTrigger   = triggerId;
                 existing.modal         = descriptor.modal;
                 existing.partialTarget = descriptor.partialTarget || null;
+
+                // Wire the `loaded.<id>` listener that consumes the response: popinLoad()
+                // only FIRES `loaded.<id>` with the body — it does not inject/open itself
+                // (legacy bindOpen registers an equivalent listener at its own load site).
+                // Without this the click-time XHR resolved into the void and nothing
+                // opened. handleLoadedBody applies the body (partial-aware), binds + opens.
+                // Guarded so repeated opens of the same popin register the listener once.
+                var loadedEvt = 'loaded.' + existing.id;
+                if ( typeof(gina.events[loadedEvt]) == 'undefined' ) {
+                    addListener(gina, existing.target, loadedEvt, function (loadedEvent) {
+                        loadedEvent.preventDefault();
+                        handleLoadedBody(loadedEvent.detail, existing, ensurePopinDialog(existing));
+                    });
+                }
+
                 // Consume a warmed preload if present; else fall through to a click-time XHR.
                 if ( consumePreload(descriptor.src, existing) ) {
                     return;
@@ -18085,14 +18147,20 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             addListener(gina, document, 'click', function (event) {
                 var $trigger = ( event.target && typeof(event.target.closest) == 'function' )
-                    ? event.target.closest('[data-gina-dialog],[data-gina-popin-name]')
+                    ? event.target.closest('[data-gina-dialog],[data-gina-dialog-src],[data-gina-popin-name]')
                     : null;
                 if ( !$trigger ) {
                     return;
                 }
-                // Only the new data-gina-dialog API is owned here; legacy triggers are
-                // handled by bindOpen's per-element listeners.
-                if ( $trigger.getAttribute('data-gina-dialog') == null ) {
+                // Own the new data-gina-dialog API: the `data-gina-dialog` marker (in-page
+                // or marker+src) OR a standalone `data-gina-dialog-src` AJAX trigger
+                // (documented as a peer trigger, and already warmed by installPreload). Pure
+                // legacy `data-gina-popin-*` triggers carrying neither new attribute stay
+                // with bindOpen's per-element listeners, to avoid a double-open.
+                if (
+                    $trigger.getAttribute('data-gina-dialog') == null
+                    && $trigger.getAttribute('data-gina-dialog-src') == null
+                ) {
                     return;
                 }
                 cancelEvent(event);
