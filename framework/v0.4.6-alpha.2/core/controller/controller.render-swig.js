@@ -210,7 +210,9 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
 
-    cachePath       = self.serverInstance._cachePath;
+    // #TPL2 — cachePath (the layout-cache root) is derived IN-ROOT below, once
+    // localOptions is resolved; see the assignment before the layout-cache prime.
+    // Was: self.serverInstance._cachePath (a sibling, out-of-root tree).
 
     var err = null;
     // localOptions must be resolved before the isRenderingCustomError check below
@@ -408,6 +410,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     var subFolder       = path.split(/\//g).slice(0, -1).join('/').replace(localOptions.template.html, '') || '';
     var hasSubFolder    = (subFolder && subFolder != '') ? true : false;
 
+    // #TPL2 — the processed-layout cache lives IN-ROOT, under the bundle templates
+    // root, so the {% extends %} rewrite below resolves inside the swig loader's
+    // basepath and swig-core's confinement (CVE-2023-25345) accepts it without an
+    // allowOutsideRoot opt-out. The leading-dot dir rides gina's existing
+    // dotfile-skip convention (the public/errors/forms scans in config.js), so the
+    // cache is never served as a static asset nor enumerated by template discovery.
+    // localOptions (not local.options) so the custom-error render path caches under
+    // its own template root.
+    cachePath = localOptions.template.html + '/.gina-layout-cache';
+
     if (
         !isWithoutLayout
         && !isRenderingCustomError
@@ -458,6 +470,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         newLayoutDirObj.mkdirSync()
                     }
                     newLayoutDirObj = null;
+                    // #TPL2 — keep the in-root layout cache out of a bundle's git:
+                    // drop a self-ignoring .gitignore ('*') at the cache root so the
+                    // .gina-layout-cache tree never surfaces as untracked in a
+                    // consumer repo (the old out-of-root cache lived under the
+                    // project `cache/` dir consumers already ignore). Written once,
+                    // existsSync-guarded; best-effort.
+                    var _cacheIgnore = cachePath + '/.gitignore';
+                    if ( !fs.existsSync(_cacheIgnore) ) {
+                        try { fs.writeFileSync(_cacheIgnore, '*\n'); } catch (_giErr) { /* best effort */ }
+                    }
                     // [CVE-2023-25345] The layoutPath is extracted from the raw {% extends "..." %}
                     // directive in the template file. Without a boundary check, a template containing
                     // {% extends "../../../etc/passwd" %} would cause readFileSync to read arbitrary
@@ -1299,11 +1321,28 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 + '};});'
                 + '}(window));</script>\n';
 
+            // #TPL2 — inline the statusbar template body instead of {% include %}-ing
+            // it from the framework core dir. That include target is OUTSIDE the
+            // bundle templates root, which the swig loader now confines
+            // (CVE-2023-25345, allowOutsideRoot=false). statusbar.html is a leaf
+            // (only {% if page.cspNonce %} + {{ }} tags, no nested include/extends),
+            // so its body compiles identically when spliced into the layout in place
+            // of the include. Read per-render so dev edits hot-reload; this block is
+            // dev/debug-gated above, so there is no production read.
+            var _statusbarTpl = '';
+            try {
+                _statusbarTpl = await fs.promises.readFile(
+                    getPath('gina').core + '/asset/plugin/dist/vendor/gina/html/statusbar.html', 'utf8'
+                );
+            } catch (_sbErr) {
+                console.warn('[render] Inspector statusbar template unavailable: ' + (_sbErr.message || _sbErr));
+            }
+
             plugin = '\t'
                 + '{# Gina Inspector #}'
                 + __logsScript
                 + __gdScript
-                + '{%- include "'+ getPath('gina').core +'/asset/plugin/dist/vendor/gina/html/statusbar.html" -%}'// jshint ignore:line
+                + _statusbarTpl
                 + '{# END Gina Inspector #}'
             ;
 

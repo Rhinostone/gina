@@ -770,13 +770,14 @@ function SuperController(options) {
                 cache       : false
             };
             if (dir) {
-                // allowOutsideRoot=true — mirrors core/server.js initSwigEngine:
-                // gina resolves the processed layout cache and dev framework
-                // includes outside the templates root; untrusted {% extends %} /
-                // file paths are still boundary-checked in render-swig.js.
-                // swig-core's confinement (CVE-2023-25345) would otherwise reject
-                // those trusted framework paths.
-                swigOptions.loader = swig.loaders.fs(dir, 'utf8', true);
+                // #TPL2 — confined loader (mirrors core/server.js initSwigEngine).
+                // gina's processed layout cache is now in-root (.gina-layout-cache
+                // under the templates root) and the dev statusbar is inlined, so no
+                // template resolves outside the bundle templates root. swig-core's
+                // basepath confinement (CVE-2023-25345, allowOutsideRoot defaults
+                // false) therefore guards every resolution, including untrusted
+                // nested {% include %} / {% import %}.
+                swigOptions.loader = swig.loaders.fs(dir);
             }
             if ( typeof(local._swigOptions) == 'undefined' ) {
                 local._swigOptions = JSON.clone(swigOptions);
