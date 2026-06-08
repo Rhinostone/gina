@@ -237,7 +237,40 @@ require([
     "lib/collection",
     "lib/domain",
     "lib/routing"
-]);
+], function () {
+    // Boot the popin handler at page load so the declarative `data-gina-dialog` API is
+    // active WITHOUT bundle code calling `new gina.popin()`. Constructing the handler
+    // installs the delegated open listener + the `gina-popins` container; the
+    // `.on('ready')` registration triggers the popin `init` self-fire so `gina.popin` /
+    // `gina.hasPopinHandler` are set (a later explicit `new gina.popin()` then merges
+    // into this instance instead of creating a second container). Idempotent — guarded
+    // on `hasPopinHandler`; a no-op on pages with no dialog/popin elements. The popin
+    // module mutates the framework instance (`window.gina`), so defer until the
+    // `ginaloaded` lifecycle has wired it (bounded poll on `isFrameworkLoaded`).
+    var _popinBootTries = 0;
+    var bootPopinHandler = function () {
+        try {
+            if ( !window['gina'] || !window['gina']['isFrameworkLoaded'] ) {
+                if ( _popinBootTries++ < 100 ) {
+                    (window['setTimeout'] || function (fn) { fn(); })(bootPopinHandler, 50);
+                }
+                return;
+            }
+            if ( window['gina']['hasPopinHandler'] ) {
+                return;
+            }
+            var Popin = require('gina/popin');
+            if ( typeof(Popin) == 'function' ) {
+                new Popin({ 'name': 'gina-dialog-boot' }).on('ready', function () {});
+            }
+        } catch (popinBootErr) {
+            if ( typeof(console) != 'undefined' && console.error ) {
+                console.error('[gina] popin boot failed', popinBootErr.stack || popinBootErr);
+            }
+        }
+    };
+    bootPopinHandler();
+});
 
 function getDependencies(gina, cb) {
     // Loading frontend assets required by plugins

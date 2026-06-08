@@ -1252,3 +1252,113 @@ describe('23 - Served bundle (gina.min.js) reflects the dialog source', function
         }
     });
 });
+
+
+// ── 24 — PR #35 finish: boot-instantiation + dialog-mode close path ───────────────
+//
+// Three coupled gaps in the data-gina-dialog feature, all verified live (clean-boot
+// click open/close/reopen) and pinned here against regression:
+//   (1) Inert at page boot — nothing instantiated the popin handler, so the delegated
+//       open listener + container were never installed (clean-boot click did nothing,
+//       gina.popin undefined). core.js now boots the handler in the plugin-loading
+//       require([...]) callback (new Popin(...).on('ready', …) — the listener triggers
+//       the init self-fire that sets gina.popin / gina.hasPopinHandler).
+//   (2) Close threw — popinUnbind did instance.target.firstChild.classList.remove(),
+//       but a dialog-mode container has no overlay first-child (popinCreateContainer
+//       skips it; native ::backdrop is used), so firstChild was null. Now guarded by
+//       !useDialogMode, mirroring the open path.
+//   (3) Reopen was blank — popinUnbind wiped $el.innerHTML on close, erasing an in-page
+//       dialog's authored content. In-page dialogs are now marked isInPageDialog and
+//       skip the wipe; AJAX-loaded popins keep the legacy clear.
+//
+// A node:test source pin cannot exercise the runtime boot wiring (that needs a real
+// gina render — verified by hand); these guard the source structure + the served-bundle
+// freshness, plus a pure-logic replica of the guarded teardown.
+
+var CORE_SRC = path.join(FW, 'core/asset/plugin/src/vendor/gina/core.js');
+var _coreSrc;
+function getCoreSrc() { return _coreSrc || (_coreSrc = fs.readFileSync(CORE_SRC, 'utf8')); }
+
+describe('24 - PR #35 finish: boot-instantiation + dialog-mode close path', function () {
+
+    it('source: core.js boots the popin handler in the require([...]) callback (#1)', function () {
+        var src = getCoreSrc();
+        assert.ok(/require\(\s*\[[\s\S]*?\]\s*,\s*function/.test(src),
+            'expected a callback on the plugin-loading require([...])');
+        assert.ok(src.indexOf("'gina-dialog-boot'") > -1,
+            'expected the reserved boot popin name');
+        assert.ok(/new\s+Popin\(\s*\{\s*'name'\s*:\s*'gina-dialog-boot'\s*\}\s*\)\.on\(\s*'ready'/.test(src),
+            'expected new Popin({ "name": "gina-dialog-boot" }).on("ready", …) to fire the init self-fire');
+        assert.ok(src.indexOf("window['gina']['hasPopinHandler']") > -1,
+            'boot must be idempotent — guarded on hasPopinHandler (return-early)');
+    });
+
+    it('source: popinUnbind guards the overlay firstChild access in dialog mode (#2)', function () {
+        var src = getPopinSrc();
+        var unbind = src.substring(src.indexOf('function popinUnbind('), src.indexOf('function popinClose('));
+        assert.ok(unbind.length > 0, 'popinUnbind function not found');
+        assert.ok(/if\s*\(\s*!self\.options\.useDialogMode\s*\)\s*\{[\s\S]*?instance\.target\.firstChild\.classList\.remove/.test(unbind),
+            'popinUnbind must guard instance.target.firstChild (null in dialog mode) behind !useDialogMode');
+    });
+
+    it('source: in-page dialogs are marked isInPageDialog and skip the innerHTML wipe (#3)', function () {
+        var src = getPopinSrc();
+        var openFn = src.substring(src.indexOf('function openInPageDialog('), src.indexOf('function openFromTrigger('));
+        assert.ok(openFn.length > 0, 'openInPageDialog function not found');
+        assert.ok(/\$dialogPopin\.isInPageDialog\s*=\s*true/.test(openFn),
+            'openInPageDialog must mark the static dialog isInPageDialog');
+        var unbind = src.substring(src.indexOf('function popinUnbind('), src.indexOf('function popinClose('));
+        assert.ok(/if\s*\(\s*!\$popin\.isInPageDialog\s*\)\s*\{[\s\S]*?\$el\.innerHTML/.test(unbind),
+            'popinUnbind must skip the $el.innerHTML wipe for in-page dialogs');
+    });
+
+    it('served gina.min.js carries the boot instantiation — rebuilt from source (#1 freshness)', function () {
+        // 'gina-dialog-boot' is a quoted string literal → survives Closure ADVANCED
+        // minification (unlike the renamed isInPageDialog / useDialogMode identifiers),
+        // so it is the stable marker proving the boot code shipped into the served bundle.
+        assert.ok(getDistMinSrc().indexOf('gina-dialog-boot') > -1,
+            'served gina.min.js is missing the boot popin name — the bundle was not rebuilt from source');
+        // the un-minified gina.js retains the renamed-in-min source markers
+        assert.ok(getDistSrc().indexOf('isInPageDialog') > -1,
+            'gina.js must carry the isInPageDialog close-path marker');
+    });
+
+    it('logic: dialog-mode close is null-safe and preserves in-page content; legacy clears (#2/#3)', function () {
+        // Pure-logic replica of popinUnbind's `!isRouting` teardown.
+        function teardown($el, instanceTarget, useDialogMode, isInPageDialog) {
+            if ( !useDialogMode ) {
+                instanceTarget.firstChild.classList.remove('gina-popin-is-active'); // throws if firstChild null
+            }
+            $el.classList.remove('gina-popin-is-active');
+            if ( !isInPageDialog ) {
+                $el.innerHTML = '';
+            }
+        }
+        var mkEl = function (html) {
+            var cls = {};
+            return {
+                innerHTML: html,
+                classList: {
+                    add: function (c) { cls[c] = 1; },
+                    remove: function (c) { delete cls[c]; },
+                    contains: function (c) { return !!cls[c]; }
+                }
+            };
+        };
+
+        // dialog mode (default): container has NO overlay child → firstChild is null;
+        // an in-page dialog → close must not throw AND must keep its authored content.
+        var $dlg = mkEl('<h2>Demo</h2>');
+        var dialogContainer = { firstChild: null };
+        assert.doesNotThrow(function () { teardown($dlg, dialogContainer, true, true); },
+            'dialog-mode close must not deref instance.target.firstChild');
+        assert.equal($dlg.innerHTML, '<h2>Demo</h2>', 'in-page dialog content must survive close');
+
+        // non-dialog (legacy) mode: overlay child present, AJAX popin → content cleared.
+        var $ajax = mkEl('<p>loaded</p>');
+        var overlay = { classList: { remove: function () {}, contains: function () { return false; } } };
+        var legacyContainer = { firstChild: overlay };
+        assert.doesNotThrow(function () { teardown($ajax, legacyContainer, false, false); });
+        assert.equal($ajax.innerHTML, '', 'AJAX popin content is still cleared (legacy behavior preserved)');
+    });
+});

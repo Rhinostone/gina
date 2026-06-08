@@ -17979,6 +17979,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 $dialogPopin.loadContent   = popinLoadContent;
                 $dialogPopin.open          = popinOpen;
                 $dialogPopin.close         = popinClose;
+                // Marks a static in-page dialog (vs an AJAX-loaded popin): its content is
+                // authored in the page, so popinUnbind must NOT wipe innerHTML on close —
+                // it has to survive close + reopen.
+                $dialogPopin.isInPageDialog = true;
                 instance.$popins[id]       = $dialogPopin;
             }
             $dialogPopin.modal       = descriptor.modal;
@@ -19548,9 +19552,21 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
                 if ( $el != null && $el.classList.contains('gina-popin-is-active') ) {
                     if (!isRouting) {
-                        instance.target.firstChild.classList.remove('gina-popin-is-active');
+                        // Non-dialog mode only: clear the manual overlay's active state.
+                        // In dialog mode the `gina-popins` container has no overlay
+                        // first-child (popinCreateContainer skips it — native ::backdrop is
+                        // used instead), so guard the firstChild access to avoid a null
+                        // deref on close. Mirrors the open-path guard above.
+                        if ( !self.options.useDialogMode ) {
+                            instance.target.firstChild.classList.remove('gina-popin-is-active');
+                        }
                         $el.classList.remove('gina-popin-is-active');
-                        $el.innerHTML                           = '';
+                        // In-page (static) dialogs own their authored content — it must
+                        // persist across close + reopen. Only clear for AJAX-loaded popins
+                        // (the legacy default), whose body was injected at load time.
+                        if ( !$popin.isInPageDialog ) {
+                            $el.innerHTML                       = '';
+                        }
                     }
                     // Fixed: clear loading state on reset — defensive cleanup for navigation
                     // within a popin that was in loading state when reset was called.
@@ -22354,7 +22370,40 @@ require([
     "lib/collection",
     "lib/domain",
     "lib/routing"
-]);
+], function () {
+    // Boot the popin handler at page load so the declarative `data-gina-dialog` API is
+    // active WITHOUT bundle code calling `new gina.popin()`. Constructing the handler
+    // installs the delegated open listener + the `gina-popins` container; the
+    // `.on('ready')` registration triggers the popin `init` self-fire so `gina.popin` /
+    // `gina.hasPopinHandler` are set (a later explicit `new gina.popin()` then merges
+    // into this instance instead of creating a second container). Idempotent — guarded
+    // on `hasPopinHandler`; a no-op on pages with no dialog/popin elements. The popin
+    // module mutates the framework instance (`window.gina`), so defer until the
+    // `ginaloaded` lifecycle has wired it (bounded poll on `isFrameworkLoaded`).
+    var _popinBootTries = 0;
+    var bootPopinHandler = function () {
+        try {
+            if ( !window['gina'] || !window['gina']['isFrameworkLoaded'] ) {
+                if ( _popinBootTries++ < 100 ) {
+                    (window['setTimeout'] || function (fn) { fn(); })(bootPopinHandler, 50);
+                }
+                return;
+            }
+            if ( window['gina']['hasPopinHandler'] ) {
+                return;
+            }
+            var Popin = require('gina/popin');
+            if ( typeof(Popin) == 'function' ) {
+                new Popin({ 'name': 'gina-dialog-boot' }).on('ready', function () {});
+            }
+        } catch (popinBootErr) {
+            if ( typeof(console) != 'undefined' && console.error ) {
+                console.error('[gina] popin boot failed', popinBootErr.stack || popinBootErr);
+            }
+        }
+    };
+    bootPopinHandler();
+});
 
 function getDependencies(gina, cb) {
     // Loading frontend assets required by plugins

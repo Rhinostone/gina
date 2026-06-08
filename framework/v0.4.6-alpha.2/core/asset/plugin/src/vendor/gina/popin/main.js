@@ -635,6 +635,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 $dialogPopin.loadContent   = popinLoadContent;
                 $dialogPopin.open          = popinOpen;
                 $dialogPopin.close         = popinClose;
+                // Marks a static in-page dialog (vs an AJAX-loaded popin): its content is
+                // authored in the page, so popinUnbind must NOT wipe innerHTML on close —
+                // it has to survive close + reopen.
+                $dialogPopin.isInPageDialog = true;
                 instance.$popins[id]       = $dialogPopin;
             }
             $dialogPopin.modal       = descriptor.modal;
@@ -2204,9 +2208,21 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
                 if ( $el != null && $el.classList.contains('gina-popin-is-active') ) {
                     if (!isRouting) {
-                        instance.target.firstChild.classList.remove('gina-popin-is-active');
+                        // Non-dialog mode only: clear the manual overlay's active state.
+                        // In dialog mode the `gina-popins` container has no overlay
+                        // first-child (popinCreateContainer skips it — native ::backdrop is
+                        // used instead), so guard the firstChild access to avoid a null
+                        // deref on close. Mirrors the open-path guard above.
+                        if ( !self.options.useDialogMode ) {
+                            instance.target.firstChild.classList.remove('gina-popin-is-active');
+                        }
                         $el.classList.remove('gina-popin-is-active');
-                        $el.innerHTML                           = '';
+                        // In-page (static) dialogs own their authored content — it must
+                        // persist across close + reopen. Only clear for AJAX-loaded popins
+                        // (the legacy default), whose body was injected at load time.
+                        if ( !$popin.isInPageDialog ) {
+                            $el.innerHTML                       = '';
+                        }
                     }
                     // Fixed: clear loading state on reset — defensive cleanup for navigation
                     // within a popin that was in loading state when reset was called.
