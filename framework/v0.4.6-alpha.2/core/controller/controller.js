@@ -770,7 +770,13 @@ function SuperController(options) {
                 cache       : false
             };
             if (dir) {
-                swigOptions.loader = swig.loaders.fs(dir);
+                // allowOutsideRoot=true — mirrors core/server.js initSwigEngine:
+                // gina resolves the processed layout cache and dev framework
+                // includes outside the templates root; untrusted {% extends %} /
+                // file paths are still boundary-checked in render-swig.js.
+                // swig-core's confinement (CVE-2023-25345) would otherwise reject
+                // those trusted framework paths.
+                swigOptions.loader = swig.loaders.fs(dir, 'utf8', true);
             }
             if ( typeof(local._swigOptions) == 'undefined' ) {
                 local._swigOptions = JSON.clone(swigOptions);

@@ -461,7 +461,16 @@ function Server(options) {
         var dir = conf.content.templates._common.html;
         var swigOptions = {
             autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
-            loader: swig.loaders.fs(dir),
+            // allowOutsideRoot=true (3rd arg): gina legitimately resolves templates
+            // outside the bundle templates root — the processed layout cache (under
+            // cachePath, a sibling tree) and dev-only framework-injected includes
+            // (e.g. the inspector statusbar under the framework core dir). swig-core's
+            // basepath confinement (CVE-2023-25345) would reject those trusted,
+            // framework-generated paths. Untrusted {% extends %} / file paths are
+            // still validated against the templates root before render (see
+            // controller.render-swig.js boundary checks); project-side / custom
+            // loaders keep swig-core's confinement.
+            loader: swig.loaders.fs(dir, 'utf8', true),
             cache: (conf.isCacheless) ? false : 'memory'
         };
 
