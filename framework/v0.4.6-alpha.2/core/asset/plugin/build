@@ -253,10 +253,13 @@ if [ -d "${inspector_sass}" ]; then
         if [ ! "${is_sass_file}" ]; then continue; fi
         css_prefix=$( echo $sf | sed -e s/\.[^.]*$// )
         css_file=$css_prefix.css
-        cmd="${sass_bin} --update ${inspector_sass}/${sf}:${inspector_css}/${css_file}"
-        if [ "${build_env}" == "dev" ]; then
-            cmd="${sass_bin} --update --no-source-map ${inspector_sass}/${sf}:${inspector_css}/${css_file}"
-        fi
+        # --no-source-map in EVERY env: inspector.css.map is gitignored (never shipped),
+        # so a `/*# sourceMappingURL=inspector.css.map */` comment would dangle (404) in the
+        # served/published bundle. This also mirrors gina.min.css (whose .map is removed at
+        # build time) and keeps prod == dev == the committed dist, so the bundle-freshness
+        # gate stays green. (Prod previously kept the map comment via the dev-only branch
+        # below — the now-fixed :(glob) gate is the first to catch that pre-existing drift.)
+        cmd="${sass_bin} --update --no-source-map ${inspector_sass}/${sf}:${inspector_css}/${css_file}"
         eval $cmd
     done
     echo -e "Inspector SASS: ${inspector_sass} -> ${inspector_css}"
