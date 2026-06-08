@@ -161,11 +161,16 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
                     console.debug('Is request from same domain ? ', isSameDomain);
                 }
                 if (!isSameDomain) {
-                    // proxy external urls
-                    // TODO - instead of using `cors.io`, try to intégrate a local CORS proxy similar to : http://oskarhane.com/avoid-cors-with-nginx-proxy_pass/
-                    //url = url.match(/^(https|http)\:/)[0] + '//cors.io/?' + url;
-                    url = url.match(/^(https|http)\:/)[0] + '//corsacme.herokuapp.com/?'+ url;
-                    //delete options.headers['X-Requested-With']
+                    // Cross-origin request: drop credentials by default — the target
+                    // server must opt in via `Access-Control-Allow-Origin` (+ `Vary: Origin`).
+                    // If forced by user options, it is restored by the `$link.options` merge.
+                    //
+                    // SECURITY: the previous code rewrote the URL through an external CORS
+                    // proxy (`corsacme.herokuapp.com`) — an unmaintained third party that
+                    // would have routed user traffic (and any credentials) through it, and
+                    // which no longer resolves. Removed; cross-origin requests now go direct
+                    // and rely on the server's own CORS headers.
+                    options.withCredentials = false;
                 }
             }
             options.url     = url;

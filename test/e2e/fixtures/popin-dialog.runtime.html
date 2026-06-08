@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina dialog runtime e2e harness</title>
+    <!-- Empty data-URI icon: suppresses the favicon.ico request so the e2e can
+         assert a clean console (no 404 noise). -->
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
+
+    <!--
+        RUNTIME harness: boots the REAL built gina bundle so the full-runtime
+        delegated `data-gina-dialog*` handlers (AJAX load, partial slot replace,
+        hover preload, legacy/deprecation) run for real. Served by
+        test/e2e/runtime-server.js (which substitutes the onload whisper tokens
+        and serves the dist gina.min.js). Contrast with the framework-free
+        fixtures/popin-dialog.html, which only mirrors the a11y CSS/contract.
+
+        Load order matches a real gina render: the onload (loader) defines
+        window.onGinaLoaded + __ginaWebroot, THEN the gina bundle boots.
+    -->
+    <script src="/js/gina.onload.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script>
+        // On a minimal page the framework's own `ginaloaded` listener loses the
+        // attach race (the event fires during synchronous module construction,
+        // before core.js attaches its listener — see client-bootstrap.md). So we
+        // invoke onGinaLoaded manually to flip `gina.isFrameworkLoaded`; the
+        // loader's `if (gina.isFrameworkLoaded) return true` guard makes a
+        // duplicate call (if the framework also wins the race) a no-op.
+        //
+        // The boot phantom (core.js require([...]) callback) then polls
+        // isFrameworkLoaded (100 x 50ms) and constructs the popin handler. We
+        // poll here too, until window.gina + window.onGinaLoaded are available.
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    // `gina.config` is set to {} by core.js getDependencies AFTER
+                    // the routing.json fetch resolves; onGinaLoaded reads
+                    // gina.config.routing, so we wait for gina.config to exist
+                    // before calling it (else it throws on undefined.routing).
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                }
+            }
+            kick();
+        }());
+    </script>
+
+    <style>
+        /* Tall page so the non-modal scroll-lock shim is observable. */
+        body { min-height: 200vh; margin: 0; padding: 1rem; }
+        dialog.gina-popin-container { min-width: 20rem; padding: 1.5rem; }
+    </style>
+</head>
+<body>
+    <h1>gina dialog runtime harness</h1>
+    <!-- Triggers are injected by the spec into the live DOM; the boot phantom's
+         delegated document listeners (bindDelegatedOpen + installPreload) handle
+         dynamically-added triggers, so no per-test markup is needed here. -->
+</body>
+</html>

@@ -83,6 +83,7 @@
   },
   "scripts": {
     "test": "node --test test*.test.js",
+    "test:e2e": "playwright test test/e2e",
     "types:gen": "node script/generate_gna_types.js",
     "types:check": "node script/generate_gna_types.js --check",
     "prepare": "node script/prepare_version.js",
@@ -100,6 +101,7 @@
     "ws": "^8.20.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.0",
     "csso-cli": "4.0.2",
     "engine.io-client": "^6.6.4",
     "jsdom": "^29.1.1",
