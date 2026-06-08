@@ -7,8 +7,8 @@
  * native-<dialog> + CSS a11y contract without booting gina), THIS spec boots the
  * REAL built gina bundle so the full-runtime delegated `data-gina-dialog*` handlers
  * run for real — closing the gap that pins + jsdom replicas cannot catch (a wiring
- * bug between two correct-in-isolation functions). It is the executing complement to
- * the four `test.fixme` placeholders in the a11y spec.
+ * bug between two correct-in-isolation functions). It is the executing counterpart to
+ * the framework-free popin-dialog.a11y.spec.js.
  *
  * The harness (test/e2e/runtime-server.js + fixtures/popin-dialog.runtime.html) is
  * started by playwright.config.js `webServer`: a tiny Node server that serves the

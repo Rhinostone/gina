@@ -16,8 +16,8 @@
  *
  * Not executed by the default `node --test` suite (those source/behavioral checks
  * live in test/core/popin.test.js). The full-runtime scenarios that need a served
- * gina bundle (AJAX load, partial slot replace, hover preload, JSON redirect) are
- * marked `test.fixme` below — wire them once `gina start` is available in CI.
+ * gina bundle (AJAX load, partial slot replace, hover preload, legacy/deprecation)
+ * run for real against the booted bundle in the sibling popin-dialog.runtime.spec.js.
  */
 
 const path = require('path');
@@ -116,10 +116,3 @@ test.describe('motion preferences', () => {
         expect(transition).toContain('opacity');
     });
 });
-
-// Full-runtime scenarios needing a served gina bundle (gina start). Enable once the
-// bundle is served in CI so the real delegated handler / popinLoad path runs.
-test.fixme('AJAX load (data-gina-dialog-src) opens with loaded content', async () => {});
-test.fixme('partial replace (data-gina-dialog-target) swaps only the slot', async () => {});
-test.fixme('hover preload fires one request on hover, none on click', async () => {});
-test.fixme('legacy data-gina-popin-* opens modal + logs one deprecation warning', async () => {});
