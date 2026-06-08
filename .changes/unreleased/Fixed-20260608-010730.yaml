@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina project:add` no longer crashes with a `TypeError` when registering a project alias while another already-registered project''s bundles are present on disk (for example, the same path registered under a second alias). The bundle-asset loader''s per-bundle default-environment write indexed the bundle map by the active project name instead of the loop''s current project; it now uses the loop variable, matching every sibling write.'
+time: 2026-06-08T01:07:30.000000+01:00

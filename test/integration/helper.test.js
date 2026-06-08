@@ -831,3 +831,99 @@ describe('18 - loadAssets: stale-manifest project skipped not fatal (#B24)', fun
         assert.deepEqual(out.bundles, {});
     });
 });
+
+
+// 19 — loadAssets: per-bundle def_env uses the loop variable, not cmd.projectName (#B27)
+//
+// loadAssets()'s `for (project in bundlesByProject) { for (bundle in ...) }`
+// double-loop sets each bundle's def_env. Every sibling write in the loop body
+// indexes bundlesByProject by the loop variable `project`; ONE line
+// (helper.js:1388) indexed by cmd.projectName instead. When the loop reached a
+// project that is NOT the freshly-added @alias — and that alias had no
+// bundlesByProject entry yet — the write dereferenced
+// cmd.bundlesByProject[<alias>] === undefined and threw
+// `TypeError: Cannot read properties of undefined (reading '<bundle>')`,
+// hard-crashing `gina project:add` whenever projects.json already held another
+// project whose on-disk bundles passed the existsSync gate (e.g. the same path
+// registered under another alias). A first-ever add into an empty projects.json
+// has no other project to iterate, so it never reached the line — why it stayed
+// latent. Longstanding (blame: b489588d, 2025-07-29), not a #B24 regression.
+describe('19 - loadAssets: per-bundle def_env uses loop variable not cmd.projectName (#B27)', function () {
+
+    it('source: the def_env write inside the bundle loop is indexed by the loop variable `project`', function () {
+        var src = fs.readFileSync(HELPER_CMD_SOURCE, 'utf8');
+        assert.match(src, /cmd\.bundlesByProject\[project\]\[bundle\]\.def_env\s*=\s*\(cmd\.params\.env\)/,
+            '#B27: the def_env write must index bundlesByProject by the loop variable `project`');
+        // negative pin: the buggy cmd.projectName index must NOT reappear on the def_env write
+        assert.doesNotMatch(src, /cmd\.bundlesByProject\[cmd\.projectName\]\[bundle\]\.def_env/,
+            '#B27: the def_env write must NOT index bundlesByProject by cmd.projectName (the crash)');
+    });
+
+    // --- Pure-logic replica of the per-bundle def_env write ----------------
+    // No daemon / CmdHelper context (loadAssets needs the full CLI bootstrap to
+    // run — same convention as section 18 / cmd-noninteractive-guards.test.js).
+    // The replica mirrors helper.js:1310-1394 for the exists branch: iterate
+    // bundlesByProject[project][bundle] and set that bundle's def_env. The only
+    // variable is the index used for the write — cmd.projectName (old) vs the
+    // loop variable project (fixed).
+
+    function runLoop(cmd, indexKey /* 'projectName' | 'project' */) {
+        for (var project in cmd.bundlesByProject) {       // helper.js:1310
+            for (var bundle in cmd.bundlesByProject[project]) {  // helper.js:1321
+                // exists branch (existsSync passed) — helper.js:1354..1388
+                var idx = (indexKey === 'projectName') ? cmd.projectName : project;
+                cmd.bundlesByProject[idx][bundle].def_env =
+                    (cmd.params.env) ? cmd.params.env : cmd.defaultEnv;  // helper.js:1388
+            }
+        }
+    }
+
+    // Multi-project scenario: the alias being added ('newalias') has NO
+    // bundlesByProject entry yet; an already-registered project ('other') owns
+    // one bundle whose src passed the existsSync gate.
+    function makeMultiProjectScenario() {
+        return {
+            projectName : 'newalias',
+            params      : {},        // no --env
+            defaultEnv  : 'dev',
+            bundlesByProject: {
+                other: { web: { src: 'src/web', exists: true } }
+            }
+        };
+    }
+
+    it('MEASUREMENT: the old cmd.projectName index throws on a multi-project add', function () {
+        var cmd = makeMultiProjectScenario();
+        assert.throws(function () {
+            runLoop(cmd, 'projectName');
+        }, /Cannot read properties of undefined \(reading 'web'\)/,
+        'the old index dereferences bundlesByProject[newalias] === undefined');
+    });
+
+    it('fixed: the loop-variable index sets def_env on the iterated bundle without throwing', function () {
+        var cmd = makeMultiProjectScenario();
+        assert.doesNotThrow(function () {
+            runLoop(cmd, 'project');
+        });
+        assert.equal(cmd.bundlesByProject.other.web.def_env, 'dev',
+            "the 'other' project's bundle gets def_env from defaultEnv");
+    });
+
+    it('fixed: an explicit --env param wins over defaultEnv', function () {
+        var cmd = makeMultiProjectScenario();
+        cmd.params.env = 'production';
+        runLoop(cmd, 'project');
+        assert.equal(cmd.bundlesByProject.other.web.def_env, 'production');
+    });
+
+    it('fixed: the active project\'s own bundles are still written (single-project case unchanged)', function () {
+        // alias == the only project; old and fixed are equivalent here because
+        // project === cmd.projectName, which is why the bug stayed latent.
+        var cmd = {
+            projectName: 'solo', params: {}, defaultEnv: 'dev',
+            bundlesByProject: { solo: { api: { src: 'src/api', exists: true } } }
+        };
+        runLoop(cmd, 'project');
+        assert.equal(cmd.bundlesByProject.solo.api.def_env, 'dev');
+    });
+});

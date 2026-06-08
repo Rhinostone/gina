@@ -1385,7 +1385,11 @@ function CmdHelper(cmd, client, debug) {
                         }
                     }
 
-                    cmd.bundlesByProject[cmd.projectName][bundle].def_env = (cmd.params.env) ? cmd.params.env : cmd.defaultEnv; // by default
+                    // #B27: index by the loop variable `project` — every other write in this
+                    // double-loop does. With the old cmd.projectName index, the loop reaching a
+                    // project other than the freshly-added @alias (which has no bundlesByProject
+                    // entry yet) dereferenced undefined and hard-crashed `gina project:add`.
+                    cmd.bundlesByProject[project][bundle].def_env = (cmd.params.env) ? cmd.params.env : cmd.defaultEnv; // by default
 
 
                 } else {
