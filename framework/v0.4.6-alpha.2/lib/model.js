@@ -253,6 +253,23 @@ function ModelUtil() {
                     }
                 }
 
+                // #B29 — a connectors.json with no actual connector entries (only a
+                // `$schema` annotation — the `bundle:add` scaffold default — or an empty
+                // `{}`) leaves `models` a truthy object with zero object-valued keys, so
+                // the guard above entered this connector branch. The connector loop below
+                // `continue`s past every non-object key, so `done()` (the sole `cb()`
+                // caller) is never reached and the boot stalls before `.listen()`. Treat a
+                // zero-connector config like the no-connectors `else` branch: advance to
+                // the next bundle (or finish), firing the completion callback.
+                if (_connectorCount === 0) {
+                    if (b < bundles.length-1) {
+                        loadModel(b+1, bundles, configuration, env, cb)
+                    } else {
+                        cb()
+                    }
+                    return;
+                }
+
                 var t = 0;
 
                 var done = function(connector, modelConnectors) {

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A bundle whose `connectors.json` declares no actual connector — only the `$schema` annotation that `gina bundle:add` scaffolds, or an empty `{}` — failed to finish starting up: the model loader never invoked its completion callback, so the server never began listening (`gina bundle:start` reported "taking too long"). Such bundles now start correctly. Bundles that declare a real connector, or omit `connectors.json` entirely, are unaffected.'
+time: 2026-06-09T10:44:28.000000+01:00
