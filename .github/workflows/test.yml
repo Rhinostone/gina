@@ -53,4 +53,5 @@ jobs:
             test/lib/*.test.js \
             test/bin/*.test.js \
             test/integration/helper.test.js \
+            test/integration/container-boot.test.js \
             framework/v*/test/unit/*.test.js
