@@ -5,17 +5,21 @@ var console = lib.logger;
  * @module gina/lib/cmd/framework/version
  */
 /**
- * Prints the installed Gina framework version, platform, architecture, and middleware.
+ * Prints the installed Gina framework version, platform, architecture, middleware,
+ * and — when the engine package is resolvable — the bundled template engine name and
+ * version (swig by default). The template-engine line is omitted when the engine
+ * package cannot be read (e.g. a framework directory not yet `npm install`-ed),
+ * satisfying the "when available" contract.
  *
  * Usage:
  *  gina framework:version
  *  gina version
- *  gina version --short=true   (prints version number only)
+ *  gina version --short=true   (prints version number only; no template-engine line)
  *
  * @class Version
  * @constructor
  * @param {object} opt - Parsed command-line options
- * @param {string} [opt.frameworkPath] - Absolute path to the framework directory
+ * @param {string} [opt.frameworkPath] - Absolute path to the framework directory (used to read MIDDLEWARE and the bundled template engine's package.json)
  * @param {string} [opt.pack] - Path to package.json for reading the copyright field
  */
 function Version(opt){
@@ -41,6 +45,21 @@ function Version(opt){
             default:
                 break;
         }
+        // Template engine in use — read the framework-bundled engine package (swig by
+        // default, declared in framework/v<version>/package.json). Read defensively so a
+        // framework directory without the engine package installed (e.g. a fresh clone
+        // before `npm install`) simply omits the line, satisfying the "when available"
+        // contract rather than crashing the banner.
+        var engine = '';
+        try {
+            var enginePack = JSON.parse( fs.readFileSync(_( opt.frameworkPath + '/node_modules/@rhinostone/swig/package.json')).toString() );
+            if ( enginePack && enginePack.name && enginePack.version ) {
+                engine = enginePack.name + '@' + enginePack.version;
+            }
+        } catch (engineErr) {
+            engine = '';
+        }
+
         var vers = "",
             short = ( typeof(process.argv[3]) != 'undefined') ? process.argv[3]: false,
             msg = require('./msg.json'),
@@ -49,12 +68,14 @@ function Version(opt){
                 "platform"      : process.platform,
                 "arch"          : arch,
                 "middleware"    : fs.readFileSync(_( opt.frameworkPath + '/MIDDLEWARE')).toString() || 'none',
+                "engine"        : engine,
                 "copyright"     : require(opt.pack).copyright
             };
 
         vers = msg.basic[4]
             .replace(/%version%/, version.number +' '+ version.platform +' '+ version.arch + ' (MIT)')
             .replace(/%middleware%/, version.middleware)
+            .replace(/%engine%/, version.engine ? ('Template engine: ' + version.engine + '\n') : '')
             .replace(/%copyright%/, version.copyright);
 
         if (typeof(GINA_VERSION) != "undefined") {
