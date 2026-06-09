@@ -197,6 +197,12 @@
                   "default": false
                 }
               }
+            },
+            "trustedRoots": {
+              "type": "array",
+              "description": "Per-bundle opt-out to the swig filesystem-loader's CVE-2023-25345 basepath confinement. Each entry is a template directory — relative to the bundle templates root (templates/html) or absolute — that nested {% include %} / {% import %} may resolve INTO even though it sits outside the templates root (e.g. \"../shared\" for a sibling shared-assets directory). Paths under the templates root are always allowed; anything outside it AND not under a declared trustedRoot still throws. Default [] = fully confined (the loader stays the stock confined swig.loaders.fs(dir)). Does NOT affect the top-level {% extends %} layout boundary, which stays root-confined independently.",
+              "items": { "type": "string" },
+              "default": []
             }
           }
         },

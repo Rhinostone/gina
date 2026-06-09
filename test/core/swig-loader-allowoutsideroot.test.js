@@ -1,28 +1,36 @@
 /**
- * swig-core (CVE-2023-25345) loader basepath confinement — gina posture (#TPL2).
+ * swig-core (CVE-2023-25345) loader basepath confinement — gina posture
+ * (#TPL2 + per-bundle trustedRoots opt-out).
  *
  * swig-core >= 2.7.1 confines the filesystem loader to its basepath and rejects
- * include/extends/import paths that resolve outside it. gina now keeps that
- * confinement ON for its default render path: both loader construction sites
- * build a bare, confined `swig.loaders.fs(dir)` (allowOutsideRoot defaults false),
- * and gina no longer produces ANY out-of-root template resolution —
+ * include/extends/import paths that resolve outside it. gina keeps that
+ * confinement ON BY DEFAULT for its default render path: both loader
+ * construction sites build the loader via `lib.swigTrustedLoader.build(swig,
+ * dir, trustedRoots)`, which returns the stock confined `swig.loaders.fs(dir)`
+ * when no trustedRoots are declared (allowOutsideRoot defaults false), and gina
+ * produces no out-of-root template resolution of its own —
  *   - the processed layout cache was relocated UNDER the bundle templates root:
  *     controller.render-swig.js rewrites the page's {% extends %} to an absolute
  *     path under `<templates.html>/.gina-layout-cache/...`, which resolves INSIDE
  *     the loader basepath; and
  *   - the dev inspector statusbar is INLINED into the layout string instead of
  *     being {% include %}-d from the framework core dir.
- * So every resolution — including untrusted nested {% include %} / {% import %} —
- * is now guarded by swig-core's confinement.
+ * So by default every resolution — including untrusted nested {% include %} /
+ * {% import %} — is guarded by swig-core's confinement. A bundle can OPT OUT
+ * specific sibling directories via settings.template.swig.trustedRoots; the
+ * allowlist behaviour is covered by test/lib/swig-trusted-loader.test.js.
  *
- * This replaces the interim `allowOutsideRoot=true` opt-out (commit b7a022e9).
+ * This replaces the interim blanket `allowOutsideRoot=true` opt-out
+ * (commit b7a022e9) with a confined-by-default + per-bundle-allowlist posture.
  *
  * (a) behavioural — the installed swig-core loader confines by default: it accepts
  *     an in-root path shaped exactly like the relocated layout cache, rejects both
  *     an out-of-root path (the OLD sibling-cache shape) and a `../` traversal, and
  *     enforces the same boundary through a real swig.compile({% extends %}) chain;
- * (b) source pins — both loader sites build the confined `fs(dir)` (no opt-out),
- *     and render-swig.js derives the cache in-root + inlines the statusbar.
+ * (b) source pins — both loader sites delegate to lib.swigTrustedLoader.build
+ *     (confined-by-default, reading settings.template.swig.trustedRoots), neither
+ *     passes the blanket allowOutsideRoot=true opt-out, and render-swig.js derives
+ *     the cache in-root + inlines the statusbar.
  */
 
 'use strict';
@@ -116,25 +124,30 @@ describe('02 - confined loader in a swig.compile extends chain', function () {
 // 03 - source pins: both loader sites are confined (no allowOutsideRoot opt-out)
 // ---------------------------------------------------------------------------
 
-describe('03 - gina loader sites keep swig-core confinement', function () {
+describe('03 - gina loader sites are confined-by-default via the trustedRoots loader', function () {
 
-    it('server.js initSwigEngine builds the confined bare fs(dir) loader', function () {
-        assert.match(SERVER_SRC, /loader:\s*swig\.loaders\.fs\(dir\),/);
+    it('server.js initSwigEngine delegates to lib.swigTrustedLoader.build (confined-by-default)', function () {
+        assert.match(SERVER_SRC, /loader:\s*lib\.swigTrustedLoader\.build\(swig, dir, _swigTrustedRoots\),/);
     });
 
-    it('controller.js per-request loader is the confined bare fs(dir)', function () {
-        assert.match(CONTROLLER_SRC, /swigOptions\.loader = swig\.loaders\.fs\(dir\);/);
+    it('controller.js per-request loader delegates to lib.swigTrustedLoader.build', function () {
+        assert.match(CONTROLLER_SRC, /swigOptions\.loader = lib\.swigTrustedLoader\.build\(swig, dir, _swigTrustedRoots\);/);
     });
 
-    it('NEITHER site passes the allowOutsideRoot=true opt-out (regression guard)', function () {
+    it('both sites read settings.template.swig.trustedRoots (the per-bundle opt-out)', function () {
+        assert.match(SERVER_SRC,     /conf\.content\.settings\.template\.swig\.trustedRoots/);
+        assert.match(CONTROLLER_SRC, /local\.options\.conf\.content\.settings\.template\.swig\.trustedRoots/);
+    });
+
+    it('NEITHER site passes the blanket allowOutsideRoot=true opt-out (regression guard)', function () {
         assert.doesNotMatch(SERVER_SRC,     /swig\.loaders\.fs\(dir,\s*'utf8',\s*true\)/);
         assert.doesNotMatch(CONTROLLER_SRC, /swig\.loaders\.fs\(dir,\s*'utf8',\s*true\)/);
     });
 
     it('server.js documents the CVE confinement rationale next to the loader', function () {
-        var idx = SERVER_SRC.indexOf('loader: swig.loaders.fs(dir),');
-        assert.ok(idx > 0, 'confined loader present in server.js');
-        var win = SERVER_SRC.slice(Math.max(0, idx - 800), idx);
+        var idx = SERVER_SRC.indexOf('loader: lib.swigTrustedLoader.build(swig, dir, _swigTrustedRoots),');
+        assert.ok(idx > 0, 'trusted-roots loader present in server.js');
+        var win = SERVER_SRC.slice(Math.max(0, idx - 1000), idx);
         assert.match(win, /CVE-2023-25345/);
         assert.match(win, /confine/i);
     });

@@ -91,6 +91,19 @@
     }
   },
   "cache": {},
+  // Template-engine options (opt-in; bundles render unchanged without this block).
+  //   template.swig.trustedRoots — per-bundle opt-out to swig-core's loader
+  //     basepath confinement (CVE-2023-25345). By default the swig loader is
+  //     confined to the bundle templates root: a nested {% include %} / {% import %}
+  //     resolving OUTSIDE the root throws. List directories here — each relative to
+  //     the bundle templates root (templates/html) or absolute — to let templates
+  //     {% include %} / {% import %} author-relative assets from them (e.g. a sibling
+  //     "shared" directory). Anything outside the root AND not under a declared
+  //     trusted root still throws; top-level {% extends %} stays root-confined
+  //     regardless. Default (key omitted, as here) = fully confined.
+  //     Example: "template": { "swig": { "trustedRoots": ["../shared"] } }
+  //   template.{swig,nunjucks}.loader — #TPL1 async custom template loader
+  //     (memory / http backend). See schema/settings.json for the full shape.
   // #CSRF1 — session-cookie defaults applied by gina.plugins.Session(expressSession).
   // Bundle cookie options passed to session({ cookie: ... }) always override these.
   //   sameSite: "lax" | "strict" | "none"   (default "lax")

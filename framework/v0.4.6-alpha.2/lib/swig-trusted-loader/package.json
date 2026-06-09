@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-swig-trusted-loader",
+  "version": "1.0.0",
+  "description": "Per-bundle opt-out to swig-core's filesystem-loader basepath confinement (CVE-2023-25345). Builds the synchronous swig fs loader with a trustedRoots allowlist: nested include / import may resolve into declared out-of-root directories while everything else stays confined. Confined-by-default (empty/absent trustedRoots returns the stock swig.loaders.fs(dir)); fail-closed (never sets swig-core's blanket allowOutsideRoot). Consumed by initSwigEngine (server.js) and the per-request swig setup (controller.js).",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

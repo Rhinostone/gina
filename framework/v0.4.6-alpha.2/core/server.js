@@ -459,16 +459,24 @@ function Server(options) {
 
         // swig options
         var dir = conf.content.templates._common.html;
+        // Per-bundle trusted-roots opt-out to the swig loader confinement below.
+        var _swigTrustedRoots = ( conf.content && conf.content.settings
+            && conf.content.settings.template && conf.content.settings.template.swig
+            && conf.content.settings.template.swig.trustedRoots ) || [];
         var swigOptions = {
             autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
-            // #TPL2 — confined loader (swig-core basepath confinement, CVE-2023-25345).
-            // gina no longer resolves any template OUTSIDE the bundle templates root:
-            // the processed layout cache lives in-root (controller.render-swig.js
-            // .gina-layout-cache) and the dev inspector statusbar is inlined rather
-            // than {% include %}-d from the framework core dir. So the loader keeps
-            // swig-core's confinement (allowOutsideRoot defaults false) for every
-            // resolution, including untrusted nested {% include %} / {% import %}.
-            loader: swig.loaders.fs(dir),
+            // #TPL2 + trustedRoots opt-out — confined to the bundle templates root by
+            // default (swig-core basepath confinement, CVE-2023-25345): gina produces
+            // no out-of-root resolution of its own (the processed layout cache lives
+            // in-root under .gina-layout-cache, and the dev inspector statusbar is
+            // inlined rather than {% include %}-d from the framework core dir). A
+            // bundle that legitimately {% include %} / {% import %}s a sibling shared
+            // asset (e.g. "../shared/x.css") opts those dirs out of confinement via
+            // settings.template.swig.trustedRoots; every other out-of-root path still
+            // throws. Empty / absent ⇒ fully confined (build() returns the stock
+            // swig.loaders.fs(dir)). Top-level {% extends %} stays root-confined by
+            // render-swig.js's own boundary check regardless.
+            loader: lib.swigTrustedLoader.build(swig, dir, _swigTrustedRoots),
             cache: (conf.isCacheless) ? false : 'memory'
         };
 
