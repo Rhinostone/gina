@@ -8563,3 +8563,99 @@ describe('77 - #INS8 Inspector SPA WebSocket transport (tryAgentWS)', function()
     });
 
 });
+
+
+// ── 18 — Data-source freshness guard: a stale-process opener/localStorage
+//         snapshot must not override the live agent data (e.g. the
+//         template-engine version badge after a bundle restart) ─────────────
+describe('18 - Inspector data-source freshness guard', function() {
+
+    var INSPECTOR_JS = path.join(BM_DIR, 'inspector.js');
+    var _src;
+    function getSrc() { return _src || (_src = fs.readFileSync(INSPECTOR_JS, 'utf8')); }
+
+    // ── Source pins ──────────────────────────────────────────────────────
+    it('declares the _livePid freshness reference', function() {
+        assert.match(getSrc(), /var _livePid = null;/);
+    });
+
+    it('defines the _gdPid / _noteLivePid / _isStaleSource helpers', function() {
+        var src = getSrc();
+        assert.match(src, /function _gdPid\(gd\)/);
+        assert.match(src, /function _noteLivePid\(gd\)/);
+        assert.match(src, /function _isStaleSource\(gd\)/);
+    });
+
+    it('reads the "gina pid" off gina.environment first then user.environment', function() {
+        var src = getSrc();
+        assert.match(src, /\['gina pid'\]/);
+        var body = src.substring(src.indexOf('function _gdPid'), src.indexOf('function _gdPid') + 320);
+        assert.ok(body.indexOf('gd.gina && gd.gina.environment') > -1, 'gina.environment first');
+        assert.ok(body.indexOf('gd.user && gd.user.environment') > -1, 'user.environment fallback');
+    });
+
+    it('records the live pid at all three agent apply sites', function() {
+        var calls = (getSrc().match(/_noteLivePid\(gd\);/g) || []).length;
+        assert.equal(calls, 3, 'expected _noteLivePid(gd) at the SSE, WS and passive agent handlers');
+    });
+
+    it('gates the opener/localStorage poll on _isStaleSource before applying', function() {
+        var src = getSrc();
+        assert.match(src, /if \(_isStaleSource\(gd\)\) return;/);
+        var pd    = src.indexOf('function pollData');
+        var guard = src.indexOf('if (_isStaleSource(gd)) return;', pd);
+        var apply = src.indexOf('ginaData = gd;', pd);
+        assert.ok(pd > -1 && guard > pd && guard < apply,
+            'guard must run inside pollData, before ginaData = gd');
+    });
+
+    it('is inert (returns false) until an agent pid is known', function() {
+        var src = getSrc();
+        var body = src.substring(src.indexOf('function _isStaleSource'), src.indexOf('function _isStaleSource') + 200);
+        assert.ok(body.indexOf('if (!_livePid) return false;') > -1,
+            'expected the no-agent inert short-circuit');
+    });
+
+    // ── Pure-logic replica of _gdPid + the staleness decision ─────────────
+    function gdPid(gd) {
+        try {
+            var e = (gd && gd.gina && gd.gina.environment)
+                 || (gd && gd.user && gd.user.environment) || null;
+            return e ? (e['gina pid'] || null) : null;
+        } catch (e) { return null; }
+    }
+    function isStale(livePid, gd) {
+        if (!livePid) return false;
+        var p = gdPid(gd);
+        return !!(p && p !== livePid);
+    }
+    function fromPid(pid, view) {
+        var o = {}; o[view || 'gina'] = { environment: { 'gina pid': pid } }; return o;
+    }
+
+    it('extracts pid from the gina view, falling back to the user view', function() {
+        assert.equal(gdPid(fromPid(223, 'gina')), 223);
+        assert.equal(gdPid(fromPid(223, 'user')), 223);
+        assert.equal(gdPid({ gina: { environment: {} } }), null);
+        assert.equal(gdPid(null), null);
+    });
+
+    it('inert before any agent frame — a stale-looking opener still applies', function() {
+        assert.equal(isStale(null, fromPid(1238)), false);
+    });
+
+    it('suppresses an opener payload from a different (stale) process', function() {
+        // agent established live pid 223; opener still on the pre-restart pid 1238
+        assert.equal(isStale(223, fromPid(1238)), true);
+    });
+
+    it('applies an opener payload from the live process (same pid)', function() {
+        assert.equal(isStale(223, fromPid(223)), false);
+    });
+
+    it('applies an opener payload with no pid (back-compat — nothing to compare)', function() {
+        assert.equal(isStale(223, { gina: { environment: {} } }), false);
+        assert.equal(isStale(223, null), false);
+    });
+
+});

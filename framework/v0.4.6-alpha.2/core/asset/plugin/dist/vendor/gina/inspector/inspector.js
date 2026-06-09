@@ -160,6 +160,12 @@
     var paused  = false;
     /** @type {string} JSON.stringify of last processed ginaData — for change detection */
     var lastGdStr = '';
+    /** @type {?(number|string)} `gina pid` of the running bundle as last reported by the
+     *  live agent (SSE/WS) channel; the freshness reference {@link _isStaleSource} compares
+     *  opener/localStorage polls against so a stale-process snapshot (e.g. an opener tab
+     *  rendered before a bundle restart) cannot override live data. Null in pure
+     *  opener/localStorage mode, which leaves the guard inert. */
+    var _livePid = null;
     /** @type {boolean} When true, Data tab renders raw JSON instead of a tree */
     var rawMode = false;
     /** @type {string} Highest severity level received since last clear (drives log-dot) */
@@ -3256,6 +3262,55 @@
     }
 
     /**
+     * Extract the running bundle's `gina pid` from a `__ginaData` payload,
+     * reading `gina.environment` first then falling back to `user.environment`.
+     *
+     * @inner
+     * @param   {?Object} gd  A parsed `__ginaData` payload.
+     * @returns {?(number|string)} The `gina pid`, or null when absent.
+     */
+    function _gdPid(gd) {
+        try {
+            var e = (gd && gd.gina && gd.gina.environment)
+                 || (gd && gd.user && gd.user.environment) || null;
+            return e ? (e['gina pid'] || null) : null;
+        } catch (e) { return null; }
+    }
+
+    /**
+     * Record the live bundle pid from an agent-delivered payload. The agent
+     * (SSE/WS) channel always reflects the running process, so its pid is the
+     * freshness reference {@link _isStaleSource} compares polled snapshots against.
+     *
+     * @inner
+     * @param {?Object} gd  A parsed `__ginaData` payload from the agent channel.
+     */
+    function _noteLivePid(gd) {
+        var p = _gdPid(gd);
+        if (p) _livePid = p;
+    }
+
+    /**
+     * Freshness guard for the opener/localStorage poll. Once the live agent
+     * channel has reported the running bundle's pid ({@link _livePid}), a polled
+     * payload carrying a DIFFERENT pid is a snapshot from a prior process — e.g.
+     * an opener tab still open from before a bundle restart. Returning true tells
+     * {@link pollData} to keep the live agent data instead of letting that stale
+     * snapshot override it (most visibly the template-engine version badge).
+     * Inert (returns false) until an agent pid is known, preserving the pure
+     * opener/localStorage behaviour.
+     *
+     * @inner
+     * @param   {?Object} gd  The polled `__ginaData` payload.
+     * @returns {boolean} True when `gd` belongs to a different (stale) process.
+     */
+    function _isStaleSource(gd) {
+        if (!_livePid) return false;
+        var p = _gdPid(gd);
+        return !!(p && p !== _livePid);
+    }
+
+    /**
      * Poll the data source for updates. Called on a timer every
      * {@link pollDataMs} milliseconds.
      *
@@ -3298,6 +3353,10 @@
             if (!gd) return;
             var str = JSON.stringify(gd);
             if (str === lastGdStr) return;
+            // Freshness guard — a stale-process opener/localStorage snapshot (its
+            // `gina pid` differs from the live agent's) must not override live data;
+            // see _isStaleSource. Inert until an agent frame establishes _livePid.
+            if (_isStaleSource(gd)) return;
             showLoader();
             lastGdStr = str;
             ginaData = gd;
@@ -3788,6 +3847,7 @@
                     showLoader();
                     lastGdStr = str;
                     ginaData = gd;
+                    _noteLivePid(gd);
                     var env = (gd.user && gd.user.environment) || {};
                     qs('#bm-label').textContent = (env.bundle || '?') + '@' + (env.env || '?');
                     qs('#bm-dot').className = 'bm-dot ok';
@@ -3906,6 +3966,7 @@
                         showLoader();
                         lastGdStr = str;
                         ginaData = gd;
+                        _noteLivePid(gd);
                         var env = (gd.user && gd.user.environment) || {};
                         qs('#bm-label').textContent = (env.bundle || '?') + '@' + (env.env || '?');
                         qs('#bm-dot').className = 'bm-dot ok';
@@ -4024,6 +4085,7 @@
                     showLoader();
                     lastGdStr = str;
                     ginaData = gd;
+                    _noteLivePid(gd);
                     var env = (gd.user && gd.user.environment) || {};
                     qs('#bm-label').textContent = (env.bundle || '?') + '@' + (env.env || '?');
                     qs('#bm-dot').className = 'bm-dot ok';
