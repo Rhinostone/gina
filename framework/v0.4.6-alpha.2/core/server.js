@@ -3591,6 +3591,15 @@ function Server(options) {
                     });
 
                     request.on('end', function onEnd() {
+                        // Preserve the exact unparsed body BEFORE processRequestData mutates
+                        // request.body into the parsed object. Inbound webhooks that
+                        // authenticate via an HMAC computed over the raw request bytes need
+                        // the untouched body; by the time middlewares run, the stream is
+                        // drained and request.body is the parsed object. request.body is the
+                        // fully-accumulated string here ('' when the body was empty). This
+                        // is a reference assignment, not a copy. The multipart branch above
+                        // uses Busboy and never reaches here, so uploads are unaffected.
+                        request.rawBody = (typeof request.body === 'string') ? request.body : '';
                         processRequestData(request, response, next);
                     });
 

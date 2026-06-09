@@ -1023,3 +1023,115 @@ describe('15 - client this.query: application/json body is raw JSON (not RFC5987
         assert.deepEqual(parseJsonTolerant(legacyWire), data);
     });
 });
+
+
+// ─── 16 — server.js: request.rawBody snapshot for HMAC webhook verification ───
+//
+// Inbound webhooks that authenticate by an HMAC over the exact raw request bytes need the
+// unparsed body. The non-multipart end-of-stream handler now snapshots request.rawBody from
+// the fully-accumulated request.body BEFORE processRequestData mutates it into the parsed
+// object. Always-on (a reference assignment); the multipart/Busboy path never reaches it.
+
+describe('16 - server.js: request.rawBody snapshot before processRequestData', function() {
+
+    var crypto = require('node:crypto');
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // ── source pins ──
+
+    it('the onEnd handler assigns request.rawBody before calling processRequestData', function() {
+        var endIdx = src.indexOf('function onEnd()');
+        assert.ok(endIdx >= 0, 'the non-multipart end-of-stream handler must exist');
+        var handler = src.slice(endIdx, src.indexOf('});', endIdx));
+        var rawIdx     = handler.indexOf('request.rawBody');
+        var processIdx = handler.indexOf('processRequestData(request, response, next)');
+        assert.ok(rawIdx >= 0, 'onEnd must snapshot request.rawBody');
+        assert.ok(processIdx >= 0, 'onEnd must call processRequestData');
+        assert.ok(rawIdx < processIdx, 'the rawBody snapshot must happen BEFORE processRequestData mutates request.body');
+    });
+
+    it('the snapshot is string-guarded (empty body → empty string, never the {} init object)', function() {
+        var endIdx  = src.indexOf('function onEnd()');
+        var handler = src.slice(endIdx, src.indexOf('});', endIdx));
+        assert.match(handler, /request\.rawBody\s*=\s*\(\s*typeof\s+request\.body\s*===?\s*'string'\s*\)\s*\?\s*request\.body\s*:\s*''/,
+            'rawBody must be the accumulated string, or "" when body was empty/object');
+    });
+
+    it('there is exactly one rawBody snapshot, and it lives on the non-multipart path (after request.pipe(busboy))', function() {
+        var count = (src.match(/request\.rawBody\s*=/g) || []).length;
+        assert.strictEqual(count, 1, 'exactly one rawBody snapshot site');
+        var busboyIdx = src.indexOf('request.pipe(busboy)');
+        var rawIdx    = src.indexOf('request.rawBody =');
+        assert.ok(busboyIdx >= 0 && rawIdx > busboyIdx,
+            'the snapshot is in the non-multipart else branch — the multipart/Busboy path is unaffected');
+    });
+
+    // ── behavioural replica of the data-accumulation + snapshot ──
+
+    // Mirrors server.js: request.body inits to {} (request init), the data handler resets it
+    // to '' on the first chunk and appends chunk.toString(), then onEnd snapshots rawBody.
+    function accumulateAndSnapshot(chunks) {
+        var request = { body: {} };
+        chunks.forEach(function(chunk) {
+            if (typeof request.body === 'object') { request.body = ''; }
+            request.body += chunk;
+        });
+        request.rawBody = (typeof request.body === 'string') ? request.body : '';
+        return request;
+    }
+
+    it('rawBody equals the exact bytes sent (pre-parse) and the body still parses normally', function() {
+        var raw = '{"event":"thing.updated","id":42,"v":"x%20y"}';
+        var req = accumulateAndSnapshot([raw]);
+        assert.strictEqual(req.rawBody, raw, 'rawBody is the exact unparsed bytes');
+        // a subsequent JSON.parse (what processRequestData does for application/json) still works
+        var parsed = JSON.parse(req.rawBody);
+        assert.strictEqual(parsed.id, 42);
+        assert.strictEqual(parsed.v, 'x%20y', 'the raw bytes are untouched — %XX preserved');
+    });
+
+    it('rawBody is reassembled across multiple chunks', function() {
+        var req = accumulateAndSnapshot(['{"a":', '1,"b":', '"two"}']);
+        assert.strictEqual(req.rawBody, '{"a":1,"b":"two"}');
+        assert.deepEqual(JSON.parse(req.rawBody), { a: 1, b: 'two' });
+    });
+
+    it('an empty body yields rawBody = "" (never the {} init object)', function() {
+        var req = accumulateAndSnapshot([]);
+        assert.strictEqual(req.rawBody, '');
+    });
+
+    it('HMAC round-trip: a signature recomputed over rawBody matches the sender signature', function() {
+        var secret  = 'a-shared-webhook-secret';
+        var rawBody = JSON.stringify({ event: 'invoice.paid', id: 'abc123', amount: 1000 });
+        // sender signs the exact bytes it transmits
+        var sentSig = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+        // server snapshots rawBody and recomputes
+        var req = accumulateAndSnapshot([rawBody]);
+        var recomputed = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+        assert.strictEqual(recomputed, sentSig, 'HMAC over req.rawBody must match the sender signature');
+        // and the parsed body remains available to the controller
+        assert.deepEqual(JSON.parse(req.rawBody), { event: 'invoice.paid', id: 'abc123', amount: 1000 });
+    });
+
+    it('subtract-my-contribution: rawBody is required — signing the re-stringified parse does not match', function() {
+        var secret = 'a-shared-webhook-secret';
+        // a body whose formatting would NOT survive a parse → stringify round-trip
+        var rawBody = '{ "a" : 1 }';
+        var sentSig = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+        var req = accumulateAndSnapshot([rawBody]);
+
+        // correct path: HMAC over the preserved raw bytes matches the sender
+        var overRaw = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+        assert.strictEqual(overRaw, sentSig, 'HMAC over rawBody matches the sender signature');
+
+        // wrong path: HMAC over the re-stringified parsed object differs (whitespace lost)
+        var reStringified = JSON.stringify(JSON.parse(req.rawBody)); // '{"a":1}'
+        assert.notStrictEqual(reStringified, rawBody, 'sanity: parse→stringify changed the bytes');
+        var overParsed = crypto.createHmac('sha256', secret).update(reStringified).digest('hex');
+        assert.notStrictEqual(overParsed, sentSig,
+            'without rawBody, a signature over the parsed-then-restringified object would fail verification');
+    });
+});
