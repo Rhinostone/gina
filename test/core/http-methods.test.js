@@ -784,9 +784,14 @@ describe('13 - body parser: application/json verbatim parse (no url-decode, no c
     // The json branch must NOT route application/json through formatDataFromString
     // (that helper is the one that double-decodes + coerces). Pin it stays only on
     // the urlencoded / GET / HEAD paths, never inside an application/json branch.
-    it('the application/json branches do not call formatDataFromString', function() {
+    it('the application/json branches do not call formatDataFromString, and decode only as a fallback', function() {
         // For each method, the substring between the application/json test and the
         // closing of its branch (the `} else {`) must not contain formatDataFromString.
+        // #B28 intent preserved: the FIRST parse attempt is verbatim JSON.parse(request.body)
+        // — no url-decode on the happy path, so valid JSON (incl. a %XX inside a string value)
+        // is never double-decoded. A decodeURIComponent fallback is allowed ONLY after the
+        // verbatim attempt throws — that tolerates a percent-encoded JSON body emitted by the
+        // framework's own client (the self.query() self-consistency fix), never a raw-JSON body.
         ['post', 'put', 'patch'].forEach(function(m) {
             var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
             var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
@@ -795,8 +800,14 @@ describe('13 - body parser: application/json verbatim parse (no url-decode, no c
             var branch   = caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
             assert.doesNotMatch(branch, /formatDataFromString/,
                 m + ' json branch must not call formatDataFromString');
-            assert.doesNotMatch(branch, /decodeURIComponent/,
-                m + ' json branch must not url-decode');
+            var verbatimIdx = branch.indexOf('JSON.parse(request.body)');
+            var decodeIdx   = branch.indexOf('decodeURIComponent');
+            assert.ok(verbatimIdx >= 0,
+                m + ' json branch must JSON.parse(request.body) verbatim on the happy path');
+            if (decodeIdx >= 0) {
+                assert.ok(decodeIdx > verbatimIdx,
+                    m + ' json branch may only decodeURIComponent as a fallback AFTER the verbatim parse');
+            }
         });
     });
 
@@ -861,5 +872,154 @@ describe('13 - body parser: application/json verbatim parse (no url-decode, no c
 
     it('a literal + in a JSON string value is preserved', function() {
         assert.strictEqual(parseJsonBranch('{"v":"1.0+rc1"}').v, '1.0+rc1');
+    });
+});
+
+
+// ─── 14 — body parser: application/json tolerant parse (verbatim first, decode fallback) ───
+//
+// The framework's own server-to-server client (controller.js this.query) historically
+// percent-encoded application/json bodies (encodeRFC5987ValueChars(JSON.stringify(data))),
+// while the #B28 server parses them verbatim — so the framework emitted bodies its own
+// parser rejected (POST/PATCH 500, PUT silent body loss). The server now tries the verbatim
+// JSON.parse first and falls back to a single decodeURIComponent only when that throws, so a
+// percent-encoded body is tolerated WITHOUT double-decoding a genuine raw-JSON body.
+
+describe('14 - body parser: application/json tolerant parse (verbatim first, decode fallback)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // Faithful replica of helpers/data/src/main.js encodeRFC5987ValueChars — what the
+    // client actually emitted for a json/text/x-www-form PUT/POST body.
+    function encodeRFC5987ValueChars(str) {
+        return encodeURIComponent(str)
+            .replace(/['()]/g, escape)
+            .replace(/\*/g, '%2A')
+            .replace(/%(?:7C|60|5E)/g, unescape);
+    }
+
+    // Pure-logic replica of the new application/json branch: verbatim first, decode fallback.
+    function parseJsonTolerant(body) {
+        try { return JSON.parse(body); }
+        catch (e) { return JSON.parse(decodeURIComponent(body)); }
+    }
+
+    // ── source pins: each json branch keeps the verbatim parse and adds the fallback ──
+    ['post', 'put', 'patch'].forEach(function(m) {
+        it(m.toUpperCase() + ' json branch: verbatim parse first, decodeURIComponent fallback after it', function() {
+            var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
+            var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
+            var jsonIdx  = caseSrc.indexOf("/application\\/json/i.test");
+            assert.ok(jsonIdx >= 0, m + ' must have an application/json branch');
+            var branch   = caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
+            var verbatimIdx = branch.indexOf('JSON.parse(request.body)');
+            var fallbackIdx = branch.indexOf('JSON.parse(decodeURIComponent(request.body))');
+            assert.ok(verbatimIdx >= 0, m + ' json branch must JSON.parse(request.body) verbatim');
+            assert.ok(fallbackIdx > verbatimIdx,
+                m + ' json branch must JSON.parse(decodeURIComponent(request.body)) only as a fallback after the verbatim parse');
+        });
+    });
+
+    it('POST/PATCH still 500 on total parse failure; PUT still warn-only (no throwError in its json branch)', function() {
+        function jsonBranch(m) {
+            var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
+            var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
+            var jsonIdx  = caseSrc.indexOf("/application\\/json/i.test");
+            return caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
+        }
+        assert.match(jsonBranch('post'),  /throwError\(response, 500,/, 'POST json branch must 500 when both attempts fail');
+        assert.match(jsonBranch('patch'), /throwError\(response, 500,/, 'PATCH json branch must 500 when both attempts fail');
+        assert.doesNotMatch(jsonBranch('put'), /throwError/, 'PUT json branch stays warn-only (asymmetric, unchanged)');
+        assert.match(jsonBranch('put'), /console\.warn/, 'PUT json branch warns on total failure');
+    });
+
+    // ── behavioural replicas ──
+
+    it('a percent-encoded JSON body (the client emitted form) parses to the right object', function() {
+        var wire = encodeRFC5987ValueChars(JSON.stringify({ a: 1, b: 'x' }));
+        assert.match(wire, /^%7B/, 'sanity: the encoded wire body starts percent-encoded, not raw JSON');
+        assert.deepEqual(parseJsonTolerant(wire), { a: 1, b: 'x' });
+    });
+
+    it('regression — a raw JSON body still parses (verbatim attempt wins)', function() {
+        assert.deepEqual(parseJsonTolerant('{"a":1}'), { a: 1 });
+        assert.deepEqual(parseJsonTolerant('{"a":1,"b":"x"}'), { a: 1, b: 'x' });
+    });
+
+    it('regression — #B28 intent preserved: %XX inside a raw-JSON string value is NOT double-decoded', function() {
+        // Valid JSON parses on the verbatim attempt, so the fallback never runs and %20 survives.
+        assert.strictEqual(parseJsonTolerant('{"u":"x%20y"}').u, 'x%20y',
+            'a raw-JSON %XX must stay literal — the fallback must not touch valid JSON');
+    });
+
+    it('regression — a real-typed raw JSON body is preserved verbatim', function() {
+        var v = parseJsonTolerant('{"b":true,"n":42,"z":null,"o":{"k":"v"}}');
+        assert.strictEqual(v.b, true);
+        assert.strictEqual(v.n, 42);
+        assert.strictEqual(v.z, null);
+        assert.deepEqual(v.o, { k: 'v' });
+    });
+
+    it('a genuinely malformed body still throws (→ 500 for POST/PATCH) — both attempts fail', function() {
+        assert.throws(function() { parseJsonTolerant('%%%'); }, 'malformed: verbatim throws, decodeURIComponent throws');
+        assert.throws(function() { parseJsonTolerant('not json'); }, 'plain text: both attempts fail');
+    });
+});
+
+
+// ─── 15 — client this.query: application/json body is raw JSON, not RFC5987-encoded ───
+//
+// Root-cause half of the self-consistency fix: this.query must send the body as raw
+// JSON.stringify(data) for the application/json path (the wire content-type is forced to
+// application/json), NOT encodeRFC5987ValueChars(JSON.stringify(data)). RFC5987 value-encoding
+// is for HTTP header values, not request bodies.
+
+describe('15 - client this.query: application/json body is raw JSON (not RFC5987-encoded)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONTROLLER_SRC, 'utf8'); });
+
+    // The PUT/POST json body branch lives between the `['put', 'post'].indexOf(...)` test and
+    // its closing `} else {` (the urlencoded-into-path branch).
+    function jsonBodyBranch() {
+        var i = src.indexOf("['put', 'post'].indexOf(options.method.toLowerCase())");
+        assert.ok(i >= 0, 'this.query must have the PUT/POST content-type body branch');
+        return src.slice(i, src.indexOf('} else {', i));
+    }
+
+    it('sends queryData = JSON.stringify(data) for the application/json body', function() {
+        assert.match(jsonBodyBranch(), /queryData\s*=\s*JSON\.stringify\(data\)/,
+            'the json body branch must assign raw JSON.stringify(data)');
+    });
+
+    it('does NOT wrap the application/json body in encodeRFC5987ValueChars', function() {
+        assert.doesNotMatch(jsonBodyBranch(), /encodeRFC5987ValueChars\(JSON\.stringify\(data\)\)/,
+            'the json body must not be percent-encoded — it produced a body the server rejected');
+    });
+
+    // ── round-trip: the body the client now emits parses through the new server branch ──
+
+    function parseJsonTolerant(body) {
+        try { return JSON.parse(body); }
+        catch (e) { return JSON.parse(decodeURIComponent(body)); }
+    }
+
+    it('the raw-JSON body the client now emits round-trips through the server parser', function() {
+        var data = { a: 1, b: 'x', nested: { k: 'v' } };
+        var wire = JSON.stringify(data); // what this.query now puts on the wire
+        assert.deepEqual(parseJsonTolerant(wire), data);
+    });
+
+    it('version-skew safety: an already-deployed encoded sender also still round-trips (A complements B)', function() {
+        function encodeRFC5987ValueChars(str) {
+            return encodeURIComponent(str)
+                .replace(/['()]/g, escape)
+                .replace(/\*/g, '%2A')
+                .replace(/%(?:7C|60|5E)/g, unescape);
+        }
+        var data = { a: 1, b: 'x' };
+        var legacyWire = encodeRFC5987ValueChars(JSON.stringify(data)); // old client form
+        assert.deepEqual(parseJsonTolerant(legacyWire), data);
     });
 });

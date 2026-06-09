@@ -2920,8 +2920,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             queryData = '?';
             // TODO - if 'application/json' && method == (put|post)
             if ( ['put', 'post'].indexOf(options.method.toLowerCase()) >-1 && /(text\/plain|application\/json|application\/x\-www\-form)/i.test(options.headers['content-type']) ) {
-                // replacing
-                queryData = encodeRFC5987ValueChars(JSON.stringify(data))
+                // Send the body as raw JSON. The wire content-type is forced to
+                // application/json below, and the receiving parser (server.js
+                // processRequestData) reads application/json verbatim — so the body must
+                // NOT be percent-encoded. RFC5987 value-encoding is defined for HTTP
+                // header values (e.g. filename*=), not request bodies; applying it here
+                // produced a body the framework's own parser rejected.
+                queryData = JSON.stringify(data)
             } else {
                 //Sample request.
                 //options.path = '/updater/start?release={"version":"0.0.5-dev","url":"http://10.1.0.1:8080/project/bundle/repository/archive?ref=0.0.5-dev","date":1383669077141}&pid=46493';

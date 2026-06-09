@@ -3663,9 +3663,20 @@ function Server(options) {
                                     request.post = obj;
                                     isPostSet = true;
                                 } catch (err) {
-                                    exception = new Error('Could not parse application/json POST body. '+ err.message);
-                                    throwError(response, 500, exception, next);
-                                    return;
+                                    // Tolerate a percent-encoded JSON body (e.g. an
+                                    // encodeURIComponent / RFC5987-encoded payload). A genuine
+                                    // raw-JSON body parses on the verbatim attempt above, so a
+                                    // legitimate %XX inside a string value is never double-decoded
+                                    // (preserves #B28 intent) — only a non-raw-JSON body reaches here.
+                                    try {
+                                        obj = JSON.parse(decodeURIComponent(request.body));
+                                        request.post = obj;
+                                        isPostSet = true;
+                                    } catch (err2) {
+                                        exception = new Error('Could not parse application/json POST body. '+ err.message);
+                                        throwError(response, 500, exception, next);
+                                        return;
+                                    }
                                 }
                             } else {
                                 if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
@@ -3830,7 +3841,14 @@ function Server(options) {
                                 try {
                                     obj = JSON.parse(request.body);
                                 } catch (err) {
-                                    console.warn('[ Could not parse application/json PUT body ] '+ request.url +'\n'+ err.stack);
+                                    // Tolerate a percent-encoded JSON body (see the POST branch).
+                                    // The verbatim attempt above wins for genuine raw JSON, so
+                                    // #B28 intent holds and only an encoded body reaches here.
+                                    try {
+                                        obj = JSON.parse(decodeURIComponent(request.body));
+                                    } catch (err2) {
+                                        console.warn('[ Could not parse application/json PUT body ] '+ request.url +'\n'+ err.stack);
+                                    }
                                 }
                             } else {
                                 if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
@@ -3935,9 +3953,18 @@ function Server(options) {
                                     request.patch = obj;
                                     isPatchSet = true;
                                 } catch (err) {
-                                    exception = new Error('Could not parse application/json PATCH body. '+ err.message);
-                                    throwError(response, 500, exception, next);
-                                    return;
+                                    // Tolerate a percent-encoded JSON body (see the POST branch).
+                                    // The verbatim attempt above wins for genuine raw JSON, so
+                                    // #B28 intent holds and only an encoded body reaches here.
+                                    try {
+                                        obj = JSON.parse(decodeURIComponent(request.body));
+                                        request.patch = obj;
+                                        isPatchSet = true;
+                                    } catch (err2) {
+                                        exception = new Error('Could not parse application/json PATCH body. '+ err.message);
+                                        throwError(response, 500, exception, next);
+                                        return;
+                                    }
                                 }
                             } else {
                                 if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
