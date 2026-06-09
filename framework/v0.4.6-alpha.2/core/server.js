@@ -459,28 +459,16 @@ function Server(options) {
 
         // swig options
         var dir = conf.content.templates._common.html;
-        // Per-bundle trusted-roots opt-out (bundle-wide default). Read from the
-        // templates config — the same place the loader basepath (_common.html)
-        // lives — so the root and its trusted siblings are declared together. A
-        // section can override it per-template (see core/controller/controller.js).
-        var _swigTrustedRoots = ( conf.content && conf.content.templates
-            && conf.content.templates._common
-            && conf.content.templates._common.trustedRoots ) || [];
         var swigOptions = {
             autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
-            // #TPL2 + trustedRoots opt-out — confined to the bundle templates root by
-            // default (swig-core basepath confinement, CVE-2023-25345): gina produces
-            // no out-of-root resolution of its own (the processed layout cache lives
-            // in-root under .gina-layout-cache, and the dev inspector statusbar is
-            // inlined rather than {% include %}-d from the framework core dir). A
-            // bundle that legitimately {% include %} / {% import %}s a sibling shared
-            // asset (e.g. "../shared/x.css") declares those dirs in the templates
-            // config — templates._common.trustedRoots (overridable per template via a
-            // section's own trustedRoots); every other out-of-root path still throws.
-            // Empty / absent ⇒ fully confined (build() returns the stock
-            // swig.loaders.fs(dir)). Top-level {% extends %} stays root-confined by
-            // render-swig.js's own boundary check regardless.
-            loader: lib.swigTrustedLoader.build(swig, dir, _swigTrustedRoots),
+            // #TPL2 — confined loader (swig-core basepath confinement, CVE-2023-25345).
+            // gina no longer resolves any template OUTSIDE the bundle templates root:
+            // the processed layout cache lives in-root (controller.render-swig.js
+            // .gina-layout-cache) and the dev inspector statusbar is inlined rather
+            // than {% include %}-d from the framework core dir. So the loader keeps
+            // swig-core's confinement (allowOutsideRoot defaults false) for every
+            // resolution, including untrusted nested {% include %} / {% import %}.
+            loader: swig.loaders.fs(dir),
             cache: (conf.isCacheless) ? false : 'memory'
         };
 

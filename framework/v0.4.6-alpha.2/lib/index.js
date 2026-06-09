@@ -145,15 +145,6 @@ function Lib() {
         // build + validation) and controller.render-swig-async.js. Pure factory
         // (no singleton state), so _require (hot-reloadable) is safe.
         templateLoaders : _require('./template-loaders'),
-        // Per-bundle `trustedRoots` opt-out to #TPL2's swig fs-loader basepath
-        // confinement (CVE-2023-25345). build(swig, dir, trustedRoots) returns
-        // the stock confined swig.loaders.fs(dir) when no roots are declared,
-        // else a gina-owned fail-closed loader that allows nested include/import
-        // into the declared sibling dirs (everything else still throws).
-        // Consumed by initSwigEngine (server.js) + the per-request swig setup
-        // (controller.js). Pure factory (no singleton state), so _require
-        // (hot-reloadable) is safe.
-        swigTrustedLoader : _require('./swig-trusted-loader'),
         // #AI8b — MCP server primitives (JSON-RPC 2.0 framing, lifecycle,
         // method handlers). Transport-agnostic; wired to stdio by bundle:mcp-start.
         mcpServer       : _require('./mcp-server'),

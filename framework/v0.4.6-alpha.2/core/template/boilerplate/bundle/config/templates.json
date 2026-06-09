@@ -7,16 +7,6 @@
         // means that the file name of the template is the same as the route name
         // You can override it through the routing.json
         "routeNameAsFilenameEnabled": true,
-        // [opt-in] trustedRoots — per-template directories that a nested {% include %}
-        // / {% import %} may resolve INTO even though they sit OUTSIDE the bundle
-        // templates root. By default the swig loader is confined to the templates root
-        // (CVE-2023-25345): {% include "../shared/x.css" %} would be rejected. List
-        // trusted sibling dirs here (each relative to templates/html, or absolute) to
-        // allow them; anything outside the root AND not listed still throws. On
-        // _common it applies to every template; declare it on a section instead to
-        // scope it to that template (a section value REPLACES the _common default).
-        // Omitted = fully confined. Top-level {% extends %} stays root-confined.
-        // "trustedRoots": ["../shared"],
         "http-metas": {
             "content-type": "text/html"
         },

@@ -2563,14 +2563,7 @@ function Config(opt, contextResetNeeded) {
                     }
                     // merging other common properties
                     for (let ref in files['templates']._common) {
-                        // trustedRoots (the swig loader-confinement opt-out — a
-                        // security allowlist) is EXCLUDED from the _common→section
-                        // auto-merge so a section's own trustedRoots REPLACES the
-                        // _common default rather than unioning with it. The consumer
-                        // (controller.js) falls back to _common only when the section
-                        // declares none, so a section can narrow below (or differ
-                        // from) the bundle-wide default — see #TPL2 trustedRoots.
-                        if ( /^(javascripts|stylesheets|trustedRoots)$/.test(ref) ) {
+                        if ( /^(javascripts|stylesheets)$/.test(ref) ) {
                             continue;
                         }
 
