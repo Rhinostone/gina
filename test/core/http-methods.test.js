@@ -351,23 +351,30 @@ describe('07 - HTTP methods: render-swig.js HEAD suppression', function() {
 
 describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', function() {
 
-    // Replica of the PATCH body parsing logic from processRequestData
+    // Replica of the PATCH body parsing logic from processRequestData.
+    // #B28 — application/json bodies are now parsed verbatim (no url-decode,
+    // no "true"/"false"/"on"/"null" coercion); only the urlencoded / legacy
+    // path still decodes + coerces.
     function parsePatchBody(body, contentType) {
         var obj = null, bodyStr = null;
         contentType = contentType || 'application/json';
 
         if (typeof body === 'string') {
             if (!/multipart\/form-data;/.test(contentType)) {
-                if (/application\/x-www-form-urlencoded/.test(contentType) && /\+/.test(body)) {
-                    body = body.replace(/\+/g, ' ');
+                if (/application\/json/i.test(contentType)) {
+                    try { obj = JSON.parse(body); } catch (e) { obj = null; }
+                } else {
+                    if (/application\/x-www-form-urlencoded/.test(contentType) && /\+/.test(body)) {
+                        body = body.replace(/\+/g, ' ');
+                    }
+                    if (body.substring(0, 1) === '?') body = body.substring(1);
+                    try { bodyStr = decodeURIComponent(body); } catch (e) { bodyStr = body; }
+                    bodyStr = bodyStr
+                        .replace(/"false"/g, false)
+                        .replace(/"true"/g, true)
+                        .replace(/"null"/ig, null);
+                    try { obj = JSON.parse(bodyStr); } catch (e) { obj = null; }
                 }
-                if (body.substring(0, 1) === '?') body = body.substring(1);
-                try { bodyStr = decodeURIComponent(body); } catch (e) { bodyStr = body; }
-                bodyStr = bodyStr
-                    .replace(/"false"/g, false)
-                    .replace(/"true"/g, true)
-                    .replace(/"null"/ig, null);
-                try { obj = JSON.parse(bodyStr); } catch (e) { obj = null; }
             }
         } else {
             bodyStr = JSON.stringify(body);
@@ -392,7 +399,7 @@ describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', functio
     });
 
     it('strips a leading ? from the body string (form-encoded edge case)', function() {
-        var result = parsePatchBody('?{"role":"admin"}');
+        var result = parsePatchBody('?{"role":"admin"}', 'application/x-www-form-urlencoded');
         assert.deepEqual(result.patch, { role: 'admin' });
     });
 
@@ -402,19 +409,24 @@ describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', functio
             "JSON body must preserve literal '+' — only urlencoded bodies get '+' → space");
     });
 
-    it('casts "true" string to boolean true', function() {
+    it('preserves "true" as a string under application/json (no coercion) — #B28', function() {
         var result = parsePatchBody('{"active":"true"}');
-        assert.strictEqual(result.patch.active, true);
+        assert.strictEqual(result.patch.active, 'true');
     });
 
-    it('casts "false" string to boolean false', function() {
+    it('preserves "false" as a string under application/json (no coercion) — #B28', function() {
         var result = parsePatchBody('{"active":"false"}');
-        assert.strictEqual(result.patch.active, false);
+        assert.strictEqual(result.patch.active, 'false');
     });
 
-    it('casts "null" string to null', function() {
+    it('preserves "null" as a string under application/json (no coercion) — #B28', function() {
         var result = parsePatchBody('{"value":"null"}');
-        assert.strictEqual(result.patch.value, null);
+        assert.strictEqual(result.patch.value, 'null');
+    });
+
+    it('still coerces "true"→boolean on the urlencoded / legacy path', function() {
+        var result = parsePatchBody('{"active":"true"}', 'application/x-www-form-urlencoded');
+        assert.strictEqual(result.patch.active, true);
     });
 
     it('handles an already-parsed object body', function() {
@@ -730,5 +742,124 @@ describe("12 - body parser: '+' → space decoding for application/x-www-form-ur
     it("missing content-type header: '+' is preserved (defensive — no replacement without explicit urlencoded)", function() {
         var bodyStr = parseBodyAfterFix('Hello+World', undefined);
         assert.strictEqual(bodyStr, 'Hello+World');
+    });
+});
+
+
+// ─── 13 — body parser: application/json parsed verbatim (no decode, no coercion) — #B28 ───
+
+describe('13 - body parser: application/json verbatim parse (no url-decode, no coercion) — #B28', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // Source-level pins: each of POST/PUT/PATCH must branch on application/json
+    // and JSON.parse the raw request.body (bypassing decodeURIComponent + the
+    // "true"/"false"/"on"/"null" coercion + formatDataFromString bracket-expansion).
+
+    it('POST branch: has an application/json check that JSON.parse(request.body) verbatim', function() {
+        var postCase = src.slice(src.indexOf("case 'post':"), src.indexOf("case 'put':"));
+        assert.match(postCase, /\/application\\\/json\/i\.test\(request\.headers\['content-type'\]\)/,
+            'POST must branch on application/json');
+        assert.match(postCase, /obj\s*=\s*JSON\.parse\(request\.body\)/,
+            'POST json branch must JSON.parse(request.body) verbatim');
+    });
+
+    it('PUT branch: has an application/json check that JSON.parse(request.body) verbatim', function() {
+        var putCase = src.slice(src.indexOf("case 'put':"), src.indexOf("case 'delete':"));
+        assert.match(putCase, /\/application\\\/json\/i\.test\(request\.headers\['content-type'\]\)/,
+            'PUT must branch on application/json');
+        assert.match(putCase, /obj\s*=\s*JSON\.parse\(request\.body\)/,
+            'PUT json branch must JSON.parse(request.body) verbatim');
+    });
+
+    it('PATCH branch: has an application/json check that JSON.parse(request.body) verbatim', function() {
+        var patchCase = src.slice(src.indexOf("case 'patch':"), src.indexOf("case 'head':"));
+        assert.match(patchCase, /\/application\\\/json\/i\.test\(request\.headers\['content-type'\]\)/,
+            'PATCH must branch on application/json');
+        assert.match(patchCase, /obj\s*=\s*JSON\.parse\(request\.body\)/,
+            'PATCH json branch must JSON.parse(request.body) verbatim');
+    });
+
+    // The json branch must NOT route application/json through formatDataFromString
+    // (that helper is the one that double-decodes + coerces). Pin it stays only on
+    // the urlencoded / GET / HEAD paths, never inside an application/json branch.
+    it('the application/json branches do not call formatDataFromString', function() {
+        // For each method, the substring between the application/json test and the
+        // closing of its branch (the `} else {`) must not contain formatDataFromString.
+        ['post', 'put', 'patch'].forEach(function(m) {
+            var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
+            var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
+            var jsonIdx  = caseSrc.indexOf("/application\\/json/i.test");
+            assert.ok(jsonIdx >= 0, m + ' must have an application/json branch');
+            var branch   = caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
+            assert.doesNotMatch(branch, /formatDataFromString/,
+                m + ' json branch must not call formatDataFromString');
+            assert.doesNotMatch(branch, /decodeURIComponent/,
+                m + ' json branch must not url-decode');
+        });
+    });
+
+    // Pure-logic replicas: the NEW json branch (verbatim) vs the LEGACY decode+coerce
+    // path that application/json bodies wrongly flowed through before #B28.
+
+    function parseJsonBranch(body) {
+        // #B28 — application/json: verbatim, no decodeURIComponent, no coercion
+        return JSON.parse(body);
+    }
+
+    function legacyDecodeCoerce(body) {
+        // the pre-#B28 path: decodeURIComponent + "true"/"false"/"on"/"null" coercion
+        var bodyStr;
+        try { bodyStr = decodeURIComponent(body); } catch (e) { bodyStr = body; }
+        bodyStr = bodyStr
+            .replace(/"false"/g, false)
+            .replace(/"true"/g, true)
+            .replace(/"on"/g, true)
+            .replace(/"null"/ig, null);
+        return JSON.parse(bodyStr);
+    }
+
+    it('%XX inside a JSON string value is PRESERVED (was corrupted by decodeURIComponent)', function() {
+        assert.strictEqual(parseJsonBranch('{"v":"50%20off"}').v, '50%20off',
+            'json branch must not url-decode %XX inside a string value');
+        // contrast: the legacy decode path is exactly what corrupted it
+        assert.strictEqual(legacyDecodeCoerce('{"v":"50%20off"}').v, '50 off',
+            'sanity: legacy decodeURIComponent turned 50%20off into "50 off"');
+    });
+
+    it('a JSON string value "true" stays the string "true" (was coerced to boolean)', function() {
+        var v = parseJsonBranch('{"active":"true"}');
+        assert.strictEqual(v.active, 'true');
+        assert.strictEqual(typeof v.active, 'string');
+        assert.strictEqual(legacyDecodeCoerce('{"active":"true"}').active, true);
+    });
+
+    it('a JSON string value "false" stays the string "false"', function() {
+        assert.strictEqual(parseJsonBranch('{"active":"false"}').active, 'false');
+        assert.strictEqual(legacyDecodeCoerce('{"active":"false"}').active, false);
+    });
+
+    it('a JSON string value "null" stays the string "null" (was coerced to null)', function() {
+        assert.strictEqual(parseJsonBranch('{"x":"null"}').x, 'null');
+        assert.strictEqual(legacyDecodeCoerce('{"x":"null"}').x, null);
+    });
+
+    it('real JSON types are preserved verbatim (boolean, number, null, nested object)', function() {
+        var v = parseJsonBranch('{"b":true,"n":42,"z":null,"o":{"k":"v"}}');
+        assert.strictEqual(v.b, true);
+        assert.strictEqual(v.n, 42);
+        assert.strictEqual(v.z, null);
+        assert.deepEqual(v.o, { k: 'v' });
+    });
+
+    it('a literal bracket-notation JSON key is preserved (no form-style expansion)', function() {
+        var v = parseJsonBranch('{"a[b]":1}');
+        assert.deepEqual(v, { 'a[b]': 1 });
+        assert.ok('a[b]' in v, 'json branch keeps the literal key, does not expand a[b] → {a:{b}}');
+    });
+
+    it('a literal + in a JSON string value is preserved', function() {
+        assert.strictEqual(parseJsonBranch('{"v":"1.0+rc1"}').v, '1.0+rc1');
     });
 });

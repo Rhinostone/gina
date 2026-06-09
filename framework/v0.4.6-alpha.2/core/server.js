@@ -3652,51 +3652,68 @@ function Server(options) {
                     // get rid of encoding issues
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
-                                request.body = request.body.replace(/\+/g, ' ');
-                            }
-
-                            if ( request.body.substring(0,1) == '?')
-                                request.body = request.body.substring(1);
-
-                            try {
-                                bodyStr = decodeURIComponent(request.body); // it is already a string for sure
-                            } catch (err) {
-                                bodyStr = request.body;
-                            }
-
-                            // false & true case
-                            if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-                            if ( /(\"null\")/i.test(bodyStr) )
-                                bodyStr = bodyStr.replace(/\"null\"/ig, null);
-
-                            try {
-                                // obj = parseBody(bodyStr);
-                                obj = formatDataFromString(bodyStr);
-                                if ( !obj) {
-                                    exception = new Error('Could not convert POST::BODY_STRING to POST::OBJECT. Possible JSON error in `bodyStr`');
+                            if ( /application\/json/i.test(request.headers['content-type']) ) {
+                                // #B28 — application/json: parse the body verbatim. JSON already
+                                // carries real types, so do NOT url-decode (a %XX inside a string
+                                // value would be corrupted) and do NOT apply form-style
+                                // "true"/"false"/"on"/"null" coercion or bracket-key expansion —
+                                // those are urlencoded-form conventions, not JSON.
+                                try {
+                                    obj = JSON.parse(request.body);
+                                    request.post = obj;
+                                    isPostSet = true;
+                                } catch (err) {
+                                    exception = new Error('Could not parse application/json POST body. '+ err.message);
                                     throwError(response, 500, exception, next);
                                     return;
                                 }
-                                request.post = obj;
-                                isPostSet = true;
-                            } catch (err) {
-                                // ignore this one
-                                msg = '[ Could properly evaluate POST ] '+ request.url +'\n'+  err.stack;
-                                console.warn(msg);
-                            }
-                            if (!isPostSet) {
-                                try {
-                                    if (obj.count() == 0 && bodyStr.length > 1) {
-                                        request.post = obj;
-                                    } else {
-                                        request.post = JSON.parse(bodyStr)
-                                    }
+                            } else {
+                                if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
+                                    request.body = request.body.replace(/\+/g, ' ');
+                                }
 
+                                if ( request.body.substring(0,1) == '?')
+                                    request.body = request.body.substring(1);
+
+                                try {
+                                    bodyStr = decodeURIComponent(request.body); // it is already a string for sure
                                 } catch (err) {
-                                    msg = '[ Exception found for POST ] '+ request.url +'\n'+  err.stack;
+                                    bodyStr = request.body;
+                                }
+
+                                // false & true case
+                                if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                    bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                                if ( /(\"null\")/i.test(bodyStr) )
+                                    bodyStr = bodyStr.replace(/\"null\"/ig, null);
+
+                                try {
+                                    // obj = parseBody(bodyStr);
+                                    obj = formatDataFromString(bodyStr);
+                                    if ( !obj) {
+                                        exception = new Error('Could not convert POST::BODY_STRING to POST::OBJECT. Possible JSON error in `bodyStr`');
+                                        throwError(response, 500, exception, next);
+                                        return;
+                                    }
+                                    request.post = obj;
+                                    isPostSet = true;
+                                } catch (err) {
+                                    // ignore this one
+                                    msg = '[ Could properly evaluate POST ] '+ request.url +'\n'+  err.stack;
                                     console.warn(msg);
+                                }
+                                if (!isPostSet) {
+                                    try {
+                                        if (obj.count() == 0 && bodyStr.length > 1) {
+                                            request.post = obj;
+                                        } else {
+                                            request.post = JSON.parse(bodyStr)
+                                        }
+
+                                    } catch (err) {
+                                        msg = '[ Exception found for POST ] '+ request.url +'\n'+  err.stack;
+                                        console.warn(msg);
+                                    }
                                 }
                             }
                         }
@@ -3804,34 +3821,47 @@ function Server(options) {
                     // get rid of encoding issues
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
-                                request.body = request.body.replace(/\+/g, ' ');
-                            }
-
-                            if ( request.body.substring(0,1) == '?')
-                                request.body = request.body.substring(1);
-
-                            // false & true case
-                            try {
-                                bodyStr = decodeURIComponent(request.body); // it is already a string for sure
-                            } catch (err) {
-                                bodyStr = request.body;
-                            }
-
-                            // false & true case
-                            if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-                            if ( /(\"null\")/i.test(bodyStr) )
-                                bodyStr = bodyStr.replace(/\"null\"/ig, null);
-
-                            obj = formatDataFromString(bodyStr);
-
-
-                            if ( typeof(obj) != 'undefined' && obj.count() == 0 && bodyStr.length > 1 ) {
+                            if ( /application\/json/i.test(request.headers['content-type']) ) {
+                                // #B28 — application/json: parse the body verbatim. JSON already
+                                // carries real types, so do NOT url-decode (a %XX inside a string
+                                // value would be corrupted) and do NOT apply form-style
+                                // "true"/"false"/"on"/"null" coercion or bracket-key expansion —
+                                // those are urlencoded-form conventions, not JSON.
                                 try {
-                                    request.put = merge(request.put, obj);
+                                    obj = JSON.parse(request.body);
                                 } catch (err) {
-                                    console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
+                                    console.warn('[ Could not parse application/json PUT body ] '+ request.url +'\n'+ err.stack);
+                                }
+                            } else {
+                                if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) ) {
+                                    request.body = request.body.replace(/\+/g, ' ');
+                                }
+
+                                if ( request.body.substring(0,1) == '?')
+                                    request.body = request.body.substring(1);
+
+                                // false & true case
+                                try {
+                                    bodyStr = decodeURIComponent(request.body); // it is already a string for sure
+                                } catch (err) {
+                                    bodyStr = request.body;
+                                }
+
+                                // false & true case
+                                if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                    bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                                if ( /(\"null\")/i.test(bodyStr) )
+                                    bodyStr = bodyStr.replace(/\"null\"/ig, null);
+
+                                obj = formatDataFromString(bodyStr);
+
+
+                                if ( typeof(obj) != 'undefined' && obj.count() == 0 && bodyStr.length > 1 ) {
+                                    try {
+                                        request.put = merge(request.put, obj);
+                                    } catch (err) {
+                                        console.log('Case `put` #0 [ merge error ]: ' + (err.stack||err.message))
+                                    }
                                 }
                             }
                         }
@@ -3894,39 +3924,56 @@ function Server(options) {
                 if ( typeof(request.body) == 'string' ) {
                     try {
                         if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
-                            if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
-                                request.body = request.body.replace(/\+/g, ' ');
-                            }
-                            if ( request.body.substring(0,1) == '?' )
-                                request.body = request.body.substring(1);
-                            try {
-                                bodyStr = decodeURIComponent(request.body);
-                            } catch (err) {
-                                bodyStr = request.body;
-                            }
-                            if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
-                                bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
-                            if ( /(\"null\")/i.test(bodyStr) )
-                                bodyStr = bodyStr.replace(/\"null\"/ig, null);
-                            try {
-                                obj = formatDataFromString(bodyStr);
-                                if ( !obj ) {
-                                    exception = new Error('Could not convert PATCH::BODY_STRING to PATCH::OBJECT. Possible JSON error in `bodyStr`');
+                            if ( /application\/json/i.test(request.headers['content-type']) ) {
+                                // #B28 — application/json: parse the body verbatim. JSON already
+                                // carries real types, so do NOT url-decode (a %XX inside a string
+                                // value would be corrupted) and do NOT apply form-style
+                                // "true"/"false"/"on"/"null" coercion or bracket-key expansion —
+                                // those are urlencoded-form conventions, not JSON.
+                                try {
+                                    obj = JSON.parse(request.body);
+                                    request.patch = obj;
+                                    isPatchSet = true;
+                                } catch (err) {
+                                    exception = new Error('Could not parse application/json PATCH body. '+ err.message);
                                     throwError(response, 500, exception, next);
                                     return;
                                 }
-                                request.patch = obj;
-                                isPatchSet = true;
-                            } catch (err) {
-                                msg = '[ Could not properly evaluate PATCH ] '+ request.url +'\n'+ err.stack;
-                                console.warn(msg);
-                            }
-                            if (!isPatchSet) {
+                            } else {
+                                if ( /application\/x\-www\-form\-urlencoded/.test(request.headers['content-type']) && /\+/.test(request.body) ) {
+                                    request.body = request.body.replace(/\+/g, ' ');
+                                }
+                                if ( request.body.substring(0,1) == '?' )
+                                    request.body = request.body.substring(1);
                                 try {
-                                    request.patch = ( obj.count() == 0 && bodyStr.length > 1 ) ? obj : JSON.parse(bodyStr);
+                                    bodyStr = decodeURIComponent(request.body);
                                 } catch (err) {
-                                    msg = '[ Exception found for PATCH ] '+ request.url +'\n'+ err.stack;
+                                    bodyStr = request.body;
+                                }
+                                if ( /(\"false\"|\"true\"|\"on\")/.test(bodyStr) )
+                                    bodyStr = bodyStr.replace(/\"false\"/g, false).replace(/\"true\"/g, true).replace(/\"on\"/g, true);
+                                if ( /(\"null\")/i.test(bodyStr) )
+                                    bodyStr = bodyStr.replace(/\"null\"/ig, null);
+                                try {
+                                    obj = formatDataFromString(bodyStr);
+                                    if ( !obj ) {
+                                        exception = new Error('Could not convert PATCH::BODY_STRING to PATCH::OBJECT. Possible JSON error in `bodyStr`');
+                                        throwError(response, 500, exception, next);
+                                        return;
+                                    }
+                                    request.patch = obj;
+                                    isPatchSet = true;
+                                } catch (err) {
+                                    msg = '[ Could not properly evaluate PATCH ] '+ request.url +'\n'+ err.stack;
                                     console.warn(msg);
+                                }
+                                if (!isPatchSet) {
+                                    try {
+                                        request.patch = ( obj.count() == 0 && bodyStr.length > 1 ) ? obj : JSON.parse(bodyStr);
+                                    } catch (err) {
+                                        msg = '[ Exception found for PATCH ] '+ request.url +'\n'+ err.stack;
+                                        console.warn(msg);
+                                    }
                                 }
                             }
                         }
