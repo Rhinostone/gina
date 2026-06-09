@@ -459,10 +459,13 @@ function Server(options) {
 
         // swig options
         var dir = conf.content.templates._common.html;
-        // Per-bundle trusted-roots opt-out to the swig loader confinement below.
-        var _swigTrustedRoots = ( conf.content && conf.content.settings
-            && conf.content.settings.template && conf.content.settings.template.swig
-            && conf.content.settings.template.swig.trustedRoots ) || [];
+        // Per-bundle trusted-roots opt-out (bundle-wide default). Read from the
+        // templates config — the same place the loader basepath (_common.html)
+        // lives — so the root and its trusted siblings are declared together. A
+        // section can override it per-template (see core/controller/controller.js).
+        var _swigTrustedRoots = ( conf.content && conf.content.templates
+            && conf.content.templates._common
+            && conf.content.templates._common.trustedRoots ) || [];
         var swigOptions = {
             autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
             // #TPL2 + trustedRoots opt-out — confined to the bundle templates root by
@@ -471,9 +474,10 @@ function Server(options) {
             // in-root under .gina-layout-cache, and the dev inspector statusbar is
             // inlined rather than {% include %}-d from the framework core dir). A
             // bundle that legitimately {% include %} / {% import %}s a sibling shared
-            // asset (e.g. "../shared/x.css") opts those dirs out of confinement via
-            // settings.template.swig.trustedRoots; every other out-of-root path still
-            // throws. Empty / absent ⇒ fully confined (build() returns the stock
+            // asset (e.g. "../shared/x.css") declares those dirs in the templates
+            // config — templates._common.trustedRoots (overridable per template via a
+            // section's own trustedRoots); every other out-of-root path still throws.
+            // Empty / absent ⇒ fully confined (build() returns the stock
             // swig.loaders.fs(dir)). Top-level {% extends %} stays root-confined by
             // render-swig.js's own boundary check regardless.
             loader: lib.swigTrustedLoader.build(swig, dir, _swigTrustedRoots),

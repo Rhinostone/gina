@@ -770,20 +770,30 @@ function SuperController(options) {
                 cache       : false
             };
             if (dir) {
-                // Per-bundle trusted-roots opt-out (mirrors core/server.js initSwigEngine).
-                var _swigTrustedRoots = ( local.options.conf && local.options.conf.content
-                    && local.options.conf.content.settings && local.options.conf.content.settings.template
-                    && local.options.conf.content.settings.template.swig
-                    && local.options.conf.content.settings.template.swig.trustedRoots ) || [];
+                // Per-bundle trusted-roots opt-out, resolved per-template (REPLACE
+                // semantics): the matched section's OWN trustedRoots if it declared
+                // any (local.options.template is the per-section config — or _common
+                // when the route has no section), else the _common default, else [].
+                // config.js excludes trustedRoots from the _common→section auto-merge,
+                // so a section's value REPLACES (rather than unions) the default — a
+                // section can narrow below, or differ from, the bundle-wide default.
+                var _swigTrustedRoots = (
+                    ( local.options.template && local.options.template.trustedRoots )
+                    || ( local.options.conf && local.options.conf.content
+                         && local.options.conf.content.templates
+                         && local.options.conf.content.templates._common
+                         && local.options.conf.content.templates._common.trustedRoots )
+                    || []
+                );
                 // #TPL2 + trustedRoots opt-out — confined to the bundle templates root
                 // by default (swig-core basepath confinement, CVE-2023-25345): gina's
                 // processed layout cache is in-root (.gina-layout-cache) and the dev
                 // statusbar is inlined, so gina resolves nothing out-of-root of its
                 // own. A bundle opts specific sibling dirs (e.g. "../shared") out of
                 // confinement for nested {% include %} / {% import %} via
-                // settings.template.swig.trustedRoots; every other out-of-root path
-                // still throws. Empty / absent ⇒ fully confined (build() returns the
-                // stock swig.loaders.fs(dir)).
+                // templates._common.trustedRoots (overridable per template/section);
+                // every other out-of-root path still throws. Empty / absent ⇒ fully
+                // confined (build() returns the stock swig.loaders.fs(dir)).
                 swigOptions.loader = lib.swigTrustedLoader.build(swig, dir, _swigTrustedRoots);
             }
             if ( typeof(local._swigOptions) == 'undefined' ) {

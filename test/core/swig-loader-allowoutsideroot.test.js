@@ -17,8 +17,9 @@
  *     being {% include %}-d from the framework core dir.
  * So by default every resolution — including untrusted nested {% include %} /
  * {% import %} — is guarded by swig-core's confinement. A bundle can OPT OUT
- * specific sibling directories via settings.template.swig.trustedRoots; the
- * allowlist behaviour is covered by test/lib/swig-trusted-loader.test.js.
+ * specific sibling directories via templates._common.trustedRoots (overridable per
+ * template via a section's own trustedRoots); the allowlist behaviour is covered by
+ * test/lib/swig-trusted-loader.test.js.
  *
  * This replaces the interim blanket `allowOutsideRoot=true` opt-out
  * (commit b7a022e9) with a confined-by-default + per-bundle-allowlist posture.
@@ -28,7 +29,7 @@
  *     an out-of-root path (the OLD sibling-cache shape) and a `../` traversal, and
  *     enforces the same boundary through a real swig.compile({% extends %}) chain;
  * (b) source pins — both loader sites delegate to lib.swigTrustedLoader.build
- *     (confined-by-default, reading settings.template.swig.trustedRoots), neither
+ *     (confined-by-default, reading templates._common.trustedRoots), neither
  *     passes the blanket allowOutsideRoot=true opt-out, and render-swig.js derives
  *     the cache in-root + inlines the statusbar.
  */
@@ -45,6 +46,7 @@ var FW              = require('../fw');
 var SERVER_SRC      = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
 var CONTROLLER_SRC  = fs.readFileSync(path.join(FW, 'core/controller/controller.js'), 'utf8');
 var RENDER_SWIG_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-swig.js'), 'utf8');
+var CONFIG_SRC      = fs.readFileSync(path.join(FW, 'core/config.js'), 'utf8');
 var swig            = require(path.join(FW, 'node_modules/@rhinostone/swig'));
 
 // ---------------------------------------------------------------------------
@@ -134,9 +136,20 @@ describe('03 - gina loader sites are confined-by-default via the trustedRoots lo
         assert.match(CONTROLLER_SRC, /swigOptions\.loader = lib\.swigTrustedLoader\.build\(swig, dir, _swigTrustedRoots\);/);
     });
 
-    it('both sites read settings.template.swig.trustedRoots (the per-bundle opt-out)', function () {
-        assert.match(SERVER_SRC,     /conf\.content\.settings\.template\.swig\.trustedRoots/);
-        assert.match(CONTROLLER_SRC, /local\.options\.conf\.content\.settings\.template\.swig\.trustedRoots/);
+    it('both sites read trustedRoots from the templates config (templates._common, per-template override)', function () {
+        // server.js: the bundle-wide _common default
+        assert.match(SERVER_SRC, /conf\.content\.templates\._common\.trustedRoots/);
+        // controller.js: the matched section's own value (per-template) with a _common fallback
+        assert.match(CONTROLLER_SRC, /local\.options\.template\.trustedRoots/);
+        assert.match(CONTROLLER_SRC, /local\.options\.conf\.content\.templates\._common\.trustedRoots/);
+        // NOT the old settings.json home
+        assert.doesNotMatch(SERVER_SRC,     /settings\.template\.swig\.trustedRoots/);
+        assert.doesNotMatch(CONTROLLER_SRC, /settings\.template\.swig\.trustedRoots/);
+    });
+
+    it('config.js excludes trustedRoots from the _common->section auto-merge (REPLACE semantics)', function () {
+        // a section trustedRoots REPLACES the _common default rather than unioning with it
+        assert.match(CONFIG_SRC, /\/\^\(javascripts\|stylesheets\|trustedRoots\)\$\//);
     });
 
     it('NEITHER site passes the blanket allowOutsideRoot=true opt-out (regression guard)', function () {
