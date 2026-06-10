@@ -814,7 +814,9 @@ describe("05 - URL query string parsing: '+' → space decoding (#B17)", functio
         var multiStart = s.indexOf("arr = queryParams[i].split('&')");
         var multiRegion = s.slice(multiStart, multiStart + 1500);
         var multiPlus   = multiRegion.indexOf("a[1].replace(/\\+/g, ' ')");
-        var multiDecode = multiRegion.indexOf('decodeURIComponent(a[1])');
+        // #B30 renamed the decode call to the crash-safe wrapper safeDecodeURIComponent(a[1]);
+        // the +→space ordering invariant (#B17) is unchanged.
+        var multiDecode = multiRegion.indexOf('safeDecodeURIComponent(a[1])');
         assert.ok(multiPlus > -1 && multiDecode > -1, 'both ops must exist in multi-value branch');
         assert.ok(multiPlus < multiDecode, "multi-value: '+' replace must precede decodeURIComponent");
 
@@ -822,7 +824,7 @@ describe("05 - URL query string parsing: '+' → space decoding (#B17)", functio
         var singleStart = s.indexOf("queryParams[1].split('=')");
         var singleRegion = s.slice(singleStart, singleStart + 1500);
         var singlePlus   = singleRegion.indexOf("a[1].replace(/\\+/g, ' ')");
-        var singleDecode = singleRegion.indexOf('decodeURIComponent(a[1])');
+        var singleDecode = singleRegion.indexOf('safeDecodeURIComponent(a[1])'); // #B30 rename (see above)
         assert.ok(singlePlus > -1 && singleDecode > -1, 'both ops must exist in single-key branch');
         assert.ok(singlePlus < singleDecode, "single-key: '+' replace must precede decodeURIComponent");
     });
@@ -1641,5 +1643,88 @@ describe('10b - /_gina/jobs/:id handler logic: pure replica (#AI6)', function() 
         assert.equal('/sub/_gina/jobs/AbC123'.match(re)[1], 'AbC123', 'matches under a webroot prefix');
         assert.equal('/_gina/jobs/../etc'.match(re), null, 'rejects path traversal');
         assert.equal('/_gina/jobs/'.match(re), null, 'rejects empty id');
+    });
+});
+
+
+// 10 — URL query string parsing: malformed-% crash-safety (#B30)
+//
+// The isaac URL query parser percent-decodes each value (a[1]) when it contains
+// a '%'. A bare decodeURIComponent throws URIError on a malformed escape (e.g.
+// GET /?x=%) which — with no uncaughtException handler — crashes the bundle.
+// #B30 routes both branches (the multi-value &-loop and the single-key path)
+// through safeDecodeURIComponent, which falls back to the raw value.
+describe('10 - URL query string parsing: malformed-% crash-safety (#B30)', function() {
+
+    var srcLocal;
+    function getSrc() {
+        if (!srcLocal) srcLocal = fs.readFileSync(SOURCE, 'utf8');
+        return srcLocal;
+    }
+
+    it('both query-value decode sites use safeDecodeURIComponent(a[1])', function() {
+        var hits = getSrc().match(/safeDecodeURIComponent\(a\[1\]\)/g) || [];
+        assert.strictEqual(hits.length, 2, 'multi-value &-loop + single-key branch both safe-decode a[1]');
+    });
+
+    it('no BARE decodeURIComponent(a[1]) remains (only the safe wrapper)', function() {
+        // negative lookbehind: a "safe"-prefixed call is fine; a bare one is the bug
+        assert.doesNotMatch(getSrc(), /(?<![A-Za-z])decodeURIComponent\(a\[1\]\)/,
+            'a bare (unguarded) decodeURIComponent(a[1]) would crash the bundle on a malformed %');
+    });
+
+    // Pure-logic replica of the two parser branches AFTER #B30, mirroring the
+    // source (safe-decode + the same +→space and boolean-coercion steps).
+    function safeDec(str) { try { return decodeURIComponent(str); } catch (e) { return str; } }
+    function parseQueryAfterFix(qs) {
+        var query = {}, a;
+        if (qs.indexOf('&') > -1) {
+            qs.split('&').forEach(function(pair) {
+                a = pair.split('=');
+                var low = a[1] && a[1].toLowerCase();
+                if (low === 'false' || low === 'true' || low === 'on') {
+                    a[1] = (low === 'true' || low === 'on');
+                } else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
+                    if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
+                    if (a[1].indexOf('%') > -1) a[1] = safeDec(a[1]);
+                }
+                query[a[0]] = a[1];
+            });
+        } else {
+            a = qs.split('=');
+            if (a.length > 1) {
+                if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
+                    if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
+                    if (a[1].indexOf('%') > -1) a[1] = safeDec(a[1]);
+                }
+                query[a[0]] = a[1];
+            }
+        }
+        return query;
+    }
+
+    it('single-key malformed %: ?x=% does NOT throw and falls back to raw "%"', function() {
+        var q;
+        assert.doesNotThrow(function() { q = parseQueryAfterFix('x=%'); });
+        assert.strictEqual(q.x, '%');
+    });
+
+    it('multi-value malformed %: ?x=%&y=ok does NOT throw; y decodes, x falls back', function() {
+        var q;
+        assert.doesNotThrow(function() { q = parseQueryAfterFix('x=%&y=ok'); });
+        assert.strictEqual(q.x, '%');
+        assert.strictEqual(q.y, 'ok');
+    });
+
+    it('valid escape still decodes: ?x=a%20b → "a b"', function() {
+        assert.strictEqual(parseQueryAfterFix('x=a%20b').x, 'a b');
+    });
+
+    // Subtract: the pre-#B30 bare decode throws URIError on the same malformed input.
+    it('subtract: a bare decodeURIComponent(a[1]) would throw URIError on ?x=%', function() {
+        assert.throws(function() {
+            var a = 'x=%'.split('=');
+            if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]); // pre-fix shape
+        }, URIError);
     });
 });

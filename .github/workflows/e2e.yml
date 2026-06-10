@@ -1,0 +1,64 @@
+name: E2E
+
+# Runs the Playwright dialog ("popin") e2e suite — the runtime spec (the real built
+# bundle, served by the test/e2e/runtime-server.js static harness) plus the
+# framework-free a11y spec. Together they cover native <dialog> behaviours jsdom cannot
+# reach (modal :modal, focus trap, native + shim Escape, body scroll-lock,
+# prefers-reduced-motion) and the delegated data-gina-dialog* runtime handlers — none of
+# which the node --test suite (Tests workflow) exercises.
+#
+# The runtime harness serves the COMMITTED dist (dist/vendor/gina/{js,css}) plus
+# in-memory fragments, so this job needs only @playwright/test + a Chromium browser —
+# no framework build, no gina install, no DB.
+
+on:
+  push:
+    branches: [develop, master]
+  pull_request:
+    branches: [develop, master]
+  workflow_dispatch:
+
+# Cancel any in-flight run for the same ref when a newer one kicks off.
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: Playwright e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Install dev dependencies
+        # `npm ci` (strict lockfile) installs @playwright/test; --ignore-scripts skips
+        # gina's lifecycle scripts (the harness needs none). Matches bundle-freshness.yml.
+        run: npm ci --ignore-scripts
+
+      - name: Install Chromium (+ OS deps)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e (test/e2e)
+        # playwright.config.js auto-starts test/e2e/runtime-server.js (reuseExistingServer
+        # is false under CI), runs the 5 runtime + 6 a11y scenarios on Chromium.
+        run: npx playwright test test/e2e
+
+      - name: Upload Playwright traces on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: test-results/
+          retention-days: 7
+          if-no-files-found: ignore

@@ -715,3 +715,215 @@ describe('17 - getCoreEnv: reps dictionary contains all required substitution ke
     });
 
 });
+
+
+// 18 — loadAssets: stale-manifest project skipped, not fatal (#B24)
+//
+// loadAssets() iterates every registered project. When a project's directory
+// exists but its manifest.json is gone (a stale ~/.gina/projects.json entry),
+// it warns and `continue`s — instead of falling through to
+// requireJSON(...).bundles, which process-exits on ENOENT and aborted EVERY
+// offline asset command (secrets:scan, i18n:scan, bundle:list) when ANY one
+// registered project was stale, even when a specific @project was named.
+describe('18 - loadAssets: stale-manifest project skipped not fatal (#B24)', function () {
+
+    it('source: a `continue` sits between the missing-manifest warning and the requireJSON deref', function () {
+        var src      = fs.readFileSync(HELPER_CMD_SOURCE, 'utf8');
+        var warnIdx  = src.indexOf('not found ! Maybe, you can try to remove the project reference');
+        var derefIdx = src.indexOf('requireJSON(projectPropertiesPath).bundles');
+        assert.ok(warnIdx > -1, 'the missing-manifest warning must exist in loadAssets');
+        assert.ok(derefIdx > warnIdx, 'the requireJSON(...).bundles deref must follow the warning');
+        var between = src.slice(warnIdx, derefIdx);
+        assert.match(between, /continue\s*;/,
+            '#B24: a `continue` must skip the stale project before the unguarded requireJSON deref');
+    });
+
+    // --- Pure-logic replica of the per-project loadAssets decision ----------
+    // No daemon / CmdHelper context (loadAssets needs the full CLI bootstrap to
+    // run — same convention as cmd-noninteractive-guards.test.js). The replica
+    // mirrors helper.js:1255-1296 for one project: pre-set bundles {} (1255),
+    // dir-exists -> exists=true (1256-1257), manifest-missing -> warn+continue
+    // (#B24, 1258-1260), else load bundles (1262); dir-missing -> exists=false.
+
+    function throwingRequireJSON() {
+        var e = new Error("ENOENT: no such file or directory, open 'manifest.json'");
+        e.code = 'ENOENT';
+        throw e;
+    }
+
+    // POST-#B24 (fixed): continue on a missing manifest.
+    function loadOneProjectFixed(opts) {
+        var entry   = {};
+        var bundles = {};                 // helper.js:1255 pre-set
+        if (opts.dirExists) {
+            entry.exists = true;          // helper.js:1257
+            if (!opts.manifestExists) {
+                opts.warn();              // helper.js:1259
+                return { entry: entry, bundles: bundles };  // #B24 continue -> skip
+            }
+            bundles = opts.requireJSON().bundles;           // helper.js:1262
+        } else {
+            entry.exists = false;         // helper.js:1295
+        }
+        return { entry: entry, bundles: bundles };
+    }
+
+    // PRE-#B24 (buggy): warn but NO continue -> falls through to requireJSON.
+    function loadOneProjectOld(opts) {
+        var entry   = {};
+        var bundles = {};
+        if (opts.dirExists) {
+            entry.exists = true;
+            if (!opts.manifestExists) {
+                opts.warn();              // warns...
+            }
+            bundles = opts.requireJSON().bundles;  // ...but unguarded -> throws when manifest missing
+        } else {
+            entry.exists = false;
+        }
+        return { entry: entry, bundles: bundles };
+    }
+
+    it('MEASUREMENT: the old body aborts (throws ENOENT) on a stale manifest', function () {
+        var warned = 0;
+        assert.throws(function () {
+            loadOneProjectOld({ dirExists: true, manifestExists: false, warn: function () { warned++; }, requireJSON: throwingRequireJSON });
+        }, /ENOENT/);
+        assert.equal(warned, 1, 'old body still warns before it throws');
+    });
+
+    it('fixed: stale manifest warns + skips to {} without calling requireJSON (no abort)', function () {
+        var warned = 0, required = 0;
+        var out = loadOneProjectFixed({
+            dirExists: true, manifestExists: false,
+            warn: function () { warned++; },
+            requireJSON: function () { required++; return { bundles: { x: {} } }; }
+        });
+        assert.equal(warned, 1, 'the stale project is warned');
+        assert.equal(required, 0, 'requireJSON is NOT called for the stale project (the skip)');
+        assert.deepEqual(out.bundles, {}, 'bundlesByProject stays {} for the stale project');
+        assert.equal(out.entry.exists, true, 'dir-exists flag stays true (the dir is present)');
+    });
+
+    it('fixed: a valid project still loads its bundles', function () {
+        var warned = 0, required = 0;
+        var out = loadOneProjectFixed({
+            dirExists: true, manifestExists: true,
+            warn: function () { warned++; },
+            requireJSON: function () { required++; return { bundles: { testbundle: { version: '0.0.1' } } }; }
+        });
+        assert.equal(warned, 0, 'a valid project is not warned');
+        assert.equal(required, 1, 'requireJSON loads the manifest for a valid project');
+        assert.deepEqual(out.bundles, { testbundle: { version: '0.0.1' } });
+        assert.equal(out.entry.exists, true);
+    });
+
+    it('fixed: a project whose directory is missing is flagged exists=false (unchanged)', function () {
+        var warned = 0, required = 0;
+        var out = loadOneProjectFixed({
+            dirExists: false, manifestExists: false,
+            warn: function () { warned++; },
+            requireJSON: function () { required++; return { bundles: {} }; }
+        });
+        assert.equal(warned, 0);
+        assert.equal(required, 0);
+        assert.equal(out.entry.exists, false);
+        assert.deepEqual(out.bundles, {});
+    });
+});
+
+
+// 19 — loadAssets: per-bundle def_env uses the loop variable, not cmd.projectName (#B27)
+//
+// loadAssets()'s `for (project in bundlesByProject) { for (bundle in ...) }`
+// double-loop sets each bundle's def_env. Every sibling write in the loop body
+// indexes bundlesByProject by the loop variable `project`; ONE line
+// (helper.js:1388) indexed by cmd.projectName instead. When the loop reached a
+// project that is NOT the freshly-added @alias — and that alias had no
+// bundlesByProject entry yet — the write dereferenced
+// cmd.bundlesByProject[<alias>] === undefined and threw
+// `TypeError: Cannot read properties of undefined (reading '<bundle>')`,
+// hard-crashing `gina project:add` whenever projects.json already held another
+// project whose on-disk bundles passed the existsSync gate (e.g. the same path
+// registered under another alias). A first-ever add into an empty projects.json
+// has no other project to iterate, so it never reached the line — why it stayed
+// latent. Longstanding (blame: b489588d, 2025-07-29), not a #B24 regression.
+describe('19 - loadAssets: per-bundle def_env uses loop variable not cmd.projectName (#B27)', function () {
+
+    it('source: the def_env write inside the bundle loop is indexed by the loop variable `project`', function () {
+        var src = fs.readFileSync(HELPER_CMD_SOURCE, 'utf8');
+        assert.match(src, /cmd\.bundlesByProject\[project\]\[bundle\]\.def_env\s*=\s*\(cmd\.params\.env\)/,
+            '#B27: the def_env write must index bundlesByProject by the loop variable `project`');
+        // negative pin: the buggy cmd.projectName index must NOT reappear on the def_env write
+        assert.doesNotMatch(src, /cmd\.bundlesByProject\[cmd\.projectName\]\[bundle\]\.def_env/,
+            '#B27: the def_env write must NOT index bundlesByProject by cmd.projectName (the crash)');
+    });
+
+    // --- Pure-logic replica of the per-bundle def_env write ----------------
+    // No daemon / CmdHelper context (loadAssets needs the full CLI bootstrap to
+    // run — same convention as section 18 / cmd-noninteractive-guards.test.js).
+    // The replica mirrors helper.js:1310-1394 for the exists branch: iterate
+    // bundlesByProject[project][bundle] and set that bundle's def_env. The only
+    // variable is the index used for the write — cmd.projectName (old) vs the
+    // loop variable project (fixed).
+
+    function runLoop(cmd, indexKey /* 'projectName' | 'project' */) {
+        for (var project in cmd.bundlesByProject) {       // helper.js:1310
+            for (var bundle in cmd.bundlesByProject[project]) {  // helper.js:1321
+                // exists branch (existsSync passed) — helper.js:1354..1388
+                var idx = (indexKey === 'projectName') ? cmd.projectName : project;
+                cmd.bundlesByProject[idx][bundle].def_env =
+                    (cmd.params.env) ? cmd.params.env : cmd.defaultEnv;  // helper.js:1388
+            }
+        }
+    }
+
+    // Multi-project scenario: the alias being added ('newalias') has NO
+    // bundlesByProject entry yet; an already-registered project ('other') owns
+    // one bundle whose src passed the existsSync gate.
+    function makeMultiProjectScenario() {
+        return {
+            projectName : 'newalias',
+            params      : {},        // no --env
+            defaultEnv  : 'dev',
+            bundlesByProject: {
+                other: { web: { src: 'src/web', exists: true } }
+            }
+        };
+    }
+
+    it('MEASUREMENT: the old cmd.projectName index throws on a multi-project add', function () {
+        var cmd = makeMultiProjectScenario();
+        assert.throws(function () {
+            runLoop(cmd, 'projectName');
+        }, /Cannot read properties of undefined \(reading 'web'\)/,
+        'the old index dereferences bundlesByProject[newalias] === undefined');
+    });
+
+    it('fixed: the loop-variable index sets def_env on the iterated bundle without throwing', function () {
+        var cmd = makeMultiProjectScenario();
+        assert.doesNotThrow(function () {
+            runLoop(cmd, 'project');
+        });
+        assert.equal(cmd.bundlesByProject.other.web.def_env, 'dev',
+            "the 'other' project's bundle gets def_env from defaultEnv");
+    });
+
+    it('fixed: an explicit --env param wins over defaultEnv', function () {
+        var cmd = makeMultiProjectScenario();
+        cmd.params.env = 'production';
+        runLoop(cmd, 'project');
+        assert.equal(cmd.bundlesByProject.other.web.def_env, 'production');
+    });
+
+    it('fixed: the active project\'s own bundles are still written (single-project case unchanged)', function () {
+        // alias == the only project; old and fixed are equivalent here because
+        // project === cmd.projectName, which is why the bug stayed latent.
+        var cmd = {
+            projectName: 'solo', params: {}, defaultEnv: 'dev',
+            bundlesByProject: { solo: { api: { src: 'src/api', exists: true } } }
+        };
+        runLoop(cmd, 'project');
+        assert.equal(cmd.bundlesByProject.solo.api.def_env, 'dev');
+    });
+});

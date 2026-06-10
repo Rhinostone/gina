@@ -1,6 +1,6 @@
 # Gina
 
-[![npm version](https://badge.fury.io/js/gina.svg)](https://badge.fury.io/js/gina) [![npm downloads](https://img.shields.io/npm/dm/gina)](https://www.npmjs.com/package/gina) [![GitHub stars](https://img.shields.io/github/stars/gina-io/gina)](https://github.com/gina-io/gina/stargazers) [![GitHub version](https://badge.fury.io/gh/gina-io%2Fgina.svg)](https://badge.fury.io/gh/gina-io%2Fgina) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT) [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D%2022-brightgreen)](https://nodejs.org) [![Tests](https://github.com/gina-io/gina/actions/workflows/test.yml/badge.svg)](https://github.com/gina-io/gina/actions/workflows/test.yml) [![Socket Badge](https://socket.dev/api/badge/npm/package/gina)](https://socket.dev/npm/package/gina)
+[![npm version](https://img.shields.io/npm/v/gina)](https://www.npmjs.com/package/gina) [![npm downloads](https://img.shields.io/npm/dm/gina)](https://www.npmjs.com/package/gina) [![GitHub stars](https://img.shields.io/github/stars/gina-io/gina)](https://github.com/gina-io/gina/stargazers) [![Tests](https://github.com/gina-io/gina/actions/workflows/test.yml/badge.svg)](https://github.com/gina-io/gina/actions/workflows/test.yml) [![Socket Badge](https://socket.dev/api/badge/npm/package/gina)](https://socket.dev/npm/package/gina) [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D%2022-brightgreen)](https://nodejs.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Documentation:** [gina.io/docs](https://gina.io/docs/) · **Issues:** [GitHub](https://github.com/gina-io/gina/issues) · **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
@@ -22,7 +22,7 @@ Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope
 | ORM / entities | EventEmitter-based entity system; SQL files auto-wired to entity methods |
 | Connectors | Couchbase, MongoDB, ScyllaDB / Cassandra, MySQL, PostgreSQL, Redis, SQLite, AI (LLM) — loaded from project `node_modules` |
 | AI connector | Any LLM provider via named protocol (`anthropic://`, `openai://`, `ollama://`, …) |
-| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.6.0 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
+| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.7.2 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
 | Internationalisation | Per-bundle JSON catalogs, `t()` helper, swig + nunjucks `t` filter, CLDR plurals, ICU MessageFormat opt-in via `t.icu()` |
 | Observability | Built-in `/_gina/metrics` Prometheus endpoint (opt-in, IP-allowlisted) — Node.js process metrics + HTTP counter / duration histogram with cardinality-safe route labels |
 | Hot reload | WatcherService evicts `require.cache` only on file change — zero per-request overhead in dev |
@@ -39,12 +39,14 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.5
+## What's in 0.4.6
 
-- **Opt-in structured (JSON) logging.** Set `GINA_LOG_FORMAT=json` to emit one machine-parseable JSON object per log line (`{ts, level, bundle, message}`) for collectors such as Loki, Datadog, Fluentd or CloudWatch. The default stays the coloured, human-readable format, so interactive `docker logs` output is unchanged unless you opt in.
-- **Per-request `requestId` / `durationMs` in JSON logs.** When JSON logging is on, every log line emitted during a request carries a request id (an inbound `X-Request-Id` is honoured when well-formed, otherwise one is generated) and the elapsed milliseconds since the request began, so a single request's lines can be correlated in your collector. Default text logging is unchanged and pays no overhead.
-- **Public SDK Cluster accessor on Couchbase entities.** `getCluster()` returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document transactions via `cluster.transactions().run(...)` — without reaching into private connection internals.
-- **Public MongoClient accessor on MongoDB entities.** `getClient()` returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` (which additionally require a replica-set or sharded deployment).
+- **Async template loaders (opt-in).** `settings.template.swig.loader` / `settings.template.nunjucks.loader` render templates from a custom backend instead of the local filesystem — built-in `memory` and `http` loaders (for templates served from a CDN, object storage or a template service), per-bundle isolated engines, full client-runtime injection on the async path, and an opt-in compiled-template cache (`loader.cache`) for production.
+- **Native dialog API.** `data-gina-dialog="ID"` opens an in-page `<dialog>`, `data-gina-dialog-src="URL"` loads its content over AJAX; non-modal by default, with per-trigger (`data-gina-dialog-modal`) or project-wide modal opt-in. Dialog popins now render as native modals in development too (dev/prod parity), and the popin plugin gains an opt-in `preOpen` loading skeleton.
+- **`request.rawBody`.** The exact unparsed request body is preserved before parsing, so controllers and middlewares can verify inbound webhook signatures (an HMAC computed over the raw bytes).
+- **JSON bodies parsed verbatim.** `application/json` POST / PUT / PATCH bodies are no longer URL-decoded and form-coerced — string values such as `"true"` or `"50%20off"` survive exactly as sent. Urlencoded handling is unchanged, and the browser form-validator now sends its JSON bodies with the matching `application/json` Content-Type.
+- **Hardening.** A single request carrying a malformed percent-escape (a bare `%`, `%zz`) can no longer crash a bundle; the default Swig render path keeps the swig-core CVE-2023-25345 path-traversal confinement active; the `@rhinostone/swig` floor moved to `^2.7.2`; and the dead third-party CORS proxy was removed from the popin and link loaders.
+- **CLI & DX.** `gina version` reports the bundled template engine; offline project commands skip a stale registered project instead of aborting; `project:add` and the framework's self-invocations no longer depend on a PATH-resolved gina binary.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 
@@ -67,7 +69,7 @@ Full installation guide, tutorials, configuration reference, and API docs at **[
 
 ## Governance
 
-Gina is co-authored by **Martin Luther** ([Rhinostone](https://rhinostone.com)) and **Fabrice DELANEAU** ([fdelaneau.com](https://fdelaneau.com)). Final decisions on direction, API design, and releases rest with Martin Luther. Community contributions and RFCs are welcome and taken seriously. See [GOVERNANCE.md](./GOVERNANCE.md) for details.
+Gina is co-authored by **Martin Luther ETOUMAN NDAMBWE** ([Rhinostone](https://rhinostone.com)) and **Fabrice DELANEAU** ([fdelaneau.com](https://fdelaneau.com)). Final decisions on direction, API design, and releases rest with Martin Luther. Community contributions and RFCs are welcome and taken seriously. See [GOVERNANCE.md](./GOVERNANCE.md) for details.
 
 ## License (MIT)
 

@@ -351,23 +351,30 @@ describe('07 - HTTP methods: render-swig.js HEAD suppression', function() {
 
 describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', function() {
 
-    // Replica of the PATCH body parsing logic from processRequestData
+    // Replica of the PATCH body parsing logic from processRequestData.
+    // #B28 — application/json bodies are now parsed verbatim (no url-decode,
+    // no "true"/"false"/"on"/"null" coercion); only the urlencoded / legacy
+    // path still decodes + coerces.
     function parsePatchBody(body, contentType) {
         var obj = null, bodyStr = null;
         contentType = contentType || 'application/json';
 
         if (typeof body === 'string') {
             if (!/multipart\/form-data;/.test(contentType)) {
-                if (/application\/x-www-form-urlencoded/.test(contentType) && /\+/.test(body)) {
-                    body = body.replace(/\+/g, ' ');
+                if (/application\/json/i.test(contentType)) {
+                    try { obj = JSON.parse(body); } catch (e) { obj = null; }
+                } else {
+                    if (/application\/x-www-form-urlencoded/.test(contentType) && /\+/.test(body)) {
+                        body = body.replace(/\+/g, ' ');
+                    }
+                    if (body.substring(0, 1) === '?') body = body.substring(1);
+                    try { bodyStr = decodeURIComponent(body); } catch (e) { bodyStr = body; }
+                    bodyStr = bodyStr
+                        .replace(/"false"/g, false)
+                        .replace(/"true"/g, true)
+                        .replace(/"null"/ig, null);
+                    try { obj = JSON.parse(bodyStr); } catch (e) { obj = null; }
                 }
-                if (body.substring(0, 1) === '?') body = body.substring(1);
-                try { bodyStr = decodeURIComponent(body); } catch (e) { bodyStr = body; }
-                bodyStr = bodyStr
-                    .replace(/"false"/g, false)
-                    .replace(/"true"/g, true)
-                    .replace(/"null"/ig, null);
-                try { obj = JSON.parse(bodyStr); } catch (e) { obj = null; }
             }
         } else {
             bodyStr = JSON.stringify(body);
@@ -392,7 +399,7 @@ describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', functio
     });
 
     it('strips a leading ? from the body string (form-encoded edge case)', function() {
-        var result = parsePatchBody('?{"role":"admin"}');
+        var result = parsePatchBody('?{"role":"admin"}', 'application/x-www-form-urlencoded');
         assert.deepEqual(result.patch, { role: 'admin' });
     });
 
@@ -402,19 +409,24 @@ describe('08 - HTTP methods: PATCH body parsing logic (inline replica)', functio
             "JSON body must preserve literal '+' — only urlencoded bodies get '+' → space");
     });
 
-    it('casts "true" string to boolean true', function() {
+    it('preserves "true" as a string under application/json (no coercion) — #B28', function() {
         var result = parsePatchBody('{"active":"true"}');
-        assert.strictEqual(result.patch.active, true);
+        assert.strictEqual(result.patch.active, 'true');
     });
 
-    it('casts "false" string to boolean false', function() {
+    it('preserves "false" as a string under application/json (no coercion) — #B28', function() {
         var result = parsePatchBody('{"active":"false"}');
-        assert.strictEqual(result.patch.active, false);
+        assert.strictEqual(result.patch.active, 'false');
     });
 
-    it('casts "null" string to null', function() {
+    it('preserves "null" as a string under application/json (no coercion) — #B28', function() {
         var result = parsePatchBody('{"value":"null"}');
-        assert.strictEqual(result.patch.value, null);
+        assert.strictEqual(result.patch.value, 'null');
+    });
+
+    it('still coerces "true"→boolean on the urlencoded / legacy path', function() {
+        var result = parsePatchBody('{"active":"true"}', 'application/x-www-form-urlencoded');
+        assert.strictEqual(result.patch.active, true);
     });
 
     it('handles an already-parsed object body', function() {
@@ -730,5 +742,553 @@ describe("12 - body parser: '+' → space decoding for application/x-www-form-ur
     it("missing content-type header: '+' is preserved (defensive — no replacement without explicit urlencoded)", function() {
         var bodyStr = parseBodyAfterFix('Hello+World', undefined);
         assert.strictEqual(bodyStr, 'Hello+World');
+    });
+});
+
+
+// ─── 13 — body parser: application/json parsed verbatim (no decode, no coercion) — #B28 ───
+
+describe('13 - body parser: application/json verbatim parse (no url-decode, no coercion) — #B28', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // Source-level pins: each of POST/PUT/PATCH must branch on application/json
+    // and JSON.parse the raw request.body (bypassing decodeURIComponent + the
+    // "true"/"false"/"on"/"null" coercion + formatDataFromString bracket-expansion).
+
+    it('POST branch: has an application/json check that JSON.parse(request.body) verbatim', function() {
+        var postCase = src.slice(src.indexOf("case 'post':"), src.indexOf("case 'put':"));
+        assert.match(postCase, /\/application\\\/json\/i\.test\(request\.headers\['content-type'\]\)/,
+            'POST must branch on application/json');
+        assert.match(postCase, /obj\s*=\s*JSON\.parse\(request\.body\)/,
+            'POST json branch must JSON.parse(request.body) verbatim');
+    });
+
+    it('PUT branch: has an application/json check that JSON.parse(request.body) verbatim', function() {
+        var putCase = src.slice(src.indexOf("case 'put':"), src.indexOf("case 'delete':"));
+        assert.match(putCase, /\/application\\\/json\/i\.test\(request\.headers\['content-type'\]\)/,
+            'PUT must branch on application/json');
+        assert.match(putCase, /obj\s*=\s*JSON\.parse\(request\.body\)/,
+            'PUT json branch must JSON.parse(request.body) verbatim');
+    });
+
+    it('PATCH branch: has an application/json check that JSON.parse(request.body) verbatim', function() {
+        var patchCase = src.slice(src.indexOf("case 'patch':"), src.indexOf("case 'head':"));
+        assert.match(patchCase, /\/application\\\/json\/i\.test\(request\.headers\['content-type'\]\)/,
+            'PATCH must branch on application/json');
+        assert.match(patchCase, /obj\s*=\s*JSON\.parse\(request\.body\)/,
+            'PATCH json branch must JSON.parse(request.body) verbatim');
+    });
+
+    // The json branch must NOT route application/json through formatDataFromString
+    // (that helper is the one that double-decodes + coerces). Pin it stays only on
+    // the urlencoded / GET / HEAD paths, never inside an application/json branch.
+    it('the application/json branches do not call formatDataFromString, and decode only as a fallback', function() {
+        // For each method, the substring between the application/json test and the
+        // closing of its branch (the `} else {`) must not contain formatDataFromString.
+        // #B28 intent preserved: the FIRST parse attempt is verbatim JSON.parse(request.body)
+        // — no url-decode on the happy path, so valid JSON (incl. a %XX inside a string value)
+        // is never double-decoded. A decodeURIComponent fallback is allowed ONLY after the
+        // verbatim attempt throws — that tolerates a percent-encoded JSON body emitted by the
+        // framework's own client (the self.query() self-consistency fix), never a raw-JSON body.
+        ['post', 'put', 'patch'].forEach(function(m) {
+            var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
+            var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
+            var jsonIdx  = caseSrc.indexOf("/application\\/json/i.test");
+            assert.ok(jsonIdx >= 0, m + ' must have an application/json branch');
+            var branch   = caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
+            assert.doesNotMatch(branch, /formatDataFromString/,
+                m + ' json branch must not call formatDataFromString');
+            var verbatimIdx = branch.indexOf('JSON.parse(request.body)');
+            var decodeIdx   = branch.indexOf('decodeURIComponent');
+            assert.ok(verbatimIdx >= 0,
+                m + ' json branch must JSON.parse(request.body) verbatim on the happy path');
+            if (decodeIdx >= 0) {
+                assert.ok(decodeIdx > verbatimIdx,
+                    m + ' json branch may only decodeURIComponent as a fallback AFTER the verbatim parse');
+            }
+        });
+    });
+
+    // Pure-logic replicas: the NEW json branch (verbatim) vs the LEGACY decode+coerce
+    // path that application/json bodies wrongly flowed through before #B28.
+
+    function parseJsonBranch(body) {
+        // #B28 — application/json: verbatim, no decodeURIComponent, no coercion
+        return JSON.parse(body);
+    }
+
+    function legacyDecodeCoerce(body) {
+        // the pre-#B28 path: decodeURIComponent + "true"/"false"/"on"/"null" coercion
+        var bodyStr;
+        try { bodyStr = decodeURIComponent(body); } catch (e) { bodyStr = body; }
+        bodyStr = bodyStr
+            .replace(/"false"/g, false)
+            .replace(/"true"/g, true)
+            .replace(/"on"/g, true)
+            .replace(/"null"/ig, null);
+        return JSON.parse(bodyStr);
+    }
+
+    it('%XX inside a JSON string value is PRESERVED (was corrupted by decodeURIComponent)', function() {
+        assert.strictEqual(parseJsonBranch('{"v":"50%20off"}').v, '50%20off',
+            'json branch must not url-decode %XX inside a string value');
+        // contrast: the legacy decode path is exactly what corrupted it
+        assert.strictEqual(legacyDecodeCoerce('{"v":"50%20off"}').v, '50 off',
+            'sanity: legacy decodeURIComponent turned 50%20off into "50 off"');
+    });
+
+    it('a JSON string value "true" stays the string "true" (was coerced to boolean)', function() {
+        var v = parseJsonBranch('{"active":"true"}');
+        assert.strictEqual(v.active, 'true');
+        assert.strictEqual(typeof v.active, 'string');
+        assert.strictEqual(legacyDecodeCoerce('{"active":"true"}').active, true);
+    });
+
+    it('a JSON string value "false" stays the string "false"', function() {
+        assert.strictEqual(parseJsonBranch('{"active":"false"}').active, 'false');
+        assert.strictEqual(legacyDecodeCoerce('{"active":"false"}').active, false);
+    });
+
+    it('a JSON string value "null" stays the string "null" (was coerced to null)', function() {
+        assert.strictEqual(parseJsonBranch('{"x":"null"}').x, 'null');
+        assert.strictEqual(legacyDecodeCoerce('{"x":"null"}').x, null);
+    });
+
+    it('real JSON types are preserved verbatim (boolean, number, null, nested object)', function() {
+        var v = parseJsonBranch('{"b":true,"n":42,"z":null,"o":{"k":"v"}}');
+        assert.strictEqual(v.b, true);
+        assert.strictEqual(v.n, 42);
+        assert.strictEqual(v.z, null);
+        assert.deepEqual(v.o, { k: 'v' });
+    });
+
+    it('a literal bracket-notation JSON key is preserved (no form-style expansion)', function() {
+        var v = parseJsonBranch('{"a[b]":1}');
+        assert.deepEqual(v, { 'a[b]': 1 });
+        assert.ok('a[b]' in v, 'json branch keeps the literal key, does not expand a[b] → {a:{b}}');
+    });
+
+    it('a literal + in a JSON string value is preserved', function() {
+        assert.strictEqual(parseJsonBranch('{"v":"1.0+rc1"}').v, '1.0+rc1');
+    });
+});
+
+
+// ─── 14 — body parser: application/json tolerant parse (verbatim first, decode fallback) ───
+//
+// The framework's own server-to-server client (controller.js this.query) historically
+// percent-encoded application/json bodies (encodeRFC5987ValueChars(JSON.stringify(data))),
+// while the #B28 server parses them verbatim — so the framework emitted bodies its own
+// parser rejected (POST/PATCH 500, PUT silent body loss). The server now tries the verbatim
+// JSON.parse first and falls back to a single decodeURIComponent only when that throws, so a
+// percent-encoded body is tolerated WITHOUT double-decoding a genuine raw-JSON body.
+
+describe('14 - body parser: application/json tolerant parse (verbatim first, decode fallback)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // Faithful replica of helpers/data/src/main.js encodeRFC5987ValueChars — what the
+    // client actually emitted for a json/text/x-www-form PUT/POST body.
+    function encodeRFC5987ValueChars(str) {
+        return encodeURIComponent(str)
+            .replace(/['()]/g, escape)
+            .replace(/\*/g, '%2A')
+            .replace(/%(?:7C|60|5E)/g, unescape);
+    }
+
+    // Pure-logic replica of the new application/json branch: verbatim first, decode fallback.
+    function parseJsonTolerant(body) {
+        try { return JSON.parse(body); }
+        catch (e) { return JSON.parse(decodeURIComponent(body)); }
+    }
+
+    // ── source pins: each json branch keeps the verbatim parse and adds the fallback ──
+    ['post', 'put', 'patch'].forEach(function(m) {
+        it(m.toUpperCase() + ' json branch: verbatim parse first, decodeURIComponent fallback after it', function() {
+            var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
+            var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
+            var jsonIdx  = caseSrc.indexOf("/application\\/json/i.test");
+            assert.ok(jsonIdx >= 0, m + ' must have an application/json branch');
+            var branch   = caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
+            var verbatimIdx = branch.indexOf('JSON.parse(request.body)');
+            var fallbackIdx = branch.indexOf('JSON.parse(decodeURIComponent(request.body))');
+            assert.ok(verbatimIdx >= 0, m + ' json branch must JSON.parse(request.body) verbatim');
+            assert.ok(fallbackIdx > verbatimIdx,
+                m + ' json branch must JSON.parse(decodeURIComponent(request.body)) only as a fallback after the verbatim parse');
+        });
+    });
+
+    it('POST/PATCH still 500 on total parse failure; PUT still warn-only (no throwError in its json branch)', function() {
+        function jsonBranch(m) {
+            var nextCase = { post: 'put', put: 'delete', patch: 'head' }[m];
+            var caseSrc  = src.slice(src.indexOf("case '" + m + "':"), src.indexOf("case '" + nextCase + "':"));
+            var jsonIdx  = caseSrc.indexOf("/application\\/json/i.test");
+            return caseSrc.slice(jsonIdx, caseSrc.indexOf('} else {', jsonIdx));
+        }
+        assert.match(jsonBranch('post'),  /throwError\(response, 500,/, 'POST json branch must 500 when both attempts fail');
+        assert.match(jsonBranch('patch'), /throwError\(response, 500,/, 'PATCH json branch must 500 when both attempts fail');
+        assert.doesNotMatch(jsonBranch('put'), /throwError/, 'PUT json branch stays warn-only (asymmetric, unchanged)');
+        assert.match(jsonBranch('put'), /console\.warn/, 'PUT json branch warns on total failure');
+    });
+
+    // ── behavioural replicas ──
+
+    it('a percent-encoded JSON body (the client emitted form) parses to the right object', function() {
+        var wire = encodeRFC5987ValueChars(JSON.stringify({ a: 1, b: 'x' }));
+        assert.match(wire, /^%7B/, 'sanity: the encoded wire body starts percent-encoded, not raw JSON');
+        assert.deepEqual(parseJsonTolerant(wire), { a: 1, b: 'x' });
+    });
+
+    it('regression — a raw JSON body still parses (verbatim attempt wins)', function() {
+        assert.deepEqual(parseJsonTolerant('{"a":1}'), { a: 1 });
+        assert.deepEqual(parseJsonTolerant('{"a":1,"b":"x"}'), { a: 1, b: 'x' });
+    });
+
+    it('regression — #B28 intent preserved: %XX inside a raw-JSON string value is NOT double-decoded', function() {
+        // Valid JSON parses on the verbatim attempt, so the fallback never runs and %20 survives.
+        assert.strictEqual(parseJsonTolerant('{"u":"x%20y"}').u, 'x%20y',
+            'a raw-JSON %XX must stay literal — the fallback must not touch valid JSON');
+    });
+
+    it('regression — a real-typed raw JSON body is preserved verbatim', function() {
+        var v = parseJsonTolerant('{"b":true,"n":42,"z":null,"o":{"k":"v"}}');
+        assert.strictEqual(v.b, true);
+        assert.strictEqual(v.n, 42);
+        assert.strictEqual(v.z, null);
+        assert.deepEqual(v.o, { k: 'v' });
+    });
+
+    it('a genuinely malformed body still throws (→ 500 for POST/PATCH) — both attempts fail', function() {
+        assert.throws(function() { parseJsonTolerant('%%%'); }, 'malformed: verbatim throws, decodeURIComponent throws');
+        assert.throws(function() { parseJsonTolerant('not json'); }, 'plain text: both attempts fail');
+    });
+});
+
+
+// ─── 15 — client this.query: application/json body is raw JSON, not RFC5987-encoded ───
+//
+// Root-cause half of the self-consistency fix: this.query must send the body as raw
+// JSON.stringify(data) for the application/json path (the wire content-type is forced to
+// application/json), NOT encodeRFC5987ValueChars(JSON.stringify(data)). RFC5987 value-encoding
+// is for HTTP header values, not request bodies.
+
+describe('15 - client this.query: application/json body is raw JSON (not RFC5987-encoded)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONTROLLER_SRC, 'utf8'); });
+
+    // The PUT/POST json body branch lives between the `['put', 'post'].indexOf(...)` test and
+    // its closing `} else {` (the urlencoded-into-path branch).
+    function jsonBodyBranch() {
+        var i = src.indexOf("['put', 'post'].indexOf(options.method.toLowerCase())");
+        assert.ok(i >= 0, 'this.query must have the PUT/POST content-type body branch');
+        return src.slice(i, src.indexOf('} else {', i));
+    }
+
+    it('sends queryData = JSON.stringify(data) for the application/json body', function() {
+        assert.match(jsonBodyBranch(), /queryData\s*=\s*JSON\.stringify\(data\)/,
+            'the json body branch must assign raw JSON.stringify(data)');
+    });
+
+    it('does NOT wrap the application/json body in encodeRFC5987ValueChars', function() {
+        assert.doesNotMatch(jsonBodyBranch(), /encodeRFC5987ValueChars\(JSON\.stringify\(data\)\)/,
+            'the json body must not be percent-encoded — it produced a body the server rejected');
+    });
+
+    // ── round-trip: the body the client now emits parses through the new server branch ──
+
+    function parseJsonTolerant(body) {
+        try { return JSON.parse(body); }
+        catch (e) { return JSON.parse(decodeURIComponent(body)); }
+    }
+
+    it('the raw-JSON body the client now emits round-trips through the server parser', function() {
+        var data = { a: 1, b: 'x', nested: { k: 'v' } };
+        var wire = JSON.stringify(data); // what this.query now puts on the wire
+        assert.deepEqual(parseJsonTolerant(wire), data);
+    });
+
+    it('version-skew safety: an already-deployed encoded sender also still round-trips (A complements B)', function() {
+        function encodeRFC5987ValueChars(str) {
+            return encodeURIComponent(str)
+                .replace(/['()]/g, escape)
+                .replace(/\*/g, '%2A')
+                .replace(/%(?:7C|60|5E)/g, unescape);
+        }
+        var data = { a: 1, b: 'x' };
+        var legacyWire = encodeRFC5987ValueChars(JSON.stringify(data)); // old client form
+        assert.deepEqual(parseJsonTolerant(legacyWire), data);
+    });
+});
+
+
+// ─── 16 — server.js: request.rawBody snapshot for HMAC webhook verification ───
+//
+// Inbound webhooks that authenticate by an HMAC over the exact raw request bytes need the
+// unparsed body. The non-multipart end-of-stream handler now snapshots request.rawBody from
+// the fully-accumulated request.body BEFORE processRequestData mutates it into the parsed
+// object. Always-on (a reference assignment); the multipart/Busboy path never reaches it.
+
+describe('16 - server.js: request.rawBody snapshot before processRequestData', function() {
+
+    var crypto = require('node:crypto');
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    // ── source pins ──
+
+    it('the onEnd handler assigns request.rawBody before calling processRequestData', function() {
+        var endIdx = src.indexOf('function onEnd()');
+        assert.ok(endIdx >= 0, 'the non-multipart end-of-stream handler must exist');
+        var handler = src.slice(endIdx, src.indexOf('});', endIdx));
+        var rawIdx     = handler.indexOf('request.rawBody');
+        var processIdx = handler.indexOf('processRequestData(request, response, next)');
+        assert.ok(rawIdx >= 0, 'onEnd must snapshot request.rawBody');
+        assert.ok(processIdx >= 0, 'onEnd must call processRequestData');
+        assert.ok(rawIdx < processIdx, 'the rawBody snapshot must happen BEFORE processRequestData mutates request.body');
+    });
+
+    it('the snapshot is string-guarded (empty body → empty string, never the {} init object)', function() {
+        var endIdx  = src.indexOf('function onEnd()');
+        var handler = src.slice(endIdx, src.indexOf('});', endIdx));
+        assert.match(handler, /request\.rawBody\s*=\s*\(\s*typeof\s+request\.body\s*===?\s*'string'\s*\)\s*\?\s*request\.body\s*:\s*''/,
+            'rawBody must be the accumulated string, or "" when body was empty/object');
+    });
+
+    it('there is exactly one rawBody snapshot, and it lives on the non-multipart path (after request.pipe(busboy))', function() {
+        var count = (src.match(/request\.rawBody\s*=/g) || []).length;
+        assert.strictEqual(count, 1, 'exactly one rawBody snapshot site');
+        var busboyIdx = src.indexOf('request.pipe(busboy)');
+        var rawIdx    = src.indexOf('request.rawBody =');
+        assert.ok(busboyIdx >= 0 && rawIdx > busboyIdx,
+            'the snapshot is in the non-multipart else branch — the multipart/Busboy path is unaffected');
+    });
+
+    // ── behavioural replica of the data-accumulation + snapshot ──
+
+    // Mirrors server.js: request.body inits to {} (request init), the data handler resets it
+    // to '' on the first chunk and appends chunk.toString(), then onEnd snapshots rawBody.
+    function accumulateAndSnapshot(chunks) {
+        var request = { body: {} };
+        chunks.forEach(function(chunk) {
+            if (typeof request.body === 'object') { request.body = ''; }
+            request.body += chunk;
+        });
+        request.rawBody = (typeof request.body === 'string') ? request.body : '';
+        return request;
+    }
+
+    it('rawBody equals the exact bytes sent (pre-parse) and the body still parses normally', function() {
+        var raw = '{"event":"thing.updated","id":42,"v":"x%20y"}';
+        var req = accumulateAndSnapshot([raw]);
+        assert.strictEqual(req.rawBody, raw, 'rawBody is the exact unparsed bytes');
+        // a subsequent JSON.parse (what processRequestData does for application/json) still works
+        var parsed = JSON.parse(req.rawBody);
+        assert.strictEqual(parsed.id, 42);
+        assert.strictEqual(parsed.v, 'x%20y', 'the raw bytes are untouched — %XX preserved');
+    });
+
+    it('rawBody is reassembled across multiple chunks', function() {
+        var req = accumulateAndSnapshot(['{"a":', '1,"b":', '"two"}']);
+        assert.strictEqual(req.rawBody, '{"a":1,"b":"two"}');
+        assert.deepEqual(JSON.parse(req.rawBody), { a: 1, b: 'two' });
+    });
+
+    it('an empty body yields rawBody = "" (never the {} init object)', function() {
+        var req = accumulateAndSnapshot([]);
+        assert.strictEqual(req.rawBody, '');
+    });
+
+    it('HMAC round-trip: a signature recomputed over rawBody matches the sender signature', function() {
+        var secret  = 'a-shared-webhook-secret';
+        var rawBody = JSON.stringify({ event: 'invoice.paid', id: 'abc123', amount: 1000 });
+        // sender signs the exact bytes it transmits
+        var sentSig = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+        // server snapshots rawBody and recomputes
+        var req = accumulateAndSnapshot([rawBody]);
+        var recomputed = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+        assert.strictEqual(recomputed, sentSig, 'HMAC over req.rawBody must match the sender signature');
+        // and the parsed body remains available to the controller
+        assert.deepEqual(JSON.parse(req.rawBody), { event: 'invoice.paid', id: 'abc123', amount: 1000 });
+    });
+
+    it('subtract-my-contribution: rawBody is required — signing the re-stringified parse does not match', function() {
+        var secret = 'a-shared-webhook-secret';
+        // a body whose formatting would NOT survive a parse → stringify round-trip
+        var rawBody = '{ "a" : 1 }';
+        var sentSig = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+
+        var req = accumulateAndSnapshot([rawBody]);
+
+        // correct path: HMAC over the preserved raw bytes matches the sender
+        var overRaw = crypto.createHmac('sha256', secret).update(req.rawBody).digest('hex');
+        assert.strictEqual(overRaw, sentSig, 'HMAC over rawBody matches the sender signature');
+
+        // wrong path: HMAC over the re-stringified parsed object differs (whitespace lost)
+        var reStringified = JSON.stringify(JSON.parse(req.rawBody)); // '{"a":1}'
+        assert.notStrictEqual(reStringified, rawBody, 'sanity: parse→stringify changed the bytes');
+        var overParsed = crypto.createHmac('sha256', secret).update(reStringified).digest('hex');
+        assert.notStrictEqual(overParsed, sentSig,
+            'without rawBody, a signature over the parsed-then-restringified object would fail verification');
+    });
+});
+
+
+// ─── 17 — GET/HEAD query decode: malformed-% crash-safety (#B30) ──────────────
+//
+// processRequestData's GET and HEAD branches build the template context from
+// request.query (and its `inheritedData` member). That value is ALREADY
+// percent-decoded once by the engine query parser, and formatDataFromString
+// performs its OWN guarded internal decode — so the prior explicit
+// decodeURIComponent was a redundant SECOND decode that threw URIError (→
+// uncaught → bundle crash) whenever a literal '%' survived the first decode
+// (e.g. inheritedData carrying {"x":"50%off"}). #B30 drops the redundant decode
+// at all four GET/HEAD sites; the genuine first-decode sites (isaac query parse,
+// static-asset path) are guarded by safeDecodeURIComponent instead. Behavioural
+// coverage of the helper + formatDataFromString crash-safety lives in
+// test/lib/format-data-from-string.test.js; the isaac parser in
+// test/core/server.isaac.test.js § 10.
+
+describe('17 - GET/HEAD query decode: malformed-% crash-safety (#B30)', function() {
+
+    var src, helperSrc, getCaseLive, headCaseLive;
+
+    // Strip full-line // comments so the negative pins don't trip on the
+    // `// was:` commented-out old code (jsdoc.md § "A negative source-inspection
+    // pin trips on the file's own ... comment").
+    function stripComments(block) {
+        return block.split('\n').filter(function(l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+
+    before(function() {
+        src       = fs.readFileSync(SERVER_SRC, 'utf8');
+        helperSrc = fs.readFileSync(path.join(FW, 'helpers/data/src/main.js'), 'utf8');
+        var getCase  = src.slice(src.indexOf("case 'get':"), src.indexOf("case 'put':"));
+        var headIdx  = src.indexOf("case 'head':");
+        var headCase = src.slice(headIdx, src.indexOf('loadBundleConfiguration', headIdx));
+        getCaseLive  = stripComments(getCase);
+        headCaseLive = stripComments(headCase);
+    });
+
+    // ── the shared helper ──
+
+    it('helpers/data defines a safeDecodeURIComponent global with try/decode/fallback-to-raw', function() {
+        assert.match(helperSrc, /safeDecodeURIComponent\s*=\s*function\s*\(\s*str\s*\)\s*\{/);
+        var fn = helperSrc.slice(helperSrc.indexOf('safeDecodeURIComponent = function'));
+        fn = fn.slice(0, fn.indexOf('};') + 2);
+        assert.match(fn, /try\s*\{[\s\S]*?return decodeURIComponent\(str\)/);
+        assert.match(fn, /catch[\s\S]*?return str/);
+    });
+
+    // ── GET: redundant explicit decode dropped ──
+
+    it('GET inheritedData: formatDataFromString(request.query.inheritedData) WITHOUT an explicit decode', function() {
+        assert.match(getCaseLive, /inheritedDataObj\s*=\s*formatDataFromString\(request\.query\.inheritedData\)/);
+        assert.doesNotMatch(getCaseLive, /formatDataFromString\(decodeURIComponent\(request\.query\.inheritedData\)\)/);
+    });
+
+    it('GET query bodyStr: formatDataFromString(bodyStr) WITHOUT an explicit decode', function() {
+        assert.match(getCaseLive, /obj\s*=\s*formatDataFromString\(bodyStr\)/);
+        assert.doesNotMatch(getCaseLive, /formatDataFromString\(decodeURIComponent\(bodyStr\)\)/);
+    });
+
+    // ── HEAD: redundant explicit decode dropped (mirrors GET) ──
+
+    it('HEAD inheritedData: formatDataFromString(request.query.inheritedData) WITHOUT an explicit decode', function() {
+        assert.match(headCaseLive, /headInheritedDataObj\s*=\s*formatDataFromString\(request\.query\.inheritedData\)/);
+        assert.doesNotMatch(headCaseLive, /formatDataFromString\(decodeURIComponent\(request\.query\.inheritedData\)\)/);
+    });
+
+    it('HEAD query bodyStr: formatDataFromString(bodyStr) WITHOUT an explicit decode', function() {
+        assert.match(headCaseLive, /obj\s*=\s*formatDataFromString\(bodyStr\)/);
+        assert.doesNotMatch(headCaseLive, /formatDataFromString\(decodeURIComponent\(bodyStr\)\)/);
+    });
+
+    // ── genuine first-decode sites guarded with safeDecodeURIComponent ──
+
+    it('static-asset path (handleStatics) uses safeDecodeURIComponent(filename)', function() {
+        assert.match(src, /filename\s*=\s*safeDecodeURIComponent\(\s*filename\s*\)/);
+    });
+
+    it('getAssetFilenameFromUrl (HTTP/2 static path) uses safeDecodeURIComponent(url)', function() {
+        assert.match(src, /url\s*=\s*safeDecodeURIComponent\(\s*url\s*\)/);
+    });
+
+    // ── negative invariant: no LIVE redundant double-decode anywhere in server.js ──
+
+    it('no live formatDataFromString(decodeURIComponent(...)) remains in server.js', function() {
+        var live = stripComments(src);
+        assert.doesNotMatch(live, /formatDataFromString\(decodeURIComponent/);
+    });
+});
+
+
+// ─── 18 — decodeURI (whole-URI) crash-safety (#B30 review follow-up) ──────────
+//
+// Separate from decodeURIComponent: decodeURI (used across the routing + error
+// paths with a `/// avoid %20` comment, to decode the URL/pathname without
+// touching path separators) throws the SAME URIError on a malformed escape. An
+// unguarded decodeURI of the request URL/pathname crashes the bundle the same
+// way — and the site inside throwError (server.js error responder) even turns a
+// would-be-graceful 404 on a malformed-% URL into a crash. #B30 routes every
+// server-side decodeURI of attacker-controllable input through safeDecodeURI.
+// Sites: server.js x3 (trie lookup, route params, throwError); lib/routing x4
+// (cached params, routing.path x2, linear-scan params); controller.js x1 (error
+// path). Behavioural coverage of safeDecodeURI lives in
+// test/lib/format-data-from-string.test.js.
+
+describe('18 - decodeURI (whole-URI) crash-safety (#B30 review follow-up)', function() {
+
+    var serverSrc, routingSrc, controllerSrc, helperSrc;
+    var ROUTING_SRC = path.join(FW, 'lib/routing/src/main.js');
+
+    function stripComments(s) {
+        return s.split('\n').filter(function(l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+    // bare decodeURI( NOT prefixed by a letter (so safeDecodeURI( is excluded;
+    // decodeURIComponent( never matches — the char after decodeURI is 'C', not '(')
+    var BARE_DECODE_URI = /(?<![A-Za-z])decodeURI\(/;
+
+    before(function() {
+        serverSrc     = fs.readFileSync(SERVER_SRC, 'utf8');
+        routingSrc    = fs.readFileSync(ROUTING_SRC, 'utf8');
+        controllerSrc = fs.readFileSync(CONTROLLER_SRC, 'utf8');
+        helperSrc     = fs.readFileSync(path.join(FW, 'helpers/data/src/main.js'), 'utf8');
+    });
+
+    it('helpers/data defines safeDecodeURI with try/decodeURI/fallback-to-raw', function() {
+        assert.match(helperSrc, /safeDecodeURI\s*=\s*function\s*\(\s*str\s*\)\s*\{/);
+        var fn = helperSrc.slice(helperSrc.indexOf('safeDecodeURI = function'));
+        fn = fn.slice(0, fn.indexOf('};') + 2);
+        assert.match(fn, /try\s*\{[\s\S]*?return decodeURI\(str\)/);
+        assert.match(fn, /catch[\s\S]*?return str/);
+    });
+
+    it('server.js: all 3 decodeURI sites use safeDecodeURI; no bare decodeURI remains', function() {
+        var live = stripComments(serverSrc);
+        var hits = (live.match(/safeDecodeURI\(/g) || []).length;
+        assert.ok(hits >= 3, 'expected >=3 safeDecodeURI( calls in server.js, got ' + hits);
+        assert.doesNotMatch(live, BARE_DECODE_URI, 'a bare (unguarded) decodeURI( would crash the bundle on a malformed %');
+    });
+
+    it('lib/routing: all 4 decodeURI sites use safeDecodeURI; no bare decodeURI remains', function() {
+        var live = stripComments(routingSrc);
+        var hits = (live.match(/safeDecodeURI\(/g) || []).length;
+        assert.ok(hits >= 4, 'expected >=4 safeDecodeURI( calls in lib/routing, got ' + hits);
+        assert.doesNotMatch(live, BARE_DECODE_URI);
+    });
+
+    it('controller.js: the error-path decodeURI uses safeDecodeURI(local.req.url); no bare decodeURI remains', function() {
+        var live = stripComments(controllerSrc);
+        assert.match(live, /safeDecodeURI\(local\.req\.url\)/);
+        assert.doesNotMatch(live, BARE_DECODE_URI);
+    });
+
+    it('the throwError site (server.js) specifically routes through safeDecodeURI(local.request.url)', function() {
+        var live = stripComments(serverSrc);
+        assert.match(live, /var url\s*=\s*safeDecodeURI\(local\.request\.url\)/);
     });
 });

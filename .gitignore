@@ -65,3 +65,8 @@ framework/v*/core/deps/*/package.json.dist
 framework/v*/test/workspace
 *.jar
 *.map
+
+# Playwright (test/e2e) artifacts
+test-results/
+playwright-report/
+.playwright/

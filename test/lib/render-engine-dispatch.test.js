@@ -32,8 +32,12 @@ var assert = require('node:assert/strict');
 var FW              = require('../fw');
 var CONTROLLER_SRC  = fs.readFileSync(path.join(FW, 'core/controller/controller.js'), 'utf8');
 var RENDER_NJ_SRC   = fs.readFileSync(path.join(FW, 'core/controller/controller.render-nunjucks.js'), 'utf8');
+var RENDER_SWIG_ASYNC_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-swig-async.js'), 'utf8');
+var RENDER_NJ_ASYNC_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-nunjucks-async.js'), 'utf8');
 var SERVER_SRC      = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
 var LIB_INDEX_SRC   = fs.readFileSync(path.join(FW, 'lib/index.js'), 'utf8');
+var SWIG_FILTERS_SRC = fs.readFileSync(path.join(FW, 'lib/swig-filters/src/main.js'), 'utf8');
+var NJ_FILTERS_SRC   = fs.readFileSync(path.join(FW, 'lib/nunjucks-filters/src/main.js'), 'utf8');
 var SCHEMA_SETTINGS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'schema/settings.json'), 'utf8'));
 
 
@@ -104,10 +108,17 @@ describe('03 - controller.js engine dispatch', function () {
         assert.match(CONTROLLER_SRC, /var\s+_engine\s*=\s*['"]swig['"]/);
     });
 
-    it('picks controller.render-nunjucks delegate when engine === "nunjucks"', function () {
+    it('picks a render-nunjucks-family delegate when engine === "nunjucks"', function () {
+        // #TPL1 Slice 3 — the nunjucks branch gained an _njAsync sub-check
+        // (async loader -> render-nunjucks-async, else render-nunjucks), so the
+        // delegate is now selected by a ternary whose fallback tail is the sync
+        // delegate. The async-specific assertions live in §03f. Mirrors the
+        // swig-side "falls back to render-swig otherwise" test below.
+        // (render-nunjucks['"] cannot false-match render-nunjucks-async — the
+        // closing quote differs.)
         assert.match(
             CONTROLLER_SRC,
-            /_engine\s*===\s*['"]nunjucks['"]\)\s*\?\s*['"]\/controller\.render-nunjucks['"]/
+            /:\s*['"]\/controller\.render-nunjucks['"]/
         );
     });
 
@@ -141,6 +152,1157 @@ describe('03 - controller.js engine dispatch', function () {
             CONTROLLER_SRC,
             /return\s+require\(\s*_\(__dirname\s*\+\s*_delegate,\s*true\)\s*\)/
         );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03b - #TPL1 controller.js async-loader dispatch
+// ---------------------------------------------------------------------------
+
+describe('03b - #TPL1 controller.js async-loader dispatch', function () {
+
+    it('routes a swig bundle with an async loader to controller.render-swig-async', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /_swigAsync\s*\?\s*['"]\/controller\.render-swig-async['"]\s*:\s*['"]\/controller\.render-swig['"]/
+        );
+    });
+
+    it('detects the async loader via process.gina._swigLoaders[...].loader.async === true', function () {
+        assert.match(CONTROLLER_SRC, /process\.gina\._swigLoaders\[_troot\]\.loader\.async\s*===\s*true/);
+    });
+
+    it('keys the dispatch by conf.content.templates._common.html (same key initSwigEngine stashes under)', function () {
+        assert.match(CONTROLLER_SRC, /local\.options\.conf\.content\.templates\._common\.html/);
+    });
+
+    it('async detection is wrapped in try/catch (falls back to the filesystem path)', function () {
+        assert.match(CONTROLLER_SRC, /catch\s*\(e\)\s*\{[^}]*fall back to the filesystem[^}]*\}/);
+    });
+
+    it('cacheless branch evicts the render-swig-async delegate, wrapped in try/catch', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /try\s*\{\s*delete\s+require\.cache\[require\.resolve\(\s*_\(__dirname\s*\+\s*['"]\/controller\.render-swig-async['"][^)]*\)\s*\)\s*\][^}]*\}\s*catch/
+        );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03c - #TPL1 schema / lib / server wiring
+// ---------------------------------------------------------------------------
+
+describe('03c - #TPL1 schema / lib / server wiring', function () {
+
+    it('schema declares template.swig.loader', function () {
+        var loader = SCHEMA_SETTINGS.properties.template
+            && SCHEMA_SETTINGS.properties.template.properties.swig
+            && SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
+        assert.ok(loader, 'template.swig.loader present');
+    });
+
+    it('loader.type is an enum of ["memory", "http"] and required', function () {
+        var loader = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
+        assert.deepEqual(loader.properties.type.enum, ['memory', 'http']);
+        assert.ok(Array.isArray(loader.required) && loader.required.indexOf('type') !== -1, 'type required');
+    });
+
+    it('loader documents the http-specific flat keys (origin / basePath / ttl / revalidate)', function () {
+        // Slice 2 — the http built-in's config keys are documented alongside
+        // the memory `templates` key (additionalProperties stays true, so they
+        // are advisory, but documenting them is the connectors.json convention).
+        var props = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader.properties;
+        assert.equal(props.origin.type, 'string');
+        assert.equal(props.basePath.type, 'string');
+        assert.equal(props.ttl.type, 'number');
+        assert.equal(props.ttl.default, 60);
+        assert.equal(props.revalidate.type, 'boolean');
+        assert.equal(props.revalidate.default, false);
+    });
+
+    it('loader allows additional (type-specific flat) properties — connector-style', function () {
+        var loader = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader;
+        assert.equal(loader.additionalProperties, true);
+    });
+
+    it('lib/index.js registers templateLoaders via _require', function () {
+        assert.match(LIB_INDEX_SRC, /templateLoaders\s*:\s*_require\('\.\/template-loaders'\)/);
+    });
+
+    it('initSwigEngine reads settings.template.swig.loader', function () {
+        assert.match(SERVER_SRC, /conf\.content\.settings\.template\.swig\.loader/);
+    });
+
+    it('initSwigEngine builds the loader via lib.templateLoaders.build, threading the bundle', function () {
+        assert.match(SERVER_SRC, /lib\.templateLoaders\.build\(\s*_loaderCfg\s*,\s*\{\s*bundle:\s*self\.appName\s*\}\s*\)/);
+    });
+
+    it('initSwigEngine stashes the built loader on process.gina._swigLoaders keyed by the template dir', function () {
+        assert.match(SERVER_SRC, /process\.gina\._swigLoaders\[dir\]\s*=\s*\{/);
+    });
+
+    it('initSwigEngine only stashes when the built loader is async (async === true)', function () {
+        assert.match(SERVER_SRC, /_builtLoader\s*&&\s*_builtLoader\.async\s*===\s*true/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03d - #TPL1 controller.render-swig-async.js shape
+// ---------------------------------------------------------------------------
+
+describe('03d - #TPL1 controller.render-swig-async.js shape', function () {
+
+    it('exports an async function with the same deps signature as the other delegates', function () {
+        assert.match(
+            RENDER_SWIG_ASYNC_SRC,
+            /module\.exports\s*=\s*async\s+function\s+renderSwigAsync\(userData,\s*displayInspector,\s*errOptions,\s*deps\)/
+        );
+    });
+
+    it('builds an ISOLATED per-bundle engine via new swigMod.Swig({ loader })', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /new\s+swigMod\.Swig\(\s*\{/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /loader:\s*loader/);
+    });
+
+    it('the engine registry is owner-guarded against dev-mode swig hot-swap', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /process\.gina\._swigEnginesOwner\s*!==\s*swigMod/);
+    });
+
+    it('forces cache:false on the per-bundle engine (no swig-side async cache)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /cache:\s*false/);
+    });
+
+    it('renders via the async getTemplate path then awaits the compiled fn .output', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /await\s+engine\.getTemplate\(\s*templateName/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /await\s+compiled\(data\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /rendered\.output/);
+    });
+
+    it('registers gina filters onto the per-bundle engine via engine.setFilter', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engine\.setFilter\(name,\s*filters\[name\]\)/);
+    });
+
+    it('keys the loader lookup by conf.content.templates._common.html (matches the dispatch key)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /localOptions\.conf\.content\.templates\._common\.html/);
+    });
+
+    it('nulls local.req/res/next at the success terminal (per-request memory release)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /local\.req\s*=\s*null;[\s\S]{0,80}local\.res\s*=\s*null;[\s\S]{0,80}local\.next\s*=\s*null;/);
+    });
+
+    it('mirrors render-swig/nunjucks error interception for non-2xx + error data', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /!String\(data\.page\.data\.status\)\.startsWith\(['"]2['"]\)/);
+    });
+
+    it('NEGATIVE — does NOT self-read templates from the filesystem (loader owns loading)', function () {
+        assert.doesNotMatch(RENDER_SWIG_ASYNC_SRC, /fs\.promises\.readFile/);
+        assert.doesNotMatch(RENDER_SWIG_ASYNC_SRC, /readFileSync/);
+    });
+
+    it('NEGATIVE — does NOT compile a template string (uses getTemplate, not swig.compile)', function () {
+        assert.doesNotMatch(RENDER_SWIG_ASYNC_SRC, /\.compile\(/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03e - #TPL1 asset injection / setResources port (async swig delegate)
+// ---------------------------------------------------------------------------
+//
+// The async swig delegate renders through the engine API (no FS getAssets()
+// machinery), so it injects the gina client bundle / CSS / JS post-render the
+// same way render-nunjucks.js does. Source-inspection coverage for the
+// setResources wiring, the render-swig.js:609 "needed !!" re-fetch, the
+// injectAssets helper + call-site, the gina-bootstrap whisper pass, and the
+// CSP-nonce exposure — plus a behavioural eval of the (pure) injectAssets helper.
+
+describe('03e - #TPL1 asset injection / setResources port (async swig delegate)', function () {
+
+    // (a) source-level wiring -------------------------------------------------
+
+    it('consumes deps.setResources in the delegate', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /var\s+setResources\s*=\s*deps\.setResources/);
+    });
+
+    it('calls setResources(localTemplateConf) BEFORE the async getTemplate render', function () {
+        var guardIdx  = RENDER_SWIG_ASYNC_SRC.indexOf("typeof setResources === 'function'");
+        var renderIdx = RENDER_SWIG_ASYNC_SRC.indexOf('await engine.getTemplate(templateName');
+        assert.ok(guardIdx > 0, 'setResources guard present');
+        assert.ok(renderIdx > 0, 'getTemplate render present');
+        assert.ok(guardIdx < renderIdx, 'setResources guarded block must run before the render');
+        var block = RENDER_SWIG_ASYNC_SRC.slice(guardIdx, renderIdx);
+        assert.match(block, /setResources\(\s*localTemplateConf\s*\)\s*;/);
+    });
+
+    it('guards the setResources call with a typeof check so older controllers still work', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /typeof\s+setResources\s*===\s*['"]function['"]/);
+    });
+
+    it('catches setResources failures without breaking the render', function () {
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf("typeof setResources === 'function'");
+        assert.ok(idx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 1500);
+        assert.match(block, /catch\s*\(\s*resourcesErr\s*\)/);
+        assert.match(block, /\[render-swig-async\]\s*setResources failed:/);
+    });
+
+    it('re-overlays getData() AFTER setResources (render-swig.js:609 "needed !!" step)', function () {
+        // setResources writes page.view.stylesheets/.scripts into local.userData
+        // via the controller set(); getData() rebuilds the data object and the
+        // merge fills the new keys so injectAssets can see them.
+        var setIdx = RENDER_SWIG_ASYNC_SRC.indexOf('setResources(localTemplateConf)');
+        assert.ok(setIdx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(setIdx, setIdx + 500);
+        assert.match(block, /data\s*=\s*merge\(data,\s*getData\(\)\)/);
+    });
+
+    // (b) isWithoutLayout — Collection filter mirror --------------------------
+
+    it('clones localTemplateConf via JSON.clone when isWithoutLayout is true', function () {
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf('isWithoutLayout   = !!localOptions.isWithoutLayout');
+        assert.ok(idx > 0, 'isWithoutLayout locals present');
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 800);
+        assert.match(block, /JSON\.clone\(localTemplateConf\)/);
+    });
+
+    it('filters javascripts via Collection.find({isCommon:false},{isCommon:true,name:"gina"})', function () {
+        assert.match(
+            RENDER_SWIG_ASYNC_SRC,
+            /new\s+Collection\(localTemplateConf\.javascripts\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('filters stylesheets via the same Collection.find OR-clause', function () {
+        assert.match(
+            RENDER_SWIG_ASYNC_SRC,
+            /new\s+Collection\(localTemplateConf\.stylesheets\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('imports Collection via the lib registry (survives dev hot-reload eviction)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /const\s+Collection\s*=\s*libRef\.Collection/);
+    });
+
+    // (c) injectAssets helper — shape + call-site -----------------------------
+
+    it('declares the injectAssets helper as an inner function', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+injectAssets\s*\(\s*html\s*,\s*data\s*,\s*localOptions\s*,\s*cspNonce\s*\)/);
+    });
+
+    it('calls injectAssets after the render and BEFORE sendHtmlResponse', function () {
+        var assetIdx = RENDER_SWIG_ASYNC_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
+        var sendIdx  = RENDER_SWIG_ASYNC_SRC.lastIndexOf('sendHtmlResponse(local, html, req, res)');
+        assert.ok(assetIdx > 0, 'injectAssets call-site present');
+        assert.ok(sendIdx > 0, 'final sendHtmlResponse present');
+        assert.ok(assetIdx < sendIdx, 'injectAssets must run BEFORE the final sendHtmlResponse');
+    });
+
+    it('wraps the injectAssets call in try/catch so a mis-shaped config never breaks rendering', function () {
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
+        assert.ok(idx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 500);
+        assert.match(block, /catch\s*\(\s*assetErr\s*\)/);
+        assert.match(block, /\[render-swig-async\]\s*asset injection skipped:/);
+    });
+
+    it('short-circuits injectAssets on empty html input', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /if\s*\(\s*typeof\s+html\s*!==\s*['"]string['"]\s*\|\|\s*html\.length\s*===\s*0\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    it('short-circuits injectAssets when data.page.view is missing', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /if\s*\(\s*!data\s*\|\|\s*!data\.page\s*\|\|\s*!data\.page\.view\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    // (d) gina-bootstrap whisper placeholder pass + CSP nonce -----------------
+
+    it('runs the whisper() placeholder pass on the injected gina bootstrap', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /html\s*=\s*whisper\(\s*ginaLoaderDic\s*,\s*html\s*,/);
+    });
+
+    it('flattens page / page.environment / page.data.session into the whisper dict', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /ginaLoaderDic\['page\.'\s*\+\s*_d\]/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /ginaLoaderDic\['page\.environment\.'\s*\+\s*_k\]/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /ginaLoaderDic\['page\.data\.session\.'\s*\+\s*_s\]/);
+    });
+
+    it('guards the whisper pass with typeof whisper === function and try/catch', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /typeof\s+whisper\s*===\s*['"]function['"]/);
+        var idx = RENDER_SWIG_ASYNC_SRC.indexOf('whisper(ginaLoaderDic, html');
+        assert.ok(idx > 0);
+        var block = RENDER_SWIG_ASYNC_SRC.slice(idx, idx + 400);
+        assert.match(block, /catch\s*\(\s*whisperErr\s*\)/);
+        assert.match(block, /\[render-swig-async\]\s*ginaLoader whisper substitution skipped:/);
+    });
+
+    it('exposes the per-request CSP nonce as page.cspNonce (strict-CSP app templates)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /_cspNonce\s*=\s*\(req\s*&&\s*req\._ginaCspNonce\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /data\.page\.cspNonce\s*=\s*_cspNonce/);
+    });
+
+    // (e) injectAssets behaviour — exercised live -----------------------------
+
+    (function () {
+        var helperMatch = RENDER_SWIG_ASYNC_SRC.match(
+            /function\s+injectAssets\s*\([^\)]*\)\s*\{[\s\S]*?\n\}/
+        );
+        if (!helperMatch) {
+            it('SKIP: could not extract injectAssets source for behavioural tests', function () {
+                assert.ok(false, 'injectAssets helper not found in render-swig-async.js');
+            });
+            return;
+        }
+        var injectAssetsFn;
+        try {
+            // eslint-disable-next-line no-new-func
+            injectAssetsFn = new Function(helperMatch[0] + '\nreturn injectAssets;')();
+        } catch (e) {
+            it('SKIP: could not compile injectAssets for behavioural tests', function () {
+                assert.ok(false, 'failed to compile injectAssets: ' + e.message);
+            });
+            return;
+        }
+
+        it('auto-injects stylesheets before </head>', function () {
+            var data = { page: { view: { stylesheets: '<link href="/a.css" rel="stylesheet">' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(
+                out.indexOf('<link href="/a.css" rel="stylesheet">') < out.indexOf('</head>'),
+                'stylesheet appears BEFORE </head>'
+            );
+        });
+
+        it('skips stylesheet auto-inject when the user already placed the token', function () {
+            var stylesheets = '<link href="/app.css" rel="stylesheet">';
+            var data = { page: { view: { stylesheets: stylesheets } } };
+            var html = '<html><head><title>x</title>' + stylesheets + '</head><body></body></html>';
+            var out = injectAssetsFn(html, data, { template: {} });
+            assert.equal(out.split(stylesheets).length - 1, 1, 'stylesheets string appears exactly once');
+        });
+
+        it('auto-injects scripts before </body> by default (non-defer)', function () {
+            var data = { page: { view: { scripts: '<script src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(
+                out.indexOf('<script src="/a.js"></script>') < out.indexOf('</body>'),
+                'scripts appear BEFORE </body>'
+            );
+        });
+
+        it('places scripts in <head> when javascriptsDeferEnabled is true', function () {
+            var data = { page: { view: { scripts: '<script defer src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: { javascriptsDeferEnabled: true } });
+            assert.ok(
+                out.indexOf('<script defer src="/a.js"></script>') < out.indexOf('</head>'),
+                'defer mode: scripts appear BEFORE </head>'
+            );
+        });
+
+        it('injects the gina bootstrap (ginaLoader) before </head>', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader } });
+            assert.match(out, /window\.onGinaLoaded[\s\S]*<\/head>/);
+        });
+
+        it('stamps the gina bootstrap <script> with the CSP nonce when provided', function () {
+            var loader = '<script type="text/javascript">window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader } }, 'abc123');
+            assert.match(out, /<script type="text\/javascript" nonce="abc123">/);
+        });
+
+        it('skips the bootstrap when javascriptsExcluded === "**"', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader, javascriptsExcluded: '**' } });
+            assert.doesNotMatch(out, /window\.onGinaLoaded/);
+        });
+
+        it('does not duplicate the bootstrap when HTML already has window.onGinaLoaded', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var html = '<html><head><script>/* window.onGinaLoaded here */</script></head><body></body></html>';
+            var out = injectAssetsFn(html, { page: { view: {} } }, { template: { ginaLoader: loader } });
+            assert.equal(out.split('<script>window.onGinaLoaded').length - 1, 0, 'bootstrap not duplicated');
+        });
+
+        it('injects external plugins (array joined) before </head>', function () {
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { externalPlugins: ['\n<script src="/jquery.js"></script>'] } });
+            assert.match(out, /<script src="\/jquery\.js"><\/script>[\s\S]*<\/head>/);
+        });
+
+        it('is a no-op on fragments missing </head> and </body>', function () {
+            var frag = '<div>partial</div>';
+            var out = injectAssetsFn(frag, { page: { view: { stylesheets: '<link href="/a.css">' } } }, { template: { ginaLoader: '<script>window.onGinaLoaded=0;</script>' } });
+            assert.equal(out, frag);
+        });
+    })();
+});
+
+
+// ---------------------------------------------------------------------------
+// 03f - #TPL1 controller.js nunjucks async-loader dispatch
+// ---------------------------------------------------------------------------
+
+describe('03f - #TPL1 controller.js nunjucks async-loader dispatch', function () {
+
+    it('routes a nunjucks bundle with an async loader to controller.render-nunjucks-async', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /_njAsync\s*\?\s*['"]\/controller\.render-nunjucks-async['"]\s*:\s*['"]\/controller\.render-nunjucks['"]/
+        );
+    });
+
+    it('detects the async loader via process.gina._nunjucksLoaders[...].loader.async === true', function () {
+        assert.match(CONTROLLER_SRC, /process\.gina\._nunjucksLoaders\[_njRoot\]\.loader\.async\s*===\s*true/);
+    });
+
+    it('keys the dispatch by conf.content.templates._common.html (same key initNunjucksEngine stashes under)', function () {
+        assert.match(CONTROLLER_SRC, /_njRoot\s*=\s*local\.options[\s\S]{0,300}templates\._common\.html/);
+    });
+
+    it('async detection is wrapped in try/catch (falls back to the cached-env path)', function () {
+        assert.match(CONTROLLER_SRC, /catch\s*\(e\)\s*\{[^}]*fall back to the cached-env[^}]*\}/);
+    });
+
+    it('cacheless branch evicts the render-nunjucks-async delegate, wrapped in try/catch', function () {
+        assert.match(
+            CONTROLLER_SRC,
+            /try\s*\{\s*delete\s+require\.cache\[require\.resolve\(\s*_\(__dirname\s*\+\s*['"]\/controller\.render-nunjucks-async['"][^)]*\)\s*\)\s*\][^}]*\}\s*catch/
+        );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03g - #TPL1 schema / lib / server wiring (nunjucks loader)
+// ---------------------------------------------------------------------------
+
+describe('03g - #TPL1 schema / lib / server wiring (nunjucks loader)', function () {
+
+    it('schema declares template.nunjucks.loader', function () {
+        var loader = SCHEMA_SETTINGS.properties.template
+            && SCHEMA_SETTINGS.properties.template.properties.nunjucks
+            && SCHEMA_SETTINGS.properties.template.properties.nunjucks.properties.loader;
+        assert.ok(loader, 'template.nunjucks.loader present');
+    });
+
+    it('nunjucks loader.type is an enum of ["memory", "http"] and required', function () {
+        var loader = SCHEMA_SETTINGS.properties.template.properties.nunjucks.properties.loader;
+        assert.deepEqual(loader.properties.type.enum, ['memory', 'http']);
+        assert.ok(Array.isArray(loader.required) && loader.required.indexOf('type') !== -1, 'type required');
+    });
+
+    it('nunjucks loader documents the http-specific flat keys (origin / basePath / ttl / revalidate)', function () {
+        var props = SCHEMA_SETTINGS.properties.template.properties.nunjucks.properties.loader.properties;
+        assert.equal(props.origin.type, 'string');
+        assert.equal(props.basePath.type, 'string');
+        assert.equal(props.ttl.type, 'number');
+        assert.equal(props.ttl.default, 60);
+        assert.equal(props.revalidate.type, 'boolean');
+        assert.equal(props.revalidate.default, false);
+    });
+
+    it('nunjucks loader allows additional (type-specific flat) properties — connector-style', function () {
+        var loader = SCHEMA_SETTINGS.properties.template.properties.nunjucks.properties.loader;
+        assert.equal(loader.additionalProperties, true);
+    });
+
+    it('initNunjucksEngine reads settings.template.nunjucks.loader', function () {
+        assert.match(SERVER_SRC, /conf\.content\.settings\.template\.nunjucks\.loader/);
+    });
+
+    it('initNunjucksEngine builds the loader via lib.templateLoaders.build, threading the bundle', function () {
+        // Scope to the initNunjucksEngine slice so this does not false-match the
+        // byte-identical lib.templateLoaders.build call in initSwigEngine.
+        var njStart = SERVER_SRC.indexOf('var initNunjucksEngine');
+        var swStart = SERVER_SRC.indexOf('var initSwigEngine');
+        assert.ok(njStart > 0 && swStart > njStart, 'initNunjucksEngine precedes initSwigEngine');
+        var slice = SERVER_SRC.slice(njStart, swStart);
+        assert.match(slice, /lib\.templateLoaders\.build\(\s*_loaderCfg\s*,\s*\{\s*bundle:\s*self\.appName\s*\}\s*\)/);
+    });
+
+    it('initNunjucksEngine stashes on process.gina._nunjucksLoaders keyed by the template root', function () {
+        assert.match(SERVER_SRC, /process\.gina\._nunjucksLoaders\[conf\.content\.templates\._common\.html\]\s*=\s*\{/);
+    });
+
+    it('initNunjucksEngine only stashes when the built loader is async (async === true)', function () {
+        var njStart = SERVER_SRC.indexOf('var initNunjucksEngine');
+        var swStart = SERVER_SRC.indexOf('var initSwigEngine');
+        var slice = SERVER_SRC.slice(njStart, swStart);
+        assert.match(slice, /_builtLoader\s*&&\s*_builtLoader\.async\s*===\s*true/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03h - #TPL1 controller.render-nunjucks-async.js shape
+// ---------------------------------------------------------------------------
+
+describe('03h - #TPL1 controller.render-nunjucks-async.js shape', function () {
+
+    it('exports an async function with the same deps signature as the other delegates', function () {
+        assert.match(
+            RENDER_NJ_ASYNC_SRC,
+            /module\.exports\s*=\s*async\s+function\s+renderNunjucksAsync\(userData,\s*displayInspector,\s*errOptions,\s*deps\)/
+        );
+    });
+
+    it('fetches nunjucks via the nunjucksResolver (never a direct require)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /nunjucksResolver\.get\(\)/);
+    });
+
+    it('builds the async loader adapter via nunjucks.Loader.extend with getSource', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /nunjucks\.Loader\.extend\(\s*\{/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /getSource:\s*function\s*\(\s*name\s*,\s*cb\s*\)/);
+    });
+
+    it('overrides resolve to identity so the gina loader resolve() is the single path authority', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /resolve:\s*function\s*\(\s*from\s*,\s*to\s*\)\s*\{\s*return\s+to\s*;\s*\}/);
+    });
+
+    it('adapter getSource routes through ginaLoader.resolve then ginaLoader.load', function () {
+        var idx = RENDER_NJ_ASYNC_SRC.indexOf('getSource: function');
+        assert.ok(idx > 0, 'getSource present');
+        var block = RENDER_NJ_ASYNC_SRC.slice(idx, idx + 600);
+        assert.match(block, /ginaLoader\.resolve\(name\)/);
+        assert.match(block, /ginaLoader\.load\(\s*id\s*,/);
+    });
+
+    it('adapter getSource returns the nunjucks { src, path, noCache } source shape', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /src:\s*src/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /path:\s*id/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /noCache:\s*process\.env\.NODE_ENV_IS_DEV\s*===\s*['"]true['"]/);
+    });
+
+    it('renders via the promisified callback-form env.render (async loaders require it)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /await\s+new\s+Promise/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /env\.render\(\s*templateName\s*,\s*data\s*,\s*function\s*\(\s*err\s*,\s*out\s*\)/);
+    });
+
+    it('keys the loader lookup by conf.content.templates._common.html (matches the dispatch key)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /localOptions\.conf\.content\.templates\._common\.html/);
+    });
+
+    it('nulls local.req/res/next at the success terminal (per-request memory release)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /local\.req\s*=\s*null;[\s\S]{0,80}local\.res\s*=\s*null;[\s\S]{0,80}local\.next\s*=\s*null;/);
+    });
+
+    it('mirrors error interception for non-2xx + error data', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /!String\(data\.page\.data\.status\)\.startsWith\(['"]2['"]\)/);
+    });
+
+    it('re-checks headersSent() AFTER the awaited render (post-await race guard)', function () {
+        var renderIdx = RENDER_NJ_ASYNC_SRC.indexOf('await new Promise');
+        assert.ok(renderIdx > 0, 'promisified render present');
+        var afterRender = RENDER_NJ_ASYNC_SRC.slice(renderIdx);
+        assert.match(afterRender, /headersSent\s*&&\s*headersSent\(\)/);
+    });
+
+    it('NEGATIVE — does NOT self-read templates from the filesystem (loader owns loading)', function () {
+        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /readFileSync/);
+        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /fs\.existsSync/);
+    });
+
+    it('NEGATIVE — does NOT require nunjucks directly (resolver is the single source)', function () {
+        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /require\(\s*['"]nunjucks['"]\s*\)/);
+    });
+
+    it('NEGATIVE (separate registry, §8.1 corrected) — does NOT reach into the sync delegate cached process.gina._nunjucksEnvs', function () {
+        // §8.1 (corrected by #TPL1 Tier-2): the sync delegate (render-nunjucks.js)
+        // is race-safe because its render is SYNCHRONOUS — NOT because of a
+        // per-request env. So the async port does NOT fix #B25 with a per-request
+        // env either; it closes the singleton race with process.gina._renderALS
+        // (the unconditional .run() wrap). It keeps a SEPARATE compiled-env registry
+        // (process.gina._nunjucksAsyncEnvs / _nunjucksAsyncEnvsOwner) and must never
+        // reach into the sync delegate's filesystem _nunjucksEnvs registry (whose
+        // loader is a FileSystemLoader, not the gina async adapter).
+        //
+        // Both pins use the `process.gina.` access prefix on purpose: the new
+        // _nunjucksAsyncEnvs* strings do NOT contain the bare sync names, and the
+        // prefix keeps the pin from tripping on the JSDoc that names the sync
+        // owner-guard for a cross-reference (jsdoc.md "negative pin trips on JSDoc").
+        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksEnvs/);
+        assert.doesNotMatch(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksEnvsOwner/);
+    });
+
+    it('POSITIVE (env over the async loader adapter) — builds new nunjucks.Environment (fresh per request when cache off, shared when on)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /new\s+nunjucks\.Environment\(/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03i - #TPL1 asset injection / setResources port (async nunjucks delegate)
+// ---------------------------------------------------------------------------
+//
+// Mirror of §03e for the async NUNJUCKS delegate. Same post-render asset
+// injection (injectAssets byte-identical to render-swig-async / render-nunjucks),
+// the render-swig.js:609 "needed !!" re-fetch, the whisper pass, and the CSP
+// nonce exposure — plus a behavioural eval of the (pure) injectAssets helper.
+
+describe('03i - #TPL1 asset injection / setResources port (async nunjucks delegate)', function () {
+
+    // (a) source-level wiring -------------------------------------------------
+
+    it('consumes deps.setResources in the delegate', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /var\s+setResources\s*=\s*deps\.setResources/);
+    });
+
+    it('calls setResources(localTemplateConf) BEFORE the promisified render', function () {
+        var guardIdx  = RENDER_NJ_ASYNC_SRC.indexOf("typeof setResources === 'function'");
+        var renderIdx = RENDER_NJ_ASYNC_SRC.indexOf('await new Promise');
+        assert.ok(guardIdx > 0, 'setResources guard present');
+        assert.ok(renderIdx > 0, 'promisified render present');
+        assert.ok(guardIdx < renderIdx, 'setResources guarded block must run before the render');
+        var block = RENDER_NJ_ASYNC_SRC.slice(guardIdx, renderIdx);
+        assert.match(block, /setResources\(\s*localTemplateConf\s*\)\s*;/);
+    });
+
+    it('guards the setResources call with a typeof check so older controllers still work', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /typeof\s+setResources\s*===\s*['"]function['"]/);
+    });
+
+    it('catches setResources failures without breaking the render', function () {
+        var idx = RENDER_NJ_ASYNC_SRC.indexOf("typeof setResources === 'function'");
+        assert.ok(idx > 0);
+        var block = RENDER_NJ_ASYNC_SRC.slice(idx, idx + 1500);
+        assert.match(block, /catch\s*\(\s*resourcesErr\s*\)/);
+        assert.match(block, /\[render-nunjucks-async\]\s*setResources failed:/);
+    });
+
+    it('re-overlays getData() AFTER setResources (render-swig.js:609 "needed !!" step)', function () {
+        var setIdx = RENDER_NJ_ASYNC_SRC.indexOf('setResources(localTemplateConf)');
+        assert.ok(setIdx > 0);
+        var block = RENDER_NJ_ASYNC_SRC.slice(setIdx, setIdx + 500);
+        assert.match(block, /data\s*=\s*merge\(data,\s*getData\(\)\)/);
+    });
+
+    // (b) isWithoutLayout — Collection filter mirror --------------------------
+
+    it('clones localTemplateConf via JSON.clone when isWithoutLayout is true', function () {
+        var idx = RENDER_NJ_ASYNC_SRC.indexOf('isWithoutLayout   = !!localOptions.isWithoutLayout');
+        assert.ok(idx > 0, 'isWithoutLayout locals present');
+        var block = RENDER_NJ_ASYNC_SRC.slice(idx, idx + 800);
+        assert.match(block, /JSON\.clone\(localTemplateConf\)/);
+    });
+
+    it('filters javascripts via Collection.find({isCommon:false},{isCommon:true,name:"gina"})', function () {
+        assert.match(
+            RENDER_NJ_ASYNC_SRC,
+            /new\s+Collection\(localTemplateConf\.javascripts\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('filters stylesheets via the same Collection.find OR-clause', function () {
+        assert.match(
+            RENDER_NJ_ASYNC_SRC,
+            /new\s+Collection\(localTemplateConf\.stylesheets\)[\s\S]{0,80}\.find\(\s*\{\s*isCommon:\s*false\s*\}\s*,\s*\{\s*isCommon:\s*true\s*,\s*name:\s*['"]gina['"]\s*\}\s*\)/
+        );
+    });
+
+    it('imports Collection via the lib registry (survives dev hot-reload eviction)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /const\s+Collection\s*=\s*libRef\.Collection/);
+    });
+
+    // (c) injectAssets helper — shape + call-site -----------------------------
+
+    it('declares the injectAssets helper as an inner function', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+injectAssets\s*\(\s*html\s*,\s*data\s*,\s*localOptions\s*,\s*cspNonce\s*\)/);
+    });
+
+    it('calls injectAssets after the render and BEFORE sendHtmlResponse', function () {
+        var assetIdx = RENDER_NJ_ASYNC_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
+        var sendIdx  = RENDER_NJ_ASYNC_SRC.lastIndexOf('sendHtmlResponse(local, html, req, res)');
+        assert.ok(assetIdx > 0, 'injectAssets call-site present');
+        assert.ok(sendIdx > 0, 'final sendHtmlResponse present');
+        assert.ok(assetIdx < sendIdx, 'injectAssets must run BEFORE the final sendHtmlResponse');
+    });
+
+    it('wraps the injectAssets call in try/catch so a mis-shaped config never breaks rendering', function () {
+        var idx = RENDER_NJ_ASYNC_SRC.indexOf('html = injectAssets(html, data, localOptions, _cspNonce)');
+        assert.ok(idx > 0);
+        var block = RENDER_NJ_ASYNC_SRC.slice(idx, idx + 500);
+        assert.match(block, /catch\s*\(\s*assetErr\s*\)/);
+        assert.match(block, /\[render-nunjucks-async\]\s*asset injection skipped:/);
+    });
+
+    it('short-circuits injectAssets on empty html input', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /if\s*\(\s*typeof\s+html\s*!==\s*['"]string['"]\s*\|\|\s*html\.length\s*===\s*0\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    it('short-circuits injectAssets when data.page.view is missing', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /if\s*\(\s*!data\s*\|\|\s*!data\.page\s*\|\|\s*!data\.page\.view\s*\)\s*\{\s*return\s+html\s*;\s*\}/);
+    });
+
+    // (d) gina-bootstrap whisper placeholder pass + CSP nonce -----------------
+
+    it('runs the whisper() placeholder pass on the injected gina bootstrap', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /html\s*=\s*whisper\(\s*ginaLoaderDic\s*,\s*html\s*,/);
+    });
+
+    it('flattens page / page.environment / page.data.session into the whisper dict', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /ginaLoaderDic\['page\.'\s*\+\s*_d\]/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /ginaLoaderDic\['page\.environment\.'\s*\+\s*_k\]/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /ginaLoaderDic\['page\.data\.session\.'\s*\+\s*_s\]/);
+    });
+
+    it('guards the whisper pass with typeof whisper === function and try/catch', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /typeof\s+whisper\s*===\s*['"]function['"]/);
+        var idx = RENDER_NJ_ASYNC_SRC.indexOf('whisper(ginaLoaderDic, html');
+        assert.ok(idx > 0);
+        var block = RENDER_NJ_ASYNC_SRC.slice(idx, idx + 400);
+        assert.match(block, /catch\s*\(\s*whisperErr\s*\)/);
+        assert.match(block, /\[render-nunjucks-async\]\s*ginaLoader whisper substitution skipped:/);
+    });
+
+    it('exposes the per-request CSP nonce as page.cspNonce + top-level cspNonce', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /_cspNonce\s*=\s*\(req\s*&&\s*req\._ginaCspNonce\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /data\.page\.cspNonce\s*=\s*_cspNonce/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /data\.cspNonce\s*=\s*_cspNonce/);
+    });
+
+    // (e) injectAssets behaviour — exercised live -----------------------------
+
+    (function () {
+        var helperMatch = RENDER_NJ_ASYNC_SRC.match(
+            /function\s+injectAssets\s*\([^\)]*\)\s*\{[\s\S]*?\n\}/
+        );
+        if (!helperMatch) {
+            it('SKIP: could not extract injectAssets source for behavioural tests', function () {
+                assert.ok(false, 'injectAssets helper not found in render-nunjucks-async.js');
+            });
+            return;
+        }
+        var injectAssetsFn;
+        try {
+            // eslint-disable-next-line no-new-func
+            injectAssetsFn = new Function(helperMatch[0] + '\nreturn injectAssets;')();
+        } catch (e) {
+            it('SKIP: could not compile injectAssets for behavioural tests', function () {
+                assert.ok(false, 'failed to compile injectAssets: ' + e.message);
+            });
+            return;
+        }
+
+        it('auto-injects stylesheets before </head>', function () {
+            var data = { page: { view: { stylesheets: '<link href="/a.css" rel="stylesheet">' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(
+                out.indexOf('<link href="/a.css" rel="stylesheet">') < out.indexOf('</head>'),
+                'stylesheet appears BEFORE </head>'
+            );
+        });
+
+        it('skips stylesheet auto-inject when the user already placed the token', function () {
+            var stylesheets = '<link href="/app.css" rel="stylesheet">';
+            var data = { page: { view: { stylesheets: stylesheets } } };
+            var html = '<html><head><title>x</title>' + stylesheets + '</head><body></body></html>';
+            var out = injectAssetsFn(html, data, { template: {} });
+            assert.equal(out.split(stylesheets).length - 1, 1, 'stylesheets string appears exactly once');
+        });
+
+        it('auto-injects scripts before </body> by default (non-defer)', function () {
+            var data = { page: { view: { scripts: '<script src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: {} });
+            assert.ok(
+                out.indexOf('<script src="/a.js"></script>') < out.indexOf('</body>'),
+                'scripts appear BEFORE </body>'
+            );
+        });
+
+        it('places scripts in <head> when javascriptsDeferEnabled is true', function () {
+            var data = { page: { view: { scripts: '<script defer src="/a.js"></script>' } } };
+            var out = injectAssetsFn('<html><head></head><body></body></html>', data, { template: { javascriptsDeferEnabled: true } });
+            assert.ok(
+                out.indexOf('<script defer src="/a.js"></script>') < out.indexOf('</head>'),
+                'defer mode: scripts appear BEFORE </head>'
+            );
+        });
+
+        it('injects the gina bootstrap (ginaLoader) before </head>', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader } });
+            assert.match(out, /window\.onGinaLoaded[\s\S]*<\/head>/);
+        });
+
+        it('stamps the gina bootstrap <script> with the CSP nonce when provided', function () {
+            var loader = '<script type="text/javascript">window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader } }, 'abc123');
+            assert.match(out, /<script type="text\/javascript" nonce="abc123">/);
+        });
+
+        it('skips the bootstrap when javascriptsExcluded === "**"', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { ginaLoader: loader, javascriptsExcluded: '**' } });
+            assert.doesNotMatch(out, /window\.onGinaLoaded/);
+        });
+
+        it('does not duplicate the bootstrap when HTML already has window.onGinaLoaded', function () {
+            var loader = '<script>window.onGinaLoaded = function(){};</script>';
+            var html = '<html><head><script>/* window.onGinaLoaded here */</script></head><body></body></html>';
+            var out = injectAssetsFn(html, { page: { view: {} } }, { template: { ginaLoader: loader } });
+            assert.equal(out.split('<script>window.onGinaLoaded').length - 1, 0, 'bootstrap not duplicated');
+        });
+
+        it('injects external plugins (array joined) before </head>', function () {
+            var out = injectAssetsFn('<html><head></head><body></body></html>', { page: { view: {} } }, { template: { externalPlugins: ['\n<script src="/jquery.js"></script>'] } });
+            assert.match(out, /<script src="\/jquery\.js"><\/script>[\s\S]*<\/head>/);
+        });
+
+        it('is a no-op on fragments missing </head> and </body>', function () {
+            var frag = '<div>partial</div>';
+            var out = injectAssetsFn(frag, { page: { view: { stylesheets: '<link href="/a.css">' } } }, { template: { ginaLoader: '<script>window.onGinaLoaded=0;</script>' } });
+            assert.equal(out, frag);
+        });
+    })();
+});
+
+
+// ---------------------------------------------------------------------------
+// 03j - #TPL1 nunjucks async adapter (behavioural, gated on nunjucks install)
+// ---------------------------------------------------------------------------
+//
+// The novel surface of Slice 3 is the nunjucks.Loader.extend adapter driving a
+// real transitive extends+include render through the gina async loader. Gated
+// on nunjucks being installed (a root devDependency) so the suite stays green
+// where it is absent.
+
+describe('03j - #TPL1 nunjucks async adapter (behavioural, gated on nunjucks install)', function () {
+    var nunjucks = null;
+    try { nunjucks = require('nunjucks'); } catch (e) { /* not installed — skip */ }
+    var tlBuild = require(path.join(FW, 'lib/template-loaders/src/main.js')).build;
+
+    it('Loader.extend adapter renders a page extending a base + including a partial through the gina memory loader', async function (t) {
+        if (!nunjucks) { t.skip('nunjucks not installed'); return; }
+        var ginaLoader = tlBuild({ type: 'memory', templates: {
+            'base.njk':    '<html><head></head><body>{% block body %}{% endblock %}</body></html>',
+            'partial.njk': '<p>{{ who }}</p>',
+            'page.njk':    '{% extends "base.njk" %}{% block body %}{% include "partial.njk" %}{% endblock %}'
+        } });
+        var AsyncGinaLoader = nunjucks.Loader.extend({
+            async: true,
+            resolve: function (from, to) { return to; },
+            getSource: function (name, cb) {
+                var id;
+                try { id = ginaLoader.resolve(name); } catch (e) { return void cb(e); }
+                ginaLoader.load(id, function (err, src) { cb(err, err ? null : { src: src, path: id, noCache: true }); });
+            }
+        });
+        var env = new nunjucks.Environment(new AsyncGinaLoader(), { autoescape: false });
+        var out = await new Promise(function (resolve, reject) {
+            env.render('page.njk', { who: 'gina' }, function (err, html) {
+                if (err) { return reject(err); }
+                resolve(html);
+            });
+        });
+        assert.match(out, /<p>gina<\/p>/);           // include served by loader
+        assert.match(out, /<body>[\s\S]*<\/body>/);   // extends served by loader
+    });
+
+    it('CVE guard rejects a "../" traversal id at the gina resolve boundary (before nunjucks loads)', function (t) {
+        if (!nunjucks) { t.skip('nunjucks not installed'); return; }
+        var ginaLoader = tlBuild({ type: 'memory', templates: { 'ok.njk': 'x' } });
+        assert.throws(function () { ginaLoader.resolve('../etc/passwd'); }, /CVE-2023-25345/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03k - #TPL1 Tier-2 compiled-template cache + #B25 ALS render-context isolation
+// ---------------------------------------------------------------------------
+//
+// Tier-2 reintroduces cross-request compiled-template reuse on the async loader
+// path, opt-in via settings.template.{swig,nunjucks}.loader.cache (dev-disabled).
+// Reuse needs a SHARED engine/env, which means a SHARED filter table — and the
+// context-bearing gina filters (getUrl / getWebroot / t / tIcu) previously read
+// a process-global singleton (SwigFilters.instance._options / NunjucksFilters.
+// instance._options) that every per-request factory call overwrote. On a
+// synchronous render that's safe (no other request runs between the factory call
+// and the render); on an ASYNC render it is NOT — a concurrent request stomps the
+// singleton across an await, bleeding one request's host/webroot into another's
+// output (#B25). KEY FINDING: this race is NOT swig-only — BOTH async delegates
+// hit it through the same singleton, and a per-request nunjucks Environment does
+// NOT fix it (the env isolates the name->fn TABLE, not the singleton the fns
+// read). The fix: the gina filters are context-free (read per-request context
+// from process.gina._renderALS at CALL time) and the render is wrapped in an
+// UNCONDITIONAL _renderALS.run() so interleaved async renders each read their own
+// context — independent of whether the compiled cache is opted in.
+//
+// Source pins lock the shape; the behavioural tests prove the isolation through a
+// real shared engine/env (and a pure-logic replica proves the mechanism + the
+// subtract — that a singleton-read filter bleeds where the ALS one does not).
+
+describe('03k - #TPL1 Tier-2 compiled-template cache + #B25 ALS render-context isolation', function () {
+
+    var swig = null;
+    try { swig = require(path.join(FW, 'node_modules/@rhinostone/swig')); } catch (e) { /* not installed — skip */ }
+    var nunjucks = null;
+    try { nunjucks = require('nunjucks'); } catch (e) { /* not installed — skip */ }
+    var AsyncLocalStorage = require('async_hooks').AsyncLocalStorage;
+    var tlBuild = require(path.join(FW, 'lib/template-loaders/src/main.js')).build;
+
+    // (a) schema — loader.cache opt-in (both engines) -------------------------
+
+    it('schema declares template.swig.loader.cache (boolean, default false)', function () {
+        var c = SCHEMA_SETTINGS.properties.template.properties.swig.properties.loader.properties.cache;
+        assert.ok(c, 'swig loader.cache present');
+        assert.equal(c.type, 'boolean');
+        assert.equal(c.default, false);
+    });
+
+    it('schema declares template.nunjucks.loader.cache (boolean, default false)', function () {
+        var c = SCHEMA_SETTINGS.properties.template.properties.nunjucks.properties.loader.properties.cache;
+        assert.ok(c, 'nunjucks loader.cache present');
+        assert.equal(c.type, 'boolean');
+        assert.equal(c.default, false);
+    });
+
+    // (b) server.js — cache stash on the loader entry (both engines) ----------
+
+    it('initNunjucksEngine stashes cache:(_loaderCfg.cache === true) on the nunjucks loader entry', function () {
+        var njStart = SERVER_SRC.indexOf('var initNunjucksEngine');
+        var swStart = SERVER_SRC.indexOf('var initSwigEngine');
+        assert.ok(njStart > 0 && swStart > njStart, 'initNunjucksEngine precedes initSwigEngine');
+        var slice = SERVER_SRC.slice(njStart, swStart);
+        assert.match(slice, /cache:\s*\(_loaderCfg\.cache === true\)/);
+    });
+
+    it('initSwigEngine stashes cache:(_loaderCfg.cache === true) on the swig loader entry', function () {
+        var swStart = SERVER_SRC.indexOf('var initSwigEngine');
+        assert.ok(swStart > 0, 'initSwigEngine present');
+        // The literal appears exactly twice in server.js (nunjucks + swig); the
+        // nunjucks one is before swStart, so the forward slice isolates swig's.
+        assert.match(SERVER_SRC.slice(swStart), /cache:\s*\(_loaderCfg\.cache === true\)/);
+    });
+
+    // (c) filter libs — context-bearing filters read process.gina._renderALS
+    //     at CALL time via getRenderCtx() (the #B25 read site) ----------------
+
+    it('swig-filters getRenderCtx() reads process.gina._renderALS.getStore() with a singleton fallback', function () {
+        assert.match(SWIG_FILTERS_SRC, /var\s+getRenderCtx\s*=\s*function/);
+        assert.match(SWIG_FILTERS_SRC, /process\.gina\._renderALS\.getStore\(\)/);
+        assert.match(SWIG_FILTERS_SRC, /_store\s*\|\|\s*SwigFilters\.instance\._options\s*\|\|\s*self\.options/);
+    });
+
+    it('swig-filters routes getWebroot/getUrl/t/tIcu through getRenderCtx() (>= 4 call sites)', function () {
+        var n = (SWIG_FILTERS_SRC.match(/var\s+ctx\s*=\s*getRenderCtx\(\)/g) || []).length;
+        assert.ok(n >= 4, 'expected >= 4 getRenderCtx() call sites, found ' + n);
+    });
+
+    it('nunjucks-filters getRenderCtx() reads process.gina._renderALS.getStore() with a singleton fallback', function () {
+        assert.match(NJ_FILTERS_SRC, /var\s+getRenderCtx\s*=\s*function/);
+        assert.match(NJ_FILTERS_SRC, /process\.gina\._renderALS\.getStore\(\)/);
+        assert.match(NJ_FILTERS_SRC, /_store\s*\|\|\s*NunjucksFilters\.instance\._options\s*\|\|\s*self\.options/);
+    });
+
+    it('nunjucks-filters routes getWebroot/getUrl/t/tIcu through getRenderCtx() (>= 4 call sites)', function () {
+        var n = (NJ_FILTERS_SRC.match(/var\s+ctx\s*=\s*getRenderCtx\(\)/g) || []).length;
+        assert.ok(n >= 4, 'expected >= 4 getRenderCtx() call sites, found ' + n);
+    });
+
+    // (d) swig-async delegate — shared engine, register-once, memo, .run() ----
+
+    it('swig-async lazily builds the render-context ALS on process.gina._renderALS', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+getRenderALS\s*\(\s*\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /process\.gina\._renderALS\s*=\s*new\s+AsyncLocalStorage\(\)/);
+    });
+
+    it('swig-async registers the gina filters ONCE inside getSwigEngine (context-free, not per request)', function () {
+        var gsStart = RENDER_SWIG_ASYNC_SRC.indexOf('function getSwigEngine');
+        assert.ok(gsStart > 0, 'getSwigEngine present');
+        var block = RENDER_SWIG_ASYNC_SRC.slice(gsStart, gsStart + 2000);
+        assert.match(block, /registerGinaFilters\(engine,\s*SwigFilters,\s*throwError\)/);
+        // and the once-registered registerGinaFilters takes the context-free shape
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+registerGinaFilters\(engine,\s*SwigFilters,\s*throwError\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /SwigFilters\(\{\s*options:\s*\{\},\s*isProxyHost:\s*false,\s*throwError:\s*throwError\s*\}\)/);
+    });
+
+    it('swig-async getSwigEngine returns { engine, compiled:Map } (engine + compiled-fn memo)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engine:\s*engine/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /compiled:\s*new Map\(\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.engine/);
+    });
+
+    it('swig-async memo is opt-in (stash.cache === true) AND dev-disabled', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /var\s+_useMemo\s*=\s*\(stash\.cache === true\)\s*&&\s*\(process\.env\.NODE_ENV_IS_DEV !== 'true'\)/);
+    });
+
+    it('swig-async caches the compiled Promise and evicts it on reject (no permanent poison)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.compiled\.get\(templateName\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.compiled\.set\(templateName,\s*compiled\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /engineEntry\.compiled\.delete\(templateName\)/);
+    });
+
+    it('swig-async wraps getTemplate + execute in _renderALS.run() UNCONDITIONALLY (#B25)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /getRenderALS\(\)\.run\(_renderStore,\s*async function/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /isProxyHost:\s*computeIsProxyHost\(req,\s*localOptions\)/);
+        assert.match(RENDER_SWIG_ASYNC_SRC, /function\s+computeIsProxyHost\(req,\s*localOptions\)/);
+    });
+
+    it('swig-async drops the whole engine registry on a swig module hot-swap (owner guard)', function () {
+        assert.match(RENDER_SWIG_ASYNC_SRC, /process\.gina\._swigEnginesOwner\s*!==\s*swigMod/);
+    });
+
+    // (e) nunjucks-async delegate — separate registry, two-mode, .run() -------
+
+    it('nunjucks-async lazily builds the render-context ALS on process.gina._renderALS', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+getRenderALS\s*\(\s*\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /process\.gina\._renderALS\s*=\s*new\s+AsyncLocalStorage\(\)/);
+    });
+
+    it('nunjucks-async uses a SEPARATE shared-env registry (_nunjucksAsyncEnvs) owner-guarded against hot-swap', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksAsyncEnvs/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /process\.gina\._nunjucksAsyncEnvsOwner\s*!==\s*nunjucks/);
+    });
+
+    it('nunjucks-async getNunjucksAsyncEnv registers the gina filters ONCE on the shared env (context-free)', function () {
+        var gsStart = RENDER_NJ_ASYNC_SRC.indexOf('function getNunjucksAsyncEnv');
+        assert.ok(gsStart > 0, 'getNunjucksAsyncEnv present');
+        var block = RENDER_NJ_ASYNC_SRC.slice(gsStart, gsStart + 2000);
+        assert.match(block, /registerGinaFilters\(env,\s*nunjucksFilters,\s*throwError\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+registerGinaFilters\(env,\s*nunjucksFilters,\s*throwError\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /nunjucksFilters\(\{\s*options:\s*\{\},\s*isProxyHost:\s*false,\s*throwError:\s*throwError\s*\}\)/);
+    });
+
+    it('nunjucks-async is two-mode: shared env when cache on, fresh per-request env (re-registered) when off', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /var\s+_useCache\s*=\s*\(stash\.cache === true\)\s*&&\s*\(process\.env\.NODE_ENV_IS_DEV !== 'true'\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /env\s*=\s*getNunjucksAsyncEnv\(nunjucks,\s*loaderKey/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /registerGinaFilters\(env,\s*nunjucksFilters,\s*self\.throwError\)/);
+    });
+
+    it('nunjucks-async wraps env.render in _renderALS.run() UNCONDITIONALLY, preserving the await-new-Promise literal (#B25)', function () {
+        assert.match(RENDER_NJ_ASYNC_SRC, /getRenderALS\(\)\.run\(_renderStore,\s*async function/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /return\s+await\s+new\s+Promise/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /isProxyHost:\s*computeIsProxyHost\(req,\s*localOptions\)/);
+        assert.match(RENDER_NJ_ASYNC_SRC, /function\s+computeIsProxyHost\(req,\s*localOptions\)/);
+    });
+
+    // (f) BEHAVIOURAL — pure-logic ALS replica (#M12b shape; always runs) -----
+
+    it('replica: two interleaved _renderALS.run() contexts stay isolated, while a shared singleton bleeds (#B25 mechanism)', async function () {
+        var als = new AsyncLocalStorage();
+        var _singleton = null;
+        // ALS path — each "render" reads its OWN store after an await tick.
+        function viaALS(host) {
+            return als.run({ host: host }, async function () {
+                await new Promise(function (r) { setTimeout(r, 1); });
+                var s = als.getStore();
+                return s ? s.host : null;
+            });
+        }
+        // Singleton path — each "render" stamps a shared global then yields; with
+        // interleaving the last writer wins for BOTH (the pre-#TPL1 instance race).
+        function viaSingleton(host) {
+            return (async function () {
+                _singleton = host;
+                await new Promise(function (r) { setTimeout(r, 1); });
+                return _singleton;
+            })();
+        }
+        var isolated = await Promise.all([ viaALS('A'), viaALS('B') ]);
+        assert.deepEqual(isolated, ['A', 'B'], 'ALS: each concurrent run() sees only its own store');
+
+        var bled = await Promise.all([ viaSingleton('A'), viaSingleton('B') ]);
+        assert.equal(bled[0], bled[1], 'singleton: interleaved renders collapse to the last writer (the #B25 bleed the ALS fix removes)');
+    });
+
+    // (g) BEHAVIOURAL — swig: ONE shared engine, interleaved renders ----------
+
+    it('swig: two interleaved renders through ONE shared engine read their OWN _renderALS context; a singleton-read filter bleeds', async function (t) {
+        if (!swig) { t.skip('@rhinostone/swig not installed'); return; }
+        process.gina = process.gina || {};
+        var _priorALS = process.gina._renderALS;
+        var als = new AsyncLocalStorage();
+        process.gina._renderALS = als;
+        var _singleton = null;
+        try {
+            // ONE shared engine (mirrors getSwigEngine's per-bundle shared engine).
+            var engine = new swig.Swig({
+                loader: tlBuild({ type: 'memory', templates: {
+                    'page.html': 'als={{ probe | ctxAls }};singleton={{ probe | ctxSingleton }}'
+                } }),
+                autoescape: false,
+                cache: false
+            });
+            // Registered ONCE on the shared engine. ctxAls reads the per-request
+            // context via process.gina._renderALS.getStore() — the exact filter
+            // getRenderCtx() read site (the #TPL1 Tier-2 fix shape). ctxSingleton
+            // reads a process-global stamped per render — the pre-#TPL1 shape #B25
+            // races.
+            engine.setFilter('ctxAls', function () {
+                var s = process.gina._renderALS.getStore();
+                return (s && s.host) ? s.host : 'NO-CTX';
+            });
+            engine.setFilter('ctxSingleton', function () { return _singleton || 'NO-CTX'; });
+
+            var renderOnce = function (host) {
+                return als.run({ host: host }, async function () {
+                    _singleton = host;                                  // pre-await racing write
+                    var fn  = await engine.getTemplate('page.html');
+                    var out = await fn({ probe: 'p' });
+                    return out.output;
+                });
+            };
+
+            var results = await Promise.all([ renderOnce('A.example'), renderOnce('B.example') ]);
+            // ALS column — each render reads its own host, no bleed.
+            assert.match(results[0], /als=A\.example/, 'render A reads A via _renderALS');
+            assert.match(results[1], /als=B\.example/, 'render B reads B via _renderALS (no bleed from A)');
+            // Singleton column (SUBTRACT) — both collapse to the last writer.
+            var sgA = results[0].match(/singleton=([^;]*)/)[1];
+            var sgB = results[1].match(/singleton=([^;]*)/)[1];
+            assert.equal(sgA, sgB, 'singleton-read filter bleeds: interleaved renders both see the last writer');
+        } finally {
+            if (typeof _priorALS === 'undefined') { delete process.gina._renderALS; }
+            else { process.gina._renderALS = _priorALS; }
+        }
+    });
+
+    // (h) BEHAVIOURAL — nunjucks (gated): ONE shared env, interleaved renders --
+
+    it('nunjucks (gated): two interleaved renders through ONE shared env read their OWN _renderALS context (no #B25 bleed)', async function (t) {
+        if (!nunjucks) { t.skip('nunjucks not installed'); return; }
+        process.gina = process.gina || {};
+        var _priorALS = process.gina._renderALS;
+        var als = new AsyncLocalStorage();
+        process.gina._renderALS = als;
+        try {
+            var ginaLoader = tlBuild({ type: 'memory', templates: { 'page.njk': 'host={{ probe | ctxhost }}' } });
+            var AsyncGinaLoader = nunjucks.Loader.extend({
+                async: true,
+                resolve: function (from, to) { return to; },
+                getSource: function (name, cb) {
+                    var id;
+                    try { id = ginaLoader.resolve(name); } catch (e) { return void cb(e); }
+                    ginaLoader.load(id, function (err, src) { cb(err, err ? null : { src: src, path: id, noCache: false }); });
+                }
+            });
+            // ONE shared env (mirrors getNunjucksAsyncEnv's cache-on path).
+            var env = new nunjucks.Environment(new AsyncGinaLoader(), { autoescape: false });
+            // Registered ONCE on the shared env; reads per-request context via ALS.
+            env.addFilter('ctxhost', function () {
+                var s = process.gina._renderALS.getStore();
+                return (s && s.host) ? s.host : 'NO-CTX';
+            });
+
+            var renderOnce = function (host) {
+                return als.run({ host: host }, function () {
+                    return new Promise(function (resolve, reject) {
+                        env.render('page.njk', { probe: 'p' }, function (err, out) {
+                            if (err) { return reject(err); }
+                            resolve(out);
+                        });
+                    });
+                });
+            };
+
+            var results = await Promise.all([ renderOnce('A.example'), renderOnce('B.example') ]);
+            assert.equal(results[0], 'host=A.example', 'render A reads A via _renderALS');
+            assert.equal(results[1], 'host=B.example', 'render B reads B via _renderALS (no bleed from A)');
+        } finally {
+            if (typeof _priorALS === 'undefined') { delete process.gina._renderALS; }
+            else { process.gina._renderALS = _priorALS; }
+        }
     });
 });
 

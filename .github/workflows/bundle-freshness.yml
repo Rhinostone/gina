@@ -98,9 +98,23 @@ jobs:
           # so the .br files remain checked. If a .css/.js/.html source
           # changes without a rebuild, the .br diff catches it; the .gz
           # divergence would have been a false positive.
+          #
+          # NOTE: the pathspecs MUST carry :(glob) magic. A bare 'framework/v*/...'
+          # pathspec does NOT treat v* as a wildcard under git's default magic — it
+          # matches zero files, so `git diff --exit-code` always returns 0 and the
+          # gate silently passes (it was a no-op for exactly this reason). :(glob)
+          # makes * and ** behave as expected against the version directory.
+          #
+          # Guard: if the include pathspec matches no tracked files (a future path or
+          # glob typo), fail loudly rather than silently pass — a 0-match pathspec is
+          # how this gate went dead in the first place.
+          if [ "$(git ls-files -- ':(glob)framework/v*/core/asset/plugin/dist/vendor/gina/**' | wc -l)" -eq 0 ]; then
+            echo "::error::bundle-freshness: dist pathspec matched 0 tracked files — gate misconfigured."
+            exit 1
+          fi
           if ! git diff --exit-code -- \
-                  'framework/v*/core/asset/plugin/dist/vendor/gina/' \
-                  ':(exclude)framework/v*/core/asset/plugin/dist/vendor/gina/**/*.gz'; then
+                  ':(glob)framework/v*/core/asset/plugin/dist/vendor/gina/**' \
+                  ':(exclude,glob)framework/v*/core/asset/plugin/dist/vendor/gina/**/*.gz'; then
             echo ""
             echo "::error::Bundle is out of sync with source."
             echo "::error::A source file under one of the AMD-aliased paths in build.json"

@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] Tests pass — `node --test test/**/*.test.js`
+- [ ] Tests pass — `node --test test/**/*.test.js framework/v*/test/unit/*.test.js`
 - [ ] New behaviour is covered by a test (or justification provided below)
 - [ ] `changie new` entry added for any user-facing change
 - [ ] Commit messages follow the project style (imperative/gerund, no AI references)
