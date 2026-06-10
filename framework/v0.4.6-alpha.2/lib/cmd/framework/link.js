@@ -98,11 +98,22 @@ var console        = lib.logger;
                     return end(err, 'error')
                 }
 
-                console.debug('[link] Running: gina link-node-modules @'+self.projectName);
-                err = execSync('$(which gina) link-node-modules @'+self.projectName);
-                if (err instanceof Error) {
-                    console.warn('[link] ', err.stack);
-                    return end(err, 'error')
+                // was: err = execSync('$(which gina) link-node-modules @'+self.projectName);
+                // A PATH-resolved binary is not guaranteed to exist (repo checkout,
+                // non-global install) and may be a different install than the one
+                // running this command — invoke the running install's own CLI instead
+                // (same rationale as the `source` resolution below). Note execSync
+                // THROWS on failure and never returns an Error, so the old
+                // `instanceof Error` check was dead code; wrap in try/catch and
+                // route the failure through end().
+                var cli = require('path').resolve(__dirname, '../../../../..', 'bin/cli');
+                console.debug('[link] Running: '+ process.execPath +' '+ cli +' link-node-modules @'+ self.projectName);
+                try {
+                    execSync('"'+ process.execPath +'" "'+ cli +'" link-node-modules @'+ self.projectName);
+                } catch (linkErr) {
+                    var errOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
+                    console.warn('[link] '+ errOutput);
+                    return end(new Error(errOutput), 'error')
                 }
             }
             destination = new _(destination.toString() +'/gina', true);

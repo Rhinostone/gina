@@ -16,6 +16,12 @@
  *       the Shell err channel (which reports any stderr output as an error);
  *   (c) route genuine failures through the (previously dead) onError parameter.
  *
+ * §05 covers the same defect class in framework/link.js's stale-node_modules
+ * repair path: `execSync('$(which gina) link-node-modules ...')` was PATH-resolved
+ * AND its `instanceof Error` check was dead code (execSync throws on failure, it
+ * never returns an Error) — now a self-resolved CLI invocation wrapped in
+ * try/catch routing failures through end().
+ *
  * Run standalone:
  *   node --test test/lib/project-add-link.test.js
  */
@@ -156,6 +162,53 @@ describe('04 - onComplete decision replica (postcondition wins over the Shell er
         var got = null;
         replica(false, null, function(e) { got = e; }, function() {});
         assert.ok(got instanceof Error);
+    });
+
+});
+
+
+// ── 05 — framework/link.js sibling: stale-node_modules repair path ───────────
+
+describe('05 - framework:link stale-node_modules repair uses the self-resolved CLI in a try/catch', function() {
+
+    var LINK_PATH = path.join(FW, 'lib/cmd/framework/link.js');
+    var LINK_SRC = fs.readFileSync(LINK_PATH, 'utf8');
+
+    it('no live PATH-resolved $(which gina) invocation remains (comment-stripped)', function() {
+        assert.ok(
+            stripComments(LINK_SRC).indexOf('$(which gina)') < 0,
+            'found a live `$(which gina)` self-invocation in framework/link.js'
+        );
+    });
+
+    it('invokes the running install\'s own CLI via process.execPath', function() {
+        assert.ok(LINK_SRC.indexOf('execSync(\'"\'+ process.execPath +\'" "\'+ cli +\'" link-node-modules @\'+ self.projectName)') > -1);
+    });
+
+    it('resolves the CLI path from __dirname, targeting bin/cli', function() {
+        assert.match(
+            LINK_SRC,
+            /var cli = require\('path'\)\.resolve\(__dirname,\s*'\.\.\/\.\.\/\.\.\/\.\.\/\.\.'\s*,\s*'bin\/cli'\)/
+        );
+    });
+
+    it('the __dirname-resolved CLI path from link.js is the repo\'s bin/cli and exists', function() {
+        var resolved = path.resolve(path.dirname(LINK_PATH), '../../../../..', 'bin/cli');
+        assert.equal(resolved, path.resolve(FW, '../..', 'bin', 'cli'));
+        assert.ok(fs.existsSync(resolved));
+    });
+
+    it('the execSync is wrapped in try/catch routing the failure through end() — the dead instanceof check is gone', function() {
+        var tryIdx   = LINK_SRC.indexOf('try {');
+        var execIdx  = LINK_SRC.indexOf('execSync(\'"\'+ process.execPath');
+        var catchIdx = LINK_SRC.indexOf('catch (linkErr)');
+        assert.ok(tryIdx > -1 && execIdx > tryIdx && catchIdx > execIdx, 'expected try { execSync(...) } catch (linkErr)');
+        assert.match(LINK_SRC.slice(catchIdx, catchIdx + 400), /return end\(new Error\(errOutput\), 'error'\)/);
+        // execSync never RETURNS an Error — the old `err = execSync(...); if (err instanceof Error)` was dead code
+        assert.ok(
+            stripComments(LINK_SRC).indexOf('err = execSync') < 0,
+            'the dead `err = execSync(...)` assignment shape must not come back'
+        );
     });
 
 });
