@@ -20,8 +20,10 @@ module.exports = defineConfig({
         trace: 'on-first-retry'
     },
     // Starts the runtime harness (test/e2e/runtime-server.js) that serves the REAL
-    // built gina bundle for popin-dialog.runtime.spec.js. The framework-free
-    // popin-dialog.a11y.spec.js drives file:// fixtures and ignores it.
+    // built gina bundle for popin-dialog.runtime.spec.js, plus the framework-free
+    // a11y fixture at /a11y — its stylesheet link resolves through the server's
+    // /css route, which derives framework/v<version> from package.json so the
+    // per-release framework-dir rename can't break it.
     webServer: {
         command: 'node test/e2e/runtime-server.js',
         url: 'http://localhost:' + E2E_PORT + '/',
