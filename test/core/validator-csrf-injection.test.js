@@ -48,7 +48,7 @@ describe('01 - source inspection: three CSRF header injection sites', function (
 
     it('main.js file-removal DELETE XHR injection site (#2)', function () {
         // file-removal: xhrOptions.headers['X-Gina-CSRF-Token'] = csrfToken before setupXhr
-        var re = /let xhrOptions = \{[\s\S]{0,800}#CSRF2 follow-up[\s\S]{0,300}isMutatingMethod\(method\)[\s\S]{0,300}readCsrfCookie\(\)[\s\S]{0,300}xhrOptions\.headers\['X-Gina-CSRF-Token'\][\s\S]{0,200}setupXhr\(xhrOptions\)/;
+        var re = /let xhrOptions = \{[\s\S]{0,1200}#CSRF2 follow-up[\s\S]{0,300}isMutatingMethod\(method\)[\s\S]{0,300}readCsrfCookie\(\)[\s\S]{0,300}xhrOptions\.headers\['X-Gina-CSRF-Token'\][\s\S]{0,200}setupXhr\(xhrOptions\)/;
         assert.ok(re.test(mainSrc),
             'expected CSRF header injection in file-removal xhrOptions in main.js');
     });

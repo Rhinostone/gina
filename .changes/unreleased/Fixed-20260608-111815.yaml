@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the browser form-validator sending JSON request bodies with an application/x-www-form-urlencoded Content-Type. The server body parser url-decoded the JSON payload (replace + with space, then decodeURIComponent) before JSON.parse, corrupting + and % inside string values such as gmail-style email "+aliases" (alias+test@x became alias test@x). The non-binary submit path now sends application/json for a JSON body while still honoring an explicit form enctype, and the file-removal request defaults its JSON body to application/json. Browser bundle rebuilt.'
+time: 2026-06-08T11:18:15.000000+02:00
