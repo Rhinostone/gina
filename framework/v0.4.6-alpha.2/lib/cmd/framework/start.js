@@ -71,7 +71,11 @@ function Start(opt){
                 continue;
             }
             // process.stdout.write('\ngina bundle:restart '+ file.replace(/\.pid$/, '').replace(/\@/, ' @') + '\n');
-            execSync('$(which gina) bundle:restart '+ file.replace(/\.pid$/, '').replace(/\@/, ' @'));
+            // was: execSync('$(which gina) bundle:restart '+ ...) — PATH-resolved self-invocation;
+            // bin/gina is resolved from this file's own location instead (the PATH may carry
+            // no gina or a different install than the one running this command).
+            var ginaBin = require('path').resolve(__dirname, '../../../../..', 'bin/gina');
+            execSync('"'+ process.execPath +'" "'+ ginaBin +'" bundle:restart '+ file.replace(/\.pid$/, '').replace(/\@/, ' @'));
         }
     }
 

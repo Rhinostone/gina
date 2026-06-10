@@ -212,3 +212,101 @@ describe('05 - framework:link stale-node_modules repair uses the self-resolved C
     });
 
 });
+
+
+// ── 06 — helper.js auto-link block (project:/bundle: start|stop|restart) ─────
+//
+// Scoped to the `linking node-modules & gina` block ONLY: helper.js:~407 keeps a
+// DELIBERATE live `$(which gina)` (project:import prefix derivation — semantically
+// "where is gina installed", left as-is by design), so no file-wide negative pin.
+
+describe('06 - CmdHelper auto-link invokes the running install\'s own CLI', function() {
+
+    var HELPER_PATH = path.join(FW, 'lib/cmd/helper.js');
+    var HELPER_SRC = fs.readFileSync(HELPER_PATH, 'utf8');
+    var blockIdx = HELPER_SRC.indexOf('// linking node-modules & gina');
+    var BLOCK = (blockIdx > -1) ? HELPER_SRC.slice(blockIdx, blockIdx + 3500) : '';
+
+    it('the auto-link block exists', function() {
+        assert.ok(blockIdx > -1, 'anchor `// linking node-modules & gina` not found in helper.js');
+    });
+
+    it('no live $(which gina) remains inside the block (comment-stripped)', function() {
+        assert.ok(stripComments(BLOCK).indexOf('$(which gina)') < 0);
+    });
+
+    it('resolves the CLI from __dirname (4 levels up from lib/cmd), targeting bin/cli', function() {
+        assert.match(
+            BLOCK,
+            /var selfCli = require\('path'\)\.resolve\(__dirname,\s*'\.\.\/\.\.\/\.\.\/\.\.'\s*,\s*'bin\/cli'\)/
+        );
+        var resolved = path.resolve(path.dirname(HELPER_PATH), '../../../..', 'bin/cli');
+        assert.equal(resolved, path.resolve(FW, '../..', 'bin', 'cli'));
+        assert.ok(fs.existsSync(resolved));
+    });
+
+    it('link-node-modules runs via process.execPath in a try/catch — the dead instanceof check is gone', function() {
+        var execIdx  = BLOCK.indexOf('execSync(\'"\'+ process.execPath +\'" "\'+ selfCli +\'" link-node-modules @\'+cmd.projectName');
+        var catchIdx = BLOCK.indexOf('catch (linkErr)');
+        assert.ok(execIdx > -1 && catchIdx > execIdx, 'expected try { execSync(node cli link-node-modules) } catch (linkErr)');
+        assert.ok(
+            stripComments(BLOCK).indexOf('err = execSync') < 0,
+            'the dead `err = execSync(...)` assignment shape must not come back'
+        );
+    });
+
+    it('the follow-up `link` call also runs via process.execPath + selfCli', function() {
+        assert.ok(BLOCK.indexOf('execSync(\'"\'+ process.execPath +\'" "\'+ selfCli +\'" link @\'+cmd.projectName') > -1);
+    });
+
+});
+
+
+// ── 07 — daemon-lifecycle sites (framework start/restart) use self-resolved bin/gina
+
+describe('07 - framework start/restart invoke the self-resolved bin/gina wrapper', function() {
+
+    var START_PATH   = path.join(FW, 'lib/cmd/framework/start.js');
+    var RESTART_PATH = path.join(FW, 'lib/cmd/framework/restart.js');
+    var START_SRC   = fs.readFileSync(START_PATH, 'utf8');
+    var RESTART_SRC = fs.readFileSync(RESTART_PATH, 'utf8');
+
+    it('no live $(which gina) remains in start.js (comment-stripped)', function() {
+        assert.ok(stripComments(START_SRC).indexOf('$(which gina)') < 0);
+    });
+
+    it('no live $(which gina) remains in restart.js (comment-stripped)', function() {
+        assert.ok(stripComments(RESTART_SRC).indexOf('$(which gina)') < 0);
+    });
+
+    it('restart.js declares a file-scope ginaBin resolved from __dirname, targeting bin/gina', function() {
+        assert.match(
+            RESTART_SRC,
+            /var ginaBin\s+= require\('path'\)\.resolve\(__dirname,\s*'\.\.\/\.\.\/\.\.\/\.\.\/\.\.'\s*,\s*'bin\/gina'\)/
+        );
+    });
+
+    it('restart.js uses ginaBin at all three sites (start, stop, bundle:restart)', function() {
+        var m = RESTART_SRC.match(/'"'\+ process\.execPath \+'" "'\+ ginaBin \+'"/g) || [];
+        assert.ok(m.length >= 3, 'expected >= 3 self-resolved invocations in restart.js, got ' + m.length);
+    });
+
+    it('start.js resolves ginaBin and uses it for bundle:restart', function() {
+        assert.match(
+            START_SRC,
+            /var ginaBin = require\('path'\)\.resolve\(__dirname,\s*'\.\.\/\.\.\/\.\.\/\.\.\/\.\.'\s*,\s*'bin\/gina'\)/
+        );
+        assert.ok(START_SRC.indexOf('\'"\'+ process.execPath +\'" "\'+ ginaBin +\'" bundle:restart \'') > -1);
+    });
+
+    it('the __dirname-resolved bin/gina exists and bin/gina self-locates its cli from __dirname', function() {
+        var resolved = path.resolve(path.dirname(RESTART_PATH), '../../../../..', 'bin/gina');
+        assert.equal(resolved, path.resolve(FW, '../..', 'bin', 'gina'));
+        assert.ok(fs.existsSync(resolved));
+        // bin/gina must keep resolving its cli from its own location for the
+        // absolute-path invocation to stay PATH-independent end-to-end
+        var ginaSrc = fs.readFileSync(resolved, 'utf8');
+        assert.ok(ginaSrc.indexOf("__dirname + '/cli'") > -1);
+    });
+
+});

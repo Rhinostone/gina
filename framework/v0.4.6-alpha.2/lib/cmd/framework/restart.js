@@ -6,6 +6,11 @@ const util = require('util');
 var CmdHelper   = require('./../helper');
 // const { start } = require('repl');
 var console     = lib.logger;
+// Self-resolved daemon wrapper — never PATH-resolve our own binary: the PATH
+// may carry no gina at all (repo checkout, non-global install) or a different
+// install than the one running this command. bin/gina (not bin/cli) is required
+// here so `start` keeps its detached-daemon spawn semantics.
+var ginaBin     = require('path').resolve(__dirname, '../../../../..', 'bin/gina');
 /**
  * @module gina/lib/cmd/framework/restart
  */
@@ -95,7 +100,8 @@ function Restart(opt, cmd) {
             // TODO - retrieve & add `opt`
             var out = null;
             try {
-                out = execSync('$(which gina) start @'+self.version).toString();
+                // was: out = execSync('$(which gina) start @'+self.version).toString();
+                out = execSync('"'+ process.execPath +'" "'+ ginaBin +'" start @'+self.version).toString();
                 console.debug('out => ', out);
                 // TODO - retrieve running bundles with its options & restart
             } catch (err) {
@@ -122,7 +128,8 @@ function Restart(opt, cmd) {
     var stop = function() {
         var out = null;
         try {
-            out = execSync('$(which gina) stop @'+self.version).toString();
+            // was: out = execSync('$(which gina) stop @'+self.version).toString();
+            out = execSync('"'+ process.execPath +'" "'+ ginaBin +'" stop @'+self.version).toString();
             console.debug('out => ', out);
         } catch (err) {
             throw err;
@@ -187,7 +194,8 @@ function Restart(opt, cmd) {
                 continue;
             }
             // process.stdout.write('\ngina bundle:restart '+ file.replace(/\.pid$/, '').replace(/\@/, ' @') + '\n');
-            execSync('$(which gina) bundle:restart '+ file.replace(/\.pid$/, '').replace(/\@/, ' @'));
+            // was: execSync('$(which gina) bundle:restart '+ ...) — PATH-resolved self-invocation
+            execSync('"'+ process.execPath +'" "'+ ginaBin +'" bundle:restart '+ file.replace(/\.pid$/, '').replace(/\@/, ' @'));
         }
     }
 

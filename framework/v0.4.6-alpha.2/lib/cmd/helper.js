@@ -1112,17 +1112,24 @@ function CmdHelper(cmd, client, debug) {
                     ||
                     /bundle\:(restart|start|stop)$/.test(cmd.task)
                 ) {
-                    console.info('[helper] Running: gina link-node-modules @'+cmd.projectName +cmd.paramsStringified);
-                    err = execSync('$(which gina) link-node-modules @'+cmd.projectName +cmd.paramsStringified);// +' --inspect-gina'
-                    if (err instanceof Error) {
-                        console.error(err.message || err.stack);
-                        return exit(err.message || err.stack);
+                    // was: err = execSync('$(which gina) link-node-modules @'+cmd.projectName +cmd.paramsStringified);
+                    // A PATH-resolved binary is not guaranteed to exist (repo checkout,
+                    // non-global install) and execSync THROWS on failure rather than
+                    // returning an Error (the old `instanceof Error` check was dead
+                    // code) — invoke the running install's own CLI instead.
+                    var selfCli = require('path').resolve(__dirname, '../../../..', 'bin/cli');
+                    console.info('[helper] Running: '+ process.execPath +' '+ selfCli +' link-node-modules @'+cmd.projectName +cmd.paramsStringified);
+                    try {
+                        execSync('"'+ process.execPath +'" "'+ selfCli +'" link-node-modules @'+cmd.projectName +cmd.paramsStringified);// +' --inspect-gina'
+                    } catch (linkErr) {
+                        var linkErrOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
+                        console.error(linkErrOutput);
+                        return exit(linkErrOutput);
                     }
 
-                    console.info('[helper] Running: $(which gina) link @'+cmd.projectName +cmd.paramsStringified);
-                    // let ginaBin = execSync('echo $(which gina)').toString().trim();
+                    console.info('[helper] Running: '+ process.execPath +' '+ selfCli +' link @'+cmd.projectName +cmd.paramsStringified);
                     try {
-                        console.debug(execSync('$(which gina) link @'+cmd.projectName +cmd.paramsStringified).toString().trim());// +' --inspect-gina'
+                        console.debug(execSync('"'+ process.execPath +'" "'+ selfCli +'" link @'+cmd.projectName +cmd.paramsStringified).toString().trim());// +' --inspect-gina'
                     } catch (err) {
                         var errOutput = (err.stderr) ? err.stderr.toString().trim() : (err.message || err.stack);
                         console.emerg(errOutput);
