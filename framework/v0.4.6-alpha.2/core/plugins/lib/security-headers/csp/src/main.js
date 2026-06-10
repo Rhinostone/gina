@@ -80,14 +80,21 @@
  *
  * In report-only mode the plugin also OMITS directives that browsers ignore
  * there (`REPORT_ONLY_IGNORED_DIRECTIVES` — currently just `sandbox`, which
- * applies a restriction but produces no violation report and triggers a
- * browser console warning). The omission is functionally identical (the
- * directive does nothing in report-only) and silences that console warning;
- * a one-time factory-time `console.warn` names what was dropped. The omitted
- * directives remain in the configured set, so an enforcing factory built from
- * the same config still emits them. `frame-ancestors` is NOT omitted — it
- * reports violations in report-only mode. A report-only policy whose every
- * directive is inert (e.g. only `sandbox`) throws at factory call time.
+ * every engine ignores in report-only: it applies a restriction but produces
+ * no violation report and triggers a browser console warning). The omission
+ * is functionally identical (the directive does nothing in report-only) and
+ * silences that console warning; a one-time factory-time `console.warn`
+ * names what was dropped. The omitted directives remain in the configured
+ * set, so an enforcing factory built from the same config still emits them.
+ * `frame-ancestors` is NOT omitted — its report-only behaviour is
+ * engine-divergent: the CSP3 spec, Gecko and Blink evaluate it and send
+ * violation reports (without enforcing), while WebKit alone ignores it with
+ * a console warning and no report (it retains CSP2's rule that the directive
+ * MUST be ignored when monitoring, which CSP3 dropped). Keeping it preserves
+ * the observation-phase signal on Chrome + Firefox; WebKit-heavy consumers
+ * can leave it out of their own report-only directive set. A report-only
+ * policy whose every directive is inert (e.g. only `sandbox`) throws at
+ * factory call time.
  *
  * Opens Phase 2 of the gina security-headers track (Phase 1 = HDR1-4 +
  * HDR7 shipped in 0.3.15-alpha). Single-header plugin shape — composes
@@ -184,18 +191,33 @@ var HYBRID_DIRECTIVES = [
  * the plugin omits it from a report-only header (see the `reportOnly` notes in
  * the module docstring above).
  *
- * Deliberately conservative — `sandbox` is the ONLY directive MDN's CSP
- * errors/warnings catalog lists as report-only-ignored. Intentionally NOT
- * included:
- *  - `frame-ancestors` — it REPORTS violations in report-only mode; it is only
- *    restricted in `<meta>` delivery (a separate constraint, and a report-only
- *    policy cannot be delivered via `<meta>` at all). Omitting it would discard
- *    real monitoring signal during the observation phase.
- *  - `upgrade-insecure-requests` / `block-all-mixed-content` — not in the
- *    warnings catalog and not confirmed inert across browsers; excluded under
- *    uncertainty (omitting a directive that may still act/report would lose
- *    behaviour or signal). Expanding this list requires an empirical
- *    per-browser console check first.
+ * Deliberately conservative — `sandbox` is the only directive confirmed
+ * ignored in report-only across ALL engines: CSP2 spec text ("The sandbox
+ * directive will be ignored when monitoring a policy"), MDN's Report-Only
+ * page ("supports all Content-Security-Policy directives except sandbox,
+ * which is ignored"), Chromium's SupportedInReportOnly() (false for
+ * Sandbox), and WebKit's console warning. Intentionally NOT included:
+ *  - `frame-ancestors` — report-only behaviour is ENGINE-DIVERGENT. The CSP3
+ *    spec, Gecko and Blink evaluate it and send violation reports without
+ *    enforcing (Chromium's SupportedInReportOnly() is true for
+ *    FrameAncestors; the WPT report-only frame-ancestors test asserts the
+ *    report). WebKit alone ignores it, logs "The Content Security Policy
+ *    directive 'frame-ancestors' is ignored when delivered in a report-only
+ *    policy." and sends no report — it retains CSP2's "MUST be ignored when
+ *    monitoring a policy", which CSP3 dropped (CSP3 restricts only `<meta>`
+ *    delivery, which a report-only policy cannot use anyway). Omitting it
+ *    would discard the observation-phase signal on Chrome + Firefox;
+ *    consumers serving WebKit-heavy audiences that want a clean Safari
+ *    console can omit it from their own report-only directive set
+ *    (clickjacking stays enforced by X-Frame-Options and/or an enforcing
+ *    frame-ancestors regardless).
+ *  - `upgrade-insecure-requests` / `block-all-mixed-content` — not confirmed
+ *    inert across engines: Chromium ignores-and-warns
+ *    `upgrade-insecure-requests` in report-only but supports
+ *    `block-all-mixed-content` there, and Gecko/WebKit behaviour is
+ *    unverified; excluded under uncertainty (omitting a directive that may
+ *    still act/report would lose behaviour or signal). Expanding this list
+ *    requires an empirical per-engine check first.
  *
  * @constant
  * @type {string[]}

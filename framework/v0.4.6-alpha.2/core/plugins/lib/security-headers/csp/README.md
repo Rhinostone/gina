@@ -158,8 +158,9 @@ require('gina').plugins.Csp({
 
 The `sandbox` directive has **no effect** in a `Content-Security-Policy-Report-Only`
 header — it applies a document-level restriction rather than a load decision, so
-the browser ignores it there and logs *"Ignoring sandbox directive when delivered
-in a report-only policy"*. When `reportOnly: true`, the plugin therefore **omits**
+every engine ignores it there (the CSP Level 2 spec says it outright: *"The
+sandbox directive will be ignored when monitoring a policy"*) and logs
+*"Ignoring sandbox directive when delivered in a report-only policy"*. When `reportOnly: true`, the plugin therefore **omits**
 `sandbox` from the emitted header and logs one line at startup naming what was
 dropped. The omission is functionally identical (the directive does nothing in
 report-only) and keeps the browser console clean. `sandbox` remains in your
@@ -167,14 +168,25 @@ configured `directives`, so an enforcing factory (`reportOnly: false`) built fro
 the same config still emits it — you can keep **one directive set across both
 modes** without remove-then-re-add churn.
 
-`frame-ancestors` is **not** omitted: unlike `sandbox`, it *does* report
-violations in report-only mode (it is only restricted in `<meta>` delivery, which
-a report-only policy never uses), so it is meaningful during the observation
-phase. A report-only policy whose every directive is report-only-inert (e.g. only
-`sandbox`) **throws at factory call time**, since it would report nothing.
+`frame-ancestors` is **not** omitted — its report-only behaviour is
+**engine-divergent**: the CSP3 spec, Firefox (Gecko) and Chrome (Blink) evaluate
+it and send violation reports without enforcing, while Safari (WebKit) ignores
+it, logs *"The Content Security Policy directive 'frame-ancestors' is ignored
+when delivered in a report-only policy"* and sends no report (WebKit retains the
+CSP Level 2 rule — *"The frame-ancestors directive MUST be ignored when
+monitoring a policy"* — which CSP Level 3 dropped; CSP3 only restricts `<meta>`
+delivery, which a report-only policy never uses). The plugin keeps it so the
+observation phase still reports on Chrome and Firefox. If you serve a
+WebKit-heavy audience and want a clean Safari console, leave `frame-ancestors`
+out of your report-only directive set — clickjacking protection stays enforced
+by `X-Frame-Options` and/or an enforcing-mode `frame-ancestors`. (Chrome caveat:
+frame-ancestors violation reports are delivered via `report-uri`; known Chromium
+bugs leave them undelivered via `report-to`.) A report-only policy whose every
+directive is report-only-inert (e.g. only `sandbox`) **throws at factory call
+time**, since it would report nothing.
 
 The omitted set is intentionally conservative — `sandbox` is the only directive
-browsers are documented to ignore-and-warn in report-only mode.
+confirmed ignored in report-only across all engines.
 
 ## Per-response CSP nonce (`useNonce`)
 

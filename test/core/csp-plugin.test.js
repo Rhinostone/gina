@@ -1086,7 +1086,7 @@ describe('14 - reportOnly: omit report-only-inert directives', function () {
         assert.deepEqual(Csp._REPORT_ONLY_IGNORED_DIRECTIVES, ['sandbox']);
     });
 
-    it('frame-ancestors is NOT in REPORT_ONLY_IGNORED_DIRECTIVES (it reports in report-only)', function () {
+    it('frame-ancestors is NOT in REPORT_ONLY_IGNORED_DIRECTIVES (spec/Gecko/Blink report it in report-only; kept deliberately)', function () {
         assert.equal(Csp._REPORT_ONLY_IGNORED_DIRECTIVES.indexOf('frame-ancestors'), -1);
     });
 
