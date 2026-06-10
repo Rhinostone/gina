@@ -201,7 +201,7 @@ function Routing() {
                 method              : method,
                 requirements        : routeObject.requirements,
                 namespace           : routeObject.namespace || undefined,
-                url                 : decodeURI(req.url), /// avoid %20
+                url                 : safeDecodeURI(req.url), /// avoid %20 — #B30 malformed-%-safe
                 rule                : routeObject.originalRule || cachedRoute.name,
 
                 param               : routeObject.param,
@@ -1474,7 +1474,7 @@ function Routing() {
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
         if ( typeof(request.routing.path) == 'undefined' )
-            request.routing.path = decodeURI(pathname);
+            request.routing.path = safeDecodeURI(pathname); // #B30 malformed-%-safe
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
 
         if (isMethodProvidedByDefault) {
@@ -1482,7 +1482,7 @@ function Routing() {
             request.originalMethod = request.method;
 
             request.method = method;
-            request.routing.path = decodeURI(pathname)
+            request.routing.path = safeDecodeURI(pathname) // #B30 malformed-%-safe
         }
         // last method check
         if ( !request.method)
@@ -1517,7 +1517,7 @@ function Routing() {
                     method              : localMethod,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
-                    url                 : decodeURI(pathname), /// avoid %20
+                    url                 : safeDecodeURI(pathname), /// avoid %20 — #B30 malformed-%-safe
                     rule                : routing[name].originalRule || name,
                     param               : routing[name].param,
                     //middleware: routing[name].middleware,

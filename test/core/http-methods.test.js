@@ -1135,3 +1135,160 @@ describe('16 - server.js: request.rawBody snapshot before processRequestData', f
             'without rawBody, a signature over the parsed-then-restringified object would fail verification');
     });
 });
+
+
+// ─── 17 — GET/HEAD query decode: malformed-% crash-safety (#B30) ──────────────
+//
+// processRequestData's GET and HEAD branches build the template context from
+// request.query (and its `inheritedData` member). That value is ALREADY
+// percent-decoded once by the engine query parser, and formatDataFromString
+// performs its OWN guarded internal decode — so the prior explicit
+// decodeURIComponent was a redundant SECOND decode that threw URIError (→
+// uncaught → bundle crash) whenever a literal '%' survived the first decode
+// (e.g. inheritedData carrying {"x":"50%off"}). #B30 drops the redundant decode
+// at all four GET/HEAD sites; the genuine first-decode sites (isaac query parse,
+// static-asset path) are guarded by safeDecodeURIComponent instead. Behavioural
+// coverage of the helper + formatDataFromString crash-safety lives in
+// test/lib/format-data-from-string.test.js; the isaac parser in
+// test/core/server.isaac.test.js § 10.
+
+describe('17 - GET/HEAD query decode: malformed-% crash-safety (#B30)', function() {
+
+    var src, helperSrc, getCaseLive, headCaseLive;
+
+    // Strip full-line // comments so the negative pins don't trip on the
+    // `// was:` commented-out old code (jsdoc.md § "A negative source-inspection
+    // pin trips on the file's own ... comment").
+    function stripComments(block) {
+        return block.split('\n').filter(function(l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+
+    before(function() {
+        src       = fs.readFileSync(SERVER_SRC, 'utf8');
+        helperSrc = fs.readFileSync(path.join(FW, 'helpers/data/src/main.js'), 'utf8');
+        var getCase  = src.slice(src.indexOf("case 'get':"), src.indexOf("case 'put':"));
+        var headIdx  = src.indexOf("case 'head':");
+        var headCase = src.slice(headIdx, src.indexOf('loadBundleConfiguration', headIdx));
+        getCaseLive  = stripComments(getCase);
+        headCaseLive = stripComments(headCase);
+    });
+
+    // ── the shared helper ──
+
+    it('helpers/data defines a safeDecodeURIComponent global with try/decode/fallback-to-raw', function() {
+        assert.match(helperSrc, /safeDecodeURIComponent\s*=\s*function\s*\(\s*str\s*\)\s*\{/);
+        var fn = helperSrc.slice(helperSrc.indexOf('safeDecodeURIComponent = function'));
+        fn = fn.slice(0, fn.indexOf('};') + 2);
+        assert.match(fn, /try\s*\{[\s\S]*?return decodeURIComponent\(str\)/);
+        assert.match(fn, /catch[\s\S]*?return str/);
+    });
+
+    // ── GET: redundant explicit decode dropped ──
+
+    it('GET inheritedData: formatDataFromString(request.query.inheritedData) WITHOUT an explicit decode', function() {
+        assert.match(getCaseLive, /inheritedDataObj\s*=\s*formatDataFromString\(request\.query\.inheritedData\)/);
+        assert.doesNotMatch(getCaseLive, /formatDataFromString\(decodeURIComponent\(request\.query\.inheritedData\)\)/);
+    });
+
+    it('GET query bodyStr: formatDataFromString(bodyStr) WITHOUT an explicit decode', function() {
+        assert.match(getCaseLive, /obj\s*=\s*formatDataFromString\(bodyStr\)/);
+        assert.doesNotMatch(getCaseLive, /formatDataFromString\(decodeURIComponent\(bodyStr\)\)/);
+    });
+
+    // ── HEAD: redundant explicit decode dropped (mirrors GET) ──
+
+    it('HEAD inheritedData: formatDataFromString(request.query.inheritedData) WITHOUT an explicit decode', function() {
+        assert.match(headCaseLive, /headInheritedDataObj\s*=\s*formatDataFromString\(request\.query\.inheritedData\)/);
+        assert.doesNotMatch(headCaseLive, /formatDataFromString\(decodeURIComponent\(request\.query\.inheritedData\)\)/);
+    });
+
+    it('HEAD query bodyStr: formatDataFromString(bodyStr) WITHOUT an explicit decode', function() {
+        assert.match(headCaseLive, /obj\s*=\s*formatDataFromString\(bodyStr\)/);
+        assert.doesNotMatch(headCaseLive, /formatDataFromString\(decodeURIComponent\(bodyStr\)\)/);
+    });
+
+    // ── genuine first-decode sites guarded with safeDecodeURIComponent ──
+
+    it('static-asset path (handleStatics) uses safeDecodeURIComponent(filename)', function() {
+        assert.match(src, /filename\s*=\s*safeDecodeURIComponent\(\s*filename\s*\)/);
+    });
+
+    it('getAssetFilenameFromUrl (HTTP/2 static path) uses safeDecodeURIComponent(url)', function() {
+        assert.match(src, /url\s*=\s*safeDecodeURIComponent\(\s*url\s*\)/);
+    });
+
+    // ── negative invariant: no LIVE redundant double-decode anywhere in server.js ──
+
+    it('no live formatDataFromString(decodeURIComponent(...)) remains in server.js', function() {
+        var live = stripComments(src);
+        assert.doesNotMatch(live, /formatDataFromString\(decodeURIComponent/);
+    });
+});
+
+
+// ─── 18 — decodeURI (whole-URI) crash-safety (#B30 review follow-up) ──────────
+//
+// Separate from decodeURIComponent: decodeURI (used across the routing + error
+// paths with a `/// avoid %20` comment, to decode the URL/pathname without
+// touching path separators) throws the SAME URIError on a malformed escape. An
+// unguarded decodeURI of the request URL/pathname crashes the bundle the same
+// way — and the site inside throwError (server.js error responder) even turns a
+// would-be-graceful 404 on a malformed-% URL into a crash. #B30 routes every
+// server-side decodeURI of attacker-controllable input through safeDecodeURI.
+// Sites: server.js x3 (trie lookup, route params, throwError); lib/routing x4
+// (cached params, routing.path x2, linear-scan params); controller.js x1 (error
+// path). Behavioural coverage of safeDecodeURI lives in
+// test/lib/format-data-from-string.test.js.
+
+describe('18 - decodeURI (whole-URI) crash-safety (#B30 review follow-up)', function() {
+
+    var serverSrc, routingSrc, controllerSrc, helperSrc;
+    var ROUTING_SRC = path.join(FW, 'lib/routing/src/main.js');
+
+    function stripComments(s) {
+        return s.split('\n').filter(function(l) { return !/^\s*\/\//.test(l); }).join('\n');
+    }
+    // bare decodeURI( NOT prefixed by a letter (so safeDecodeURI( is excluded;
+    // decodeURIComponent( never matches — the char after decodeURI is 'C', not '(')
+    var BARE_DECODE_URI = /(?<![A-Za-z])decodeURI\(/;
+
+    before(function() {
+        serverSrc     = fs.readFileSync(SERVER_SRC, 'utf8');
+        routingSrc    = fs.readFileSync(ROUTING_SRC, 'utf8');
+        controllerSrc = fs.readFileSync(CONTROLLER_SRC, 'utf8');
+        helperSrc     = fs.readFileSync(path.join(FW, 'helpers/data/src/main.js'), 'utf8');
+    });
+
+    it('helpers/data defines safeDecodeURI with try/decodeURI/fallback-to-raw', function() {
+        assert.match(helperSrc, /safeDecodeURI\s*=\s*function\s*\(\s*str\s*\)\s*\{/);
+        var fn = helperSrc.slice(helperSrc.indexOf('safeDecodeURI = function'));
+        fn = fn.slice(0, fn.indexOf('};') + 2);
+        assert.match(fn, /try\s*\{[\s\S]*?return decodeURI\(str\)/);
+        assert.match(fn, /catch[\s\S]*?return str/);
+    });
+
+    it('server.js: all 3 decodeURI sites use safeDecodeURI; no bare decodeURI remains', function() {
+        var live = stripComments(serverSrc);
+        var hits = (live.match(/safeDecodeURI\(/g) || []).length;
+        assert.ok(hits >= 3, 'expected >=3 safeDecodeURI( calls in server.js, got ' + hits);
+        assert.doesNotMatch(live, BARE_DECODE_URI, 'a bare (unguarded) decodeURI( would crash the bundle on a malformed %');
+    });
+
+    it('lib/routing: all 4 decodeURI sites use safeDecodeURI; no bare decodeURI remains', function() {
+        var live = stripComments(routingSrc);
+        var hits = (live.match(/safeDecodeURI\(/g) || []).length;
+        assert.ok(hits >= 4, 'expected >=4 safeDecodeURI( calls in lib/routing, got ' + hits);
+        assert.doesNotMatch(live, BARE_DECODE_URI);
+    });
+
+    it('controller.js: the error-path decodeURI uses safeDecodeURI(local.req.url); no bare decodeURI remains', function() {
+        var live = stripComments(controllerSrc);
+        assert.match(live, /safeDecodeURI\(local\.req\.url\)/);
+        assert.doesNotMatch(live, BARE_DECODE_URI);
+    });
+
+    it('the throwError site (server.js) specifically routes through safeDecodeURI(local.request.url)', function() {
+        var live = stripComments(serverSrc);
+        assert.match(live, /var url\s*=\s*safeDecodeURI\(local\.request\.url\)/);
+    });
+});

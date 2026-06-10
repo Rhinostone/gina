@@ -1171,7 +1171,11 @@ function Server(options) {
     var getAssetFilenameFromUrl = function(bundleConf, url) {
 
         var staticsArr  = bundleConf.publicResources;
-        url = decodeURIComponent( url );
+        // #B30: reachable with an attacker-controlled URL (the HTTP/2 static path
+        // passes request-derived `pathname` here — server.js ~2500), so a malformed
+        // % escape would otherwise throw URIError, uncaught, and crash the bundle.
+        // was: url = decodeURIComponent( url );
+        url = safeDecodeURIComponent( url );
         var staticProps = {
             firstLevel  : '/'+ url.split(/\//g)[1] + '/',
             isFile      :  /^\/[A-Za-z0-9_-]+\.(.*)$/.test(url)
@@ -2276,7 +2280,11 @@ function Server(options) {
         }
 
 
-        filename = decodeURIComponent(filename);
+        // #B30: a static-asset request URL with a malformed % escape (e.g.
+        // GET /assets/%E0%.css) would otherwise throw URIError here, uncaught,
+        // and crash the bundle. Fall back to the raw filename on a bad escape.
+        // was: filename = decodeURIComponent(filename);
+        filename = safeDecodeURIComponent(filename);
         let filenameObj = new _(filename, true);
         filenameObj.exists(function onStaticExists(exists) {
         // fs.exists(filename, function onStaticExists(exists) {
@@ -3799,7 +3807,17 @@ function Server(options) {
 
 
                         if ( typeof(request.query.inheritedData) == 'string' ) {
-                            inheritedDataObj = formatDataFromString(decodeURIComponent(request.query.inheritedData));
+                            // #B30: request.query.inheritedData is ALREADY percent-decoded once by
+                            // the engine query parser (server.isaac.js / express qs), and
+                            // formatDataFromString performs its OWN guarded internal decode. The
+                            // explicit decodeURIComponent here was a redundant SECOND decode whose
+                            // only effects were (a) a URIError crash on a literal '%' surviving the
+                            // first decode — e.g. inheritedData carrying {"x":"50%off"} → "%of" is a
+                            // malformed escape → the bundle dies (URIError → proc.js uncaughtException → SIGTERM) — and
+                            // (b) extra silent double-decode corruption. Dropped: formatDataFromString
+                            // supplies the single guarded decode.
+                            // was: inheritedDataObj = formatDataFromString(decodeURIComponent(request.query.inheritedData));
+                            inheritedDataObj = formatDataFromString(request.query.inheritedData);
                         } else {
                             inheritedDataObj = JSON.clone(request.query.inheritedData);
                         }
@@ -3816,7 +3834,11 @@ function Server(options) {
                         bodyStr = bodyStr.replace(/\"null\"/ig, null);
 
 
-                    obj = formatDataFromString(decodeURIComponent(bodyStr));
+                    // #B30: redundant second decode dropped (see the GET inheritedData note
+                    // above) — request.query values are already engine-decoded and
+                    // formatDataFromString self-guards its own decode.
+                    // was: obj = formatDataFromString(decodeURIComponent(bodyStr));
+                    obj = formatDataFromString(bodyStr);
 
                     request.query = merge(obj, inheritedDataObj);
                     // delete obj;
@@ -4060,7 +4082,9 @@ function Server(options) {
                     var headInheritedDataObj = {};
                     if ( typeof(request.query.inheritedData) != 'undefined' ) {
                         if ( typeof(request.query.inheritedData) == 'string' ) {
-                            headInheritedDataObj = formatDataFromString(decodeURIComponent(request.query.inheritedData));
+                            // #B30: redundant second decode dropped (see the GET inheritedData note).
+                            // was: headInheritedDataObj = formatDataFromString(decodeURIComponent(request.query.inheritedData));
+                            headInheritedDataObj = formatDataFromString(request.query.inheritedData);
                         } else {
                             headInheritedDataObj = JSON.clone(request.query.inheritedData);
                         }
@@ -4071,7 +4095,9 @@ function Server(options) {
                         bodyStr = bodyStr.replace(/\"false\"/ig, false).replace(/\"true\"/ig, true).replace(/\"on\"/ig, true);
                     if ( /(\"null\")/i.test(bodyStr) )
                         bodyStr = bodyStr.replace(/\"null\"/ig, null);
-                    obj = formatDataFromString(decodeURIComponent(bodyStr));
+                    // #B30: redundant second decode dropped (see the GET inheritedData note).
+                    // was: obj = formatDataFromString(decodeURIComponent(bodyStr));
+                    obj = formatDataFromString(bodyStr);
                     request.query = merge(obj, headInheritedDataObj);
                     obj = null;
                     headInheritedDataObj = null;
@@ -4517,7 +4543,7 @@ function Server(options) {
         // lookupTrie returns null when no trie is available → linear scan runs normally.
         var _trieCandidateSet = null;
         if (!hasCachedRoute) {
-            var _trieHits = routingLib.lookupTrie(decodeURI(pathname), bundle);
+            var _trieHits = routingLib.lookupTrie(safeDecodeURI(pathname), bundle); // #B30: malformed-%-safe — a bad escape here would otherwise reject the async dispatch promise → hung request
             if (_trieHits !== null && _trieHits.length > 0) {
                 _trieCandidateSet = new Set(_trieHits);
             }
@@ -4607,7 +4633,7 @@ function Server(options) {
                     control             : routing[name].param.control,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
-                    url                 : decodeURI(pathname), /// avoid %20
+                    url                 : safeDecodeURI(pathname), /// avoid %20 — #B30 malformed-%-safe
                     rule                : routing[name].originalRule || name,
                     cache               : routing[name].cache || null,
                     queryTimeout        : parseTimeout(routing[name].queryTimeout) || null,
@@ -4907,7 +4933,13 @@ function Server(options) {
                 // console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] \n'+ msg);
                 // intercept none HTML mime types
-                var url                     = decodeURI(local.request.url) /// avoid %20
+                // #B30: throwError is the central error responder, reached synchronously from many
+                // request callbacks; an unguarded decodeURI of a malformed-% URL here throws URIError →
+                // proc.js uncaughtException handler (proc.js:319) → emerg + SIGTERM → the bundle dies
+                // (it even turns a would-be graceful 404 on a malformed-% URL into a crash).
+                // safeDecodeURI falls back to the raw URL.
+                // was: var url = decodeURI(local.request.url) /// avoid %20
+                var url                     = safeDecodeURI(local.request.url) /// avoid %20
                     , ext                   = null
                     , isHtmlContent         = false
                     , hasCustomErrorFile    = false

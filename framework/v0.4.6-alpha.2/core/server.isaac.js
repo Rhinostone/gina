@@ -1615,7 +1615,7 @@ function ServerEngineClass(options) {
                                 else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
                                     // #B17: '+' → space per WHATWG URL form-urlencoded parser; must run before decodeURIComponent (which does NOT decode '+').
                                     if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
-                                    if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]);
+                                    if (a[1].indexOf('%') > -1) a[1] = safeDecodeURIComponent(a[1]); // #B30: malformed-%-safe (raw fallback) — an unguarded decodeURIComponent here crashes the bundle
                                 }
 
                                 if (a[1] && typeof a[1] === 'string' && (a[1].charAt(0) === '{' || a[1].charAt(0) === '[') ) {
@@ -1639,7 +1639,7 @@ function ServerEngineClass(options) {
                             else if (a[1] && (a[1].indexOf('+') > -1 || a[1].indexOf('%') > -1)) {
                                 // #B17: '+' → space per WHATWG URL form-urlencoded parser; must run before decodeURIComponent (which does NOT decode '+').
                                 if (a[1].indexOf('+') > -1) a[1] = a[1].replace(/\+/g, ' ');
-                                if (a[1].indexOf('%') > -1) a[1] = decodeURIComponent(a[1]);
+                                if (a[1].indexOf('%') > -1) a[1] = safeDecodeURIComponent(a[1]); // #B30: malformed-%-safe (raw fallback) — an unguarded decodeURIComponent here crashes the bundle
                             }
 
                             request.query[ a[0] ] = a[1]

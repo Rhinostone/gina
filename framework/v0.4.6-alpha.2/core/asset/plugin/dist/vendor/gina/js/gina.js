@@ -5164,7 +5164,7 @@ function Routing() {
                 method              : method,
                 requirements        : routeObject.requirements,
                 namespace           : routeObject.namespace || undefined,
-                url                 : decodeURI(req.url), /// avoid %20
+                url                 : safeDecodeURI(req.url), /// avoid %20 — #B30 malformed-%-safe
                 rule                : routeObject.originalRule || cachedRoute.name,
 
                 param               : routeObject.param,
@@ -6437,7 +6437,7 @@ function Routing() {
 
         pathname    = url.replace( new RegExp('^('+ hostname +'|'+hostname.replace(/\:\d+/, '') +')' ), '');
         if ( typeof(request.routing.path) == 'undefined' )
-            request.routing.path = decodeURI(pathname);
+            request.routing.path = safeDecodeURI(pathname); // #B30 malformed-%-safe
         method      = ( typeof(method) != 'undefined' ) ? method.toLowerCase() : 'get';
 
         if (isMethodProvidedByDefault) {
@@ -6445,7 +6445,7 @@ function Routing() {
             request.originalMethod = request.method;
 
             request.method = method;
-            request.routing.path = decodeURI(pathname)
+            request.routing.path = safeDecodeURI(pathname) // #B30 malformed-%-safe
         }
         // last method check
         if ( !request.method)
@@ -6480,7 +6480,7 @@ function Routing() {
                     method              : localMethod,
                     requirements        : routing[name].requirements,
                     namespace           : routing[name].namespace || undefined,
-                    url                 : decodeURI(pathname), /// avoid %20
+                    url                 : safeDecodeURI(pathname), /// avoid %20 — #B30 malformed-%-safe
                     rule                : routing[name].originalRule || name,
                     param               : routing[name].param,
                     //middleware: routing[name].middleware,
@@ -9327,6 +9327,56 @@ function DataHelper(){
     };
 
     /**
+     * Percent-decodes a string, returning the input UNCHANGED when it is not a
+     * valid URI component. `decodeURIComponent` throws `URIError` on a malformed
+     * escape (a bare `%`, `%zz`, or a truncated `%E0%A`). On the server request
+     * path an attacker-controlled malformed `%` in a URL / query string would
+     * otherwise reach an unguarded `decodeURIComponent`, throw, and — since the
+     * framework runs no `uncaughtException` handler — take the whole bundle down
+     * (#B30). Use this at every server-side decode of attacker-controllable
+     * input where the decode is the genuine (first) decode and cannot simply be
+     * dropped; it mirrors the try/decode/fallback-to-raw idiom already used in
+     * the POST/PUT/PATCH body branches of `processRequestData`.
+     *
+     * @param {string} str - the value to decode
+     * @returns {string} the decoded value, or the original string on URIError
+     * @example
+     *   safeDecodeURIComponent('a%20b'); // 'a b'
+     *   safeDecodeURIComponent('100%');  // '100%'  (decodeURIComponent would throw URIError)
+     */
+    safeDecodeURIComponent = function(str) {
+        try {
+            return decodeURIComponent(str);
+        } catch (err) {
+            return str;
+        }
+    };
+
+    /**
+     * Like {@link safeDecodeURIComponent} but for whole-URI decoding: wraps
+     * `decodeURI` (which leaves URI-reserved characters such as `/ ? #` intact —
+     * used across the routing and error-handler paths to turn `%20` back into a
+     * space without touching path separators). `decodeURI` throws the SAME
+     * `URIError` as `decodeURIComponent` on a malformed escape, so an unguarded
+     * call on the request URL / pathname crashes the bundle the same way (#B30) —
+     * including from inside `throwError`, which would turn a graceful error into a
+     * crash. Returns the input unchanged on a malformed escape.
+     *
+     * @param {string} str - the value to decode
+     * @returns {string} the decoded value, or the original string on URIError
+     * @example
+     *   safeDecodeURI('/a%20b');  // '/a b'
+     *   safeDecodeURI('/a%E0%A'); // '/a%E0%A'  (decodeURI would throw URIError)
+     */
+    safeDecodeURI = function(str) {
+        try {
+            return decodeURI(str);
+        } catch (err) {
+            return str;
+        }
+    };
+
+    /**
      * Convert JSON string with structured keys to object
      *
      * @param {string} JSON string with structured keys
@@ -9430,7 +9480,11 @@ function DataHelper(){
             for (var i = 0, len = arr.length; i < len; ++i) {
                 if (!arr[i]) continue;
 
-                arr[i] = decodeURIComponent(arr[i]);
+                // #B30: tolerate a malformed `%` escape (fall back to the raw
+                // segment) instead of letting decodeURIComponent throw URIError —
+                // an unguarded throw here propagates to processRequestData with no
+                // uncaughtException handler and crashes the bundle.
+                arr[i] = safeDecodeURIComponent(arr[i]);
 
                 if ( /^\{/.test(arr[i]) || /\=\{/.test(arr[i]) || /\=\[/.test(arr[i]) ) {
                     try {
@@ -9459,8 +9513,9 @@ function DataHelper(){
 
                     if ( typeof(el[1]) == 'string' && !/\[object /.test(el[1])) {
                         key     = null;
-                        el[0]   = decodeURIComponent(el[0]);
-                        el[1]   = decodeURIComponent(el[1]);
+                        // #B30: malformed-%-safe decode (see the arr[] loop above).
+                        el[0]   = safeDecodeURIComponent(el[0]);
+                        el[1]   = safeDecodeURIComponent(el[1]);
 
                         if ( /^(.*)\[(.*)\]/.test(el[0]) ) { // some[field] ?
                             key = el[0].replace(/\]/g, '').split(/\[/g);

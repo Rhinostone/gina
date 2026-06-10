@@ -2002,6 +2002,30 @@ gna.run = run;
 gna.encodeRFC5987ValueChars = encodeRFC5987ValueChars;
 
 /**
+ * Percent-decode a string, returning it unchanged on a malformed `%` escape
+ * (`decodeURIComponent` would throw `URIError`). Crash-safe decode for the
+ * server request path — see {@link safeDecodeURIComponent} in helpers/data (#B30).
+ *
+ * @param {string} str - Value to decode
+ * @returns {string} Decoded value, or the original string on URIError
+ * @example
+ *   safeDecodeURIComponent('100%'); // "100%" (decodeURIComponent would throw)
+ */
+gna.safeDecodeURIComponent = safeDecodeURIComponent;
+
+/**
+ * Whole-URI variant of {@link safeDecodeURIComponent} — wraps `decodeURI`
+ * (leaves `/ ? #` intact) and returns the input unchanged on a malformed `%`
+ * escape, so the routing / error paths cannot crash on a bad URL (#B30).
+ *
+ * @param {string} str - Value to decode
+ * @returns {string} Decoded value, or the original string on URIError
+ * @example
+ *   safeDecodeURI('/a%E0%A'); // "/a%E0%A" (decodeURI would throw)
+ */
+gna.safeDecodeURI = safeDecodeURI;
+
+/**
  * Parse a form/body string (`application/x-www-form-urlencoded` or JSON) into
  * a nested object. Recognises PHP-style `foo[bar][0]` keys.
  *

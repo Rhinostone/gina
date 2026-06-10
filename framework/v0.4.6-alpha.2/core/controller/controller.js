@@ -5476,7 +5476,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
 
                  // intercept none HTML mime types
-                 var url                     = decodeURI(local.req.url) /// avoid %20
+                 // #B30: controller-side error-path mirror of server.js:4936 — safeDecodeURI so a
+                 // malformed-% URL cannot crash the bundle from inside the error handler.
+                 // was: var url = decodeURI(local.req.url) /// avoid %20
+                 var url                     = safeDecodeURI(local.req.url) /// avoid %20
                     , ext                   = null
                     , isHtmlContent         = false
                     , hasCustomErrorFile    = false
