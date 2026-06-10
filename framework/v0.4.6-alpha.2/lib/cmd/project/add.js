@@ -887,12 +887,22 @@ function Add(opt, cmd) {
     }
 
     /**
-     * Runs `gina link @<project>` via Shell to create the node_modules/gina symlink
-     * inside the project directory.
+     * Creates the project's `node_modules/gina` symlink by invoking the running
+     * install's own CLI: `<node> <gina root>/bin/cli link @<project>`.
+     *
+     * The CLI path is resolved from this file's location — NOT from a PATH-resolved
+     * `gina` binary: the PATH may carry no gina at all (a repo checkout where
+     * `npm install --ignore-scripts` skipped the bin linking) or a different install
+     * than the one executing `project:add`. Same rationale as framework/link.js,
+     * which resolves the symlink source from its own location.
+     *
+     * Success is verified on the actual postcondition — the symlink exists — because
+     * the Shell helper reports any stderr output as an error even when the command
+     * succeeded.
      *
      * @inner
      * @private
-     * @param {function} onError - Called with an Error when the link command fails
+     * @param {function} onError - Called with an Error when the gina symlink is still missing after the link attempt
      * @param {function} onSuccess - Called with no arguments on success
      */
     var linkGina = function ( onError, onSuccess ) {
@@ -902,19 +912,25 @@ function Add(opt, cmd) {
         npm.setOptions({ chdir: self.projectLocation });
         npm
             // .run('npm link gina', true)
-            .run('gina link @'+ self.projectName, true)
+            // was: .run('gina link @'+ self.projectName, true)
+            // A PATH-resolved binary is not guaranteed to exist (repo checkout,
+            // non-global install) and its failure was silently swallowed — the
+            // scaffolded bundle then crashed at boot with MODULE_NOT_FOUND on its
+            // framework require. Invoke the running install's own CLI instead.
+            .run([ process.execPath, require('path').resolve(__dirname, '../../../../..', 'bin/cli'), 'link', '@'+ self.projectName ], true)
             .onComplete(function (err, data) {
-                if (err) {
-                    if ( typeof(onSuccess) != 'undefined' ) {
-                        onSuccess(err);
-                    } else {
-                        console.error(err.stack);
-                    }
 
-                } else {
-                    if ( typeof(onSuccess) != 'undefined' )
-                        onSuccess()
+                var ginaModule = _(self.projectLocation + '/node_modules/gina', true);
+                if ( !fs.existsSync(ginaModule) ) {
+                    err = new Error('Could not create the gina symlink in [ '+ self.projectLocation +'/node_modules ]'+ ( err ? '\n'+ ( err.stack || err ) : '' ));
+                    if ( typeof(onError) != 'undefined' ) {
+                        return onError(err);
+                    }
+                    return console.error(err.stack);
                 }
+
+                if ( typeof(onSuccess) != 'undefined' )
+                    onSuccess()
             })
     }
 

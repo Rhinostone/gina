@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'project:add now links gina into the project by invoking the running install''s own CLI instead of a PATH-resolved binary, and reports the failure instead of printing success when the node_modules/gina symlink could not be created — a scaffolded bundle no longer crashes at boot with MODULE_NOT_FOUND when gina is not on the PATH (repo checkouts, non-global installs).'
+time: 2026-06-10T12:05:00.000000000+02:00
