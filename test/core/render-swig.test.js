@@ -1746,3 +1746,99 @@ describe('setTemplate override — render-swig honours _templateOverride with no
     });
 
 });
+
+
+// 18 — $-safe </body> splice: dev-Inspector script injection must not expand
+//      String.replace dollar-patterns (prematch / postmatch / match) and nest the
+//      page document into the statusbar <script>. Root cause of the disappearing
+//      "Inspector" launch link on content-heavy pages: #TPL2 inlined the statusbar
+//      body (which legitimately carries a dollar-backtick + dollar-quote) into a
+//      STRING replacement, so String.prototype.replace expanded the prematch —
+//      splicing the whole document before </body> INTO the statusbar script
+//      (SyntaxError, so the statusbar IIFE never ran and the link never rendered).
+describe('18 - $-safe </body> splice for dev-Inspector script injection', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    // ── source pins: the three dev-Inspector </body> splices use FUNCTION replacers ──
+    it('statusbar splice uses a function replacer, not a string replacement', function() {
+        var s = src();
+        assert.ok(
+            /layout\.replace\(\/<\\\/body>\/i,\s*function\s*\(\)\s*\{\s*return\s+plugin\s*\+/.test(s),
+            'expected the statusbar plugin splice to use a function replacer'
+        );
+        assert.ok(
+            !/layout\.replace\(\/<\\\/body>\/i,\s*plugin\s*\+/.test(s),
+            'the vulnerable string form replace(/<\\/body>/i, plugin + ...) must be gone'
+        );
+    });
+
+    it('cache-hit flow-patch splice uses a function replacer', function() {
+        var s = src();
+        assert.ok(
+            /htmlContent\.replace\(\/<\\\/body>\/i,\s*function\s*\(\)\s*\{\s*return\s+_cachePatchScript\s*\+/.test(s),
+            'expected the cache-hit patch splice to use a function replacer'
+        );
+        assert.ok(
+            !/htmlContent\.replace\(\/<\\\/body>\/i,\s*_cachePatchScript\s*\+/.test(s),
+            'the vulnerable string form must be gone (cache-hit patch)'
+        );
+    });
+
+    it('cache-miss flow-patch splice uses a function replacer', function() {
+        var s = src();
+        assert.ok(
+            /htmlContent\.replace\(\/<\\\/body>\/i,\s*function\s*\(\)\s*\{\s*return\s+_patchScript\s*\+/.test(s),
+            'expected the cache-miss patch splice to use a function replacer'
+        );
+        assert.ok(
+            !/htmlContent\.replace\(\/<\\\/body>\/i,\s*_patchScript\s*\+/.test(s),
+            'the vulnerable string form must be gone (cache-miss patch)'
+        );
+    });
+
+    // ── pure-logic behavioral replica: prove the function replacer is $-safe ──
+    // The trigger bytes are built by concatenation so this test's own source is
+    // unambiguous (and is never itself a String.replace replacement).
+    var DOLLAR_BACKTICK = '$' + '`';
+    var DOLLAR_QUOTE    = '$' + "'";
+
+    function spliceUnsafe(doc, inject) {                              // the OLD, vulnerable form
+        return doc.replace(/<\/body>/i, inject + '</body>');
+    }
+    function spliceSafe(doc, inject) {                               // the fix
+        return doc.replace(/<\/body>/i, function () { return inject + '</body>'; });
+    }
+
+    var DOC    = '<!DOCTYPE html><html><head></head><body class="x"><div>PAGEBODY</div></body></html>';
+    var SCRIPT = '<script>/* ' + DOLLAR_BACKTICK + ' and ' + DOLLAR_QUOTE + ' */var x=1;</script>';
+
+    it('replica: the old string form nests the document (reproduces the bug)', function() {
+        var out = spliceUnsafe(DOC, SCRIPT);
+        assert.ok((out.match(/PAGEBODY/g) || []).length > 1,
+            'a string replacement must duplicate the page body via the prematch pattern (bug repro)');
+        assert.ok((out.match(/<!DOCTYPE html>/g) || []).length > 1,
+            'a string replacement must duplicate the document');
+    });
+
+    it('replica: the function-replacer form inserts the script verbatim (the fix)', function() {
+        var out = spliceSafe(DOC, SCRIPT);
+        assert.strictEqual((out.match(/PAGEBODY/g) || []).length, 1,
+            'no page-body duplication with a function replacer');
+        assert.strictEqual((out.match(/<!DOCTYPE html>/g) || []).length, 1,
+            'exactly one document with a function replacer');
+        assert.ok(out.indexOf(DOLLAR_BACKTICK) > -1 && out.indexOf(DOLLAR_QUOTE) > -1,
+            'the dollar-backtick and dollar-quote survive verbatim in the injected script');
+    });
+
+    // ── the trigger is real: the shipped dev statusbar body carries a $-sequence ──
+    it('the dev statusbar template actually contains a $-special sequence (real trigger)', function() {
+        var STATUSBAR_DIST = path.join(require('../fw'), 'core/asset/plugin/dist/vendor/gina/html/statusbar.html');
+        var body = fs.readFileSync(STATUSBAR_DIST, 'utf8');
+        assert.ok(
+            body.indexOf(DOLLAR_BACKTICK) > -1 || body.indexOf(DOLLAR_QUOTE) > -1,
+            'statusbar body should carry a dollar-backtick or dollar-quote — the real trigger this splice fix neutralizes'
+        );
+    });
+
+});

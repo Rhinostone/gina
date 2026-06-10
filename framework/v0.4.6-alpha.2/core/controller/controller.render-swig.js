@@ -995,7 +995,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _cacheWeightBytes + ';u.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
                             + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _cacheWeightBytes + ';g.environment.metrics.serverMs=' + _cacheServerMsFinal + ';}'
                             + '}(window.__ginaData));</script>';
-                        htmlContent = htmlContent.replace(/<\/body>/i, _cachePatchScript + '</body>');
+                        htmlContent = htmlContent.replace(/<\/body>/i, function () { return _cachePatchScript + '</body>'; });
                     }
                 }
 
@@ -1373,7 +1373,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 localOptions.debugMode
                     && !/\{\# Gina Inspector \#\}/.test(layout)
             ) {
-                layout = layout.replace(/<\/body>/i, plugin + '\n\t</body>');
+                // $-safe splice. With a STRING replacement, String.prototype.replace expands
+                // dollar patterns: $` is the text BEFORE the match, $' the text AFTER it
+                // (also $&, $n). The inlined #TPL2 statusbar body literally contains both
+                // (a `$` followed by a backtick in a comment, and `$'` in a regex literal),
+                // so the old string form spliced the whole pre/post-</body> document INTO
+                // the statusbar <script> — a SyntaxError that killed the dev Inspector
+                // statusbar + launch link on any content-heavy page. A function replacer
+                // returns the text verbatim, with no dollar-pattern expansion.
+                layout = layout.replace(/<\/body>/i, function () { return plugin + '\n\t</body>'; });
             }
 
             // adding javascripts
@@ -1743,7 +1751,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                             + 'if(u&&u.environment&&u.environment.metrics){u.environment.metrics.weightBytes=' + _weightBytesFinal + ';u.environment.metrics.serverMs=' + _serverMsFinal + ';}'
                             + 'if(g&&g.environment&&g.environment.metrics){g.environment.metrics.weightBytes=' + _weightBytesFinal + ';g.environment.metrics.serverMs=' + _serverMsFinal + ';}'
                             + '}(window.__ginaData));</script>';
-                        htmlContent = htmlContent.replace(/<\/body>/i, _patchScript + '</body>');
+                        htmlContent = htmlContent.replace(/<\/body>/i, function () { return _patchScript + '</body>'; });
                     }
                 }
 
