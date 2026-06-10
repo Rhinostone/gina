@@ -1,3 +1,0 @@
-kind: Added
-body: 'The `gina version` command (and its `gina framework:version` long form) now prints the bundled template engine name and version beneath the middleware line — for example `Template engine: @rhinostone/swig@2.7.2`. The line is shown only when the engine package can be resolved and is omitted from `gina version --short=true` output.'
-time: 2026-06-09T15:30:47+01:00

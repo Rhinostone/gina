@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the development Inspector showing a stale value (such as the template-engine version badge) after a bundle restart. When the inspected page is reached through a window.opener tab that predates the restart, the Inspector now keeps the live agent (SSE/WebSocket) data instead of letting that stale-process snapshot override it, so the badge and environment reflect the running bundle.'
-time: 2026-06-09T22:20:02.254799+01:00

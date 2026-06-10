@@ -1,3 +1,0 @@
-kind: Added
-body: 'The async swig template loader gains an "http" built-in (settings.template.swig.loader.type: "http") that fetches templates over HTTP(S) from a configured origin + basePath — for templates served from a CDN, object storage or a CMS endpoint instead of the local filesystem. A Tier-1 source cache (keyed by resolved URL) collapses per-render fetches with a default 60-second TTL, plus opt-in ETag revalidation (revalidate: true). Every resolved URL is containment-checked to stay under the configured origin and basePath.'
-time: 2026-06-06T22:31:47+01:00

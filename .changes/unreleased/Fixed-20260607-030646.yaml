@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the getWebroot template filter (swig and nunjucks engines): it threw a TypeError on every invocation because it resolved bundle config from an undefined object reference. Cross-bundle absolute webroot links now resolve correctly through the bundle env config.'
-time: 2026-06-07T03:06:46.26872+01:00

@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'framework:link''s stale-node_modules repair path now invokes the running install''s own CLI for link-node-modules instead of a PATH-resolved binary, and a failure is reported through the command''s error path instead of crashing as an uncaught throw (the previous error check was dead code — execSync throws on failure rather than returning an Error).'
-time: 2026-06-10T14:45:00.000000000+02:00

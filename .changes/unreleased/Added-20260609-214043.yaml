@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added request.rawBody on the isaac engine: the exact unparsed request body is now preserved before parsing, so controllers and middlewares can verify inbound webhook signatures (an HMAC computed over the raw bytes). Always-on and cheap; the multipart/form-data upload path is unaffected.'
-time: 2026-06-09T21:40:43.646992+01:00

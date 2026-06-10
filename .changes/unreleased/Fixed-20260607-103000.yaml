@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Async template-loader renders (settings.template.swig.loader / settings.template.nunjucks.loader) no longer leak per-request context — web root, generated URLs and locale — between concurrent requests that share a template engine. The context-bearing template filters now resolve each request''s context through a per-request AsyncLocalStorage store at call time, so interleaved async renders can no longer overwrite one another mid-render.'
-time: 2026-06-07T10:30:00.000000+01:00

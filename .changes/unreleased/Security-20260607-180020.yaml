@@ -1,3 +1,0 @@
-kind: Security
-body: 'Removed the dead external Cross-Origin Resource Sharing (CORS) proxy (`corsacme.herokuapp.com`) that the popin and link loaders rewrote cross-origin request URLs through. It was an unmaintained third-party host that would have routed user traffic — including any credentials — through it, and no longer resolves. Cross-origin requests now go directly to the target server and rely on its own CORS headers; credentials are dropped on cross-origin requests unless explicitly opted in.'
-time: 2026-06-07T18:00:20.000000+01:00

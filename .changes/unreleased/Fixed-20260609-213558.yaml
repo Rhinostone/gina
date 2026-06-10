@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed self.query() POST, PUT and PATCH requests with a non-empty body to application/json routes, which returned HTTP 500 (POST/PATCH) or silently dropped the body (PUT). The built-in client percent-encoded the JSON body while the server parsed it verbatim; the client now sends raw JSON, and the server also tolerantly accepts a percent-encoded body as a fallback for backward compatibility.'
-time: 2026-06-09T21:35:58.793742+01:00
