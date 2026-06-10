@@ -39,12 +39,14 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.5
+## What's in 0.4.6
 
-- **Opt-in structured (JSON) logging.** Set `GINA_LOG_FORMAT=json` to emit one machine-parseable JSON object per log line (`{ts, level, bundle, message}`) for collectors such as Loki, Datadog, Fluentd or CloudWatch. The default stays the coloured, human-readable format, so interactive `docker logs` output is unchanged unless you opt in.
-- **Per-request `requestId` / `durationMs` in JSON logs.** When JSON logging is on, every log line emitted during a request carries a request id (an inbound `X-Request-Id` is honoured when well-formed, otherwise one is generated) and the elapsed milliseconds since the request began, so a single request's lines can be correlated in your collector. Default text logging is unchanged and pays no overhead.
-- **Public SDK Cluster accessor on Couchbase entities.** `getCluster()` returns the underlying SDK `Cluster` handle, so you can use SDK-level features the entity layer does not wrap — notably multi-document transactions via `cluster.transactions().run(...)` — without reaching into private connection internals.
-- **Public MongoClient accessor on MongoDB entities.** `getClient()` returns the underlying driver `MongoClient`, so you can reach driver-level features the entity layer does not wrap — notably multi-document transactions via `client.startSession()` / `session.withTransaction(...)` (which additionally require a replica-set or sharded deployment).
+- **Async template loaders (opt-in).** `settings.template.swig.loader` / `settings.template.nunjucks.loader` render templates from a custom backend instead of the local filesystem — built-in `memory` and `http` loaders (for templates served from a CDN, object storage or a template service), per-bundle isolated engines, full client-runtime injection on the async path, and an opt-in compiled-template cache (`loader.cache`) for production.
+- **Native dialog API.** `data-gina-dialog="ID"` opens an in-page `<dialog>`, `data-gina-dialog-src="URL"` loads its content over AJAX; non-modal by default, with per-trigger (`data-gina-dialog-modal`) or project-wide modal opt-in. Dialog popins now render as native modals in development too (dev/prod parity), and the popin plugin gains an opt-in `preOpen` loading skeleton.
+- **`request.rawBody`.** The exact unparsed request body is preserved before parsing, so controllers and middlewares can verify inbound webhook signatures (an HMAC computed over the raw bytes).
+- **JSON bodies parsed verbatim.** `application/json` POST / PUT / PATCH bodies are no longer URL-decoded and form-coerced — string values such as `"true"` or `"50%20off"` survive exactly as sent. Urlencoded handling is unchanged, and the browser form-validator now sends its JSON bodies with the matching `application/json` Content-Type.
+- **Hardening.** A single request carrying a malformed percent-escape (a bare `%`, `%zz`) can no longer crash a bundle; the default Swig render path keeps the swig-core CVE-2023-25345 path-traversal confinement active; the `@rhinostone/swig` floor moved to `^2.7.2`; and the dead third-party CORS proxy was removed from the popin and link loaders.
+- **CLI & DX.** `gina version` reports the bundled template engine; offline project commands skip a stale registered project instead of aborting; `project:add` and the framework's self-invocations no longer depend on a PATH-resolved gina binary.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 
