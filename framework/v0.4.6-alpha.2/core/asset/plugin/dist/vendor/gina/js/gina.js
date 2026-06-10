@@ -11596,8 +11596,18 @@ function ValidatorPlugin(rules, data, formId) {
                 }
                 //console.debug('sending -> ', data);
                 if (!hasBinaries) {
-                    if (typeof (enctype) != 'undefined' && enctype != null && enctype != '') {
-                        xhr.setRequestHeader('Content-Type', enctype);
+                    // #FORMCT — the non-binary body is JSON (JSON.stringify'd above). Honor an
+                    // EXPLICIT form `enctype` if set; otherwise send application/json — NOT the
+                    // urlencoded default — or the server url-decodes the JSON body ('+' -> space,
+                    // decodeURIComponent) and corrupts values such as email "+aliases".
+                    var explicitEnctype = $target.getAttribute('enctype');
+                    var sendContentType = (explicitEnctype && explicitEnctype != '')
+                        ? explicitEnctype
+                        : ( (typeof(data) == 'string' && /^[\[{]/.test(data.trim()))
+                            ? 'application/json; charset=UTF-8'
+                            : enctype );
+                    if (typeof (sendContentType) != 'undefined' && sendContentType != null && sendContentType != '') {
+                        xhr.setRequestHeader('Content-Type', sendContentType);
                     }
                     xhr.send(data)
                 }
@@ -11973,8 +11983,11 @@ function ValidatorPlugin(rules, data, formId) {
                             method: method,
                             isSynchrone: isSynchrone,
                             headers : {
-                                // to upload, use `multipart/form-data` for `enctype`
-                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                // #FORMCT — the body sent below is JSON (JSON.stringify({ files })).
+                                // Send application/json — NOT the urlencoded default — or the server
+                                // url-decodes the JSON body ('+' -> space, decodeURIComponent) and
+                                // corrupts '+'/'%' in removed-file keys.
+                                'Content-Type': 'application/json; charset=UTF-8',
                                 // cross domain is enabled by default, but you need to setup `Access-Control-Allow-Origin`
                                 'X-Requested-With': 'XMLHttpRequest' // in case of cross domain origin
                             }
