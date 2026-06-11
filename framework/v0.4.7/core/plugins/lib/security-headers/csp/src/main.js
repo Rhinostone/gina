@@ -92,9 +92,30 @@
  * a console warning and no report (it retains CSP2's rule that the directive
  * MUST be ignored when monitoring, which CSP3 dropped). Keeping it preserves
  * the observation-phase signal on Chrome + Firefox; WebKit-heavy consumers
- * can leave it out of their own report-only directive set. A report-only
- * policy whose every directive is inert (e.g. only `sandbox`) throws at
- * factory call time.
+ * can opt it out via `reportOnlyOmit` (below). A report-only policy whose
+ * every directive is inert (e.g. only `sandbox`) throws at factory call
+ * time.
+ *
+ * **`reportOnlyOmit: ['frame-ancestors']`** (opt-in, default `[]`) extends
+ * the report-only omission to consumer-chosen directives: every directive
+ * named is omitted from the report-only header and emitted again
+ * automatically when `reportOnly` flips to `false` — one directive set
+ * across both modes, no remove-then-re-add churn. Built for the
+ * engine-divergent case above: a consumer serving WebKit-heavy audiences can
+ * drop `frame-ancestors` for a clean Safari console, explicitly trading away
+ * the Chrome + Firefox report-only signal (the header is engine-blind; the
+ * option just makes that trade an explicit, lifecycle-managed choice). The
+ * factory-time `console.warn` for these uses wording distinct from the
+ * browser-inert omission above — they are NOT ignored by browsers. Entries
+ * are validated against the same CSP Level 3 whitelist as `directives` keys
+ * (unknown names throw); an entry not present in `directives` warns in
+ * report-only mode (likely a config mistake) and no-ops; with
+ * `reportOnly: false` the option is inert and silent — an enforce-mode
+ * config is EXPECTED to keep carrying it.
+ * `useNonce: true` with the nonce-target directive (script-src /
+ * default-src) in `reportOnlyOmit` throws at factory call time — the nonce
+ * would be stamped on the request and the tags but never referenced by the
+ * emitted policy.
  *
  * Opens Phase 2 of the gina security-headers track (Phase 1 = HDR1-4 +
  * HDR7 shipped in 0.3.15-alpha). Single-header plugin shape — composes
@@ -208,9 +229,10 @@ var HYBRID_DIRECTIVES = [
  *    delivery, which a report-only policy cannot use anyway). Omitting it
  *    would discard the observation-phase signal on Chrome + Firefox;
  *    consumers serving WebKit-heavy audiences that want a clean Safari
- *    console can omit it from their own report-only directive set
- *    (clickjacking stays enforced by X-Frame-Options and/or an enforcing
- *    frame-ancestors regardless).
+ *    console can opt it out per-config via `reportOnlyOmit:
+ *    ['frame-ancestors']` — omitted in report-only, auto-restored in
+ *    enforce mode (clickjacking stays enforced by X-Frame-Options and/or an
+ *    enforcing frame-ancestors regardless).
  *  - `upgrade-insecure-requests` / `block-all-mixed-content` — not confirmed
  *    inert across engines: Chromium ignores-and-warns
  *    `upgrade-insecure-requests` in report-only but supports
@@ -443,6 +465,59 @@ function resolveReportOnly(value) {
 
 
 /**
+ * Validate and normalise the `reportOnlyOmit` option — consumer-chosen
+ * directives to ALSO omit from a report-only header, on top of the
+ * universally-inert `REPORT_ONLY_IGNORED_DIRECTIVES`. Defaults to `[]`.
+ *
+ * Entries are lowercased and validated against the same CSP Level 3
+ * whitelist as `directives` keys; duplicates are dropped. Only consulted
+ * when `reportOnly` is true (inert and silent otherwise — keeping it in an
+ * enforce-mode config is the expected lifecycle state, not a mistake), but
+ * validated unconditionally so a malformed entry fails at boot rather than
+ * surfacing on the next `reportOnly` flip.
+ *
+ * @param {*} value
+ * @returns {string[]} normalised, deduplicated directive names.
+ * @throws  {Error} on non-array shapes, non-string entries, unknown names.
+ * @inner
+ * @private
+ */
+function resolveReportOnlyOmit(value) {
+    if (typeof value === 'undefined' || value === null) {
+        return [];
+    }
+    if (!Array.isArray(value)) {
+        throw new Error(
+            '[gina.plugins.Csp] reportOnlyOmit must be an array of CSP directive '
+            + 'names to omit from a report-only header (e.g. ["frame-ancestors"]); '
+            + 'received ' + typeof value + '.'
+        );
+    }
+    var out = [];
+    for (var i = 0; i < value.length; i++) {
+        if (typeof value[i] !== 'string') {
+            throw new Error(
+                '[gina.plugins.Csp] reportOnlyOmit entries must be strings; '
+                + 'received ' + typeof value[i] + ' at index ' + i + '.'
+            );
+        }
+        var name = String(value[i]).toLowerCase();
+        if (VALID_DIRECTIVES.indexOf(name) === -1) {
+            throw new Error(
+                '[gina.plugins.Csp] unknown directive name "' + value[i] + '" in '
+                + 'reportOnlyOmit. Expected one of: ' + VALID_DIRECTIVES.join(', ')
+                + '. (Per CSP Level 3 — https://www.w3.org/TR/CSP3/#csp-directives.)'
+            );
+        }
+        if (out.indexOf(name) === -1) {
+            out.push(name);
+        }
+    }
+    return out;
+}
+
+
+/**
  * Build the header value string from a normalised directive dict.
  *
  * Per CSP Level 3 §3.1: directives are separated by `;`; each directive
@@ -482,22 +557,26 @@ function buildHeaderValue(normalised, nonce, nonceTarget) {
 
 /**
  * Return a shallow copy of the normalised directive dict with the
- * report-only-inert directives (`REPORT_ONLY_IGNORED_DIRECTIVES`) removed.
- * Used only when `reportOnly` is true. Pure — never mutates the input, so the
- * full configured set survives for an enforcing factory built from the same
- * directives.
+ * report-only-inert directives (`REPORT_ONLY_IGNORED_DIRECTIVES`) removed,
+ * plus any consumer-chosen `extraOmit` names (the validated `reportOnlyOmit`
+ * option). Used only when `reportOnly` is true. Pure — never mutates the
+ * input, so the full configured set survives for an enforcing factory built
+ * from the same directives. Called with one argument, behaviour is identical
+ * to the pre-`reportOnlyOmit` shape (inert set only).
  *
- * @param {object} normalised — validated directive dict from resolveDirectives.
- * @returns {object} a new dict without the report-only-ignored directives.
+ * @param {object}    normalised — validated directive dict from resolveDirectives.
+ * @param {string[]} [extraOmit] — validated `reportOnlyOmit` names (default none).
+ * @returns {object} a new dict without the omitted directives.
  * @inner
  * @private
  */
-function stripReportOnlyIgnored(normalised) {
+function stripReportOnlyIgnored(normalised, extraOmit) {
+    var omit = extraOmit || [];
     var out  = {};
     var keys = Object.keys(normalised);
     for (var i = 0; i < keys.length; i++) {
         var name = keys[i];
-        if (REPORT_ONLY_IGNORED_DIRECTIVES.indexOf(name) !== -1) {
+        if (REPORT_ONLY_IGNORED_DIRECTIVES.indexOf(name) !== -1 || omit.indexOf(name) !== -1) {
             continue;
         }
         out[name] = normalised[name];
@@ -604,6 +683,15 @@ function resolveNonceTarget(normalised) {
  *                                               Content-Security-Policy-
  *                                               Report-Only instead of
  *                                               Content-Security-Policy.
+ * @param   {string[]} [opts.reportOnlyOmit=[]] — directive names to ALSO
+ *                                               omit when reportOnly is
+ *                                               true (validated against
+ *                                               the CSP Level 3
+ *                                               whitelist); emitted again
+ *                                               automatically when
+ *                                               reportOnly is false. Inert
+ *                                               and silent in enforce
+ *                                               mode.
  * @param   {boolean} [opts.useNonce=false]    — generate a per-response
  *                                               nonce, stamp it on
  *                                               `req._ginaCspNonce`, and
@@ -616,9 +704,28 @@ function resolveNonceTarget(normalised) {
  * @throws  {Error}                            — when `directives` is
  *                                               missing/empty, contains an
  *                                               unknown directive name, has
- *                                               invalid value shapes, or
+ *                                               invalid value shapes,
  *                                               `useNonce:true` with no
- *                                               script-src/default-src.
+ *                                               script-src/default-src,
+ *                                               `reportOnlyOmit` is
+ *                                               malformed or names an
+ *                                               unknown directive, the
+ *                                               report-only set is empty
+ *                                               after omissions, or
+ *                                               `reportOnlyOmit` omits the
+ *                                               nonce target in report-only
+ *                                               mode.
+ *
+ * @example
+ * // Engine-divergent directive opt-out: omit frame-ancestors from the
+ * // report-only header (clean WebKit console; forgoes the Gecko + Blink
+ * // report signal) — restored automatically at the enforce flip.
+ * var csp = require('gina').plugins.Csp({
+ *     reportOnly: true,
+ *     directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'self'"] },
+ *     reportOnlyOmit: ['frame-ancestors']
+ * });
+ * app.use(csp);
  */
 function Csp(opts) {
     var defaults    = resolveSettingsDefaults();
@@ -627,20 +734,44 @@ function Csp(opts) {
     var directives  = resolveDirectives(merged.directives);
     var reportOnly  = resolveReportOnly(merged.reportOnly);
     var useNonce    = resolveUseNonce(merged.useNonce);
+    var reportOnlyOmit = resolveReportOnlyOmit(merged.reportOnlyOmit);
 
     // Report-only mode: drop directives browsers ignore in a report-only
-    // header (REPORT_ONLY_IGNORED_DIRECTIVES — currently `sandbox`). They apply
-    // no restriction and emit no violation report there, so omitting them is
-    // functionally identical while silencing the browser console warning. They
-    // survive in `directives`, so an enforcing factory built from the same
-    // config still emits them.
+    // header (REPORT_ONLY_IGNORED_DIRECTIVES — currently `sandbox`), plus any
+    // consumer-chosen `reportOnlyOmit` names (typically engine-divergent
+    // directives like frame-ancestors). Both survive in `directives`, so an
+    // enforcing factory built from the same config still emits them.
     var emitDirectives = directives;
     if (reportOnly) {
-        emitDirectives = stripReportOnlyIgnored(directives);
+        emitDirectives = stripReportOnlyIgnored(directives, reportOnlyOmit);
         var dropped = Object.keys(directives).filter(function (d) {
             return !Object.prototype.hasOwnProperty.call(emitDirectives, d);
         });
+        // Split by cause — the warn/throw wording must not claim "ignored by
+        // browsers" for a directive the consumer chose to drop: an opted-out
+        // directive like frame-ancestors IS evaluated + reported by some
+        // engines (Gecko, Blink) in report-only mode.
+        var droppedInert = dropped.filter(function (d) {
+            return REPORT_ONLY_IGNORED_DIRECTIVES.indexOf(d) !== -1;
+        });
+        var droppedOpted = dropped.filter(function (d) {
+            return REPORT_ONLY_IGNORED_DIRECTIVES.indexOf(d) === -1;
+        });
+        var absentOmit = reportOnlyOmit.filter(function (d) {
+            return !Object.prototype.hasOwnProperty.call(directives, d);
+        });
         if (Object.keys(emitDirectives).length === 0) {
+            if (droppedOpted.length > 0) {
+                throw new Error(
+                    '[gina.plugins.Csp] reportOnly:true but the emitted directive set is '
+                    + 'empty after omissions ('
+                    + (droppedInert.length > 0 ? 'ignored by browsers: ' + droppedInert.join(', ') + '; ' : '')
+                    + 'per reportOnlyOmit: ' + droppedOpted.join(', ') + '). '
+                    + 'A report-only policy needs at least one emitted directive that '
+                    + 'produces violation reports (e.g. script-src / default-src). '
+                    + 'Remove entries from reportOnlyOmit or add directives.'
+                );
+            }
             // Mirrors the all-omitted throw in resolveDirectives: an empty CSP
             // is invalid, and a report-only policy made entirely of inert
             // directives reports nothing — surface it at factory (boot) time.
@@ -653,16 +784,37 @@ function Csp(opts) {
                 + 'in report-only mode.'
             );
         }
-        if (dropped.length > 0) {
+        if (droppedInert.length > 0) {
             // Transparency: the emitted header diverges from the configured
             // directives. One line at factory (boot) time — per call, no
             // module-level latch — so the operator knows why a configured
             // directive is absent from the wire.
             console.warn(
                 '[gina.plugins.Csp] reportOnly:true — omitting directive(s) ignored by '
-                + 'browsers in report-only mode: ' + dropped.join(', ') + '. They apply no '
+                + 'browsers in report-only mode: ' + droppedInert.join(', ') + '. They apply no '
                 + 'restriction and emit a browser console warning in report-only mode; they '
                 + 'are included automatically when reportOnly is false.'
+            );
+        }
+        if (droppedOpted.length > 0) {
+            // Distinct wording — these are NOT browser-inert: some engines
+            // (Gecko + Blink for frame-ancestors) evaluate and report them in
+            // report-only mode; the consumer is forgoing that signal.
+            console.warn(
+                '[gina.plugins.Csp] reportOnly:true — omitting directive(s) per '
+                + 'reportOnlyOmit: ' + droppedOpted.join(', ') + '. These are evaluated and '
+                + 'reported by some engines in report-only mode; you are forgoing that '
+                + 'monitoring signal. They are emitted automatically when reportOnly is '
+                + 'false.'
+            );
+        }
+        if (absentOmit.length > 0) {
+            // Omitting something you don't emit signals a config mistake.
+            // Emitted AFTER the empty-set throws above so a fatally-broken
+            // config surfaces only its throw, not a warn-then-throw sequence.
+            console.warn(
+                '[gina.plugins.Csp] reportOnlyOmit names directive(s) not present in '
+                + 'directives (no-op): ' + absentOmit.join(', ') + '.'
             );
         }
     }
@@ -672,9 +824,21 @@ function Csp(opts) {
     var headerValue = buildHeaderValue(emitDirectives);
     // Fail-fast at factory time: a nonce needs a script-governing directive.
     // Resolved from `directives` (not emitDirectives) — the nonce target is
-    // always script-src/default-src, which are never report-only-stripped, so
-    // the two sets agree; the middleware still serialises emitDirectives.
+    // always script-src/default-src, which REPORT_ONLY_IGNORED_DIRECTIVES
+    // never contains and the guard below keeps out of reportOnlyOmit, so the
+    // two sets agree; the middleware still serialises emitDirectives.
     var nonceTarget = useNonce ? resolveNonceTarget(directives) : null;
+    if (nonceTarget && reportOnly && reportOnlyOmit.indexOf(nonceTarget) !== -1) {
+        // The nonce would be stamped on req._ginaCspNonce and mirrored onto
+        // the framework inline <script> tags, but the emitted report-only
+        // policy would never reference it — incoherent header/tag state.
+        throw new Error(
+            '[gina.plugins.Csp] useNonce:true with reportOnly:true requires the '
+            + 'nonce target directive ("' + nonceTarget + '") to be emitted in the '
+            + 'report-only header, but reportOnlyOmit omits it. Remove "'
+            + nonceTarget + '" from reportOnlyOmit.'
+        );
+    }
 
     return function ginaCsp(req, res, next) {
         if (typeof res.getHeader === 'function' && res.getHeader(headerName)) {
@@ -707,6 +871,7 @@ Csp._resolveSettingsDefaults  = resolveSettingsDefaults;
 Csp._mergeOptions             = mergeOptions;
 Csp._resolveDirectives        = resolveDirectives;
 Csp._resolveReportOnly        = resolveReportOnly;
+Csp._resolveReportOnlyOmit    = resolveReportOnlyOmit;
 Csp._resolveUseNonce          = resolveUseNonce;
 Csp._resolveNonceTarget       = resolveNonceTarget;
 Csp._buildHeaderValue         = buildHeaderValue;

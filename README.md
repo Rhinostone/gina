@@ -39,14 +39,12 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.6
+## What's in 0.4.7
 
-- **Async template loaders (opt-in).** `settings.template.swig.loader` / `settings.template.nunjucks.loader` render templates from a custom backend instead of the local filesystem — built-in `memory` and `http` loaders (for templates served from a CDN, object storage or a template service), per-bundle isolated engines, full client-runtime injection on the async path, and an opt-in compiled-template cache (`loader.cache`) for production.
-- **Native dialog API.** `data-gina-dialog="ID"` opens an in-page `<dialog>`, `data-gina-dialog-src="URL"` loads its content over AJAX; non-modal by default, with per-trigger (`data-gina-dialog-modal`) or project-wide modal opt-in. Dialog popins now render as native modals in development too (dev/prod parity), and the popin plugin gains an opt-in `preOpen` loading skeleton.
-- **`request.rawBody`.** The exact unparsed request body is preserved before parsing, so controllers and middlewares can verify inbound webhook signatures (an HMAC computed over the raw bytes).
-- **JSON bodies parsed verbatim.** `application/json` POST / PUT / PATCH bodies are no longer URL-decoded and form-coerced — string values such as `"true"` or `"50%20off"` survive exactly as sent. Urlencoded handling is unchanged, and the browser form-validator now sends its JSON bodies with the matching `application/json` Content-Type.
-- **Hardening.** A single request carrying a malformed percent-escape (a bare `%`, `%zz`) can no longer crash a bundle; the default Swig render path keeps the swig-core CVE-2023-25345 path-traversal confinement active; the `@rhinostone/swig` floor moved to `^2.7.2`; and the dead third-party CORS proxy was removed from the popin and link loaders.
-- **CLI & DX.** `gina version` reports the bundled template engine; offline project commands skip a stale registered project instead of aborting; `project:add` and the framework's self-invocations no longer depend on a PATH-resolved gina binary.
+- **WebSocket over HTTP/2 (opt-in).** HTTP/2 bundles can serve WebSocket endpoints over the RFC 8441 extended-CONNECT transport, with a built-in dependency-free RFC 6455 framing codec — no external WebSocket library. Enable with `http2Options.enableConnectProtocol: true`, then register handlers from `onInitialize` with `app.onWebSocket(path, handler)`: each accepted stream arrives as a session with a `send`/`ping`/`close` API, automatic pong replies, payload and fragment caps, and a graceful close handshake.
+- **HTTP/2 hardening parity for h2c.** Cleartext HTTP/2 bundles (for example, backends behind a TLS-terminating reverse proxy) now receive the same hardening as `https` bundles — the stream caps, session flood defenses, and `settings.json` `http2Options` overrides all apply, where previously such bundles ran protocol defaults (effectively unlimited concurrent streams with server push enabled) and silently ignored their overrides.
+- **Graceful shutdown for live sockets.** Bundles with open WebSocket or engine.io connections no longer block SIGTERM shutdown until the hard timeout — every live socket is closed cleanly before the HTTP server closes, WebSockets with a `1001 going away` close handshake.
+- **CSP `reportOnlyOmit` (opt-in).** Omit engine-divergent directives such as `frame-ancestors` from `Content-Security-Policy-Report-Only` headers and have them restored automatically when `reportOnly` flips to `false` — one directive set across both modes, validated against the CSP Level 3 whitelist.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 

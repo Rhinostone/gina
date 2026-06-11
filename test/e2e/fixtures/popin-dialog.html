@@ -4,8 +4,10 @@
     <meta charset="utf-8">
     <title>gina popin dialog a11y fixture</title>
     <!-- The BUILT popin stylesheet — native ::backdrop, @starting-style enter/exit
-         transitions, body[data-gina-popin-scroll-lock] scroll-lock. -->
-    <link rel="stylesheet" href="../../../framework/v0.4.6-alpha.2/core/asset/plugin/dist/vendor/gina/css/gina.min.css">
+         transitions, body[data-gina-popin-scroll-lock] scroll-lock. Served by
+         runtime-server.js, which resolves framework/v<version> from package.json,
+         so the link survives the per-release framework-dir rename. -->
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
     <style>
         body { height: 300vh; } /* tall page so scroll-lock is observable */
         dialog.gina-popin-container { min-width: 20rem; padding: 1.5rem; }

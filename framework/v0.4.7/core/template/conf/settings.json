@@ -47,17 +47,19 @@
     // slightly longer than keepAliveTimeout — must remain > keepAliveTimeout
     "headersTimeout": "5500ms",
     // HTTP/2 tuning — wired into core/server.isaac.js at server creation time.
-    // maxConcurrentStreams      : max parallel streams per TCP connection (Node default: 100, Gina default: 256).
+    // maxConcurrentStreams      : max parallel streams per TCP connection (protocol default: unlimited — 4294967295, Gina default: 256).
     // initialWindowSize        : flow-control window in bytes (Node default: 65535, Gina default: 655350 = 10×).
     // maxSessionRejectedStreams : RST flood defense — CVE-2019-9514, CVE-2023-44487 (default: 100).
     // maxSessionInvalidFrames  : CONTINUATION flood defense — CVE-2024-27316, CVE-2024-27983 (default: 1000).
     // maxStreamsPerSecond       : rapid-reset rate limit — max new streams per session per rolling 1s window before GOAWAY + close — CVE-2023-44487 (default: 200).
+    // enableConnectProtocol     : RFC 8441 extended CONNECT (WebSocket over HTTP/2) — strict boolean opt-in; advertised on both https and cleartext h2c bundles (default: false).
     "http2Options": {
       "maxConcurrentStreams": 256,
       "initialWindowSize": 655350,
       "maxSessionRejectedStreams": 100,
       "maxSessionInvalidFrames": 1000,
-      "maxStreamsPerSecond": 200
+      "maxStreamsPerSecond": 200,
+      "enableConnectProtocol": false
     },
     // Compare with core/content.encoding
     // This is the prefered order when it comes to respond with compressed content
@@ -263,6 +265,17 @@
   //                only Inspector blocks) then carries the matching nonce
   //                attribute, so the bundle can drop 'unsafe-inline' from
   //                script-src. Requires a script-src/default-src directive.
+  //   reportOnlyOmit — array of directive names (default []). Only
+  //                consulted when reportOnly is true: the named directives
+  //                are omitted from the report-only header and emitted
+  //                again automatically when reportOnly flips to false —
+  //                one directive set across both modes. Built for engine-
+  //                divergent directives (e.g. frame-ancestors: reported by
+  //                Chrome + Firefox in report-only, ignored with a console
+  //                warning by Safari/WebKit) when a clean WebKit console
+  //                is preferred over the Gecko/Blink report signal. Inert
+  //                and silent when reportOnly is false. Entries validated
+  //                against the CSP Level 3 whitelist (unknown names throw).
   "csp": {},
   // #HDR6 — Cross-Origin-Embedder-Policy response header applied by
   // gina.plugins.Coep(). Controls which cross-origin resources the page

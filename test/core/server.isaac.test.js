@@ -1728,3 +1728,638 @@ describe('10 - URL query string parsing: malformed-% crash-safety (#B30)', funct
         }, URIError);
     });
 });
+
+
+// 11 — #H13 RFC 8441 extended CONNECT enablement (source structure)
+// Strict boolean opt-in (settings.json http2Options.enableConnectProtocol),
+// compat-level `connect` listener with an HTTP-status refusal table, internal
+// `_extendedConnectHandler` hook, and an `extendedConnect` /_gina/info metric.
+describe('11 - #H13 extended CONNECT enablement source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('source resolves the opt-in with a strict `=== true` check', function() {
+        assert.ok(
+            getSrc().indexOf('_h2Opts.enableConnectProtocol === true') > -1,
+            'expected `_h2Opts.enableConnectProtocol === true` — strict boolean opt-in'
+        );
+    });
+
+    it('source never falls back with `||` for enableConnectProtocol (boolean, not numeric idiom)', function() {
+        assert.doesNotMatch(
+            getSrc(),
+            /_h2Opts\.enableConnectProtocol\s*\|\|/,
+            'a `|| <default>` fallback would coerce truthy non-booleans (e.g. the string "true") into enabling the feature'
+        );
+    });
+
+    it('source carries enableConnectProtocol in the http2 settings literal', function() {
+        assert.ok(
+            getSrc().indexOf('enableConnectProtocol : _enableConnectProtocol') > -1,
+            'expected `enableConnectProtocol : _enableConnectProtocol` inside http2Options.settings'
+        );
+    });
+
+    it('source registers the connect listener ONLY inside the opt-in gate', function() {
+        assert.match(
+            getSrc(),
+            /if \(_enableConnectProtocol\) \{\s*server\.on\('connect'/,
+            'expected `server.on(\'connect\', ...)` immediately inside `if (_enableConnectProtocol) {` — when the flag is off no listener may exist (the compat default 405 must be preserved byte-identically)'
+        );
+    });
+
+    it('source reads the RFC 8441 :protocol pseudo-header off the request', function() {
+        assert.ok(
+            getSrc().indexOf("request.headers[':protocol']") > -1,
+            "expected a `request.headers[':protocol']` read in the connect handler"
+        );
+    });
+
+    it('source guards the HTTP/1.1 CONNECT signature (no request.stream) with a raw-socket refusal', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('if (!request.stream)') > -1, 'expected the `!request.stream` h1-signature guard');
+        assert.ok(
+            s.indexOf("'HTTP/1.1 405 Method Not Allowed\\r\\nConnection: close\\r\\n\\r\\n'") > -1,
+            'expected the raw HTTP/1.1 405 status line written to the socket'
+        );
+    });
+
+    it('source mirrors the compat default for plain HTTP/2 CONNECT: writeHead(405)', function() {
+        assert.ok(
+            getSrc().indexOf('response.writeHead(405)') > -1,
+            'expected `response.writeHead(405)` for plain CONNECT (no :protocol) — byte-parity with the engine default'
+        );
+    });
+
+    it('source refuses non-websocket :protocol values with 501', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf("_protocol !== 'websocket'") > -1, 'expected the `:protocol !== websocket` check');
+        assert.ok(s.indexOf('response.writeHead(501)') > -1, 'expected `response.writeHead(501)` refusals');
+    });
+
+    it('source hands accepted websocket streams to a typeof-guarded internal hook', function() {
+        assert.ok(
+            getSrc().indexOf("typeof server._extendedConnectHandler === 'function'") > -1,
+            'expected the typeof-guarded `server._extendedConnectHandler` hook (the WS session bridge consumer)'
+        );
+    });
+
+    it('source increments the extendedConnect metric for :protocol-bearing streams', function() {
+        assert.ok(
+            getSrc().indexOf('_h2Metrics.extendedConnect++') > -1,
+            'expected `_h2Metrics.extendedConnect++`'
+        );
+    });
+
+    it('source declares extendedConnect in the metrics literal and the /_gina/info http2 payload', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('extendedConnect : 0') > -1, 'expected `extendedConnect : 0` in the _h2Metrics literal');
+        assert.ok(
+            s.indexOf('extendedConnect : server._h2Metrics.extendedConnect') > -1,
+            'expected `extendedConnect` in the /_gina/info http2 block'
+        );
+    });
+
+    it('source contains the CONNECT-path error containment (close, never crash)', function() {
+        var s = getSrc();
+        var connectIdx = s.indexOf("server.on('connect'");
+        assert.ok(connectIdx > -1, 'connect listener must exist');
+        var closeIdx = s.indexOf('http2.constants.NGHTTP2_INTERNAL_ERROR', connectIdx);
+        assert.ok(closeIdx > -1, 'expected a `stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR)` fallback in the connect handler catch');
+    });
+
+    it('#H9 composition: the per-session stream accounting stays CONNECT-agnostic', function() {
+        var s = getSrc();
+        var streamIdx = s.indexOf("session.on('stream'");
+        var goawayIdx = s.indexOf("session.on('goaway'");
+        assert.ok(streamIdx > -1 && goawayIdx > streamIdx, 'session stream + goaway listeners must exist in order');
+        var block = s.slice(streamIdx, goawayIdx);
+        assert.ok(
+            block.indexOf(':protocol') === -1,
+            'the #H9 stream-accounting handler must not grow CONNECT detection — every CONNECT stream keeps counting in the rapid-reset window, detection lives on the compat connect event'
+        );
+    });
+
+    it('both settings templates document the enableConnectProtocol key', function() {
+        var confTemplate = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/conf/settings.json'), 'utf8'
+        );
+        var boilerplate = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/boilerplate/bundle/config/settings.server.json'), 'utf8'
+        );
+        assert.ok(
+            confTemplate.indexOf('"enableConnectProtocol": false') > -1,
+            'expected `"enableConnectProtocol": false` in the conf settings.json http2Options block'
+        );
+        assert.ok(
+            boilerplate.indexOf('"enableConnectProtocol": false') > -1,
+            'expected the commented `"enableConnectProtocol": false` example in the settings.server.json boilerplate'
+        );
+    });
+
+});
+
+
+// 11b — #H13 extended CONNECT: pure-logic replica of the opt-in resolve +
+// the connect-listener decision table (mirrors the source line-for-line so
+// the §11 pins lock the operators against drift).
+describe('11b - #H13 extended CONNECT: opt-in resolve + dispatch logic', function() {
+
+    // Replica of the #H13 strict opt-in resolve in server.isaac.js
+    function resolveEnableConnectProtocol(optionsHttp2Options) {
+        var _h2Opts = (optionsHttp2Options && typeof optionsHttp2Options === 'object') ? optionsHttp2Options : {};
+        return _h2Opts.enableConnectProtocol === true;
+    }
+
+    // Replica of the #H13 `connect` listener decision table. Returns the
+    // terminal action; mutates `metrics` exactly like the source.
+    function onConnect(hasStream, headers, hasHandler, metrics) {
+        if (!hasStream) {
+            // HTTP/1.1 CONNECT signature — raw 405 + socket destroy
+            return { action: 'h1-refuse-and-close', status: 405 };
+        }
+        var _protocol = headers[':protocol'];
+        if (typeof _protocol === 'undefined') {
+            return { action: 'respond', status: 405 };
+        }
+        metrics.extendedConnect++;
+        if (_protocol !== 'websocket') {
+            return { action: 'respond', status: 501 };
+        }
+        if (hasHandler) {
+            return { action: 'handoff' };
+        }
+        return { action: 'respond', status: 501 };
+    }
+
+    it('opt-in defaults to false when http2Options is absent, empty, or not an object', function() {
+        assert.equal(resolveEnableConnectProtocol(undefined), false);
+        assert.equal(resolveEnableConnectProtocol({}), false);
+        assert.equal(resolveEnableConnectProtocol(null), false);
+        assert.equal(resolveEnableConnectProtocol('yes'), false);
+    });
+
+    it('opt-in enables only for the boolean true', function() {
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: true }), true);
+    });
+
+    it('strictness subtract: truthy non-booleans do NOT enable (=== true vs the || idiom)', function() {
+        // The sibling numeric options use `_h2Opts.X || <default>`; that idiom
+        // applied here would let the string "true" or the number 1 flip a
+        // SETTINGS advert on. The strict === keeps them off.
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: 'true' }), false);
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: 1 }), false);
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: {} }), false);
+        // contrast: the || idiom would have enabled all three
+        assert.ok(('true' || false) && (1 || false));
+    });
+
+    it('HTTP/1.1 CONNECT signature (no stream) is refused on the raw socket, uncounted', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(false, {}, false, m);
+        assert.equal(r.action, 'h1-refuse-and-close');
+        assert.equal(r.status, 405);
+        assert.equal(m.extendedConnect, 0);
+    });
+
+    it('plain HTTP/2 CONNECT (no :protocol) gets 405 and is NOT counted as extended', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':method': 'CONNECT' }, false, m);
+        assert.equal(r.action, 'respond');
+        assert.equal(r.status, 405);
+        assert.equal(m.extendedConnect, 0);
+    });
+
+    it('a non-websocket :protocol is counted, then refused with 501', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':protocol': 'webtransport' }, false, m);
+        assert.equal(r.action, 'respond');
+        assert.equal(r.status, 501);
+        assert.equal(m.extendedConnect, 1);
+    });
+
+    it('websocket with no registered consumer is counted, then refused with 501', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':protocol': 'websocket' }, false, m);
+        assert.equal(r.action, 'respond');
+        assert.equal(r.status, 501);
+        assert.equal(m.extendedConnect, 1);
+    });
+
+    it('websocket with a registered consumer hands the stream off', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':protocol': 'websocket' }, true, m);
+        assert.equal(r.action, 'handoff');
+        assert.equal(m.extendedConnect, 1);
+    });
+
+    it('the extendedConnect metric accumulates across streams', function() {
+        var m = { extendedConnect: 0 };
+        onConnect(true, { ':protocol': 'websocket' }, true, m);
+        onConnect(true, { ':protocol': 'foo' }, true, m);
+        onConnect(true, { ':method': 'CONNECT' }, true, m); // plain — uncounted
+        onConnect(true, { ':protocol': 'websocket' }, false, m);
+        assert.equal(m.extendedConnect, 3);
+    });
+
+});
+
+
+// 12 — #H13 onWebSocket registration API + dispatcher (source structure)
+// Public bundle surface: app.onWebSocket(path, handler) from onInitialize.
+// The dispatcher installs LAZILY on the first registration so the §11
+// refusal table (501 for unclaimed websocket streams) holds until a
+// consumer exists.
+describe('12 - #H13 onWebSocket registration + dispatcher source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('source declares the per-path handler registry and the registration method', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server._wsHandlers = {};') > -1, 'expected the `server._wsHandlers` registry literal');
+        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler)') > -1, 'expected the onWebSocket registration method');
+        assert.ok(s.indexOf('server._wsHandlers[wsPath] = wsHandler;') > -1, 'expected the per-path handler store');
+    });
+
+    it('source validates registration arguments at call time (throw, not warn)', function() {
+        assert.ok(
+            getSrc().indexOf('onWebSocket(path, handler) requires a non-empty path string and a handler function') > -1,
+            'expected the factory-call-time TypeError message'
+        );
+    });
+
+    it('source installs the dispatcher LAZILY — only when no hook exists yet', function() {
+        assert.ok(
+            getSrc().indexOf("typeof server._extendedConnectHandler !== 'function'") > -1,
+            'expected the lazy-install guard so the §11 501-unclaimed behaviour holds with zero registrations'
+        );
+    });
+
+    it('source matches on the :path pathname with the query string stripped', function() {
+        assert.ok(
+            getSrc().indexOf(".split('?')[0]") > -1,
+            'expected the query-string strip before the handler lookup'
+        );
+    });
+
+    it('source refuses an unregistered pathname with 404', function() {
+        assert.ok(
+            getSrc().indexOf('response.writeHead(404)') > -1,
+            'expected `response.writeHead(404)` for a pathname with no registered handler'
+        );
+    });
+
+    it('source accepts matched streams through the ws-session bridge', function() {
+        assert.ok(
+            getSrc().indexOf('lib.wsSession.accept(request)') > -1,
+            'expected `lib.wsSession.accept(request)` on the matched path'
+        );
+    });
+
+    it('the registration API lives inside the opt-in gate, the safety stub after both branches', function() {
+        var s = getSrc();
+        var gateIdx = s.indexOf('if (_enableConnectProtocol) {');
+        var defIdx = s.indexOf('server.onWebSocket = function(wsPath, wsHandler)');
+        var stubIdx = s.indexOf("typeof server.onWebSocket !== 'function'");
+        assert.ok(gateIdx > -1 && defIdx > gateIdx, 'the real onWebSocket must be defined inside the opt-in gate');
+        assert.ok(stubIdx > defIdx, 'the cross-protocol stub must come after the gated definition');
+        assert.ok(s.indexOf('onWebSocket() ignored') > -1, 'expected the stub warn message');
+    });
+
+    it('lib/index.js registers the ws-session bridge on the registry', function() {
+        var libIndex = fs.readFileSync(
+            path.join(require('../fw'), 'lib/index.js'), 'utf8'
+        );
+        assert.match(libIndex, /wsSession\s*:\s*_require\('\.\/ws-session'\)/, 'expected the lib.wsSession registration');
+        assert.match(libIndex, /wsFraming\s*:\s*_require\('\.\/ws-framing'\)/, 'expected the lib.wsFraming registration');
+    });
+
+});
+
+
+// 12b — #H13 dispatcher pure-logic replica
+describe('12b - #H13 onWebSocket dispatcher logic', function() {
+
+    // Replica of the lazy dispatcher installed by onWebSocket
+    function dispatchWs(reqPath, handlers) {
+        var _wsPathname = String(reqPath || '').split('?')[0];
+        var _wsTarget = handlers[_wsPathname];
+        if (typeof _wsTarget !== 'function') {
+            return { action: 'status', code: 404 };
+        }
+        return { action: 'accept', handler: _wsTarget };
+    }
+
+    var handler = function() {};
+
+    it('an exact pathname match accepts and hands off to the registered handler', function() {
+        var r = dispatchWs('/live', { '/live': handler });
+        assert.equal(r.action, 'accept');
+        assert.equal(r.handler, handler);
+    });
+
+    it('the query string is stripped before matching', function() {
+        var r = dispatchWs('/live?token=abc&x=1', { '/live': handler });
+        assert.equal(r.action, 'accept');
+    });
+
+    it('an unregistered pathname is refused with 404', function() {
+        assert.deepEqual(dispatchWs('/other', { '/live': handler }), { action: 'status', code: 404 });
+    });
+
+    it('no prefix or pattern matching — /live/sub does not match /live', function() {
+        assert.equal(dispatchWs('/live/sub', { '/live': handler }).code, 404);
+    });
+
+    it('a missing :path is refused, not crashed on', function() {
+        assert.equal(dispatchWs(undefined, { '/live': handler }).code, 404);
+    });
+
+});
+
+
+// 13 — h2c flood-defense parity (#H3/#H7/#H13): the cleartext http2 branches
+// must receive the same hardening options as the https branch. The TLS keys
+// never land on those branches (key/cert/ca/pfx/passphrase merge under
+// /https/ scheme gates only), so `http2Options` is passed verbatim.
+describe('13 - h2c flood-defense parity source structure (#H3/#H7/#H13)', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it("the h2 `case 'http'` branch passes the full http2Options object", function() {
+        assert.match(
+            getSrc(),
+            /case 'http':\s*server\s*=\s*http2\.createServer\(http2Options\);/,
+            "expected `http2.createServer(http2Options)` on the h2c `case 'http'` branch — Node defaults (unlimited concurrent streams, enablePush on) and ignored settings.json overrides otherwise"
+        );
+    });
+
+    it('the h2 `default` branch passes the full http2Options object', function() {
+        assert.match(
+            getSrc(),
+            /default:\s*server\s*=\s*http2\.createServer\(http2Options\);/,
+            'expected `http2.createServer(http2Options)` on the h2c `default` branch'
+        );
+    });
+
+    it('the https branch still uses createSecureServer with the same object', function() {
+        assert.ok(
+            getSrc().indexOf('http2.createSecureServer(http2Options)') > -1,
+            'expected `http2.createSecureServer(http2Options)` on the https branch'
+        );
+    });
+
+    it('no h2 branch is left on a bare allowHTTP1-only literal', function() {
+        assert.ok(
+            getSrc().indexOf('createServer({ allowHTTP1') === -1,
+            'a `createServer({ allowHTTP1: ... })` literal would drop the settings advert and the #H3/#H7 caps on cleartext'
+        );
+    });
+
+    it('TLS material merges under /https/ scheme gates only (the premise that makes verbatim-pass safe)', function() {
+        assert.match(
+            getSrc(),
+            /if \( \/https\/\.test\(options\.scheme\) \) \{\s*try \{\s*http2Options = \{\s*key: readSync/,
+            'expected the key/cert seed inside the `/https/.test(options.scheme)` gate — if TLS keys ever land unconditionally, the cleartext branches must stop passing http2Options verbatim'
+        );
+    });
+
+});
+
+
+// 13b — h2c flood-defense parity: replica of the option construction for a
+// cleartext scheme + a live loopback proving the client actually receives
+// gina's advertised settings from a cleartext h2c server.
+describe('13b - h2c flood-defense parity: option construction + cleartext settings advert', function() {
+
+    var http2 = require('http2');
+
+    // Replica of server.isaac.js option construction for a NON-https scheme:
+    // the TLS stages are /https/-gated and contribute nothing, leaving
+    // allowHTTP1 + the settings literal + the #H3/#H7 caps.
+    function buildH2cOptions(options) {
+        var http2Options = {};
+        var allowHTTP1 = true;
+        if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {
+            allowHTTP1 = options.allowHTTP1;
+        }
+        http2Options.allowHTTP1 = allowHTTP1;
+        var _h2Opts = (options.http2Options && typeof options.http2Options === 'object') ? options.http2Options : {};
+        var _enableConnectProtocol = _h2Opts.enableConnectProtocol === true;
+        http2Options.settings = {
+            maxConcurrentStreams : _h2Opts.maxConcurrentStreams || 256,
+            initialWindowSize   : _h2Opts.initialWindowSize    || 65535 * 10,
+            maxHeaderListSize   : 65536,
+            enablePush          : false,
+            enableConnectProtocol : _enableConnectProtocol
+        };
+        http2Options.maxSessionRejectedStreams = _h2Opts.maxSessionRejectedStreams || 100;
+        http2Options.maxSessionInvalidFrames = _h2Opts.maxSessionInvalidFrames || 1000;
+        return http2Options;
+    }
+
+    // Spin a cleartext h2 server with `serverOptions`, connect a client, and
+    // resolve with the SETTINGS frame the client received from the server.
+    function readRemoteSettings(serverOptions) {
+        var server = http2.createServer(serverOptions);
+        var liveSessions = [];
+        server.on('session', function(h2session) { liveSessions.push(h2session); });
+        server.on('request', function(req, res) { res.end('ok'); });
+        return new Promise(function(resolve, reject) {
+            server.listen(0, '127.0.0.1', function() {
+                var port = server.address().port;
+                var client = http2.connect('http://127.0.0.1:' + port);
+                var guard = setTimeout(function() { reject(new Error('settings advert timed out')); }, 3000);
+                client.on('error', reject);
+                client.on('remoteSettings', function(settings) {
+                    clearTimeout(guard);
+                    var snapshot = {
+                        maxConcurrentStreams  : settings.maxConcurrentStreams,
+                        initialWindowSize     : settings.initialWindowSize,
+                        maxHeaderListSize     : settings.maxHeaderListSize,
+                        enablePush            : settings.enablePush,
+                        enableConnectProtocol : settings.enableConnectProtocol
+                    };
+                    try { client.close(); } catch (e) {}
+                    resolve(snapshot);
+                });
+            });
+        }).finally(function() {
+            liveSessions.forEach(function(h2session) {
+                try { h2session.destroy(); } catch (e) {}
+            });
+            return new Promise(function(resolve) { server.close(resolve); });
+        });
+    }
+
+    it('replica defaults: caps + settings present, no TLS keys', function() {
+        var opts = buildH2cOptions({});
+        assert.equal(opts.allowHTTP1, true);
+        assert.equal(opts.maxSessionRejectedStreams, 100);
+        assert.equal(opts.maxSessionInvalidFrames, 1000);
+        assert.equal(opts.settings.maxConcurrentStreams, 256);
+        assert.equal(opts.settings.initialWindowSize, 655350);
+        assert.equal(opts.settings.maxHeaderListSize, 65536);
+        assert.equal(opts.settings.enablePush, false);
+        assert.equal(opts.settings.enableConnectProtocol, false);
+        assert.equal(typeof opts.key, 'undefined');
+        assert.equal(typeof opts.cert, 'undefined');
+    });
+
+    it('replica honours settings.json overrides on a cleartext scheme', function() {
+        var opts = buildH2cOptions({ http2Options: {
+            maxConcurrentStreams: 64, maxSessionRejectedStreams: 50,
+            maxSessionInvalidFrames: 500, enableConnectProtocol: true
+        } });
+        assert.equal(opts.settings.maxConcurrentStreams, 64);
+        assert.equal(opts.maxSessionRejectedStreams, 50);
+        assert.equal(opts.maxSessionInvalidFrames, 500);
+        assert.equal(opts.settings.enableConnectProtocol, true);
+    });
+
+    it('a cleartext h2c server built from these options advertises gina settings to the client', async function() {
+        var remote = await readRemoteSettings(buildH2cOptions({ http2Options: { enableConnectProtocol: true } }));
+        assert.equal(remote.maxConcurrentStreams, 256, 'expected gina default 256, not the protocol-default unlimited');
+        assert.equal(remote.initialWindowSize, 655350);
+        assert.equal(remote.maxHeaderListSize, 65536);
+        assert.equal(remote.enablePush, false, 'server push must be disabled on h2c too');
+        assert.equal(remote.enableConnectProtocol, true, 'the RFC 8441 advert must reach cleartext clients when opted in');
+    });
+
+    it('subtract-my-contribution: the old allowHTTP1-only literal advertises protocol defaults', async function() {
+        var remote = await readRemoteSettings({ allowHTTP1: true });
+        assert.notEqual(remote.maxConcurrentStreams, 256, 'pre-fix shape must NOT carry the gina stream cap');
+        assert.equal(remote.enablePush, true, 'pre-fix shape leaves deprecated server push enabled');
+        assert.equal(remote.enableConnectProtocol, false);
+    });
+
+});
+
+
+// 14 — engine.io socket SIGTERM-drain registration: live engine.io sockets
+// register a graceful closer in process.gina._sseConnections (the registry
+// proc.js drains BEFORE _httpServer.close()) and deregister in their own
+// close handler, so SIGTERM no longer blocks on open sockets until the
+// hard shutdown timeout.
+describe('14 - engine.io socket SIGTERM-drain registration source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // The engine.io connection-handler block: from the connection listener
+    // to the upgrade handler that follows it.
+    function eioBlk() {
+        var s = getSrc();
+        var start = s.indexOf("ioServer.on('connection'");
+        assert.ok(start > -1, 'engine.io connection handler must exist');
+        var end = s.indexOf("server.on('upgrade'", start);
+        assert.ok(end > start, 'upgrade handler expected after the connection handler');
+        return s.slice(start, end);
+    }
+
+    it('registers a shutdown closer in process.gina._sseConnections on connection', function() {
+        var blk = eioBlk();
+        assert.ok(
+            blk.indexOf('if (!process.gina._sseConnections) process.gina._sseConnections = new Set();') > -1,
+            'expected the lazy Set init (same idiom as the SSE handlers)'
+        );
+        assert.ok(
+            blk.indexOf('process.gina._sseConnections.add(_eioShutdownCloser)') > -1,
+            'expected the closer registration'
+        );
+    });
+
+    it('the closer calls the GRACEFUL socket.close() — no discard arg', function() {
+        assert.match(
+            eioBlk(),
+            /var _eioShutdownCloser = function\(\) \{\s*try \{ socket\.close\(\); \} catch \(e\) \{\}\s*\};/,
+            'expected `try { socket.close(); }` — the engine.io API has no status code; close(true) is the hard-discard variant reserved for ioServer.close()'
+        );
+    });
+
+    it('the socket close handler deregisters the closer', function() {
+        var blk = eioBlk();
+        var closeIdx = blk.indexOf("socket.on('close'");
+        assert.ok(closeIdx > -1, 'close handler must exist');
+        assert.ok(
+            blk.indexOf('process.gina._sseConnections.delete(_eioShutdownCloser)', closeIdx) > -1,
+            'expected the closer deregistration inside the close handler'
+        );
+    });
+
+    it('registration precedes the close-handler binding', function() {
+        var blk = eioBlk();
+        var addIdx   = blk.indexOf('process.gina._sseConnections.add(_eioShutdownCloser)');
+        var closeIdx = blk.indexOf("socket.on('close'");
+        assert.ok(addIdx > -1 && closeIdx > addIdx, 'add must come before the close-handler binding');
+    });
+
+});
+
+
+// 14b — engine.io SIGTERM-drain lifecycle: pure-logic replica mirroring the
+// source — register on connect, a proc.js-style snapshot drain invokes the
+// closer (graceful close()), the socket close event deregisters.
+describe('14b - engine.io SIGTERM-drain lifecycle logic', function() {
+
+    function makeFakeSocket() {
+        var sock = { closed: 0, closeHandlers: [] };
+        sock.close = function() {
+            sock.closed++;
+            // engine.io: the transport teardown fires the socket close event
+            sock.closeHandlers.forEach(function(h) { h(); });
+        };
+        sock.onClose = function(h) { sock.closeHandlers.push(h); };
+        return sock;
+    }
+
+    // Replica of the source lifecycle against an injected registry.
+    function wireSocket(registry, socket) {
+        var _eioShutdownCloser = function() {
+            try { socket.close(); } catch (e) {}
+        };
+        registry.add(_eioShutdownCloser);
+        socket.onClose(function() {
+            registry.delete(_eioShutdownCloser);
+        });
+    }
+
+    // Replica of the proc.js drain: snapshot first, invoke each in try/catch.
+    function drain(registry) {
+        Array.from(registry).forEach(function(closer) {
+            try { closer(); } catch (e) {}
+        });
+    }
+
+    it('register → drain closes the socket → close event deregisters', function() {
+        var registry = new Set();
+        var sock = makeFakeSocket();
+        wireSocket(registry, sock);
+        assert.equal(registry.size, 1);
+        drain(registry);
+        assert.equal(sock.closed, 1, 'the drain must close the socket');
+        assert.equal(registry.size, 0, 'the close event must deregister the closer');
+    });
+
+    it('a peer-initiated close deregisters; a later drain has nothing to do', function() {
+        var registry = new Set();
+        var sock = makeFakeSocket();
+        wireSocket(registry, sock);
+        sock.close(); // peer closed first
+        assert.equal(registry.size, 0);
+        drain(registry);
+        assert.equal(sock.closed, 1, 'no double close after deregistration');
+    });
+
+    it('multiple sockets drain independently (snapshot iteration is delete-safe)', function() {
+        var registry = new Set();
+        var a = makeFakeSocket(), b = makeFakeSocket();
+        wireSocket(registry, a);
+        wireSocket(registry, b);
+        assert.equal(registry.size, 2);
+        drain(registry);
+        assert.equal(a.closed, 1);
+        assert.equal(b.closed, 1);
+        assert.equal(registry.size, 0);
+    });
+
+});

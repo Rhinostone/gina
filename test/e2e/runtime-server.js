@@ -12,6 +12,9 @@
  *
  * What it serves:
  *   GET /                              -> fixtures/popin-dialog.runtime.html
+ *   GET /a11y                          -> fixtures/popin-dialog.html (framework-free
+ *                                         a11y harness; its stylesheet link resolves
+ *                                         through this server's /css route)
  *   GET /js/gina.min.js                -> built bundle (dist)
  *   GET /js/gina.onload.js             -> built onload (dist), whisper tokens
  *                                         substituted with harness stub values
@@ -108,6 +111,10 @@ const server = http.createServer(function (req, res) {
         if (url === '/' || url === '/index.html') {
             return send(res, 200, 'text/html; charset=utf-8',
                 fs.readFileSync(path.join(FIXTURES, 'popin-dialog.runtime.html')));
+        }
+        if (url === '/a11y' || url === '/a11y.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'popin-dialog.html')));
         }
         if (url === '/js/gina.onload.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload());

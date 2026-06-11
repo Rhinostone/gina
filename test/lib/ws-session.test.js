@@ -1,0 +1,412 @@
+/**
+ * lib/ws-session — WebSocket-over-HTTP/2 session bridge suite (#H13).
+ *
+ * Require-by-path like the sibling lib suites. Two layers:
+ *  - mock-stream unit tests (accept contract, send/ping/close, auto-pong,
+ *    close handshake both directions, protocol-violation teardown, handler
+ *    containment, backpressure, shutdown-drain registration);
+ *  - a real HTTP/2 loopback (extended CONNECT against a live
+ *    http2.createServer with enableConnectProtocol) proving the bridge works
+ *    against a genuine Http2Stream end to end.
+ *
+ * Outbound frames are asserted by parsing the mock stream's written bytes
+ * with a CLIENT-mode lib/ws-framing parser (server frames are unmasked).
+ */
+
+var { describe, it } = require('node:test');
+var assert = require('node:assert/strict');
+var path = require('path');
+var http2 = require('http2');
+var EventEmitter = require('events').EventEmitter;
+
+var FW = require('../fw');
+var wsSess = require(path.join(FW, 'lib/ws-session/src/main'));
+var wsf = require(path.join(FW, 'lib/ws-framing/src/main'));
+
+function mockStream() {
+    var stream = new EventEmitter();
+    stream.destroyed = false;
+    stream.closed = false;
+    stream.writableEnded = false;
+    stream.written = [];
+    stream.respondedWith = null;
+    stream.writeReturn = true;
+    stream.respond = function(headers) { stream.respondedWith = headers; };
+    stream.write = function(buf) { stream.written.push(buf); return stream.writeReturn; };
+    stream.end = function() { stream.writableEnded = true; };
+    return stream;
+}
+
+function mockRequest(stream, reqPath) {
+    return {
+        headers : { ':method': 'CONNECT', ':protocol': 'websocket', ':path': reqPath || '/ws' },
+        stream  : stream
+    };
+}
+
+// Decodes everything the session wrote to the wire with a client-mode parser.
+function decodeWritten(stream) {
+    var out = { messages: [], pings: [], pongs: [], closes: [], errors: [] };
+    var parser = wsf.createParser({
+        isServer  : false,
+        onMessage : function(d, b) { out.messages.push({ data: d, isBinary: b }); },
+        onPing    : function(p) { out.pings.push(p); },
+        onPong    : function(p) { out.pongs.push(p); },
+        onClose   : function(c, r) { out.closes.push({ code: c, reason: r }); },
+        onError   : function(e) { out.errors.push(e); }
+    });
+    if (stream.written.length > 0) {
+        parser.feed(Buffer.concat(stream.written));
+    }
+    return out;
+}
+
+function setupSession(options, reqPath) {
+    var stream = mockStream();
+    var events = { messages: [], pings: [], pongs: [], closes: [], errors: [], drains: 0 };
+    var session = wsSess.accept(mockRequest(stream, reqPath), options);
+    session
+        .onMessage(function(d, b) { events.messages.push({ data: d, isBinary: b }); })
+        .onPing(function(p) { events.pings.push(p); })
+        .onPong(function(p) { events.pongs.push(p); })
+        .onClose(function(c, r) { events.closes.push({ code: c, reason: r }); })
+        .onError(function(e) { events.errors.push(e); })
+        .onDrain(function() { events.drains++; });
+    return { stream: stream, session: session, events: events };
+}
+
+var KEY = Buffer.from([9, 8, 7, 6]);
+function clientText(text) {
+    return wsf.encodeFrame({ opcode: wsf.OPCODES.TEXT, payload: text, mask: true, maskKey: KEY });
+}
+function clientClose(code, reason) {
+    var payload;
+    if (typeof code === 'undefined') {
+        payload = Buffer.alloc(0);
+    } else {
+        var reasonBuf = reason ? Buffer.from(reason, 'utf8') : Buffer.alloc(0);
+        payload = Buffer.alloc(2 + reasonBuf.length);
+        payload.writeUInt16BE(code, 0);
+        reasonBuf.copy(payload, 2);
+    }
+    return wsf.encodeFrame({ opcode: wsf.OPCODES.CLOSE, payload: payload, mask: true, maskKey: KEY });
+}
+
+
+// 01 — accept() contract
+describe('01 - accept(): the RFC 8441 §5 success response', function() {
+
+    it('responds :status 200 on the raw stream and returns a session', function() {
+        var stream = mockStream();
+        var session = wsSess.accept(mockRequest(stream));
+        assert.deepEqual(stream.respondedWith, { ':status': 200 });
+        assert.equal(session instanceof wsSess.WsSession, true);
+    });
+
+    it('echoes a selected subprotocol in sec-websocket-protocol', function() {
+        var stream = mockStream();
+        wsSess.accept(mockRequest(stream), { protocol: 'chat' });
+        assert.deepEqual(stream.respondedWith, { ':status': 200, 'sec-websocket-protocol': 'chat' });
+    });
+
+    it('throws on a request with no respondable stream (e.g. the HTTP/1.1 CONNECT signature)', function() {
+        assert.throws(function() { wsSess.accept({ headers: {} }); }, TypeError);
+    });
+
+    it('throws when the stream is already closed', function() {
+        var stream = mockStream();
+        stream.destroyed = true;
+        assert.throws(function() { wsSess.accept(mockRequest(stream)); }, /already closed/);
+    });
+
+});
+
+
+// 02 — outbound: send / ping
+describe('02 - send and ping write well-formed unmasked server frames', function() {
+
+    it('send(string) goes out as a TEXT frame, send(Buffer) as BINARY', function() {
+        var s = setupSession();
+        assert.equal(s.session.send('hello'), true);
+        assert.equal(s.session.send(Buffer.from([1, 2, 3])), true);
+        var out = decodeWritten(s.stream);
+        assert.equal(out.errors.length, 0);
+        assert.deepEqual(out.messages[0], { data: 'hello', isBinary: false });
+        assert.equal(out.messages[1].isBinary, true);
+        assert.deepEqual(out.messages[1].data, Buffer.from([1, 2, 3]));
+    });
+
+    it('ping() writes a PING frame the peer can parse', function() {
+        var s = setupSession();
+        assert.equal(s.session.ping('beat'), true);
+        var out = decodeWritten(s.stream);
+        assert.equal(out.pings[0].toString(), 'beat');
+    });
+
+    it('send() reports backpressure when the stream write returns false', function() {
+        var s = setupSession();
+        s.stream.writeReturn = false;
+        assert.equal(s.session.send('pressure'), false);
+        s.stream.writeReturn = true;
+        s.stream.emit('drain');
+        assert.equal(s.events.drains, 1);
+    });
+
+});
+
+
+// 03 — inbound: messages and auto-pong
+describe('03 - inbound dispatch and auto-pong (§5.5.2)', function() {
+
+    it('delivers inbound masked text to onMessage', function() {
+        var s = setupSession();
+        s.stream.emit('data', clientText('inbound'));
+        assert.deepEqual(s.events.messages, [{ data: 'inbound', isBinary: false }]);
+    });
+
+    it('answers an inbound PING with a PONG echoing the payload, and still reports it', function() {
+        var s = setupSession();
+        s.stream.emit('data', wsf.encodePing('hb', { mask: true, maskKey: KEY }));
+        assert.equal(s.events.pings[0].toString(), 'hb');
+        var out = decodeWritten(s.stream);
+        assert.equal(out.pongs.length, 1);
+        assert.equal(out.pongs[0].toString(), 'hb');
+    });
+
+    it('subtract: autoPong false suppresses the automatic PONG', function() {
+        var s = setupSession({ autoPong: false });
+        s.stream.emit('data', wsf.encodePing('hb', { mask: true, maskKey: KEY }));
+        assert.equal(s.events.pings.length, 1);
+        assert.equal(decodeWritten(s.stream).pongs.length, 0);
+    });
+
+});
+
+
+// 04 — close handshake, both directions
+describe('04 - close handshake (§5.5.1 / §7)', function() {
+
+    it('peer-initiated close: echoes the code, ends the stream, fires onClose once', function() {
+        var s = setupSession();
+        s.stream.emit('data', clientClose(1000, 'bye'));
+        assert.deepEqual(s.events.closes, [{ code: 1000, reason: 'bye' }]);
+        assert.equal(decodeWritten(s.stream).closes[0].code, 1000);
+        assert.equal(s.stream.writableEnded, true);
+        assert.equal(s.session.isClosed(), true);
+        // terminal is exactly-once even if the transport close event follows
+        s.stream.emit('close');
+        assert.equal(s.events.closes.length, 1);
+    });
+
+    it('peer close with an EMPTY body reports 1005 locally but echoes an empty Close (1005 never goes on the wire)', function() {
+        var s = setupSession();
+        s.stream.emit('data', clientClose());
+        assert.deepEqual(s.events.closes, [{ code: 1005, reason: '' }]);
+        var echoed = decodeWritten(s.stream).closes[0];
+        assert.equal(echoed.code, 1005, 'an empty echoed Close body decodes as 1005 client-side');
+    });
+
+    it('initiated close: peer echo completes the handshake', function() {
+        var s = setupSession({ closeTimeout: 5000 });
+        s.session.close(1000, 'done');
+        assert.equal(decodeWritten(s.stream).closes[0].code, 1000);
+        assert.equal(s.events.closes.length, 0, 'not terminal until the peer answers');
+        s.stream.emit('data', clientClose(1000, 'done'));
+        assert.equal(s.events.closes.length, 1);
+        assert.equal(s.stream.writableEnded, true);
+    });
+
+    it('initiated close: a silent peer is force-ended after closeTimeout', async function() {
+        var s = setupSession({ closeTimeout: 25 });
+        s.session.close(1001, 'going away');
+        await new Promise(function(resolve) { setTimeout(resolve, 60); });
+        assert.deepEqual(s.events.closes, [{ code: 1001, reason: 'going away' }]);
+        assert.equal(s.stream.writableEnded, true);
+    });
+
+    it('send() and ping() refuse after a close was sent', function() {
+        var s = setupSession();
+        s.session.close(1000);
+        assert.equal(s.session.send('late'), false);
+        assert.equal(s.session.ping(), false);
+    });
+
+});
+
+
+// 05 — protocol violations and transport teardown
+describe('05 - violations answer with the prescribed code; transport loss is 1006', function() {
+
+    it('an unmasked client frame fails 1002: error + close frame + terminal close', function() {
+        var s = setupSession();
+        s.stream.emit('data', wsf.encodeText('unmasked'));
+        assert.equal(s.events.errors[0].closeCode, 1002);
+        assert.equal(decodeWritten(s.stream).closes[0].code, 1002);
+        assert.deepEqual(s.events.closes.map(function(c) { return c.code; }), [1002]);
+        assert.equal(s.stream.writableEnded, true);
+    });
+
+    it('an oversized declared frame fails 1009', function() {
+        var s = setupSession({ maxPayload: 100 });
+        s.stream.emit('data', Buffer.from([0x82, 0xFE, 0x07, 0xD0])); // declares 2000 bytes
+        assert.equal(s.events.errors[0].closeCode, 1009);
+        assert.equal(decodeWritten(s.stream).closes[0].code, 1009);
+    });
+
+    it('a transport close without a Close frame is a 1006 abnormal closure', function() {
+        var s = setupSession();
+        s.stream.emit('close');
+        assert.deepEqual(s.events.closes, [{ code: 1006, reason: '' }]);
+    });
+
+    it('a stream error is absorbed (never thrown) and terminates with 1006', function() {
+        var s = setupSession();
+        assert.doesNotThrow(function() {
+            s.stream.emit('error', new Error('ECONNRESET-ish'));
+        });
+        assert.equal(s.events.closes[0].code, 1006);
+    });
+
+});
+
+
+// 06 — consumer-handler containment
+describe('06 - a throwing consumer handler never escalates', function() {
+
+    it('a throwing onMessage is contained: diagnostic onError + 1011 close, no exception out of feed', function() {
+        var stream = mockStream();
+        var errors = [];
+        var closes = [];
+        var session = wsSess.accept(mockRequest(stream));
+        session
+            .onMessage(function() { throw new Error('handler bug'); })
+            .onError(function(e) { errors.push(e); })
+            .onClose(function(c, r) { closes.push(c); });
+        assert.doesNotThrow(function() {
+            stream.emit('data', clientText('boom'));
+        });
+        assert.equal(errors.length, 1);
+        assert.equal(errors[0].message, 'handler bug');
+        assert.equal(decodeWritten(stream).closes[0].code, 1011);
+        // the 1011 close is INITIATED — terminal onClose arrives with the
+        // peer's echo (same handshake semantics as §04)
+        assert.deepEqual(closes, []);
+        stream.emit('data', clientClose(1011));
+        assert.deepEqual(closes, [1011]);
+    });
+
+});
+
+
+// 07 — graceful-shutdown drain registration
+describe('07 - SIGTERM drain registry (process.gina._sseConnections)', function() {
+
+    it('registers a closer on creation, drains with 1001, deregisters on finish', function() {
+        var hadGina = Object.prototype.hasOwnProperty.call(process, 'gina');
+        var savedGina = process.gina;
+        process.gina = {};
+        try {
+            var s = setupSession();
+            assert.equal(process.gina._sseConnections.size, 1);
+
+            // simulate the proc.js SIGTERM drain: invoke every registered closer
+            Array.from(process.gina._sseConnections).forEach(function(closer) { closer(); });
+            assert.equal(decodeWritten(s.stream).closes[0].code, 1001);
+
+            // the peer's echo finishes the session and deregisters it
+            s.stream.emit('data', clientClose(1001));
+            assert.equal(s.events.closes.length, 1);
+            assert.equal(process.gina._sseConnections.size, 0);
+        } finally {
+            if (hadGina) { process.gina = savedGina; } else { delete process.gina; }
+        }
+    });
+
+    it('skips registration cleanly outside a framework process (no process.gina)', function() {
+        assert.equal(typeof process.gina, 'undefined', 'precondition: test process has no gina bootstrap');
+        var s = setupSession();
+        assert.equal(typeof process.gina, 'undefined', 'the bridge must not invent process.gina');
+        s.session.close(1000);
+    });
+
+});
+
+
+// 08 — real HTTP/2 loopback: extended CONNECT end to end
+describe('08 - real HTTP/2 loopback (extended CONNECT, live Http2Stream)', function() {
+
+    it('accept + echo + client-initiated close over a genuine extended-CONNECT stream', async function() {
+        var server = http2.createServer({ settings: { enableConnectProtocol: true } });
+        var serverEvents = { messages: [], closes: [] };
+        var liveSessions = [];
+        server.on('session', function(h2session) { liveSessions.push(h2session); });
+
+        // mirror the Isaac reality: a compat request listener coexists
+        server.on('request', function(req, res) {
+            if (req.method !== 'CONNECT') { res.end('ok'); }
+        });
+        server.on('connect', function(request, response) {
+            var session = wsSess.accept(request);
+            session.onMessage(function(data, isBinary) {
+                serverEvents.messages.push(data);
+                session.send('echo: ' + data);
+            });
+            session.onClose(function(code, reason) {
+                serverEvents.closes.push({ code: code, reason: reason });
+            });
+        });
+
+        await new Promise(function(resolve) { server.listen(0, '127.0.0.1', resolve); });
+        var port = server.address().port;
+
+        var clientOut = { messages: [], closes: [] };
+        var clientParser = wsf.createParser({
+            isServer  : false,
+            onMessage : function(d) { clientOut.messages.push(d); },
+            onClose   : function(c, r) { clientOut.closes.push({ code: c, reason: r }); },
+            onError   : function(e) { clientOut.err = e; }
+        });
+
+        try {
+            await new Promise(function(resolve, reject) {
+                var client = http2.connect('http://127.0.0.1:' + port);
+                var guard = setTimeout(function() { reject(new Error('loopback timed out')); }, 3000);
+                client.on('error', reject);
+                client.on('remoteSettings', function() {
+                    var req = client.request({
+                        ':method': 'CONNECT', ':protocol': 'websocket', ':scheme': 'http',
+                        ':path': '/live', ':authority': '127.0.0.1:' + port
+                    });
+                    req.on('error', function(e) { reject(e); });
+                    req.on('response', function(headers) {
+                        try { assert.equal(headers[':status'], 200); } catch (e) { return reject(e); }
+                        req.on('data', function(chunk) { clientParser.feed(chunk); });
+                        req.write(wsf.encodeFrame({ opcode: wsf.OPCODES.TEXT, payload: 'hi', mask: true }));
+                        setTimeout(function() {
+                            req.write(clientClose(1000, 'bye'));
+                            req.end(); // END_STREAM after the Close frame so the stream fully closes
+                        }, 120);
+                    });
+                    req.on('close', function() {
+                        clearTimeout(guard);
+                        try { client.close(); } catch (e) {}
+                        resolve();
+                    });
+                });
+            });
+        } finally {
+            // destroy any surviving HTTP/2 session so server.close() cannot hang
+            liveSessions.forEach(function(h2session) {
+                try { h2session.destroy(); } catch (e) { /* already gone */ }
+            });
+            await new Promise(function(resolve) { server.close(resolve); });
+        }
+
+        assert.deepEqual(serverEvents.messages, ['hi']);
+        assert.deepEqual(serverEvents.closes, [{ code: 1000, reason: 'bye' }]);
+        assert.deepEqual(clientOut.messages, ['echo: hi']);
+        // §5.5.1 — the bridge echoes the STATUS CODE; the reason is not echoed
+        assert.deepEqual(clientOut.closes, [{ code: 1000, reason: '' }]);
+    });
+
+});

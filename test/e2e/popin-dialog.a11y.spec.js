@@ -8,7 +8,10 @@
  * enter/exit transitions, and the non-modal shims (body scroll-lock, shim Escape,
  * focus return). It drives `fixtures/popin-dialog.html`, a framework-free harness that
  * mirrors the a11y contract popin/main.js guarantees, against the BUILT
- * `dist/.../css/gina.min.css`.
+ * `dist/.../css/gina.min.css`. The fixture is served at /a11y by the runtime
+ * harness (test/e2e/runtime-server.js), which resolves framework/v<version>
+ * from package.json — so the stylesheet link survives the per-release
+ * framework-dir rename (a hardcoded file:// version path broke at the 0.4.6 cut).
  *
  * Run:
  *   npm i -D @playwright/test && npx playwright install chromium
@@ -20,10 +23,10 @@
  * run for real against the booted bundle in the sibling popin-dialog.runtime.spec.js.
  */
 
-const path = require('path');
 const { test, expect } = require('@playwright/test');
 
-const FIXTURE = 'file://' + path.join(__dirname, 'fixtures', 'popin-dialog.html');
+const PORT    = process.env.GINA_E2E_PORT || '3179';
+const FIXTURE = 'http://localhost:' + PORT + '/a11y';
 
 test.beforeEach(async ({ page }) => {
     await page.goto(FIXTURE);

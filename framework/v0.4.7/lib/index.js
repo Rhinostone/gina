@@ -160,6 +160,20 @@ function Lib() {
         // inside loadBundleConfig). Default backend reads process.env[KEY];
         // fail-closed on unset/empty values. See lib/secrets/src/main.js.
         secrets         : _require('./secrets'),
+        // #H13 — RFC 6455 WebSocket framing codec (frame encoder + incremental
+        // parser: fragmentation reassembly, masking enforcement, UTF-8 and
+        // close-code validation, maxPayload/maxFragments caps). Transport-
+        // agnostic; the WebSocket-over-HTTP/2 session bridge feeds it
+        // extended-CONNECT stream bytes. Pure factory (per-connection parser
+        // instances, no module-scope state), so _require (hot-reloadable) is safe.
+        wsFraming       : _require('./ws-framing'),
+        // #H13 — WebSocket-over-HTTP/2 session bridge. accept(request) answers
+        // the extended CONNECT with :status 200 and wraps the raw Http2Stream
+        // + a ws-framing parser into a send/ping/close session (auto-pong,
+        // timed close handshake, teardown on stream close/error, graceful-
+        // shutdown drain registration). Consumed by the Isaac engine's
+        // onWebSocket dispatcher. Pure factory, so _require is safe.
+        wsSession       : _require('./ws-session'),
     };
 
     /**

@@ -1203,3 +1203,296 @@ describe('14 - reportOnly: omit report-only-inert directives', function () {
     });
 
 });
+
+
+// ─── 15 — reportOnlyOmit: consumer-chosen report-only omissions ────────────
+
+describe('15 - reportOnlyOmit: consumer-chosen report-only omissions', function () {
+
+    function makeRes(initial) {
+        var headers = initial || {};
+        return {
+            statusCode: 200,
+            getHeader: function (n) { return headers[String(n).toLowerCase()] || null; },
+            setHeader: function (n, v) { headers[String(n).toLowerCase()] = v; },
+            _headers: headers
+        };
+    }
+
+    // Capture console.warn for the transparency-signal assertions.
+    var origWarn, warnings;
+    beforeEach(function () {
+        origWarn     = console.warn;
+        warnings     = [];
+        console.warn = function () { warnings.push(Array.prototype.join.call(arguments, ' ')); };
+    });
+    afterEach(function () { console.warn = origWarn; });
+
+    // -- _resolveReportOnlyOmit: validation + normalisation --
+
+    it('_resolveReportOnlyOmit defaults to [] when undefined', function () {
+        assert.deepEqual(Csp._resolveReportOnlyOmit(undefined), []);
+    });
+
+    it('_resolveReportOnlyOmit defaults to [] when null', function () {
+        assert.deepEqual(Csp._resolveReportOnlyOmit(null), []);
+    });
+
+    it('_resolveReportOnlyOmit lowercases and dedupes entries', function () {
+        assert.deepEqual(
+            Csp._resolveReportOnlyOmit(['Frame-Ancestors', 'frame-ancestors', 'script-src']),
+            ['frame-ancestors', 'script-src']
+        );
+    });
+
+    it('_resolveReportOnlyOmit throws on a non-array shape', function () {
+        assert.throws(function () {
+            Csp._resolveReportOnlyOmit('frame-ancestors');
+        }, /reportOnlyOmit must be an array/);
+    });
+
+    it('_resolveReportOnlyOmit throws on a non-string entry', function () {
+        assert.throws(function () {
+            Csp._resolveReportOnlyOmit(['frame-ancestors', 42]);
+        }, /reportOnlyOmit entries must be strings/);
+    });
+
+    it('_resolveReportOnlyOmit throws on an unknown directive name (same whitelist as directives)', function () {
+        assert.throws(function () {
+            Csp._resolveReportOnlyOmit(['frame-ancestrs']);
+        }, /unknown directive name "frame-ancestrs" in reportOnlyOmit/);
+    });
+
+    // -- _stripReportOnlyIgnored: second parameter --
+
+    it('_stripReportOnlyIgnored removes the extraOmit names on top of sandbox', function () {
+        var out = Csp._stripReportOnlyIgnored(
+            { 'script-src': ["'self'"], 'sandbox': true, 'frame-ancestors': ["'none'"] },
+            ['frame-ancestors']
+        );
+        assert.deepEqual(out, { 'script-src': ["'self'"] });
+    });
+
+    it('_stripReportOnlyIgnored 1-arg call keeps the pre-feature behaviour (inert set only)', function () {
+        var out = Csp._stripReportOnlyIgnored({
+            'script-src': ["'self'"], 'sandbox': true, 'frame-ancestors': ["'none'"]
+        });
+        assert.deepEqual(out, { 'script-src': ["'self'"], 'frame-ancestors': ["'none'"] });
+    });
+
+    it('_stripReportOnlyIgnored with extraOmit is pure — input unmutated, new object returned', function () {
+        var input = { 'script-src': ["'self'"], 'frame-ancestors': ["'none'"] };
+        var out   = Csp._stripReportOnlyIgnored(input, ['frame-ancestors']);
+        assert.deepEqual(input, { 'script-src': ["'self'"], 'frame-ancestors': ["'none'"] }, 'input unchanged');
+        assert.notEqual(out, input, 'returns a new object');
+    });
+
+    // -- factory + middleware behaviour --
+
+    it('reportOnly:true + reportOnlyOmit omits the named directive, keeps siblings', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'self'"] },
+            reportOnly: true,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(res.getHeader('content-security-policy-report-only'), "script-src 'self'");
+    });
+
+    it('opted-out omission warns with reportOnlyOmit wording, NOT the browser-inert wording', function () {
+        Csp({
+            directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'self'"] },
+            reportOnly: true,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        assert.equal(warnings.length, 1, 'expected exactly one factory-time warning');
+        assert.ok(/per\s+reportOnlyOmit/.test(warnings[0]),  'expected reportOnlyOmit wording');
+        assert.ok(/frame-ancestors/.test(warnings[0]),       'expected warning to name the directive');
+        assert.ok(/forgoing/.test(warnings[0]),              'expected the forgone-signal wording');
+        assert.ok(!/ignored by browsers/.test(warnings[0]),
+            'opted-out directives are NOT browser-ignored — wording must not claim it');
+    });
+
+    it('inert + opted omissions produce two distinguishable warnings', function () {
+        Csp({
+            directives: { 'script-src': ["'self'"], 'sandbox': true, 'frame-ancestors': ["'self'"] },
+            reportOnly: true,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        assert.equal(warnings.length, 2, 'expected one warning per omission cause');
+        var inertWarn = warnings.filter(function (w) { return /ignored by browsers/.test(w); });
+        var optedWarn = warnings.filter(function (w) { return /per\s+reportOnlyOmit/.test(w); });
+        assert.equal(inertWarn.length, 1, 'expected one browser-inert warning');
+        assert.equal(optedWarn.length, 1, 'expected one reportOnlyOmit warning');
+        assert.ok(/sandbox/.test(inertWarn[0]) && !/frame-ancestors/.test(inertWarn[0]),
+            'inert warning names sandbox only');
+        assert.ok(/frame-ancestors/.test(optedWarn[0]) && !/sandbox/.test(optedWarn[0]),
+            'opted warning names frame-ancestors only');
+    });
+
+    it('reportOnly:false restores the opted-out directives and is silent (the enforce flip)', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'sandbox': true, 'frame-ancestors': ["'self'"] },
+            reportOnly: false,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        var emitted = res.getHeader('content-security-policy');
+        assert.ok(/frame-ancestors 'self'/.test(emitted), 'frame-ancestors restored in enforcing mode');
+        assert.ok(/sandbox/.test(emitted),                'sandbox restored in enforcing mode');
+        assert.equal(warnings.length, 0,
+            'reportOnlyOmit is silent-inert in enforce mode — carrying it there is the expected lifecycle state');
+    });
+
+    it('reportOnlyOmit entry absent from directives warns (config-mistake signal) and no-ops', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"] },
+            reportOnly: true,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(res.getHeader('content-security-policy-report-only'), "script-src 'self'");
+        assert.equal(warnings.length, 1, 'expected the absent-entry warning');
+        assert.ok(/not present/.test(warnings[0]) && /frame-ancestors/.test(warnings[0]));
+    });
+
+    it('absent-entry warning does NOT fire in enforce mode (option fully silent there)', function () {
+        Csp({
+            directives: { 'script-src': ["'self'"] },
+            reportOnly: false,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        assert.equal(warnings.length, 0);
+    });
+
+    it('throws when reportOnlyOmit empties the report-only set', function () {
+        assert.throws(function () {
+            Csp({
+                directives: { 'script-src': ["'self'"] },
+                reportOnly: true,
+                reportOnlyOmit: ['script-src']
+            });
+        }, /empty after omissions[\s\S]*per reportOnlyOmit: script-src/);
+    });
+
+    it('mixed-cause empty set names both causes in the throw', function () {
+        assert.throws(function () {
+            Csp({
+                directives: { 'script-src': ["'self'"], 'sandbox': true },
+                reportOnly: true,
+                reportOnlyOmit: ['script-src']
+            });
+        }, /ignored by browsers: sandbox[\s\S]*per reportOnlyOmit: script-src/);
+    });
+
+    it('sandbox listed in reportOnlyOmit is not double-named (inert warning only)', function () {
+        Csp({
+            directives: { 'script-src': ["'self'"], 'sandbox': true },
+            reportOnly: true,
+            reportOnlyOmit: ['sandbox']
+        });
+        assert.equal(warnings.length, 1, 'expected only the browser-inert warning');
+        assert.ok(/ignored by browsers/.test(warnings[0]) && /sandbox/.test(warnings[0]));
+    });
+
+    it('throws when useNonce target is in reportOnlyOmit under reportOnly (incoherent header/tag state)', function () {
+        assert.throws(function () {
+            Csp({
+                directives: { 'script-src': ["'self'"], 'default-src': ["'self'"] },
+                reportOnly: true,
+                reportOnlyOmit: ['script-src'],
+                useNonce: true
+            });
+        }, /nonce target directive \("script-src"\)/);
+    });
+
+    it('useNonce composes when the omitted directive is NOT the nonce target', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'self'"] },
+            reportOnly: true,
+            reportOnlyOmit: ['frame-ancestors'],
+            useNonce: true
+        });
+        var req = { method: 'GET' };
+        var res = makeRes();
+        mw(req, res, function () {});
+        assert.equal(typeof req._ginaCspNonce, 'string');
+        assert.equal(
+            res.getHeader('content-security-policy-report-only'),
+            "script-src 'self' 'nonce-" + req._ginaCspNonce + "'"
+        );
+    });
+
+    it('no reportOnlyOmit → output byte-identical to the pre-feature report-only behaviour', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'none'"], 'sandbox': true },
+            reportOnly: true
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(
+            res.getHeader('content-security-policy-report-only'),
+            "script-src 'self'; frame-ancestors 'none'"
+        );
+        assert.equal(warnings.length, 1, 'only the pre-existing sandbox warning');
+    });
+
+    it('a false-valued directive named in reportOnlyOmit gets the absent-entry warn (already omitted everywhere)', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'frame-ancestors': false },
+            reportOnly: true,
+            reportOnlyOmit: ['frame-ancestors']
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(res.getHeader('content-security-policy-report-only'), "script-src 'self'");
+        assert.equal(warnings.length, 1, 'a false value is excluded by resolveDirectives, so the entry is absent');
+        assert.ok(/not present/.test(warnings[0]) && /frame-ancestors/.test(warnings[0]));
+    });
+
+    it('mixed-case reportOnlyOmit entry matches a lowercase directives key through the factory path', function () {
+        var mw  = Csp({
+            directives: { 'script-src': ["'self'"], 'frame-ancestors': ["'self'"] },
+            reportOnly: true,
+            reportOnlyOmit: ['Frame-Ancestors']
+        });
+        var res = makeRes();
+        mw({ method: 'GET' }, res, function () {});
+        assert.equal(res.getHeader('content-security-policy-report-only'), "script-src 'self'");
+        assert.equal(warnings.length, 1, 'expected the omission warn, not the absent-entry warn');
+        assert.ok(/per\s+reportOnlyOmit/.test(warnings[0]), 'normalised entry matched the directives key');
+    });
+
+    it('reportOnlyOmit flows through the settings-defaults merge (defaults apply, caller wins)', function () {
+        var viaDefaults = Csp._mergeOptions({}, { reportOnlyOmit: ['frame-ancestors'] });
+        assert.deepEqual(viaDefaults.reportOnlyOmit, ['frame-ancestors'], 'settings-side value survives the merge');
+        var callerWins = Csp._mergeOptions({ reportOnlyOmit: [] }, { reportOnlyOmit: ['frame-ancestors'] });
+        assert.deepEqual(callerWins.reportOnlyOmit, [], 'caller value wins over settings');
+    });
+
+    // -- source pins --
+
+    it('factory routes reportOnlyOmit through the strip helper', function () {
+        var src = fs.readFileSync(PLUGIN, 'utf8');
+        assert.ok(
+            /stripReportOnlyIgnored\(\s*directives,\s*reportOnlyOmit\s*\)/.test(src),
+            'expected stripReportOnlyIgnored(directives, reportOnlyOmit) call'
+        );
+    });
+
+    it('source guards the nonce target against reportOnlyOmit', function () {
+        var src = fs.readFileSync(PLUGIN, 'utf8');
+        assert.ok(
+            /reportOnlyOmit\.indexOf\(\s*nonceTarget\s*\)/.test(src),
+            'expected the reportOnlyOmit nonce-target guard'
+        );
+    });
+
+    it('exports _resolveReportOnlyOmit for unit testing', function () {
+        assert.equal(typeof Csp._resolveReportOnlyOmit, 'function');
+    });
+
+});

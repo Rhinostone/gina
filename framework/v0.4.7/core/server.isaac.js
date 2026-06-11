@@ -479,6 +479,10 @@ function ServerEngineClass(options) {
 
     if ( /^http\/2/.test(options.protocol) ) {
         var _h2Opts = (options.http2Options && typeof options.http2Options === 'object') ? options.http2Options : {};
+        // #H13 — RFC 8441 extended CONNECT (WebSocket over HTTP/2): strict boolean
+        // opt-in via settings.json http2Options.enableConnectProtocol (default false).
+        // Gates both the SETTINGS advert below and the `connect` listener registration.
+        var _enableConnectProtocol = _h2Opts.enableConnectProtocol === true;
         http2Options.settings = {
             // Max parallel streams per TCP connection — configurable via settings.json http2Options.maxConcurrentStreams
             maxConcurrentStreams : _h2Opts.maxConcurrentStreams || 256,
@@ -487,7 +491,12 @@ function ServerEngineClass(options) {
             // #H3 — HPACK bomb defense: cap compressed header list size (SETTINGS_MAX_HEADER_LIST_SIZE)
             maxHeaderListSize   : 65536,
             // #H3 — Server push is deprecated in Chrome/Firefox and removed in HTTP/2 RFC 9113; disable it
-            enablePush          : false
+            enablePush          : false,
+            // #H13 — advertises SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441) on any
+            // http/2 bundle: `http2Options` (and this `settings` block) reaches
+            // createSecureServer (https) and createServer (h2c) alike. RFC 8441 has
+            // no TLS requirement; the flag stays a strict opt-in (default false).
+            enableConnectProtocol : _enableConnectProtocol
         };
         // #H3 — RST flood defense (CVE-2019-9514, CVE-2023-44487 rapid reset)
         // #H7 — configurable via settings.json http2Options.maxSessionRejectedStreams (default 100)
@@ -502,9 +511,15 @@ function ServerEngineClass(options) {
         // settings.json http2Options.maxStreamsPerSecond (default 200).
         var _maxStreamsPerSec = _h2Opts.maxStreamsPerSecond || 200;
         var http2   = require('http2');
+        // h2c flood-defense parity: the cleartext branches receive the same
+        // `http2Options` as the https branch. On non-https schemes the object
+        // carries no TLS material (key/cert/ca/pfx/passphrase are merged under
+        // `/https/` scheme gates only) — it holds exactly allowHTTP1 + the
+        // `settings` advert + the #H3/#H7 caps, so the hardening applies
+        // identically across schemes.
         switch (options.scheme) {
             case 'http':
-                server      = http2.createServer({ allowHTTP1: allowHTTP1 });
+                server      = http2.createServer(http2Options);
                 break;
 
             case 'https':
@@ -512,7 +527,7 @@ function ServerEngineClass(options) {
                 break;
 
             default:
-                server      = http2.createServer({ allowHTTP1: allowHTTP1 });
+                server      = http2.createServer(http2Options);
                 break;
         }
 
@@ -522,7 +537,9 @@ function ServerEngineClass(options) {
             totalStreams    : 0,
             goawayCount     : 0,
             rstCount        : 0,
-            rapidResetBlocked : 0
+            rapidResetBlocked : 0,
+            // #H13 — extended-CONNECT (`:protocol`-bearing) streams observed
+            extendedConnect : 0
         };
         server._h2Metrics = _h2Metrics;
 
@@ -596,6 +613,111 @@ function ServerEngineClass(options) {
                 console.error('[ SERVER ] Session error:', err.stack);
             });
         });
+
+        // #H13 — RFC 8441 extended CONNECT (WebSocket over HTTP/2), strict opt-in.
+        // Registering a `connect` listener suppresses the engine compat layer's
+        // automatic 405 for CONNECT streams, so EVERY path below must terminate
+        // the stream/socket — an unanswered CONNECT hangs forever. When the flag
+        // is off, no listener is registered and the engine behaves byte-identically
+        // to previous releases (plain CONNECT → compat 405; extended CONNECT →
+        // rejected as malformed before reaching the app, since
+        // SETTINGS_ENABLE_CONNECT_PROTOCOL was never advertised).
+        // #H9 composition: the per-session `stream` accounting above still counts
+        // every CONNECT stream — a rapid-reset flood of CONNECT streams trips the
+        // same GOAWAY teardown, which destroys any just-accepted stream with it.
+        if (_enableConnectProtocol) {
+            server.on('connect', (request, response) => {
+                try {
+                    if (!request.stream) {
+                        // HTTP/1.1 CONNECT (allowHTTP1 fallback): `response` is the
+                        // raw socket here, the third argument the head buffer. Gina
+                        // is not a forward proxy — refuse and close. (Without this
+                        // listener the engine destroys the connection unanswered.)
+                        response.write('HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n');
+                        response.destroy();
+                        return;
+                    }
+                    var _protocol = request.headers[':protocol'];
+                    if (typeof _protocol === 'undefined') {
+                        // Plain HTTP/2 CONNECT (no :protocol): mirror the compat
+                        // layer's default refusal (`:status 405` + `date`, no body).
+                        response.writeHead(405);
+                        response.end();
+                        return;
+                    }
+                    _h2Metrics.extendedConnect++;
+                    if (_protocol !== 'websocket') {
+                        response.writeHead(501);
+                        response.end();
+                        return;
+                    }
+                    if (typeof server._extendedConnectHandler === 'function') {
+                        // Narrow internal hook: the WebSocket session bridge claims
+                        // the stream from here (`request.stream` is the raw
+                        // Http2Stream; RFC 8441 §5 — respond `:status 200`, then the
+                        // stream IS the bidirectional WebSocket channel).
+                        server._extendedConnectHandler(request, response);
+                        return;
+                    }
+                    // No consumer registered (transport enabled, bridge not wired):
+                    // refuse cleanly so clients see a handshake failure, not a hang.
+                    response.writeHead(501);
+                    response.end();
+                } catch (err) {
+                    // Never let a CONNECT-path error escalate to uncaughtException
+                    // (proc.js would SIGTERM the bundle) — terminate the stream instead.
+                    console.warn('[ SERVER ] extended CONNECT handling failed: ' + err.message);
+                    try {
+                        if (request.stream && !request.stream.destroyed) {
+                            request.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+                        } else if (!request.stream && response && response.destroy) {
+                            response.destroy();
+                        }
+                    } catch (closeErr) {
+                        // stream/socket already gone — nothing left to terminate
+                    }
+                }
+            });
+
+            /**
+             * #H13 — public WebSocket-over-HTTP/2 registration API. Bundle code
+             * reaches it from `onInitialize` (the `app` argument IS this raw
+             * server object) and registers a handler per exact pathname:
+             *
+             *     app.onWebSocket('/live', function(session, request) { ... });
+             *
+             * The dispatcher installs LAZILY on the first registration so the
+             * default refusal table above keeps answering 501 for websocket
+             * streams when no consumer exists. With handlers registered, an
+             * accepted websocket stream is matched on its `:path` pathname
+             * (query string stripped): a hit is answered `:status 200` via
+             * lib.wsSession.accept and handed to the handler as a live
+             * session; a miss is refused with 404. No express middleware runs
+             * on the CONNECT path — authentication is the handler's concern
+             * (it receives the full request for header/cookie inspection).
+             */
+            server._wsHandlers = {};
+            server.onWebSocket = function(wsPath, wsHandler) {
+                if (typeof wsPath !== 'string' || wsPath.length === 0 || typeof wsHandler !== 'function') {
+                    throw new TypeError('onWebSocket(path, handler) requires a non-empty path string and a handler function');
+                }
+                server._wsHandlers[wsPath] = wsHandler;
+                if (typeof server._extendedConnectHandler !== 'function') {
+                    server._extendedConnectHandler = function(request, response) {
+                        var _wsPathname = String(request.headers[':path'] || '').split('?')[0];
+                        var _wsTarget = server._wsHandlers[_wsPathname];
+                        if (typeof _wsTarget !== 'function') {
+                            // No handler registered for this pathname.
+                            response.writeHead(404);
+                            response.end();
+                            return;
+                        }
+                        var _wsSession = lib.wsSession.accept(request);
+                        _wsTarget(_wsSession, request);
+                    };
+                }
+            };
+        }
     } else {
 
         switch (options.scheme) {
@@ -614,6 +736,16 @@ function ServerEngineClass(options) {
                 server      = http.createServer();
                 break;
         }
+    }
+
+    // #H13 — cross-protocol safety stub: onWebSocket is only functional on an
+    // http/2 bundle with http2Options.enableConnectProtocol enabled. Bundles
+    // sharing one onInitialize across differently-configured environments
+    // must not crash on the call — warn instead of throwing.
+    if (typeof server.onWebSocket !== 'function') {
+        server.onWebSocket = function() {
+            console.warn('[ SERVER ] onWebSocket() ignored — WebSocket over HTTP/2 requires an http/2 protocol and settings.json http2Options.enableConnectProtocol set to true');
+        };
     }
 
     // Setting up server options
@@ -860,7 +992,8 @@ function ServerEngineClass(options) {
                         totalStreams    : server._h2Metrics.totalStreams,
                         goawayCount    : server._h2Metrics.goawayCount,
                         rstCount       : server._h2Metrics.rstCount,
-                        rapidResetBlocked : server._h2Metrics.rapidResetBlocked
+                        rapidResetBlocked : server._h2Metrics.rapidResetBlocked,
+                        extendedConnect : server._h2Metrics.extendedConnect
                     };
                 }
                 const infoStatus = JSON.stringify(infoPayload);
@@ -1840,6 +1973,18 @@ function ServerEngineClass(options) {
                 pingInterval: parseTimeout(options.ioServer.pingInterval || options.ioServer.interval)
             }));
 
+            // Graceful-shutdown drain: proc.js's SIGTERM path invokes every
+            // registered closer before _httpServer.close(), so live engine.io
+            // sockets get a graceful close() (write buffer flushed, transport
+            // close packet sent) instead of blocking shutdown until the hard
+            // timeout. engine.io's close() takes no status code — the discard
+            // variant close(true) is the hard teardown ioServer.close() uses.
+            if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+            var _eioShutdownCloser = function() {
+                try { socket.close(); } catch (e) {}
+            };
+            process.gina._sseConnections.add(_eioShutdownCloser);
+
             socket.on('message', function(payload){
 
                 try {
@@ -1893,6 +2038,9 @@ function ServerEngineClass(options) {
 
             socket.on('close', function(){
                 console.debug('[IO SERVER ] closed socket #'+ this.id);
+                if (process.gina._sseConnections) {
+                    process.gina._sseConnections.delete(_eioShutdownCloser);
+                }
                 if (typeof _ioLogListener !== 'undefined') {
                     process.removeListener('logger#default', _ioLogListener);
                 }
