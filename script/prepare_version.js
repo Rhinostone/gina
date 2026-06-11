@@ -561,6 +561,11 @@ function PrepareVersion() {
             // keeping package.json up to date
             //"main": "./framework/v{version}/core/gna",
             package.main = './framework/v'+ targetedVersion +'/core/gna';
+            // #M10 — keep the exports map's "." require condition in lockstep
+            // with "main" (the ESM "import" targets are version-agnostic).
+            if ( package.exports && package.exports['.'] && package.exports['.'].require ) {
+                package.exports['.'].require = './framework/v'+ targetedVersion +'/core/gna.js';
+            }
             new _(pack, true).rmSync();
             lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
 

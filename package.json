@@ -73,6 +73,19 @@
     "gina-init": "bin/gina-init"
   },
   "main": "./framework/v0.4.8-alpha.2/core/gna",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./index.mjs",
+      "require": "./framework/v0.4.8-alpha.2/core/gna.js"
+    },
+    "./gna": {
+      "types": "./types/gna.d.ts",
+      "import": "./gna.mjs",
+      "require": "./gna.js"
+    },
+    "./package.json": "./package.json"
+  },
   "types": "./types/index.d.ts",
   "typesVersions": {
     "*": {
