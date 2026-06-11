@@ -26,14 +26,14 @@
  *      + `<script>window.__ginaLogs = ...</script>` are injected before `</body>`
  *      in dev mode, redacted via `lib/inspector-redact`, stashed on
  *      `self.serverInstance._lastGinaData`, and emitted via
- *      `process.emit('inspector#data')`. Within this port, **statusbar.html
- *      inclusion is still deferred** — the swig template uses `{% include %}`
- *      with swig-specific syntax; a nunjucks-compatible statusbar template
- *      is a separate follow-up. `data.page.flow` (flow timeline from
- *      `local._timeline`) and `data.page.queries` (query log from
- *      `local._queryLog`) are also not yet piped into the Inspector payload
- *      — the data is computed in render-swig.js around lines 980-1040 and
- *      belongs in a shared helper before porting.
+ *      `process.emit('inspector#data')`. The within-port follow-ups shipped
+ *      with #M11: the dev statusbar.html body — a leaf with only `{% if %}`
+ *      / `{{ }}` tags, valid nunjucks — is rendered through the resolver
+ *      module's `renderString()` and spliced post-render (render-swig
+ *      inlines the same body into the layout pre-compile — #TPL2), and both
+ *      `data.page.flow` (flow timeline from `local._timeline`) and
+ *      `data.page.queries` (query log from `local._queryLog`) are piped
+ *      into the Inspector payload inside `injectInspectorScripts()`.
  *   2. ~~**HTTP/2 `stream.respond()` direct path**~~ — **shipped 2026-04-22**
  *      (commit TBD). `sendHtmlResponse` now implements the four-way branch
  *      from `class.controller.md §7b` (HEAD×stream, HEAD×HTTP1.1, body×stream,
@@ -230,12 +230,12 @@ function resolveTemplatePath(data, localOptions) {
         if (effective === localOptions.namespace) {
             effective = 'index';
         }
-        // FRAMEWORK PATCH: drop redundant `<namespace>-` prefix
-        // from the file segment when present, so `project/project-get.njk`
-        // resolves to `project/get.njk` (and `client/client-list.njk` to
+        // Drop the redundant `<namespace>-` prefix from the file segment
+        // when present, so `project/project-get.njk` resolves to
+        // `project/get.njk` (and `client/client-list.njk` to
         // `client/list.njk`). Lets route names that already carry the
         // namespace (e.g. `project-get`, `client-list`) live at the cleaner
-        // `<namespace>/<action>.njk` path. Push upstream to gina-io/gina.
+        // `<namespace>/<action>.njk` path. Upstreamed in 0.3.9.
         var nsPrefix = localOptions.namespace + '-';
         if (effective.length > nsPrefix.length && effective.indexOf(nsPrefix) === 0) {
             effective = effective.substring(nsPrefix.length);
@@ -252,10 +252,12 @@ function resolveTemplatePath(data, localOptions) {
 }
 
 /**
- * Builds the Inspector dev-payload scripts and injects them into the
- * rendered HTML just before `</body>`. Mirrors render-swig.js:1041-1128
- * but without the `statusbar.html` `{% include %}` (that template is
- * swig-specific — a nunjucks-compatible version is a follow-up).
+ * Builds the Inspector dev-payload scripts + the dev statusbar and injects
+ * them into the rendered HTML just before `</body>`. Mirrors render-swig.js
+ * (#TPL2 inlines the statusbar.html body into the layout pre-compile; here
+ * the engine pass has already happened, so the statusbar body — a leaf with
+ * only `{% if %}` / `{{ }}` tags, valid nunjucks — is rendered through the
+ * resolver module's `renderString()` and spliced as plain HTML).
  *
  * Runs only in dev mode (`self.isCacheless()`), gated by `displayInspector`:
  *
@@ -321,6 +323,13 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
             requestStart: local._timeline.requestStart,
             entries: local._timeline.entries
         };
+    }
+
+    // #M11 — Inspector Queries tab parity with render-swig: expose the raw
+    // QI query log alongside the flow-timeline fold-in above, so
+    // `__ginaData.user.queries` exists for nunjucks pages too.
+    if (local._queryLog && local._queryLog.length > 0) {
+        data.page.queries = local._queryLog;
     }
 
     // Two deep clones — one labelled gina (metadata for the Inspector
@@ -450,10 +459,32 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
         process.emit('inspector#data', __gdPayload);
     } catch (e) { /* listener raised — not fatal to the render */ }
 
+    // #M11 — dev statusbar parity with render-swig. statusbar.html is a leaf
+    // template (only {% if page.cspNonce %} + {{ }} tags — valid nunjucks),
+    // but this helper runs AFTER the engine pass, so the body is rendered
+    // through the resolver module's renderString() and spliced as plain
+    // HTML. Read per-render so dev edits hot-reload; this path is
+    // dev/inspector-gated above, so there is no production read.
+    var _statusbarHtml = '';
+    try {
+        var _statusbarTpl = fs.readFileSync(
+            getPath('gina').core + '/asset/plugin/dist/vendor/gina/html/statusbar.html', 'utf8'
+        );
+        _statusbarHtml = require('../../lib/nunjucks-resolver').get().renderString(_statusbarTpl, data);
+    } catch (_sbErr) {
+        console.warn('[render] Inspector statusbar unavailable: ' + (_sbErr.message || _sbErr));
+    }
+
     // Inject before the first `</body>`. Case-insensitive match; the
     // surrounding newline + tab match render-swig's formatting so the
     // diff against a rendered swig-then-nunjucks page is cosmetic-only.
-    return html.replace(/<\/body>/i, '\t' + __logsScript + __gdScript + '\n\t</body>');
+    // $-safe splice (function replacer): with a STRING replacement,
+    // String.prototype.replace expands dollar patterns — the statusbar body
+    // literally contains two of them, and the JSON payloads can carry them
+    // in user data. The function form returns the text verbatim; mirrors
+    // render-swig.js's #TPL2 splice fix.
+    var _injected = '\t' + __logsScript + __gdScript + _statusbarHtml + '\n\t</body>';
+    return html.replace(/<\/body>/i, function () { return _injected; });
 }
 
 /**

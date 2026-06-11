@@ -22,7 +22,7 @@ Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope
 | ORM / entities | EventEmitter-based entity system; SQL files auto-wired to entity methods |
 | Connectors | Couchbase, MongoDB, ScyllaDB / Cassandra, MySQL, PostgreSQL, Redis, SQLite, AI (LLM) — loaded from project `node_modules` |
 | AI connector | Any LLM provider via named protocol (`anthropic://`, `openai://`, `ollama://`, …) |
-| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.7.2 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` |
+| Template engine | [`@rhinostone/swig`](https://github.com/gina-io/swig) 2.7.2 — maintained fork with CVE-2023-25345 patched; streaming SSE/chunked via `renderStream()`. Nunjucks supported as opt-in via `render.engine = "nunjucks"` or per-section `"ext": ".njk"` |
 | Internationalisation | Per-bundle JSON catalogs, `t()` helper, swig + nunjucks `t` filter, CLDR plurals, ICU MessageFormat opt-in via `t.icu()` |
 | Observability | Built-in `/_gina/metrics` Prometheus endpoint (opt-in, IP-allowlisted) — Node.js process metrics + HTTP counter / duration histogram with cardinality-safe route labels |
 | Hot reload | WatcherService evicts `require.cache` only on file change — zero per-request overhead in dev |
@@ -39,12 +39,11 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.4.7
+## What's in 0.5.0
 
-- **WebSocket over HTTP/2 (opt-in).** HTTP/2 bundles can serve WebSocket endpoints over the RFC 8441 extended-CONNECT transport, with a built-in dependency-free RFC 6455 framing codec — no external WebSocket library. Enable with `http2Options.enableConnectProtocol: true`, then register handlers from `onInitialize` with `app.onWebSocket(path, handler)`: each accepted stream arrives as a session with a `send`/`ping`/`close` API, automatic pong replies, payload and fragment caps, and a graceful close handshake.
-- **HTTP/2 hardening parity for h2c.** Cleartext HTTP/2 bundles (for example, backends behind a TLS-terminating reverse proxy) now receive the same hardening as `https` bundles — the stream caps, session flood defenses, and `settings.json` `http2Options` overrides all apply, where previously such bundles ran protocol defaults (effectively unlimited concurrent streams with server push enabled) and silently ignored their overrides.
-- **Graceful shutdown for live sockets.** Bundles with open WebSocket or engine.io connections no longer block SIGTERM shutdown until the hard timeout — every live socket is closed cleanly before the HTTP server closes, WebSockets with a `1001 going away` close handshake.
-- **CSP `reportOnlyOmit` (opt-in).** Omit engine-divergent directives such as `frame-ancestors` from `Content-Security-Policy-Report-Only` headers and have them restored automatically when `reportOnly` flips to `false` — one directive set across both modes, validated against the CSP Level 3 whitelist.
+- **Native ESM entry points.** `package.json` now declares an `"exports"` map with dual CJS/ESM entries — `import gina from 'gina'` and `import gna from 'gina/gna'` work natively in ESM projects and modern bundlers (default exports only; the `gina/gna` getters resolve at access time, after framework boot). CJS `require()` resolution is byte-identical to before, and TypeScript declarations keep resolving through per-entry `types` conditions. Note: with the `exports` map in place, the package's Node-resolvable surface is exactly `gina`, `gina/gna`, and `gina/package.json` — undeclared deep subpaths are no longer resolvable.
+- **Mixed template engines per bundle.** A `templates.json` section declaring `"ext": ".njk"` (or a `self.setTemplate(file, '.njk')` call) renders through nunjucks and `".swig"` through swig — regardless of the bundle-level `render.engine` setting. `.html` and any other extension keep following `render.engine`, so existing bundles are unchanged. Bundles with `.njk` sections get the same fail-fast `NUNJUCKS_NOT_INSTALLED` startup check as nunjucks-engine bundles.
+- **Nunjucks Inspector parity (dev mode).** Dev-mode nunjucks pages now render the Inspector statusbar and expose the query log as `data.page.queries` alongside the flow timeline — the Inspector Queries tab no longer renders empty for nunjucks bundles.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 

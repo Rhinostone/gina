@@ -667,3 +667,121 @@ describe('userData merge — framework page.* survives a partial page override (
     });
 
 });
+
+// 07 — #M11 nunjucks Inspector parity: data.page.queries + dev statusbar
+//
+// Closes the two remaining within-Inspector parity gaps against render-swig:
+// (a) the raw QI query log is exposed as data.page.queries alongside the
+//     flow-timeline fold-in, so __ginaData.user.queries exists for nunjucks
+//     pages (the Inspector Queries tab no longer renders empty);
+// (b) the dev statusbar ships — statusbar.html is a leaf template (only
+//     {% if page.cspNonce %} + {{ }} tags, valid nunjucks) rendered through
+//     the resolver module's renderString() AFTER the engine pass and spliced
+//     before </body> with a FUNCTION replacer ($-safe: the statusbar body
+//     literally contains $` and $' sequences which a string replacement
+//     would dollar-expand — the same defect render-swig's #TPL2 splice fix
+//     addressed).
+describe('07 - #M11 Inspector parity: queries + statusbar', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    it('exposes data.page.queries from local._queryLog (same gate as render-swig)', function() {
+        var s = src();
+        assert.ok(
+            /if\s*\(local\._queryLog\s*&&\s*local\._queryLog\.length\s*>\s*0\)\s*\{\s*data\.page\.queries\s*=\s*local\._queryLog;/.test(s),
+            'expected the render-swig-shaped queries gate + assignment'
+        );
+    });
+
+    it('queries assignment sits in injectInspectorScripts, after the flow fold-in', function() {
+        var s = src();
+        var helperIdx = s.indexOf('function injectInspectorScripts');
+        var flowIdx = s.indexOf('data.page.flow = {', helperIdx);
+        var queriesIdx = s.indexOf('data.page.queries = local._queryLog', helperIdx);
+        var clonesIdx = s.indexOf('JSON.parse(JSON.stringify(data.page))', helperIdx);
+        assert.ok(helperIdx > 0 && flowIdx > helperIdx, 'flow block inside the helper');
+        assert.ok(queriesIdx > flowIdx, 'queries assignment after the flow block');
+        assert.ok(queriesIdx < clonesIdx, 'queries assigned BEFORE the payload deep-clones');
+    });
+
+    it('reads statusbar.html from the framework core dist (per-render, hot-reloadable)', function() {
+        var s = src();
+        assert.ok(
+            /fs\.readFileSync\(\s*\n?\s*getPath\('gina'\)\.core\s*\+\s*'\/asset\/plugin\/dist\/vendor\/gina\/html\/statusbar\.html'/.test(s),
+            'expected the statusbar.html read in injectInspectorScripts'
+        );
+    });
+
+    it('renders the statusbar through the resolver module renderString (post-engine pass)', function() {
+        assert.ok(
+            src().indexOf("require('../../lib/nunjucks-resolver').get().renderString(_statusbarTpl, data)") > 0,
+            'expected renderString over the statusbar body with the render data'
+        );
+    });
+
+    it('statusbar read + render is contained in try/catch (best-effort, never breaks the render)', function() {
+        var s = src();
+        var sbIdx = s.indexOf('var _statusbarHtml');
+        var trIdx = s.indexOf('try {', sbIdx);
+        var caIdx = s.indexOf('catch (_sbErr)', sbIdx);
+        var spliceIdx = s.indexOf('var _injected', sbIdx);
+        assert.ok(sbIdx > 0 && trIdx > sbIdx && caIdx > trIdx && spliceIdx > caIdx,
+            'statusbar build wrapped in try/catch ahead of the splice');
+    });
+
+    it('splices with a function replacer ($-safe), statusbar between payload scripts and </body>', function() {
+        var s = src();
+        assert.ok(
+            /var _injected\s*=\s*'\\t'\s*\+\s*__logsScript\s*\+\s*__gdScript\s*\+\s*_statusbarHtml\s*\+\s*'\\n\\t<\/body>'/.test(s),
+            'expected the injected block composition'
+        );
+        assert.ok(
+            /return html\.replace\(\/<\\\/body>\/i,\s*function\s*\(\)\s*\{\s*return\s+_injected;\s*\}\s*\)/.test(s),
+            'expected the function-replacer splice'
+        );
+        // No string-replacement splice of the inspector block remains.
+        assert.ok(
+            s.indexOf("html.replace(/<\\/body>/i, '\\t' + __logsScript") < 0,
+            'the old string-replacement splice must be gone'
+        );
+    });
+
+    // Behavioural replica of the $-safety property: a payload carrying
+    // dollar-quote / dollar-backtick sequences must splice verbatim.
+    it('$-safe splice replica: dollar sequences survive verbatim (subtract: string form corrupts)', function() {
+        var html = '<html><body><p>content before</p></body></html>';
+        var block = '<script>var re = /\\$\'/; // and a $` in a comment</script>';
+        var injected = '\t' + block + '\n\t</body>';
+        var safe = html.replace(/<\/body>/i, function () { return injected; });
+        assert.ok(safe.indexOf(block) > 0, 'function replacer keeps the block verbatim');
+        // Subtract-my-contribution: the string form dollar-expands $' (the
+        // post-match text) into the block — proving the replacer is the
+        // load-bearing half of the fix.
+        var corrupted = html.replace(/<\/body>/i, injected);
+        assert.ok(corrupted.indexOf(block) < 0, 'string replacement corrupts the block');
+        // $' substitutes the POST-MATCH text (everything after </body>).
+        assert.ok(corrupted.indexOf('</html>/; // and a') > 0, "$' expanded the post-match text");
+        // $` substitutes the PRE-MATCH text.
+        assert.ok(corrupted.indexOf('a <html><body><p>content before</p> in a comment') > 0,
+            '$` expanded the pre-match text');
+    });
+
+    // Behavioural: the statusbar body's single directive renders under
+    // plain nunjucks renderString when the project has nunjucks installed
+    // (same install-gate idiom as the other behavioural nunjucks tests).
+    it('statusbar.html body renders under nunjucks renderString (gated on nunjucks install)', function(t) {
+        var nunjucks;
+        try { nunjucks = require('nunjucks'); }
+        catch (e) { t.skip('nunjucks not installed in this environment'); return; }
+        var FW = require('../fw');
+        var sb = fs.readFileSync(
+            path.join(FW, 'core/asset/plugin/dist/vendor/gina/html/statusbar.html'), 'utf8'
+        );
+        var withNonce = nunjucks.renderString(sb, { page: { cspNonce: 'abc123' } });
+        assert.ok(withNonce.indexOf('nonce="abc123"') > 0, 'nonce attribute rendered');
+        var withoutNonce = nunjucks.renderString(sb, { page: {} });
+        assert.ok(withoutNonce.indexOf('nonce=') < 0, 'no nonce attribute without page.cspNonce');
+        assert.ok(withoutNonce.indexOf('{%') < 0 && withoutNonce.indexOf('{{') < 0,
+            'no unrendered template directives remain');
+    });
+});

@@ -414,8 +414,15 @@ function Server(options) {
      * throws NUNJUCKS_NOT_INSTALLED here, terminating bundle startup with
      * a clear error — rendering with a stub would mask the misconfig.
      *
-     * No-op when render.engine is unset or "swig" — the existing swig
-     * engine init handles that case via initSwigEngine below.
+     * No-op when render.engine is unset or "swig" AND no templates.json
+     * section declares a `.njk` extension — the existing swig engine init
+     * handles that case via initSwigEngine below. A bundle whose
+     * settings-level engine is swig can still mix in nunjucks-rendered
+     * sections via per-section templates.json `ext` declarations (#M11:
+     * `.njk` routes through the nunjucks delegate at dispatch time), so
+     * nunjucks is initialised for those bundles too and a missing project
+     * nunjucks install fails at startup instead of 500-ing the first
+     * `.njk` render.
      *
      * @inner
      * @private
@@ -424,7 +431,22 @@ function Server(options) {
     var initNunjucksEngine = function(conf) {
         var _settings = (conf && conf.content && conf.content.settings) || {};
         var _engine = (_settings.render && _settings.render.engine) || 'swig';
-        if (_engine !== 'nunjucks') { return; }
+        // #M11 — extension-keyed mixing: any templates.json section whose
+        // `ext` is `.njk` (or `njk`) dispatches through nunjucks even when
+        // the settings-level engine is swig, so those bundles need the
+        // same fail-fast startup init.
+        var _hasNjkSection = false;
+        try {
+            var _tpls = (conf && conf.content && conf.content.templates) || {};
+            for (var _section in _tpls) {
+                var _sectionExt = _tpls[_section] && _tpls[_section].ext;
+                if ( _sectionExt && /^\.?njk$/i.test(String(_sectionExt)) ) {
+                    _hasNjkSection = true;
+                    break;
+                }
+            }
+        } catch (e) { /* fall through — the settings-level engine decides */ }
+        if (_engine !== 'nunjucks' && !_hasNjkSection) { return; }
         var _nunjucksSettings = _settings.nunjucks || {};
         // load() throws NUNJUCKS_NOT_INSTALLED if the project does not have
         // nunjucks in its node_modules — we intentionally let that propagate

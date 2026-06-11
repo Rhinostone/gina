@@ -474,6 +474,11 @@ function PostPublish() {
         // Update package.json
         packObj.version = newVersion;
         packObj.main = './framework/v' + newVersion + '/core/gna';
+        // #M10 — keep the exports map's "." require condition in lockstep
+        // with "main" (the ESM "import" targets are version-agnostic).
+        if (packObj.exports && packObj.exports['.'] && packObj.exports['.'].require) {
+            packObj.exports['.'].require = './framework/v' + newVersion + '/core/gna.js';
+        }
         new _(pack, true).rmSync();
         lib.generator.createFileFromDataSync(JSON.stringify(packObj, null, 2), pack);
 
