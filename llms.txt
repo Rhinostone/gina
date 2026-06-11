@@ -369,11 +369,13 @@ var jobId = self.inferAsync([{ role: 'user', content: prompt }], { connector: 'm
     "maxConcurrentStreams": 256,
     "initialWindowSize": 655350,
     "maxSessionRejectedStreams": 100,
-    "maxSessionInvalidFrames": 1000
+    "maxSessionInvalidFrames": 1000,
+    "maxStreamsPerSecond": 200,
+    "enableConnectProtocol": false
   }
 }
 ```
-Security-critical settings that are hardcoded and not user-overridable: `maxHeaderListSize: 65536` (HPACK bomb), `enablePush: false`.
+Security-critical settings that are hardcoded and not user-overridable: `maxHeaderListSize: 65536` (HPACK bomb), `enablePush: false`. All of the above apply to both https and cleartext h2c bundles (the full `http2Options` reaches createSecureServer and createServer alike).
 
 **Session metrics** — exposed at `/_gina/info` under `"http2"` key:
 ```json
