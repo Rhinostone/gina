@@ -1577,12 +1577,22 @@ describe('05b - Inspector __gdPayload injection', function () {
         );
     });
 
-    it('documents statusbar.html inclusion as a within-Inspector deferred follow-up', function () {
-        // Captures our commitment — if a future session silently drops the
-        // statusbar note, this test fails and forces explicit re-docs.
-        // Multi-line tolerant: token presence plus the 'deferred' word
-        // within a small window.
-        assert.match(RENDER_NJ_SRC, /statusbar\.html[\s\S]{0,400}deferred/i);
+    it('ships the dev statusbar (renderString + $-safe post-render splice) — #M11', function () {
+        // This pin previously locked the statusbar DEFERRAL note, by design
+        // forcing explicit re-docs when the statusbar shipped. #M11 shipped
+        // it: injectInspectorScripts reads statusbar.html, renders the body
+        // through the resolver module's renderString() (the engine pass has
+        // already happened), and splices it with a FUNCTION replacer — a
+        // string replacement would dollar-expand $` / $' sequences the
+        // statusbar body literally contains.
+        assert.match(RENDER_NJ_SRC, /statusbar\.html/);
+        assert.match(RENDER_NJ_SRC, /nunjucks-resolver'\)\.get\(\)\.renderString\(\s*_statusbarTpl\s*,\s*data\s*\)/);
+        assert.match(
+            RENDER_NJ_SRC,
+            /html\.replace\(\/<\\\/body>\/i,\s*function\s*\(\)\s*\{\s*return\s+_injected\s*;\s*\}\s*\)/
+        );
+        // The statusbar HTML rides the injected block ahead of </body>.
+        assert.match(RENDER_NJ_SRC, /__logsScript\s*\+\s*__gdScript\s*\+\s*_statusbarHtml/);
     });
 
     it('documents data.page.flow / queries pipeline as deferred', function () {

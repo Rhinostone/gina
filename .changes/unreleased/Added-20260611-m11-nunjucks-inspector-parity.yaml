@@ -1,0 +1,3 @@
+kind: Added
+body: 'Nunjucks Inspector parity (#M11): dev-mode nunjucks pages now render the Inspector statusbar (the statusbar template is rendered through nunjucks and spliced post-render with a dollar-safe function replacer) and expose the query log as `data.page.queries` alongside the already-piped flow timeline — the Inspector Queries tab no longer renders empty for nunjucks bundles. Closes the within-Inspector parity gaps against the swig render path.'
+time: 2026-06-11T17:25:00.000000+01:00
