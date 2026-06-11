@@ -1,3 +1,0 @@
-kind: Added
-body: 'ESM compatibility layer (#M10): package.json now declares an "exports" map with dual CJS/ESM entry points — `import gina from ''gina''` and `import gna from ''gina/gna''` work natively in ESM projects and modern bundlers (default exports only; the gina/gna getter semantics are preserved). CJS `require()` resolution is byte-identical to before, and TypeScript declarations keep resolving via per-entry "types" conditions. The documented public surface is the bare specifier, ./gna and ./package.json; undeclared deep subpaths are no longer resolvable.'
-time: 2026-06-11T16:10:00.000000+01:00

@@ -1,3 +1,0 @@
-kind: Added
-body: 'Extension-keyed template-engine dispatch (#M11): a single bundle can now mix swig and nunjucks — a templates.json section declaring `"ext": ".njk"` (or a `self.setTemplate(file, ''.njk'')` call) renders through nunjucks and `".swig"` through swig, regardless of the bundle-level `render.engine` setting; `.html` and any other extension keep following `render.engine`, so existing bundles are unchanged. Bundles with `.njk` sections get the same fail-fast NUNJUCKS_NOT_INSTALLED startup check as `render.engine: "nunjucks"` bundles.'
-time: 2026-06-11T16:55:00.000000+01:00
