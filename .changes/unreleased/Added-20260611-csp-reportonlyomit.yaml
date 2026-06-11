@@ -1,3 +1,0 @@
-kind: Added
-body: 'Csp plugin: new opt-in reportOnlyOmit option — an array of directive names to omit from a Content-Security-Policy-Report-Only header and emit again automatically when reportOnly flips to false, so one directive set covers both modes. Built for engine-divergent directives such as frame-ancestors (reported in report-only by Chrome and Firefox, ignored with a console warning by Safari/WebKit): a bundle can trade the Gecko/Blink report signal for a clean WebKit console as an explicit, lifecycle-managed choice. Entries are validated against the CSP Level 3 whitelist, a factory-time warning names what was dropped, and the default output is unchanged.'
-time: 2026-06-11T06:04:52.032304+01:00
