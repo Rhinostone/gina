@@ -69,6 +69,7 @@ Settings.json shape — caller-supplied options always win over settings:
 | `directives` | object  | —       | **Required.** Throws if missing or empty. See "Directives" below.   |
 | `reportOnly` | boolean | `false` | When `true`, emits `Content-Security-Policy-Report-Only` instead.   |
 | `reportOnlyOmit` | string[] | `[]` | Directives to *also* omit while `reportOnly` is `true`; emitted again automatically in enforce mode. See "reportOnlyOmit" below. |
+| `useNonce`   | boolean | `false` | When `true`, generates a per-response nonce, stamps it on `req._ginaCspNonce`, and appends `'nonce-XXXX'` to `script-src` (fallback `default-src`). See "Per-response CSP nonce" below. |
 
 There is no sensible cross-bundle default for `directives`. Every bundle
 has its own resource graph; a default policy would either be too restrictive
