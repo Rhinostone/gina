@@ -15,19 +15,27 @@
  * dir from package.json at runtime).
  *
  * This guard locks that version-agnostic state: every file under test/e2e/
- * plus playwright.config.js must stay free of `framework/v<digit>` literals.
- * It runs in the gated suite (test/lib glob — local pre-publish gate + the
- * Tests CI workflow), so a reintroduced pin fails at commit time, long
- * before any cut.
+ * and .github/workflows/, plus playwright.config.js, must stay free of
+ * `framework/v<digit>` literals. It runs in the gated suite (test/lib glob —
+ * local pre-publish gate + the Tests CI workflow), so a reintroduced pin
+ * fails at commit time, long before any cut.
  *
  * Scope notes:
- * - The sweep covers ONLY the surfaces that reference REAL on-disk paths.
- *   Sibling node tests legitimately embed fictitious framework/v1-style
- *   mock paths as test data and must not be swept (this file itself carries
- *   the historical offending literal in its replica section below — it
- *   lives in test/lib, outside the swept set, so it cannot self-trip).
+ * - The sweep covers ONLY the non-rewritten surfaces that reference REAL
+ *   on-disk paths. Workflows are included because they share the failure
+ *   shape (a hardcoded FW_DIR would be green until the cut); today they
+ *   derive `framework/v${VERSION}` dynamically. Sibling node tests
+ *   legitimately embed fictitious framework/v1-style mock paths as test
+ *   data and must not be swept (this file itself carries the historical
+ *   offending literal in its replica section below — it lives in test/lib,
+ *   outside the swept set, so it cannot self-trip).
+ * - gna.js and the root package.json `main` field DO carry the literal by
+ *   design — script/prepare_version.js and post_publish.js bumpVersion
+ *   rewrite them atomically with the dir rename, so they are maintained
+ *   surfaces, deliberately NOT swept here.
  * - The regex is digit-anchored (`framework/v` followed by a digit) so
- *   prose like `framework/v<version>` and source compositions like
+ *   prose like `framework/v<version>`, the workflows' `v${VERSION}`
+ *   interpolation, `v*` glob pathspecs, and source compositions like
  *   `'framework/v' + VERSION` never match.
  */
 
@@ -38,9 +46,10 @@ var fs = require('fs');
 var { describe, it } = require('node:test');
 var assert = require('node:assert/strict');
 
-var ROOT        = nodePath.join(__dirname, '..', '..');
-var E2E_DIR     = nodePath.join(ROOT, 'test', 'e2e');
-var EXTRA_FILES = [nodePath.join(ROOT, 'playwright.config.js')];
+var ROOT          = nodePath.join(__dirname, '..', '..');
+var E2E_DIR       = nodePath.join(ROOT, 'test', 'e2e');
+var WORKFLOWS_DIR = nodePath.join(ROOT, '.github', 'workflows');
+var EXTRA_FILES   = [nodePath.join(ROOT, 'playwright.config.js')];
 
 // Digit-anchored: matches `framework/v0.4.6-alpha.2/...` but not the
 // version-agnostic prose form `framework/v<version>`.
@@ -126,6 +135,26 @@ describe('01 - e2e surfaces carry no hardcoded framework-version path', function
             violations, [],
             'hardcoded framework-version path(s) in playwright config — resolve from package.json '
             + 'instead:\n' + violations.join('\n')
+        );
+    });
+
+    it('no CI workflow embeds a framework/v<digit> path literal', function () {
+        var workflowFiles = collectFiles(WORKFLOWS_DIR);
+        // Same no-silent-no-op pin as the e2e sweep.
+        assert.ok(workflowFiles.length > 0, 'expected files under .github/workflows — empty sweep means the guard inspects nothing');
+        var names = workflowFiles.map(function (f) { return nodePath.basename(f); });
+        assert.ok(names.indexOf('e2e.yml') > -1, 'expected e2e.yml in the sweep');
+        assert.ok(names.indexOf('test.yml') > -1, 'expected test.yml in the sweep');
+
+        var violations = [];
+        for (var i = 0; i < workflowFiles.length; i++) {
+            violations = violations.concat(findPins(workflowFiles[i]));
+        }
+        assert.deepEqual(
+            violations, [],
+            'hardcoded framework-version path(s) in CI workflows — these break at the per-release '
+            + 'framework-dir rename. Derive the dir dynamically (FW_DIR="framework/v${VERSION}" '
+            + 'idiom) instead:\n' + violations.join('\n')
         );
     });
 });
