@@ -1963,3 +1963,116 @@ describe('11b - #H13 extended CONNECT: opt-in resolve + dispatch logic', functio
     });
 
 });
+
+
+// 12 — #H13 onWebSocket registration API + dispatcher (source structure)
+// Public bundle surface: app.onWebSocket(path, handler) from onInitialize.
+// The dispatcher installs LAZILY on the first registration so the §11
+// refusal table (501 for unclaimed websocket streams) holds until a
+// consumer exists.
+describe('12 - #H13 onWebSocket registration + dispatcher source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('source declares the per-path handler registry and the registration method', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server._wsHandlers = {};') > -1, 'expected the `server._wsHandlers` registry literal');
+        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler)') > -1, 'expected the onWebSocket registration method');
+        assert.ok(s.indexOf('server._wsHandlers[wsPath] = wsHandler;') > -1, 'expected the per-path handler store');
+    });
+
+    it('source validates registration arguments at call time (throw, not warn)', function() {
+        assert.ok(
+            getSrc().indexOf('onWebSocket(path, handler) requires a non-empty path string and a handler function') > -1,
+            'expected the factory-call-time TypeError message'
+        );
+    });
+
+    it('source installs the dispatcher LAZILY — only when no hook exists yet', function() {
+        assert.ok(
+            getSrc().indexOf("typeof server._extendedConnectHandler !== 'function'") > -1,
+            'expected the lazy-install guard so the §11 501-unclaimed behaviour holds with zero registrations'
+        );
+    });
+
+    it('source matches on the :path pathname with the query string stripped', function() {
+        assert.ok(
+            getSrc().indexOf(".split('?')[0]") > -1,
+            'expected the query-string strip before the handler lookup'
+        );
+    });
+
+    it('source refuses an unregistered pathname with 404', function() {
+        assert.ok(
+            getSrc().indexOf('response.writeHead(404)') > -1,
+            'expected `response.writeHead(404)` for a pathname with no registered handler'
+        );
+    });
+
+    it('source accepts matched streams through the ws-session bridge', function() {
+        assert.ok(
+            getSrc().indexOf('lib.wsSession.accept(request)') > -1,
+            'expected `lib.wsSession.accept(request)` on the matched path'
+        );
+    });
+
+    it('the registration API lives inside the opt-in gate, the safety stub after both branches', function() {
+        var s = getSrc();
+        var gateIdx = s.indexOf('if (_enableConnectProtocol) {');
+        var defIdx = s.indexOf('server.onWebSocket = function(wsPath, wsHandler)');
+        var stubIdx = s.indexOf("typeof server.onWebSocket !== 'function'");
+        assert.ok(gateIdx > -1 && defIdx > gateIdx, 'the real onWebSocket must be defined inside the opt-in gate');
+        assert.ok(stubIdx > defIdx, 'the cross-protocol stub must come after the gated definition');
+        assert.ok(s.indexOf('onWebSocket() ignored') > -1, 'expected the stub warn message');
+    });
+
+    it('lib/index.js registers the ws-session bridge on the registry', function() {
+        var libIndex = fs.readFileSync(
+            path.join(require('../fw'), 'lib/index.js'), 'utf8'
+        );
+        assert.match(libIndex, /wsSession\s*:\s*_require\('\.\/ws-session'\)/, 'expected the lib.wsSession registration');
+        assert.match(libIndex, /wsFraming\s*:\s*_require\('\.\/ws-framing'\)/, 'expected the lib.wsFraming registration');
+    });
+
+});
+
+
+// 12b — #H13 dispatcher pure-logic replica
+describe('12b - #H13 onWebSocket dispatcher logic', function() {
+
+    // Replica of the lazy dispatcher installed by onWebSocket
+    function dispatchWs(reqPath, handlers) {
+        var _wsPathname = String(reqPath || '').split('?')[0];
+        var _wsTarget = handlers[_wsPathname];
+        if (typeof _wsTarget !== 'function') {
+            return { action: 'status', code: 404 };
+        }
+        return { action: 'accept', handler: _wsTarget };
+    }
+
+    var handler = function() {};
+
+    it('an exact pathname match accepts and hands off to the registered handler', function() {
+        var r = dispatchWs('/live', { '/live': handler });
+        assert.equal(r.action, 'accept');
+        assert.equal(r.handler, handler);
+    });
+
+    it('the query string is stripped before matching', function() {
+        var r = dispatchWs('/live?token=abc&x=1', { '/live': handler });
+        assert.equal(r.action, 'accept');
+    });
+
+    it('an unregistered pathname is refused with 404', function() {
+        assert.deepEqual(dispatchWs('/other', { '/live': handler }), { action: 'status', code: 404 });
+    });
+
+    it('no prefix or pattern matching — /live/sub does not match /live', function() {
+        assert.equal(dispatchWs('/live/sub', { '/live': handler }).code, 404);
+    });
+
+    it('a missing :path is refused, not crashed on', function() {
+        assert.equal(dispatchWs(undefined, { '/live': handler }).code, 404);
+    });
+
+});

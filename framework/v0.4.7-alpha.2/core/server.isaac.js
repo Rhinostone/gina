@@ -672,6 +672,45 @@ function ServerEngineClass(options) {
                     }
                 }
             });
+
+            /**
+             * #H13 — public WebSocket-over-HTTP/2 registration API. Bundle code
+             * reaches it from `onInitialize` (the `app` argument IS this raw
+             * server object) and registers a handler per exact pathname:
+             *
+             *     app.onWebSocket('/live', function(session, request) { ... });
+             *
+             * The dispatcher installs LAZILY on the first registration so the
+             * default refusal table above keeps answering 501 for websocket
+             * streams when no consumer exists. With handlers registered, an
+             * accepted websocket stream is matched on its `:path` pathname
+             * (query string stripped): a hit is answered `:status 200` via
+             * lib.wsSession.accept and handed to the handler as a live
+             * session; a miss is refused with 404. No express middleware runs
+             * on the CONNECT path — authentication is the handler's concern
+             * (it receives the full request for header/cookie inspection).
+             */
+            server._wsHandlers = {};
+            server.onWebSocket = function(wsPath, wsHandler) {
+                if (typeof wsPath !== 'string' || wsPath.length === 0 || typeof wsHandler !== 'function') {
+                    throw new TypeError('onWebSocket(path, handler) requires a non-empty path string and a handler function');
+                }
+                server._wsHandlers[wsPath] = wsHandler;
+                if (typeof server._extendedConnectHandler !== 'function') {
+                    server._extendedConnectHandler = function(request, response) {
+                        var _wsPathname = String(request.headers[':path'] || '').split('?')[0];
+                        var _wsTarget = server._wsHandlers[_wsPathname];
+                        if (typeof _wsTarget !== 'function') {
+                            // No handler registered for this pathname.
+                            response.writeHead(404);
+                            response.end();
+                            return;
+                        }
+                        var _wsSession = lib.wsSession.accept(request);
+                        _wsTarget(_wsSession, request);
+                    };
+                }
+            };
         }
     } else {
 
@@ -691,6 +730,16 @@ function ServerEngineClass(options) {
                 server      = http.createServer();
                 break;
         }
+    }
+
+    // #H13 — cross-protocol safety stub: onWebSocket is only functional on an
+    // http/2 bundle with http2Options.enableConnectProtocol enabled. Bundles
+    // sharing one onInitialize across differently-configured environments
+    // must not crash on the call — warn instead of throwing.
+    if (typeof server.onWebSocket !== 'function') {
+        server.onWebSocket = function() {
+            console.warn('[ SERVER ] onWebSocket() ignored — WebSocket over HTTP/2 requires an http/2 protocol and settings.json http2Options.enableConnectProtocol set to true');
+        };
     }
 
     // Setting up server options
