@@ -52,7 +52,7 @@
     // maxSessionRejectedStreams : RST flood defense — CVE-2019-9514, CVE-2023-44487 (default: 100).
     // maxSessionInvalidFrames  : CONTINUATION flood defense — CVE-2024-27316, CVE-2024-27983 (default: 1000).
     // maxStreamsPerSecond       : rapid-reset rate limit — max new streams per session per rolling 1s window before GOAWAY + close — CVE-2023-44487 (default: 200).
-    // enableConnectProtocol     : RFC 8441 extended CONNECT (WebSocket over HTTP/2) — strict boolean opt-in; advertised on https bundles only (default: false).
+    // enableConnectProtocol     : RFC 8441 extended CONNECT (WebSocket over HTTP/2) — strict boolean opt-in; advertised on both https and cleartext h2c bundles (default: false).
     "http2Options": {
       "maxConcurrentStreams": 256,
       "initialWindowSize": 655350,

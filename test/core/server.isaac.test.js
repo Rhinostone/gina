@@ -2076,3 +2076,161 @@ describe('12b - #H13 onWebSocket dispatcher logic', function() {
     });
 
 });
+
+
+// 13 — h2c flood-defense parity (#H3/#H7/#H13): the cleartext http2 branches
+// must receive the same hardening options as the https branch. The TLS keys
+// never land on those branches (key/cert/ca/pfx/passphrase merge under
+// /https/ scheme gates only), so `http2Options` is passed verbatim.
+describe('13 - h2c flood-defense parity source structure (#H3/#H7/#H13)', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it("the h2 `case 'http'` branch passes the full http2Options object", function() {
+        assert.match(
+            getSrc(),
+            /case 'http':\s*server\s*=\s*http2\.createServer\(http2Options\);/,
+            "expected `http2.createServer(http2Options)` on the h2c `case 'http'` branch — Node defaults (unlimited concurrent streams, enablePush on) and ignored settings.json overrides otherwise"
+        );
+    });
+
+    it('the h2 `default` branch passes the full http2Options object', function() {
+        assert.match(
+            getSrc(),
+            /default:\s*server\s*=\s*http2\.createServer\(http2Options\);/,
+            'expected `http2.createServer(http2Options)` on the h2c `default` branch'
+        );
+    });
+
+    it('the https branch still uses createSecureServer with the same object', function() {
+        assert.ok(
+            getSrc().indexOf('http2.createSecureServer(http2Options)') > -1,
+            'expected `http2.createSecureServer(http2Options)` on the https branch'
+        );
+    });
+
+    it('no h2 branch is left on a bare allowHTTP1-only literal', function() {
+        assert.ok(
+            getSrc().indexOf('createServer({ allowHTTP1') === -1,
+            'a `createServer({ allowHTTP1: ... })` literal would drop the settings advert and the #H3/#H7 caps on cleartext'
+        );
+    });
+
+    it('TLS material merges under /https/ scheme gates only (the premise that makes verbatim-pass safe)', function() {
+        assert.match(
+            getSrc(),
+            /if \( \/https\/\.test\(options\.scheme\) \) \{\s*try \{\s*http2Options = \{\s*key: readSync/,
+            'expected the key/cert seed inside the `/https/.test(options.scheme)` gate — if TLS keys ever land unconditionally, the cleartext branches must stop passing http2Options verbatim'
+        );
+    });
+
+});
+
+
+// 13b — h2c flood-defense parity: replica of the option construction for a
+// cleartext scheme + a live loopback proving the client actually receives
+// gina's advertised settings from a cleartext h2c server.
+describe('13b - h2c flood-defense parity: option construction + cleartext settings advert', function() {
+
+    var http2 = require('http2');
+
+    // Replica of server.isaac.js option construction for a NON-https scheme:
+    // the TLS stages are /https/-gated and contribute nothing, leaving
+    // allowHTTP1 + the settings literal + the #H3/#H7 caps.
+    function buildH2cOptions(options) {
+        var http2Options = {};
+        var allowHTTP1 = true;
+        if (typeof (options.allowHTTP1) != 'undefined' && options.allowHTTP1 != '' ) {
+            allowHTTP1 = options.allowHTTP1;
+        }
+        http2Options.allowHTTP1 = allowHTTP1;
+        var _h2Opts = (options.http2Options && typeof options.http2Options === 'object') ? options.http2Options : {};
+        var _enableConnectProtocol = _h2Opts.enableConnectProtocol === true;
+        http2Options.settings = {
+            maxConcurrentStreams : _h2Opts.maxConcurrentStreams || 256,
+            initialWindowSize   : _h2Opts.initialWindowSize    || 65535 * 10,
+            maxHeaderListSize   : 65536,
+            enablePush          : false,
+            enableConnectProtocol : _enableConnectProtocol
+        };
+        http2Options.maxSessionRejectedStreams = _h2Opts.maxSessionRejectedStreams || 100;
+        http2Options.maxSessionInvalidFrames = _h2Opts.maxSessionInvalidFrames || 1000;
+        return http2Options;
+    }
+
+    // Spin a cleartext h2 server with `serverOptions`, connect a client, and
+    // resolve with the SETTINGS frame the client received from the server.
+    function readRemoteSettings(serverOptions) {
+        var server = http2.createServer(serverOptions);
+        var liveSessions = [];
+        server.on('session', function(h2session) { liveSessions.push(h2session); });
+        server.on('request', function(req, res) { res.end('ok'); });
+        return new Promise(function(resolve, reject) {
+            server.listen(0, '127.0.0.1', function() {
+                var port = server.address().port;
+                var client = http2.connect('http://127.0.0.1:' + port);
+                var guard = setTimeout(function() { reject(new Error('settings advert timed out')); }, 3000);
+                client.on('error', reject);
+                client.on('remoteSettings', function(settings) {
+                    clearTimeout(guard);
+                    var snapshot = {
+                        maxConcurrentStreams  : settings.maxConcurrentStreams,
+                        initialWindowSize     : settings.initialWindowSize,
+                        maxHeaderListSize     : settings.maxHeaderListSize,
+                        enablePush            : settings.enablePush,
+                        enableConnectProtocol : settings.enableConnectProtocol
+                    };
+                    try { client.close(); } catch (e) {}
+                    resolve(snapshot);
+                });
+            });
+        }).finally(function() {
+            liveSessions.forEach(function(h2session) {
+                try { h2session.destroy(); } catch (e) {}
+            });
+            return new Promise(function(resolve) { server.close(resolve); });
+        });
+    }
+
+    it('replica defaults: caps + settings present, no TLS keys', function() {
+        var opts = buildH2cOptions({});
+        assert.equal(opts.allowHTTP1, true);
+        assert.equal(opts.maxSessionRejectedStreams, 100);
+        assert.equal(opts.maxSessionInvalidFrames, 1000);
+        assert.equal(opts.settings.maxConcurrentStreams, 256);
+        assert.equal(opts.settings.initialWindowSize, 655350);
+        assert.equal(opts.settings.maxHeaderListSize, 65536);
+        assert.equal(opts.settings.enablePush, false);
+        assert.equal(opts.settings.enableConnectProtocol, false);
+        assert.equal(typeof opts.key, 'undefined');
+        assert.equal(typeof opts.cert, 'undefined');
+    });
+
+    it('replica honours settings.json overrides on a cleartext scheme', function() {
+        var opts = buildH2cOptions({ http2Options: {
+            maxConcurrentStreams: 64, maxSessionRejectedStreams: 50,
+            maxSessionInvalidFrames: 500, enableConnectProtocol: true
+        } });
+        assert.equal(opts.settings.maxConcurrentStreams, 64);
+        assert.equal(opts.maxSessionRejectedStreams, 50);
+        assert.equal(opts.maxSessionInvalidFrames, 500);
+        assert.equal(opts.settings.enableConnectProtocol, true);
+    });
+
+    it('a cleartext h2c server built from these options advertises gina settings to the client', async function() {
+        var remote = await readRemoteSettings(buildH2cOptions({ http2Options: { enableConnectProtocol: true } }));
+        assert.equal(remote.maxConcurrentStreams, 256, 'expected gina default 256, not the protocol-default unlimited');
+        assert.equal(remote.initialWindowSize, 655350);
+        assert.equal(remote.maxHeaderListSize, 65536);
+        assert.equal(remote.enablePush, false, 'server push must be disabled on h2c too');
+        assert.equal(remote.enableConnectProtocol, true, 'the RFC 8441 advert must reach cleartext clients when opted in');
+    });
+
+    it('subtract-my-contribution: the old allowHTTP1-only literal advertises protocol defaults', async function() {
+        var remote = await readRemoteSettings({ allowHTTP1: true });
+        assert.notEqual(remote.maxConcurrentStreams, 256, 'pre-fix shape must NOT carry the gina stream cap');
+        assert.equal(remote.enablePush, true, 'pre-fix shape leaves deprecated server push enabled');
+        assert.equal(remote.enableConnectProtocol, false);
+    });
+
+});

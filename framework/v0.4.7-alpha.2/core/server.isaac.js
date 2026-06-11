@@ -492,10 +492,10 @@ function ServerEngineClass(options) {
             maxHeaderListSize   : 65536,
             // #H3 — Server push is deprecated in Chrome/Firefox and removed in HTTP/2 RFC 9113; disable it
             enablePush          : false,
-            // #H13 — advertises SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441). Only
-            // effective on the https path: `http2Options` (and this `settings` block)
-            // is passed to createSecureServer only — the cleartext branches below
-            // create their server with `{ allowHTTP1 }` alone.
+            // #H13 — advertises SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441) on any
+            // http/2 bundle: `http2Options` (and this `settings` block) reaches
+            // createSecureServer (https) and createServer (h2c) alike. RFC 8441 has
+            // no TLS requirement; the flag stays a strict opt-in (default false).
             enableConnectProtocol : _enableConnectProtocol
         };
         // #H3 — RST flood defense (CVE-2019-9514, CVE-2023-44487 rapid reset)
@@ -511,9 +511,15 @@ function ServerEngineClass(options) {
         // settings.json http2Options.maxStreamsPerSecond (default 200).
         var _maxStreamsPerSec = _h2Opts.maxStreamsPerSecond || 200;
         var http2   = require('http2');
+        // h2c flood-defense parity: the cleartext branches receive the same
+        // `http2Options` as the https branch. On non-https schemes the object
+        // carries no TLS material (key/cert/ca/pfx/passphrase are merged under
+        // `/https/` scheme gates only) — it holds exactly allowHTTP1 + the
+        // `settings` advert + the #H3/#H7 caps, so the hardening applies
+        // identically across schemes.
         switch (options.scheme) {
             case 'http':
-                server      = http2.createServer({ allowHTTP1: allowHTTP1 });
+                server      = http2.createServer(http2Options);
                 break;
 
             case 'https':
@@ -521,7 +527,7 @@ function ServerEngineClass(options) {
                 break;
 
             default:
-                server      = http2.createServer({ allowHTTP1: allowHTTP1 });
+                server      = http2.createServer(http2Options);
                 break;
         }
 
