@@ -2234,3 +2234,132 @@ describe('13b - h2c flood-defense parity: option construction + cleartext settin
     });
 
 });
+
+
+// 14 — engine.io socket SIGTERM-drain registration: live engine.io sockets
+// register a graceful closer in process.gina._sseConnections (the registry
+// proc.js drains BEFORE _httpServer.close()) and deregister in their own
+// close handler, so SIGTERM no longer blocks on open sockets until the
+// hard shutdown timeout.
+describe('14 - engine.io socket SIGTERM-drain registration source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // The engine.io connection-handler block: from the connection listener
+    // to the upgrade handler that follows it.
+    function eioBlk() {
+        var s = getSrc();
+        var start = s.indexOf("ioServer.on('connection'");
+        assert.ok(start > -1, 'engine.io connection handler must exist');
+        var end = s.indexOf("server.on('upgrade'", start);
+        assert.ok(end > start, 'upgrade handler expected after the connection handler');
+        return s.slice(start, end);
+    }
+
+    it('registers a shutdown closer in process.gina._sseConnections on connection', function() {
+        var blk = eioBlk();
+        assert.ok(
+            blk.indexOf('if (!process.gina._sseConnections) process.gina._sseConnections = new Set();') > -1,
+            'expected the lazy Set init (same idiom as the SSE handlers)'
+        );
+        assert.ok(
+            blk.indexOf('process.gina._sseConnections.add(_eioShutdownCloser)') > -1,
+            'expected the closer registration'
+        );
+    });
+
+    it('the closer calls the GRACEFUL socket.close() — no discard arg', function() {
+        assert.match(
+            eioBlk(),
+            /var _eioShutdownCloser = function\(\) \{\s*try \{ socket\.close\(\); \} catch \(e\) \{\}\s*\};/,
+            'expected `try { socket.close(); }` — the engine.io API has no status code; close(true) is the hard-discard variant reserved for ioServer.close()'
+        );
+    });
+
+    it('the socket close handler deregisters the closer', function() {
+        var blk = eioBlk();
+        var closeIdx = blk.indexOf("socket.on('close'");
+        assert.ok(closeIdx > -1, 'close handler must exist');
+        assert.ok(
+            blk.indexOf('process.gina._sseConnections.delete(_eioShutdownCloser)', closeIdx) > -1,
+            'expected the closer deregistration inside the close handler'
+        );
+    });
+
+    it('registration precedes the close-handler binding', function() {
+        var blk = eioBlk();
+        var addIdx   = blk.indexOf('process.gina._sseConnections.add(_eioShutdownCloser)');
+        var closeIdx = blk.indexOf("socket.on('close'");
+        assert.ok(addIdx > -1 && closeIdx > addIdx, 'add must come before the close-handler binding');
+    });
+
+});
+
+
+// 14b — engine.io SIGTERM-drain lifecycle: pure-logic replica mirroring the
+// source — register on connect, a proc.js-style snapshot drain invokes the
+// closer (graceful close()), the socket close event deregisters.
+describe('14b - engine.io SIGTERM-drain lifecycle logic', function() {
+
+    function makeFakeSocket() {
+        var sock = { closed: 0, closeHandlers: [] };
+        sock.close = function() {
+            sock.closed++;
+            // engine.io: the transport teardown fires the socket close event
+            sock.closeHandlers.forEach(function(h) { h(); });
+        };
+        sock.onClose = function(h) { sock.closeHandlers.push(h); };
+        return sock;
+    }
+
+    // Replica of the source lifecycle against an injected registry.
+    function wireSocket(registry, socket) {
+        var _eioShutdownCloser = function() {
+            try { socket.close(); } catch (e) {}
+        };
+        registry.add(_eioShutdownCloser);
+        socket.onClose(function() {
+            registry.delete(_eioShutdownCloser);
+        });
+    }
+
+    // Replica of the proc.js drain: snapshot first, invoke each in try/catch.
+    function drain(registry) {
+        Array.from(registry).forEach(function(closer) {
+            try { closer(); } catch (e) {}
+        });
+    }
+
+    it('register → drain closes the socket → close event deregisters', function() {
+        var registry = new Set();
+        var sock = makeFakeSocket();
+        wireSocket(registry, sock);
+        assert.equal(registry.size, 1);
+        drain(registry);
+        assert.equal(sock.closed, 1, 'the drain must close the socket');
+        assert.equal(registry.size, 0, 'the close event must deregister the closer');
+    });
+
+    it('a peer-initiated close deregisters; a later drain has nothing to do', function() {
+        var registry = new Set();
+        var sock = makeFakeSocket();
+        wireSocket(registry, sock);
+        sock.close(); // peer closed first
+        assert.equal(registry.size, 0);
+        drain(registry);
+        assert.equal(sock.closed, 1, 'no double close after deregistration');
+    });
+
+    it('multiple sockets drain independently (snapshot iteration is delete-safe)', function() {
+        var registry = new Set();
+        var a = makeFakeSocket(), b = makeFakeSocket();
+        wireSocket(registry, a);
+        wireSocket(registry, b);
+        assert.equal(registry.size, 2);
+        drain(registry);
+        assert.equal(a.closed, 1);
+        assert.equal(b.closed, 1);
+        assert.equal(registry.size, 0);
+    });
+
+});

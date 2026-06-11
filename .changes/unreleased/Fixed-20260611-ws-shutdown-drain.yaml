@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Graceful shutdown: bundles with live WebSocket or engine.io connections no longer block SIGTERM shutdown until the hard timeout — every accepted engine.io socket and every /_gina/agent Inspector WebSocket now registers a per-socket closer in the framework shutdown drain (the same registry the Inspector SSE endpoints and WebSocket-over-HTTP/2 sessions already use), so shutdown closes them before the HTTP server close: engine.io sockets get a graceful transport close, agent WebSockets a clean 1001 going-away close handshake.'
+time: 2026-06-11T15:00:00.000000+01:00

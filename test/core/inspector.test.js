@@ -8659,3 +8659,74 @@ describe('18 - Inspector data-source freshness guard', function() {
     });
 
 });
+
+
+// ── 78 — agent-WS SIGTERM-drain registration (server.js) ─────────────────────
+// Live /_gina/agent WebSocket sockets register a `1001 going away` closer in
+// process.gina._sseConnections (the registry proc.js drains BEFORE
+// _httpServer.close()) and deregister in their own _cleanup, so SIGTERM no
+// longer blocks on open agent sockets until the hard shutdown timeout.
+
+describe('78 - agent-WS SIGTERM-drain registration in server.js', function() {
+
+    function wsDrainBlk() {
+        var src = getServerSrc();
+        var i = src.indexOf('function attachInspectorAgentWs');
+        assert.ok(i > -1, 'expected attachInspectorAgentWs() in server.js');
+        return src.substring(i, i + 8000);
+    }
+
+    it('registers a shutdown closer in process.gina._sseConnections on upgrade', function() {
+        var blk = wsDrainBlk();
+        assert.ok(
+            blk.indexOf('if (!process.gina._sseConnections) process.gina._sseConnections = new Set();') > -1,
+            'expected the lazy Set init (same idiom as the SSE handlers)'
+        );
+        assert.ok(
+            blk.indexOf('process.gina._sseConnections.add(_wsShutdownCloser)') > -1,
+            'expected the closer registration'
+        );
+    });
+
+    it("the closer sends a clean `1001 going away` close handshake", function() {
+        assert.match(
+            wsDrainBlk(),
+            /var _wsShutdownCloser = function\(\) \{\s*try \{ ws\.close\(1001, 'server shutting down'\); \} catch \(e\) \{\}\s*\};/,
+            "expected `ws.close(1001, 'server shutting down')` — byte-consistent with the ws-session drain closer"
+        );
+    });
+
+    it('_cleanup deregisters the closer (close fires after the handshake completes)', function() {
+        var blk = wsDrainBlk();
+        var cleanupIdx = blk.indexOf('var _cleanup = function()');
+        assert.ok(cleanupIdx > -1, '_cleanup must exist');
+        var delIdx = blk.indexOf('process.gina._sseConnections.delete(_wsShutdownCloser)', cleanupIdx);
+        var bindIdx = blk.indexOf("ws.on('close', _cleanup)", cleanupIdx);
+        assert.ok(delIdx > -1 && bindIdx > delIdx,
+            'expected the deregistration inside _cleanup, before the close/error bindings');
+    });
+
+    it('registration precedes the _cleanup bindings (no unregistered-close window)', function() {
+        var blk = wsDrainBlk();
+        var addIdx  = blk.indexOf('process.gina._sseConnections.add(_wsShutdownCloser)');
+        var bindIdx = blk.indexOf("ws.on('close', _cleanup)");
+        assert.ok(addIdx > -1 && bindIdx > addIdx, 'add must come before the close/error bindings');
+    });
+
+    it('_cleanup stays idempotent when close AND error both fire (replica)', function() {
+        var registry = new Set();
+        var removed = [];
+        var _wsShutdownCloser = function() {};
+        registry.add(_wsShutdownCloser);
+        var _cleanup = function() {
+            removed.push('listeners');
+            if (registry) { registry.delete(_wsShutdownCloser); }
+        };
+        // ws can emit both 'close' and 'error' for the same socket
+        _cleanup();
+        _cleanup();
+        assert.equal(registry.size, 0, 'double _cleanup must not throw and must leave the registry clean');
+        assert.equal(removed.length, 2);
+    });
+
+});

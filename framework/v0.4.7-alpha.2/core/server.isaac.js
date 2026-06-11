@@ -1973,6 +1973,18 @@ function ServerEngineClass(options) {
                 pingInterval: parseTimeout(options.ioServer.pingInterval || options.ioServer.interval)
             }));
 
+            // Graceful-shutdown drain: proc.js's SIGTERM path invokes every
+            // registered closer before _httpServer.close(), so live engine.io
+            // sockets get a graceful close() (write buffer flushed, transport
+            // close packet sent) instead of blocking shutdown until the hard
+            // timeout. engine.io's close() takes no status code — the discard
+            // variant close(true) is the hard teardown ioServer.close() uses.
+            if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+            var _eioShutdownCloser = function() {
+                try { socket.close(); } catch (e) {}
+            };
+            process.gina._sseConnections.add(_eioShutdownCloser);
+
             socket.on('message', function(payload){
 
                 try {
@@ -2026,6 +2038,9 @@ function ServerEngineClass(options) {
 
             socket.on('close', function(){
                 console.debug('[IO SERVER ] closed socket #'+ this.id);
+                if (process.gina._sseConnections) {
+                    process.gina._sseConnections.delete(_eioShutdownCloser);
+                }
                 if (typeof _ioLogListener !== 'undefined') {
                     process.removeListener('logger#default', _ioLogListener);
                 }

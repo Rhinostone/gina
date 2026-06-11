@@ -296,9 +296,23 @@ function attachInspectorAgentWs(rawServer, ctx) {
             process.on('inspector#data', _wsDataListener);
             process.on('logger#default', _wsLogListener);
 
+            // Graceful-shutdown drain: proc.js's SIGTERM path invokes every
+            // registered closer before _httpServer.close(), so a live agent
+            // WebSocket ends with a clean `1001 going away` close handshake
+            // instead of blocking shutdown until the hard timeout. ws emits
+            // 'close' once the handshake completes, so _cleanup deregisters.
+            if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+            var _wsShutdownCloser = function() {
+                try { ws.close(1001, 'server shutting down'); } catch (e) {}
+            };
+            process.gina._sseConnections.add(_wsShutdownCloser);
+
             var _cleanup = function() {
                 process.removeListener('inspector#data', _wsDataListener);
                 process.removeListener('logger#default', _wsLogListener);
+                if (process.gina._sseConnections) {
+                    process.gina._sseConnections.delete(_wsShutdownCloser);
+                }
             };
             ws.on('close', _cleanup);
             ws.on('error', _cleanup);
