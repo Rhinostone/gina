@@ -479,6 +479,10 @@ function ServerEngineClass(options) {
 
     if ( /^http\/2/.test(options.protocol) ) {
         var _h2Opts = (options.http2Options && typeof options.http2Options === 'object') ? options.http2Options : {};
+        // #H13 — RFC 8441 extended CONNECT (WebSocket over HTTP/2): strict boolean
+        // opt-in via settings.json http2Options.enableConnectProtocol (default false).
+        // Gates both the SETTINGS advert below and the `connect` listener registration.
+        var _enableConnectProtocol = _h2Opts.enableConnectProtocol === true;
         http2Options.settings = {
             // Max parallel streams per TCP connection — configurable via settings.json http2Options.maxConcurrentStreams
             maxConcurrentStreams : _h2Opts.maxConcurrentStreams || 256,
@@ -487,7 +491,12 @@ function ServerEngineClass(options) {
             // #H3 — HPACK bomb defense: cap compressed header list size (SETTINGS_MAX_HEADER_LIST_SIZE)
             maxHeaderListSize   : 65536,
             // #H3 — Server push is deprecated in Chrome/Firefox and removed in HTTP/2 RFC 9113; disable it
-            enablePush          : false
+            enablePush          : false,
+            // #H13 — advertises SETTINGS_ENABLE_CONNECT_PROTOCOL (RFC 8441). Only
+            // effective on the https path: `http2Options` (and this `settings` block)
+            // is passed to createSecureServer only — the cleartext branches below
+            // create their server with `{ allowHTTP1 }` alone.
+            enableConnectProtocol : _enableConnectProtocol
         };
         // #H3 — RST flood defense (CVE-2019-9514, CVE-2023-44487 rapid reset)
         // #H7 — configurable via settings.json http2Options.maxSessionRejectedStreams (default 100)
@@ -522,7 +531,9 @@ function ServerEngineClass(options) {
             totalStreams    : 0,
             goawayCount     : 0,
             rstCount        : 0,
-            rapidResetBlocked : 0
+            rapidResetBlocked : 0,
+            // #H13 — extended-CONNECT (`:protocol`-bearing) streams observed
+            extendedConnect : 0
         };
         server._h2Metrics = _h2Metrics;
 
@@ -596,6 +607,72 @@ function ServerEngineClass(options) {
                 console.error('[ SERVER ] Session error:', err.stack);
             });
         });
+
+        // #H13 — RFC 8441 extended CONNECT (WebSocket over HTTP/2), strict opt-in.
+        // Registering a `connect` listener suppresses the engine compat layer's
+        // automatic 405 for CONNECT streams, so EVERY path below must terminate
+        // the stream/socket — an unanswered CONNECT hangs forever. When the flag
+        // is off, no listener is registered and the engine behaves byte-identically
+        // to previous releases (plain CONNECT → compat 405; extended CONNECT →
+        // rejected as malformed before reaching the app, since
+        // SETTINGS_ENABLE_CONNECT_PROTOCOL was never advertised).
+        // #H9 composition: the per-session `stream` accounting above still counts
+        // every CONNECT stream — a rapid-reset flood of CONNECT streams trips the
+        // same GOAWAY teardown, which destroys any just-accepted stream with it.
+        if (_enableConnectProtocol) {
+            server.on('connect', (request, response) => {
+                try {
+                    if (!request.stream) {
+                        // HTTP/1.1 CONNECT (allowHTTP1 fallback): `response` is the
+                        // raw socket here, the third argument the head buffer. Gina
+                        // is not a forward proxy — refuse and close. (Without this
+                        // listener the engine destroys the connection unanswered.)
+                        response.write('HTTP/1.1 405 Method Not Allowed\r\nConnection: close\r\n\r\n');
+                        response.destroy();
+                        return;
+                    }
+                    var _protocol = request.headers[':protocol'];
+                    if (typeof _protocol === 'undefined') {
+                        // Plain HTTP/2 CONNECT (no :protocol): mirror the compat
+                        // layer's default refusal (`:status 405` + `date`, no body).
+                        response.writeHead(405);
+                        response.end();
+                        return;
+                    }
+                    _h2Metrics.extendedConnect++;
+                    if (_protocol !== 'websocket') {
+                        response.writeHead(501);
+                        response.end();
+                        return;
+                    }
+                    if (typeof server._extendedConnectHandler === 'function') {
+                        // Narrow internal hook: the WebSocket session bridge claims
+                        // the stream from here (`request.stream` is the raw
+                        // Http2Stream; RFC 8441 §5 — respond `:status 200`, then the
+                        // stream IS the bidirectional WebSocket channel).
+                        server._extendedConnectHandler(request, response);
+                        return;
+                    }
+                    // No consumer registered (transport enabled, bridge not wired):
+                    // refuse cleanly so clients see a handshake failure, not a hang.
+                    response.writeHead(501);
+                    response.end();
+                } catch (err) {
+                    // Never let a CONNECT-path error escalate to uncaughtException
+                    // (proc.js would SIGTERM the bundle) — terminate the stream instead.
+                    console.warn('[ SERVER ] extended CONNECT handling failed: ' + err.message);
+                    try {
+                        if (request.stream && !request.stream.destroyed) {
+                            request.stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR);
+                        } else if (!request.stream && response && response.destroy) {
+                            response.destroy();
+                        }
+                    } catch (closeErr) {
+                        // stream/socket already gone — nothing left to terminate
+                    }
+                }
+            });
+        }
     } else {
 
         switch (options.scheme) {
@@ -860,7 +937,8 @@ function ServerEngineClass(options) {
                         totalStreams    : server._h2Metrics.totalStreams,
                         goawayCount    : server._h2Metrics.goawayCount,
                         rstCount       : server._h2Metrics.rstCount,
-                        rapidResetBlocked : server._h2Metrics.rapidResetBlocked
+                        rapidResetBlocked : server._h2Metrics.rapidResetBlocked,
+                        extendedConnect : server._h2Metrics.extendedConnect
                     };
                 }
                 const infoStatus = JSON.stringify(infoPayload);

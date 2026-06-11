@@ -1728,3 +1728,238 @@ describe('10 - URL query string parsing: malformed-% crash-safety (#B30)', funct
         }, URIError);
     });
 });
+
+
+// 11 — #H13 RFC 8441 extended CONNECT enablement (source structure)
+// Strict boolean opt-in (settings.json http2Options.enableConnectProtocol),
+// compat-level `connect` listener with an HTTP-status refusal table, internal
+// `_extendedConnectHandler` hook, and an `extendedConnect` /_gina/info metric.
+describe('11 - #H13 extended CONNECT enablement source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('source resolves the opt-in with a strict `=== true` check', function() {
+        assert.ok(
+            getSrc().indexOf('_h2Opts.enableConnectProtocol === true') > -1,
+            'expected `_h2Opts.enableConnectProtocol === true` — strict boolean opt-in'
+        );
+    });
+
+    it('source never falls back with `||` for enableConnectProtocol (boolean, not numeric idiom)', function() {
+        assert.doesNotMatch(
+            getSrc(),
+            /_h2Opts\.enableConnectProtocol\s*\|\|/,
+            'a `|| <default>` fallback would coerce truthy non-booleans (e.g. the string "true") into enabling the feature'
+        );
+    });
+
+    it('source carries enableConnectProtocol in the http2 settings literal', function() {
+        assert.ok(
+            getSrc().indexOf('enableConnectProtocol : _enableConnectProtocol') > -1,
+            'expected `enableConnectProtocol : _enableConnectProtocol` inside http2Options.settings'
+        );
+    });
+
+    it('source registers the connect listener ONLY inside the opt-in gate', function() {
+        assert.match(
+            getSrc(),
+            /if \(_enableConnectProtocol\) \{\s*server\.on\('connect'/,
+            'expected `server.on(\'connect\', ...)` immediately inside `if (_enableConnectProtocol) {` — when the flag is off no listener may exist (the compat default 405 must be preserved byte-identically)'
+        );
+    });
+
+    it('source reads the RFC 8441 :protocol pseudo-header off the request', function() {
+        assert.ok(
+            getSrc().indexOf("request.headers[':protocol']") > -1,
+            "expected a `request.headers[':protocol']` read in the connect handler"
+        );
+    });
+
+    it('source guards the HTTP/1.1 CONNECT signature (no request.stream) with a raw-socket refusal', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('if (!request.stream)') > -1, 'expected the `!request.stream` h1-signature guard');
+        assert.ok(
+            s.indexOf("'HTTP/1.1 405 Method Not Allowed\\r\\nConnection: close\\r\\n\\r\\n'") > -1,
+            'expected the raw HTTP/1.1 405 status line written to the socket'
+        );
+    });
+
+    it('source mirrors the compat default for plain HTTP/2 CONNECT: writeHead(405)', function() {
+        assert.ok(
+            getSrc().indexOf('response.writeHead(405)') > -1,
+            'expected `response.writeHead(405)` for plain CONNECT (no :protocol) — byte-parity with the engine default'
+        );
+    });
+
+    it('source refuses non-websocket :protocol values with 501', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf("_protocol !== 'websocket'") > -1, 'expected the `:protocol !== websocket` check');
+        assert.ok(s.indexOf('response.writeHead(501)') > -1, 'expected `response.writeHead(501)` refusals');
+    });
+
+    it('source hands accepted websocket streams to a typeof-guarded internal hook', function() {
+        assert.ok(
+            getSrc().indexOf("typeof server._extendedConnectHandler === 'function'") > -1,
+            'expected the typeof-guarded `server._extendedConnectHandler` hook (the WS session bridge consumer)'
+        );
+    });
+
+    it('source increments the extendedConnect metric for :protocol-bearing streams', function() {
+        assert.ok(
+            getSrc().indexOf('_h2Metrics.extendedConnect++') > -1,
+            'expected `_h2Metrics.extendedConnect++`'
+        );
+    });
+
+    it('source declares extendedConnect in the metrics literal and the /_gina/info http2 payload', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('extendedConnect : 0') > -1, 'expected `extendedConnect : 0` in the _h2Metrics literal');
+        assert.ok(
+            s.indexOf('extendedConnect : server._h2Metrics.extendedConnect') > -1,
+            'expected `extendedConnect` in the /_gina/info http2 block'
+        );
+    });
+
+    it('source contains the CONNECT-path error containment (close, never crash)', function() {
+        var s = getSrc();
+        var connectIdx = s.indexOf("server.on('connect'");
+        assert.ok(connectIdx > -1, 'connect listener must exist');
+        var closeIdx = s.indexOf('http2.constants.NGHTTP2_INTERNAL_ERROR', connectIdx);
+        assert.ok(closeIdx > -1, 'expected a `stream.close(http2.constants.NGHTTP2_INTERNAL_ERROR)` fallback in the connect handler catch');
+    });
+
+    it('#H9 composition: the per-session stream accounting stays CONNECT-agnostic', function() {
+        var s = getSrc();
+        var streamIdx = s.indexOf("session.on('stream'");
+        var goawayIdx = s.indexOf("session.on('goaway'");
+        assert.ok(streamIdx > -1 && goawayIdx > streamIdx, 'session stream + goaway listeners must exist in order');
+        var block = s.slice(streamIdx, goawayIdx);
+        assert.ok(
+            block.indexOf(':protocol') === -1,
+            'the #H9 stream-accounting handler must not grow CONNECT detection — every CONNECT stream keeps counting in the rapid-reset window, detection lives on the compat connect event'
+        );
+    });
+
+    it('both settings templates document the enableConnectProtocol key', function() {
+        var confTemplate = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/conf/settings.json'), 'utf8'
+        );
+        var boilerplate = fs.readFileSync(
+            path.join(require('../fw'), 'core/template/boilerplate/bundle/config/settings.server.json'), 'utf8'
+        );
+        assert.ok(
+            confTemplate.indexOf('"enableConnectProtocol": false') > -1,
+            'expected `"enableConnectProtocol": false` in the conf settings.json http2Options block'
+        );
+        assert.ok(
+            boilerplate.indexOf('"enableConnectProtocol": false') > -1,
+            'expected the commented `"enableConnectProtocol": false` example in the settings.server.json boilerplate'
+        );
+    });
+
+});
+
+
+// 11b — #H13 extended CONNECT: pure-logic replica of the opt-in resolve +
+// the connect-listener decision table (mirrors the source line-for-line so
+// the §11 pins lock the operators against drift).
+describe('11b - #H13 extended CONNECT: opt-in resolve + dispatch logic', function() {
+
+    // Replica of the #H13 strict opt-in resolve in server.isaac.js
+    function resolveEnableConnectProtocol(optionsHttp2Options) {
+        var _h2Opts = (optionsHttp2Options && typeof optionsHttp2Options === 'object') ? optionsHttp2Options : {};
+        return _h2Opts.enableConnectProtocol === true;
+    }
+
+    // Replica of the #H13 `connect` listener decision table. Returns the
+    // terminal action; mutates `metrics` exactly like the source.
+    function onConnect(hasStream, headers, hasHandler, metrics) {
+        if (!hasStream) {
+            // HTTP/1.1 CONNECT signature — raw 405 + socket destroy
+            return { action: 'h1-refuse-and-close', status: 405 };
+        }
+        var _protocol = headers[':protocol'];
+        if (typeof _protocol === 'undefined') {
+            return { action: 'respond', status: 405 };
+        }
+        metrics.extendedConnect++;
+        if (_protocol !== 'websocket') {
+            return { action: 'respond', status: 501 };
+        }
+        if (hasHandler) {
+            return { action: 'handoff' };
+        }
+        return { action: 'respond', status: 501 };
+    }
+
+    it('opt-in defaults to false when http2Options is absent, empty, or not an object', function() {
+        assert.equal(resolveEnableConnectProtocol(undefined), false);
+        assert.equal(resolveEnableConnectProtocol({}), false);
+        assert.equal(resolveEnableConnectProtocol(null), false);
+        assert.equal(resolveEnableConnectProtocol('yes'), false);
+    });
+
+    it('opt-in enables only for the boolean true', function() {
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: true }), true);
+    });
+
+    it('strictness subtract: truthy non-booleans do NOT enable (=== true vs the || idiom)', function() {
+        // The sibling numeric options use `_h2Opts.X || <default>`; that idiom
+        // applied here would let the string "true" or the number 1 flip a
+        // SETTINGS advert on. The strict === keeps them off.
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: 'true' }), false);
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: 1 }), false);
+        assert.equal(resolveEnableConnectProtocol({ enableConnectProtocol: {} }), false);
+        // contrast: the || idiom would have enabled all three
+        assert.ok(('true' || false) && (1 || false));
+    });
+
+    it('HTTP/1.1 CONNECT signature (no stream) is refused on the raw socket, uncounted', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(false, {}, false, m);
+        assert.equal(r.action, 'h1-refuse-and-close');
+        assert.equal(r.status, 405);
+        assert.equal(m.extendedConnect, 0);
+    });
+
+    it('plain HTTP/2 CONNECT (no :protocol) gets 405 and is NOT counted as extended', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':method': 'CONNECT' }, false, m);
+        assert.equal(r.action, 'respond');
+        assert.equal(r.status, 405);
+        assert.equal(m.extendedConnect, 0);
+    });
+
+    it('a non-websocket :protocol is counted, then refused with 501', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':protocol': 'webtransport' }, false, m);
+        assert.equal(r.action, 'respond');
+        assert.equal(r.status, 501);
+        assert.equal(m.extendedConnect, 1);
+    });
+
+    it('websocket with no registered consumer is counted, then refused with 501', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':protocol': 'websocket' }, false, m);
+        assert.equal(r.action, 'respond');
+        assert.equal(r.status, 501);
+        assert.equal(m.extendedConnect, 1);
+    });
+
+    it('websocket with a registered consumer hands the stream off', function() {
+        var m = { extendedConnect: 0 };
+        var r = onConnect(true, { ':protocol': 'websocket' }, true, m);
+        assert.equal(r.action, 'handoff');
+        assert.equal(m.extendedConnect, 1);
+    });
+
+    it('the extendedConnect metric accumulates across streams', function() {
+        var m = { extendedConnect: 0 };
+        onConnect(true, { ':protocol': 'websocket' }, true, m);
+        onConnect(true, { ':protocol': 'foo' }, true, m);
+        onConnect(true, { ':method': 'CONNECT' }, true, m); // plain — uncounted
+        onConnect(true, { ':protocol': 'websocket' }, false, m);
+        assert.equal(m.extendedConnect, 3);
+    });
+
+});
