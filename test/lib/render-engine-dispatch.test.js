@@ -1389,18 +1389,29 @@ describe('05 - server.js bundle startup', function () {
         assert.match(SERVER_SRC, /var\s+initNunjucksEngine\s*=\s*function\s*\(\s*conf\s*\)/);
     });
 
-    it('initNunjucksEngine short-circuits when render.engine !== "nunjucks"', function () {
-        // Match: _engine !== 'nunjucks' check followed by return
+    // End-anchor slice of the initNunjucksEngine body (anchored on the
+    // following initSwigEngine declaration, not a fixed char window — a
+    // fixed window silently drops end-of-function pins as the function
+    // grows; the #M11 .njk-section scan did exactly that to the previous
+    // `idx + 800` slice).
+    function initNunjucksBlock() {
         var idx = SERVER_SRC.indexOf('var initNunjucksEngine');
-        assert.ok(idx > 0);
-        var body = SERVER_SRC.slice(idx, idx + 800);
-        assert.match(body, /_engine\s*!==\s*['"]nunjucks['"]/);
+        assert.ok(idx > 0, 'var initNunjucksEngine found');
+        var end = SERVER_SRC.indexOf('var initSwigEngine', idx);
+        assert.ok(end > idx, 'var initSwigEngine found after initNunjucksEngine');
+        return SERVER_SRC.slice(idx, end);
+    }
+
+    it('initNunjucksEngine short-circuits when render.engine !== "nunjucks"', function () {
+        // Match: the composed #M11 gate — engine check AND the absence of
+        // any templates.json `.njk` section — followed by return
+        var body = initNunjucksBlock();
+        assert.match(body, /_engine\s*!==\s*['"]nunjucks['"]\s*&&\s*!_hasNjkSection/);
         assert.match(body, /return\s*;/);
     });
 
     it('initNunjucksEngine calls nunjucksResolver.load with executionPath + settings.nunjucks', function () {
-        var idx = SERVER_SRC.indexOf('var initNunjucksEngine');
-        var body = SERVER_SRC.slice(idx, idx + 800);
+        var body = initNunjucksBlock();
         assert.match(body, /nunjucksResolver\.load\(\s*self\.executionPath/);
     });
 
@@ -2712,5 +2723,170 @@ describe('06 - negative invariants', function () {
         // Any hardcoded `/dist/gina.min.css` or similar would break custom
         // bundle asset paths. All asset URLs must flow through setResources.
         assert.doesNotMatch(RENDER_NJ_SRC, /\/dist\/gina(?:\.min)?\.(?:css|js)/);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// 07 - #M11 extension-keyed engine dispatch
+// ---------------------------------------------------------------------------
+//
+// An explicit template extension is an unambiguous engine signal: `.njk`
+// renders through nunjucks and `.swig` through swig, regardless of the
+// settings-level render.engine, so a single bundle can mix engines per
+// section (templates.json `ext`) or per `self.setTemplate(file, ext)` call.
+// The effective extension precedence mirrors the delegates' own resolution
+// (setTemplate override ext first, then the rule's template ext) so the
+// dispatch can never disagree with the file the delegate resolves. The
+// ambiguous `.html` default — and any other extension — keeps following
+// render.engine, leaving every existing bundle byte-unchanged.
+
+describe('07 - #M11 extension-keyed engine dispatch (source pins)', function () {
+
+    // The dispatch region: from the _engine default to the _delegate pick.
+    function dispatchBlock() {
+        var idx = CONTROLLER_SRC.indexOf("var _engine = 'swig';");
+        assert.ok(idx > 0, '_engine default found');
+        var end = CONTROLLER_SRC.indexOf('var _delegate;', idx);
+        assert.ok(end > idx, 'var _delegate found after the engine pick');
+        return CONTROLLER_SRC.slice(idx, end);
+    }
+
+    it('reads the override ext ahead of the rule template ext', function () {
+        var block = dispatchBlock();
+        var ovIdx = block.indexOf('local.options._templateOverride.ext');
+        var tplIdx = block.indexOf('local.options.template.ext');
+        assert.ok(ovIdx > 0, 'override ext read present');
+        assert.ok(tplIdx > 0, 'template ext read present');
+        assert.ok(ovIdx < tplIdx, 'override ext read precedes template ext read');
+    });
+
+    it('normalises the effective ext (lowercase + leading dot)', function () {
+        var block = dispatchBlock();
+        assert.match(block, /String\(_effExt\)\.toLowerCase\(\)/);
+        assert.match(block, /_effExt\s*=\s*'\.'\s*\+\s*_effExt/);
+    });
+
+    it('.njk routes to nunjucks, .swig to swig, anything else keeps render.engine', function () {
+        var block = dispatchBlock();
+        assert.match(block, /_effExt\s*===\s*'\.njk'/);
+        assert.match(block, /_effExt\s*===\s*'\.swig'/);
+        var njkIdx = block.indexOf("_effExt === '.njk'");
+        var nunjucksAssign = block.indexOf("_engine = 'nunjucks';", njkIdx);
+        assert.ok(nunjucksAssign > njkIdx, '.njk branch assigns nunjucks');
+        var swigExtIdx = block.indexOf("_effExt === '.swig'");
+        var swigAssign = block.indexOf("_engine = 'swig';", swigExtIdx);
+        assert.ok(swigAssign > swigExtIdx, '.swig branch assigns swig');
+        // No .html branch — the default ext deliberately follows render.engine.
+        assert.ok(block.indexOf("_effExt === '.html'") < 0, 'no .html special-case');
+    });
+
+    it('the ext override sits AFTER the settings read and BEFORE the delegate pick', function () {
+        var block = dispatchBlock();
+        var settingsIdx = block.indexOf('_settings.render.engine');
+        var extIdx = block.indexOf('_templateOverride.ext');
+        assert.ok(settingsIdx > 0 && extIdx > settingsIdx,
+            'ext-keyed override runs after the settings-level engine read');
+    });
+
+    it('initNunjucksEngine scans templates.json sections for a .njk ext', function () {
+        var idx = SERVER_SRC.indexOf('var initNunjucksEngine');
+        var end = SERVER_SRC.indexOf('var initSwigEngine', idx);
+        var body = SERVER_SRC.slice(idx, end);
+        assert.ok(body.indexOf('_hasNjkSection') > 0, '_hasNjkSection flag present');
+        assert.ok(body.indexOf('/^\\.?njk$/i') > 0, 'dotted/dotless case-insensitive njk match');
+        assert.match(body, /conf\.content\.templates/);
+    });
+});
+
+describe('07b - #M11 extension-keyed dispatch (pure-logic replica)', function () {
+
+    // Line-for-line replica of the controller.js dispatch (settings read +
+    // #M11 ext override). The §07 source pins lock the operators so this
+    // replica cannot silently drift from the source.
+    function pickEngine(settingsEngine, templateOverride, template) {
+        var _engine = 'swig';
+        if (settingsEngine) { _engine = settingsEngine; }
+        var _effExt = null;
+        if ( templateOverride && templateOverride.ext ) {
+            _effExt = templateOverride.ext;
+        } else if ( template && template.ext ) {
+            _effExt = template.ext;
+        }
+        if (_effExt) {
+            _effExt = String(_effExt).toLowerCase();
+            if ( !/^\./.test(_effExt) ) {
+                _effExt = '.' + _effExt;
+            }
+            if (_effExt === '.njk') {
+                _engine = 'nunjucks';
+            } else if (_effExt === '.swig') {
+                _engine = 'swig';
+            }
+        }
+        return _engine;
+    }
+
+    it('back-compat: no ext config keeps the settings-level engine', function () {
+        assert.equal(pickEngine(null, null, null), 'swig');
+        assert.equal(pickEngine('swig', null, null), 'swig');
+        assert.equal(pickEngine('nunjucks', null, null), 'nunjucks');
+    });
+
+    it('back-compat: the .html default follows render.engine', function () {
+        assert.equal(pickEngine('swig', null, { ext: '.html' }), 'swig');
+        assert.equal(pickEngine('nunjucks', null, { ext: '.html' }), 'nunjucks');
+    });
+
+    it('a .njk section renders through nunjucks on a swig bundle', function () {
+        assert.equal(pickEngine('swig', null, { ext: '.njk' }), 'nunjucks');
+    });
+
+    it('a .swig section renders through swig on a nunjucks bundle', function () {
+        assert.equal(pickEngine('nunjucks', null, { ext: '.swig' }), 'swig');
+    });
+
+    it('dotless and mixed-case config forms normalise', function () {
+        assert.equal(pickEngine('swig', null, { ext: 'njk' }), 'nunjucks');
+        assert.equal(pickEngine('swig', null, { ext: '.NJK' }), 'nunjucks');
+        assert.equal(pickEngine('nunjucks', null, { ext: 'SWIG' }), 'swig');
+    });
+
+    it('setTemplate override ext wins over the rule template ext', function () {
+        assert.equal(pickEngine('swig', { ext: '.njk' }, { ext: '.html' }), 'nunjucks');
+        assert.equal(pickEngine('nunjucks', { ext: '.swig' }, { ext: '.njk' }), 'swig');
+    });
+
+    it('an override without ext falls through to the rule template ext', function () {
+        assert.equal(pickEngine('swig', { ext: null }, { ext: '.njk' }), 'nunjucks');
+    });
+
+    it('unknown extensions keep the settings-level engine', function () {
+        assert.equal(pickEngine('swig', null, { ext: '.tpl' }), 'swig');
+        assert.equal(pickEngine('nunjucks', null, { ext: '.tpl' }), 'nunjucks');
+    });
+
+    // Replica of the initNunjucksEngine templates.json scan.
+    function hasNjkSection(templates) {
+        var _hasNjkSection = false;
+        var _tpls = templates || {};
+        for (var _section in _tpls) {
+            var _sectionExt = _tpls[_section] && _tpls[_section].ext;
+            if ( _sectionExt && /^\.?njk$/i.test(String(_sectionExt)) ) {
+                _hasNjkSection = true;
+                break;
+            }
+        }
+        return _hasNjkSection;
+    }
+
+    it('boot scan: any section with a .njk ext (dotted, dotless, any case) triggers init', function () {
+        assert.equal(hasNjkSection({ _common: { html: 'templates/html' } }), false);
+        assert.equal(hasNjkSection({ _common: { ext: '.html' }, reports: { ext: '.njk' } }), true);
+        assert.equal(hasNjkSection({ reports: { ext: 'njk' } }), true);
+        assert.equal(hasNjkSection({ reports: { ext: '.NJK' } }), true);
+        assert.equal(hasNjkSection({ _common: { ext: 'njk' } }), true);
+        assert.equal(hasNjkSection({ reports: { ext: '.njk.bak' } }), false);
+        assert.equal(hasNjkSection({}), false);
+        assert.equal(hasNjkSection(null), false);
     });
 });

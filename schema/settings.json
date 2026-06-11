@@ -258,7 +258,7 @@
       "properties": {
         "engine": {
           "type": "string",
-          "description": "Template engine for self.render() HTML output. \"swig\" (default) uses @rhinostone/swig via controller.render-swig.js; \"nunjucks\" uses the project-installed nunjucks package via controller.render-nunjucks.js. When set to \"nunjucks\", bundle startup fails with NUNJUCKS_NOT_INSTALLED if the package is absent from the project's node_modules.",
+          "description": "Bundle-level template engine for self.render() HTML output. \"swig\" (default) uses @rhinostone/swig via controller.render-swig.js; \"nunjucks\" uses the project-installed nunjucks package via controller.render-nunjucks.js. When set to \"nunjucks\", bundle startup fails with NUNJUCKS_NOT_INSTALLED if the package is absent from the project's node_modules. An explicit template extension overrides this per render: a section whose templates.json `ext` is \".njk\" (or a self.setTemplate(file, '.njk') call) renders through nunjucks, \".swig\" through swig — so a single bundle can mix engines; \".html\" and any other extension follow this setting.",
           "enum": ["swig", "nunjucks"],
           "default": "swig"
         }

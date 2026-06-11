@@ -1199,6 +1199,41 @@ function SuperController(options) {
             }
         } catch (e) { /* fall back to default 'swig' */ }
 
+        // #M11 — extension-keyed engine dispatch. An explicit template
+        // extension is an unambiguous engine signal, so a single bundle can
+        // mix engines per section (templates.json `ext`) or per
+        // `self.setTemplate(file, ext)` call: `.njk` renders through
+        // nunjucks, `.swig` through swig. The precedence mirrors the
+        // delegates' own resolution (setTemplate override ext first, then
+        // the rule's template ext) so the dispatch can never disagree with
+        // the file the delegate resolves; the ambiguous `.html` default —
+        // and any other extension — keeps following `render.engine` above,
+        // which leaves every existing bundle byte-unchanged.
+        // initNunjucksEngine scans templates.json for `.njk` sections so a
+        // mixed bundle still fails fast at startup when the project lacks
+        // nunjucks; a pure-runtime `.njk` switch (setTemplate on a bundle
+        // with no `.njk` config at all) surfaces the resolver's explicit
+        // "get() called before load()" error instead.
+        try {
+            var _effExt = null;
+            if ( local.options && local.options._templateOverride && local.options._templateOverride.ext ) {
+                _effExt = local.options._templateOverride.ext;
+            } else if ( local.options && local.options.template && local.options.template.ext ) {
+                _effExt = local.options.template.ext;
+            }
+            if (_effExt) {
+                _effExt = String(_effExt).toLowerCase();
+                if ( !/^\./.test(_effExt) ) {
+                    _effExt = '.' + _effExt;
+                }
+                if (_effExt === '.njk') {
+                    _engine = 'nunjucks';
+                } else if (_effExt === '.swig') {
+                    _engine = 'swig';
+                }
+            }
+        } catch (e) { /* keep the settings-level engine */ }
+
         var _delegate;
         if (_engine === 'nunjucks') {
             // #TPL1 — a nunjucks bundle with a configured async loader renders
