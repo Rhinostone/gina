@@ -1,0 +1,3 @@
+kind: Added
+body: 'New lib/ws-framing framework library: a dependency-free RFC 6455 WebSocket framing codec — frame encoder (minimal length encoding across the 7/16/64-bit forms, control-frame constraints, optional masking) and incremental per-connection parser (fragmentation reassembly, client-masking enforcement, UTF-8 validation of text payloads and close reasons, close-status-code validation, and DoS caps maxPayload/maxFragments enforced from declared frame lengths before any payload is buffered). Registered on the lib registry as wsFraming; transport-agnostic groundwork for WebSocket over HTTP/2 (RFC 8441 extended CONNECT).'
+time: 2026-06-11T07:01:45.067530+01:00
