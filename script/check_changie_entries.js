@@ -11,7 +11,7 @@
  * @file script/check_changie_entries.js
  *
  * Pre-commit guard for `.changes/unreleased/*.yaml` entries. Enforces the
- * rule captured in `llms.txt` lesson #66: every changie body must be
+ * rule captured in `llms.txt` #126 (formerly #66): every changie body must be
  * single-quoted, double-quoted, or a block scalar (`>` / `|`). Unquoted
  * bodies silently truncate at ` #` (YAML comment marker) or break at `:`
  * (mapping-values error), losing entire paragraphs from the rendered
@@ -116,7 +116,7 @@ function validate(path, text) {
         return '';
     }
 
-    // Single-quoted scalar — THE safe default per lesson #66. But it has
+    // Single-quoted scalar — THE safe default per llms.txt #126 (formerly #66). But it has
     // two traps: (a) literal `'` must be doubled as `''`, and (b) the
     // body must terminate with `'` before the next top-level key.
     if (leader === "'") {
@@ -125,7 +125,7 @@ function validate(path, text) {
 
     // Everything else is an unquoted scalar — rejected unconditionally
     // because of the ` #` comment-marker and `:` mapping-values traps.
-    return 'unquoted `body:` — use single quotes (body: \'...\') per lesson #66';
+    return 'unquoted `body:` — use single quotes (body: \'...\') per llms.txt #126';
 }
 
 /**
@@ -228,7 +228,7 @@ function main(argv) {
     failures.forEach(function (line) {
         process.stderr.write('  - ' + line + '\n');
     });
-    process.stderr.write('\n[check-changie] See llms.txt lesson #66 for the safe body shapes.\n');
+    process.stderr.write('\n[check-changie] See llms.txt #126 for the safe body shapes.\n');
     process.stderr.write('[check-changie] Every body must be single-quoted (`body: \'...\'`), double-quoted,\n');
     process.stderr.write('[check-changie] or a block scalar (`body: >-` / `body: |-`). Unquoted bodies are\n');
     process.stderr.write('[check-changie] rejected because they silently truncate at ` #` (YAML comment\n');
