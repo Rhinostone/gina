@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the inter-bundle proxy (SuperController::query() over HTTP/2) re-labeling its raw-JSON request body with the incoming request''s Content-Type. When the incoming browser request was a plain urlencoded form POST, the receiving bundle parsed the raw JSON through its urlencoded branch — corrupting `+`/`%XX` sequences inside JSON string values (e.g. a `+`-alias email losing its `+`). The `application/json` label query() sets for the body it serializes itself is now preserved; the incoming-Content-Type forward is kept for non-JSON outbound bodies. (#FORMCT2)'
-time: 2026-06-12T13:17:53.000000+01:00
