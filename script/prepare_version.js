@@ -345,6 +345,67 @@ function PrepareVersion() {
     };
 
     /**
+     * Fail-closed gate: abort a stable publish when ROADMAP.md
+     * contradicts the version being released — an open (📋) row that
+     * still references the exact version about to ship, or a done (✅)
+     * row labelled with a version newer than it. A missing `X.Y.Z ✅`
+     * timeline row is surfaced as a warning only.
+     *
+     * The actual logic lives in `script/check_roadmap_consistency.js`
+     * (pure `check()` over injected content) so it can be unit-tested
+     * without a filesystem. This wrapper resolves the live ROADMAP.md +
+     * package.json version and converts the result into the
+     * gate-callback shape used by `begin()`.
+     *
+     * Background: a roadmap-accuracy sweep (2026-06-12) found ✅ rows
+     * carrying stale TARGET versions instead of actual ship versions,
+     * and ten 📋 rows still targeting versions that had shipped without
+     * them — both are cut-time facts that manual checklist steps kept
+     * missing (same decay pattern the README-freshness gate closed).
+     *
+     * Runs after `checkReadmeFreshness` and before
+     * `checkDefFrameworkConsistency`; skipped on alpha publishes.
+     */
+    self.checkRoadmapConsistency = function(done) {
+        if (self.git.tag === 'alpha') {
+            console.debug('[prepare] Skipping roadmap consistency gate (alpha publish).');
+            return done();
+        }
+
+        console.debug('[prepare] Checking ROADMAP.md consistency against the targeted version ...');
+
+        var checker = require('./check_roadmap_consistency');
+        var result, version;
+        try {
+            var content = fs.readFileSync(ginaPath + '/ROADMAP.md', 'utf8');
+            version = JSON.parse(fs.readFileSync(ginaPath + '/package.json', 'utf8')).version;
+            result = checker.check({ roadmapContent: content, targetedVersion: version });
+        } catch (err) {
+            return done(err);
+        }
+
+        for (var w = 0; w < result.warnings.length; w++) {
+            console.warn('[prepare] WARN: ' + result.warnings[w]);
+        }
+
+        if (result.ok) {
+            console.debug('[prepare] OK: ROADMAP.md is consistent with releasing ' + version + '.');
+            return done();
+        }
+
+        console.error('[prepare] ERROR: ROADMAP.md contradicts releasing ' + version + ' — aborting publish.');
+        for (var f = 0; f < result.failures.length; f++) {
+            console.error('  [' + result.failures[f].rule + '] line ' + result.failures[f].lineNo + ': ' + result.failures[f].excerpt);
+        }
+        console.error('');
+        console.error('  Fix shape:');
+        console.error('    - open (📋) row naming ' + version + ': re-target it (e.g. to the `X.Y.x` bucket) or reword the reference;');
+        console.error('    - done (✅) row naming a version newer than ' + version + ': stamp the actual ship version.');
+        console.error('  Then commit on develop and re-run npm publish.');
+        return done(new Error('ROADMAP.md contradicts releasing ' + version + ' (' + result.failures.length + ' row(s))'));
+    };
+
+    /**
      * Fail-closed gate: abort the publish if `~/.gina/main.json`'s
      * `def_framework` field points to a framework directory that does
      * not exist on disk. Catches the silent state-store drift that
