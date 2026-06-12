@@ -161,12 +161,27 @@ function SuperController(options) {
      * Returns `true` when response headers have already been sent.
      * Checks both HTTP/2 stream and HTTP/1.1 `res.headersSent`.
      *
+     * Also returns `true` when the per-request response refs were already
+     * released by a terminal exit (`local.res` is null) — a released response
+     * can no longer be written to, so callers' `!headersSent()` guards no-op
+     * instead of dereferencing null (#B31).
+     *
      * @inner
      * @param {object} [res] - Defaults to `local.res`
      * @returns {boolean}
      */
     var headersSent = function(res) {
         var _res = ( typeof(res) != 'undefined' ) ? res : local.res;
+        // #B31 — the per-request response refs may already be released (the
+        // terminal-exit triplet: redirect()/renderTEXT()/throwError() and the
+        // render delegates set local.res = null once the response is out). A
+        // released response cannot be written to anymore, so report it as
+        // "sent": callers' existing !headersSent() guards then no-op instead
+        // of throwing `Cannot read properties of null (reading 'stream')` —
+        // an uncaughtException that proc.js escalates to SIGTERM (bundle kill).
+        if ( !_res ) {
+            return true;
+        }
         if (
             typeof(_res.stream) != 'undefined'
             && typeof(_res.stream.headersSent) != 'undefined'
@@ -5266,11 +5281,17 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   - `throwError(code, err)` — 2-arg form: HTTP status + Error|string
      *   - `throwError(res, code, msg)` — internal 3-arg form used by the router
      *
+     * Late calls: when throwError fires after a response terminal exit has
+     * already released the per-request refs (`local.res` is null — e.g. an
+     * entity/query callback resuming after a redirect() sent its 301), the
+     * call is logged and ignored instead of crashing the bundle (#B31).
+     *
      * @param {object} [ res ]
      * @param {number} code
      * @param {string} msg
      *
-     * @returns {void}
+     * @returns {void|boolean} `false` when the call is ignored (nested
+     *          rendering stack, or a late call on a released response)
      * */
     this.throwError = function(res, code, msg) {
 
@@ -5388,6 +5409,32 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         }
 
         var responseHeaders = null;
+        // #B31 — a late throwError (an entity/query callback, timer or catch
+        // handler resuming after the action already responded) can fire AFTER
+        // a terminal exit (redirect()/render*()/a previous throwError) released
+        // local.req/res/next. Every call shape above has normalized `res` to
+        // local.res by this point, so a null `res` means the response is gone:
+        // reading getHeaders off it threw `Cannot read properties of null
+        // (reading 'getHeaders')` — an uncaughtException that proc.js escalates
+        // to SIGTERM, killing the bundle and every in-flight request with it
+        // (same crash class as #B30: fix the throw site, never widen the
+        // uncaughtException net). Log the swallowed error so the late failure
+        // stays observable, then no-op — same return contract as the
+        // renderingStack guard above.
+        if ( !res ) {
+            res = local.res;
+        }
+        if ( !res ) {
+            var _lateError = errorObject || msg || code;
+            var _lateErrorStr = '';
+            try {
+                _lateErrorStr = ( _lateError && typeof(_lateError) == 'object' ) ? JSON.stringify(_lateError) : String(_lateError || '');
+            } catch (_lateJsonErr) {
+                _lateErrorStr = String(_lateError);
+            }
+            console.warn('[ Controller ] throwError() called after the response was released — ignoring late error: '+ _lateErrorStr);
+            return false;
+        }
         if ( typeof(res.getHeaders) == 'undefined' && typeof(res.stream) != 'undefined' ) {
             responseHeaders = res.stream.sentHeader;
         } else {

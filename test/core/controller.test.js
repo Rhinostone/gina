@@ -2463,3 +2463,162 @@ describe('21 - gina-container bare-global fallbacks (GINA_PID / GINA_CULTURE)', 
         }, ReferenceError);
     });
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 22 — late throwError / headersSent on a released response (#B31)
+//
+// Field sequence: a controller action redirects (301) — redirect() ends the
+// response and releases local.req/res/next (the terminal-exit triplet) — then
+// a late async continuation (entity/query callback, timer, catch handler)
+// calls self.throwError(err) on the same request. Pre-fix, throwError
+// normalized `res` to the released ref (null) and read typeof(res.getHeaders):
+// `TypeError: Cannot read properties of null (reading 'getHeaders')` — an
+// uncaughtException the process supervisor escalates to SIGTERM, killing the
+// bundle and every in-flight request with it. headersSent() had the same
+// exposure via its `typeof(_res.stream)` read (any second render*() call
+// after a terminal exit). Both entry points must no-op on a released
+// response: the response is gone, there is nothing left to write on.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('22 - throwError / headersSent on a released response (#B31)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source structure ----
+
+    it('headersSent guards the released response before any deref', function() {
+        var hsIdx = src.indexOf('var headersSent = function(res)');
+        assert.ok(hsIdx > -1, 'expected the headersSent definition');
+        var hsEnd = src.indexOf('return false;', hsIdx);
+        assert.ok(hsEnd > hsIdx, 'expected the headersSent fall-through tail');
+        var hsBlk = src.substring(hsIdx, hsEnd);
+
+        var guardIdx  = hsBlk.indexOf('if ( !_res )');
+        var streamIdx = hsBlk.indexOf('_res.stream');
+        assert.ok(guardIdx > -1, 'expected the `if ( !_res )` released-response guard');
+        assert.ok(streamIdx > -1, 'expected the `_res.stream` read');
+        assert.ok(guardIdx < streamIdx, 'the null guard must precede the first `_res` deref');
+        assert.match(
+            hsBlk.substring(guardIdx, guardIdx + 100),
+            /if \( !_res \)\s*\{\s*return true;/,
+            'a released response must report as already-sent so callers no-op'
+        );
+    });
+
+    it('throwError no-ops on a released response before the header snapshot', function() {
+        var fnIdx = src.indexOf('this.throwError = function(res, code, msg)');
+        assert.ok(fnIdx > -1, 'expected the throwError definition');
+        var endIdx = src.indexOf('responseHeaders = res.stream.sentHeader', fnIdx);
+        assert.ok(endIdx > fnIdx, 'expected the header-snapshot block as end anchor');
+        var blk = src.substring(fnIdx, endIdx);
+
+        assert.match(
+            blk,
+            /if \( !res \) \{\s*res = local\.res;/,
+            'expected the defensive `res = local.res` fallback before the released-response guard'
+        );
+        var warnIdx   = blk.indexOf('throwError() called after the response was released');
+        var typeofIdx = blk.indexOf("typeof(res.getHeaders) == 'undefined'");
+        assert.ok(warnIdx > -1, 'expected the late-error warn (the swallowed error must stay observable)');
+        assert.ok(typeofIdx > -1, 'expected the getHeaders feature-test in the snapshot block');
+        assert.ok(warnIdx < typeofIdx, 'the released-response guard must precede the getHeaders read');
+        assert.match(
+            blk.substring(warnIdx, warnIdx + 320),
+            /return false;/,
+            'the late call must return false (same contract as the renderingStack guard)'
+        );
+    });
+
+    // ---- pure logic: replica of the normalized snapshot tail ----
+
+    // Mirrors throwError after argument normalization (`res` already holds
+    // local.res for every 1-/2-arg shape): fixed tail = fallback + guard +
+    // snapshot; pre-fix tail = snapshot only.
+    function fixedSnapshotTail(localRes) {
+        var local = { res: localRes };
+        var res   = local.res;
+        if ( !res ) { res = local.res; }
+        if ( !res ) { return false; }
+        if ( typeof(res.getHeaders) == 'undefined' && typeof(res.stream) != 'undefined' ) {
+            return res.stream.sentHeader;
+        }
+        return res.getHeaders() || local.res.getHeaders();
+    }
+    function preFixSnapshotTail(localRes) {
+        var local = { res: localRes };
+        var res   = local.res;
+        if ( typeof(res.getHeaders) == 'undefined' && typeof(res.stream) != 'undefined' ) {
+            return res.stream.sentHeader;
+        }
+        return res.getHeaders() || local.res.getHeaders();
+    }
+
+    it('released response: the fixed tail returns false and does not throw', function() {
+        assert.strictEqual(fixedSnapshotTail(null), false);
+    });
+
+    it('live response: the fixed tail still snapshots headers (behaviour unchanged)', function() {
+        var headers = { 'content-type': 'text/html' };
+        var live = { getHeaders: function() { return headers; } };
+        assert.deepStrictEqual(fixedSnapshotTail(live), headers);
+    });
+
+    it('subtract: the pre-fix tail throws the exact field TypeError on a released response', function() {
+        assert.throws(function() {
+            preFixSnapshotTail(null);
+        }, function(err) {
+            return err instanceof TypeError
+                && /Cannot read properties of null \(reading 'getHeaders'\)/.test(err.message);
+        }, 'the unguarded snapshot must reproduce the field crash');
+    });
+
+    // ---- pure logic: replica of headersSent ----
+
+    function headersSentReplica(_res) {
+        if ( !_res ) {
+            return true;
+        }
+        if (
+            typeof(_res.stream) != 'undefined'
+            && typeof(_res.stream.headersSent) != 'undefined'
+            && _res.stream.headersSent === true
+        ) {
+            return true;
+        }
+        if ( typeof(_res.headersSent) != 'undefined' ) {
+            return _res.headersSent;
+        }
+        return false;
+    }
+
+    it('headersSent reports true on a released response (nothing left to write)', function() {
+        assert.strictEqual(headersSentReplica(null), true);
+        assert.strictEqual(headersSentReplica(undefined), true);
+    });
+
+    it('headersSent still honours a live response (behaviour unchanged)', function() {
+        assert.strictEqual(headersSentReplica({ headersSent: false }), false);
+        assert.strictEqual(headersSentReplica({ headersSent: true }), true);
+        assert.strictEqual(headersSentReplica({ stream: { headersSent: true } }), true);
+        assert.strictEqual(headersSentReplica({}), false);
+    });
+
+    it('subtract: the pre-fix headersSent shape throws reading `stream` on a released response', function() {
+        function preFixHeadersSent(_res) {
+            if ( typeof(_res.stream) != 'undefined' && _res.stream.headersSent === true ) {
+                return true;
+            }
+            if ( typeof(_res.headersSent) != 'undefined' ) {
+                return _res.headersSent;
+            }
+            return false;
+        }
+        assert.throws(function() {
+            preFixHeadersSent(null);
+        }, function(err) {
+            return err instanceof TypeError
+                && /Cannot read properties of null \(reading 'stream'\)/.test(err.message);
+        }, 'the unguarded headersSent must reproduce the second-crash shape');
+    });
+});

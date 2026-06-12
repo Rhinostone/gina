@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed a bundle-killing crash when an error fired after the response was already sent. A late throwError() — e.g. an entity or query callback resuming after a redirect() had already issued its 301 and released the per-request response — dereferenced the released response and threw TypeError (reading getHeaders), escalating to uncaughtException and a SIGTERM bundle shutdown that also dropped every in-flight request. Late throwError() calls now log the swallowed error and no-op, and headersSent() treats a released response as already-sent so second render calls no-op too (#B31).'
+time: 2026-06-12T10:49:02.844387+01:00
