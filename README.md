@@ -39,11 +39,12 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.5.0
+## What's in 0.5.1
 
-- **Native ESM entry points.** `package.json` now declares an `"exports"` map with dual CJS/ESM entries — `import gina from 'gina'` and `import gna from 'gina/gna'` work natively in ESM projects and modern bundlers (default exports only; the `gina/gna` getters resolve at access time, after framework boot). CJS `require()` resolution is byte-identical to before, and TypeScript declarations keep resolving through per-entry `types` conditions. Note: with the `exports` map in place, the package's Node-resolvable surface is exactly `gina`, `gina/gna`, and `gina/package.json` — undeclared deep subpaths are no longer resolvable.
-- **Mixed template engines per bundle.** A `templates.json` section declaring `"ext": ".njk"` (or a `self.setTemplate(file, '.njk')` call) renders through nunjucks and `".swig"` through swig — regardless of the bundle-level `render.engine` setting. `.html` and any other extension keep following `render.engine`, so existing bundles are unchanged. Bundles with `.njk` sections get the same fail-fast `NUNJUCKS_NOT_INSTALLED` startup check as nunjucks-engine bundles.
-- **Nunjucks Inspector parity (dev mode).** Dev-mode nunjucks pages now render the Inspector statusbar and expose the query log as `data.page.queries` alongside the flow timeline — the Inspector Queries tab no longer renders empty for nunjucks bundles.
+- **Released-response crash family fixed (bundle-killing).** A late `throwError()` after the response was already sent — e.g. an entity or query callback resuming after a `redirect()` had already issued its 301 — dereferenced the released response, escalating to an `uncaughtException` and a SIGTERM bundle shutdown that dropped every in-flight request. Late calls now log the swallowed error and no-op. The same guard family covers the HTTP/2 inter-bundle query paths: retry re-entries, late upstream responses, and both 3xx redirect intercepts no longer crash when the originating request has already terminated.
+- **Dev-mode hot-reload memory leak fixed.** The per-request hot-reload eviction cycles retained ~1.8 MB of live heap per request through dead `module.children` references, killing heavily-loaded dev bundles with a heap-limit OOM. Both cycles now prune stale module references after eviction; production mode was never affected.
+- **Inter-bundle proxy Content-Type fix.** `query()` over HTTP/2 no longer re-labels the raw-JSON body it serializes itself with the incoming request's Content-Type — a urlencoded browser POST proxied between bundles no longer corrupts `+`/`%XX` sequences inside JSON string values.
+- **ROADMAP consistency release gate.** Stable publishes now abort when a roadmap row is stale relative to the version being released, alongside the existing README freshness gate.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 
