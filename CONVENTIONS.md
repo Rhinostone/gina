@@ -391,6 +391,7 @@ exports.setUp = function(done) {
 - Test names use `[ category ] description` format for grouping
 - Setup guards (`if (initialized) return done()`) prevent re-execution across test suites
 - New unit tests go in `test/core/` with numeric prefix for ordering
+- **Test counts in docs and changelogs are measured, never estimated.** Don't write an "N unit tests" claim before running the test — estimating from section count consistently undercounts (behaviour sections run 10-15 tests, not ~5). The corrective is mechanical: run `node --test test/core/<file>.test.js 2>&1 | tail -10`, copy the `ℹ tests N` line, and write that exact N. Use `TODO_test_count` placeholders in drafts and fill from the actual output before staging.
 
 **Recommendation:**
 Migrate to `node:test` (built-in, Node 18+) for all new test files — `nodeunit` is unmaintained. Do not convert existing tests; add `node:test` tests alongside. The HTTP/2 client mock harness (#UT1) should use `node:test + node:assert` natively.
