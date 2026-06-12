@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed a family of bundle-killing crashes when an HTTP/2 inter-bundle query outlives its own request: retry re-entries and late upstream responses ran against a response that a terminal exit (e.g. a redirect that lets the middleware chain continue) had already released, dereferencing null — the header-forward prep block on every retry re-entry, the session lookup behind isHaltedRequest, and both 3xx redirect intercepts. All sites are now null-guarded: forwards and intercepts no-op on a released request (options.headers already carries the first attempt''s values, so nothing is lost), and the session lookup reports no session. Live-request behaviour is byte-identical. (#B33)'
+time: 2026-06-12T15:35:00.000000+01:00

@@ -2622,3 +2622,154 @@ describe('22 - throwError / headersSent on a released response (#B31)', function
         }, 'the unguarded headersSent must reproduce the second-crash shape');
     });
 });
+
+describe('23 - query retry/response handlers on a released response (#B33)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source structure ----
+
+    // The negative pin is scoped to the two fixed function bodies — other functions
+    // (redirect, isPopinContext, the render-path authority composition, the bundle-status
+    // forwards) deliberately retain unguarded reads: they run on the live request
+    // lifecycle, are NOT on the measured query/retry path, and are tracked as a
+    // measure-first follow-up in the #B33 ledger entry. Do not widen this pin to the
+    // whole file without measuring those sites first.
+    it('query() and handleHTTP2ClientRequest carry no unguarded local.req.headers forward', function() {
+        var qStart  = src.indexOf('this.query = function(options, data, callback)');
+        var h2Start = src.indexOf('var handleHTTP2ClientRequest = function(');
+        var h2End   = src.indexOf('var getSession = function()');
+        assert.ok(qStart > -1 && h2Start > qStart && h2End > h2Start, 'expected the structural anchors');
+        var fixedBlocks = src.slice(qStart, h2End);
+        var unguarded = fixedBlocks.match(/(?<!local\.req != null && )typeof\(local\.req\.headers\[/g) || [];
+        assert.strictEqual(unguarded.length, 0,
+            'every local.req.headers forward in query()/handleHTTP2ClientRequest must carry `local.req != null && `');
+        var guarded = fixedBlocks.match(/local\.req != null && typeof\(local\.req\.headers\[/g) || [];
+        assert.ok(guarded.length >= 7,
+            'expected at least the 7 guarded forwards (5 in handleHTTP2ClientRequest + 2 in query)');
+    });
+
+    it('getSession returns null on a released request before any session deref', function() {
+        assert.match(src,
+            /var getSession = function\(\) \{[\s\S]{0,400}?if \( local\.req == null \) \{\s*return null;/,
+            'getSession must early-return null when local.req was released');
+    });
+
+    it('both 3xx redirect intercepts skip a released response', function() {
+        var count = src.split("local.res != null && data.status && /^3/.test(data.status)").length - 1;
+        assert.strictEqual(count, 2,
+            'both the callback-mode and emitter-mode 3xx intercepts must be local.res-guarded');
+    });
+
+    // ---- pure-logic replicas (mirror the shipped guard shapes) ----
+
+    function forwardReplica(req, options) {
+        if ( req != null && typeof(req.headers['x-requested-with']) != 'undefined' ) {
+            options.headers['x-requested-with'] = req.headers['x-requested-with'];
+        }
+        return options;
+    }
+
+    it('forward replica: released request skips the forward without throwing', function() {
+        var options = { headers: {} };
+        assert.doesNotThrow(function() { forwardReplica(null, options); });
+        assert.strictEqual(typeof options.headers['x-requested-with'], 'undefined');
+    });
+
+    it('forward replica: live request still forwards (behaviour unchanged)', function() {
+        var options = { headers: {} };
+        forwardReplica({ headers: { 'x-requested-with': 'XMLHttpRequest' } }, options);
+        assert.strictEqual(options.headers['x-requested-with'], 'XMLHttpRequest');
+    });
+
+    it('subtract: the pre-fix forward shape throws reading `headers` on a released request', function() {
+        function preFixForward(req, options) {
+            if ( typeof(req.headers['x-requested-with']) != 'undefined' ) {
+                options.headers['x-requested-with'] = req.headers['x-requested-with'];
+            }
+        }
+        assert.throws(function() {
+            preFixForward(null, { headers: {} });
+        }, function(err) {
+            return err instanceof TypeError
+                && /Cannot read properties of null \(reading 'headers'\)/.test(err.message);
+        }, 'the unguarded forward must reproduce the retry-re-entry crash shape');
+    });
+
+    function getSessionReplica(req) {
+        var session = null;
+        if ( req == null ) {
+            return null;
+        }
+        if ( typeof(req.session) != 'undefined') {
+            session = req.session;
+        }
+        return session;
+    }
+
+    it('getSession replica: released request yields null; live request yields the session', function() {
+        assert.strictEqual(getSessionReplica(null), null);
+        var sess = { id: 'x1' };
+        assert.strictEqual(getSessionReplica({ session: sess }), sess);
+        assert.strictEqual(getSessionReplica({}), null);
+    });
+
+    it('subtract: the pre-fix getSession shape throws reading `session` on a released request', function() {
+        function preFixGetSession(req) {
+            var session = null;
+            if ( typeof(req.session) != 'undefined') {
+                session = req.session;
+            }
+            return session;
+        }
+        assert.throws(function() {
+            preFixGetSession(null);
+        }, function(err) {
+            return err instanceof TypeError
+                && /Cannot read properties of null \(reading 'session'\)/.test(err.message);
+        }, 'the unguarded getSession must reproduce the isHaltedRequest crash shape');
+    });
+
+    function interceptReplica(res, data) {
+        if (res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+            res.writeHead(data.status, data.headers);
+            res.end();
+            return 'intercepted';
+        }
+        return 'fell-through';
+    }
+
+    it('intercept replica: released response falls through instead of writing', function() {
+        assert.strictEqual(
+            interceptReplica(null, { status: 301, headers: { location: '/x' } }),
+            'fell-through');
+    });
+
+    it('intercept replica: live response still intercepts the 3xx (behaviour unchanged)', function() {
+        var wrote = [];
+        var res = {
+            writeHead: function(s, h) { wrote.push([s, h]); },
+            end: function() { wrote.push('end'); }
+        };
+        assert.strictEqual(
+            interceptReplica(res, { status: 301, headers: { location: '/x' } }),
+            'intercepted');
+        assert.strictEqual(wrote.length, 2);
+        assert.strictEqual(wrote[0][0], 301);
+    });
+
+    it('subtract: the pre-fix intercept shape throws reading `writeHead` on a released response', function() {
+        function preFixIntercept(res, data) {
+            if (data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+                res.writeHead(data.status, data.headers);
+                return res.end();
+            }
+        }
+        assert.throws(function() {
+            preFixIntercept(null, { status: 301, headers: { location: '/x' } });
+        }, function(err) {
+            return err instanceof TypeError
+                && /Cannot read properties of null \(reading 'writeHead'\)/.test(err.message);
+        }, 'the unguarded intercept must reproduce the emitter-mode crash shape');
+    });
+});

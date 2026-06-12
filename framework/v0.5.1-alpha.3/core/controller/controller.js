@@ -3318,11 +3318,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 		// proxy_set_header X-Ingress-IP $server_addr
 		// proxy_set_header X-Forwarded-For $remote_addr;
 		// # EO - Specific headers for Gina
-        if ( typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
             options.headers['x-client-ip'] = local.req.headers['x-client-ip']
         }
 
-        if ( typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
             options.headers['x-ingress-ip'] = local.req.headers['x-ingress-ip']
         }
 
@@ -3859,11 +3859,17 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         } = browser.constants;
 
 
-        if ( typeof(local.req.headers['x-requested-with']) != 'undefined' ) {
+        // #B33 — every retry re-entry (setTimeout → handleHTTP2ClientRequest) re-executes
+        // these forwards, and a terminal exit (e.g. redirect-then-continue) may have
+        // released local.req in between: each forward is null-guarded with query()'s own
+        // idiom. Skipping a forward on a released request is a no-op, not a behavior
+        // change — options.headers already carries the attempt-1 values (the same options
+        // object travels through every retry).
+        if ( local.req != null && typeof(local.req.headers['x-requested-with']) != 'undefined' ) {
             options.headers['x-requested-with'] = local.req.headers['x-requested-with']
         }
 
-        if ( typeof(local.req.headers['access-control-allow-credentials']) != 'undefined' ) {
+        if ( local.req != null && typeof(local.req.headers['access-control-allow-credentials']) != 'undefined' ) {
             options.headers['access-control-allow-credentials'] = local.req.headers['access-control-allow-credentials']
         }
 
@@ -3875,7 +3881,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         // receiving bundle's urlencoded parse then corrupts `+`/`%XX` inside JSON string
         // values (same corruption #FORMCT fixed in the browser validator). The forward is
         // kept for non-JSON outbound bodies (e.g. the MSIE text/plain override).
-        if ( typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] && !/application\/json/i.test(options.headers['content-type']) ) {
+        if ( local.req != null && typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] && !/application\/json/i.test(options.headers['content-type']) ) {
             options.headers['content-type'] = local.req.headers['content-type']
         }
 
@@ -3885,11 +3891,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 		// proxy_set_header X-Ingress-IP $server_addr
 		// proxy_set_header X-Forwarded-For $remote_addr;
 		// # EO - Specific headers for Gina
-        if ( typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
             options.headers['x-client-ip'] = local.req.headers['x-client-ip']
         }
 
-        if ( typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
             options.headers['x-ingress-ip'] = local.req.headers['x-ingress-ip']
         }
 
@@ -4206,7 +4212,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                 try {
                     // Intercepting fallback redirect (3xx)
-                    if (data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+                    // #B33 — local.res may be null when the response lands after a terminal
+                    // exit released the triplet; skip the intercept and fall through to the
+                    // non-2xx handling (whose throwError no-ops on a released response).
+                    if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
                         local.res.writeHead(data.status, data.headers);
                         return local.res.end();
                     }
@@ -4278,7 +4287,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
                 }
 
-                if (data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+                // #B33 — same released-response skip as the callback-mode intercept above;
+                // emitter mode falls through to the query#complete emit so listeners
+                // still learn the outcome.
+                if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
                     self.removeAllListeners(['query#complete']);
                     local.res.writeHead(data.status, data.headers);
                     return local.res.end();
@@ -4945,6 +4957,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
     var getSession = function() {
         var session = null;
+        // #B33 — local.req is null after a terminal exit released the triplet; callers
+        // like isHaltedRequest() run from HTTP/2 response handlers that can fire on a
+        // released request (retry/late-response paths). No session on a released request.
+        if ( local.req == null ) {
+            return null;
+        }
         if ( typeof(local.req.session) != 'undefined') {
             session = local.req.session;
         }
