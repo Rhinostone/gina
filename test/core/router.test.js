@@ -644,7 +644,7 @@ describe('09 - hot-reload dirty-flag logic (#M6)', function() {
 // 10 — #B18 router.js require.cache antipattern eviction
 // ─────────────────────────────────────────────────────────────────────────
 //
-// Per llms.txt #104: `require.cache[path] = require(path)` is an antipattern
+// Per llms.txt #175 (formerly #104): `require.cache[path] = require(path)` is an antipattern
 // because Node reads `.exports` off each `require.cache` entry on every
 // subsequent `require()`; assigning the bare exports object into the slot
 // (no `.exports` key) makes the next plain `require()` return `undefined`.
