@@ -129,7 +129,36 @@ function Router(env, scope) {
         SuperController = require(_(corePath +'/controller/index.js', true));
 
         if (_hotReload) _hotReload.core = false; // #M6 — clear flag after eviction
+
+        pruneDeadModuleChildren();
         corePath = null;
+    }
+
+    /**
+     * Prunes stale `Module` references from every cached module's `children`
+     * array after the eviction cycle above. Each cache-miss `require()` pushes
+     * the fresh `Module` onto the requiring module's `children` (Node only
+     * dedupes on cache hits), so without pruning this long-lived router module
+     * accumulates one dead controller `Module` per request, each pinning its
+     * whole evaluated exports graph — the dev-mode per-request memory leak.
+     *
+     * Local copy of the sweep in `core/server.isaac.js` — the engine-agnostic
+     * router cannot depend on an engine module, and the `lib` registry is
+     * itself evicted per request. Keep both copies in sync.
+     *
+     * @inner
+     * @returns {undefined}
+     */
+    var pruneDeadModuleChildren = function() {
+        var cacheIds = Object.keys(require.cache);
+        for (var i = 0, len = cacheIds.length; i < len; i++) {
+            var cached = require.cache[cacheIds[i]];
+            if (cached && cached.children && cached.children.length > 0) {
+                cached.children = cached.children.filter(function onPruneFilter(child) {
+                    return require.cache[child.id] === child;
+                });
+            }
+        }
     }
 
     this.setServerInstance = function(serverInstance) {
