@@ -3867,7 +3867,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             options.headers['access-control-allow-credentials'] = local.req.headers['access-control-allow-credentials']
         }
 
-        if ( typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] ) {
+        // #FORMCT2 — never clobber an `application/json` outbound Content-Type with the
+        // INCOMING request's. query() serializes the inter-bundle body as raw JSON
+        // (queryData = JSON.stringify) and labels it application/json; forwarding the
+        // incoming CT here re-labels that JSON body (e.g. as urlencoded when the browser
+        // request was a plain form POST — canonical case: a haltedRequest resume), and the
+        // receiving bundle's urlencoded parse then corrupts `+`/`%XX` inside JSON string
+        // values (same corruption #FORMCT fixed in the browser validator). The forward is
+        // kept for non-JSON outbound bodies (e.g. the MSIE text/plain override).
+        if ( typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] && !/application\/json/i.test(options.headers['content-type']) ) {
             options.headers['content-type'] = local.req.headers['content-type']
         }
 
