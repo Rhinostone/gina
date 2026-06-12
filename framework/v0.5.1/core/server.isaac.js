@@ -243,7 +243,47 @@ var refreshCore = function() {
     delete require.cache[require.resolve(pluginsIndexPath)];
     var freshPlugins = require( pluginsIndexPath );
     require.cache[_(corePath + '/gna.js', true)].exports.plugins = freshPlugins;
+
+    pruneDeadModuleChildren();
 }
+
+/**
+ * Prunes stale `Module` references from every cached module's `children` array.
+ *
+ * Each cache-miss `require()` pushes the freshly created `Module` onto the
+ * requiring module's `children` array — Node only dedupes on cache hits — so the
+ * per-request delete-and-re-require cycles in `refreshCore()` (and the router's
+ * `refreshCoreDependencies()`) make long-lived parents accumulate one dead
+ * `Module` per eviction: this engine module, `router.js`, and any module with a
+ * lazy in-function `require()` of an evicted lib. Every dead `Module` pins its
+ * entire evaluated exports graph. Measured on a minimal bundle in dev mode:
+ * ~1.8 MB of post-GC live heap retained per request, ending in a heap-limit
+ * OOM (SIGABRT) at ~2400 requests.
+ *
+ * Keeping only children whose resolved id still maps to that same instance in
+ * `require.cache` releases the dead graphs. `children` is diagnostic metadata
+ * (nothing in Node's resolution reads it), so pruning never unloads a module
+ * still referenced elsewhere.
+ *
+ * A local copy of the same sweep lives in `core/router.js` — the engine-agnostic
+ * router cannot depend on an engine module, and the `lib` registry is itself
+ * evicted per request. Keep both copies in sync.
+ *
+ * @memberof module:gina/core/server.isaac
+ * @inner
+ * @returns {undefined}
+ */
+var pruneDeadModuleChildren = function() {
+    var cacheIds = Object.keys(require.cache);
+    for (var i = 0, len = cacheIds.length; i < len; i++) {
+        var cached = require.cache[cacheIds[i]];
+        if (cached && cached.children && cached.children.length > 0) {
+            cached.children = cached.children.filter(function onPruneFilter(child) {
+                return require.cache[child.id] === child;
+            });
+        }
+    }
+};
 
 // Express compatibility
 const slice = Array.prototype.slice;

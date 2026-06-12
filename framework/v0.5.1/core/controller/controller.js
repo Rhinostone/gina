@@ -161,12 +161,27 @@ function SuperController(options) {
      * Returns `true` when response headers have already been sent.
      * Checks both HTTP/2 stream and HTTP/1.1 `res.headersSent`.
      *
+     * Also returns `true` when the per-request response refs were already
+     * released by a terminal exit (`local.res` is null) — a released response
+     * can no longer be written to, so callers' `!headersSent()` guards no-op
+     * instead of dereferencing null (#B31).
+     *
      * @inner
      * @param {object} [res] - Defaults to `local.res`
      * @returns {boolean}
      */
     var headersSent = function(res) {
         var _res = ( typeof(res) != 'undefined' ) ? res : local.res;
+        // #B31 — the per-request response refs may already be released (the
+        // terminal-exit triplet: redirect()/renderTEXT()/throwError() and the
+        // render delegates set local.res = null once the response is out). A
+        // released response cannot be written to anymore, so report it as
+        // "sent": callers' existing !headersSent() guards then no-op instead
+        // of throwing `Cannot read properties of null (reading 'stream')` —
+        // an uncaughtException that proc.js escalates to SIGTERM (bundle kill).
+        if ( !_res ) {
+            return true;
+        }
         if (
             typeof(_res.stream) != 'undefined'
             && typeof(_res.stream.headersSent) != 'undefined'
@@ -3303,11 +3318,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 		// proxy_set_header X-Ingress-IP $server_addr
 		// proxy_set_header X-Forwarded-For $remote_addr;
 		// # EO - Specific headers for Gina
-        if ( typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
             options.headers['x-client-ip'] = local.req.headers['x-client-ip']
         }
 
-        if ( typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
             options.headers['x-ingress-ip'] = local.req.headers['x-ingress-ip']
         }
 
@@ -3844,15 +3859,29 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         } = browser.constants;
 
 
-        if ( typeof(local.req.headers['x-requested-with']) != 'undefined' ) {
+        // #B33 — every retry re-entry (setTimeout → handleHTTP2ClientRequest) re-executes
+        // these forwards, and a terminal exit (e.g. redirect-then-continue) may have
+        // released local.req in between: each forward is null-guarded with query()'s own
+        // idiom. Skipping a forward on a released request is a no-op, not a behavior
+        // change — options.headers already carries the attempt-1 values (the same options
+        // object travels through every retry).
+        if ( local.req != null && typeof(local.req.headers['x-requested-with']) != 'undefined' ) {
             options.headers['x-requested-with'] = local.req.headers['x-requested-with']
         }
 
-        if ( typeof(local.req.headers['access-control-allow-credentials']) != 'undefined' ) {
+        if ( local.req != null && typeof(local.req.headers['access-control-allow-credentials']) != 'undefined' ) {
             options.headers['access-control-allow-credentials'] = local.req.headers['access-control-allow-credentials']
         }
 
-        if ( typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] ) {
+        // #FORMCT2 — never clobber an `application/json` outbound Content-Type with the
+        // INCOMING request's. query() serializes the inter-bundle body as raw JSON
+        // (queryData = JSON.stringify) and labels it application/json; forwarding the
+        // incoming CT here re-labels that JSON body (e.g. as urlencoded when the browser
+        // request was a plain form POST — canonical case: a haltedRequest resume), and the
+        // receiving bundle's urlencoded parse then corrupts `+`/`%XX` inside JSON string
+        // values (same corruption #FORMCT fixed in the browser validator). The forward is
+        // kept for non-JSON outbound bodies (e.g. the MSIE text/plain override).
+        if ( local.req != null && typeof(local.req.headers['content-type']) != 'undefined' && local.req.headers['content-type'] != options.headers['content-type'] && !/application\/json/i.test(options.headers['content-type']) ) {
             options.headers['content-type'] = local.req.headers['content-type']
         }
 
@@ -3862,11 +3891,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 		// proxy_set_header X-Ingress-IP $server_addr
 		// proxy_set_header X-Forwarded-For $remote_addr;
 		// # EO - Specific headers for Gina
-        if ( typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-client-ip']) != 'undefined' && local.req.headers['x-client-ip'] != options.headers['x-client-ip'] ) {
             options.headers['x-client-ip'] = local.req.headers['x-client-ip']
         }
 
-        if ( typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
+        if ( local.req != null && typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
             options.headers['x-ingress-ip'] = local.req.headers['x-ingress-ip']
         }
 
@@ -4183,7 +4212,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                 try {
                     // Intercepting fallback redirect (3xx)
-                    if (data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+                    // #B33 — local.res may be null when the response lands after a terminal
+                    // exit released the triplet; skip the intercept and fall through to the
+                    // non-2xx handling (whose throwError no-ops on a released response).
+                    if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
                         local.res.writeHead(data.status, data.headers);
                         return local.res.end();
                     }
@@ -4255,7 +4287,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
                 }
 
-                if (data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+                // #B33 — same released-response skip as the callback-mode intercept above;
+                // emitter mode falls through to the query#complete emit so listeners
+                // still learn the outcome.
+                if (local.res != null && data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
                     self.removeAllListeners(['query#complete']);
                     local.res.writeHead(data.status, data.headers);
                     return local.res.end();
@@ -4922,6 +4957,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
     var getSession = function() {
         var session = null;
+        // #B33 — local.req is null after a terminal exit released the triplet; callers
+        // like isHaltedRequest() run from HTTP/2 response handlers that can fire on a
+        // released request (retry/late-response paths). No session on a released request.
+        if ( local.req == null ) {
+            return null;
+        }
         if ( typeof(local.req.session) != 'undefined') {
             session = local.req.session;
         }
@@ -5266,11 +5307,17 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   - `throwError(code, err)` — 2-arg form: HTTP status + Error|string
      *   - `throwError(res, code, msg)` — internal 3-arg form used by the router
      *
+     * Late calls: when throwError fires after a response terminal exit has
+     * already released the per-request refs (`local.res` is null — e.g. an
+     * entity/query callback resuming after a redirect() sent its 301), the
+     * call is logged and ignored instead of crashing the bundle (#B31).
+     *
      * @param {object} [ res ]
      * @param {number} code
      * @param {string} msg
      *
-     * @returns {void}
+     * @returns {void|boolean} `false` when the call is ignored (nested
+     *          rendering stack, or a late call on a released response)
      * */
     this.throwError = function(res, code, msg) {
 
@@ -5388,6 +5435,32 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         }
 
         var responseHeaders = null;
+        // #B31 — a late throwError (an entity/query callback, timer or catch
+        // handler resuming after the action already responded) can fire AFTER
+        // a terminal exit (redirect()/render*()/a previous throwError) released
+        // local.req/res/next. Every call shape above has normalized `res` to
+        // local.res by this point, so a null `res` means the response is gone:
+        // reading getHeaders off it threw `Cannot read properties of null
+        // (reading 'getHeaders')` — an uncaughtException that proc.js escalates
+        // to SIGTERM, killing the bundle and every in-flight request with it
+        // (same crash class as #B30: fix the throw site, never widen the
+        // uncaughtException net). Log the swallowed error so the late failure
+        // stays observable, then no-op — same return contract as the
+        // renderingStack guard above.
+        if ( !res ) {
+            res = local.res;
+        }
+        if ( !res ) {
+            var _lateError = errorObject || msg || code;
+            var _lateErrorStr = '';
+            try {
+                _lateErrorStr = ( _lateError && typeof(_lateError) == 'object' ) ? JSON.stringify(_lateError) : String(_lateError || '');
+            } catch (_lateJsonErr) {
+                _lateErrorStr = String(_lateError);
+            }
+            console.warn('[ Controller ] throwError() called after the response was released — ignoring late error: '+ _lateErrorStr);
+            return false;
+        }
         if ( typeof(res.getHeaders) == 'undefined' && typeof(res.stream) != 'undefined' ) {
             responseHeaders = res.stream.sentHeader;
         } else {

@@ -158,7 +158,7 @@ describe('02 - happy paths', function () {
 
 
 // ---------------------------------------------------------------------------
-// 03 — rejected unquoted bodies (the three failure modes from lesson #66)
+// 03 — rejected unquoted bodies (the three failure modes from llms.txt #126, formerly #66)
 // ---------------------------------------------------------------------------
 
 describe('03 - unquoted bodies are rejected', function () {
@@ -186,7 +186,7 @@ describe('03 - unquoted bodies are rejected', function () {
     });
 
     it('rejects an unquoted plain body even when content looks "safe"', function () {
-        // This locks in the strict rule from lesson #66: unquoted bodies
+        // This locks in the strict rule from llms.txt #126 (formerly #66): unquoted bodies
         // are NEVER allowed, even when the current text has no hazards —
         // a future edit might add one.
         var f = write('bad-plain.yaml', [

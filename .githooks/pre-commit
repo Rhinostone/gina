@@ -35,7 +35,7 @@ EOF
 fi
 
 # ---------------------------------------------------------------------------
-# Changie entry validation (llms.txt lesson #66)
+# Changie entry validation (llms.txt #126, formerly lesson #66)
 #
 # Unquoted bodies in .changes/unreleased/*.yaml silently truncate at ` #`
 # (YAML comment marker) or break parsing on `:` (mapping-values error). The
