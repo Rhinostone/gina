@@ -1996,6 +1996,14 @@ function SuperController(options) {
      * @callback [ next ]
      * */
     this.redirect = function(req, res, next) {
+        // #B37 — released-response guard (see getSession / #B31/#B35/#B36): redirect is
+        // synchronous and reads local.req/local.res throughout; a terminal exit (a prior
+        // redirect, or a render-error path) nulls the triplet, and a second redirect on
+        // the released instance would crash the bundle (uncaughtException → SIGTERM).
+        // Nothing to redirect once the response was already sent/released.
+        if ( local.req == null ) {
+            return;
+        }
         var conf    = self.getConfig();
         var bundle  = conf.bundle;
         var env     = conf.env;

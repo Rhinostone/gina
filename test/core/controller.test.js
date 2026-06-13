@@ -2951,3 +2951,46 @@ describe('25 - released-response guards on synchronous controller APIs (#B35)', 
             /Cannot set properties of null \(setting 'method'\)/);
     });
 });
+
+describe('26 - released-response guard on redirect() (#B37)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // redirect() is SYNCHRONOUS and reads local.req/local.res throughout (the proxy block,
+    // the originalMethod/method reads). A terminal exit (a prior redirect, or a render-error
+    // path) nulls the triplet, so a second redirect on the released instance crashed the
+    // bundle (uncaughtException → SIGTERM). Measured (standalone harness, getContext('gina')
+    // .config.getRouting mocked): CONTROL (live) redirected, RELEASE (after renderTEXT) threw
+    // `reading 'originalMethod'`. Fixed with a top-of-function guard.
+
+    it('redirect() guards a released request at the top, before getConfig/getRouting', function() {
+        var start = src.indexOf('this.redirect = function(req, res, next) {');
+        assert.ok(start > -1, 'redirect must exist');
+        var head = src.slice(start, start + 700);
+        var guardIdx = head.indexOf('if ( local.req == null )');
+        var confIdx  = head.indexOf('var conf    = self.getConfig()');
+        assert.ok(guardIdx > -1, 'redirect must carry a `if ( local.req == null )` guard');
+        assert.ok(confIdx > guardIdx, 'guard must precede getConfig()/getRouting() and all local.req reads');
+    });
+
+    // ---- pure-logic replica (redirect reads local.req.originalMethod on the released path) ----
+    function redirectHead(localReq, mode) {
+        if (mode === 'fixed' && localReq == null) return 'no-op (released)';
+        var originalMethod = localReq.originalMethod;   // representative crash site
+        return 'redirected (' + originalMethod + ')';
+    }
+
+    it('replica: released request no-ops; live request proceeds', function() {
+        assert.strictEqual(redirectHead(null, 'fixed'), 'no-op (released)');
+        assert.strictEqual(redirectHead({ originalMethod: 'GET' }, 'fixed'), 'redirected (GET)');
+    });
+
+    it('subtract: the pre-fix redirect head throws reading a property on a released request', function() {
+        assert.throws(function() { redirectHead(null, 'prefix'); },
+            function(err) {
+                return err instanceof TypeError
+                    && /Cannot read properties of null \(reading 'originalMethod'\)/.test(err.message);
+            },
+            'the unguarded redirect head must reproduce the released-response crash');
+    });
+});
