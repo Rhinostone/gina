@@ -1341,6 +1341,13 @@ function SuperController(options) {
      * @returns {boolean}
      */
     this.isPopinContext = function() {
+        // #B35 — released-response guard (see getSession, #B31/#B33): a terminal exit
+        // (e.g. redirect-then-continue) nulls local.req; reading local.req.headers here
+        // would crash the bundle (uncaughtException → SIGTERM). A released request is
+        // not a popin context.
+        if ( local.req == null ) {
+            return false;
+        }
         return (
             typeof(local.req.headers['x-gina-popin-id']) != 'undefined'
             || typeof(local.req.headers['x-gina-popin-name']) != 'undefined'
@@ -1820,6 +1827,11 @@ function SuperController(options) {
      */
     var localRequestMethod = null, localRequestMethodParams = null;
     this.setRequestMethod = function(requestMethod, conf) {
+        // #B35 — released-response guard (see getSession): skip on a released request;
+        // reading the request method / routing here would crash the bundle.
+        if ( local.req == null ) {
+            return null;
+        }
         // http/2 case
         if ( /http\/2/i.test(conf.server.protocolShort) ) {
             local.req.headers[':method'] = local.req.method.toUpperCase()
@@ -1848,6 +1860,10 @@ function SuperController(options) {
      * @returns {void}
      */
     this.setRequestMethodParams = function(params) {
+        // #B35 — released-response guard: skip the local.req write on a released request.
+        if ( local.req == null ) {
+            return;
+        }
         localRequestMethodParams = local.req[local.req.method.toLowerCase()] = localRequestMethodParams = params
     }
 
@@ -1858,6 +1874,10 @@ function SuperController(options) {
      * @returns {object}
      */
     this.getRequestMethodParams = function() {
+        // #B35 — released-response guard: return the cached value without dereferencing local.req.
+        if ( local.req == null ) {
+            return localRequestMethodParams;
+        }
         return (localRequestMethodParams) ? localRequestMethodParams : local.req[local.req.method.toLowerCase()]
     }
 
@@ -4864,6 +4884,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *
      * */
     this.getFormsRules = function () {
+        // #B35 — released-response guard: no form rules to resolve on a released request
+        // (reading the request's gina headers would crash the bundle).
+        if ( local.req == null ) {
+            return {};
+        }
         var bundle  = local.options.conf.bundle; // by default
         var form    = null;
         var rule    = null;

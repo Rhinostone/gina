@@ -2880,3 +2880,74 @@ describe('24 - query: exhausted 502 retries surface a BAD_GATEWAY error, not suc
         assert.strictEqual(r.payload, HTML_502, 'the caller received the raw 502 error page as "data"');
     });
 });
+
+describe('25 - released-response guards on synchronous controller APIs (#B35)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // Scope note: these are the 5 directly-callable SYNCHRONOUS controller APIs measured
+    // (via a standalone harness: createTestInstance → renderTEXT() releases the triplet →
+    // call) to throw an uncaughtException → SIGTERM bundle kill on a released request — the
+    // same lethal class as #B31/#B33. The §23 comment lists isPopinContext among the
+    // "deliberately unguarded" siblings; that predates this fix — isPopinContext is now
+    // guarded here. The remaining siblings (redirect second-call, the async store /
+    // downloadFromURL — which fail as a non-fatal unhandledRejection — and the render-path
+    // inner functions setResources / getNodeRes) stay a documented measure-first follow-up.
+
+    // ---- source structure: each guard sits at the top of its function, before the deref ----
+    var GUARDED = [
+        { name: 'isPopinContext',         sig: 'this.isPopinContext = function() {',                   ret: 'return false;',                    deref: "local.req.headers['x-gina-popin-id']" },
+        { name: 'setRequestMethod',       sig: 'this.setRequestMethod = function(requestMethod, conf) {', ret: 'return null;',                  deref: 'local.req.method' },
+        { name: 'setRequestMethodParams', sig: 'this.setRequestMethodParams = function(params) {',      ret: 'return;',                          deref: 'local.req[local.req.method' },
+        { name: 'getRequestMethodParams', sig: 'this.getRequestMethodParams = function() {',            ret: 'return localRequestMethodParams;', deref: 'local.req[local.req.method' },
+        { name: 'getFormsRules',          sig: 'this.getFormsRules = function () {',                    ret: 'return {};',                       deref: 'local.req.ginaHeaders' }
+    ];
+
+    GUARDED.forEach(function(g) {
+        it(g.name + ' guards a released request before dereferencing local.req', function() {
+            var start = src.indexOf(g.sig);
+            assert.ok(start > -1, 'function ' + g.name + ' must exist');
+            var body = src.slice(start, start + 700);
+            var guardIdx = body.indexOf('if ( local.req == null )');
+            var derefIdx = body.indexOf(g.deref);
+            assert.ok(guardIdx > -1, g.name + ' must carry a `if ( local.req == null )` guard');
+            assert.ok(derefIdx > -1, g.name + ' must still contain its local.req deref');
+            assert.ok(guardIdx < derefIdx, g.name + ' guard must precede the local.req deref');
+            var guardBlock = body.slice(guardIdx, derefIdx);
+            assert.ok(guardBlock.indexOf(g.ret) > -1, g.name + ' guard must `' + g.ret + '` on a released request');
+        });
+    });
+
+    // ---- pure-logic replicas (mirror each guard shape) ----
+
+    function guardedReplica(req, derefFn, safeDefault) {
+        if (req == null) return safeDefault;   // #B35 guard
+        return derefFn(req);
+    }
+
+    it('replica: each guard returns its safe default on a released request, the real value when live', function() {
+        // isPopinContext → false / real boolean
+        var popin = function(r) { return typeof r.headers['x-gina-popin-id'] != 'undefined'; };
+        assert.strictEqual(guardedReplica(null, popin, false), false);
+        assert.strictEqual(guardedReplica({ headers: { 'x-gina-popin-id': '1' } }, popin, false), true);
+        // getRequestMethodParams → cached value (here null) / real params
+        var params = function(r) { return r[r.method.toLowerCase()]; };
+        assert.strictEqual(guardedReplica(null, params, null), null);
+        assert.deepStrictEqual(guardedReplica({ method: 'GET', get: { a: 1 } }, params, null), { a: 1 });
+        // getFormsRules → {} / real ginaHeaders
+        var forms = function(r) { return r.ginaHeaders; };
+        assert.deepStrictEqual(guardedReplica(null, forms, {}), {});
+        assert.deepStrictEqual(guardedReplica({ ginaHeaders: { form: { id: 'f' } } }, forms, {}), { form: { id: 'f' } });
+    });
+
+    it('subtract: the pre-fix unguarded reads throw the released-response TypeError', function() {
+        assert.throws(function() { var r = null; return r.headers['x']; },
+            /Cannot read properties of null \(reading 'headers'\)/);
+        assert.throws(function() { var r = null; return r.method; },
+            /Cannot read properties of null \(reading 'method'\)/);
+        assert.throws(function() { var r = null; return r.ginaHeaders; },
+            /Cannot read properties of null \(reading 'ginaHeaders'\)/);
+        assert.throws(function() { var r = null; r.method = 'GET'; },
+            /Cannot set properties of null \(setting 'method'\)/);
+    });
+});
