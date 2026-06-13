@@ -18,6 +18,13 @@ var console = lib.logger;
  *
  * When a required value is omitted, the user is prompted interactively.
  *
+ * Pass --force to reassign a port that is currently held by a different bundle:
+ * the prior holder is evicted (it loses that port for the protocol/scheme and
+ * re-pins itself the next time its own context runs port:set). Without --force,
+ * a port already assigned to another bundle is rejected.
+ *
+ *  gina port:set <bundle_name> @<project_name> --protocol=http/2.0 --scheme=https --port=8443 --env=dev --force
+ *
  * @class Set
  * @constructor
  * @param {object} opt - Parsed command-line options
@@ -34,6 +41,7 @@ function Set(opt, cmd) {
         , requestedScheme = null
         , requestedPort   = null
         , requestedEnv    = null
+        , requestedForce  = false
     ;
 
     // Pre-parse argv before CmdHelper to extract protocol:port and @project/env
@@ -65,6 +73,7 @@ function Set(opt, cmd) {
             if ( /^\-\-protocol\=/.test(arg) ) { requestedProtocol = arg.split('=')[1];   continue; }
             if ( /^\-\-scheme\=/.test(arg) )   { requestedScheme   = arg.split('=')[1];   continue; }
             if ( /^\-\-env\=/.test(arg) )      { requestedEnv      = arg.split('=')[1];   continue; }
+            if ( /^\-\-force$/.test(arg) )     { requestedForce   = true;                continue; }
 
             cleaned.push(arg);
         }
@@ -242,12 +251,20 @@ function Set(opt, cmd) {
      * ports.reverse.json. Removes any previous assignment for the same
      * bundle/env/protocol/scheme before writing the new one.
      *
+     * If the target port is already held by a DIFFERENT bundle/env, the call is
+     * rejected — unless `--force` was passed (closure var `requestedForce`), in
+     * which case the prior holder is evicted from both maps and a warning is
+     * logged before the new assignment is written.
+     *
      * @inner
      * @private
      * @param {string} protocol - e.g. 'http/1.1', 'http/2.0'
      * @param {string} scheme   - e.g. 'http', 'https'
      * @param {number} port     - Port number to assign
      * @param {string} env      - Environment name (e.g. 'dev', 'staging')
+     * @example
+     * // Pin a bundle to a fixed port even if another bundle currently holds it:
+     * //   gina port:set frontend @myproject --protocol=http/2.0 --scheme=https --port=8443 --env=dev --force
      */
     var setPort = function(protocol, scheme, port, env) {
 
@@ -290,8 +307,34 @@ function Set(opt, cmd) {
             && typeof(ports[protocol][scheme][portStr]) != 'undefined'
             && ports[protocol][scheme][portStr] !== portValue
         ) {
-            console.error('Port '+ port +' is already assigned to '+ ports[protocol][scheme][portStr]);
-            process.exit(1);
+            var squatter = ports[protocol][scheme][portStr];
+
+            if ( !requestedForce ) {
+                console.error('Port '+ port +' is already assigned to '+ squatter +' (use --force to reassign)');
+                process.exit(1);
+            }
+
+            // --force: evict the current holder so this bundle can take the port.
+            // The displaced bundle loses this port for this protocol/scheme; it
+            // re-pins itself the next time its own context runs `port:set`. This is
+            // the intended shape for one-bundle-per-container deployments where each
+            // container owns exactly one bundle and pins it to a fixed port.
+            console.warn('[port:set] --force: reassigning port '+ port +' from '+ squatter +' to '+ portValue);
+            delete ports[protocol][scheme][portStr];
+
+            // Drop the displaced bundle's reverse entry so the two maps stay consistent.
+            var sSlash = squatter.lastIndexOf('/');
+            if ( sSlash > 0 ) {
+                var sBundleKey = squatter.substring(0, sSlash);
+                var sEnv       = squatter.substring(sSlash + 1);
+                if (
+                    typeof(portsReverse[sBundleKey]) != 'undefined'
+                    && typeof(portsReverse[sBundleKey][sEnv]) != 'undefined'
+                    && typeof(portsReverse[sBundleKey][sEnv][protocol]) != 'undefined'
+                ) {
+                    delete portsReverse[sBundleKey][sEnv][protocol][scheme];
+                }
+            }
         }
 
         // Remove previous port for this bundle/env/protocol/scheme (if reassigning)

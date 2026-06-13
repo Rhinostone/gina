@@ -56,6 +56,17 @@
 
     Ports 4100-4199 are reserved for Gina infrastructure and will be rejected.
 
+    Reassign a port already held by another bundle (--force)
+    ----------
+
+    By default, setting a port that another bundle/environment already holds is
+    rejected. Pass --force to take the port anyway: the prior holder is evicted
+    (it loses that port for the protocol/scheme and re-pins itself the next time
+    its own context runs port:set). This is the intended shape for one-bundle-per-
+    container deployments that pin each bundle to a fixed port.
+
+    $ gina port:set <bundle_name> @<project_name> --protocol=<protocol> --scheme=<scheme> --port=<port_number> --env=<environment> --force
+
 [ Listing port numbers ]
 
     $ gina port:list <bundle_name> @<project_name>
