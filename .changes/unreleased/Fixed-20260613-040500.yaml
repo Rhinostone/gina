@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed renderJSON() crashing the bundle when called after the response was already released. A controller action that keeps running after self.redirect() (which releases the per-request response and lets the middleware chain continue) and then calls self.renderJSON() dereferenced the released response and threw synchronously, escalating to an uncaughtException and a SIGTERM bundle shutdown. renderJSON() now no-ops on a released response, matching the released-response guards already on the query, throwError and the other controller helpers. (#B36)'
-time: 2026-06-13T04:05:00.000000+01:00

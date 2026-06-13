@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed self.redirect() crashing the bundle when called after the response was already released. redirect() is synchronous and reads the request/response throughout, so a controller that hits a terminal exit (a prior redirect, or a render-error path) and then calls self.redirect() again dereferenced the released request and threw synchronously, escalating to an uncaughtException and a SIGTERM bundle shutdown. redirect() now no-ops on a released response, matching the guards already on the query, throwError, renderJSON and the other controller helpers. (#B37)'
-time: 2026-06-13T04:20:00.000000+01:00
