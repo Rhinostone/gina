@@ -154,6 +154,15 @@ module.exports = function renderJSON(jsonObj, deps) {
         return;
     }
 
+    // #B36 — released-response guard: a terminal exit (e.g. redirect-then-continue,
+    // which nulls local.req/res/next then lets the middleware chain continue) leaves
+    // local.res null; the synchronous `local.res.stream` read below would then crash
+    // the bundle (uncaughtException → SIGTERM, the #B31/#B33/#B35 class). There is
+    // nothing to render to a response that was already sent/released.
+    if ( local.res == null ) {
+        return;
+    }
+
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
     cachePath       = self.serverInstance._cachePath;
