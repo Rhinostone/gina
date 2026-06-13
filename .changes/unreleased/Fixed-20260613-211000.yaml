@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Containerised and daemonless bundle boot failures no longer exit without a message: the gina-container launcher and the framework boot path now flush the failure reason synchronously before calling process.exit, so a crash on a piped stdout/stderr (the norm under container log collectors) surfaces its cause instead of being truncated.'
+time: 2026-06-13T21:10:00.000000+01:00

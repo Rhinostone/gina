@@ -431,6 +431,10 @@ var abort = function(err, bundle) {
         console.emerg(err.stack||err);
     }
 
+    // Guarantee the abort reason survives process.exit(): process.stdout/stderr
+    // are async on a pipe (e.g. under bin/gina-container), so the console.emerg
+    // above is truncated by the immediate exit. fs.writeSync blocks until flushed.
+    try { fs.writeSync(2, '[ FRAMEWORK ] abort: ' + ((err && err.stack) || err) + '\n'); } catch (_e) { /* best-effort */ }
     process.exit(1);
 };
 
@@ -695,7 +699,10 @@ gna.mount = process.mount = function(bundlesPath, source, target, type, callback
 
                 } catch (err) {
                     if (err) {
-                        console.emerg('[ FRAMEWORK ] '+ (err.stack||err.message));
+                        var _mountMsg = '[ FRAMEWORK ] '+ (err.stack||err.message);
+                        console.emerg(_mountMsg);
+                        // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+                        try { fs.writeSync(2, _mountMsg + '\n'); } catch (_e) { /* best-effort */ }
                         process.exit(1)
                     }
                     if ( fs.existsSync(target) ) {

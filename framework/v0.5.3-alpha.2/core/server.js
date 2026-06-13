@@ -691,7 +691,10 @@ function Server(options) {
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {
-            console.emerg('[ BUNDLE ] [ '+ self.appName +' ] ServerEngine ' + err.stack)
+            var _engineMsg = '[ BUNDLE ] [ '+ self.appName +' ] ServerEngine ' + err.stack;
+            console.emerg(_engineMsg)
+            // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+            try { fs.writeSync(2, _engineMsg + '\n'); } catch (_e) { /* best-effort */ }
             process.exit(1)
         }
     }

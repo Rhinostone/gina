@@ -662,7 +662,10 @@ function Proc(bundle, proc, usePidFile){
 
     //init
     if ( typeof(self.bundle) == "undefined" ) {
-        console.error('[ PROC ] Invalid or undefined proc name . Proc naming Aborted');
+        var _procMsg = '[ PROC ] Invalid or undefined proc name . Proc naming Aborted';
+        console.error(_procMsg);
+        // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+        try { fs.writeSync(2, _procMsg + '\n'); } catch (_e) { /* best-effort */ }
         process.exit(1)
     } else {
         init()

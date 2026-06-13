@@ -34,6 +34,28 @@ var spawn = require('child_process').spawn;
 var binPath  = __dirname;
 var ginaPath = binPath.replace(/\/bin$/, '');
 
+// ── 0. Synchronous stdout writer ──────────────────────────────────────────────
+/**
+ * Writes a message synchronously to stdout (fd 1).
+ *
+ * `process.stdout.write` is ASYNCHRONOUS when stdout is a pipe — the norm under
+ * a container log collector (kubectl/Fluentd/Datadog) or a test harness that
+ * pipes the launcher's stdio. A `process.stdout.write` immediately followed by
+ * `process.exit(1)` therefore loses its message: the process tears down before
+ * libuv drains the pipe. Every diagnostic this launcher prints precedes either
+ * the bundle spawn or a `process.exit`, so on the failure paths the message
+ * vanishes — exactly the empty-log signature seen in the container-boot CI
+ * flake. `fs.writeSync(1, …)` blocks until the bytes are handed to the pipe, so
+ * the diagnostic always survives. (It does not reproduce on a local TTY, where
+ * stdout is synchronous.)
+ *
+ * @param {string} msg - Message to write to stdout.
+ * @returns {void}
+ */
+function out(msg) {
+    try { fs.writeSync(1, msg); } catch (e) { /* stdout gone — nothing better to do */ }
+}
+
 // ── 1. Bootstrap utils/helper ─────────────────────────────────────────────────
 // Injects globals: _, setEnvVar, getEnvVar, getUserHome, getTmpDir, etc.
 require(ginaPath + '/utils/helper'); // jshint ignore:line
@@ -117,7 +139,7 @@ if (fs.existsSync(_mainJsonPath)) {
     try {
         var _mainData = JSON.parse(fs.readFileSync(_mainJsonPath, 'utf8'));
         if (_mainData.def_framework !== version) {
-            process.stdout.write('[gina-container] def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + version + '\n');
+            out('[gina-container] def_framework: ' + (_mainData.def_framework || 'unset') + ' → ' + version + '\n');
             _mainData.def_framework = version;
             if (!_mainData.frameworks) { _mainData.frameworks = {}; }
             if (!_mainData.frameworks[shortVersion]) { _mainData.frameworks[shortVersion] = []; }
@@ -127,7 +149,7 @@ if (fs.existsSync(_mainJsonPath)) {
             fs.writeFileSync(_mainJsonPath, JSON.stringify(_mainData, null, 4));
         }
     } catch(e) {
-        process.stdout.write('[gina-container] warn: could not sync def_framework — ' + (e.message || e) + '\n');
+        out('[gina-container] warn: could not sync def_framework — ' + (e.message || e) + '\n');
     }
 }
 
@@ -146,7 +168,7 @@ for (var a = 0; a < rawArgs.length; a++) {
 }
 
 if (!bundleName || !projectName) {
-    process.stdout.write('Usage: gina-container <bundle> @<project>\n');
+    out('Usage: gina-container <bundle> @<project>\n');
     process.exit(1);
 }
 
@@ -155,7 +177,7 @@ var projectsPath     = home + '/projects.json';
 var portsReversePath = home + '/ports.reverse.json';
 
 if (!fs.existsSync(projectsPath)) {
-    process.stdout.write(
+    out(
         '[ gina-container ] ' + projectsPath + ' not found.\n' +
         '  Run: gina project:import @' + projectName + '\n'
     );
@@ -169,7 +191,7 @@ var portsReverse = fs.existsSync(portsReversePath)
 
 var projectEntry = projects[projectName];
 if (!projectEntry) {
-    process.stdout.write(
+    out(
         '[ gina-container ] project @' + projectName + ' not registered in projects.json\n' +
         '  Run: gina project:import @' + projectName + '\n'
     );
@@ -199,12 +221,12 @@ try {
     }
 } catch (err) {
     // fallback: bundles/<bundle>/index.js (mirrors start.js catch block)
-    process.stdout.write('[ gina-container ] manifest.json warning: ' + (err.message || err) + '\n');
+    out('[ gina-container ] manifest.json warning: ' + (err.message || err) + '\n');
     appPath = projectRoot + '/bundles/' + bundleName + '/index.js';
 }
 
 if (!fs.existsSync(appPath)) {
-    process.stdout.write('[ gina-container ] bundle entry point not found: ' + appPath + '\n');
+    out('[ gina-container ] bundle entry point not found: ' + appPath + '\n');
     process.exit(1);
 }
 
@@ -239,9 +261,9 @@ var ctxJSON = JSON.stringify({
 // stdio: 'inherit' — bundle stdout/stderr go directly to the container's
 // stdout/stderr, which is what K8s log collectors (kubectl logs, Fluentd,
 // Datadog, etc.) expect.  No MQ logger intermediary is needed here.
-process.stdout.write('[ gina-container ] Starting ' + bundleName + '@' + projectName + '\n');
-process.stdout.write('[ gina-container ] App:   ' + appPath + '\n');
-process.stdout.write('[ gina-container ] Env:   ' + env + '  Scope: ' + scope + '\n');
+out('[ gina-container ] Starting ' + bundleName + '@' + projectName + '\n');
+out('[ gina-container ] App:   ' + appPath + '\n');
+out('[ gina-container ] Env:   ' + env + '  Scope: ' + scope + '\n');
 
 var child = spawn(process.argv[0], [appPath, ctxJSON, projectName, bundleName], {
     detached: false,
@@ -264,7 +286,7 @@ process.on('SIGINT',  function() { forwardSignal('SIGINT');  });
 
 // ── 10. Exit when child exits ─────────────────────────────────────────────────
 child.on('error', function(err) {
-    process.stdout.write('[ gina-container ] failed to spawn bundle: ' + (err.message || err) + '\n');
+    out('[ gina-container ] failed to spawn bundle: ' + (err.message || err) + '\n');
     process.exit(1);
 });
 
