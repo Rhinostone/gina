@@ -2689,6 +2689,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      **/
     this.downloadFromLocal = function(filename) {
 
+        // #B38 — released-response guard (see #B31): a terminal exit (redirect()/
+        // renderTEXT()/throwError()/a render-error path) nulled the per-request refs.
+        // downloadFromLocal is terminal — it streams a file as the response — so a
+        // released instance means the response is already out; a no-op return is correct
+        // (a live request is unaffected: the guard is skipped while the refs exist).
+        if ( local.res == null ) {
+            return;
+        }
+
         var file            = filename.split(/\//g).pop();
         var ext             = file.split(/\./g).pop()
             , contentType   = null
@@ -2734,6 +2743,18 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             if (arguments.length == 2 && typeof(arguments[1]) == 'function' ) {
                 var cb = arguments[1];
+            }
+
+            // #B38 — released-response guard (see #B31): the documented
+            // `store(target).onComplete(cb)` form calls start() SYNCHRONOUSLY from the
+            // returned wrapper, OUTSIDE the async store() body, so on a released request
+            // (the per-request refs nulled by a terminal exit) this is a SIGTERM bundle
+            // kill — not the non-fatal async class. Notify through the same cb / 'uploaded'
+            // channel the empty-upload path uses, then bail.
+            if ( local.req == null ) {
+                var _releasedErr = new Error('Controller::store — response already released');
+                if (cb) { cb(_releasedErr); } else { self.emit('uploaded', _releasedErr); }
+                return;
             }
 
             if ( typeof(files) == 'undefined' || typeof(files) == 'function' ) {
@@ -4948,6 +4969,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      */
     this.push = function(payload, option, callback) {
 
+        // #B38 — released-response guard (see #B31): push is a fire-and-forget broadcast
+        // over the SSE/engine.io clients; on a released request (per-request refs nulled by
+        // a terminal exit) a no-op return is correct — the response this request would have
+        // pushed to is already gone. Live requests are unaffected (guard skipped).
+        if ( local.req == null ) {
+            return;
+        }
+
         var req = local.req, res = local.res;
         var method  = req.method.toLowerCase();
         // if no session defined, will push to all active clients
@@ -5073,6 +5102,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      */
     this.pauseRequest = function(data, requestStorage) {
 
+        // #B38 — released-response guard (see #B31): pauseRequest snapshots the current
+        // request before a login redirect; on a released request (per-request refs nulled
+        // by a terminal exit) there is nothing to snapshot — a no-op return is correct.
+        // Live requests are unaffected (guard skipped while the refs exist).
+        if ( local.req == null ) {
+            return;
+        }
 
         // saving halted request
         var req             = local.req
@@ -5135,6 +5171,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         if (local.haltedRequestUrlResumed)
             return;
+
+        // #B38 — released-response guard (see #B31): resumeRequest replays a halted
+        // request against the live request/response; on a released request (per-request
+        // refs nulled by a terminal exit) there is nothing to replay onto — a no-op return
+        // is correct. Live requests are unaffected (guard skipped while the refs exist).
+        if ( local.req == null ) {
+            return;
+        }
 
         var haltedRequest   = null
             , req           = local.req

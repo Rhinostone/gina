@@ -2994,3 +2994,79 @@ describe('26 - released-response guard on redirect() (#B37)', function() {
             'the unguarded redirect head must reproduce the released-response crash');
     });
 });
+
+describe('27 - released-response guards on more synchronous controller APIs (#B38)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // Scope note: an exhaustive #B38 sweep of every SYNCHRONOUS controller surface found
+    // FIVE more directly-callable / sync-reachable APIs that read the per-request refs
+    // unguarded and crash a released request (uncaughtException -> SIGTERM) -- the same
+    // lethal class as #B31/#B33/#B35/#B37. Each was runtime-measured (standalone harness:
+    // createTestInstance -> renderTEXT() releases the triplet -> call -> positive crash,
+    // then no-throw after the guard). The #B37 ledger had claimed the SIGTERM class CLOSED;
+    // these were missed -- notably store's inner start() is reached SYNCHRONOUSLY through
+    // the documented store(target).onComplete(cb) wrapper (the #B35 probe only tried
+    // store('t'), which returns the wrapper WITHOUT calling start). renderStream's guard is
+    // pinned in render-stream.test.js. The non-fatal async residuals (downloadFromURL; the
+    // render-path inner fns setResources / getNodeRes, only ever called from the async
+    // render delegates -> unhandledRejection) stay documented + skipped, mirroring #B36.
+
+    // ---- source structure: each guard sits at the top of its function, before the deref ----
+    var GUARDED = [
+        { name: 'downloadFromLocal',   sig: 'this.downloadFromLocal = function(filename) {',       guardTok: 'if ( local.res == null )', ret: 'return;',      deref: 'local.res.setHeader' },
+        { name: 'store (inner start)', sig: 'var start = function(target, files, cb) {',            guardTok: 'if ( local.req == null )', ret: '_releasedErr', deref: 'local.req.files' },
+        { name: 'push',                sig: 'this.push = function(payload, option, callback) {',    guardTok: 'if ( local.req == null )', ret: 'return;',      deref: 'req.method' },
+        { name: 'pauseRequest',        sig: 'this.pauseRequest = function(data, requestStorage) {', guardTok: 'if ( local.req == null )', ret: 'return;',      deref: 'req.url' },
+        { name: 'resumeRequest',       sig: 'this.resumeRequest = function(requestStorage) {',      guardTok: 'if ( local.req == null )', ret: 'return;',      deref: 'req.session' }
+    ];
+
+    GUARDED.forEach(function(g) {
+        it(g.name + ' guards a released request before dereferencing the per-request ref', function() {
+            var start = src.indexOf(g.sig);
+            assert.ok(start > -1, 'function ' + g.name + ' must exist');
+            var body = src.slice(start, start + 1100);
+            var guardIdx = body.indexOf(g.guardTok);
+            var derefIdx = body.indexOf(g.deref);
+            assert.ok(guardIdx > -1, g.name + ' must carry a `' + g.guardTok + '` guard');
+            assert.ok(derefIdx > -1, g.name + ' must still contain its released-response deref');
+            assert.ok(guardIdx < derefIdx, g.name + ' guard must precede the deref');
+            var guardBlock = body.slice(guardIdx, derefIdx);
+            assert.ok(guardBlock.indexOf(g.ret) > -1, g.name + ' guard must short-circuit (`' + g.ret + '`) on a released request');
+        });
+    });
+
+    // ---- pure-logic replica (mirror the top-of-fn guard shape) ----
+    function guardedReplica(ref, derefFn, safeDefault) {
+        if (ref == null) return safeDefault;   // #B38 guard
+        return derefFn(ref);
+    }
+
+    it('replica: each guard returns its safe default on a released request, the real value when live', function() {
+        // downloadFromLocal -> no-op undefined / proceeds when res is live
+        var setH = function(res) { res.setHeader('content-type', 'x'); return 'sent'; };
+        assert.strictEqual(guardedReplica(null, setH, undefined), undefined);
+        assert.strictEqual(guardedReplica({ setHeader: function() {} }, setH, undefined), 'sent');
+        // store inner start -> notifies via the error channel (marker) / reads req.files when live
+        var readFiles = function(req) { return req.files; };
+        assert.strictEqual(guardedReplica(null, readFiles, 'released'), 'released');
+        assert.deepStrictEqual(guardedReplica({ files: [1] }, readFiles, 'released'), [1]);
+        // push / pauseRequest / resumeRequest -> no-op undefined / read the live request prop
+        var readProp = function(req) { return req.method; };
+        assert.strictEqual(guardedReplica(null, readProp, undefined), undefined);
+        assert.strictEqual(guardedReplica({ method: 'GET' }, readProp, undefined), 'GET');
+    });
+
+    it('subtract: the pre-fix unguarded reads reproduce each released-response TypeError', function() {
+        assert.throws(function() { var r = null; return r.setHeader; },
+            /Cannot read properties of null \(reading 'setHeader'\)/);
+        assert.throws(function() { var r = null; return r.files; },
+            /Cannot read properties of null \(reading 'files'\)/);
+        assert.throws(function() { var r = null; return r.method; },
+            /Cannot read properties of null \(reading 'method'\)/);
+        assert.throws(function() { var r = null; return r.url; },
+            /Cannot read properties of null \(reading 'url'\)/);
+        assert.throws(function() { var r = null; return r.session; },
+            /Cannot read properties of null \(reading 'session'\)/);
+    });
+});

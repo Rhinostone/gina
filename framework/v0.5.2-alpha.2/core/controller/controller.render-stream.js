@@ -42,6 +42,15 @@ module.exports = function renderStream(asyncIterable, contentType, deps) {
     if (local.options.renderingStack.length > 1) return false;
     if (self.isProcessingError) return;
 
+    // #B38 — released-response guard (see #B31 / #B36): a terminal exit (redirect() /
+    // renderTEXT() / throwError()) nulled the per-request refs before this stream began.
+    // renderStream's wrapper and this delegate are BOTH synchronous, so the read below
+    // would throw synchronously → uncaughtException → SIGTERM. The read happens BEFORE the
+    // headersSent() guard further down, so check here — mirrors render-json.js's #B36
+    // placement (after isProcessingError, before the first local.res deref). Behaviour-
+    // neutral on live requests (guard skipped while the refs exist).
+    if (local.res == null) return;
+
     var response = local.res;
     var stream   = (typeof(response.stream) !== 'undefined') ? response.stream : null;
     // #H10 — opt-in HTTP/2 response trailers (registered via self.sendTrailers()).
