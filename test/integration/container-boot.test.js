@@ -208,7 +208,9 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
 
         // 1. project:add — bootstraps the isolated home on first use. The bootstrap
         //    command may exit non-zero (benign MQ ECONNRESET); verify via projects.json.
-        runCli(['project:add', '@' + PROJ, '--path=' + PROJ_DIR, '--start-port-from=' + PORT_START]);
+        //    (--start-port-from is NOT honoured by project:add outside import mode — it
+        //    is passed to bundle:add below, which is what actually allocates the port.)
+        runCli(['project:add', '@' + PROJ, '--path=' + PROJ_DIR]);
         var projectsPath = path.join(GINA_HOME, 'projects.json');
         if (!fs.existsSync(projectsPath) || !readJSON(projectsPath)[PROJ]) {
             setupError = 'project:add did not register @' + PROJ + ' in ' + projectsPath;
@@ -217,7 +219,10 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
 
         // 2. bundle:add — scaffolds src/<bundle> keeping the DEFAULT $schema-only
         //    connectors.json (the #B29 trigger). Verify via ports.reverse.json.
-        runCli(['bundle:add', BUNDLE, '@' + PROJ]);
+        //    --start-port-from is honoured HERE (bundle:add allocates the port), so the
+        //    bundle binds a high port out of the contended default 3100-3999 range —
+        //    the intent PORT_START documents, and less collision-prone under concurrent CI.
+        runCli(['bundle:add', BUNDLE, '@' + PROJ, '--start-port-from=' + PORT_START]);
         var portsReversePath = path.join(GINA_HOME, 'ports.reverse.json');
         var key = BUNDLE + '@' + PROJ;
         if (!fs.existsSync(portsReversePath) || !readJSON(portsReversePath)[key]) {
@@ -231,6 +236,17 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
             connectorsKeys = Object.keys(parseConfigJSON(connPath));
         } catch (e) {
             setupError = 'could not parse scaffolded connectors.json: ' + (e.message || e);
+            return;
+        }
+
+        // 3b. Assert the launcher's dev entry point (src/<bundle>/index.js) scaffolded.
+        //     A half-completed scaffold (manifest/ports written but index.js missing)
+        //     would otherwise make gina-container exit 1 at its entry-point check with a
+        //     message truncated by process.exit on a pipe — a blind boot failure. Failing
+        //     here as a setupError gives a clear cause instead.
+        var entryPoint = path.join(PROJ_DIR, 'src', BUNDLE, 'index.js');
+        if (!fs.existsSync(entryPoint)) {
+            setupError = 'bundle entry point not scaffolded: ' + entryPoint;
             return;
         }
 
