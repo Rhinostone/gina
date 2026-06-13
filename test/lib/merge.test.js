@@ -194,7 +194,7 @@ describe('01c - Merging three objects', function () {
 
     it('Merge : A<-B<-C without override', function () {
         var a = {
-            "name": "dashboard", "version": "0.0.1",
+            "name": "web", "version": "0.0.1",
             "proxy": {
                 "api": {
                     "_comment": "this is the targeted host to send API queries: pointing to api env",
@@ -203,11 +203,11 @@ describe('01c - Merging three objects', function () {
                     "port": "api@myproject",
                     "path": "/api"
                 },
-                "dashboard": {
-                    "_comment": "this is the targeted host to send Dashboard queries: pointing to Dashboard env",
+                "web": {
+                    "_comment": "this is the targeted host to send Web queries: pointing to Web env",
                     "ca": "${projectPath}/ssl/server/myproject.local.pem",
-                    "hostname": "dashboard@myproject",
-                    "port": "dashboard@myproject",
+                    "hostname": "web@myproject",
+                    "port": "web@myproject",
                     "path": "/"
                 }
             },
@@ -216,12 +216,12 @@ describe('01c - Merging three objects', function () {
         var b = {
             "proxy": {
                 "api": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
-                "dashboard": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
+                "web": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
             }
         };
         var bUnordered = {
             "proxy": {
-                "dashboard": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
+                "web": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
                 "api": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
             }
         };
@@ -233,14 +233,14 @@ describe('01c - Merging three objects', function () {
             agent: false
         };
 
-        var result1 = merge(a.proxy.dashboard, b.proxy.dashboard, c);
-        var result2 = merge(a.proxy.dashboard, bUnordered.proxy.dashboard, c);
+        var result1 = merge(a.proxy.web, b.proxy.web, c);
+        var result2 = merge(a.proxy.web, bUnordered.proxy.web, c);
 
         var res = {
-            "_comment": "this is the targeted host to send Dashboard queries: pointing to Dashboard env",
+            "_comment": "this is the targeted host to send Web queries: pointing to Web env",
             "ca": "${projectPath}/ssl/server/myproject.local.pem",
-            "hostname": "dashboard@myproject",
-            "port": "dashboard@myproject",
+            "hostname": "web@myproject",
+            "port": "web@myproject",
             "path": "/",
             "rejectUnauthorized": false,
             "method": "GET",
