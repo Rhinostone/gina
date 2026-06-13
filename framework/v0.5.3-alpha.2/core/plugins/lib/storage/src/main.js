@@ -223,8 +223,11 @@ function StoragePlugin(options) {
      * */
     function collectionInsert(content) {
 
-        // TODO - add uuid
-        content['_id']         = Date.now().toString(36) + '-' + uuid();
+        // uuid(16): a 16-char base-62 suffix (62^16) avoids the birthday-paradox
+        // _id collision the 4-char default risks when several records are inserted
+        // within the same millisecond (the Date.now() prefix is shared at ms
+        // granularity). Mirrors the lib/collection #COLL1 size=16 opt-in.
+        content['_id']         = Date.now().toString(36) + '-' + uuid(16);
         content['_createdAt']  = new Date().format("isoDateTime");
         content['_updatedAt']  = new Date().format("isoDateTime");
 
