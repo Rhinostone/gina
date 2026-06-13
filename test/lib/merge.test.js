@@ -196,11 +196,11 @@ describe('01c - Merging three objects', function () {
         var a = {
             "name": "dashboard", "version": "0.0.1",
             "proxy": {
-                "coreapi": {
-                    "_comment": "this is the targeted host to send API queries: pointing to coreapi env",
+                "api": {
+                    "_comment": "this is the targeted host to send API queries: pointing to api env",
                     "ca": "${projectPath}/ssl/server/myproject.local.pem",
-                    "hostname": "coreapi@myproject",
-                    "port": "coreapi@myproject",
+                    "hostname": "api@myproject",
+                    "port": "api@myproject",
                     "path": "/api"
                 },
                 "dashboard": {
@@ -215,14 +215,14 @@ describe('01c - Merging three objects', function () {
         };
         var b = {
             "proxy": {
-                "coreapi": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
+                "api": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
                 "dashboard": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
             }
         };
         var bUnordered = {
             "proxy": {
                 "dashboard": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
-                "coreapi": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
+                "api": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
             }
         };
         var c = {

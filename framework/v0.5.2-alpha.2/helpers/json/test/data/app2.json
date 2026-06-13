@@ -2,13 +2,13 @@
     "name" : "dashboard",
     "version" : "0.0.1",
     "proxy": {
-        "coreapi": {
-            "_comment": "this is the targeted host to send API queries: pointing to coreapi env",
+        "api": {
+            "_comment": "this is the targeted host to send API queries: pointing to api env",
             // testing * bloc comments
             "ca": "${projectPath}/ssl/server/*.domain.com.local.pem",
-            "hostname" : "coreapi@myproject",
+            "hostname" : "api@myproject",
             "_protocol": "https",
-            "port": "coreapi@myproject",
+            "port": "api@myproject",
             "path": "/api"
         },
         "dashboard": {

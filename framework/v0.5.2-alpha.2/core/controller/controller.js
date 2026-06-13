@@ -285,7 +285,7 @@ function SuperController(options) {
         // Activated when the Inspector is open locally (_inspectorActive) OR when
         // the request came from a cross-bundle self.query() call with the Inspector
         // header (x-gina-inspector). This ensures QI captures queries on target
-        // bundles (e.g. coreapi) without always-on overhead.
+        // bundles (e.g. an upstream API bundle) without always-on overhead.
         // #INS10 — also enter capture during a prod instrumentation window. Window-only in prod:
         // the x-gina-inspector header path still requires _isDev, so a spoofed header cannot
         // trigger capture in production (only an explicitly-opened window does).
@@ -2654,7 +2654,7 @@ function SuperController(options) {
 // Override for local scope when switching env
 if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     var ctx = getContext();
-    var envHostname = ctx.gina.config.envConf['coreapi'][ctx.env].hostname;
+    var envHostname = ctx.gina.config.envConf['api'][ctx.env].hostname;
     var re = new RegExp('^'+ envHostname);
     if (!re.test(file.url) ) {
         var urlHostname = file.url.match(/^[a-z]+:\/\/[^/:]+(?::\d+)?/)[0];
@@ -4211,7 +4211,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 if (req.aborted || req.destroyed) {
                     data = { status: 500, error: new Error('Request aborted by client or server') };
                 } else {
-                    // Might be a 204 No Content, but usually CoreAPI should return {}
+                    // Might be a 204 No Content, but usually the upstream bundle should return {}
                     console.warn('[HTTP2] Empty response received');
                     data = { status: 200, empty: true };
                 }
@@ -4307,7 +4307,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         }
                         // #QI — extract upstream query log from the response and
                         // merge into the current request's log. This surfaces
-                        // coreapi queries in the dashboard Inspector automatically.
+                        // upstream-bundle queries in the calling bundle's Inspector automatically.
                         // #INS10 — extract + strip the upstream query sidecar during a prod window too.
                         if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || _isDev) && data && data.__ginaQueries && local._queryLog) {
                             for (var _qi = 0; _qi < data.__ginaQueries.length; _qi++) {
@@ -5667,7 +5667,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                 if ( errorObject && errorObject != 'null' && /object/i.test(typeof(errorObject)) ) {
                     // replaced: (errorObject.stack||errorObject.message) — both may be undefined for plain
-                    // object errors forwarded from query() (e.g. coreapi non-2xx). Fall back to serializing
+                    // object errors forwarded from query() (e.g. an upstream non-2xx). Fall back to serializing
                     // errorObject.error so the log always contains the failure reason. (#Q1)
                     // When no stack is present on the error object, capture the throwError callsite so the
                     // log always shows which controller method caused the error. (#Q1)

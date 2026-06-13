@@ -1,5 +1,5 @@
 {
-  "name": "coreapi",
+  "name": "api",
   "_comment": "`version` is the current API version: to link to the new documentation, change this value",
   "version": "0.0.1",
   "fonts": "//fonts.gstatic.com/s/trirong/v3/gzxgezrghzh.ttf",

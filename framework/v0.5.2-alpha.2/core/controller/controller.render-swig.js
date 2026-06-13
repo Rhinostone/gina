@@ -657,7 +657,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             var errorObject = {
                 status  : data.page.data.status,
                 // replaced: statusCodes[data.page.data.status] first — always truthy for known
-                // codes, so actual coreapi error reason was always buried. Prioritize the actual
+                // codes, so the actual upstream error reason was always buried. Prioritize the actual
                 // error/message from the upstream response; fall back to generic status label. (#Q1)
                 // Normalized to string before use — upstream objects would otherwise render as
                 // "[object Object]". (#Q2)

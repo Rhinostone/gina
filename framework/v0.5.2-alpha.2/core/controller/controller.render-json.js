@@ -421,7 +421,7 @@ module.exports = function renderJSON(jsonObj, deps) {
             return response.end(data);
         }
         // normal case
-        // E.g.: Caching result for document-get-all@coreapi
+        // E.g.: Caching result for document-get-all@api
         if (
             !self.isCacheless()
             && typeof(request.routing.cache) != 'undefined'

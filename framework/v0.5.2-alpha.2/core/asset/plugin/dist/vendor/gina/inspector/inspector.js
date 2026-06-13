@@ -2690,7 +2690,7 @@
                 break;
 
             case 'io':
-                // "query → coreapi" → "→ coreapi"
+                // "query → api" → "→ api"
                 name = label.replace(/^query\s*/, '');
                 break;
 
