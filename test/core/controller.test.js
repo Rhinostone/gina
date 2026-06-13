@@ -2773,3 +2773,110 @@ describe('23 - query retry/response handlers on a released response (#B33)', fun
         }, 'the unguarded intercept must reproduce the emitter-mode crash shape');
     });
 });
+
+describe('24 - query: exhausted 502 retries surface a BAD_GATEWAY error, not success (#B34)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source structure ----
+
+    it('the exhausted-502 branch sits right after the 502 retry guard', function() {
+        var retryGuard = src.indexOf('if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES)');
+        var exhausted  = src.indexOf('} else if (httpStatus === 502) {');
+        assert.ok(retryGuard > -1, 'the 502 retry guard must exist');
+        assert.ok(exhausted > retryGuard,
+            'the exhausted-502 else-if must follow the retry guard (so it only fires when retries are spent)');
+    });
+
+    it('the exhausted-502 branch builds a GinaHttp2Error with code BAD_GATEWAY and status 502', function() {
+        var exhausted = src.indexOf('} else if (httpStatus === 502) {');
+        var blk = src.slice(exhausted, src.indexOf('// 3. Exception filter', exhausted));
+        assert.match(blk, /new GinaHttp2Error\(/, 'must construct a typed error');
+        assert.match(blk, /code\s*:\s*'BAD_GATEWAY'/, 'code must be BAD_GATEWAY');
+        assert.match(blk, /status\s*:\s*502/, 'status must be 502 (truthful upstream status)');
+        assert.match(blk, /retryable\s*:\s*false/, 'exhausted error is not retryable');
+    });
+
+    it('the exhausted-502 branch dispatches via callback (callback mode) and query#complete (emitter mode)', function() {
+        var exhausted = src.indexOf('} else if (httpStatus === 502) {');
+        var blk = src.slice(exhausted, src.indexOf('// 3. Exception filter', exhausted));
+        assert.match(blk, /if \(_swallowIfNonCritical\(_badGatewayErr\)\) return;/,
+            'must respect the non-critical swallow, like the sibling exhaustion paths');
+        assert.match(blk, /callback\(_badGatewayErr\)/, 'callback mode surfaces the error to the caller');
+        assert.match(blk, /self\.emit\('query#complete', \{ status: 502, error: _badGatewayErr \}\)/,
+            'emitter mode surfaces { status: 502, error }');
+    });
+
+    // ---- pure-logic replica (mirrors the onEnd 502 decision: retry guard, the new
+    //      exhausted-502 branch, then the legacy fall-through success path) ----
+
+    function onEnd502Replica(httpStatus, retryCount, MAX, body, mode) {
+        // mode: 'fixed' (post-#B34) | 'prefix' (pre-#B34, no exhausted-502 branch)
+        var out = { dispatch: null, payload: null };
+        function callback(err, d) {
+            out.dispatch = (err === false || err == null) ? 'success' : 'error';
+            out.payload  = (err === false || err == null) ? d : err;
+        }
+        // shared retry guard
+        if (httpStatus === 502 && retryCount < MAX) {
+            out.dispatch = 'retry';
+            return out;
+        }
+        // #B34 exhausted-502 branch (fixed only)
+        if (mode === 'fixed' && httpStatus === 502) {
+            callback({ code: 'BAD_GATEWAY', status: 502, retryable: false, retryCount: retryCount });
+            return out;
+        }
+        // legacy fall-through (success path) — JSON-shaped body without `.status` -> 200
+        var data = body;
+        if (typeof data === 'string' && /^(\{|%7B|\[{)|\[\]/.test(data)) {
+            data = JSON.parse(data);
+            if (typeof data.status === 'undefined') data.status = 200;
+        }
+        if (data && typeof data === 'object' && data.status && !/^2/.test(data.status)) {
+            callback(data);            // genuine non-2xx in the body
+        } else {
+            callback(false, data);     // success
+        }
+        return out;
+    }
+
+    var JSON_502 = '{"error":"bad gateway"}';   // JSON-shaped, no `.status`
+    var HTML_502 = '<html><head><title>502 Bad Gateway</title></head></html>';
+
+    it('fixed: exhausted 502 (JSON body) surfaces an error with status 502 / BAD_GATEWAY', function() {
+        var r = onEnd502Replica(502, 2, 2, JSON_502, 'fixed');
+        assert.strictEqual(r.dispatch, 'error');
+        assert.strictEqual(r.payload.status, 502);
+        assert.strictEqual(r.payload.code, 'BAD_GATEWAY');
+    });
+
+    it('fixed: exhausted 502 (HTML body) surfaces an error with status 502', function() {
+        var r = onEnd502Replica(502, 2, 2, HTML_502, 'fixed');
+        assert.strictEqual(r.dispatch, 'error');
+        assert.strictEqual(r.payload.status, 502);
+    });
+
+    it('fixed: a 502 with retries remaining still routes to retry (unchanged)', function() {
+        var r = onEnd502Replica(502, 0, 2, JSON_502, 'fixed');
+        assert.strictEqual(r.dispatch, 'retry');
+    });
+
+    it('fixed: a genuine 200 JSON body without status still succeeds (legacy fallback intact)', function() {
+        var r = onEnd502Replica(200, 0, 2, '{"ok":1}', 'fixed');
+        assert.strictEqual(r.dispatch, 'success');
+        assert.strictEqual(r.payload.status, 200); // the undefined-status->200 fallback is correct here
+    });
+
+    it('subtract: pre-fix exhausted 502 (JSON body) was reported as SUCCESS with status forced to 200', function() {
+        var r = onEnd502Replica(502, 2, 2, JSON_502, 'prefix');
+        assert.strictEqual(r.dispatch, 'success', 'reproduces the defect: 502 surfaced as success');
+        assert.strictEqual(r.payload.status, 200, 'the 502 body had status forced to 200');
+    });
+
+    it('subtract: pre-fix exhausted 502 (HTML body) was reported as SUCCESS carrying the 502 page', function() {
+        var r = onEnd502Replica(502, 2, 2, HTML_502, 'prefix');
+        assert.strictEqual(r.dispatch, 'success', 'reproduces the defect: 502 HTML surfaced as success');
+        assert.strictEqual(r.payload, HTML_502, 'the caller received the raw 502 error page as "data"');
+    });
+});

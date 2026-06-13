@@ -4184,6 +4184,28 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     handleHTTP2ClientRequest(browser, options, callback, _502Next, isCritical);
                 }, 2000);
                 return;
+            } else if (httpStatus === 502) {
+                // #B34 — all retries exhausted on a 502: surface it as an error instead of
+                // falling through to the success path (which silently delivered the 502 body
+                // to the caller as `callback(false, data)` / `query#complete(false, data)`,
+                // and for a JSON-shaped body even logged "switching to 200" and forced
+                // data.status = 200). Mirrors the timeout / stream-error / premature-close
+                // exhaustion branches; status 502 is the truthful upstream status (the
+                // GinaHttp2Error JSDoc already lists code BAD_GATEWAY / status 502).
+                var _badGatewayErr = new GinaHttp2Error('[HTTP2] 502 Bad Gateway from '+ options[':authority'] + options[':path'] +' (exhausted '+ HTTP2_MAX_RETRIES +' retries)', {
+                    code       : 'BAD_GATEWAY',
+                    retryable  : false,
+                    status     : 502,
+                    retryCount : retryCount
+                });
+                // H3: if non-critical, swallow and return
+                if (_swallowIfNonCritical(_badGatewayErr)) return;
+                if (typeof callback !== 'undefined') {
+                    callback(_badGatewayErr);
+                } else {
+                    self.emit('query#complete', { status: 502, error: _badGatewayErr });
+                }
+                return;
             }
 
             // 3. Exception filter for ALPN or protocol mismatches
