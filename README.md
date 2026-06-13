@@ -39,12 +39,10 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.5.1
+## What's in 0.5.2
 
-- **Released-response crash family fixed (bundle-killing).** A late `throwError()` after the response was already sent — e.g. an entity or query callback resuming after a `redirect()` had already issued its 301 — dereferenced the released response, escalating to an `uncaughtException` and a SIGTERM bundle shutdown that dropped every in-flight request. Late calls now log the swallowed error and no-op. The same guard family covers the HTTP/2 inter-bundle query paths: retry re-entries, late upstream responses, and both 3xx redirect intercepts no longer crash when the originating request has already terminated.
-- **Dev-mode hot-reload memory leak fixed.** The per-request hot-reload eviction cycles retained ~1.8 MB of live heap per request through dead `module.children` references, killing heavily-loaded dev bundles with a heap-limit OOM. Both cycles now prune stale module references after eviction; production mode was never affected.
-- **Inter-bundle proxy Content-Type fix.** `query()` over HTTP/2 no longer re-labels the raw-JSON body it serializes itself with the incoming request's Content-Type — a urlencoded browser POST proxied between bundles no longer corrupts `+`/`%XX` sequences inside JSON string values.
-- **ROADMAP consistency release gate.** Stable publishes now abort when a roadmap row is stale relative to the version being released, alongside the existing README freshness gate.
+- **Released-response crash family completed across the synchronous controller surface (bundle-killing).** Building on the `throwError()` and HTTP/2 query-path guards in 0.5.1, thirteen more synchronous controller APIs — `renderJSON()`, `redirect()`, `store()`, `push()`, `renderStream()`, `pauseRequest()` / `resumeRequest()`, `downloadFromLocal()`, and the request-method / popin / form-rule helpers — no longer crash the bundle when a controller action keeps running after a terminal exit (typically a `redirect()` that lets the middleware chain continue) and then dereferences the already-released request or response. Each now no-ops or notifies through its existing callback/event channel instead of escalating to an `uncaughtException` and a SIGTERM shutdown; live requests are byte-for-byte unaffected.
+- **Exhausted HTTP/2 502 retries now surface a typed error instead of success.** An inter-bundle `self.query()` over HTTP/2 that exhausted its retries against an upstream returning 502 used to hand the Bad Gateway response body to the caller as if it were valid data (a JSON-shaped body was even relabelled `status: 200`). Exhausted 502s now surface `status: 502`, `code: BAD_GATEWAY` to the caller, matching how timeout, stream-error, and premature-close exhaustion are already reported; non-critical queries still swallow it.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 
