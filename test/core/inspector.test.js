@@ -108,8 +108,8 @@ describe('02 - Inspector URL pattern matching', function() {
         assert.ok(pattern.test('/_gina/inspector/sub/dir/file.js'));
     });
 
-    it('matches with webroot prefix /entreprise/_gina/inspector/', function() {
-        assert.ok(pattern.test('/entreprise/_gina/inspector/'));
+    it('matches with webroot prefix /api/_gina/inspector/', function() {
+        assert.ok(pattern.test('/api/_gina/inspector/'));
     });
 
     it('matches with webroot prefix /api/_gina/inspector/inspector.css', function() {
@@ -178,12 +178,12 @@ describe('03 - Inspector path extraction', function() {
         assert.equal(extractPath('/_gina/inspector/logo.svg'), 'logo.svg');
     });
 
-    it('strips webroot prefix /entreprise/_gina/inspector/ → index.html', function() {
-        assert.equal(extractPath('/entreprise/_gina/inspector/'), 'index.html');
+    it('strips webroot prefix /api/_gina/inspector/ → index.html', function() {
+        assert.equal(extractPath('/api/_gina/inspector/'), 'index.html');
     });
 
-    it('strips webroot prefix /entreprise/_gina/inspector/inspector.css → inspector.css', function() {
-        assert.equal(extractPath('/entreprise/_gina/inspector/inspector.css'), 'inspector.css');
+    it('strips webroot prefix /api/_gina/inspector/inspector.css → inspector.css', function() {
+        assert.equal(extractPath('/api/_gina/inspector/inspector.css'), 'inspector.css');
     });
 
 });
@@ -1095,8 +1095,8 @@ describe('13 - /_gina/logs URL pattern matching', function() {
         assert.ok(pattern.test('/_gina/logs'));
     });
 
-    it('matches with webroot prefix /entreprise/_gina/logs', function() {
-        assert.ok(pattern.test('/entreprise/_gina/logs'));
+    it('matches with webroot prefix /api/_gina/logs', function() {
+        assert.ok(pattern.test('/api/_gina/logs'));
     });
 
     it('does NOT match /_gina/logs/', function() {

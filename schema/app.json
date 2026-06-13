@@ -97,7 +97,7 @@
         },
         "hostname": {
           "type": "string",
-          "description": "Upstream host. Use \"bundle@project\" notation to reference another Gina bundle (e.g. \"coreapi@myproject\")."
+          "description": "Upstream host. Use \"bundle@project\" notation to reference another Gina bundle (e.g. \"api@myproject\")."
         },
         "port": {
           "type": ["string", "number"],

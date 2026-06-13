@@ -152,3 +152,50 @@ describe('02 - HTTP/2 response trailers (#H10)', function() {
         );
     });
 });
+
+describe('03 - released-response guard (#B36)', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    // renderJSON() reads `local.res.stream` (~:165, the first local.res deref after the
+    // #M1 captures) with NO headersSent guard before it, and the exported renderJSON is
+    // synchronous — so a terminal exit (redirect-then-continue) that nulled local.res made
+    // it crash the bundle (uncaughtException → SIGTERM). Measured via a standalone harness
+    // driving the real delegate: CONTROL (live) rendered, RELEASE (after renderTEXT) threw
+    // `reading 'stream'`. Fixed with a top-of-function released-response guard.
+
+    it('renderJSON guards a released response before the local.res.stream read', function() {
+        var s = src();
+        var guardIdx  = s.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
+        var errIdx    = s.indexOf('if ( self.isProcessingError )');
+        var cacheIdx  = s.indexOf('cache.from(self.serverInstance._cached)');
+        var streamIdx = s.indexOf('typeof(local.res.stream)');
+        assert.ok(guardIdx > -1, 'expected an `if ( local.res == null ) return;` guard in renderJSON()');
+        assert.ok(errIdx > -1 && errIdx < guardIdx, 'guard must follow the isProcessingError early-return');
+        assert.ok(cacheIdx > guardIdx, 'guard must precede cache.from(self.serverInstance._cached)');
+        assert.ok(streamIdx > guardIdx, 'guard must precede the local.res.stream read (the crash site)');
+    });
+
+    // ---- pure-logic replica of the guard + the crash site ----
+    function renderJSONHead(localRes, mode) {
+        // mode: 'fixed' (post-#B36) | 'prefix' (pre-#B36, no guard)
+        if (mode === 'fixed' && localRes == null) return 'no-op (released)';
+        // crash site (render-json.js:165): `if ( typeof(local.res.stream) != 'undefined' )`
+        var stream = (typeof localRes.stream != 'undefined') ? localRes.stream : null;
+        return 'rendered (stream=' + stream + ')';
+    }
+
+    it('replica: released response no-ops; live response proceeds', function() {
+        assert.strictEqual(renderJSONHead(null, 'fixed'), 'no-op (released)');
+        assert.strictEqual(renderJSONHead({}, 'fixed'), 'rendered (stream=null)');
+    });
+
+    it('subtract: the pre-fix head throws reading `stream` on a released response', function() {
+        assert.throws(function() { renderJSONHead(null, 'prefix'); },
+            function(err) {
+                return err instanceof TypeError
+                    && /Cannot read properties of null \(reading 'stream'\)/.test(err.message);
+            },
+            'the unguarded renderJSON head must reproduce the released-response crash');
+    });
+});

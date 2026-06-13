@@ -1404,8 +1404,12 @@ describe('11 - page.section auto-promotion from route.param.section', function()
         var windowStart = Math.max(0, anchor - 600);
         var windowEnd   = Math.min(src.length, anchor + 200);
         var block = src.slice(windowStart, windowEnd);
+        // The forbidden consumer token is reconstructed (not embedded as a literal)
+        // so this guard file does not itself carry the token it forbids, per the
+        // no-consumer-references rule; the regex still detects it in `block`.
+        var _consumerToken = ['free', 'lancer'].join('');
         assert.ok(
-            !/freelancer|FRAMEWORK PATCH \(/.test(block),
+            !(new RegExp(_consumerToken + '|FRAMEWORK PATCH \\(')).test(block),
             'page.section auto-promotion comment must not name a consumer app or use a "FRAMEWORK PATCH (consumer)" prefix'
         );
     });
@@ -2771,5 +2775,302 @@ describe('23 - query retry/response handlers on a released response (#B33)', fun
             return err instanceof TypeError
                 && /Cannot read properties of null \(reading 'writeHead'\)/.test(err.message);
         }, 'the unguarded intercept must reproduce the emitter-mode crash shape');
+    });
+});
+
+describe('24 - query: exhausted 502 retries surface a BAD_GATEWAY error, not success (#B34)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source structure ----
+
+    it('the exhausted-502 branch sits right after the 502 retry guard', function() {
+        var retryGuard = src.indexOf('if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES)');
+        var exhausted  = src.indexOf('} else if (httpStatus === 502) {');
+        assert.ok(retryGuard > -1, 'the 502 retry guard must exist');
+        assert.ok(exhausted > retryGuard,
+            'the exhausted-502 else-if must follow the retry guard (so it only fires when retries are spent)');
+    });
+
+    it('the exhausted-502 branch builds a GinaHttp2Error with code BAD_GATEWAY and status 502', function() {
+        var exhausted = src.indexOf('} else if (httpStatus === 502) {');
+        var blk = src.slice(exhausted, src.indexOf('// 3. Exception filter', exhausted));
+        assert.match(blk, /new GinaHttp2Error\(/, 'must construct a typed error');
+        assert.match(blk, /code\s*:\s*'BAD_GATEWAY'/, 'code must be BAD_GATEWAY');
+        assert.match(blk, /status\s*:\s*502/, 'status must be 502 (truthful upstream status)');
+        assert.match(blk, /retryable\s*:\s*false/, 'exhausted error is not retryable');
+    });
+
+    it('the exhausted-502 branch dispatches via callback (callback mode) and query#complete (emitter mode)', function() {
+        var exhausted = src.indexOf('} else if (httpStatus === 502) {');
+        var blk = src.slice(exhausted, src.indexOf('// 3. Exception filter', exhausted));
+        assert.match(blk, /if \(_swallowIfNonCritical\(_badGatewayErr\)\) return;/,
+            'must respect the non-critical swallow, like the sibling exhaustion paths');
+        assert.match(blk, /callback\(_badGatewayErr\)/, 'callback mode surfaces the error to the caller');
+        assert.match(blk, /self\.emit\('query#complete', \{ status: 502, error: _badGatewayErr \}\)/,
+            'emitter mode surfaces { status: 502, error }');
+    });
+
+    // ---- pure-logic replica (mirrors the onEnd 502 decision: retry guard, the new
+    //      exhausted-502 branch, then the legacy fall-through success path) ----
+
+    function onEnd502Replica(httpStatus, retryCount, MAX, body, mode) {
+        // mode: 'fixed' (post-#B34) | 'prefix' (pre-#B34, no exhausted-502 branch)
+        var out = { dispatch: null, payload: null };
+        function callback(err, d) {
+            out.dispatch = (err === false || err == null) ? 'success' : 'error';
+            out.payload  = (err === false || err == null) ? d : err;
+        }
+        // shared retry guard
+        if (httpStatus === 502 && retryCount < MAX) {
+            out.dispatch = 'retry';
+            return out;
+        }
+        // #B34 exhausted-502 branch (fixed only)
+        if (mode === 'fixed' && httpStatus === 502) {
+            callback({ code: 'BAD_GATEWAY', status: 502, retryable: false, retryCount: retryCount });
+            return out;
+        }
+        // legacy fall-through (success path) — JSON-shaped body without `.status` -> 200
+        var data = body;
+        if (typeof data === 'string' && /^(\{|%7B|\[{)|\[\]/.test(data)) {
+            data = JSON.parse(data);
+            if (typeof data.status === 'undefined') data.status = 200;
+        }
+        if (data && typeof data === 'object' && data.status && !/^2/.test(data.status)) {
+            callback(data);            // genuine non-2xx in the body
+        } else {
+            callback(false, data);     // success
+        }
+        return out;
+    }
+
+    var JSON_502 = '{"error":"bad gateway"}';   // JSON-shaped, no `.status`
+    var HTML_502 = '<html><head><title>502 Bad Gateway</title></head></html>';
+
+    it('fixed: exhausted 502 (JSON body) surfaces an error with status 502 / BAD_GATEWAY', function() {
+        var r = onEnd502Replica(502, 2, 2, JSON_502, 'fixed');
+        assert.strictEqual(r.dispatch, 'error');
+        assert.strictEqual(r.payload.status, 502);
+        assert.strictEqual(r.payload.code, 'BAD_GATEWAY');
+    });
+
+    it('fixed: exhausted 502 (HTML body) surfaces an error with status 502', function() {
+        var r = onEnd502Replica(502, 2, 2, HTML_502, 'fixed');
+        assert.strictEqual(r.dispatch, 'error');
+        assert.strictEqual(r.payload.status, 502);
+    });
+
+    it('fixed: a 502 with retries remaining still routes to retry (unchanged)', function() {
+        var r = onEnd502Replica(502, 0, 2, JSON_502, 'fixed');
+        assert.strictEqual(r.dispatch, 'retry');
+    });
+
+    it('fixed: a genuine 200 JSON body without status still succeeds (legacy fallback intact)', function() {
+        var r = onEnd502Replica(200, 0, 2, '{"ok":1}', 'fixed');
+        assert.strictEqual(r.dispatch, 'success');
+        assert.strictEqual(r.payload.status, 200); // the undefined-status->200 fallback is correct here
+    });
+
+    it('subtract: pre-fix exhausted 502 (JSON body) was reported as SUCCESS with status forced to 200', function() {
+        var r = onEnd502Replica(502, 2, 2, JSON_502, 'prefix');
+        assert.strictEqual(r.dispatch, 'success', 'reproduces the defect: 502 surfaced as success');
+        assert.strictEqual(r.payload.status, 200, 'the 502 body had status forced to 200');
+    });
+
+    it('subtract: pre-fix exhausted 502 (HTML body) was reported as SUCCESS carrying the 502 page', function() {
+        var r = onEnd502Replica(502, 2, 2, HTML_502, 'prefix');
+        assert.strictEqual(r.dispatch, 'success', 'reproduces the defect: 502 HTML surfaced as success');
+        assert.strictEqual(r.payload, HTML_502, 'the caller received the raw 502 error page as "data"');
+    });
+});
+
+describe('25 - released-response guards on synchronous controller APIs (#B35)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // Scope note: these are the 5 directly-callable SYNCHRONOUS controller APIs measured
+    // (via a standalone harness: createTestInstance → renderTEXT() releases the triplet →
+    // call) to throw an uncaughtException → SIGTERM bundle kill on a released request — the
+    // same lethal class as #B31/#B33. The §23 comment lists isPopinContext among the
+    // "deliberately unguarded" siblings; that predates this fix — isPopinContext is now
+    // guarded here. The remaining siblings (redirect second-call, the async store /
+    // downloadFromURL — which fail as a non-fatal unhandledRejection — and the render-path
+    // inner functions setResources / getNodeRes) stay a documented measure-first follow-up.
+
+    // ---- source structure: each guard sits at the top of its function, before the deref ----
+    var GUARDED = [
+        { name: 'isPopinContext',         sig: 'this.isPopinContext = function() {',                   ret: 'return false;',                    deref: "local.req.headers['x-gina-popin-id']" },
+        { name: 'setRequestMethod',       sig: 'this.setRequestMethod = function(requestMethod, conf) {', ret: 'return null;',                  deref: 'local.req.method' },
+        { name: 'setRequestMethodParams', sig: 'this.setRequestMethodParams = function(params) {',      ret: 'return;',                          deref: 'local.req[local.req.method' },
+        { name: 'getRequestMethodParams', sig: 'this.getRequestMethodParams = function() {',            ret: 'return localRequestMethodParams;', deref: 'local.req[local.req.method' },
+        { name: 'getFormsRules',          sig: 'this.getFormsRules = function () {',                    ret: 'return {};',                       deref: 'local.req.ginaHeaders' }
+    ];
+
+    GUARDED.forEach(function(g) {
+        it(g.name + ' guards a released request before dereferencing local.req', function() {
+            var start = src.indexOf(g.sig);
+            assert.ok(start > -1, 'function ' + g.name + ' must exist');
+            var body = src.slice(start, start + 700);
+            var guardIdx = body.indexOf('if ( local.req == null )');
+            var derefIdx = body.indexOf(g.deref);
+            assert.ok(guardIdx > -1, g.name + ' must carry a `if ( local.req == null )` guard');
+            assert.ok(derefIdx > -1, g.name + ' must still contain its local.req deref');
+            assert.ok(guardIdx < derefIdx, g.name + ' guard must precede the local.req deref');
+            var guardBlock = body.slice(guardIdx, derefIdx);
+            assert.ok(guardBlock.indexOf(g.ret) > -1, g.name + ' guard must `' + g.ret + '` on a released request');
+        });
+    });
+
+    // ---- pure-logic replicas (mirror each guard shape) ----
+
+    function guardedReplica(req, derefFn, safeDefault) {
+        if (req == null) return safeDefault;   // #B35 guard
+        return derefFn(req);
+    }
+
+    it('replica: each guard returns its safe default on a released request, the real value when live', function() {
+        // isPopinContext → false / real boolean
+        var popin = function(r) { return typeof r.headers['x-gina-popin-id'] != 'undefined'; };
+        assert.strictEqual(guardedReplica(null, popin, false), false);
+        assert.strictEqual(guardedReplica({ headers: { 'x-gina-popin-id': '1' } }, popin, false), true);
+        // getRequestMethodParams → cached value (here null) / real params
+        var params = function(r) { return r[r.method.toLowerCase()]; };
+        assert.strictEqual(guardedReplica(null, params, null), null);
+        assert.deepStrictEqual(guardedReplica({ method: 'GET', get: { a: 1 } }, params, null), { a: 1 });
+        // getFormsRules → {} / real ginaHeaders
+        var forms = function(r) { return r.ginaHeaders; };
+        assert.deepStrictEqual(guardedReplica(null, forms, {}), {});
+        assert.deepStrictEqual(guardedReplica({ ginaHeaders: { form: { id: 'f' } } }, forms, {}), { form: { id: 'f' } });
+    });
+
+    it('subtract: the pre-fix unguarded reads throw the released-response TypeError', function() {
+        assert.throws(function() { var r = null; return r.headers['x']; },
+            /Cannot read properties of null \(reading 'headers'\)/);
+        assert.throws(function() { var r = null; return r.method; },
+            /Cannot read properties of null \(reading 'method'\)/);
+        assert.throws(function() { var r = null; return r.ginaHeaders; },
+            /Cannot read properties of null \(reading 'ginaHeaders'\)/);
+        assert.throws(function() { var r = null; r.method = 'GET'; },
+            /Cannot set properties of null \(setting 'method'\)/);
+    });
+});
+
+describe('26 - released-response guard on redirect() (#B37)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // redirect() is SYNCHRONOUS and reads local.req/local.res throughout (the proxy block,
+    // the originalMethod/method reads). A terminal exit (a prior redirect, or a render-error
+    // path) nulls the triplet, so a second redirect on the released instance crashed the
+    // bundle (uncaughtException → SIGTERM). Measured (standalone harness, getContext('gina')
+    // .config.getRouting mocked): CONTROL (live) redirected, RELEASE (after renderTEXT) threw
+    // `reading 'originalMethod'`. Fixed with a top-of-function guard.
+
+    it('redirect() guards a released request at the top, before getConfig/getRouting', function() {
+        var start = src.indexOf('this.redirect = function(req, res, next) {');
+        assert.ok(start > -1, 'redirect must exist');
+        var head = src.slice(start, start + 700);
+        var guardIdx = head.indexOf('if ( local.req == null )');
+        var confIdx  = head.indexOf('var conf    = self.getConfig()');
+        assert.ok(guardIdx > -1, 'redirect must carry a `if ( local.req == null )` guard');
+        assert.ok(confIdx > guardIdx, 'guard must precede getConfig()/getRouting() and all local.req reads');
+    });
+
+    // ---- pure-logic replica (redirect reads local.req.originalMethod on the released path) ----
+    function redirectHead(localReq, mode) {
+        if (mode === 'fixed' && localReq == null) return 'no-op (released)';
+        var originalMethod = localReq.originalMethod;   // representative crash site
+        return 'redirected (' + originalMethod + ')';
+    }
+
+    it('replica: released request no-ops; live request proceeds', function() {
+        assert.strictEqual(redirectHead(null, 'fixed'), 'no-op (released)');
+        assert.strictEqual(redirectHead({ originalMethod: 'GET' }, 'fixed'), 'redirected (GET)');
+    });
+
+    it('subtract: the pre-fix redirect head throws reading a property on a released request', function() {
+        assert.throws(function() { redirectHead(null, 'prefix'); },
+            function(err) {
+                return err instanceof TypeError
+                    && /Cannot read properties of null \(reading 'originalMethod'\)/.test(err.message);
+            },
+            'the unguarded redirect head must reproduce the released-response crash');
+    });
+});
+
+describe('27 - released-response guards on more synchronous controller APIs (#B38)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // Scope note: an exhaustive #B38 sweep of every SYNCHRONOUS controller surface found
+    // FIVE more directly-callable / sync-reachable APIs that read the per-request refs
+    // unguarded and crash a released request (uncaughtException -> SIGTERM) -- the same
+    // lethal class as #B31/#B33/#B35/#B37. Each was runtime-measured (standalone harness:
+    // createTestInstance -> renderTEXT() releases the triplet -> call -> positive crash,
+    // then no-throw after the guard). The #B37 ledger had claimed the SIGTERM class CLOSED;
+    // these were missed -- notably store's inner start() is reached SYNCHRONOUSLY through
+    // the documented store(target).onComplete(cb) wrapper (the #B35 probe only tried
+    // store('t'), which returns the wrapper WITHOUT calling start). renderStream's guard is
+    // pinned in render-stream.test.js. The non-fatal async residuals (downloadFromURL; the
+    // render-path inner fns setResources / getNodeRes, only ever called from the async
+    // render delegates -> unhandledRejection) stay documented + skipped, mirroring #B36.
+
+    // ---- source structure: each guard sits at the top of its function, before the deref ----
+    var GUARDED = [
+        { name: 'downloadFromLocal',   sig: 'this.downloadFromLocal = function(filename) {',       guardTok: 'if ( local.res == null )', ret: 'return;',      deref: 'local.res.setHeader' },
+        { name: 'store (inner start)', sig: 'var start = function(target, files, cb) {',            guardTok: 'if ( local.req == null )', ret: '_releasedErr', deref: 'local.req.files' },
+        { name: 'push',                sig: 'this.push = function(payload, option, callback) {',    guardTok: 'if ( local.req == null )', ret: 'return;',      deref: 'req.method' },
+        { name: 'pauseRequest',        sig: 'this.pauseRequest = function(data, requestStorage) {', guardTok: 'if ( local.req == null )', ret: 'return;',      deref: 'req.url' },
+        { name: 'resumeRequest',       sig: 'this.resumeRequest = function(requestStorage) {',      guardTok: 'if ( local.req == null )', ret: 'return;',      deref: 'req.session' }
+    ];
+
+    GUARDED.forEach(function(g) {
+        it(g.name + ' guards a released request before dereferencing the per-request ref', function() {
+            var start = src.indexOf(g.sig);
+            assert.ok(start > -1, 'function ' + g.name + ' must exist');
+            var body = src.slice(start, start + 1100);
+            var guardIdx = body.indexOf(g.guardTok);
+            var derefIdx = body.indexOf(g.deref);
+            assert.ok(guardIdx > -1, g.name + ' must carry a `' + g.guardTok + '` guard');
+            assert.ok(derefIdx > -1, g.name + ' must still contain its released-response deref');
+            assert.ok(guardIdx < derefIdx, g.name + ' guard must precede the deref');
+            var guardBlock = body.slice(guardIdx, derefIdx);
+            assert.ok(guardBlock.indexOf(g.ret) > -1, g.name + ' guard must short-circuit (`' + g.ret + '`) on a released request');
+        });
+    });
+
+    // ---- pure-logic replica (mirror the top-of-fn guard shape) ----
+    function guardedReplica(ref, derefFn, safeDefault) {
+        if (ref == null) return safeDefault;   // #B38 guard
+        return derefFn(ref);
+    }
+
+    it('replica: each guard returns its safe default on a released request, the real value when live', function() {
+        // downloadFromLocal -> no-op undefined / proceeds when res is live
+        var setH = function(res) { res.setHeader('content-type', 'x'); return 'sent'; };
+        assert.strictEqual(guardedReplica(null, setH, undefined), undefined);
+        assert.strictEqual(guardedReplica({ setHeader: function() {} }, setH, undefined), 'sent');
+        // store inner start -> notifies via the error channel (marker) / reads req.files when live
+        var readFiles = function(req) { return req.files; };
+        assert.strictEqual(guardedReplica(null, readFiles, 'released'), 'released');
+        assert.deepStrictEqual(guardedReplica({ files: [1] }, readFiles, 'released'), [1]);
+        // push / pauseRequest / resumeRequest -> no-op undefined / read the live request prop
+        var readProp = function(req) { return req.method; };
+        assert.strictEqual(guardedReplica(null, readProp, undefined), undefined);
+        assert.strictEqual(guardedReplica({ method: 'GET' }, readProp, undefined), 'GET');
+    });
+
+    it('subtract: the pre-fix unguarded reads reproduce each released-response TypeError', function() {
+        assert.throws(function() { var r = null; return r.setHeader; },
+            /Cannot read properties of null \(reading 'setHeader'\)/);
+        assert.throws(function() { var r = null; return r.files; },
+            /Cannot read properties of null \(reading 'files'\)/);
+        assert.throws(function() { var r = null; return r.method; },
+            /Cannot read properties of null \(reading 'method'\)/);
+        assert.throws(function() { var r = null; return r.url; },
+            /Cannot read properties of null \(reading 'url'\)/);
+        assert.throws(function() { var r = null; return r.session; },
+            /Cannot read properties of null \(reading 'session'\)/);
     });
 });

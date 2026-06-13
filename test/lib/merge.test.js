@@ -17,7 +17,7 @@ describe('01 - Merging two objects', function () {
             page: {
                 content: 'index.html',
                 list: ['apple', 'orange', 'mango'],
-                javascripts: [ '/entreprise/handlers/client/main.js' ]
+                javascripts: [ '/app/handlers/client/main.js' ]
             }
         };
         b = {
@@ -28,7 +28,7 @@ describe('01 - Merging two objects', function () {
                 "ext": ".html",
                 "content": "home.html",
                 "javascripts": [
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js"
                 ]
             }
@@ -56,7 +56,7 @@ describe('01 - Merging two objects', function () {
                 "content": "home.html",
                 "list": [ "apple", "orange", "mango" ],
                 "javascripts": [
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js"
                 ],
                 "control": "home",
@@ -74,7 +74,7 @@ describe('01 - Merging two objects', function () {
             "page": {
                 "content": "index.html",
                 "list": [ "apple", "orange", "mango" ],
-                "javascripts": [ "/entreprise/handlers/client/main.js" ],
+                "javascripts": [ "/app/handlers/client/main.js" ],
                 "control": "home",
                 "ext": ".html"
             }
@@ -91,8 +91,8 @@ describe('01 - Merging two objects', function () {
                 "content": "index.html",
                 "list": [ "apple", "orange", "mango" ],
                 "javascripts": [
-                    "/entreprise/handlers/client/main.js",
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/main.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js"
                 ],
                 "control": "home",
@@ -111,9 +111,9 @@ describe('01 - Merging two objects', function () {
                 "content": "home.html",
                 "list": [ "apple", "orange", "mango" ],
                 "javascripts": [
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js",
-                    "/entreprise/handlers/client/main.js"
+                    "/app/handlers/client/main.js"
                 ],
                 "control": "home",
                 "ext": ".html"
@@ -194,20 +194,20 @@ describe('01c - Merging three objects', function () {
 
     it('Merge : A<-B<-C without override', function () {
         var a = {
-            "name": "dashboard", "version": "0.0.1",
+            "name": "web", "version": "0.0.1",
             "proxy": {
-                "coreapi": {
-                    "_comment": "this is the targeted host to send API queries: pointing to coreapi env",
+                "api": {
+                    "_comment": "this is the targeted host to send API queries: pointing to api env",
                     "ca": "${projectPath}/ssl/server/myproject.local.pem",
-                    "hostname": "coreapi@myproject",
-                    "port": "coreapi@myproject",
+                    "hostname": "api@myproject",
+                    "port": "api@myproject",
                     "path": "/api"
                 },
-                "dashboard": {
-                    "_comment": "this is the targeted host to send Dashboard queries: pointing to Dashboard env",
+                "web": {
+                    "_comment": "this is the targeted host to send Web queries: pointing to Web env",
                     "ca": "${projectPath}/ssl/server/myproject.local.pem",
-                    "hostname": "dashboard@myproject",
-                    "port": "dashboard@myproject",
+                    "hostname": "web@myproject",
+                    "port": "web@myproject",
                     "path": "/"
                 }
             },
@@ -215,14 +215,14 @@ describe('01c - Merging three objects', function () {
         };
         var b = {
             "proxy": {
-                "coreapi": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
-                "dashboard": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
+                "api": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
+                "web": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
             }
         };
         var bUnordered = {
             "proxy": {
-                "dashboard": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
-                "coreapi": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
+                "web": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" },
+                "api": { "rejectUnauthorized": false, "ca": "${projectPath}/ssl/server/myproject.local.pem" }
             }
         };
         var c = {
@@ -233,14 +233,14 @@ describe('01c - Merging three objects', function () {
             agent: false
         };
 
-        var result1 = merge(a.proxy.dashboard, b.proxy.dashboard, c);
-        var result2 = merge(a.proxy.dashboard, bUnordered.proxy.dashboard, c);
+        var result1 = merge(a.proxy.web, b.proxy.web, c);
+        var result2 = merge(a.proxy.web, bUnordered.proxy.web, c);
 
         var res = {
-            "_comment": "this is the targeted host to send Dashboard queries: pointing to Dashboard env",
+            "_comment": "this is the targeted host to send Web queries: pointing to Web env",
             "ca": "${projectPath}/ssl/server/myproject.local.pem",
-            "hostname": "dashboard@myproject",
-            "port": "dashboard@myproject",
+            "hostname": "web@myproject",
+            "port": "web@myproject",
             "path": "/",
             "rejectUnauthorized": false,
             "method": "GET",

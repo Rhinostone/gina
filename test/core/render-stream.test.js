@@ -551,3 +551,42 @@ describe('10 - renderStream: HTTP/2 trailers (#H10)', function() {
         assert.strictEqual(h.sentTrailers, null);
     });
 });
+
+
+// ─── 11 — released-response guard (#B38) ──────────────────────────────────────
+
+describe('11 - renderStream: released-response guard (#B38)', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(RENDER_STREAM, 'utf8'); });
+
+    // renderStream's controller.js wrapper AND this delegate are BOTH synchronous, so a
+    // released response (per-request refs nulled by a terminal exit: redirect/renderTEXT/
+    // throwError) made the `local.res.stream` read throw SYNCHRONOUSLY -> uncaughtException
+    // -> SIGTERM. The read precedes the headersSent() guard, so the fix checks first.
+    // Measured (standalone harness): RELEASE threw `reading 'stream'` pre-fix, no-throw after.
+
+    it('returns early (no throw) when local.res was released by a terminal exit', function() {
+        var deps = makeDeps();
+        deps.local.res = null;   // terminal-exit released state
+        var result;
+        assert.doesNotThrow(function() {
+            result = renderStream(from([]), 'text/event-stream', deps);
+        });
+        assert.strictEqual(result, undefined);
+    });
+
+    it('guard sits after the isProcessingError check and before the first local.res capture', function() {
+        var ipIdx    = src.indexOf('self.isProcessingError');
+        var guardIdx = src.indexOf('local.res == null');
+        var derefIdx = src.indexOf('var response = local.res;');
+        assert.ok(ipIdx > -1 && guardIdx > -1 && derefIdx > -1, 'all three anchors must exist');
+        assert.ok(guardIdx > ipIdx,   'guard must follow the isProcessingError check');
+        assert.ok(guardIdx < derefIdx, 'guard must precede the `var response = local.res` capture');
+    });
+
+    it('subtract: the pre-fix `response.stream` read throws on a released response', function() {
+        assert.throws(function() { var response = null; return response.stream; },
+            /Cannot read properties of null \(reading 'stream'\)/);
+    });
+});
