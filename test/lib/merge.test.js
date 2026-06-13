@@ -17,7 +17,7 @@ describe('01 - Merging two objects', function () {
             page: {
                 content: 'index.html',
                 list: ['apple', 'orange', 'mango'],
-                javascripts: [ '/entreprise/handlers/client/main.js' ]
+                javascripts: [ '/app/handlers/client/main.js' ]
             }
         };
         b = {
@@ -28,7 +28,7 @@ describe('01 - Merging two objects', function () {
                 "ext": ".html",
                 "content": "home.html",
                 "javascripts": [
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js"
                 ]
             }
@@ -56,7 +56,7 @@ describe('01 - Merging two objects', function () {
                 "content": "home.html",
                 "list": [ "apple", "orange", "mango" ],
                 "javascripts": [
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js"
                 ],
                 "control": "home",
@@ -74,7 +74,7 @@ describe('01 - Merging two objects', function () {
             "page": {
                 "content": "index.html",
                 "list": [ "apple", "orange", "mango" ],
-                "javascripts": [ "/entreprise/handlers/client/main.js" ],
+                "javascripts": [ "/app/handlers/client/main.js" ],
                 "control": "home",
                 "ext": ".html"
             }
@@ -91,8 +91,8 @@ describe('01 - Merging two objects', function () {
                 "content": "index.html",
                 "list": [ "apple", "orange", "mango" ],
                 "javascripts": [
-                    "/entreprise/handlers/client/main.js",
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/main.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js"
                 ],
                 "control": "home",
@@ -111,9 +111,9 @@ describe('01 - Merging two objects', function () {
                 "content": "home.html",
                 "list": [ "apple", "orange", "mango" ],
                 "javascripts": [
-                    "/entreprise/handlers/client/edit.js",
+                    "/app/handlers/client/edit.js",
                     "/js/lib/jquery.min.js",
-                    "/entreprise/handlers/client/main.js"
+                    "/app/handlers/client/main.js"
                 ],
                 "control": "home",
                 "ext": ".html"
