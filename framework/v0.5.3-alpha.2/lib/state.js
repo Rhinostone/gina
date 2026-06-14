@@ -15,6 +15,10 @@
 var fs       = require('fs');
 var nodePath = require('path');
 
+// #B43 — monotonic counter for unique same-process atomic-write temp filenames
+// (see this.write: a temp + rename keeps the JSON sidecar reads tear-free).
+var _sidecarWriteSeq = 0;
+
 /**
  * SQLite-backed key-value store for the five `~/.gina/` state files.
  *
@@ -184,7 +188,11 @@ function StateStore() {
      *
      * The sidecar write keeps every legacy read path (`require()`,
      * `requireJSON()`, `fs.readFileSync()`) working without modification.
-     * SQLite is canonical; the JSON file is derived from it.
+     * SQLite is canonical; the JSON file is derived from it. The sidecar is
+     * itself written atomically — a same-dir temp file then `fs.renameSync`
+     * (#B43) — so a concurrent fleet-boot reader never observes a truncated
+     * or empty file (a bare in-place write would let a partial read crash
+     * the booting process).
      *
      * Returns `false` when the store is unavailable (Node < 22.5.0 or
      * `GINA_HOMEDIR` not yet set); the caller should fall through to a
@@ -207,9 +215,23 @@ function StateStore() {
             'INSERT OR REPLACE INTO kv_store (key, value, updated_at) VALUES (?, ?, ?)'
         ).run(key, value, Date.now());
 
-        // Write JSON sidecar — derived from SQLite, needed by all read call sites
-        fs.writeFileSync(filePath, value);
-        try { fs.chmodSync(filePath, 0o755); } catch(chmodErr) {}
+        // Write the JSON sidecar — derived from SQLite, needed by all read call sites.
+        // #B43 — write it ATOMICALLY: a same-dir temp + rename, so a concurrent reader
+        // (requireJSON / require / raw JSON.parse on a fleet boot) never observes a
+        // truncated or empty file. A bare fs.writeFileSync truncates the target in
+        // place, leaving a window where a concurrent read parses partial JSON and
+        // crashes FATALLY (requireJSON -> process.exit(1); plain require -> uncaught
+        // SyntaxError). rename(2) is atomic within a filesystem; the temp is a sibling
+        // of the target so the two always share one.
+        var _tmp = filePath + '.' + process.pid + '.' + (_sidecarWriteSeq++) + '.tmp';
+        try {
+            fs.writeFileSync(_tmp, value);
+            try { fs.chmodSync(_tmp, 0o755); } catch(chmodErr) {}
+            fs.renameSync(_tmp, filePath);
+        } catch (writeErr) {
+            try { fs.unlinkSync(_tmp); } catch(unlinkErr) {}
+            throw writeErr;
+        }
 
         return true;
     };

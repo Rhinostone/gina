@@ -20,6 +20,10 @@ var fs = require('fs');
 var _stateModule;
 try { _stateModule = require('../state'); } catch (_) { _stateModule = null; }
 
+// #B43 — monotonic counter for unique same-process atomic-write temp filenames
+// (createFileFromDataSync's legacy path writes a temp + renames to stay tear-free).
+var _atomicWriteSeq = 0;
+
 /**
  * @class Generator
  *
@@ -103,10 +107,21 @@ var Generator = {
             }
         }
 
-        // Legacy JSON write (non-state files, or SQLite unavailable)
+        // Legacy JSON write (non-state files, or SQLite unavailable).
+        // #B43 — write ATOMICALLY: a same-dir temp + rename, so a concurrent reader
+        // never observes a truncated/empty file (a bare fs.writeFileSync truncates the
+        // target in place; a concurrent boot read of the partial JSON crashes FATALLY).
+        // rename(2) is atomic within a filesystem; the temp is a sibling of the target.
         data = (typeof(data) == "object") ? JSON.stringify(data, null, 4) : data;
-        fs.writeFileSync(target, data);
-        fs.chmodSync(target, 0755)
+        var _tmp = target + '.' + process.pid + '.' + (_atomicWriteSeq++) + '.tmp';
+        try {
+            fs.writeFileSync(_tmp, data);
+            fs.chmodSync(_tmp, 0755);
+            fs.renameSync(_tmp, target);
+        } catch (writeErr) {
+            try { fs.unlinkSync(_tmp); } catch(unlinkErr) {}
+            throw writeErr;
+        }
     },
     // createFoldersFromStructureSync : function(structure){
     // },
