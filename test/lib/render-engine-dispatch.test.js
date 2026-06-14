@@ -2900,3 +2900,32 @@ describe('07b - #M11 extension-keyed dispatch (pure-logic replica)', function ()
         assert.equal(hasNjkSection(null), false);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 08 - released-response guard (#B45) on the async delegates
+// ---------------------------------------------------------------------------
+// Both async delegates capture req/res/next (#M1) then proceed to derefs that
+// crash on a released instance (a parallel-query storm against a downed upstream
+// re-enters render() after a prior failure callback released the triplet). Guarded
+// at the top — after the captures, before the no-view short-circuit (which itself
+// derefs req/res) — mirroring render-json.js (#B36) / render-stream.js (#B38).
+describe('08 - released-response guard (#B45) on the async delegates', function () {
+
+    function pinGuard(SRC, label) {
+        var guardIdx   = SRC.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
+        var captureIdx = SRC.search(/var\s+_next\s*=\s*local\.next;/);
+        var noViewIdx  = SRC.indexOf('!hasViews || !hasViews()');
+        assert.ok(guardIdx > -1, label + ': expected an `if ( local.res == null ) return;` guard');
+        assert.ok(captureIdx > -1 && captureIdx < guardIdx, label + ': guard must follow the #M1 captures');
+        assert.ok(noViewIdx > guardIdx, label + ': guard must precede the no-view short-circuit (which derefs req/res)');
+    }
+
+    it('render-swig-async guards a released response after captures, before the no-view branch', function () {
+        pinGuard(RENDER_SWIG_ASYNC_SRC, 'render-swig-async');
+    });
+
+    it('render-nunjucks-async guards a released response after captures, before the no-view branch', function () {
+        pinGuard(RENDER_NJ_ASYNC_SRC, 'render-nunjucks-async');
+    });
+});

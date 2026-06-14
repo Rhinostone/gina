@@ -1099,8 +1099,8 @@ describe('12 - function-scoped captures of per-request refs (#M1 race fix)', fun
         var stripped = src.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
         var allReads = stripped.match(/local\.res\b/g) || [];
         assert.strictEqual(
-            allReads.length, 4,
-            'expected exactly 4 `local.res` references in active code (1 capture + 3 closure-nulls), found ' + allReads.length
+            allReads.length, 5,
+            'expected exactly 5 `local.res` references in active code (1 capture + 1 #B45 released-response guard + 3 closure-nulls), found ' + allReads.length
         );
     });
 
@@ -1841,4 +1841,52 @@ describe('18 - $-safe </body> splice for dev-Inspector script injection', functi
         );
     });
 
+});
+
+
+describe('19 - released-response guard (#B45)', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    // render() captures req/res/next (#M1) then reads `res.stream` (~:259, the first res
+    // deref) with no released-response guard. The exported render is async, so when a
+    // controller fires several parallel self.query() calls against a downed upstream — the
+    // first failure callback renders a degraded response and releases the triplet, then a
+    // later callback re-enters render() here with local.res === null — `res.stream` threw
+    // `reading 'stream'` → an unhandled promise rejection (and setResources' local.req.headers
+    // read crashed the same way, caught by the #B31 throwError guard). Fixed with a
+    // top-of-function released-response guard, mirroring render-json.js (#B36).
+
+    it('render guards a released response after the #M1 captures, before the res.stream read', function() {
+        var s = src();
+        var guardIdx   = s.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
+        var captureIdx = s.search(/var\s+_next\s*=\s*local\.next;/);
+        var streamIdx  = s.indexOf('typeof(res.stream)');
+        assert.ok(guardIdx > -1, 'expected an `if ( local.res == null ) return;` guard in render()');
+        assert.ok(captureIdx > -1 && captureIdx < guardIdx, 'guard must follow the #M1 req/res/next captures');
+        assert.ok(streamIdx > guardIdx, 'guard must precede the res.stream read (the crash site)');
+    });
+
+    // ---- pure-logic replica of the guard + the crash site (render-swig.js:259) ----
+    function renderHead(localRes, mode) {
+        // mode: 'fixed' (post-#B45) | 'prefix' (pre-#B45, no guard)
+        var res = localRes;                       // #M1 capture: var res = local.res
+        if (mode === 'fixed' && localRes == null) return 'no-op (released)';
+        var stream = (typeof res.stream != 'undefined') ? res.stream : null;   // :259
+        return 'rendered (stream=' + stream + ')';
+    }
+
+    it('replica: released response no-ops; live response proceeds', function() {
+        assert.strictEqual(renderHead(null, 'fixed'), 'no-op (released)');
+        assert.strictEqual(renderHead({}, 'fixed'), 'rendered (stream=null)');
+    });
+
+    it('subtract: the pre-fix head throws reading `stream` on a released response', function() {
+        assert.throws(function() { renderHead(null, 'prefix'); },
+            function(err) {
+                return err instanceof TypeError
+                    && /Cannot read properties of null \(reading 'stream'\)/.test(err.message);
+            },
+            'the unguarded render head must reproduce the released-response crash');
+    });
 });

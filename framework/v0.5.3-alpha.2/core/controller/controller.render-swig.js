@@ -186,6 +186,21 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     var req         = local.req;
     var res         = local.res;
     var _next       = local.next;
+
+    // #B45 — released-response guard. render() can be re-entered on a controller
+    // instance whose terminal exit already nulled the per-request triplet — e.g.
+    // an action that fired several parallel self.query() calls against a downed
+    // upstream: the first failure callback renders a degraded response and
+    // releases the triplet, then a later callback re-enters render() here with
+    // local.res === null. A later res.stream / setResources(local.req.headers)
+    // deref then throws; since render() is async, that escapes as an unhandled
+    // promise rejection. Nothing to render to a response already sent/released —
+    // no-op. Mirrors render-json.js (#B36) / render-stream.js (#B38); distinct
+    // from the #M1 in-flight null-out the captures above isolate.
+    if ( local.res == null ) {
+        return;
+    }
+
     // #H10 — opt-in HTTP/2 response trailers (registered via self.sendTrailers()).
     var _trailers   = (local._trailers && typeof(local._trailers) === 'object') ? local._trailers : null;
     // #HDR5 — per-request CSP nonce (set on req by gina.plugins.Csp({useNonce:true})).

@@ -968,6 +968,20 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     var res   = local.res;
     var _next = local.next;
 
+    // #B45 — released-response guard. render() can be re-entered on a controller
+    // instance whose terminal exit already nulled the per-request triplet — e.g.
+    // an action that fired several parallel self.query() calls against a downed
+    // upstream: the first failure callback renders a degraded response and
+    // releases the triplet, then a later callback re-enters render() here with
+    // local.res === null. A later res.stream / setResources(local.req.headers)
+    // deref then throws; since render() is async, that escapes as an unhandled
+    // promise rejection. Nothing to render to a response already sent/released —
+    // no-op. Mirrors render-json.js (#B36) / render-stream.js (#B38); distinct
+    // from the #M1 in-flight null-out the captures above isolate.
+    if ( local.res == null ) {
+        return;
+    }
+
     // #HDR5 — per-request CSP nonce (set on req by gina.plugins.Csp({useNonce:true})).
     // Mirrored onto every framework-injected inline <script> so a bundle can drop
     // 'unsafe-inline' from script-src. Threaded into injectAssets() (which has no
