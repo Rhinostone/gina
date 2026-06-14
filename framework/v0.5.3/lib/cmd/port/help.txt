@@ -1,0 +1,76 @@
+******************************
+* Port command lines e.g. *
+******************************
+
+
+[ Reserved port range ]
+
+    Ports 4100–4199 are reserved for Gina infrastructure and are never
+    assigned to bundle HTTP servers:
+
+        4100  Socket server (gina daemon)
+        4101  Reserved
+        4102  engine.io internal transport
+        4103–4199  Reserved for future Gina infrastructure
+
+    The port scanner skips this range automatically.
+    See: https://www.rfc-editor.org/rfc/rfc6335.html
+
+
+[ Scan window ]
+
+    The port scanner searches a window of max(899, limit + 99) ports starting
+    from the configured start port (default: 3100), giving a default range of
+    3100–3999.
+
+    If every port in the window is already in use, the scanner stops with:
+        [SCAN] Maximum port number reached: <end>
+
+    To recover, reset allocations from a higher base:
+        $ gina port:reset @<project_name> --start-port-from=4200
+
+    Use 4200 or higher — ports 4100–4199 are reserved (see above).
+
+
+[ Set a port number ]
+
+    Set or update a port number
+    ----------
+
+    To set a port for an existing bundle, use the following command line.
+    
+    Set default a port number for all your bundle's environments :
+    - If no <port_number> is entered, you will be prompted to enter a port number
+    - If no <protocol> is mentioned, you will be prompted to enter an existing protocol
+    - If no <environment> is mentioned, you will be prompted to enter an existing environment
+
+    $ gina port:set <bundle_name> @<project_name>
+
+    or
+
+    $ gina port:set <protocol>:<port_number> <bundle_name> @<project_name>/<environment>
+
+    Flag syntax (equivalent):
+
+    $ gina port:set <bundle_name> @<project_name> --protocol=<protocol> --scheme=<scheme> --port=<port_number> --env=<environment>
+
+    Ports 4100-4199 are reserved for Gina infrastructure and will be rejected.
+
+    Reassign a port already held by another bundle (--force)
+    ----------
+
+    By default, setting a port that another bundle/environment already holds is
+    rejected. Pass --force to take the port anyway: the prior holder is evicted
+    (it loses that port for the protocol/scheme and re-pins itself the next time
+    its own context runs port:set). This is the intended shape for one-bundle-per-
+    container deployments that pin each bundle to a fixed port.
+
+    $ gina port:set <bundle_name> @<project_name> --protocol=<protocol> --scheme=<scheme> --port=<port_number> --env=<environment> --force
+
+[ Listing port numbers ]
+
+    $ gina port:list <bundle_name> @<project_name>
+
+    or
+
+    $ gina port:list <bundle_name> @<project_name>/<environment>

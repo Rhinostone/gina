@@ -785,3 +785,53 @@ describe('07 - #M11 Inspector parity: queries + statusbar', function() {
             'no unrendered template directives remain');
     });
 });
+
+
+describe('08 - released-response guard (#B45)', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    // renderNunjucks() captures req/res/next (#M1) then proceeds to setResources, which
+    // reads local.req.headers (controller.js:896). When a controller fires several parallel
+    // self.query() calls against a downed upstream — the first failure callback renders +
+    // releases the triplet, then a later callback re-enters renderNunjucks() here with
+    // local.res === null — that deref threw. Guarded at the top, mirroring render-json.js
+    // (#B36). (render-nunjucks's own res.stream read is already (res && ...)-safe, so the
+    // crash surfaces at the setResources -> local.req.headers path.)
+
+    it('renderNunjucks guards a released response after the #M1 captures, before cache.from', function() {
+        var s = src();
+        var guardIdx   = s.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
+        var captureIdx = s.search(/var\s+_next\s*=\s*local\.next;/);
+        var cacheIdx   = s.indexOf('cache.from(self.serverInstance._cached)');
+        assert.ok(guardIdx > -1, 'expected an `if ( local.res == null ) return;` guard in renderNunjucks()');
+        assert.ok(captureIdx > -1 && captureIdx < guardIdx, 'guard must follow the #M1 req/res/next captures');
+        assert.ok(cacheIdx > guardIdx, 'guard must precede cache.from / the first per-request work');
+    });
+
+    // ---- pure-logic replica of the guard + render-nunjucks's released-response crash site ----
+    function renderNunjucksHead(local, mode) {
+        // mode: 'fixed' (post-#B45) | 'prefix' (pre-#B45, no guard)
+        if (mode === 'fixed' && local.res == null) return 'no-op (released)';
+        var req = local.req;   // #M1 capture
+        // setResources reads local.req.headers (controller.js:896) — reached once render
+        // proceeds past the guard on a released instance.
+        var proto = (typeof req.headers['x-forwarded-proto'] != 'undefined')
+            ? req.headers['x-forwarded-proto'] : 'https';
+        return 'rendered (' + proto + ')';
+    }
+
+    it('replica: released response no-ops; live response proceeds', function() {
+        assert.strictEqual(renderNunjucksHead({ req: null, res: null }, 'fixed'), 'no-op (released)');
+        assert.strictEqual(renderNunjucksHead({ req: { headers: {} }, res: {} }, 'fixed'), 'rendered (https)');
+    });
+
+    it('subtract: the pre-fix head throws reading `headers` on a released response', function() {
+        assert.throws(function() { renderNunjucksHead({ req: null, res: null }, 'prefix'); },
+            function(err) {
+                return err instanceof TypeError
+                    && /Cannot read properties of null \(reading 'headers'\)/.test(err.message);
+            },
+            'the unguarded renderNunjucks head must reproduce the released-response crash');
+    });
+});

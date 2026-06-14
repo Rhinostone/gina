@@ -190,6 +190,46 @@ describe('05 - filterArgs', function () {
         assert.equal(process.gina['GINA_TEST_SKIP_CHECK'], 'ok');
         assert.equal(process.gina['GINA_GINA_VERSION'], undefined);
     });
+
+    // #B40 — framework-connection flags hoist into GINA_* only for framework-scoped
+    // commands. A sub-topic command's --port is the BUNDLE port and must not become
+    // GINA_PORT (which framework:init would persist as the framework socket port).
+    it('#B40: port:set --port=N does NOT hoist GINA_PORT', function () {
+        delete process.env.GINA_PORT;
+        process.argv = ['node', 'cli', 'port:set', 'frontend', '@myproject', '--port=3200'];
+        filterArgs();
+        assert.equal(process.gina['GINA_PORT'], undefined, 'port:set --port must not become GINA_PORT');
+    });
+
+    it('#B40: bundle:start --port=N does NOT hoist GINA_PORT', function () {
+        delete process.env.GINA_PORT;
+        process.argv = ['node', 'cli', 'bundle:start', 'frontend', '@myproject', '--port=3200'];
+        filterArgs();
+        assert.equal(process.gina['GINA_PORT'], undefined, 'bundle:start --port must not become GINA_PORT');
+    });
+
+    it('#B40: framework:set --port=N DOES hoist GINA_PORT', function () {
+        delete process.env.GINA_PORT;
+        process.argv = ['node', 'cli', 'framework:set', '--port=9001'];
+        filterArgs();
+        assert.equal(~~process.gina['GINA_PORT'], 9001, 'framework:set --port must become GINA_PORT');
+    });
+
+    it('#B40: bare `start --port=N` DOES hoist GINA_PORT (bare = framework-scoped)', function () {
+        delete process.env.GINA_PORT;
+        process.argv = ['node', 'cli', 'start', '--port=9002'];
+        filterArgs();
+        assert.equal(~~process.gina['GINA_PORT'], 9002, 'bare start --port must become GINA_PORT');
+    });
+
+    it('#B40: also guards --mq-port / --host-v4 / --hostname for sub-topic commands', function () {
+        delete process.env.GINA_MQ_PORT; delete process.env.GINA_HOST_V4; delete process.env.GINA_HOSTNAME;
+        process.argv = ['node', 'cli', 'port:set', 'frontend', '@myproject', '--mq-port=9125', '--host-v4=1.2.3.4', '--hostname=foo'];
+        filterArgs();
+        assert.equal(process.gina['GINA_MQ_PORT'], undefined);
+        assert.equal(process.gina['GINA_HOST_V4'], undefined);
+        assert.equal(process.gina['GINA_HOSTNAME'], undefined);
+    });
 });
 
 

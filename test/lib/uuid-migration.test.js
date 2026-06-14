@@ -265,26 +265,29 @@ describe('04b - Functional: uuid.customAlphabet', function() {
 
 describe('05 - Functional: storage time-prefixed ID pattern (Date.now + uuid)', function() {
 
+    // Mirrors lib/storage's _id generation: Date.now().toString(36) + '-' + uuid(16).
+    // The 16-char base-62 suffix (62^16) avoids the birthday-paradox collision the
+    // 4-char default risks when many IDs share the same ms-granularity Date.now() prefix.
     var uuid = require(UUID_SRC);
 
     it('time-prefixed ID returns a string', function() {
-        var id = Date.now().toString(36) + '-' + uuid();
+        var id = Date.now().toString(36) + '-' + uuid(16);
         assert.equal(typeof id, 'string');
     });
 
     it('time-prefixed ID contains a base36 timestamp prefix and a hyphen separator', function() {
-        var id = Date.now().toString(36) + '-' + uuid();
+        var id = Date.now().toString(36) + '-' + uuid(16);
         var parts = id.split('-');
         assert.ok(parts.length === 2, 'Expected 2 segments separated by a hyphen');
         var ts = parseInt(parts[0], 36);
         assert.ok(!isNaN(ts) && ts > 0, 'First segment should be a base36 timestamp, got: ' + parts[0]);
-        assert.ok(UUID_RE.test(parts[1]), 'Second segment should be a uuid, got: ' + parts[1]);
+        assert.ok(/^[0-9A-Za-z]{16}$/.test(parts[1]), 'Second segment should be a 16-char uuid, got: ' + parts[1]);
     });
 
     it('time-prefixed IDs are unique across 100 calls', function() {
         var seen = new Set();
         for (var i = 0; i < 100; i++) {
-            seen.add(Date.now().toString(36) + '-' + uuid());
+            seen.add(Date.now().toString(36) + '-' + uuid(16));
         }
         assert.equal(seen.size, 100, 'Expected 100 unique IDs');
     });
@@ -330,9 +333,10 @@ describe('07 - Functional: Collection generates valid _uuid via uuid()', functio
 
     it('Collection _uuid fields match uuid base-62 format (pre-toRaw)', function() {
         // lib/collection opts into uuid(16) (vs lib/uuid's 4-char default) to
-        // close the birthday-paradox collision at N=917 (#COLL1). UUID_RE is
-        // intentionally NOT updated — it stays 4-char for the raw-uuid() tests
-        // at lines 178 and 281, which exercise lib/uuid's default behaviour.
+        // close the birthday-paradox collision at N=917 (#COLL1). lib/storage's
+        // _id uses the same uuid(16), so §05 mirrors it. UUID_RE stays 4-char for
+        // the raw-uuid() default tests in §04, which exercise lib/uuid's default
+        // behaviour.
         var data = [{ name: 'Test' }];
         var col = new Collection(data);
         assert.ok(

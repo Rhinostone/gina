@@ -480,10 +480,77 @@ describe('11 - source-inspection: lib/secrets wired into framework', function ()
     });
 
     it('core/config.js propagates secrets.resolve errors through the load callback', function () {
+        // #B42 loosened: a console.debug(...) line may sit between `{` and the
+        // return now (it names the failing key + config path); the invariant
+        // pinned here is that the catch still propagates via callback(secretErr).
         assert.ok(
-            /catch\s*\(\s*secretErr\s*\)\s*\{\s*return\s+callback\(secretErr\)/.test(CONFIG_SRC),
+            /catch\s*\(\s*secretErr\s*\)\s*\{[\s\S]*?return\s+callback\(secretErr\)/.test(CONFIG_SRC),
             'core/config.js must propagate secrets.resolve errors via callback(err)'
         );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 13 — #B42: catch site names the failing secret + config path at debug level
+// ---------------------------------------------------------------------------
+
+describe('13 - #B42 secret-resolution failure names the key + config path (debug)', function () {
+
+    var CONFIG_SRC = fs.readFileSync(path.join(FW, 'core/config.js'), 'utf8');
+
+    // Replica of the #B42 debug-message composition at the catch site
+    // (bundle / env / scope are loadBundleConfig locals in scope there).
+    function buildSecretDebugMsg(err, bundle, env, scope) {
+        return '[CONFIG][loadBundleConfig] Secret resolution failed for `'
+            + ((err && err._ginaSecretKey) || '<unknown>')
+            + '` in `' + bundle + '/' + env + ':' + scope + '` configuration';
+    }
+
+    it('the catch logs via console.debug before propagating', function () {
+        assert.ok(
+            /catch\s*\(\s*secretErr\s*\)\s*\{[\s\S]*?console\.debug\([\s\S]*?return\s+callback\(secretErr\)/.test(CONFIG_SRC),
+            'the secretErr catch must console.debug(...) before return callback(secretErr)'
+        );
+    });
+
+    it('the debug log surfaces the non-enumerable _ginaSecretKey', function () {
+        assert.ok(
+            CONFIG_SRC.indexOf('secretErr._ginaSecretKey') > -1,
+            'the catch must reference secretErr._ginaSecretKey'
+        );
+    });
+
+    it('the debug log composes the bundle/env:scope config path', function () {
+        assert.ok(
+            /_ginaSecretKey[\s\S]*?bundle\s*\+[\s\S]*?env[\s\S]*?scope/.test(CONFIG_SRC),
+            'the debug message must compose bundle + "/" + env + ":" + scope'
+        );
+    });
+
+    it('logs at debug level only — never warn/error/emerg (user channel stays generic)', function () {
+        var catchSlice = CONFIG_SRC.slice(
+            CONFIG_SRC.indexOf('catch (secretErr)'),
+            CONFIG_SRC.indexOf('return callback(secretErr)')
+        );
+        assert.ok(catchSlice.indexOf('console.debug') > -1, 'catch logs at debug level');
+        assert.equal(catchSlice.indexOf('console.warn'), -1, 'catch must not warn');
+        assert.equal(catchSlice.indexOf('console.error'), -1, 'catch must not error');
+        assert.equal(catchSlice.indexOf('console.emerg'), -1, 'catch must not emerg');
+    });
+
+    it('replica: names the key + the bundle/env:scope path', function () {
+        var err = {};
+        Object.defineProperty(err, '_ginaSecretKey', { value: 'DB_PASSWORD', enumerable: false });
+        var msg = buildSecretDebugMsg(err, 'demo', 'dev', 'local');
+        assert.ok(msg.indexOf('DB_PASSWORD') > -1, 'msg names the key');
+        assert.ok(msg.indexOf('demo/dev:local') > -1, 'msg names the bundle/env:scope path');
+    });
+
+    it('replica: falls back to <unknown> when _ginaSecretKey is absent', function () {
+        var msg = buildSecretDebugMsg(new Error('Secret resolution failed'), 'demo', 'dev', 'local');
+        assert.ok(msg.indexOf('<unknown>') > -1, 'missing key → <unknown> placeholder');
+        assert.equal(msg.indexOf('undefined'), -1, 'never renders the literal "undefined"');
     });
 });
 

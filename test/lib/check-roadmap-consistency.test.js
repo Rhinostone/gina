@@ -45,6 +45,10 @@ describe('01 - module shape', function () {
         assert.equal(typeof CHECK.compareVersions, 'function');
     });
 
+    it('exports latestTimelineStable', function () {
+        assert.equal(typeof CHECK.latestTimelineStable, 'function');
+    });
+
     it('exports parseStatusRows', function () {
         assert.equal(typeof CHECK.parseStatusRows, 'function');
     });
@@ -139,6 +143,34 @@ describe('03 - compareVersions', function () {
 
     it('a prerelease of a HIGHER core still outranks a lower stable', function () {
         assert.equal(CHECK.compareVersions('0.5.1-alpha.1', '0.5.0'), 1);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 03b — latestTimelineStable (rule-2 shipped baseline)
+// ---------------------------------------------------------------------------
+
+describe('03b - latestTimelineStable', function () {
+
+    it('returns the highest stable version marked shipped in a timeline row', function () {
+        var content = [
+            '| **Q2 2026** | `0.5.0` ✅ | a |',
+            '| **Q2 2026** | `0.5.2` ✅ | b |',
+            '| **Q2 2026** | `0.4.7` ✅ | c |'
+        ].join('\n');
+        assert.equal(CHECK.latestTimelineStable(content), '0.5.2');
+    });
+
+    it('ignores status rows (✅ marker BEFORE the version) — only timeline marks count', function () {
+        assert.equal(
+            CHECK.latestTimelineStable('| ✅ | feature | `0.9.0` | 2026-06-11 |'),
+            null);
+    });
+
+    it('returns null when no timeline mark is present', function () {
+        assert.equal(CHECK.latestTimelineStable('no versions here'), null);
+        assert.equal(CHECK.latestTimelineStable(''), null);
     });
 });
 
@@ -258,6 +290,33 @@ describe('06 - check: done-row-references-future-version', function () {
         });
         assert.equal(r.ok, true);
     });
+
+    it('does NOT flag a newer ✅ version that the timeline records as shipped (hotfix / out-of-order cut)', function () {
+        // Releasing 0.4.8 while 0.5.0 has already shipped: the ✅ 0.5.0 feature
+        // row legitimately references a newer-but-shipped version. The timeline
+        // mark `0.5.0` ✅ is the shipped record that floors the comparison, so
+        // the older-line cut is not falsely blocked.
+        var r = CHECK.check({
+            roadmapContent: [
+                '| **Q2 2026** | `0.5.0` ✅ | shipped feature set |',
+                '| ✅ | **a 0.5.0 feature** | `0.5.0` | 2026-06-11 |'
+            ].join('\n'),
+            targetedVersion: '0.4.8'
+        });
+        assert.equal(r.ok, true,
+            'a newer version already marked shipped in the timeline must not block an older-line cut');
+    });
+
+    it('STILL flags a newer ✅ version the timeline does NOT record as shipped', function () {
+        // Same older-line target, but no `0.5.0` ✅ timeline mark — 0.5.0 is not
+        // recorded as shipped, so the jumped-ahead-label protection still fires.
+        var r = CHECK.check({
+            roadmapContent: '| ✅ | **a feature** | `0.5.0` | 2026-06-11 |',
+            targetedVersion: '0.4.8'
+        });
+        assert.equal(r.ok, false);
+        assert.equal(r.failures[0].rule, 'done-row-references-future-version');
+    });
 });
 
 
@@ -294,13 +353,27 @@ describe('07 - check: timeline warning', function () {
 
 describe('08 - live ROADMAP.md smoke', function () {
 
-    it('the live file is consistent with plausible next stable versions', function () {
-        ['0.5.1', '0.6.0'].forEach(function (v) {
-            var r = CHECK.check({ roadmapContent: ROADMAP, targetedVersion: v });
-            assert.equal(r.ok, true,
-                'live ROADMAP.md must not trip the gate for ' + v + ': ' +
-                JSON.stringify(r.failures));
-        });
+    // A genuine forward cut on the CURRENT release line: minor-bump the
+    // package.json version. Deriving from package.json (not from the max token
+    // in the file) keeps the candidate in the live major (0.x) — so the smoke
+    // actually exercises rule 2 against the real 0.x ✅ rows (a cross-major
+    // candidate would skip them all, rule 2 being same-major-only) — and ahead
+    // of every shipped 0.x version, so a clean forward cut must pass. Replaces
+    // the prior hardcoded `0.5.1` / `0.6.0` constants, which had both already
+    // shipped and would have false-flagged against the next forward ✅ row (#2).
+    function forwardCandidate() {
+        var pkg = JSON.parse(fs.readFileSync(
+            nodePath.join(__dirname, '..', '..', 'package.json'), 'utf8'));
+        var core = String(pkg.version).split('-')[0].split('.').map(Number);
+        return core[0] + '.' + (core[1] + 1) + '.0';
+    }
+
+    it('the live file is consistent with a genuine forward cut (derived from package.json)', function () {
+        var v = forwardCandidate();
+        var r = CHECK.check({ roadmapContent: ROADMAP, targetedVersion: v });
+        assert.equal(r.ok, true,
+            'live ROADMAP.md must not trip the gate for forward cut ' + v + ': ' +
+            JSON.stringify(r.failures));
     });
 
     it('the live file would have CAUGHT the pre-sweep drift (regression proof)', function () {

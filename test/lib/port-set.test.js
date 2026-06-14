@@ -66,6 +66,20 @@ describe('02 - port:set source structure', function() {
         assert.ok(getSrc().indexOf('createFileFromDataSync') > -1);
     });
 
+    it('supports a --force flag (parse + closure var)', function() {
+        var s = getSrc();
+        assert.ok(/\-\-force/.test(s), 'set.js should parse --force');
+        assert.ok(s.indexOf('requestedForce') > -1, 'set.js should carry requestedForce state');
+    });
+
+    it('evicts the prior holder only under --force (guarded reassignment)', function() {
+        var s = getSrc();
+        // the conflict branch must gate the hard error on !requestedForce
+        assert.ok(/if\s*\(\s*!requestedForce\s*\)/.test(s), 'hard error must be gated on !requestedForce');
+        // and the force path must delete the displaced holder's reverse entry
+        assert.ok(/delete\s+portsReverse\[sBundleKey\]\[sEnv\]\[protocol\]\[scheme\]/.test(s), 'force path must drop the displaced reverse entry');
+    });
+
 });
 
 
@@ -101,6 +115,7 @@ describe('04 - port:set argv pre-parsing', function() {
             , requestedScheme = null
             , requestedPort   = null
             , requestedEnv    = null
+            , requestedForce  = false
         ;
         var cleaned = argv.slice(0, 3);
 
@@ -128,6 +143,7 @@ describe('04 - port:set argv pre-parsing', function() {
             if ( /^\-\-protocol\=/.test(arg) ) { requestedProtocol = arg.split('=')[1];   continue; }
             if ( /^\-\-scheme\=/.test(arg) )   { requestedScheme   = arg.split('=')[1];   continue; }
             if ( /^\-\-env\=/.test(arg) )      { requestedEnv      = arg.split('=')[1];   continue; }
+            if ( /^\-\-force$/.test(arg) )     { requestedForce   = true;                continue; }
 
             cleaned.push(arg);
         }
@@ -137,6 +153,7 @@ describe('04 - port:set argv pre-parsing', function() {
             scheme:   requestedScheme,
             port:     requestedPort,
             env:      requestedEnv,
+            force:    requestedForce,
             cleaned:  cleaned
         };
     }
@@ -218,6 +235,25 @@ describe('04 - port:set argv pre-parsing', function() {
         assert.equal(result.port, 4200);
     });
 
+    it('parses --force flag as boolean true', function() {
+        var result = preParseArgs([
+            'node', 'gina', 'port:set', 'frontend', '@myproject',
+            '--protocol=http/2.0', '--scheme=https', '--port=5134', '--env=dev', '--force'
+        ]);
+        assert.equal(result.force, true);
+    });
+
+    it('--force defaults to false when absent', function() {
+        var result = preParseArgs(['node', 'gina', 'port:set', 'frontend', '@myproject', '--port=5134']);
+        assert.equal(result.force, false);
+    });
+
+    it('does not leak --force into cleaned argv', function() {
+        var result = preParseArgs(['node', 'gina', 'port:set', 'frontend', '@myproject', '--force']);
+        assert.ok(result.cleaned.indexOf('--force') === -1);
+        assert.ok(result.cleaned.indexOf('frontend') > -1);
+    });
+
 });
 
 
@@ -279,7 +315,7 @@ describe('05 - port:set port validation rules', function() {
 describe('06 - port:set port map operations', function() {
 
     // Replica of the forward/reverse map update logic from setPort()
-    function applyPort(ports, portsReverse, protocol, scheme, port, bundleName, projectName, env) {
+    function applyPort(ports, portsReverse, protocol, scheme, port, bundleName, projectName, env, force) {
         var bundleKey = bundleName +'@'+ projectName;
         var portValue = bundleKey +'/'+ env;
         var portStr   = ''+ port;
@@ -291,7 +327,24 @@ describe('06 - port:set port map operations', function() {
             && typeof(ports[protocol][scheme][portStr]) != 'undefined'
             && ports[protocol][scheme][portStr] !== portValue
         ) {
-            return { error: 'conflict', assignedTo: ports[protocol][scheme][portStr] };
+            if ( !force ) {
+                return { error: 'conflict', assignedTo: ports[protocol][scheme][portStr] };
+            }
+            // --force: evict the displaced bundle from both maps
+            var squatter = ports[protocol][scheme][portStr];
+            delete ports[protocol][scheme][portStr];
+            var sSlash = squatter.lastIndexOf('/');
+            if ( sSlash > 0 ) {
+                var sBundleKey = squatter.substring(0, sSlash);
+                var sEnv       = squatter.substring(sSlash + 1);
+                if (
+                    typeof(portsReverse[sBundleKey]) != 'undefined'
+                    && typeof(portsReverse[sBundleKey][sEnv]) != 'undefined'
+                    && typeof(portsReverse[sBundleKey][sEnv][protocol]) != 'undefined'
+                ) {
+                    delete portsReverse[sBundleKey][sEnv][protocol][scheme];
+                }
+            }
         }
 
         // Remove old assignment for this bundle/env/protocol/scheme
@@ -361,6 +414,43 @@ describe('06 - port:set port map operations', function() {
         assert.equal(result.ports['http/1.1']['http']['3100'], 'frontend@myproject/dev');
     });
 
+    it('--force reassigns a port held by another bundle (evicts the holder, both maps)', function() {
+        // Drift shape: a project-wide reset parked `backend` on the port `frontend`
+        // needs (8443), pushing `frontend` to 8500; force-pin frontend -> 8443.
+        var ports = { 'http/2.0': { 'https': {
+            '8443': 'backend@myproject/dev',
+            '8500': 'frontend@myproject/dev'
+        } } };
+        var portsReverse = {
+            'backend@myproject':  { 'dev': { 'http/2.0': { 'https': 8443 } } },
+            'frontend@myproject': { 'dev': { 'http/2.0': { 'https': 8500 } } }
+        };
+        var result = applyPort(ports, portsReverse, 'http/2.0', 'https', 8443, 'frontend', 'myproject', 'dev', true);
+        assert.equal(result.error, null);
+        // forward map: 8443 now points at frontend; frontend's old 8500 is gone
+        assert.equal(result.ports['http/2.0']['https']['8443'], 'frontend@myproject/dev');
+        assert.equal(typeof(result.ports['http/2.0']['https']['8500']), 'undefined', 'old port removed');
+        // reverse map: frontend -> 8443; the evicted backend entry is gone
+        assert.equal(result.portsReverse['frontend@myproject']['dev']['http/2.0']['https'], 8443);
+        assert.equal(typeof(result.portsReverse['backend@myproject']['dev']['http/2.0']['https']), 'undefined', 'displaced holder reverse entry removed');
+    });
+
+    it('without --force, the same reassignment is rejected (default safety preserved)', function() {
+        var ports = { 'http/2.0': { 'https': { '8443': 'backend@myproject/dev' } } };
+        var result = applyPort(ports, {}, 'http/2.0', 'https', 8443, 'frontend', 'myproject', 'dev' /* force omitted */);
+        assert.equal(result.error, 'conflict');
+        assert.equal(result.assignedTo, 'backend@myproject/dev');
+    });
+
+    it('--force is idempotent when the bundle already holds the port', function() {
+        var ports = { 'http/2.0': { 'https': { '8443': 'frontend@myproject/dev' } } };
+        var portsReverse = { 'frontend@myproject': { 'dev': { 'http/2.0': { 'https': 8443 } } } };
+        var result = applyPort(ports, portsReverse, 'http/2.0', 'https', 8443, 'frontend', 'myproject', 'dev', true);
+        assert.equal(result.error, null);
+        assert.equal(result.ports['http/2.0']['https']['8443'], 'frontend@myproject/dev');
+        assert.equal(result.portsReverse['frontend@myproject']['dev']['http/2.0']['https'], 8443);
+    });
+
 });
 
 
@@ -389,6 +479,10 @@ describe('07 - help.txt documents port:set', function() {
 
     it('documents <bundle_name> parameter', function() {
         assert.ok(getHelp().indexOf('<bundle_name>') > -1);
+    });
+
+    it('documents the --force flag', function() {
+        assert.ok(getHelp().indexOf('--force') > -1);
     });
 
 });

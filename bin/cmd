@@ -41,6 +41,18 @@ function Cmd(opt, runOffine) {
     var launchFramework = function(){
 
         var framework = net.createServer( function(conn) {//'connection' listener
+
+            // #B41 — per-connection accumulation buffer for the command JSON
+            // payload. The client sends `JSON.stringify(process.argv)` in a
+            // single write (bin/cli), but TCP may split or coalesce it across
+            // 'data' chunks, so we accumulate and only parse once the payload
+            // is complete. A partial chunk fails to parse and we keep waiting;
+            // a malformed / empty payload never completes and is ignored here
+            // — an unguarded JSON.parse would otherwise throw, surfacing as a
+            // [ FRAMEWORK ][ uncaughtException ] that drops the command (and
+            // risks a SIGTERM via proc.js).
+            var _payload = '';
+
             //feedback.
             conn.once('end', function() {
                 console.debug('[ CLI ] task completed');
@@ -57,7 +69,28 @@ function Cmd(opt, runOffine) {
             //Receiving.
             conn.on('data', function(data) {
 
-                var argv = JSON.parse( data.toString() );
+                _payload += data.toString();
+
+                var argv;
+                try {
+                    argv = JSON.parse( _payload );
+                } catch (parseErr) {
+                    // Payload not yet complete (TCP split) — keep accumulating.
+                    // A non-JSON / empty payload never parses and is ignored,
+                    // so the framework does not crash on a malformed command.
+                    return;
+                }
+                // Complete payload consumed — reset for any further command on
+                // this connection.
+                _payload = '';
+
+                if ( !Array.isArray(argv) ) {
+                    // Valid JSON but not the expected argv array — drop without
+                    // crashing (argv.join below would otherwise throw). The
+                    // real client always sends process.argv (an array).
+                    console.warn( '[ FRAMEWORK ] ignoring non-argv command payload' );
+                    return;
+                }
 
                 console.debug( '[ FRAMEWORK ] CMD received "'+ argv.join(' ') +'"' );
 

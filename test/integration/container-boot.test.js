@@ -73,8 +73,10 @@ var scheme      = 'http';
 var webroot     = '/' + BUNDLE + '/';
 var connectorsKeys = null;
 var containerProc  = null;
-var containerLog   = '';
-var containerExit  = null;  // { code, signal } if the launcher exits before we tear it down
+var containerLog    = '';
+var containerStdout = '';
+var containerStderr = '';
+var containerExit   = null;  // { code, signal } if the launcher exits before we tear it down
 
 
 // ---------------------------------------------------------------------------
@@ -142,6 +144,31 @@ function sleep(ms) {
     return new Promise(function(resolve) { setTimeout(resolve, ms); });
 }
 
+// Rich boot-failure diagnostics. The bare "log tail" came back EMPTY on the CI
+// failure (2026-06-10), so this dumps BOTH child streams in full (with byte
+// counts), surfaces the requested-vs-resolved port (the 9700 -> 3100 mismatch
+// seen there), and distinguishes a CRASH (non-zero exit) from a genuine
+// slow/stalled boot — so the next occurrence is root-causable instead of a
+// blind "port did not open".
+function bootDiagnostics() {
+    var exitNote;
+    if (containerExit === null) {
+        exitNote = 'still running at deadline — a genuine slow/stalled boot (#B29 signature: never reached .listen())';
+    } else if (containerExit.code === 0) {
+        exitNote = 'exited cleanly (code 0) before binding — unexpected';
+    } else {
+        exitNote = 'CRASHED (exit code ' + containerExit.code + ', signal ' + containerExit.signal +
+                   ') before binding — a boot crash, NOT a slow boot; a timeout bump would not help';
+    }
+    return (
+        'requested --start-port-from=' + PORT_START + ' | resolved bundlePort=' + bundlePort + '\n' +
+        'container exit: ' + JSON.stringify(containerExit) + ' — ' + exitNote + '\n' +
+        'container stdout (' + containerStdout.length + ' bytes):\n' + (containerStdout || '(empty)') + '\n' +
+        '---\n' +
+        'container stderr (' + containerStderr.length + ' bytes):\n' + (containerStderr || '(empty)')
+    );
+}
+
 function isChildAlive(child) {
     return child && child.exitCode === null && child.signalCode === null;
 }
@@ -181,7 +208,9 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
 
         // 1. project:add — bootstraps the isolated home on first use. The bootstrap
         //    command may exit non-zero (benign MQ ECONNRESET); verify via projects.json.
-        runCli(['project:add', '@' + PROJ, '--path=' + PROJ_DIR, '--start-port-from=' + PORT_START]);
+        //    (--start-port-from is NOT honoured by project:add outside import mode — it
+        //    is passed to bundle:add below, which is what actually allocates the port.)
+        runCli(['project:add', '@' + PROJ, '--path=' + PROJ_DIR]);
         var projectsPath = path.join(GINA_HOME, 'projects.json');
         if (!fs.existsSync(projectsPath) || !readJSON(projectsPath)[PROJ]) {
             setupError = 'project:add did not register @' + PROJ + ' in ' + projectsPath;
@@ -190,7 +219,10 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
 
         // 2. bundle:add — scaffolds src/<bundle> keeping the DEFAULT $schema-only
         //    connectors.json (the #B29 trigger). Verify via ports.reverse.json.
-        runCli(['bundle:add', BUNDLE, '@' + PROJ]);
+        //    --start-port-from is honoured HERE (bundle:add allocates the port), so the
+        //    bundle binds a high port out of the contended default 3100-3999 range —
+        //    the intent PORT_START documents, and less collision-prone under concurrent CI.
+        runCli(['bundle:add', BUNDLE, '@' + PROJ, '--start-port-from=' + PORT_START]);
         var portsReversePath = path.join(GINA_HOME, 'ports.reverse.json');
         var key = BUNDLE + '@' + PROJ;
         if (!fs.existsSync(portsReversePath) || !readJSON(portsReversePath)[key]) {
@@ -204,6 +236,17 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
             connectorsKeys = Object.keys(parseConfigJSON(connPath));
         } catch (e) {
             setupError = 'could not parse scaffolded connectors.json: ' + (e.message || e);
+            return;
+        }
+
+        // 3b. Assert the launcher's dev entry point (src/<bundle>/index.js) scaffolded.
+        //     A half-completed scaffold (manifest/ports written but index.js missing)
+        //     would otherwise make gina-container exit 1 at its entry-point check with a
+        //     message truncated by process.exit on a pipe — a blind boot failure. Failing
+        //     here as a setupError gives a clear cause instead.
+        var entryPoint = path.join(PROJ_DIR, 'src', BUNDLE, 'index.js');
+        if (!fs.existsSync(entryPoint)) {
+            setupError = 'bundle entry point not scaffolded: ' + entryPoint;
             return;
         }
 
@@ -231,8 +274,8 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
         containerProc = spawn(process.execPath, [CONTAINER, BUNDLE, '@' + PROJ], {
             env: CHILD_ENV, stdio: ['ignore', 'pipe', 'pipe']
         });
-        containerProc.stdout.on('data', function(d) { containerLog += d; });
-        containerProc.stderr.on('data', function(d) { containerLog += d; });
+        containerProc.stdout.on('data', function(d) { containerStdout += d; containerLog += d; });
+        containerProc.stderr.on('data', function(d) { containerStderr += d; containerLog += d; });
         containerProc.on('exit', function(code, signal) { containerExit = { code: code, signal: signal }; });
     });
 
@@ -273,12 +316,11 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
         assert.ok(bundlePort, 'bundle port not resolved');
 
         var opened = await waitForPort(bundlePort, POLL_TIMEOUT_MS);
+        if (!opened) { await sleep(300); }   // let the child's final stdout/stderr/exit flush before snapshotting diagnostics
         assert.ok(
             opened,
-            'port ' + bundlePort + ' did not open within ' + POLL_TIMEOUT_MS + ' ms — the bundle never reached .listen() ' +
-            '(this is the #B29 signature: a $schema-only connectors.json stalling model-load).\n' +
-            'container exit: ' + JSON.stringify(containerExit) + '\n' +
-            'container log tail:\n' + containerLog.split('\n').slice(-15).join('\n')
+            'port ' + bundlePort + ' did not open within ' + POLL_TIMEOUT_MS + ' ms — the bundle never reached .listen().\n' +
+            bootDiagnostics()
         );
     });
 
@@ -291,7 +333,7 @@ describe('20 - container-boot — daemonless gina-container boots a default ($sc
         assert.equal(
             result.status, 200,
             'expected HTTP 200 from ' + scheme + '://127.0.0.1:' + bundlePort + webroot + ', got ' +
-            result.status + (result.err ? ' (' + result.err + ')' : '')
+            result.status + (result.err ? ' (' + result.err + ')' : '') + '\n' + bootDiagnostics()
         );
         assert.ok(
             result.body.indexOf('Hello World') > -1,

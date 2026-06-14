@@ -149,3 +149,103 @@ describe('03 - bin/cli: framework version existence guard precedes the require',
         );
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 04 — Source + logic: framework-connection params (--port, --mq-port,
+//      --host-v4, --hostname, --debug-port) are hoisted into GINA_* / persisted
+//      to settings.json ONLY for framework-scoped commands (#B40).
+//
+// Regression: `gina port:set <bundle> --port=N` (a sub-topic command whose
+// `--port` is the BUNDLE port) used to hoist N into GINA_PORT and persist it as
+// the FRAMEWORK socket port in ~/.gina/<short>/settings.json (8124 -> N), so
+// every later online command connected to the wrong port and reported
+// "[ gina ] not started". The hoist is now gated on isFrameworkScopedCmd; the
+// --inspect/--debug splice stays unconditional (bundle:start --inspect needs it).
+// ---------------------------------------------------------------------------
+describe('04 - bin/cli: framework-connection param hoist scoped to framework commands (#B40)', function() {
+
+    var src = fs.readFileSync(CLI_SOURCE, 'utf8');
+
+    it('defines an isFrameworkScopedCmd predicate', function() {
+        assert.ok(src.indexOf('var isFrameworkScopedCmd') > -1,
+            'expected an isFrameworkScopedCmd predicate in bin/cli');
+    });
+
+    it('the predicate is (_topic has no ":" || starts with framework:)', function() {
+        assert.ok(
+            src.indexOf("_topic.indexOf(':') < 0 || /^framework:/.test(_topic)") > -1,
+            'expected isFrameworkScopedCmd = (_topic.indexOf(":") < 0 || /^framework:/.test(_topic))'
+        );
+    });
+
+    it('gates all five framework-connection param branches on isFrameworkScopedCmd', function() {
+        [
+            'isFrameworkScopedCmd && /^\\-\\-port/',
+            'isFrameworkScopedCmd && /^\\-\\-mq\\-port/',
+            'isFrameworkScopedCmd && /^\\-\\-host\\-v4/',
+            'isFrameworkScopedCmd && /^\\-\\-hostname/',
+            'isFrameworkScopedCmd && /^\\-\\-debug(\\_|\\-)port/'
+        ].forEach(function(needle) {
+            assert.ok(src.indexOf(needle) > -1, 'expected gated branch: ' + needle);
+        });
+    });
+
+    it('does NOT gate the --inspect/--debug splice', function() {
+        assert.ok(
+            src.indexOf('if ( /^\\-\\-(inspect|debug)/.test(params[p])') > -1,
+            'expected the --inspect/--debug branch to remain unconditional'
+        );
+        assert.equal(
+            src.indexOf('isFrameworkScopedCmd && /^\\-\\-(inspect'), -1,
+            'the --inspect/--debug splice must NOT be gated on isFrameworkScopedCmd'
+        );
+    });
+
+    // ---- pure-logic replica of the predicate ----
+    function isFrameworkScopedCmd(topic) {
+        var _topic = topic || '';
+        return ( _topic.indexOf(':') < 0 || /^framework:/.test(_topic) );
+    }
+
+    it('predicate: bare commands (start/stop/restart/status/tail) and empty are framework-scoped', function() {
+        ['start', 'stop', 'restart', 'status', 'tail', ''].forEach(function(c) {
+            assert.equal(isFrameworkScopedCmd(c), true, c + ' should be framework-scoped');
+        });
+    });
+
+    it('predicate: framework:* commands are framework-scoped', function() {
+        ['framework:set', 'framework:start', 'framework:restart'].forEach(function(c) {
+            assert.equal(isFrameworkScopedCmd(c), true, c + ' should be framework-scoped');
+        });
+    });
+
+    it('predicate: sub-topic commands are NOT framework-scoped', function() {
+        ['port:set', 'port:reset', 'bundle:start', 'bundle:add', 'project:start', 'connector:list'].forEach(function(c) {
+            assert.equal(isFrameworkScopedCmd(c), false, c + ' should NOT be framework-scoped');
+        });
+    });
+
+    // ---- behavioural replica: mirrors the gated hoist + bin/cli:306 fallback ----
+    // settings['port'] = getEnvVar('GINA_PORT') || settings['port']
+    function resolvedFrameworkPort(topic, argv, settingsPort) {
+        var scoped = isFrameworkScopedCmd(topic);
+        var ginaPort = null;
+        argv.forEach(function(a) {
+            if (scoped && /^\-\-port/.test(a)) { ginaPort = ~~(a.split('=')[1]); }
+        });
+        return ginaPort || settingsPort;
+    }
+
+    it('port:set --port=3200 does NOT corrupt the framework socket port (stays 8124)', function() {
+        assert.equal(resolvedFrameworkPort('port:set', ['frontend', '@myproject', '--port=3200'], '8124'), '8124');
+    });
+
+    it('start --port=9000 DOES set the framework socket port', function() {
+        assert.equal(resolvedFrameworkPort('start', ['--port=9000'], '8124'), 9000);
+    });
+
+    it('bundle:start --inspect=9229 does NOT touch the framework socket port', function() {
+        assert.equal(resolvedFrameworkPort('bundle:start', ['frontend', '@myproject', '--inspect=9229'], '8124'), '8124');
+    });
+});

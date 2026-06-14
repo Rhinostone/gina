@@ -81,6 +81,18 @@ function MainHelper(opt) {
             , err   = null
         ;
 
+        // #B40 — Treat framework-connection flags (--port, --mq-port, --host-v4,
+        // --hostname, --debug-port) as framework settings ONLY for framework-scoped
+        // commands (bare commands like `start`/`stop`/`restart` — prefixed to
+        // `framework:*` downstream — or explicit `framework:*`). For a sub-topic
+        // command (`port:set <bundle> --port=N`, `bundle:start ... --port=N`, ...)
+        // `--port` is the BUNDLE's port; hoisting it into GINA_PORT made
+        // framework:init overwrite the framework socket port in
+        // ~/.gina/<short>/settings.json, so later online commands connected to the
+        // wrong port and reported "[ gina ] not started".
+        var _topic = ( typeof(process.argv[2]) != 'undefined' ) ? process.argv[2] : '';
+        var _isFrameworkScopedCmd = ( _topic.indexOf(':') < 0 || /^framework:/.test(_topic) );
+
         if ( typeof(process.env['gina']) == 'undefined') {
             process.env['gina'] = {}
         }
@@ -90,6 +102,16 @@ function MainHelper(opt) {
             if ( /\-\-/.test(process.argv[a]) && process.argv[a].indexOf('=') > -1 ) {
                 // special cases
                 if (/\-\-(prefix|env|scope|gina-version)/.test(process.argv[a])) {
+                    continue;
+                }
+
+                // #B40 — don't hoist framework-connection flags for sub-topic
+                // commands; keep them in argv for the sub-command's own parser
+                // (e.g. port:set reads --port itself). Framework-scoped commands
+                // still hoist them (so `gina start --port=N` / `framework:set
+                // --port=N` persist to settings.json as intended).
+                if ( !_isFrameworkScopedCmd && /^\-\-(port|mq-port|host-v4|hostname|debug-port|debug_port)=/.test(process.argv[a]) ) {
+                    newArgv[a] = process.argv[a];
                     continue;
                 }
 

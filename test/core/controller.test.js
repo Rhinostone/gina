@@ -3074,3 +3074,133 @@ describe('27 - released-response guards on more synchronous controller APIs (#B3
             /Cannot read properties of null \(reading 'session'\)/);
     });
 });
+
+// 28 — early released-response guard for throwError's 2-arg/3-arg shapes (#B44)
+//
+// #B31 (§22) guarded the throwError header-snapshot tail, which catches the
+// 1-arg `throwError(err)` shape: there `res` stays the truthy err object until
+// it is reassigned to `local.res` at the end of the errorObject build, so the
+// snapshot-tail guard sees the null and no-ops. But the 2-arg
+// `throwError(code, Error|string)` and 3-arg `throwError(local.res, code, msg)`
+// shapes resolve `res` to local.res (null on a released response) BEFORE that
+// build — via the 2-arg shift, or by the caller passing the released local.res
+// (downloadFromURL's async catch). Those then crash on the earlier derefs:
+//   - HTTP/2 bundles → `res.stream` in the protocol branch (the :5440 read);
+//   - every bundle   → `res.error` in the errorObject build (the :5475 read,
+//     which HTTP/1.1 reaches because the :5440 read short-circuits off-h2).
+// Guarding only :5440 (as first proposed) would merely relocate the HTTP/2
+// crash to :5475 and do nothing on HTTP/1.1. The fix is an up-front guard,
+// before any `res` deref, returning false with the same no-op contract.
+// (Measured on the real throwError via the §14 harness: /tmp/b44-probe.js —
+// pre-fix all 2-arg/3-arg released shapes crash at :5475 (http/1.1) / :5440
+// (http/2.0); post-fix every shape no-ops on both protocols.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('28 - throwError early released-response guard on 2-arg/3-arg shapes (#B44)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source structure ----
+
+    it('the #B44 early guard precedes the protocol/stream read and the errorObject build', function() {
+        var fnIdx = src.indexOf('this.throwError = function(res, code, msg)');
+        assert.ok(fnIdx > -1, 'expected the throwError definition');
+
+        var protocolIdx   = src.indexOf('getResponseProtocol(res)', fnIdx);    // the :5439 call
+        var streamIdx     = src.indexOf('test(protocol) && res.stream', fnIdx); // the :5440 read
+        var errorBuildIdx = src.indexOf('res.error || res.message', fnIdx);     // the :5475 build
+        assert.ok(protocolIdx > fnIdx, 'expected the getResponseProtocol(res) call');
+        assert.ok(streamIdx > fnIdx, 'expected the protocol-branch res.stream read');
+        assert.ok(errorBuildIdx > fnIdx, 'expected the errorObject res.error build');
+
+        var b44Idx   = src.indexOf('#B44', fnIdx);
+        assert.ok(b44Idx > fnIdx, 'expected the #B44 guard comment');
+        var guardIdx = src.indexOf('if ( !res ) {', b44Idx);
+        var warnIdx  = src.indexOf('throwError() called after the response was released', b44Idx);
+        var retIdx   = src.indexOf('return false;', guardIdx);
+        assert.ok(guardIdx > b44Idx, 'expected the early `if ( !res )` guard under the #B44 comment');
+        assert.ok(warnIdx > guardIdx, 'the early guard warns on the late error');
+        assert.ok(retIdx > warnIdx, 'the early guard returns false after warning');
+
+        // the whole guard sits BEFORE every res deref
+        assert.ok(guardIdx < protocolIdx,   'guard must precede getResponseProtocol(res)');
+        assert.ok(retIdx   < protocolIdx,   'guard must return before getResponseProtocol(res)');
+        assert.ok(guardIdx < streamIdx,     'guard must precede the :5440 res.stream read');
+        assert.ok(guardIdx < errorBuildIdx, 'guard must precede the :5475 res.error build');
+    });
+
+    it('the #B31 snapshot-tail guard is left intact (1-arg shape still covered there)', function() {
+        // §22 covers the snapshot-tail guard; assert #B44 did not remove it.
+        assert.match(src, /if \( !res \) \{\s*res = local\.res;/,
+            'the #B31 `if ( !res ) { res = local.res; }` fallback must remain');
+    });
+
+    // ---- pure logic: replica of the throwError prologue (shift → guard → derefs) ----
+
+    // Mirrors throwError from the 2-arg shift through the first `res` derefs:
+    // the protocol-branch read (:5440 res.stream) and the errorObject build
+    // (:5475 res.error). `protocol` is the value getResponseProtocol returns on
+    // a released response — the configured bundle protocol (local.req is null).
+    function prologue(args, localRes, protocol, withGuard) {
+        var res = args[0], code = args[1], msg = args[2];
+        // 2-arg shift (statusCode, Error|string)
+        if ( typeof(res) == 'number' && args.length === 2 &&
+             (args[1] instanceof Error || typeof(args[1]) == 'string') ) {
+            msg = args[1]; code = res; res = localRes;
+        }
+        if ( withGuard && !res ) { return false; }                                   // #B44 early guard
+        var stream = ( /http\/2/.test(protocol) && res.stream ) ? res.stream : null; // :5440
+        var errorObject = { status: code, error: res.error || res.message || 'def' };// :5475
+        return errorObject;
+    }
+
+    // For 2-arg shapes `res` comes from the shift (= localRes); for the 3-arg
+    // shape `res` is the first arg, so it must carry the live/released value.
+    function argsFor(shape, res) {
+        if (shape === '2arg-Error')  return [500, new Error('boom')];
+        if (shape === '2arg-string') return [500, 'boom'];
+        return [res, 500, new Error('boom')]; // 3arg-Error: res is the first arg (downloadFromURL passes local.res)
+    }
+    var SHAPES    = ['2arg-Error', '2arg-string', '3arg-Error'];
+    var PROTOCOLS = ['http/1.1', 'http/2.0'];
+
+    it('released response: the guarded prologue returns false (no throw) for every shape/protocol', function() {
+        SHAPES.forEach(function(shape) {
+            PROTOCOLS.forEach(function(proto) {
+                assert.strictEqual(
+                    prologue(argsFor(shape, null), null, proto, true), false,
+                    shape + ' (' + proto + ') released must no-op'
+                );
+            });
+        });
+    });
+
+    it('live response: the guarded prologue still builds the errorObject (behaviour unchanged)', function() {
+        var live = {}; // a live response object: no .stream / .error / .message
+        SHAPES.forEach(function(shape) {
+            PROTOCOLS.forEach(function(proto) {
+                var out = prologue(argsFor(shape, live), live, proto, true);
+                assert.ok(out && out.status === 500,
+                    shape + ' (' + proto + ') live must still build the errorObject');
+            });
+        });
+    });
+
+    it('subtract: the unguarded prologue throws the exact field TypeError per protocol', function() {
+        // HTTP/2 → the :5440 res.stream read fires first
+        assert.throws(function() { prologue([500, new Error('x')], null, 'http/2.0', false); },
+            /Cannot read properties of null \(reading 'stream'\)/,
+            '2-arg on http/2.0 must crash at the res.stream read');
+        // HTTP/1.1 → :5440 short-circuits off-h2, so the :5475 res.error read fires
+        assert.throws(function() { prologue([500, new Error('x')], null, 'http/1.1', false); },
+            /Cannot read properties of null \(reading 'error'\)/,
+            '2-arg on http/1.1 must crash at the res.error build');
+        // 3-arg released (passed null res) — same two sites
+        assert.throws(function() { prologue([null, 500, new Error('x')], null, 'http/2.0', false); },
+            /Cannot read properties of null \(reading 'stream'\)/,
+            '3-arg on http/2.0 must crash at the res.stream read');
+        assert.throws(function() { prologue([null, 500, new Error('x')], null, 'http/1.1', false); },
+            /Cannot read properties of null \(reading 'error'\)/,
+            '3-arg on http/1.1 must crash at the res.error build');
+    });
+});
