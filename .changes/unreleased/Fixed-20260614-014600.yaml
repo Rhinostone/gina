@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed sub-topic CLI commands (e.g. `gina port:set`, `gina bundle:start`) that were passed `--port` overwriting the framework socket port in `~/.gina/<short>/settings.json` with the bundle port. The corrupted framework port made later online commands fail with "[ gina ] not started" and prevented the bundle from binding its port. The framework-connection flags (`--port`, `--mq-port`, `--host-v4`, `--hostname`, `--debug-port`) are now applied as framework settings only for framework-scoped commands (`gina start`/`stop`/`restart`, `framework:*`); for any other command they are left for that command to interpret.'
+time: 2026-06-14T01:46:00+0100

@@ -83,38 +83,53 @@ async function onExec() {
         // catching debug|inspect arg
         //process.stdout.write('params '+ params.join(', ') + '\n');
 
+        // #B40 — Framework-connection params (--port, --mq-port, --host-v4,
+        // --hostname, --debug-port) are FRAMEWORK settings. Only hoist them into
+        // GINA_* (and persist them to ~/.gina/<short>/settings.json via
+        // isUpdateRequired) for framework-scoped commands: bare commands
+        // (`start`/`stop`/`restart`/`status`/... — prefixed to `framework:*` below)
+        // and explicit `framework:*` commands. For a sub-topic command
+        // (`port:set <bundle> --port=N`, `bundle:start <bundle> --port=N`, ...)
+        // `--port` is the BUNDLE's port, NOT the framework socket port; hoisting it
+        // overwrote settings.json `port` (8124 -> bundle port), so every later
+        // online command connected to the wrong framework port and reported
+        // "[ gina ] not started". The `--inspect`/`--debug` splice below stays
+        // unconditional — `bundle:start ... --inspect=<port>` relies on it.
+        var _topic = process.argv[2] || '';
+        var isFrameworkScopedCmd = ( _topic.indexOf(':') < 0 || /^framework:/.test(_topic) );
+
         if ( params.length > 0 ) {
             for (let p = 0, len = params.length; p < len; ++p) {
 
-                if ( /^\-\-port/.test(params[p]) ) {
+                if ( isFrameworkScopedCmd && /^\-\-port/.test(params[p]) ) {
                     let port = params[p].split(/\=/)[1];
                     setEnvVar('GINA_PORT', ~~port);// jshint ignore:line
                     isUpdateRequired = true;
                     continue;
                 }
 
-                if ( /^\-\-mq\-port/.test(params[p]) ) {
+                if ( isFrameworkScopedCmd && /^\-\-mq\-port/.test(params[p]) ) {
                     let mqPort = params[p].split(/\=/)[1];
                     setEnvVar('GINA_MQ_PORT', ~~mqPort);// jshint ignore:line
                     isUpdateRequired = true;
                     continue;
                 }
 
-                if ( /^\-\-host\-v4/.test(params[p]) ) {
+                if ( isFrameworkScopedCmd && /^\-\-host\-v4/.test(params[p]) ) {
                     let host = params[p].split(/\=/)[1];
                     setEnvVar('GINA_HOST_V4', host);// jshint ignore:line
                     isUpdateRequired = true;
                     continue;
                 }
 
-                if ( /^\-\-hostname/.test(params[p]) ) {
+                if ( isFrameworkScopedCmd && /^\-\-hostname/.test(params[p]) ) {
                     hostname = params[p].split(/\=/)[1];
                     setEnvVar('GINA_HOSTNAME', hostname);// jshint ignore:line
                     isUpdateRequired = true;
                     continue;
                 }
 
-                if ( /^\-\-debug(\_|\-)port/.test(params[p]) ) {
+                if ( isFrameworkScopedCmd && /^\-\-debug(\_|\-)port/.test(params[p]) ) {
                     let port = params[p].split(/\=/)[1];
                     setEnvVar('GINA_DEBUG_PORT', ~~port);// jshint ignore:line
                     isUpdateRequired = true;
