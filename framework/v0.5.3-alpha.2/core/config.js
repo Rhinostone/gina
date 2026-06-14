@@ -2795,6 +2795,15 @@ function Config(opt, contextResetNeeded) {
         try {
             secrets.resolve(self.envConf[bundle][env]);
         } catch (secretErr) {
+            // #B42 — name the failing secret + config path at debug level so
+            // operators can locate it. The user-facing message intentionally
+            // omits the key (lib/secrets/backends/env.js); the key rides on the
+            // non-enumerable `_ginaSecretKey` and is surfaced here only.
+            console.debug(
+                '[CONFIG][loadBundleConfig] Secret resolution failed for `'
+                + (secretErr._ginaSecretKey || '<unknown>')
+                + '` in `'+ bundle +'/'+ env +':'+ scope +'` configuration'
+            );
             return callback(secretErr);
         }
 
