@@ -34,12 +34,17 @@
  *      are the sanctioned re-target form.
  *
  *   2. ABORT — a done (✅) row references a version NEWER than the one
- *      being released. A feature cannot have shipped in a version that
- *      does not exist yet; this catches target-version labels left on
- *      rows that were flipped to ✅ before the cut. Only tokens sharing
- *      the released version's MAJOR are compared, so dependency
- *      versions in prose (e.g. a `2.x` template-engine floor or a
- *      two-digit uuid major) cannot false-positive.
+ *      being released AND newer than the latest version the timeline
+ *      records as shipped. A feature cannot have shipped in a version
+ *      that does not exist yet; this catches target-version labels left
+ *      on rows that were flipped to ✅ before the cut. The comparison is
+ *      floored at the latest shipped stable (see `latestTimelineStable`)
+ *      so a hotfix / out-of-order cut of an OLDER line is not falsely
+ *      blocked by the (already-shipped) newer versions it legitimately
+ *      references. Only tokens sharing the released version's MAJOR are
+ *      compared, so dependency versions in prose (e.g. a `2.x`
+ *      template-engine floor or a two-digit uuid major) cannot
+ *      false-positive.
  *
  *   3. WARN — no timeline row marks the released version ✅
  *      (`` `X.Y.Z` ✅ ``). The timeline is coarse narrative, so this is
@@ -134,6 +139,34 @@ function compareVersions(a, b) {
 }
 
 /**
+ * The highest STABLE version a timeline row marks as shipped
+ * (`` `X.Y.Z` ✅ ``) — the roadmap's own record of "newest released".
+ * Used to floor rule 2 so a hotfix / out-of-order cut of an older line
+ * is not falsely flagged for the (already-shipped) newer versions it
+ * legitimately references. Deliberately matches ONLY the timeline form
+ * (version token immediately followed by ✅); status rows put the ✅
+ * marker in the FIRST cell, before the version, so they never match
+ * here, and `-alpha` marks are ignored (the timeline records stables).
+ *
+ * @param {string} content  full ROADMAP.md content
+ * @returns {string|null} the highest shipped stable version, or null if none
+ * @example
+ * latestTimelineStable('| **Q2** | `0.5.2` ✅ | x |\n| **Q1** | `0.5.0` ✅ | y |'); // '0.5.2'
+ * latestTimelineStable('| ✅ | feature | `0.5.0` | 2026-06-11 |');                  // null
+ */
+function latestTimelineStable(content) {
+    var re = /`(\d+\.\d+\.\d+)`\s*✅/g;
+    var best = null;
+    var m;
+    while ((m = re.exec(String(content || ''))) !== null) {
+        if (best === null || compareVersions(m[1], best) > 0) {
+            best = m[1];
+        }
+    }
+    return best;
+}
+
+/**
  * Parse the roadmap content into status rows.
  *
  * @param {string} content  full ROADMAP.md content
@@ -173,6 +206,21 @@ function check(opts) {
     var warnings = [];
     var targetMajor = Number(String(version).split('.')[0]);
 
+    // Rule 2 baseline. A ✅ row may legitimately reference a version NEWER than
+    // the one being released when that version has ALREADY shipped — i.e. a
+    // hotfix / out-of-order cut of an older line, while a newer minor is already
+    // out. Floor the "future" comparison at the latest version the timeline
+    // records as shipped, so only versions newer than BOTH the target AND the
+    // latest release count as "does not exist yet". For a normal forward cut
+    // (target at or above everything shipped) the baseline collapses to the
+    // target and behaviour is unchanged. (Residual: a bogus ✅ row whose version
+    // is ALSO bogusly timeline-marked shipped escapes — a two-mistake case far
+    // narrower than the single jumped-ahead-label drift rule 2 targets.)
+    var latestStable = latestTimelineStable(content);
+    var futureBaseline = (latestStable && compareVersions(latestStable, version) > 0)
+        ? latestStable
+        : version;
+
     var rows = parseStatusRows(content);
     for (var i = 0; i < rows.length; i++) {
         var row = rows[i];
@@ -188,7 +236,7 @@ function check(opts) {
             }
             if (row.status === '✅'
                 && Number(token.split('.')[0]) === targetMajor
-                && compareVersions(token, version) > 0
+                && compareVersions(token, futureBaseline) > 0
             ) {
                 failures.push({
                     rule: 'done-row-references-future-version',
@@ -279,6 +327,7 @@ function main() {
 module.exports = {
     extractVersionTokens: extractVersionTokens,
     compareVersions: compareVersions,
+    latestTimelineStable: latestTimelineStable,
     parseStatusRows: parseStatusRows,
     check: check,
     isAlphaPublish: isAlphaPublish,
