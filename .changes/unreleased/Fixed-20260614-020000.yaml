@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Hardened the framework command socket against a malformed or fragmented payload. The socket handler parsed each incoming TCP chunk as JSON directly, so a partial, empty, or non-JSON payload threw an uncaught exception that dropped the command (and could trigger a framework shutdown). Incoming command data is now accumulated per connection and parsed only once the payload is complete; a payload that is valid JSON but not the expected argument array is ignored instead of crashing.'
-time: 2026-06-14T02:00:00+0100

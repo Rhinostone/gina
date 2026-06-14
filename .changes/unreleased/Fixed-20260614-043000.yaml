@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Hardened the HTML render delegates (swig and nunjucks, including their async variants) against being invoked after the response was already released. A controller that renders again after a terminal exit — for example an action that fires several parallel self.query() calls and renders a degraded response from the first failure callback, then renders again from a later callback — no longer emits a framework-level unhandled promise rejection; the render delegates now no-op on a released response, matching renderJSON and the streaming delegate.'
-time: 2026-06-14T04:30:00+0100

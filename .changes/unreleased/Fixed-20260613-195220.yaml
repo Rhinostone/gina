@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Hardened the storage plugin''s record `_id` generation against same-millisecond collisions by widening the random suffix to 16 base-62 characters, matching the collection ID convention.'
-time: 2026-06-13T19:52:20.429601+01:00

@@ -1,3 +1,0 @@
-kind: Added
-body: '`gina port:set --force` reassigns a port already held by another bundle (the prior holder is evicted from both port maps); without `--force`, an in-use port is still rejected as before. Enables deterministic per-bundle port pinning for one-bundle-per-container deployments.'
-time: 2026-06-14T00:08:04+0100

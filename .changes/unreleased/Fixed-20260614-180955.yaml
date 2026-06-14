@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The five ~/.gina state files (main.json, projects.json, settings.json, env.json, locals.json) are now written atomically via a temp file plus rename, so a concurrent boot of many bundles or containers against the same home directory can no longer read a partially-written file and crash on startup.'
-time: 2026-06-14T18:09:55.580579+01:00
