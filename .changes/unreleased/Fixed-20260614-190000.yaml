@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A late `self.throwError(statusCode, error)` call — fired after the response was already sent or released (for example from an async callback that resumes after a redirect) — no longer crashes the bundle. Only the single-argument `throwError(err)` form was previously guarded; the two- and three-argument forms resolved the response reference earlier and could dereference it (on HTTP/2 bundles, or while building the error payload on any bundle) before reaching that guard. These late calls are now logged and ignored, like the single-argument form.'
+time: 2026-06-14T19:00:00+0100

@@ -5409,7 +5409,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Late calls: when throwError fires after a response terminal exit has
      * already released the per-request refs (`local.res` is null — e.g. an
      * entity/query callback resuming after a redirect() sent its 301), the
-     * call is logged and ignored instead of crashing the bundle (#B31).
+     * call is logged and ignored instead of crashing the bundle. This holds
+     * for every call shape: the 1-arg `throwError(err)` form is caught by the
+     * guard after the errorObject build (#B31), and the 2-arg/3-arg forms —
+     * whose `res` is already the released `local.res` before that build — are
+     * caught by an up-front guard so the HTTP/2 `res.stream` and the
+     * errorObject-build `res.error` reads can't deref null first (#B44).
      *
      * @param {object} [ res ]
      * @param {number} code
@@ -5434,6 +5439,32 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             msg  = arguments[1];
             code = res;
             res  = local.res;
+        }
+
+        // #B44 — for the 2-arg `throwError(code, Error|string)` and 3-arg
+        // `throwError(local.res, code, msg)` shapes, `res` is already `local.res`
+        // here (set by the shift above, or passed by the caller) — which is null
+        // when a terminal exit has released the response. The reads below all
+        // deref `res` BEFORE the #B31 guard further down: `res.stream` in the
+        // protocol branch (HTTP/2 bundles crash there) and `res.error` /
+        // `res.stack` / `res.message` / `res.fallback` in the errorObject build
+        // (every bundle crashes there). So a released response would crash
+        // (uncaughtException → SIGTERM) instead of being ignored. Bail up-front
+        // with the same no-op contract as the #B31 guard. The 1-arg shapes keep
+        // a truthy `res` (the Error/errorObj) here, so they are unaffected and
+        // still reach the #B31 guard after `res` is reassigned to `local.res` at
+        // the end of the errorObject build.
+        if ( !res ) {
+            self.isProcessingError = true;
+            var _b44LateError = msg || code;
+            var _b44LateErrorStr = '';
+            try {
+                _b44LateErrorStr = ( _b44LateError && typeof(_b44LateError) == 'object' ) ? JSON.stringify(_b44LateError) : String(_b44LateError || '');
+            } catch (_b44JsonErr) {
+                _b44LateErrorStr = String(_b44LateError);
+            }
+            console.warn('[ Controller ] throwError() called after the response was released — ignoring late error: '+ _b44LateErrorStr);
+            return false;
         }
 
         var protocol        = getResponseProtocol(res);
