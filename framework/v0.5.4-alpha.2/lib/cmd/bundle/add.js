@@ -20,6 +20,7 @@ var scan        = require('../port/inc/scan');
  * Usage:
  *  gina bundle:add <bundle_name> @<project_name>
  *  gina bundle:add <bundle_name> @<project_name> --start-port-from=<port_number>
+ *  gina bundle:add <bundle_name> @<project_name> --ignore-ports=<port[,port...]>
  *  gina bundle:add <bundle_name> @<project_name> --scope=<scope> --env=<env>
  *
  * @class Add
@@ -35,7 +36,9 @@ function Add(opt, cmd) {
 
     var self    = {
             // --start-port-from
-            startFrom: null
+            startFrom: null,
+            // --ignore-ports — extra ports to exclude from the availability scan
+            ignorePorts: []
         }
         , local     = {
             // bundle index while searching or browsing
@@ -76,6 +79,30 @@ function Add(opt, cmd) {
                     break;
                 }
                 self.startFrom = port
+            }
+
+            if ( /^\-\-ignore\-ports\=/.test(process.argv[i]) ) {
+                let raw = process.argv[i].substring(process.argv[i].indexOf('=') + 1);
+                let entries = raw.split(/,/);
+                for (let e = 0, eLen = entries.length; e < eLen; e++) {
+                    let p = entries[e].trim();
+                    // tolerate empty tokens from trailing/duplicate commas (e.g. 3000,,3001,)
+                    if ( p === '' ) {
+                        continue;
+                    }
+                    if ( /[^0-9]+/.test(p) ) {
+                        portErr = new Error('--ignore-ports must be a comma-separated list of integers');
+                        break;
+                    }
+                    // keep as STRING — scan.js compares opt.ignore.indexOf(''+port)
+                    // and getPortsList() likewise stores string ports
+                    if ( self.ignorePorts.indexOf(p) < 0 ) {
+                        self.ignorePorts.push(p)
+                    }
+                }
+                if (portErr) {
+                    break;
+                }
             }
         }
 
@@ -145,8 +172,17 @@ function Add(opt, cmd) {
             local.envFileSaved  = false;
 
             // find available port
+            // merge the user-supplied --ignore-ports into the already-assigned
+            // ports so the scan skips both (strings, matching scan.js's
+            // opt.ignore.indexOf(''+port) and getPortsList()'s string ports)
+            var ignoreList = getPortsList();
+            for (let ig = 0, igLen = self.ignorePorts.length; ig < igLen; ig++) {
+                if ( ignoreList.indexOf(self.ignorePorts[ig]) < 0 ) {
+                    ignoreList.push(self.ignorePorts[ig])
+                }
+            }
             options = {
-                ignore      : getPortsList(),
+                ignore      : ignoreList,
                 limit       : getBundleScanLimit(bundle),
                 startFrom   : self.startFrom
             };

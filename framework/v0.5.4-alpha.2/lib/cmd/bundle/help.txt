@@ -12,7 +12,21 @@
 
     $ gina bundle:add <bundle_name> @<project_name>
     Or
-    $ gina bundle:add <bundle_name> @<project_name> --start-port-from<port_number>
+    $ gina bundle:add <bundle_name> @<project_name> --start-port-from=<port_number>
+
+
+    Excluding specific ports from the scan
+    ----------
+    By default, ports already assigned to the project's bundles (and the
+    reserved 4100-4199 range) are skipped automatically. To also skip a list
+    of specific ports while scanning, pass --ignore-ports with a comma-separated
+    list of port numbers:
+
+    $ gina bundle:add <bundle_name> @<project_name> --ignore-ports=3000,3001,8080
+
+    Combine with --start-port-from to move the scan window and skip ports:
+
+    $ gina bundle:add <bundle_name> @<project_name> --start-port-from=4200 --ignore-ports=4250,4300
 
 
     Adding multiple

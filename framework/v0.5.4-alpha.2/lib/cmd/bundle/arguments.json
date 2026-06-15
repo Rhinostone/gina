@@ -5,6 +5,7 @@
   "--import",
   "--replace",
   "--start-port-from",
+  "--ignore-ports",
   "--gina-version",
   "--output",
   "--timeout-ms",

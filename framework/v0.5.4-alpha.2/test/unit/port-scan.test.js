@@ -181,3 +181,23 @@ test('ports in the ignore list are never returned', (t, done) => {
         done();
     });
 });
+
+test('scan skips a non-consecutive multi-port ignore list', (t, done) => {
+    // Mirrors the --ignore-ports use case: a scattered list of ports to skip.
+    // Ignore start, start+2, start+3 (start+1 is free between them).
+    const start  = 44200;
+    const ignore = [String(start), String(start + 2), String(start + 3)];
+    const restore = mockSocket(() => false); // all ports free
+
+    // Collect 3 ports: the first free one is start+1, and none of the
+    // collected ports may appear in the ignore list.
+    scan({ start, ignore, limit: 3 }, (err, ports) => {
+        restore();
+        assert.ok(!err, String(err));
+        assert.equal(ports[0], start + 1, 'first free non-ignored port');
+        for (const p of ports) {
+            assert.equal(ignore.indexOf(String(p)), -1, `port ${p} should have been skipped`);
+        }
+        done();
+    });
+});
