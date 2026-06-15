@@ -1504,8 +1504,23 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             }
 
             // test if val is strictly a float
-            if ( Number(val) === val && val % 1 !== 0 ) {
-                this.value = local.data[this.name] = Number(val);
+            // #B46 (2026-06-15) — accept STRING floats, not only real JS numbers.
+            // The old gate `Number(val) === val` is true only for a real number,
+            // so a string "1.5" (browser .value and urlencoded bodies are ALWAYS
+            // strings) was rejected server-side. Coerce to Number first, then
+            // require a finite value with a fractional part. Whole numbers ("2", 2)
+            // still fail (no fractional part), preserving isFloat's contract that
+            // an integer is not a float.
+            // was:
+            // if ( Number(val) === val && val % 1 !== 0 ) {
+            //     this.value = local.data[this.name] = Number(val);
+            //     isValid = true
+            // } else {
+            //     isValid = false
+            // }
+            var floatVal = Number(val);
+            if ( Number.isFinite(floatVal) && floatVal % 1 !== 0 ) {
+                this.value = local.data[this.name] = floatVal;
                 isValid = true
             } else {
                 isValid = false

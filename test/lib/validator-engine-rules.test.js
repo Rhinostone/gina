@@ -29,9 +29,9 @@
  * CHARACTERIZATION NOTE: several assertions below lock behavior that is
  * surprising but CURRENT, e.g.
  *   - `isString` accepts a non-string value when the field is not required;
- *   - `isFloat` rejects the STRING "1.5" because it compares `Number(val) === val`
- *     strictly — only a real JS number passes (string floats need `toFloat()`,
- *     which is browser-coupled);
+ *   - `isFloat` accepts a STRING "1.5" by coercing via `Number()` (#B46, fixed
+ *     2026-06-15) — a whole number still fails (no fractional part); previously
+ *     the strict `Number(val) === val` gate rejected every string;
  *   - `isInteger` treats "" as the integer 0;
  *   - `isDate` reliably handles only the ISO `yyyy-mm-dd` mask — a non-ISO slash
  *     mask (`dd/mm/yyyy`) with day > 12 misparses via `new Date()` (see § 09).
@@ -188,11 +188,12 @@ describe('06 - isFloat', function () {
 
     it('accepts a real float number', function () { ok(vf('n', 1.5).isFloat()); });
 
-    it('CHARACTERIZATION: rejects the STRING "1.5" (strict Number(val) === val)', function () {
-        // isFloat compares `Number(val) === val`; for a string that is always
-        // false, so only a real JS number passes. String floats need toFloat()
-        // first (browser-coupled). Locking the current behavior.
-        ko(vf('n', '1.5').isFloat(), 'isFloat');
+    it('accepts the STRING "1.5" (coerces via Number; #B46)', function () {
+        // #B46 (2026-06-15): isFloat now coerces with Number() before testing
+        // finiteness + a fractional part, so a string float validates server-side
+        // (browser .value + urlencoded bodies are always strings). Previously the
+        // strict `Number(val) === val` gate rejected every string value.
+        ok(vf('n', '1.5').isFloat());
     });
 
     it('rejects an integer value (isFloat requires a fractional part)', function () {
