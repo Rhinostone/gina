@@ -33,8 +33,9 @@
  *     2026-06-15) — a whole number still fails (no fractional part); previously
  *     the strict `Number(val) === val` gate rejected every string;
  *   - `isInteger` treats "" as the integer 0;
- *   - `isDate` reliably handles only the ISO `yyyy-mm-dd` mask — a non-ISO slash
- *     mask (`dd/mm/yyyy`) with day > 12 misparses via `new Date()` (see § 09).
+ *   - `isDate` builds the Date from explicit numeric components + a round-trip
+ *     range check (#B47, fixed 2026-06-15), so non-ISO slash masks validate and
+ *     out-of-range dates (e.g. 2023-02-30) still reject (see § 09).
  * These are golden/characterization tests: a future change to any of them breaks
  * the matching test, prompting a deliberate confirm-or-fix. That is the point.
  */
@@ -266,13 +267,22 @@ describe('09 - isDate', function () {
         ok(f);
     });
 
-    it('CHARACTERIZATION / KNOWN LIMITATION: a non-ISO slash mask with day>12 misparses', function () {
-        // isDate rebuilds the date string FROM THE MASK (keeping its separators),
-        // form-validator.js:1736-1745: 'dd/mm/yyyy' + '15/06/2023' → '15/06/2023',
-        // which new Date() parses as US MM/DD → month 15 → Invalid Date.
-        // So isDate is reliable only with the default ISO mask. Locked to flag
-        // the limitation; fixing it would deliberately break this test.
-        ko(vf('dt', '15/06/2023').isDate('dd/mm/yyyy'), 'isDate');
+    it('accepts a non-ISO slash mask (dd/mm/yyyy) with day>12 (#B47)', function () {
+        // #B47 (2026-06-15): isDate now builds the Date from explicit numeric
+        // components identified by the mask tokens (y*/m*/d*) plus a round-trip
+        // range check, so a non-ISO slash mask validates. (isDate returns the
+        // parsed Date on its valid path — deferred #B48 — so capture the field
+        // and assert on it, per the §09 NOTE above.)
+        var f = vf('dt', '15/06/2023');
+        f.isDate('dd/mm/yyyy');
+        ok(f);
+    });
+
+    it('still rejects an impossible day in a non-ISO mask (2023-02-30) — round-trip check (#B47)', function () {
+        // The component build alone would roll Feb 30 over to Mar 2; the
+        // round-trip check (constructed components must equal the inputs) keeps
+        // it rejected.
+        ko(vf('dt', '30/02/2023').isDate('dd/mm/yyyy'), 'isDate');
     });
 });
 

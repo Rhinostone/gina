@@ -1742,22 +1742,60 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                     throw new Error('[FormValidator::isDate] Provided mask not allowed: `'+ mask +'`');
                 }
 
+                // #B47 (2026-06-15) — build the Date from explicit numeric
+                // components identified by the mask tokens (y*/m*/d*), then
+                // range-check via a round-trip. The old path rebuilt the string
+                // FROM THE MASK (keeping its separators) and handed it to
+                // `new Date(str)`, which parses a slash mask (e.g. "15/06/2023")
+                // as US MM/DD -> month 15 -> Invalid Date, so any non-ISO mask
+                // with day>12 (or non-US field order) was wrongly rejected. A
+                // naive `new Date(y, m-1, d)` is not enough either: JS rolls
+                // invalid components over (new Date(2023,12,45) is a valid date),
+                // so the round-trip check (constructed components must equal the
+                // inputs) is what still rejects e.g. 2023-13-45 and 2023-02-30.
+                // was:
+                // try {
+                //     val = val.match(/[^\/\- ]+/g);
+                //     var dic = {}, d, len;
+                //     for (d=0, len=m.length; d<len; ++d) { dic[m[d]] = val[d] }
+                //     var formatedDate = mask;
+                //     for (var v in dic) { formatedDate = formatedDate.replace(new RegExp(v, "g"), dic[v]) }
+                // } catch (err) { throw new Error('...Provided value not allowed...'); }
+                // date = this.value = local.data[this.name] = new Date(formatedDate);
+                var dic = {}, d, len, parts = null,
+                    yNum = NaN, moNum = NaN, dNum = NaN;
                 try {
-                    val = val.match(/[^\/\- ]+/g);
-                    var dic = {}, d, len;
-                    for (d=0, len=m.length; d<len; ++d) {
-                        dic[m[d]] = val[d]
-                    }
-                    var formatedDate = mask;
-                    for (var v in dic) {
-                        formatedDate = formatedDate.replace(new RegExp(v, "g"), dic[v])
+                    parts = val.match(/[^\/\- ]+/g);
+                    for (d = 0, len = m.length; d < len; ++d) {
+                        dic[m[d]] = parts[d];
                     }
                 } catch (err) {
                     throw new Error('[FormValidator::isDate] Provided value not allowed: `'+ val +'`' + err);
                 }
 
+                for (var tok in dic) {
+                    if ( /y/i.test(tok) )      { yNum  = parseInt(dic[tok], 10); }
+                    else if ( /m/i.test(tok) ) { moNum = parseInt(dic[tok], 10); }
+                    else if ( /d/i.test(tok) ) { dNum  = parseInt(dic[tok], 10); }
+                }
 
-                date = this.value = local.data[this.name] = new Date(formatedDate);
+                if (
+                    !Number.isFinite(yNum) || !Number.isFinite(moNum) || !Number.isFinite(dNum)
+                    || moNum < 1 || moNum > 12 || dNum < 1 || dNum > 31
+                ) {
+                    date = this.value = local.data[this.name] = new Date(NaN);
+                } else {
+                    date = new Date(yNum, moNum - 1, dNum);
+                    // reject rolled-over components (e.g. Feb 30 -> Mar 2)
+                    if (
+                        date.getFullYear() !== yNum
+                        || date.getMonth() !== (moNum - 1)
+                        || date.getDate() !== dNum
+                    ) {
+                        date = new Date(NaN);
+                    }
+                    this.value = local.data[this.name] = date;
+                }
 
                 if ( /Invalid Date/i.test(date) || date instanceof Date === false ) {
                     if ( !errors['isRequired'] && this.value == '' ) {
