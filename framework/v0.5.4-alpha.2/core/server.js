@@ -3400,7 +3400,16 @@ function Server(options) {
                         return throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
                     }
 
-                    var uploadDir = opt.uploadDir || os.tmpdir();
+                    // #B49 (2026-06-16) — honour the configured upload directory.
+                    // was: var uploadDir = opt.uploadDir || os.tmpdir();
+                    // The old line read only `opt.uploadDir`, a key the shipped settings.json
+                    // never sets (it defines `upload.tmpPath`, and nothing maps tmpPath→uploadDir),
+                    // so every upload fell back to os.tmpdir() and the documented `upload.tmpPath`
+                    // / per-group `path` keys were dead. `tmpPath` resolves to an absolute dir at
+                    // config-load (via whisper → <project>/tmp, created at boot), so prefer it;
+                    // `uploadDir` is kept first for back-compat (any operator who set it). A
+                    // per-group `path` overrides this global default at the write site below.
+                    var uploadDir = opt.uploadDir || opt.tmpPath || os.tmpdir();
 
                     /**
                      * str2ab
@@ -3578,8 +3587,22 @@ function Server(options) {
                         // TODO - https://github.com/TooTallNate/node-wav
                         //file._mimetype = mimetype;
 
+                        // #B49 (2026-06-16) — per-group `path` overrides the global uploadDir;
+                        // fall back to the global dir when the group declares no path. The
+                        // configured defaults resolve to dirs that exist (os.tmpdir() always;
+                        // <project>/tmp is created at boot), but a CUSTOM dir may not exist yet —
+                        // and the writeStream 'error' handler is only attached later, in the
+                        // busboy 'finish' loop, so a missing dir would emit an unhandled ENOENT
+                        // here (during streaming) and crash the bundle. mkdir-if-missing guards it.
+                        var fileUploadDir = ( opt.groups[fileGroup] && opt.groups[fileGroup].path )
+                            ? opt.groups[fileGroup].path
+                            : uploadDir;
+                        if ( !fs.existsSync(fileUploadDir) ) {
+                            fs.mkdirSync(fileUploadDir, { recursive: true });
+                        }
+
                         // creating file
-                        writeStreams[index] = fs.createWriteStream( _(uploadDir + '/' + filename) );
+                        writeStreams[index] = fs.createWriteStream( _(fileUploadDir + '/' + filename) );
                         var liner = new require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {
@@ -3606,7 +3629,9 @@ function Server(options) {
                             //fileObj = Buffer.from(str2ab(this._dataChunk));
                             //delete this._dataChunk;
 
-                            tmpFilename = _(uploadDir + '/' + filename);
+                            // #B49 — mirror the per-group / configured dir chosen at the write site
+                            // above (file.on('end') closes over the same per-file fileUploadDir).
+                            tmpFilename = _(fileUploadDir + '/' + filename);
 
                             request.files.push({
                                 name: fieldname,
