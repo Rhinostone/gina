@@ -83,7 +83,7 @@
       "untagged": {
         "path": "${tmpPath}",
         "allowedExtensions": "*", // or [ "jpg", "jpeg", "png", "svg" ]
-        "isMultipleAllowed": false
+        "isMultipleAllowed": true // #B50 — untagged is the permissive default (now enforced); set false to require single-file
         // optional sample
         // ,
         // "filePrefix": "$designId_",

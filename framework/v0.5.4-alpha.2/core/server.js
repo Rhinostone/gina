@@ -3504,35 +3504,74 @@ function Server(options) {
                         file._dataLen = 0;
                         ++fileCount;
 
-                        if (
-                            typeof(group) != 'undefined'
-                            && group != 'untagged'
-                            && typeof(opt.groups[group]) != 'undefined'
-                        ) {
-                            // allowed extensions
-                            if ( typeof(opt.groups[group].allowedExtensions) != 'undefined'
-                                && opt.groups[group].allowedExtensions != '*'
-                            ) {
-                                var ext     = opt.groups[group].allowedExtensions;
-                                var fileExt = filename.substring(filename.lastIndexOf('.')+1)
-                                if ( !Array.isArray(ext) ) {
-                                    ext = [ext]
-                                }
+                        // #B50 (2026-06-16) — every uploaded file must map to a CONFIGURED upload group.
+                        // The old gate (commented below) ran the ext + count checks ONLY for a group that was
+                        // defined, NOT `untagged`, AND present in opt.groups; every other case — no group,
+                        // `untagged`, or an unknown group name — streamed through UNCHECKED, so a client could
+                        // bypass a group's allow-list simply by tagging a file with any unconfigured group.
+                        // Now: a file with no group falls back to the default `untagged`; a group not declared
+                        // in settings.json `upload.groups` is rejected (400); and `untagged` is no longer
+                        // hardcode-exempt — it obeys its own allowedExtensions / isMultipleAllowed like any
+                        // other group (the shipped default is `*` + isMultipleAllowed:true, so single- and
+                        // multi-file untagged uploads are unaffected).
+                        //
+                        // if (
+                        //     typeof(group) != 'undefined'
+                        //     && group != 'untagged'
+                        //     && typeof(opt.groups[group]) != 'undefined'
+                        // ) {
+                        //     // allowed extensions
+                        //     if ( typeof(opt.groups[group].allowedExtensions) != 'undefined'
+                        //         && opt.groups[group].allowedExtensions != '*'
+                        //     ) {
+                        //         var ext     = opt.groups[group].allowedExtensions;
+                        //         var fileExt = filename.substring(filename.lastIndexOf('.')+1)
+                        //         if ( !Array.isArray(ext) ) { ext = [ext] }
+                        //         if ( ext.indexOf(fileExt) < 0 ) {
+                        //             throwError(response, 400, '`'+ fileExt +'` is not an allowed extension. See `'+ group +'` upload group definition.');
+                        //             return false;
+                        //         }
+                        //     }
+                        //     // multiple or single
+                        //     if ( typeof(opt.groups[group].isMultipleAllowed) != 'undefined'
+                        //         && !opt.groups[group].isMultipleAllowed
+                        //         && fileCount > 1
+                        //     ) {
+                        //         throwError(response, 400, 'multiple uploads not allowed. See `'+ group +'` upload group definition.');
+                        //         return false;
+                        //     }
+                        // }
+                        var fileGroup = ( typeof(group) != 'undefined' && group ) ? group : 'untagged';
 
-                                if ( ext.indexOf(fileExt) < 0 ) {
-                                    throwError(response, 400, '`'+ fileExt +'` is not an allowed extension. See `'+ group +'` upload group definition.');
-                                    return false;
-                                }
+                        // deny an unconfigured upload group (was: silently streamed through)
+                        if ( typeof(opt.groups) == 'undefined' || typeof(opt.groups[fileGroup]) == 'undefined' ) {
+                            throwError(response, 400, '`'+ fileGroup +'` is not a configured upload group. See the `upload.groups` definition in settings.json.');
+                            return false;
+                        }
+
+                        // allowed extensions
+                        if ( typeof(opt.groups[fileGroup].allowedExtensions) != 'undefined'
+                            && opt.groups[fileGroup].allowedExtensions != '*'
+                        ) {
+                            var ext     = opt.groups[fileGroup].allowedExtensions;
+                            var fileExt = filename.substring(filename.lastIndexOf('.')+1)
+                            if ( !Array.isArray(ext) ) {
+                                ext = [ext]
                             }
 
-                            // multiple or single
-                            if ( typeof(opt.groups[group].isMultipleAllowed) != 'undefined'
-                                && !opt.groups[group].isMultipleAllowed
-                                && fileCount > 1
-                            ) {
-                                throwError(response, 400, 'multiple uploads not allowed. See `'+ group +'` upload group definition.');
+                            if ( ext.indexOf(fileExt) < 0 ) {
+                                throwError(response, 400, '`'+ fileExt +'` is not an allowed extension. See `'+ fileGroup +'` upload group definition.');
                                 return false;
                             }
+                        }
+
+                        // multiple or single
+                        if ( typeof(opt.groups[fileGroup].isMultipleAllowed) != 'undefined'
+                            && !opt.groups[fileGroup].isMultipleAllowed
+                            && fileCount > 1
+                        ) {
+                            throwError(response, 400, 'multiple uploads not allowed. See `'+ fileGroup +'` upload group definition.');
+                            return false;
                         }
 
 
