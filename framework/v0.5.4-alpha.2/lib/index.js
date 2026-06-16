@@ -50,8 +50,20 @@ function Lib() {
         //this one must move to Dev since it's dev related
         Domain          : _require('./domain'),
         Model           : _require('./model'),
-        Collection      : _require('./collection'),
-        merge           : _require('./merge'),
+        // #B32-residual (measured 2026-06-16) — plain require, NOT _require.
+        // Collection/merge/uuid are stateless leaf utilities new'd per request from
+        // gen-0 bindings captured in load-once modules (server.isaac.js:34
+        // `const Collection = lib.Collection`, used per request at :853 in onPath).
+        // With _require they are evicted from require.cache every refreshCore(), so each
+        // per-request `new Collection()` is a cache-miss that pushes a fresh merge/uuid
+        // child Module onto the gen-0 (evicted-but-retained) collection Module — which
+        // pruneDeadModuleChildren() never reaches (it walks require.cache keys only),
+        // accumulating ~2 dead Modules/request (dev-mode OOM). Plain require = never
+        // evicted = cache-hit = Node dedupes the children = flat. Verified standalone:
+        // gen-0 collection .children 0->1000 over 500 reqs with _require, pinned at 2
+        // with require. Same precedent as logger/job/State/instrument below.
+        Collection      : require('./collection'),
+        merge           : require('./merge'),
         generator       : _require('./generator'),//move to gina.dev
         Proc            : _require('./proc'),
         Shell           : _require('./shell'),
@@ -64,12 +76,17 @@ function Lib() {
         logger          : require('./logger'),
         math            : _require('./math'),
         routing         : _require('./routing'),
-        archiver        : _require('./archiver'),
+        // #B32-residual — plain require: archiver is a `new Archiver()` EventEmitter
+        // SINGLETON (archiver/src/main.js:510). _require re-instantiated it every
+        // refreshCore() (per-request churn) and left each prior instance pinned via the
+        // gen-0 lib registry — it was the named instance in the leak's heap snapshot.
+        // A singleton must not hot-reload (same reason as logger/job/State/instrument).
+        archiver        : require('./archiver'),
         cmd             : _require('./cmd'),
         SessionStore    : _require('./session-store'),
         SwigFilters     : _require('./swig-filters'),
-        Cache           : _require('./cache'),
-        uuid            : _require('./uuid'),
+        Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
+        uuid            : require('./uuid'),      // #B32-residual — plain require (pushed as a child of the gen-0 collection module per `new Collection()`). See Collection note above.
         // #R1 — WatcherService: fs.watch-based file-change registry. Class is hot-reloadable;
         // instantiated once per bundle in gna.js:onStarted and stored as gna.watcher.
         Watcher         : _require('./watcher'),
