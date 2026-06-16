@@ -3386,8 +3386,36 @@ function Server(options) {
                     // -> https://github.com/mscdex/busboy
                     var opt = self.conf[self.appName][self.env].content.settings.upload;
                     // checking size
-                    var maxSize     = parseInt(opt.maxFieldsSize);
-                    var fileSize    = request.headers["content-length"]/1024/1024; //MB
+                    // #B51 (2026-06-16) — parse the maxFieldsSize unit suffix into bytes.
+                    // was: var maxSize  = parseInt(opt.maxFieldsSize);
+                    //      var fileSize = request.headers["content-length"]/1024/1024; //MB
+                    // parseInt("512K") => 512, compared against content-length/1024/1024 (MB), so
+                    // "512K" silently meant 512 MB. parseSize reads B/KB/MB/GB (case-insensitive)
+                    // into bytes; a BARE number is treated as MB for back-compat (the shipped "2MB"
+                    // => 2*1024*1024, unchanged). content-length is then compared in bytes directly.
+                    var parseSize = function(value) {
+                        if ( typeof(value) == 'number' ) { return value * 1024 * 1024; } // bare number = MB
+                        if ( typeof(value) != 'string' ) { return NaN; }
+                        var m = value.trim().match(/^([0-9]*\.?[0-9]+)\s*(b|kb|k|mb|m|gb|g)?$/i);
+                        if ( !m ) { return NaN; }
+                        var n = parseFloat(m[1]);
+                        switch ( (m[2] || 'mb').toLowerCase() ) {
+                            case 'b':
+                                return n;
+                            case 'k':
+                            case 'kb':
+                                return n * 1024;
+                            case 'g':
+                            case 'gb':
+                                return n * 1024 * 1024 * 1024;
+                            case 'm':
+                            case 'mb':
+                            default:
+                                return n * 1024 * 1024;
+                        }
+                    };
+                    var maxSize     = parseSize(opt.maxFieldsSize);                     // bytes
+                    var fileSize    = parseInt(request.headers["content-length"], 10);  // bytes
                     var hasAutoTmpCleanupTimeout = (
                         typeof(opt.autoTmpCleanupTimeout) != 'undefined'
                         &&  opt.autoTmpCleanupTimeout != ''
@@ -3396,7 +3424,10 @@ function Server(options) {
                     ) ? true : false;
                     var autoTmpCleanupTimeout = (!hasAutoTmpCleanupTimeout) ? null : parseTimeout(opt.autoTmpCleanupTimeout);
 
-                    if (fileSize > maxSize) {
+                    // #B51 — guard on maxSize so an unset / 0 / invalid maxFieldsSize disables the
+                    // cap (was: `fileSize > maxSize` with maxSize=NaN naturally skipped; maxSize=0
+                    // would have rejected everything — 0 now means "no limit", as for maxFields).
+                    if (maxSize && fileSize > maxSize) {
                         return throwError(response, 431, 'Attachment exceeded maximum file size [ '+ opt.maxFieldsSize +' ]');
                     }
 
@@ -3512,6 +3543,18 @@ function Server(options) {
 
                         file._dataLen = 0;
                         ++fileCount;
+
+                        // #B51 (2026-06-16) — enforce the global maxFields file-count cap. It was
+                        // declared in settings.json (default 1000) but read NOWHERE — the only count
+                        // limit was the binary per-group isMultipleAllowed, so an isMultipleAllowed:true
+                        // group (the shipped untagged default) accepted UNBOUNDED files. parseInt reads
+                        // the number or a string; an unset / 0 / NaN value disables the cap. Global only
+                        // (per-group maxFields is not wired, like per-group maxFieldsSize).
+                        var maxFields = parseInt(opt.maxFields, 10);
+                        if ( maxFields && fileCount > maxFields ) {
+                            throwError(response, 400, 'too many upload fields (max '+ maxFields +'). See the `upload.maxFields` definition in settings.json.');
+                            return false;
+                        }
 
                         // #B50 (2026-06-16) — every uploaded file must map to a CONFIGURED upload group.
                         // The old gate (commented below) ran the ext + count checks ONLY for a group that was

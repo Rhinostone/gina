@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed two multipart upload limits that were declared in settings.json but inert. `upload.maxFields` (default 1000) is now enforced as a global per-request file-count cap — previously it was never read, so a group allowing multiple files accepted an unbounded number. `upload.maxFieldsSize` now honours its unit suffix (B/KB/MB/GB; a bare number is read as MB) instead of dropping it — previously `"512K"` was parsed as 512 and compared as 512 MB. Back-compat note: a `maxFieldsSize` with a non-MB suffix now means what it says (a tighter limit than before); the shipped `"2MB"` default is unchanged.'
+time: 2026-06-16T18:11:12+01:00

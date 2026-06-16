@@ -10,6 +10,9 @@
  *  01 — #B49 server.js source: global tmpPath fallback + per-group path + mkdir guard + write sites
  *  02 — #B49 inline logic replica: dir resolution precedence (uploadDir > tmpPath > os.tmpdir; group path overrides)
  *  03 — #B49 behavioural: mkdir-if-missing creates a custom dir (real fs, throwaway dir)
+ *  04 — #B51 server.js source: parseSize + byte comparison + maxSize guard + maxFields cap
+ *  05 — #B51 inline logic replica: parseSize units (KB/MB/GB, bare=MB) + the back-compat tightening
+ *  06 — #B51 inline logic replica: global maxFields count gate (default 1000; 0/unset disables)
  */
 var { describe, it, before, after } = require('node:test');
 var assert = require('node:assert/strict');
@@ -149,5 +152,126 @@ describe('03 - upload dir: mkdir-if-missing creates a custom dir (#B49)', functi
         ensureDir(base);
         assert.equal(fs.existsSync(base), true);
         assert.equal(fs.readdirSync(base).length >= before, true);
+    });
+});
+
+// ─── 04 — #B51 server.js source pins ──────────────────────────────────────────
+describe('04 - upload limits: server.js source pins (#B51)', function() {
+    var active;
+    before(function() {
+        active = stripLineComments(fs.readFileSync(SERVER_SRC, 'utf8'));
+    });
+
+    it('parses the maxFieldsSize unit suffix via a parseSize helper (into bytes)', function() {
+        assert.match(active, /var parseSize\s*=\s*function/);
+        assert.match(active, /var maxSize\s*=\s*parseSize\(opt\.maxFieldsSize\)/);
+    });
+
+    it('compares content-length in bytes (no /1024/1024 MB conversion)', function() {
+        assert.match(active, /var fileSize\s*=\s*parseInt\(request\.headers\["content-length"\], 10\)/);
+        assert.doesNotMatch(active, /\["content-length"\]\s*\/\s*1024\s*\/\s*1024/);
+    });
+
+    it('no longer uses the suffix-dropping parseInt on maxFieldsSize', function() {
+        assert.doesNotMatch(active, /parseInt\(opt\.maxFieldsSize\)/);
+    });
+
+    it('guards the size check so 0 / unset disables the cap', function() {
+        assert.match(active, /if \(maxSize && fileSize > maxSize\)/);
+    });
+
+    it('enforces a global maxFields file-count cap (HTTP 400), disabled when 0/unset', function() {
+        assert.match(active, /var maxFields\s*=\s*parseInt\(opt\.maxFields, 10\)/);
+        assert.match(active, /if \(\s*maxFields && fileCount > maxFields\s*\)/);
+        assert.match(active, /too many upload fields/);
+    });
+});
+
+// ─── 05 — #B51 parseSize replica ──────────────────────────────────────────────
+describe('05 - upload size: parseSize replica (#B51)', function() {
+
+    // mirror of the server.js parseSize helper
+    function parseSize(value) {
+        if ( typeof(value) === 'number' ) { return value * 1024 * 1024; }
+        if ( typeof(value) !== 'string' ) { return NaN; }
+        var m = value.trim().match(/^([0-9]*\.?[0-9]+)\s*(b|kb|k|mb|m|gb|g)?$/i);
+        if ( !m ) { return NaN; }
+        var n = parseFloat(m[1]);
+        switch ( (m[2] || 'mb').toLowerCase() ) {
+            case 'b':            return n;
+            case 'k': case 'kb': return n * 1024;
+            case 'g': case 'gb': return n * 1024 * 1024 * 1024;
+            default:             return n * 1024 * 1024;
+        }
+    }
+
+    var MB = 1024 * 1024, KB = 1024, GB = 1024 * 1024 * 1024;
+
+    it('"2MB" → 2 MB in bytes (shipped default, unchanged)', function() {
+        assert.equal(parseSize('2MB'), 2 * MB);
+    });
+    it('a bare number is treated as MB (back-compat)', function() {
+        assert.equal(parseSize(2), 2 * MB);
+    });
+    it('a unitless numeric string defaults to MB', function() {
+        assert.equal(parseSize('100'), 100 * MB);
+    });
+    it('"512K" / "512KB" → 512 KB (NOT 512 MB — the bug)', function() {
+        assert.equal(parseSize('512K'), 512 * KB);
+        assert.equal(parseSize('512KB'), 512 * KB);
+    });
+    it('"1GB" / "1g" → 1 GB, case-insensitive', function() {
+        assert.equal(parseSize('1GB'), GB);
+        assert.equal(parseSize('1g'), GB);
+    });
+    it('fractional values parse ("1.5MB")', function() {
+        assert.equal(parseSize('1.5MB'), 1.5 * MB);
+    });
+    it('invalid / non-numeric / undefined / null → NaN', function() {
+        assert.ok(Number.isNaN(parseSize('abc')));
+        assert.ok(Number.isNaN(parseSize(undefined)));
+        assert.ok(Number.isNaN(parseSize(null)));
+    });
+
+    it('the back-compat tightening: a 100 MB request is REJECTED against "512K"', function() {
+        // OLD: parseInt("512K") = 512 (read as MB) → 100 < 512 → allowed (the bug).
+        // NEW: parseSize("512K") = 524288 bytes → 100*MB > 524288 → rejected.
+        var contentLength = 100 * MB;
+        var maxSize = parseSize('512K');
+        assert.equal(maxSize, 512 * KB);
+        assert.equal(contentLength > maxSize, true);
+    });
+
+    it('boundary: a request exactly at the limit is allowed (strict >)', function() {
+        assert.equal((2 * MB) > parseSize('2MB'), false);     // exactly 2 MB: allowed
+        assert.equal((2 * MB + 1) > parseSize('2MB'), true);  // 1 byte over: rejected
+    });
+});
+
+// ─── 06 — #B51 maxFields count gate replica ───────────────────────────────────
+describe('06 - upload count: maxFields gate replica (#B51)', function() {
+
+    // mirror of the server.js global maxFields cap
+    function exceedsMaxFields(opt, fileCount) {
+        var maxFields = parseInt(opt.maxFields, 10);
+        return !!( maxFields && fileCount > maxFields );
+    }
+
+    it('default 1000 allows exactly 1000, rejects the 1001st', function() {
+        assert.equal(exceedsMaxFields({ maxFields: 1000 }, 1000), false);
+        assert.equal(exceedsMaxFields({ maxFields: 1000 }, 1001), true);
+    });
+    it('a small cap rejects past it', function() {
+        assert.equal(exceedsMaxFields({ maxFields: 2 }, 2), false);
+        assert.equal(exceedsMaxFields({ maxFields: 2 }, 3), true);
+    });
+    it('a string cap is parsed', function() {
+        assert.equal(exceedsMaxFields({ maxFields: '5' }, 6), true);
+    });
+    it('unset maxFields disables the cap (back-compat — was unbounded)', function() {
+        assert.equal(exceedsMaxFields({}, 100000), false);
+    });
+    it('maxFields:0 disables the cap (no limit)', function() {
+        assert.equal(exceedsMaxFields({ maxFields: 0 }, 100000), false);
     });
 });
