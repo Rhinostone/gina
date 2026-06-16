@@ -26,6 +26,11 @@
  *   §05 replica — a gen-0 parent retained OFF require.cache grows children every
  *       request despite the prune (the residual the require.cache walk misses);
  *       a resident (plain-require'd) child keeps it bounded. §04 locks the fix.
+ *   §06 audit guard — lib/inherits has zero require() calls (#B32-residual
+ *       completeness audit, 2026-06-16). inherits is the only HOT lib gen-0-captured
+ *       AND invoked per-request by load-once modules (router.js / couchbase), so a
+ *       zero-require body is what keeps those sites from reopening the residual; the
+ *       pin trips if any require() is ever added there.
  */
 
 var assert = require('assert');
@@ -239,4 +244,31 @@ test('§05 replica: a gen-0 parent held OFF require.cache leaks despite the prun
             return c.id !== childResolved && c.id !== parentResolved;
         });
     }
+});
+
+test('§06 lib/inherits: zero require() in code — the gen-0-captured + per-request-invoked HOT lib must never push a child (#B32-residual completeness audit, 2026-06-16)', function() {
+    // Completeness-audit invariant: among the HOT (_require'd) libs, `inherits` is the
+    // only one that load-once modules gen-0-capture AND invoke PER REQUEST
+    // (router.js:594/595/597/664/890 `const inherits = lib.inherits`; couchbase
+    // index.js:718). Because lib/inherits/src/main.js is a pure Object.create
+    // prototype-chain builder with ZERO require() calls, each per-request inherits()
+    // pushes NO child Module onto its gen-0 (evicted-but-retained) module — so those
+    // sites cannot reopen the residual. Measured: +0 children over 200 reqs on the real
+    // module vs a +200 leaking control (the routing per-request methods are likewise
+    // safe — their only in-method require is the non-HOT ./radix, a permanent cache-hit).
+    // If a require() is EVER added to inherits, this pin trips: re-check whether the
+    // target is a HOT (_require'd) lib before updating the pin — a HOT-sibling require
+    // would reintroduce #B32-residual for the router/couchbase per-request sites.
+    var INHERITS_PATH = path.join(BASE, 'framework', FRAMEWORK_DIR, 'lib', 'inherits', 'src', 'main.js');
+    var SRC = fs.readFileSync(INHERITS_PATH, 'utf8');
+    // Strip comments first: the module's JSDoc @example contains a literal
+    // require(...) string, which a raw scan would match (false positive).
+    var code = SRC
+        .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments (incl. JSDoc)
+        .replace(/\/\/[^\n]*/g, '');         // line comments
+    assert.strictEqual(
+        code.indexOf('require('), -1,
+        'lib/inherits/src/main.js must contain ZERO require() calls in code (comments stripped) — ' +
+        'it is gen-0-captured + invoked per-request by router.js / couchbase; a require() here can reopen #B32-residual'
+    );
 });
