@@ -245,10 +245,11 @@ describe('08 - isInList', function () {
 
 
 // 09 — isDate
-//   NOTE: unlike every other rule (which returns the field object), isDate
-//   returns the parsed Date on its valid path (form-validator.js:1765) and the
-//   field on its invalid paths. So the valid cases capture the field and assert
-//   on it directly rather than on the rule's return value.
+//   NOTE: isDate now returns the field object on ALL paths (#B48, 2026-06-17),
+//   like every other rule, so it chains. The parsed Date is preserved on the
+//   field's .value (rendered via the field's own .format()). The valid cases
+//   below still assert on the field via ok(f); the final test locks the #B48
+//   return contract directly.
 describe('09 - isDate', function () {
 
     it('accepts a valid ISO date with the yyyy-mm-dd mask', function () {
@@ -270,9 +271,9 @@ describe('09 - isDate', function () {
     it('accepts a non-ISO slash mask (dd/mm/yyyy) with day>12 (#B47)', function () {
         // #B47 (2026-06-15): isDate now builds the Date from explicit numeric
         // components identified by the mask tokens (y*/m*/d*) plus a round-trip
-        // range check, so a non-ISO slash mask validates. (isDate returns the
-        // parsed Date on its valid path — deferred #B48 — so capture the field
-        // and assert on it, per the §09 NOTE above.)
+        // range check, so a non-ISO slash mask validates. (#B48 since made
+        // isDate return the field on all paths; ok(f) asserts on the field
+        // either way.)
         var f = vf('dt', '15/06/2023');
         f.isDate('dd/mm/yyyy');
         ok(f);
@@ -283,6 +284,19 @@ describe('09 - isDate', function () {
         // round-trip check (constructed components must equal the inputs) keeps
         // it rejected.
         ko(vf('dt', '30/02/2023').isDate('dd/mm/yyyy'), 'isDate');
+    });
+
+    it('returns the field object on its valid path so rules chain, with the Date kept on .value (#B48)', function () {
+        var f = vf('dt', '2023-06-15');
+        var ret = f.isDate('yyyy-mm-dd');
+        // #B48: the valid path returns the field (chainable), like every other
+        // rule, not the raw parsed Date.
+        assert.strictEqual(ret, f, 'isDate should return the field object, not the parsed Date');
+        // the parsed Date is preserved on .value (so the field's .format() still renders it)
+        assert.ok(f.value instanceof Date, 'parsed Date preserved on field.value');
+        // chaining into a subsequent validator rule works (threw on a Date pre-#B48)
+        assert.strictEqual(ret.setLabel('Date'), f, 'a rule chained after isDate returns the field');
+        assert.equal(f.valid, true);
     });
 });
 

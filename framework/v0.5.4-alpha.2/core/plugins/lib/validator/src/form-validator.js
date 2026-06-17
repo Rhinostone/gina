@@ -1701,7 +1701,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
          *
          * @param {string|boolean} [mask] - by default "yyyy-mm-dd"
          *
-         * @returns {date} date - extended by gina::lib::helpers::dateFormat; an adaptation of Steven Levithan's code
+         * @returns {object} field object (chainable). The parsed Date is preserved on the field's `.value` and rendered via the field's own `.format()` method (DateFormatHelper — an adaptation of Steven Levithan's code).
          * */
         self[el]['isDate'] = function(mask) {
             var val         = this.value
@@ -1815,7 +1815,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
             this.valid = isValid;
 
-            return date
+            // #B48 (2026-06-17) — return the field object (chainable), like
+            // every other rule, instead of the raw parsed Date. The Date is
+            // preserved on this.value (set above), so
+            // `field.isDate(mask).format('isoDateTime')` still renders it via
+            // the field's own `format` method; returning the Date here broke
+            // chaining into any validator rule (a Date has no .isX()).
+            // was: return date
+            return self[this.name]
         }
 
         /**
