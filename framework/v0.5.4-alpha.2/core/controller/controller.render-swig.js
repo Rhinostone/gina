@@ -12,10 +12,11 @@ var emitInspectorWindowData = require('./inspector-window-emit');
 // Precompiled regex — avoids per-request RegExp allocation (#P3)
 var blacklistRe       = /[<>]/g;
 
-// Inherited from controller
-var self                = null
-    , local             = null
-    , getData           = null
+// Inherited from controller.
+// #INS10 race fix: `self` / `local` are NOT declared module-scoped — they are
+// captured FUNCTION-scoped inside render() (see the deps unpack) so concurrent
+// renders never share them. The refs below stay module-scoped (read pre-await).
+var getData             = null
     , hasViews          = null
     , setResources      = null
     // Default filters
@@ -160,9 +161,16 @@ async function writeCache(bundle, opt, htmlContent, req, res) {
  */
 module.exports = async function render(userData, displayInspector, errOptions, deps) {
 
-    // Inherited from controller
-    self            = deps.self;
-    local           = deps.local;
+    // Inherited from controller.
+    // #INS10 race fix — `self` / `local` are FUNCTION-scoped (`var`), not module-
+    // scoped: render() is async, so a render suspended at an await must not have
+    // its `self` / `local` overwritten by a concurrent render — otherwise the
+    // post-await Inspector emit (prod-window egress + dev `inspector#data`) would
+    // carry the other request's `_queryLog` / `_timeline`. Mirrors render-nunjucks.js.
+    // (getData / hasViews / SwigFilters / headersSent stay module-scoped: read
+    //  before the first await, so they are not the documented race vector.)
+    var self            = deps.self;
+    var local           = deps.local;
     getData         = deps.getData;
     hasViews        = deps.hasViews;
     setResources    = deps.setResources;

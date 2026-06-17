@@ -1048,6 +1048,50 @@ describe('12 - function-scoped captures of per-request refs (#M1 race fix)', fun
         );
     });
 
+    // ── (a2) #INS10 race fix: self / local are ALSO function-scoped ──────
+    //
+    // Pre-fix render-swig.js assigned `self` / `local` at MODULE scope, so a
+    // render suspended at an await could have them overwritten by a concurrent
+    // render — and the post-await Inspector emit (#INS10 prod-window egress +
+    // dev `inspector#data`) would then carry the OTHER request's _queryLog /
+    // _timeline. They are now captured FUNCTION-scoped via `var`, matching the
+    // req/res/_next captures above and render-nunjucks.js (which was already
+    // function-scoped, hence race-clean).
+
+    it("render() declares `self` function-scoped (`var self = deps.self`) — #INS10 race fix", function() {
+        var src = getSrc();
+        var renderIdx = src.indexOf('module.exports = async function render');
+        var awaitIdx  = src.indexOf('await fs.promises.', renderIdx);
+        var prologue  = src.substring(renderIdx, awaitIdx);
+        assert.ok(
+            /var\s+self\s*=\s*deps\.self\s*;/.test(prologue),
+            'expected `var self = deps.self;` (function-scoped) in render() prologue'
+        );
+    });
+
+    it("render() declares `local` function-scoped (`var local = deps.local`) — #INS10 race fix", function() {
+        var src = getSrc();
+        var renderIdx = src.indexOf('module.exports = async function render');
+        var awaitIdx  = src.indexOf('await fs.promises.', renderIdx);
+        var prologue  = src.substring(renderIdx, awaitIdx);
+        assert.ok(
+            /var\s+local\s*=\s*deps\.local\s*;/.test(prologue),
+            'expected `var local = deps.local;` (function-scoped) in render() prologue'
+        );
+    });
+
+    it("module scope no longer declares `self` / `local` as shared bindings (#INS10)", function() {
+        var src = getSrc();
+        var renderIdx = src.indexOf('module.exports = async function render');
+        // Everything before render() — the module-scope prologue. Were self/local
+        // still declared here as `= null` inherited-ref bindings, the function-
+        // scoped `var` inside render() would merely SHADOW a live shared binding,
+        // not remove the cross-request sharing.
+        var head = src.substring(0, renderIdx);
+        assert.ok(!/\bself\s+=\s*null\b/.test(head),  '`self = null` must not appear at module scope');
+        assert.ok(!/\blocal\s+=\s*null\b/.test(head), '`local = null` must not appear at module scope');
+    });
+
     // ── (b) source structure: writeCache signature takes req, res params ─
 
     it('writeCache signature includes `req, res` parameters', function() {
