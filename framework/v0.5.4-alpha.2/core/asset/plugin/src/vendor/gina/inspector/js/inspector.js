@@ -1873,6 +1873,39 @@
     }
 
     /**
+     * Resolve the base URL prefix for a per-bundle `/_gina/*` endpoint.
+     *
+     * Three-fallback resolver (the same logic `toggleReveal()` uses): (1) a
+     * `?target=` query param (standalone mode), (2) the opener's pathname
+     * (statusbar-opened mode — routes to the bundle that rendered the current
+     * page), (3) the Inspector's own pathname with `_gina/inspector...` stripped.
+     * Critical in proxy-routed multi-bundle setups where bundles share a host and
+     * differ only by a path prefix: a bare `/_gina/logs` or `/_gina/indexes` would
+     * otherwise hit the proxy's default bundle instead of the monitored one.
+     *
+     * NOTE: `toggleReveal()`, `tryAgentPassive()`, and the refresh-button re-reveal
+     * keep their own inline copies of this logic (pinned by inspector.test.js
+     * §54/§55); folding them into this helper is a deferred cleanup that needs a
+     * test-pin update — out of scope for this routing fix.
+     *
+     * @inner
+     * @returns {string} Base URL prefix (no trailing slash), or '' for host root.
+     */
+    function resolveBundleBase() {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            var target = (params.get('target') || '').replace(/\/+$/, '');
+            if (target) {
+                return target;
+            }
+            if (window.opener && window.opener.location) {
+                return (window.opener.location.pathname || '').replace(/\/+$/, '');
+            }
+        } catch (e) {}
+        return window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
+    }
+
+    /**
      * #QI2 — Fetch live index data from the /_gina/indexes endpoint.
      * Called when the Query tab renders queries with N/A index badges.
      * On success, caches the result and re-renders the Query tab.
@@ -1882,7 +1915,10 @@
     function fetchLiveIndexes() {
         if (_liveIndexes !== null || _liveIndexesFetching) return;
         _liveIndexesFetching = true;
-        var base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '');
+        // Route through the shared 3-fallback resolver so /_gina/indexes reaches
+        // the monitored bundle in proxy-routed multi-bundle setups (was a bare
+        // pathname strip that misrouted to the proxy's default bundle).
+        var base = resolveBundleBase();
         var url  = base + '/_gina/indexes';
         try {
             var xhr = new XMLHttpRequest();
@@ -3768,9 +3804,10 @@
     function tryServerLogs() {
         if (typeof EventSource === 'undefined') return;
 
-        // Derive the SSE URL from the inspector path:
-        //   /{webroot}/_gina/inspector/  →  /{webroot}/_gina/logs
-        var base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '');
+        // Derive the SSE URL via the shared 3-fallback resolver so /_gina/logs
+        // reaches the monitored bundle in proxy-routed multi-bundle setups (was a
+        // bare pathname strip that misrouted to the proxy's default bundle).
+        var base = resolveBundleBase();
         var url  = base + '/_gina/logs';
 
         try {

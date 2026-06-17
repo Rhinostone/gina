@@ -8730,3 +8730,58 @@ describe('78 - agent-WS SIGTERM-drain registration in server.js', function() {
     });
 
 });
+
+
+// ── 79 — resolveBundleBase shared resolver routes /_gina/indexes + /_gina/logs ─
+//
+// fetchLiveIndexes (/_gina/indexes) and tryServerLogs (/_gina/logs) previously
+// derived their base URL with a bare `window.location.pathname` strip — no
+// ?target= / opener fallback — so in proxy-routed multi-bundle setups (bundles
+// sharing a host, differing only by path prefix) they misrouted to the proxy's
+// default bundle. They now go through the shared resolveBundleBase() helper, the
+// same 3-fallback toggleReveal() uses. (toggleReveal / tryAgentPassive and the
+// refresh re-reveal keep their own inline copies, pinned by §54/§55/§56; folding
+// them into the helper is a deferred cleanup that needs a test-pin update.)
+
+describe('79 - resolveBundleBase shared resolver routes /_gina/indexes + /_gina/logs', function() {
+
+    var INSPECTOR_79 = path.join(BM_DIR, 'inspector.js');
+    var _src79;
+    function getSrc79() { return _src79 || (_src79 = fs.readFileSync(INSPECTOR_79, 'utf8')); }
+
+    it('inspector.js defines resolveBundleBase()', function() {
+        assert.ok(getSrc79().indexOf('function resolveBundleBase') > -1, 'expected resolveBundleBase() definition');
+    });
+
+    it('resolveBundleBase implements the 3-fallback (target -> opener -> strip) in try/catch', function() {
+        var src = getSrc79();
+        var idx = src.indexOf('function resolveBundleBase');
+        assert.ok(idx > -1, 'resolveBundleBase must exist');
+        var body = src.slice(idx, idx + 900);
+        assert.ok(/params\.get\(\s*['"]target['"]\s*\)/.test(body), 'expected ?target= lookup (fallback 1)');
+        assert.ok(body.indexOf('window.opener.location.pathname') > -1, 'expected opener pathname (fallback 2)');
+        assert.ok(body.indexOf('window.location.pathname.replace') > -1, 'expected inspector-path strip fallback (fallback 3)');
+        assert.ok(/try\s*\{[\s\S]*?\}\s*catch\s*\(/.test(body), 'expected try/catch for cross-origin opener safety');
+    });
+
+    it('fetchLiveIndexes resolves its base via resolveBundleBase() (no bare strip)', function() {
+        var src = getSrc79();
+        var idx = src.indexOf('function fetchLiveIndexes');
+        assert.ok(idx > -1, 'fetchLiveIndexes must exist');
+        var body = src.slice(idx, idx + 700);
+        assert.ok(/var base\s*=\s*resolveBundleBase\(\)/.test(body), 'fetchLiveIndexes must call resolveBundleBase()');
+        assert.ok(body.indexOf("'/_gina/indexes'") > -1, 'still builds the /_gina/indexes URL');
+        assert.ok(body.indexOf('window.location.pathname.replace') < 0, 'the old bare-strip resolver must be gone from fetchLiveIndexes');
+    });
+
+    it('tryServerLogs resolves its base via resolveBundleBase() (no bare strip)', function() {
+        var src = getSrc79();
+        var idx = src.indexOf('function tryServerLogs');
+        assert.ok(idx > -1, 'tryServerLogs must exist');
+        var body = src.slice(idx, idx + 700);
+        assert.ok(/var base\s*=\s*resolveBundleBase\(\)/.test(body), 'tryServerLogs must call resolveBundleBase()');
+        assert.ok(body.indexOf("'/_gina/logs'") > -1, 'still builds the /_gina/logs URL');
+        assert.ok(body.indexOf('window.location.pathname.replace') < 0, 'the old bare-strip resolver must be gone from tryServerLogs');
+    });
+
+});
