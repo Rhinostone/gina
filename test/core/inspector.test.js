@@ -6431,50 +6431,39 @@ describe('53 - unredacted snapshot is only stored when scope === local', functio
 // Fix: derive the URL prefix from `window.opener.location.pathname` so the
 // request routes through the same bundle that produced the snapshot.
 
-describe('54 - toggleReveal resolves /_gina/reveal via opener pathname for proxy routing', function() {
+describe('54 - toggleReveal resolves /_gina/reveal via the shared resolveBundleBase()', function() {
 
     var INSPECTOR_JS_54 = path.join(BM_DIR, 'inspector.js');
     var _inspSrc54;
     function getInspSrc54() { return _inspSrc54 || (_inspSrc54 = fs.readFileSync(INSPECTOR_JS_54, 'utf8')); }
 
-    it('toggleReveal prefers ?target= when present (standalone mode)', function() {
+    // resolveBundleBase()'s own 3-fallback internals (?target= -> opener ->
+    // strip) + cross-origin try/catch are pinned in §79; §54 now pins only that
+    // toggleReveal routes through that shared resolver (the inline copy was
+    // folded in — see llms.txt #190 follow-up).
+
+    it('toggleReveal resolves its base via the shared resolveBundleBase()', function() {
         var src = getInspSrc54();
+        var idx = src.indexOf('function toggleReveal');
+        assert.ok(idx > -1, 'toggleReveal function must exist');
+        var body = src.slice(idx, idx + 3000);
         assert.ok(
-            /new URLSearchParams\(window\.location\.search\)/.test(src),
-            'expected URLSearchParams read of window.location.search'
-        );
-        assert.ok(
-            /params\.get\(\s*['"]target['"]\s*\)/.test(src),
-            'expected params.get("target") lookup'
+            /var base\s*=\s*resolveBundleBase\(\)/.test(body),
+            'toggleReveal must resolve its base via resolveBundleBase()'
         );
     });
 
-    it('toggleReveal falls back to window.opener.location.pathname when no target', function() {
+    it('toggleReveal no longer inlines the base resolver', function() {
         var src = getInspSrc54();
+        var idx = src.indexOf('function toggleReveal');
+        var body = src.slice(idx, idx + 3000);
+        // Window-independent negative: the inline resolver's distinctive
+        // `var base = '';` init is globally gone after the fold (0 file-wide),
+        // so this can't trip on neighbouring code the way a `window.opener...`
+        // grep over a fixed-size slice would (jsdoc.md fixed-window brittleness).
         assert.ok(
-            /window\.opener\s*&&\s*window\.opener\.location/.test(src),
-            'expected guard on window.opener + window.opener.location'
-        );
-        assert.ok(
-            /window\.opener\.location\.pathname/.test(src),
-            'expected read of window.opener.location.pathname for bundle-scoped prefix'
-        );
-    });
-
-    it('toggleReveal final fallback strips /_gina/inspector from own pathname', function() {
-        var src = getInspSrc54();
-        assert.ok(
-            /window\.location\.pathname\.replace\(\/\\\/_gina\\\/inspector\.\*\$\//.test(src),
-            'expected /_gina/inspector.*$/ strip as final fallback'
-        );
-    });
-
-    it('toggleReveal strips trailing slashes from every base path source', function() {
-        var src = getInspSrc54();
-        var stripCount = (src.match(/\.replace\(\/\\\/\+\$\//g) || []).length;
-        assert.ok(
-            stripCount >= 3,
-            'expected at least 3 trailing-slash strips (target, opener pathname, own pathname fallback); found ' + stripCount
+            body.indexOf("var base = '';") < 0,
+            'the inline base resolver must be gone from toggleReveal (folded into resolveBundleBase)'
         );
     });
 
@@ -6483,18 +6472,6 @@ describe('54 - toggleReveal resolves /_gina/reveal via opener pathname for proxy
         assert.ok(
             /var url\s*=\s*base\s*\+\s*['"]\/_gina\/reveal['"]/.test(src),
             'expected `var url = base + "/_gina/reveal"` construction'
-        );
-    });
-
-    it('toggleReveal wraps the resolver in try/catch so a cross-origin opener cannot crash it', function() {
-        var src = getInspSrc54();
-        // Find the toggleReveal function body, ensure it contains try/catch around base resolution
-        var idx = src.indexOf('function toggleReveal');
-        assert.ok(idx > -1, 'toggleReveal function must exist');
-        var body = src.slice(idx, idx + 3000);
-        assert.ok(
-            /try\s*\{[\s\S]*?URLSearchParams[\s\S]*?\}\s*catch\s*\(/.test(body),
-            'expected try/catch wrapping the URLSearchParams + opener.location read'
         );
     });
 
@@ -6527,27 +6504,17 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         );
     });
 
-    it('tryAgentPassive derives the bundle URL from window.opener.location.pathname', function() {
+    it('tryAgentPassive resolves the bundle URL via the shared resolveBundleBase()', function() {
         var src = getInspSrc55();
         var idx = src.indexOf('function tryAgentPassive');
         var body = src.slice(idx, idx + 2500);
         assert.ok(
-            /window\.opener\s*&&\s*window\.opener\.location/.test(body),
-            'expected opener.location read for URL derivation'
+            /var base\s*=\s*resolveBundleBase\(\)/.test(body),
+            'tryAgentPassive must resolve its base via resolveBundleBase()'
         );
         assert.ok(
-            /window\.opener\.location\.pathname/.test(body),
-            'expected opener pathname used as base'
-        );
-    });
-
-    it('tryAgentPassive falls back to inspector path when opener is unavailable', function() {
-        var src = getInspSrc55();
-        var idx = src.indexOf('function tryAgentPassive');
-        var body = src.slice(idx, idx + 2500);
-        assert.ok(
-            /_gina\\\/inspector\.\*\$/.test(body) || /\/_gina\/inspector/.test(body),
-            'expected fallback stripping the inspector path'
+            body.indexOf("var base = '';") < 0,
+            'the inline base resolver must be gone from tryAgentPassive (folded into resolveBundleBase; its ?target= branch is inert here)'
         );
     });
 
@@ -6606,15 +6573,8 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         );
     });
 
-    it('tryAgentPassive wraps URL derivation in try/catch for cross-origin safety', function() {
-        var src = getInspSrc55();
-        var idx = src.indexOf('function tryAgentPassive');
-        var body = src.slice(idx, idx + 6000);
-        assert.ok(
-            /try\s*\{[\s\S]*?window\.opener[\s\S]*?\}\s*catch\s*\(/.test(body),
-            'expected try/catch around opener.location read'
-        );
-    });
+    // (cross-origin try/catch safety is now resolveBundleBase()'s concern,
+    //  pinned in §79; tryAgentPassive resolves via that helper — see above.)
 
     it('init wires tryAgentPassive inside the !isAgent branch', function() {
         var src = getInspSrc55();
@@ -6692,6 +6652,8 @@ describe('56 - Refresh button soft refresh (live indexes, reveal, passive agent)
         assert.ok(/new\s+XMLHttpRequest\(\)/.test(body), 'expected XMLHttpRequest for reveal refetch');
         assert.ok(/_revealedData\s*=\s*JSON\.parse/.test(body), 'expected _revealedData reassignment on 200');
         assert.ok(/renderTab\(\s*'data'\s*\)/.test(body), 'expected renderTab("data") on success');
+        assert.ok(/var base\s*=\s*resolveBundleBase\(\)/.test(body), 'the reveal refetch must resolve its base via resolveBundleBase()');
+        assert.ok(body.indexOf("var base = '';") < 0, 'the inline base resolver must be gone from the refresh handler (folded into resolveBundleBase)');
     });
 
     it('click handler reopens the passive agent SSE stream when closed', function() {
@@ -8740,8 +8702,8 @@ describe('78 - agent-WS SIGTERM-drain registration in server.js', function() {
 // sharing a host, differing only by path prefix) they misrouted to the proxy's
 // default bundle. They now go through the shared resolveBundleBase() helper, the
 // same 3-fallback toggleReveal() uses. (toggleReveal / tryAgentPassive and the
-// refresh re-reveal keep their own inline copies, pinned by §54/§55/§56; folding
-// them into the helper is a deferred cleanup that needs a test-pin update.)
+// refresh re-reveal now route through resolveBundleBase() too, pinned by
+// §54/§55/§56 — every per-bundle /_gina/* consumer uses the one resolver.)
 
 describe('79 - resolveBundleBase shared resolver routes /_gina/indexes + /_gina/logs', function() {
 

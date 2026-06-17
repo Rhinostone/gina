@@ -1889,10 +1889,11 @@
      * differ only by a path prefix: a bare `/_gina/logs` or `/_gina/indexes` would
      * otherwise hit the proxy's default bundle instead of the monitored one.
      *
-     * NOTE: `toggleReveal()`, `tryAgentPassive()`, and the refresh-button re-reveal
-     * keep their own inline copies of this logic (pinned by inspector.test.js
-     * §54/§55); folding them into this helper is a deferred cleanup that needs a
-     * test-pin update — out of scope for this routing fix.
+     * Used by every per-bundle `/_gina/*` consumer: `fetchLiveIndexes()`,
+     * `tryServerLogs()`, `toggleReveal()`, `tryAgentPassive()`, and the
+     * refresh-button re-reveal all resolve their base through this one helper
+     * (pinned by inspector.test.js §54/§55/§56/§79). For `tryAgentPassive()`
+     * the `?target=` branch is inert — it only runs when no `?target=` exists.
      *
      * @inner
      * @returns {string} Base URL prefix (no trailing slash), or '' for host root.
@@ -3104,20 +3105,7 @@
         //      one that produced the snapshot.
         //   3. Fallback — strip `_gina/inspector` from the Inspector's own
         //      pathname (same approach as tryServerLogs).
-        var base = '';
-        try {
-            var params = new URLSearchParams(window.location.search);
-            var target = (params.get('target') || '').replace(/\/+$/, '');
-            if (target) {
-                base = target;
-            } else if (window.opener && window.opener.location) {
-                base = (window.opener.location.pathname || '').replace(/\/+$/, '');
-            } else {
-                base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
-            }
-        } catch (e) {
-            base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
-        }
+        var base = resolveBundleBase();
         var url = base + '/_gina/reveal';
         var xhr  = new XMLHttpRequest();
         try {
@@ -4099,20 +4087,11 @@
         // Agent mode already covers data + logs via the primary tryAgent stream.
         if (source === 'agent') return false;
 
-        // Derive the bundle URL the same way toggleReveal() does: prefer the
-        // opener's pathname so multi-bundle proxy setups route to the bundle
-        // that rendered the current page, falling back to stripping the
-        // inspector path.
-        var base = '';
-        try {
-            if (window.opener && window.opener.location) {
-                base = (window.opener.location.pathname || '').replace(/\/+$/, '');
-            } else {
-                base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
-            }
-        } catch (e) {
-            base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
-        }
+        // Resolve the bundle base via resolveBundleBase() (the one resolver
+        // every /_gina/* consumer uses). Its ?target= branch is inert here:
+        // tryAgentPassive only runs when source !== 'agent' (i.e. no ?target=),
+        // so this falls through to the opener-pathname fallback as before.
+        var base = resolveBundleBase();
         var url = base + '/_gina/agent';
 
         try {
@@ -5069,20 +5048,7 @@
                 fetchLiveIndexes();
 
                 if (_revealActive) {
-                    var base = '';
-                    try {
-                        var params = new URLSearchParams(window.location.search);
-                        var target = (params.get('target') || '').replace(/\/+$/, '');
-                        if (target) {
-                            base = target;
-                        } else if (window.opener && window.opener.location) {
-                            base = (window.opener.location.pathname || '').replace(/\/+$/, '');
-                        } else {
-                            base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
-                        }
-                    } catch (e) {
-                        base = window.location.pathname.replace(/\/_gina\/inspector.*$/, '').replace(/\/+$/, '');
-                    }
+                    var base = resolveBundleBase();
                     try {
                         var xhr = new XMLHttpRequest();
                         xhr.open('GET', base + '/_gina/reveal', true);
