@@ -329,7 +329,13 @@
     function loadFoldStore() {
         try {
             var raw = localStorage.getItem(FOLD_STORAGE_KEY);
-            return raw ? JSON.parse(raw) : {};
+            var o   = raw ? JSON.parse(raw) : {};
+            // Shape-guard (mirrors getCustomOrder / getHiddenTabs / tryLocalStorage):
+            // a corrupted or tampered key could hold a JSON primitive (42 / true /
+            // "x"); returning it would make the un-try/caught toggle handler run
+            // `store[tab] = {}` on a primitive → strict-mode TypeError, breaking
+            // fold persistence on every <details> toggle.
+            return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {};
         } catch (e) { return {}; }
     }
 
@@ -1399,7 +1405,7 @@
         // Remaining keys (e.g. "validated" — boolean set by gina.js form validator)
         for (var k = 0; k < keys.length; k++) {
             if (sectionOrder.indexOf(keys[k]) >= 0) continue;
-            h += '<h3 class="bm-sub-section-title">' + keys[k] + '</h3>';
+            h += '<h3 class="bm-sub-section-title">' + escHtml(keys[k]) + '</h3>';
             h += renderTree(fd[keys[k]], 0, null, null, ginaFd ? ginaFd[keys[k]] : undefined);
         }
         return h;

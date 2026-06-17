@@ -8785,3 +8785,36 @@ describe('79 - resolveBundleBase shared resolver routes /_gina/indexes + /_gina/
     });
 
 });
+
+
+// ── 80 — SPA input hardening: loadFoldStore shape-guard + form-key escaping ──
+//
+// Two defense-in-depth hardenings in the Inspector SPA:
+//   (C) loadFoldStore() validates the parsed __gina_inspector_folds JSON is a
+//       plain object — a corrupted/tampered primitive would otherwise crash the
+//       (un-try/caught) <details> toggle handler with a strict-mode TypeError.
+//   (D) renderFormDataSections escapes the form-data section key via escHtml
+//       before it reaches innerHTML (the only key/label interpolation in the SPA
+//       that previously lacked escaping).
+
+describe('80 - SPA input hardening (loadFoldStore shape-guard + form-key escHtml)', function() {
+
+    var INSPECTOR_80 = path.join(BM_DIR, 'inspector.js');
+    var _src80;
+    function getSrc80() { return _src80 || (_src80 = fs.readFileSync(INSPECTOR_80, 'utf8')); }
+
+    it('loadFoldStore validates the parsed value is a plain object (not a primitive/array)', function() {
+        var src = getSrc80();
+        var idx = src.indexOf('function loadFoldStore');
+        assert.ok(idx > -1, 'loadFoldStore must exist');
+        var body = src.slice(idx, idx + 700);
+        assert.ok(/typeof\s+\w+\s*===?\s*'object'/.test(body), "expected a `typeof === 'object'` shape check");
+        assert.ok(body.indexOf('!Array.isArray(') > -1, 'expected an !Array.isArray guard (reject array/primitive)');
+    });
+
+    it('renderFormDataSections escapes the form-data section key via escHtml', function() {
+        var src = getSrc80();
+        assert.ok(src.indexOf('escHtml(keys[k])') > -1, 'expected escHtml(keys[k]) on the form-data section title (XSS hardening)');
+    });
+
+});
