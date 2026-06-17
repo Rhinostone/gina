@@ -1072,44 +1072,17 @@ describe('08 - #S7 admin /_gina/* IP allowlist source structure', function() {
 
     var src = fs.readFileSync(SOURCE, 'utf8');
 
-    it('source contains the isAdminClientAllowed helper at module scope', function() {
-        assert.ok(
-            src.indexOf('function isAdminClientAllowed(req)') > -1,
-            'expected `function isAdminClientAllowed(req)` at module scope'
-        );
-    });
-
-    it('helper reads from process.gina._adminAllowList, defaults to loopback', function() {
-        var fnStart = src.indexOf('function isAdminClientAllowed(req)');
-        var fnEnd   = src.indexOf('}', src.indexOf('return list.indexOf(ip) >= 0'));
-        var body    = src.slice(fnStart, fnEnd);
-        assert.ok(body.indexOf('process.gina._adminAllowList') > -1, 'helper must read process.gina._adminAllowList');
-        assert.ok(body.indexOf("'127.0.0.1'") > -1 && body.indexOf("'::1'") > -1, 'helper must default to loopback');
-    });
-
-    it('helper never trusts X-Forwarded-For (reads from req.socket only)', function() {
-        var fnStart = src.indexOf('function isAdminClientAllowed(req)');
-        var fnEnd   = src.indexOf('}', src.indexOf('return list.indexOf(ip) >= 0'));
-        var body    = src.slice(fnStart, fnEnd);
-        assert.ok(body.indexOf('req.socket') > -1, 'helper must read req.socket.remoteAddress');
-        assert.ok(body.indexOf('x-forwarded-for') < 0 && body.indexOf('X-Forwarded-For') < 0,
-            'helper must NOT reference X-Forwarded-For');
-    });
-
-    it('helper normalises ::ffff:IPv4 → IPv4', function() {
-        var fnStart = src.indexOf('function isAdminClientAllowed(req)');
-        var fnEnd   = src.indexOf('}', src.indexOf('return list.indexOf(ip) >= 0'));
-        var body    = src.slice(fnStart, fnEnd);
-        assert.ok(body.indexOf('::ffff:') > -1 && body.indexOf('slice(7)') > -1,
-            'helper must strip the ::ffff: prefix from IPv6-mapped IPv4 addresses');
-    });
+    // The helper-body pins (reads-allowlist / no-X-Forwarded-For / ::ffff
+    // normalise) moved to test/lib/admin.test.js when isAdminClientAllowed was
+    // extracted into the shared lib.admin; this describe now pins how the Isaac
+    // handlers wire that gate (plus the gna.js + schema wiring below).
 
     it('/_gina/info handler invokes the gate before responding', function() {
         var infoMatch = src.indexOf('\\_gina\\/info$');
         assert.ok(infoMatch > -1, '/_gina/info regex anchor not found');
         var afterInfo = src.slice(infoMatch, infoMatch + 1200);
-        assert.ok(afterInfo.indexOf('isAdminClientAllowed(request)') > -1,
-            '/_gina/info handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(afterInfo.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/info handler must invoke lib.admin.isClientAllowed(request) before responding');
         assert.ok(afterInfo.indexOf("':status': 403") > -1 || afterInfo.indexOf(', 403') > -1,
             '/_gina/info handler must return 403 on deny');
     });
@@ -1118,8 +1091,8 @@ describe('08 - #S7 admin /_gina/* IP allowlist source structure', function() {
         var cacheMatch = src.indexOf('/_gina\\/cache\\/stats$');
         assert.ok(cacheMatch > -1, '/_gina/cache/stats regex anchor not found');
         var afterCache = src.slice(cacheMatch, cacheMatch + 1200);
-        assert.ok(afterCache.indexOf('isAdminClientAllowed(request)') > -1,
-            '/_gina/cache/stats handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(afterCache.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/cache/stats handler must invoke lib.admin.isClientAllowed(request) before responding');
         assert.ok(afterCache.indexOf("':status': 403") > -1 || afterCache.indexOf(', 403') > -1,
             '/_gina/cache/stats handler must return 403 on deny');
     });

@@ -674,67 +674,24 @@ describe('#M12b — per-request log context (requestId / durationMs)', function 
 // (setHeader / statusCode / end) rather than Isaac's _setPoweredByHeader /
 // response.stream.
 //
-// The isAdminClientAllowed(req) helper is duplicated VERBATIM from
-// server.isaac.js — its body is byte-identical (a sync pin below guards it;
-// a shared lib.admin extraction is a clean deferred follow-up). Mirrors the
-// server.isaac.test.js §08 / §08b coverage.
+// The IP-allowlist check now lives in the shared lib.admin (extracted from
+// the former byte-identical copies in server.js + server.isaac.js); both
+// engines call lib.admin.isClientAllowed(request). The helper-body +
+// byte-identical-sync pins moved to test/lib/admin.test.js; this describe now
+// pins only the express-engine handler wiring. Mirrors server.isaac.test.js §08.
 
 describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function () {
 
-    var src, isaacSrc;
-    var ISAAC_SOURCE = path.join(require('../fw'), 'core/server.isaac.js');
+    var src;
 
     before(function () {
-        src      = fs.readFileSync(SOURCE, 'utf8');
-        isaacSrc = fs.readFileSync(ISAAC_SOURCE, 'utf8');
+        src = fs.readFileSync(SOURCE, 'utf8');
     });
 
-    // Extract the isAdminClientAllowed function body (decl → closing brace),
-    // using the same end-anchor the isaac §08 pins use.
-    function extractHelper(s) {
-        var start = s.indexOf('function isAdminClientAllowed(req)');
-        if (start < 0) return null;
-        var end = s.indexOf('}', s.indexOf('return list.indexOf(ip) >= 0', start));
-        return s.slice(start, end + 1);
-    }
-
-    // ── source-structure pins ──────────────────────────────────────────────
-
-    it('server.js contains the isAdminClientAllowed helper at module scope', function () {
-        assert.ok(
-            src.indexOf('function isAdminClientAllowed(req)') > -1,
-            'expected `function isAdminClientAllowed(req)` at module scope in server.js'
-        );
-    });
-
-    it('helper reads process.gina._adminAllowList and defaults to loopback', function () {
-        var body = extractHelper(src);
-        assert.ok(body, 'helper body not found');
-        assert.ok(body.indexOf('process.gina._adminAllowList') > -1, 'helper must read process.gina._adminAllowList');
-        assert.ok(body.indexOf("'127.0.0.1'") > -1 && body.indexOf("'::1'") > -1, 'helper must default to loopback');
-    });
-
-    it('helper never trusts X-Forwarded-For (reads req.socket only)', function () {
-        var body = extractHelper(src);
-        assert.ok(body.indexOf('req.socket') > -1, 'helper must read req.socket.remoteAddress');
-        assert.ok(body.indexOf('x-forwarded-for') < 0 && body.indexOf('X-Forwarded-For') < 0,
-            'helper must NOT reference X-Forwarded-For');
-    });
-
-    it('helper normalises ::ffff:IPv4 → IPv4', function () {
-        var body = extractHelper(src);
-        assert.ok(body.indexOf('::ffff:') > -1 && body.indexOf('slice(7)') > -1,
-            'helper must strip the ::ffff: prefix from IPv6-mapped IPv4 addresses');
-    });
-
-    it('helper body is byte-identical to the server.isaac.js copy (sync guard)', function () {
-        var here  = extractHelper(src);
-        var there = extractHelper(isaacSrc);
-        assert.ok(here && there, 'both copies of the helper must be present');
-        assert.equal(here, there,
-            'server.js and server.isaac.js copies of isAdminClientAllowed must stay byte-identical — ' +
-            'update both (or extract to a shared lib.admin) when changing either');
-    });
+    // ── source-structure pins (express-engine handler wiring) ───────────────
+    // The helper-body + byte-identical-sync pins moved to test/lib/admin.test.js
+    // when isAdminClientAllowed was extracted into the shared lib.admin; this
+    // describe now pins only how the express handlers wire that gate.
 
     it('/_gina/info handler invokes the gate before responding (403 on deny)', function () {
         var infoAt  = src.indexOf('_gina\\/info$');
@@ -742,8 +699,8 @@ describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function
         assert.ok(infoAt > -1, '/_gina/info regex anchor not found in server.js');
         assert.ok(cacheAt > infoAt, '/_gina/cache/stats anchor must follow /_gina/info');
         var blk = src.slice(infoAt, cacheAt);
-        assert.ok(blk.indexOf('isAdminClientAllowed(request)') > -1,
-            '/_gina/info handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(blk.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/info handler must invoke lib.admin.isClientAllowed(request) before responding');
         assert.ok(blk.indexOf('statusCode = 403') > -1,
             '/_gina/info handler must return 403 on deny');
     });
@@ -772,8 +729,8 @@ describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function
         assert.ok(cacheAt > -1, '/_gina/cache/stats regex anchor not found in server.js');
         assert.ok(jobsAt > cacheAt, '/_gina/jobs anchor must follow /_gina/cache/stats');
         var blk = src.slice(cacheAt, jobsAt);
-        assert.ok(blk.indexOf('isAdminClientAllowed(request)') > -1,
-            '/_gina/cache/stats handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(blk.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/cache/stats handler must invoke lib.admin.isClientAllowed(request) before responding');
         assert.ok(blk.indexOf('statusCode = 403') > -1,
             '/_gina/cache/stats handler must return 403 on deny');
     });

@@ -100,45 +100,6 @@ var Domain          = lib.Domain;
 var domainLib       = new Domain();
 
 /**
- * IP-allowlist check for admin-grade /_gina/* endpoints (/_gina/info,
- * /_gina/cache/stats). #S7. Engine-agnostic mirror of the helper in
- * server.isaac.js — the function body is kept byte-identical to it (a
- * source-pin in test/core/server.test.js guards the two copies staying
- * in sync); a shared lib.admin extraction is a clean follow-up.
- *
- * Reads the allowlist from `process.gina._adminAllowList`, which `gna.js`
- * populates at bundle init from `app.json` `admin.allowFrom` (defaults to
- * loopback `['127.0.0.1', '::1']`). Same shape as `lib.metrics.isClientAllowed`
- * but on a separate axis — admin endpoints expose process state (memory,
- * uptime, HTTP/2 session counters, cache contents) and are gated separately
- * from Prometheus scrapes.
- *
- * Reads the client IP from `req.socket.remoteAddress` only — never trusts
- * `X-Forwarded-For` because reverse proxies could spoof it. Normalises
- * `::ffff:IPv4` (IPv6-mapped IPv4) → `IPv4` so listing `127.0.0.1` matches
- * both forms.
- *
- * Empty allowlist (`[]`) denies everyone — explicit lockdown choice.
- * Missing `process.gina._adminAllowList` (init not yet fired) falls back
- * to loopback-only, the safest default.
- *
- * @inner
- * @param {http.IncomingMessage|http2.Http2ServerRequest} req
- * @returns {boolean} true if client IP is allowed, false otherwise
- */
-function isAdminClientAllowed(req) {
-    var list = (typeof process.gina === 'object' && process.gina && Array.isArray(process.gina._adminAllowList))
-        ? process.gina._adminAllowList
-        : ['127.0.0.1', '::1'];
-    if (list.length === 0) return false;
-    var ip = (req.socket && req.socket.remoteAddress)
-          || (req.connection && req.connection.remoteAddress)
-          || '';
-    if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
-    return list.indexOf(ip) >= 0;
-}
-
-/**
  * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
  * exposed outside dev mode (#INS9b). Engine-agnostic mirror of the helper in
  * server.isaac.js. The configured key lives on `process.gina._inspectorAgentKey`
@@ -2963,7 +2924,7 @@ function Server(options) {
                 response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
                 response.setHeader('pragma',  'no-cache');
                 response.setHeader('expires', '0');
-                if ( !isAdminClientAllowed(request) ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
                     response.statusCode = 403;
                     return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/info: client IP not in app.json admin.allowFrom' }));
                 }
@@ -2998,7 +2959,7 @@ function Server(options) {
                 response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
                 response.setHeader('pragma',  'no-cache');
                 response.setHeader('expires', '0');
-                if ( !isAdminClientAllowed(request) ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
                     response.statusCode = 403;
                     return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/cache/stats: client IP not in app.json admin.allowFrom' }));
                 }

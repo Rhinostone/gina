@@ -43,42 +43,6 @@ const env               = process.env.NODE_ENV
 ;
 
 /**
- * IP-allowlist check for admin-grade /_gina/* endpoints (/_gina/info,
- * /_gina/cache/stats). #S7.
- *
- * Reads the allowlist from `process.gina._adminAllowList`, which `gna.js`
- * populates at bundle init from `app.json` `admin.allowFrom` (defaults to
- * loopback `['127.0.0.1', '::1']`). Same shape as `lib.metrics.isClientAllowed`
- * but on a separate axis — admin endpoints expose process state (memory,
- * uptime, HTTP/2 session counters, cache contents) and are gated separately
- * from Prometheus scrapes.
- *
- * Reads the client IP from `req.socket.remoteAddress` only — never trusts
- * `X-Forwarded-For` because reverse proxies could spoof it. Normalises
- * `::ffff:IPv4` (IPv6-mapped IPv4) → `IPv4` so listing `127.0.0.1` matches
- * both forms.
- *
- * Empty allowlist (`[]`) denies everyone — explicit lockdown choice.
- * Missing `process.gina._adminAllowList` (init not yet fired) falls back
- * to loopback-only, the safest default.
- *
- * @inner
- * @param {http.IncomingMessage|http2.Http2ServerRequest} req
- * @returns {boolean} true if client IP is allowed, false otherwise
- */
-function isAdminClientAllowed(req) {
-    var list = (typeof process.gina === 'object' && process.gina && Array.isArray(process.gina._adminAllowList))
-        ? process.gina._adminAllowList
-        : ['127.0.0.1', '::1'];
-    if (list.length === 0) return false;
-    var ip = (req.socket && req.socket.remoteAddress)
-          || (req.connection && req.connection.remoteAddress)
-          || '';
-    if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
-    return list.indexOf(ip) >= 0;
-}
-
-/**
  * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
  * exposed outside dev mode (#INS9b). The configured key lives on
  * `process.gina._inspectorAgentKey` (set by gna.js from settings.json
@@ -1007,7 +971,7 @@ function ServerEngineClass(options) {
 
                 // #S7 — IP allowlist gate. Mirrors the metrics endpoint
                 // gate at L605-621. 403 on deny.
-                if ( !isAdminClientAllowed(request) ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
                     var infoForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/info: client IP not in app.json admin.allowFrom' });
                     var infoForbiddenHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',
@@ -1067,7 +1031,7 @@ function ServerEngineClass(options) {
             if ( request.method.toUpperCase() === 'GET' && /\/_gina\/cache\/stats$/i.test(request.url) ) {
 
                 // #S7 — IP allowlist gate. Same shape as the /_gina/info gate above.
-                if ( !isAdminClientAllowed(request) ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
                     var cacheStatsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/cache/stats: client IP not in app.json admin.allowFrom' });
                     var cacheStatsForbiddenHeaders = _setPoweredByHeader({
                         'cache-control': 'no-cache, no-store, must-revalidate',

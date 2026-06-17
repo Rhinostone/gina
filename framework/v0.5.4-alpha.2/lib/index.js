@@ -106,6 +106,11 @@ function Lib() {
         // lifecycle hook that populates the HTTP counter + histogram. Opt-in
         // via app.json `metrics.enabled`.
         metrics         : _require('./metrics'),
+        // #S7 — admin /_gina/* IP-allowlist gate (isClientAllowed). Functional
+        // sibling of metrics above, but a PLAIN require (NOT _require): a
+        // stateless pure-function leaf with no instance/singleton state to
+        // hot-reload — same #B32-residual precedent as merge / uuid / Collection.
+        admin           : require('./admin'),
         // #AI6 — Async-job primitive. Holds an in-memory job registry, a
         // concurrency-limited worker, and a self-contained unref'd setInterval
         // sweep timer at module scope. Like State / logger below, it MUST use a
