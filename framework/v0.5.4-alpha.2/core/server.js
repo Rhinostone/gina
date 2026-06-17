@@ -100,6 +100,45 @@ var Domain          = lib.Domain;
 var domainLib       = new Domain();
 
 /**
+ * IP-allowlist check for admin-grade /_gina/* endpoints (/_gina/info,
+ * /_gina/cache/stats). #S7. Engine-agnostic mirror of the helper in
+ * server.isaac.js — the function body is kept byte-identical to it (a
+ * source-pin in test/core/server.test.js guards the two copies staying
+ * in sync); a shared lib.admin extraction is a clean follow-up.
+ *
+ * Reads the allowlist from `process.gina._adminAllowList`, which `gna.js`
+ * populates at bundle init from `app.json` `admin.allowFrom` (defaults to
+ * loopback `['127.0.0.1', '::1']`). Same shape as `lib.metrics.isClientAllowed`
+ * but on a separate axis — admin endpoints expose process state (memory,
+ * uptime, HTTP/2 session counters, cache contents) and are gated separately
+ * from Prometheus scrapes.
+ *
+ * Reads the client IP from `req.socket.remoteAddress` only — never trusts
+ * `X-Forwarded-For` because reverse proxies could spoof it. Normalises
+ * `::ffff:IPv4` (IPv6-mapped IPv4) → `IPv4` so listing `127.0.0.1` matches
+ * both forms.
+ *
+ * Empty allowlist (`[]`) denies everyone — explicit lockdown choice.
+ * Missing `process.gina._adminAllowList` (init not yet fired) falls back
+ * to loopback-only, the safest default.
+ *
+ * @inner
+ * @param {http.IncomingMessage|http2.Http2ServerRequest} req
+ * @returns {boolean} true if client IP is allowed, false otherwise
+ */
+function isAdminClientAllowed(req) {
+    var list = (typeof process.gina === 'object' && process.gina && Array.isArray(process.gina._adminAllowList))
+        ? process.gina._adminAllowList
+        : ['127.0.0.1', '::1'];
+    if (list.length === 0) return false;
+    var ip = (req.socket && req.socket.remoteAddress)
+          || (req.connection && req.connection.remoteAddress)
+          || '';
+    if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
+    return list.indexOf(ip) >= 0;
+}
+
+/**
  * Constant-time API-key check for the /_gina/agent SSE endpoint when it is
  * exposed outside dev mode (#INS9b). Engine-agnostic mirror of the helper in
  * server.isaac.js. The configured key lives on `process.gina._inspectorAgentKey`
@@ -2908,6 +2947,64 @@ function Server(options) {
                     response.statusCode = 500;
                     return response.end(JSON.stringify({ error: 'metrics_error', message: _metricsErr.message || String(_metricsErr) }));
                 });
+            }
+
+            // ── /_gina/info — process/runtime state (always-on, admin-gated) ─────────
+            // (#S7) Engine-agnostic mirror of the Isaac handler. GET only. The IP
+            // allowlist comes from app.json `admin.allowFrom` (default loopback) via
+            // process.gina._adminAllowList; 403 JSON on deny. The `http2` block is
+            // Isaac-only (the Express engine has no HTTP/2 session metrics —
+            // _h2Metrics is undefined here), so it degrades to omitted under Express.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /\/_gina\/info$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',  'no-cache');
+                response.setHeader('expires', '0');
+                if ( !isAdminClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/info: client IP not in app.json admin.allowFrom' }));
+                }
+                var infoPayload = {
+                    "cache-is-enabled": self.instance._cacheIsEnabled,
+                    "memory"  : process.memoryUsage(),
+                    "uptime"  : process.uptime(),
+                    "version" : process.version
+                };
+                if (self.instance._h2Metrics) {
+                    infoPayload["http2"] = {
+                        activeSessions    : self.instance._h2Metrics.activeSessions,
+                        totalStreams      : self.instance._h2Metrics.totalStreams,
+                        goawayCount       : self.instance._h2Metrics.goawayCount,
+                        rstCount          : self.instance._h2Metrics.rstCount,
+                        rapidResetBlocked : self.instance._h2Metrics.rapidResetBlocked,
+                        extendedConnect   : self.instance._h2Metrics.extendedConnect
+                    };
+                }
+                return response.end(JSON.stringify(infoPayload));
+            }
+
+            // ── /_gina/cache/stats — cache statistics (always-on, admin-gated) ───────
+            // (#S7) Engine-agnostic mirror of the Isaac handler. GET only. Same admin
+            // IP allowlist as /_gina/info. Builds a Cache view over the shared
+            // self.instance._cached Map and returns its stats(); 403 JSON on deny.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /\/_gina\/cache\/stats$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',  'no-cache');
+                response.setHeader('expires', '0');
+                if ( !isAdminClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/cache/stats: client IP not in app.json admin.allowFrom' }));
+                }
+                var _cacheStatsView = new lib.Cache();
+                _cacheStatsView.from(self.instance._cached);
+                return response.end(JSON.stringify(_cacheStatsView.stats()));
             }
 
             // ── /_gina/jobs/:id — async-job status (always-on, state-only) ──────────

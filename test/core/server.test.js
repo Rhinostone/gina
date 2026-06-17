@@ -659,3 +659,182 @@ describe('#M12b — per-request log context (requestId / durationMs)', function 
         assert.deepEqual(results, ['A', 'B'], 'each concurrent run() must see only its own store');
     });
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// #S7 — admin-grade /_gina/* IP allowlist (express-engine mirror)
+// ─────────────────────────────────────────────────────────────────────────
+//
+// server.isaac.js serves /_gina/info and /_gina/cache/stats (admin-grade —
+// they expose process state: memory, uptime, HTTP/2 counters, cache
+// contents) behind an IP allowlist. The default express engine (server.js)
+// previously 404'd both — a /_gina/* endpoint-sync-rule gap (fail-closed,
+// but a parity gap). They are now mirrored into server.js with the same
+// always-on + admin-gated shape, using the express response idiom
+// (setHeader / statusCode / end) rather than Isaac's _setPoweredByHeader /
+// response.stream.
+//
+// The isAdminClientAllowed(req) helper is duplicated VERBATIM from
+// server.isaac.js — its body is byte-identical (a sync pin below guards it;
+// a shared lib.admin extraction is a clean deferred follow-up). Mirrors the
+// server.isaac.test.js §08 / §08b coverage.
+
+describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function () {
+
+    var src, isaacSrc;
+    var ISAAC_SOURCE = path.join(require('../fw'), 'core/server.isaac.js');
+
+    before(function () {
+        src      = fs.readFileSync(SOURCE, 'utf8');
+        isaacSrc = fs.readFileSync(ISAAC_SOURCE, 'utf8');
+    });
+
+    // Extract the isAdminClientAllowed function body (decl → closing brace),
+    // using the same end-anchor the isaac §08 pins use.
+    function extractHelper(s) {
+        var start = s.indexOf('function isAdminClientAllowed(req)');
+        if (start < 0) return null;
+        var end = s.indexOf('}', s.indexOf('return list.indexOf(ip) >= 0', start));
+        return s.slice(start, end + 1);
+    }
+
+    // ── source-structure pins ──────────────────────────────────────────────
+
+    it('server.js contains the isAdminClientAllowed helper at module scope', function () {
+        assert.ok(
+            src.indexOf('function isAdminClientAllowed(req)') > -1,
+            'expected `function isAdminClientAllowed(req)` at module scope in server.js'
+        );
+    });
+
+    it('helper reads process.gina._adminAllowList and defaults to loopback', function () {
+        var body = extractHelper(src);
+        assert.ok(body, 'helper body not found');
+        assert.ok(body.indexOf('process.gina._adminAllowList') > -1, 'helper must read process.gina._adminAllowList');
+        assert.ok(body.indexOf("'127.0.0.1'") > -1 && body.indexOf("'::1'") > -1, 'helper must default to loopback');
+    });
+
+    it('helper never trusts X-Forwarded-For (reads req.socket only)', function () {
+        var body = extractHelper(src);
+        assert.ok(body.indexOf('req.socket') > -1, 'helper must read req.socket.remoteAddress');
+        assert.ok(body.indexOf('x-forwarded-for') < 0 && body.indexOf('X-Forwarded-For') < 0,
+            'helper must NOT reference X-Forwarded-For');
+    });
+
+    it('helper normalises ::ffff:IPv4 → IPv4', function () {
+        var body = extractHelper(src);
+        assert.ok(body.indexOf('::ffff:') > -1 && body.indexOf('slice(7)') > -1,
+            'helper must strip the ::ffff: prefix from IPv6-mapped IPv4 addresses');
+    });
+
+    it('helper body is byte-identical to the server.isaac.js copy (sync guard)', function () {
+        var here  = extractHelper(src);
+        var there = extractHelper(isaacSrc);
+        assert.ok(here && there, 'both copies of the helper must be present');
+        assert.equal(here, there,
+            'server.js and server.isaac.js copies of isAdminClientAllowed must stay byte-identical — ' +
+            'update both (or extract to a shared lib.admin) when changing either');
+    });
+
+    it('/_gina/info handler invokes the gate before responding (403 on deny)', function () {
+        var infoAt  = src.indexOf('_gina\\/info$');
+        var cacheAt = src.indexOf('_gina\\/cache\\/stats$');
+        assert.ok(infoAt > -1, '/_gina/info regex anchor not found in server.js');
+        assert.ok(cacheAt > infoAt, '/_gina/cache/stats anchor must follow /_gina/info');
+        var blk = src.slice(infoAt, cacheAt);
+        assert.ok(blk.indexOf('isAdminClientAllowed(request)') > -1,
+            '/_gina/info handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(blk.indexOf('statusCode = 403') > -1,
+            '/_gina/info handler must return 403 on deny');
+    });
+
+    it('/_gina/info uses the express idiom, not Isaac stream / _setPoweredByHeader', function () {
+        var infoAt  = src.indexOf('_gina\\/info$');
+        var cacheAt = src.indexOf('_gina\\/cache\\/stats$');
+        var blk     = src.slice(infoAt, cacheAt);
+        assert.ok(blk.indexOf('response.end(') > -1, 'info handler must respond via response.end()');
+        assert.ok(blk.indexOf('response.stream') < 0 && blk.indexOf('_setPoweredByHeader') < 0,
+            'express mirror must not use Isaac-only response.stream / _setPoweredByHeader');
+    });
+
+    it('/_gina/info reads self.instance._cacheIsEnabled + keeps the _h2Metrics guard', function () {
+        var infoAt  = src.indexOf('_gina\\/info$');
+        var cacheAt = src.indexOf('_gina\\/cache\\/stats$');
+        var blk     = src.slice(infoAt, cacheAt);
+        assert.ok(blk.indexOf('self.instance._cacheIsEnabled') > -1, 'must read self.instance._cacheIsEnabled');
+        assert.ok(blk.indexOf('if (self.instance._h2Metrics)') > -1,
+            'the http2 block must stay guarded (Isaac-only — falsy/omitted under express)');
+    });
+
+    it('/_gina/cache/stats handler invokes the gate before responding (403 on deny)', function () {
+        var cacheAt = src.indexOf('_gina\\/cache\\/stats$');
+        var jobsAt  = src.indexOf('_gina\\/jobs\\/', cacheAt);
+        assert.ok(cacheAt > -1, '/_gina/cache/stats regex anchor not found in server.js');
+        assert.ok(jobsAt > cacheAt, '/_gina/jobs anchor must follow /_gina/cache/stats');
+        var blk = src.slice(cacheAt, jobsAt);
+        assert.ok(blk.indexOf('isAdminClientAllowed(request)') > -1,
+            '/_gina/cache/stats handler must invoke isAdminClientAllowed(request) before responding');
+        assert.ok(blk.indexOf('statusCode = 403') > -1,
+            '/_gina/cache/stats handler must return 403 on deny');
+    });
+
+    it('/_gina/cache/stats builds a Cache view over self.instance._cached', function () {
+        var cacheAt = src.indexOf('_gina\\/cache\\/stats$');
+        var jobsAt  = src.indexOf('_gina\\/jobs\\/', cacheAt);
+        var blk     = src.slice(cacheAt, jobsAt);
+        assert.ok(blk.indexOf('new lib.Cache()') > -1, 'must construct a fresh lib.Cache()');
+        assert.ok(blk.indexOf('.from(self.instance._cached)') > -1, 'must adopt the shared self.instance._cached Map');
+        assert.ok(blk.indexOf('.stats()') > -1, 'must serialise cache.stats()');
+    });
+
+    // ── pure-logic replica (mirrors server.isaac.test.js §08b) ──────────────
+    // Inline replica of isAdminClientAllowed; takes the allowlist as a param
+    // so every branch is exercised without touching process.gina state. The
+    // helper body above is byte-pinned to the Isaac copy, so this logic
+    // applies to both engines.
+
+    function isAllowed(req, list) {
+        if (list.length === 0) return false;
+        var ip = (req.socket && req.socket.remoteAddress)
+              || (req.connection && req.connection.remoteAddress)
+              || '';
+        if (ip.indexOf('::ffff:') === 0) ip = ip.slice(7);
+        return list.indexOf(ip) >= 0;
+    }
+
+    it('replica: loopback IPv4 is allowed by default', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '127.0.0.1' } }, ['127.0.0.1', '::1']), true);
+    });
+    it('replica: loopback IPv6 (::1) is allowed by default', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '::1' } }, ['127.0.0.1', '::1']), true);
+    });
+    it('replica: ::ffff:127.0.0.1 (IPv6-mapped IPv4 loopback) is normalised and allowed', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '::ffff:127.0.0.1' } }, ['127.0.0.1', '::1']), true);
+    });
+    it('replica: arbitrary public IP is denied by the default loopback list', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '203.0.113.42' } }, ['127.0.0.1', '::1']), false);
+    });
+    it('replica: private network IP is allowed when listed', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '10.0.1.5' } }, ['127.0.0.1', '::1', '10.0.1.5']), true);
+    });
+    it('replica: ::ffff:10.0.1.5 (IPv6-mapped non-loopback) is normalised and matched', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '::ffff:10.0.1.5' } }, ['10.0.1.5']), true);
+    });
+    it('replica: empty allowlist denies everyone (explicit lockdown)', function () {
+        assert.equal(isAllowed({ socket: { remoteAddress: '127.0.0.1' } }, []), false);
+        assert.equal(isAllowed({ socket: { remoteAddress: '::1' } }, []), false);
+        assert.equal(isAllowed({ socket: { remoteAddress: '10.0.0.1' } }, []), false);
+    });
+    it('replica: falls back to req.connection.remoteAddress when req.socket missing', function () {
+        assert.equal(isAllowed({ connection: { remoteAddress: '127.0.0.1' } }, ['127.0.0.1', '::1']), true);
+    });
+    it('replica: req with no socket and no connection denies', function () {
+        assert.equal(isAllowed({}, ['127.0.0.1', '::1']), false);
+    });
+    it('replica: X-Forwarded-For is ignored even when present (spoofing defense)', function () {
+        var req = { socket: { remoteAddress: '203.0.113.42' }, headers: { 'x-forwarded-for': '127.0.0.1' } };
+        assert.equal(isAllowed(req, ['127.0.0.1', '::1']), false,
+            'must NOT trust X-Forwarded-For — reverse proxies could spoof it');
+    });
+
+});
