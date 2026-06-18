@@ -4023,6 +4023,20 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         let httpStatus  = null; // captured from the HTTP/2 HEADERS frame (:status pseudo-header)
         const chunks    = []; // collect Buffer chunks — avoids peak-memory doubling from string concat
 
+        // #B52 — release the settled outbound stream so the cached HTTP/2 session stops
+        // retaining it (and, through the per-request controller it captures, the large
+        // per-request `options.conf` clone made in router.js). Idempotent; invoked at every
+        // NON-retry terminal below (retry paths client.destroy() the session, which tears the
+        // old stream down). Never throws — cleanup must not break the response path.
+        var _finalized = false;
+        var _finalizeStream = function _finalizeStream() {
+            if (_finalized) { return; }
+            _finalized = true;
+            try { req.setTimeout(0); } catch (e) {}
+            try { req.removeAllListeners(); } catch (e) {}
+            try { if (!req.closed && !req.destroyed) { req.close(); } } catch (e) {}
+        };
+
         // Capture the HTTP/2 response status code from the HEADERS frame.
         // Without this, the :status pseudo-header is never read and nginx-level errors
         // (e.g. 502 Bad Gateway) are indistinguishable from JSON parse failures.
@@ -4059,6 +4073,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // All retries exhausted — surface the error (H4: typed GinaHttp2Error)
             var _timeoutMsg = '[HTTP2] No response from '+ options[':authority'] +' after '+ (_streamTimeout > 1000 ? (_streamTimeout / 1000) + 's' : _streamTimeout + 'ms') +' (exhausted '+ HTTP2_MAX_RETRIES +' retries)';
             var _timeoutErr = new GinaHttp2Error(_timeoutMsg, { code: 'TIMEOUT', retryable: false, status: 503, retryCount: retryCount });
+            // #B52 — release the settled stream (covers both the swallow-return and the callback below)
+            _finalizeStream();
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_timeoutErr)) return;
             if (typeof callback === 'function') {
@@ -4143,6 +4159,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             _ginaErr.cause = error; // preserve original Node error (stack, syscall, etc.)
             if (isConnError && error.accessPoint) { _ginaErr.accessPoint = error.accessPoint; }
 
+            // #B52 — release the settled stream (covers both the swallow-return and the callback below)
+            _finalizeStream();
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(_ginaErr)) return;
             if (typeof callback !== 'undefined') {
@@ -4188,6 +4206,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 status     : 503,
                 retryCount : retryCount
             });
+            // #B52 — release the settled stream (covers both the swallow-return and the callback below)
+            _finalizeStream();
             // H3: if non-critical, swallow and return
             if (_swallowIfNonCritical(prematureCloseErr)) return;
             if (typeof callback !== 'undefined') {
@@ -4247,6 +4267,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     status     : 502,
                     retryCount : retryCount
                 });
+                // #B52 — release the settled stream (covers both the swallow-return and the callback below)
+                _finalizeStream();
                 // H3: if non-critical, swallow and return
                 if (_swallowIfNonCritical(_badGatewayErr)) return;
                 if (typeof callback !== 'undefined') {
@@ -4256,6 +4278,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 }
                 return;
             }
+
+            // #B52 — release the settled stream before the remaining onEnd terminals
+            // (ALPN-mismatch, 5xx callback, throwError, success callback, EventEmitter-mode)
+            _finalizeStream();
 
             // 3. Exception filter for ALPN or protocol mismatches
             if (typeof data === 'string' && /^Unknown ALPN Protocol/.test(data)) {
