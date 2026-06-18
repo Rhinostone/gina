@@ -797,3 +797,153 @@ describe('10 - #B18 router.js require.cache antipattern eviction', function() {
     });
 
 });
+
+
+// 11 — #B52-residual: narrowed per-request conf clone (router.js this.route)
+describe('11 - #B52-residual: narrowed per-request conf clone', function() {
+
+    var SOURCE = path.join(require('../fw'), 'core/router.js');
+    var src    = fs.readFileSync(SOURCE, 'utf8');
+    // Full-line comments stripped so the negative pin below does not trip on the
+    // commented-out old statement (a negative source pin must not match the file's own comments).
+    var code   = src.replace(/^\s*\/\/.*$/gm, '');
+
+    // The real framework deep-clone, so the replica mirrors router.js exactly.
+    var JSONClone = require('../../utils/prototypes.json_clone');
+
+    // ── (a) source structure — whole-conf clone replaced by the narrowed form ────
+
+    it('no longer deep-clones the WHOLE conf per request (active statement gone)', function() {
+        assert.ok(
+            code.indexOf('options.conf = JSON.clone(conf);') < 0,
+            'router.js must not deep-clone the entire bundle conf per request (#B52-residual high-water-mark)'
+        );
+    });
+
+    it('shallow-copies the top level + conf.content and deep-clones only conf.content.routing', function() {
+        assert.ok(
+            src.indexOf('options.conf = Object.assign({}, conf);') > -1,
+            'expected a shallow top-level copy: options.conf = Object.assign({}, conf)'
+        );
+        assert.ok(
+            src.indexOf('options.conf.content = Object.assign({}, conf.content);') > -1,
+            'expected a shallow content copy: options.conf.content = Object.assign({}, conf.content)'
+        );
+        assert.ok(
+            src.indexOf('options.conf.content.routing = JSON.clone(conf.content.routing);') > -1,
+            'expected a deep clone of only the mutated subtree: options.conf.content.routing = JSON.clone(conf.content.routing)'
+        );
+    });
+
+    it('the deep-clone precedes the per-request [rule].param write (still the single clone-writer)', function() {
+        var cloneIdx = src.indexOf('options.conf.content.routing = JSON.clone(conf.content.routing);');
+        var writeIdx = src.indexOf('options.conf.content.routing[options.rule].param = params.param;');
+        assert.ok(cloneIdx > -1 && writeIdx > -1, 'both the clone and the [rule].param write must be present');
+        assert.ok(writeIdx > cloneIdx, 'the [rule].param write must come after content.routing is made request-private');
+    });
+
+    it('source carries the #B52-residual trace marker', function() {
+        assert.ok(src.indexOf('#B52-residual') > -1, 'expected #B52-residual trace marker at the fix site');
+    });
+
+    // ── (b) pure logic — share the immutable remainder, isolate content.routing ──
+
+    // mirrors router.js this.route: shallow top + shallow content + deep content.routing
+    function narrowedConfClone(conf) {
+        var c = Object.assign({}, conf);
+        c.content = Object.assign({}, conf.content);
+        c.content.routing = JSONClone(conf.content.routing);
+        return c;
+    }
+    function makeConf() {
+        return {
+            server         : { coreConfiguration: { mime: { html: 'text/html' }, statusCodes: { '404': 'Not Found' } } },
+            routing        : { homepage: { host: 'h0' } },   // top-level — reassigned wholesale at controller:590
+            reverseRouting : { '/': 'homepage' },            // reassigned at controller:623
+            forms          : { login: {} },                  // reassigned at controller:627
+            locale         : { date: { now: 'orig' } },      // reassigned at controller:762/766
+            locales        : [{ lang: 'en', content: {} }],  // reassigned at controller:759
+            content        : {
+                templates : { _common: { html: '/tpl' } },
+                settings  : { region: { shortCode: 'en' } },
+                forms     : { login: { fields: {} } },
+                routing   : {                                 // mutated-into at router:545 — MUST be deep-cloned
+                    homepage : { url: '/',     param: { control: 'home' } },
+                    page     : { url: '/p/:n', param: { control: 'page', n: ':n' } }
+                }
+            }
+        };
+    }
+
+    it('shares the large immutable subtrees by reference (no per-request copy)', function() {
+        var source = makeConf();
+        var clone  = narrowedConfClone(source);
+        assert.equal(clone.server, source.server, 'conf.server shared by reference (read-only, big)');
+        assert.equal(clone.content.templates, source.content.templates, 'content.templates shared by reference');
+        assert.equal(clone.content.settings, source.content.settings, 'content.settings shared by reference');
+        assert.equal(clone.content.forms, source.content.forms, 'content.forms shared by reference (only reassign-read per request)');
+        assert.equal(clone.locales, source.locales, 'locales shared by reference');
+    });
+
+    it('makes conf.content.routing request-private (deep clone down to each rule)', function() {
+        var source = makeConf();
+        var clone  = narrowedConfClone(source);
+        assert.notEqual(clone.content, source.content, 'content is a fresh shallow copy');
+        assert.notEqual(clone.content.routing, source.content.routing, 'content.routing is a deep clone');
+        assert.notEqual(clone.content.routing.homepage, source.content.routing.homepage, 'each rule object is a separate copy');
+        assert.deepEqual(clone.content.routing.homepage, source.content.routing.homepage, 'but data-identical to the source');
+    });
+
+    it('the router.js:545 [rule].param write stays private (does not mutate the source conf)', function() {
+        var source = makeConf();
+        var clone  = narrowedConfClone(source);
+        clone.content.routing.homepage.param = { control: 'home', injected: 'X' }; // mirrors router.js:545
+        assert.equal(source.content.routing.homepage.param.injected, undefined,
+            'writing the clone content.routing[rule].param must not reach the shared source');
+    });
+
+    it('the whole-subtree reassigns (routing/reverseRouting/forms/locales/locale) stay private', function() {
+        var source     = makeConf();
+        var origRouting = source.routing, origLocale = source.locale;
+        var clone      = narrowedConfClone(source);
+        assert.equal(clone.routing, source.routing, 'top-level routing initially shared by reference (shallow top copy)');
+        // controller setOptions reassigns these wholesale on the per-request conf:
+        clone.routing        = { reassigned: 'A' }; // == controller:590
+        clone.reverseRouting = { reassigned: 'A' }; // == controller:623
+        clone.forms          = clone.content.forms; // == controller:627
+        clone.locale         = { date: { now: 'new' } }; // == controller:762/766
+        clone.locales        = [{ lang: 'fr' }];    // == controller:759
+        assert.equal(source.routing, origRouting, 'source.routing still the original object');
+        assert.deepEqual(source.routing, { homepage: { host: 'h0' } }, 'source.routing content unchanged');
+        assert.equal(source.locale, origLocale, 'source.locale still the original object');
+        assert.deepEqual(source.locale, { date: { now: 'orig' } }, 'source.locale content unchanged');
+    });
+
+    it('two concurrent requests do not bleed via content.routing', function() {
+        var source = makeConf();
+        var reqA = narrowedConfClone(source);
+        var reqB = narrowedConfClone(source);
+        reqA.content.routing.homepage.param = { control: 'home', reqId: 'A' };
+        reqB.content.routing.homepage.param = { control: 'home', reqId: 'B' };
+        assert.equal(reqA.content.routing.homepage.param.reqId, 'A', 'request A keeps its own param');
+        assert.equal(reqB.content.routing.homepage.param.reqId, 'B', 'request B keeps its own param');
+        assert.equal(source.content.routing.homepage.param.reqId, undefined, 'source conf is untouched');
+    });
+
+    it('subtract: WITHOUT the content.routing deep clone, concurrent requests WOULD bleed', function() {
+        // proves the deep clone is load-bearing, not incidental
+        var source = makeConf();
+        function buggyClone(conf) { // shallow content only — content.routing shared (the bug)
+            var c = Object.assign({}, conf);
+            c.content = Object.assign({}, conf.content);
+            return c;
+        }
+        var reqA = buggyClone(source);
+        var reqB = buggyClone(source);
+        reqA.content.routing.homepage.param = { control: 'home', reqId: 'A' };
+        reqB.content.routing.homepage.param = { control: 'home', reqId: 'B' };
+        assert.equal(reqA.content.routing.homepage.param.reqId, 'B',
+            'without the deep clone, request A sees request B param (cross-request bleed)');
+    });
+
+});

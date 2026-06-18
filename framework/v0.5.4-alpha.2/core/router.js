@@ -533,8 +533,21 @@ function Router(env, scope) {
         options = merge(JSON.clone(options), params);
         // options = merge(options, params);
 
-        // We want to keep original conf untouched
-        options.conf = JSON.clone(conf);
+        // We want to keep original conf untouched.
+        // #B52-residual: deep-cloning the WHOLE bundle conf on every matched request is a
+        // multi-MB per-request allocation (templates / server config / app assets / fonts) that
+        // accumulates under concurrency into a heap high-water-mark. Only conf.content.routing is
+        // mutated through this clone (the [rule].param write below) — every other subtree is
+        // read-only on the per-request path (setOptions reassigns conf.routing/reverseRouting/
+        // forms/locales/locale wholesale, which the shallow top-level copy already isolates; and
+        // plugins/connectors/model read config via their own getConfig clone or the global
+        // singleton, never through this object). So shallow-copy the top level + conf.content and
+        // deep-clone only conf.content.routing; the large immutable remainder is shared by
+        // reference at no per-request heap cost.
+        // options.conf = JSON.clone(conf); // pre-#B52-residual: whole-conf deep clone per request
+        options.conf = Object.assign({}, conf);
+        options.conf.content = Object.assign({}, conf.content);
+        options.conf.content.routing = JSON.clone(conf.content.routing);
         // inheriting from _common
         if (
             options.template

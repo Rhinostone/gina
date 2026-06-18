@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Narrowed the per-request configuration clone in the router so a matched request no longer deep-clones the entire bundle configuration. Only the routing table the request mutates is cloned per request; the large immutable remainder (templates, server configuration, application assets) is shared by reference. Under sustained concurrency this removes a heap high-water-mark proportional to configuration size. No behavior or API change.'
+time: 2026-06-18T12:30:00+01:00
