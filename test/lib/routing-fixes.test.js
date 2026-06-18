@@ -193,3 +193,89 @@ describe('03 - fitsWithRequirements: slow path (multi-param no-requirements guar
         assert.ok(slowGuard > fastPathEnd, 'slow path guard must be inside the else { // slow one } block');
     });
 });
+
+
+// ─── 04 — #B52-residual finding-2: getRouteByUrl clones param + propagates substitution ───
+//
+// getRouteByUrl built `params.param` as a BY-REFERENCE alias of the shared config
+// singleton (config.getRouting() returns content.routing by reference), while its
+// sibling `middleware` was cloned. The matcher (fitsWithRequirements / checkRouteParams)
+// then rewrites param.{path,namespace,file,title} IN PLACE for :placeholder routes, so
+// it mutated the shared singleton — a cross-request (server) / cross-navigation (client)
+// contamination. The fix is TWO coordinated edits: (1) clone param at the params build,
+// (2) carry the per-request substituted param onto the returned `route` (getRouteByUrl
+// returns a fresh clone of the singleton, NOT the mutated `params`).
+
+describe('04 - getRouteByUrl: param is cloned + substitution propagated (no singleton pollution)', function() {
+
+    it('source: params.param is JSON.clone(routing[name].param), not a bare alias', function() {
+        assert.ok(
+            /param\s*:\s*JSON\.clone\(routing\[name\]\.param\)/.test(src),
+            'getRouteByUrl must clone routing[name].param (mirrors the middleware clone / server.js)'
+        );
+    });
+
+    it('source: the substituted param is propagated onto the returned route (route.param = params.param)', function() {
+        var cloneIdx = src.indexOf('route = JSON.clone(routing[name])');
+        var propIdx  = src.indexOf('route.param = params.param');
+        assert.ok(cloneIdx >= 0, 'route = JSON.clone(routing[name]) not found');
+        assert.ok(propIdx  >= 0, 'route.param = params.param propagation not found');
+        assert.ok(propIdx > cloneIdx, 'route.param = params.param must come AFTER route = JSON.clone(routing[name])');
+    });
+
+    // ── pure-logic replica of getRouteByUrl's match + return shape ────────────────
+    // `cloneParam` models edit (1); `propagate` models edit (2). The in-place
+    // substitution is guarded by /:/ exactly like the real fitsWithRequirements /
+    // checkRouteParams — that guard is what makes a polluted singleton go stale.
+    function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+    function freshSingleton() {
+        return {
+            widget: {
+                bundle : 'demo',
+                url    : '/widget/open/:id',
+                param  : { id: ':id', file: 'includes/widget-:id', path: '/w/:id' }
+            }
+        };
+    }
+
+    function matchOnce(singleton, name, idVal, opts) {
+        var params = {
+            param: opts.cloneParam ? clone(singleton[name].param) : singleton[name].param
+        };
+        // in-place :placeholder rewrite, only when the placeholder is still present
+        if (/:/.test(params.param.file)) params.param.file = params.param.file.replace(/:id/g, idVal);
+        if (/:/.test(params.param.path)) params.param.path = params.param.path.replace(/:id/g, idVal);
+        // getRouteByUrl returns a fresh clone of the singleton, NOT params
+        var route = clone(singleton[name]);
+        route.name = name;
+        if (opts.propagate) route.param = params.param; // the 2nd edit
+        return route;
+    }
+
+    it('FIXED (clone + propagate): isolated, correct, and the singleton stays clean across requests', function() {
+        var s  = freshSingleton();
+        var r1 = matchOnce(s, 'widget', '123', { cloneParam: true, propagate: true });
+        assert.equal(r1.param.file, 'includes/widget-123', 'request 1 resolves its own id');
+        assert.equal(s.widget.param.file, 'includes/widget-:id', 'singleton keeps its :placeholder (not polluted)');
+        var r2 = matchOnce(s, 'widget', '456', { cloneParam: true, propagate: true });
+        assert.equal(r2.param.file, 'includes/widget-456', 'request 2 resolves its OWN id, no stale value');
+        assert.equal(r1.param.file, 'includes/widget-123', 'request 1 result is unaffected by request 2');
+    });
+
+    it('SUBTRACT (bare alias = the bug): singleton polluted -> request 2 inherits request 1 stale value', function() {
+        var s  = freshSingleton();
+        var r1 = matchOnce(s, 'widget', '123', { cloneParam: false, propagate: false });
+        assert.equal(r1.param.file, 'includes/widget-123', 'request 1 still resolves (via in-place singleton mutation)');
+        assert.equal(s.widget.param.file, 'includes/widget-123', 'the shared singleton is POLLUTED in place');
+        var r2 = matchOnce(s, 'widget', '456', { cloneParam: false, propagate: false });
+        assert.equal(r2.param.file, 'includes/widget-123', 'request 2 inherits request 1 STALE value — the contamination');
+    });
+
+    it('clone-only WITHOUT propagation regresses request 1 (proves the 2nd edit is load-bearing)', function() {
+        var s  = freshSingleton();
+        var r1 = matchOnce(s, 'widget', '123', { cloneParam: true, propagate: false });
+        assert.equal(s.widget.param.file, 'includes/widget-:id', 'clone-only keeps the singleton clean...');
+        assert.equal(r1.param.file, 'includes/widget-:id', '...but the returned route keeps the un-substituted :placeholder — broken');
+    });
+});

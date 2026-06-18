@@ -6542,7 +6542,13 @@ function Routing() {
                     namespace           : routing[name].namespace || undefined,
                     url                 : safeDecodeURI(pathname), /// avoid %20 — #B30 malformed-%-safe
                     rule                : routing[name].originalRule || name,
-                    param               : routing[name].param,
+                    // #B52-residual finding-2: clone so the matcher's in-place param substitution
+                    // (fitsWithRequirements / checkRouteParams rewrite param.{path,namespace,file,title})
+                    // does NOT mutate the shared config singleton — getRouteByUrl's `routing` is
+                    // config.getRouting() (server-side) / gina.config.routing (client), both by reference.
+                    // Mirrors server.js:4852 and the middleware clone on the next line.
+                    //param             : routing[name].param,
+                    param               : JSON.clone(routing[name].param),
                     //middleware: routing[name].middleware,
                     middleware          : JSON.clone(routing[name].middleware),
                     bundle              : routing[name].bundle,
@@ -6556,6 +6562,11 @@ function Routing() {
                     if (isRoute.past) {
                         route = JSON.clone(routing[name]);
                         route.name = name;
+                        // #B52-residual finding-2: getRouteByUrl returns `route` (a fresh clone of the
+                        // singleton), NOT the mutated `params`. Carry the per-request substituted param
+                        // (rewritten on the private clone above) onto the returned route so the result is
+                        // correct AND the singleton keeps its `:placeholder`(s) for the next request.
+                        route.param = params.param;
 
                         matched = true;
                         isRoute = {};

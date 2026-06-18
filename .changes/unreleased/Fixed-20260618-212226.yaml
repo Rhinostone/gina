@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'getRouteByUrl no longer mutates the shared route configuration in place when resolving a parameterised route. It now clones the route param subtree per request and propagates the resolved values onto the returned route, so a :placeholder in a route param field (path, namespace, file or title) no longer leaks the values resolved for one request into later requests for the same route, nor produces stale params across repeat client-side navigations. (#B52-residual)'
+time: 2026-06-18T21:22:26.734368+01:00
