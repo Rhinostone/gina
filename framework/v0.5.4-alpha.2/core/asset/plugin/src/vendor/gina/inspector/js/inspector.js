@@ -146,6 +146,22 @@
     // ── State ──────────────────────────────────────────────────────────────
     /** @type {?Window|string} Data source — `Window` (opener), `'localStorage'`, or `null` */
     var source  = null;
+    /**
+     * Bound mode (#INS) — the per-tab BroadcastChannel the Inspector binds to
+     * when the statusbar opened it with `?ch=<tabId>`. Scopes data to the ONE
+     * tab that opened the Inspector (immune to other tabs'/XHR renders that
+     * clobber the bundle-global localStorage + SSE channels COOP forces us onto
+     * when it severs window.opener). `null` outside bound mode.
+     * @type {?BroadcastChannel}
+     */
+    var _boundChannel = null;
+    /**
+     * Latest payload received over {@link _boundChannel}; read by pollData()
+     * (source === 'broadcast'). The channel handler also calls pollData() for an
+     * immediate apply, so the poll timer is only a fallback.
+     * @type {?Object}
+     */
+    var _bcLatest = null;
     /** @type {?Object} Latest parsed `__ginaData` payload */
     var ginaData = null;
     /** @type {LogEntry[]} In-memory log buffer (capped at {@link MAX_LOG_ENTRIES}) */
@@ -3232,6 +3248,41 @@
         } catch (e) { return false; }
     }
 
+    /**
+     * Bind the Inspector to the opener tab's per-tab BroadcastChannel (#INS).
+     *
+     * Used in "bound mode" — when the statusbar opened the Inspector with a
+     * `?ch=<tabId>` param. The statusbar (running in the opener tab) publishes
+     * that tab's CURRENT `__ginaData` on `gina-inspector-<tabId>` on every page
+     * render and every `ginaToolbar.update()` (in-tab XHR / pushState), so the
+     * data is scoped to exactly that tab and follows its navigation — unaffected
+     * by other tabs' or background-XHR renders that clobber the bundle-global
+     * localStorage / `/_gina/agent` SSE channels COOP forces the Inspector onto
+     * when it severs `window.opener`.
+     *
+     * Sets `source = 'broadcast'` (pollData then reads {@link _bcLatest}). Posts
+     * a `{type:'request'}` on connect so the opener replies with its current
+     * payload (BroadcastChannel does not replay past messages).
+     *
+     * @inner
+     * @param   {string}  ch  The opener tab id from the `?ch=` param.
+     * @returns {boolean} `true` when the channel was established.
+     */
+    function setupBoundChannel(ch) {
+        if (!ch || typeof BroadcastChannel === 'undefined') return false;
+        try {
+            _boundChannel = new BroadcastChannel('gina-inspector-' + ch);
+        } catch (e) { _boundChannel = null; return false; }
+        source = 'broadcast';
+        _boundChannel.onmessage = function (ev) {
+            if (!ev || !ev.data || ev.data.type !== 'data' || !ev.data.payload) return;
+            _bcLatest = ev.data.payload;
+            pollData();   // immediate apply; the poll timer is the fallback
+        };
+        try { _boundChannel.postMessage({ type: 'request' }); } catch (e) {}
+        return true;
+    }
+
     // ── Settings — environment info + memory gauge ────────────────────────
 
     /**
@@ -3365,6 +3416,14 @@
                     if (tab !== 'logs') renderTab(tab);
                 }
                 return;
+            } else if (source === 'broadcast') {
+                // Bound mode (#INS) — data is pushed over the per-tab
+                // BroadcastChannel into _bcLatest (the channel handler calls
+                // pollData() for an immediate apply; this timer re-read is the
+                // fallback). Scoped to the opener tab, so other tabs' renders
+                // never appear here.
+                gd = _bcLatest;
+                if (!gd) return;
             } else if (source === 'localStorage') {
                 var raw = localStorage.getItem('__ginaData');
                 if (!raw) return;
@@ -3430,7 +3489,7 @@
             hideLoader();
         } catch (e) {
             hideLoader();
-            if (source !== 'localStorage') source = null;
+            if (source !== 'localStorage' && source !== 'broadcast') source = null;
             qs('#bm-dot').className = 'bm-dot err';
         }
     }
@@ -5105,59 +5164,71 @@
         var isAgent = tryAgent();
 
         if (!isAgent) {
-            var ok = tryOpener() || tryLocalStorage();
-            if (!ok) {
-                hideLoader();
-                qs('#bm-no-source').classList.remove('hidden');
-                qs('#bm-dot').className = 'bm-dot err';
-                qs('#bm-label').textContent = 'No source';
-            }
+            // Bound mode (#INS) — the statusbar opened us with ?ch=<tabId>. Bind
+            // to that tab's per-tab BroadcastChannel so the data tabs track THIS
+            // tab only (immune to other tabs'/XHR renders that clobber the
+            // bundle-global localStorage + SSE channels COOP forces us onto when
+            // it severs window.opener). Server logs still arrive via the SSE.
+            var _boundCh = (typeof URLSearchParams !== 'undefined')
+                ? new URLSearchParams(window.location.search).get('ch') : null;
+            if (setupBoundChannel(_boundCh)) {
+                qs('#bm-no-source').classList.add('hidden');
+                tryServerLogs();   // server logs only; data via the bound channel
+            } else {
+                var ok = tryOpener() || tryLocalStorage();
+                if (!ok) {
+                    hideLoader();
+                    qs('#bm-no-source').classList.remove('hidden');
+                    qs('#bm-dot').className = 'bm-dot err';
+                    qs('#bm-label').textContent = 'No source';
+                }
 
-            /**
-             * Manual connect form on the "No source" overlay.
-             *
-             * When the Inspector opens without a `?target=` param and without
-             * `window.opener`, a form is shown allowing the user to type a
-             * bundle URL.  On submit the page reloads with `?target=<url>`,
-             * which activates `tryAgent()` and connects via SSE.
-             *
-             * The handler auto-prefixes `http://` when no scheme is provided
-             * and strips trailing slashes before encoding the target.
-             *
-             * @inner
-             */
-            var connectForm = qs('#bm-connect-form');
-            if (connectForm) {
-                connectForm.addEventListener('submit', function (ev) {
-                    ev.preventDefault();
-                    var urlInput = qs('#bm-connect-url');
-                    var raw = (urlInput.value || '').trim();
-                    if (!raw) return;
-                    // Normalise: add scheme if missing, strip trailing slash
-                    if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
-                    raw = raw.replace(/\/+$/, '');
-                    // Navigate with ?target= to activate agent mode
-                    var loc = window.location.pathname + '?target=' + encodeURIComponent(raw);
-                    // #INS9b — append the optional inspector key (?key=) for an
-                    // auth-gated agent endpoint. Kept in the URL only (ephemeral);
-                    // never persisted to localStorage.
-                    var keyInput = qs('#bm-connect-key');
-                    var keyRaw = keyInput ? (keyInput.value || '').trim() : '';
-                    if (keyRaw) {
-                        loc += '&key=' + encodeURIComponent(keyRaw);
-                    }
-                    window.location.href = loc;
-                });
-            }
+                /**
+                 * Manual connect form on the "No source" overlay.
+                 *
+                 * When the Inspector opens without a `?target=` param and without
+                 * `window.opener`, a form is shown allowing the user to type a
+                 * bundle URL.  On submit the page reloads with `?target=<url>`,
+                 * which activates `tryAgent()` and connects via SSE.
+                 *
+                 * The handler auto-prefixes `http://` when no scheme is provided
+                 * and strips trailing slashes before encoding the target.
+                 *
+                 * @inner
+                 */
+                var connectForm = qs('#bm-connect-form');
+                if (connectForm) {
+                    connectForm.addEventListener('submit', function (ev) {
+                        ev.preventDefault();
+                        var urlInput = qs('#bm-connect-url');
+                        var raw = (urlInput.value || '').trim();
+                        if (!raw) return;
+                        // Normalise: add scheme if missing, strip trailing slash
+                        if (!/^https?:\/\//i.test(raw)) raw = 'http://' + raw;
+                        raw = raw.replace(/\/+$/, '');
+                        // Navigate with ?target= to activate agent mode
+                        var loc = window.location.pathname + '?target=' + encodeURIComponent(raw);
+                        // #INS9b — append the optional inspector key (?key=) for an
+                        // auth-gated agent endpoint. Kept in the URL only (ephemeral);
+                        // never persisted to localStorage.
+                        var keyInput = qs('#bm-connect-key');
+                        var keyRaw = keyInput ? (keyInput.value || '').trim() : '';
+                        if (keyRaw) {
+                            loc += '&key=' + encodeURIComponent(keyRaw);
+                        }
+                        window.location.href = loc;
+                    });
+                }
 
-            tryEngineIO();
-            // Subscribe to /_gina/agent in parallel with opener polling. Opener
-            // polling alone misses SPA (pushState) and XHR renders because
-            // those paths never rewrite window.__ginaData. The passive agent
-            // stream delivers pushed data + log frames from those renders.
-            // It also supersedes tryServerLogs() (same `event: log` frames).
-            var _passiveAgentActive = tryAgentPassive();
-            if (!_passiveAgentActive) tryServerLogs();
+                tryEngineIO();
+                // Subscribe to /_gina/agent in parallel with opener polling. Opener
+                // polling alone misses SPA (pushState) and XHR renders because
+                // those paths never rewrite window.__ginaData. The passive agent
+                // stream delivers pushed data + log frames from those renders.
+                // It also supersedes tryServerLogs() (same `event: log` frames).
+                var _passiveAgentActive = tryAgentPassive();
+                if (!_passiveAgentActive) tryServerLogs();
+            }
         }
 
         // ── Persist window geometry on resize/move ──────────────────────────

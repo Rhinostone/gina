@@ -6582,7 +6582,7 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         assert.ok(isAgentIdx > -1);
         // grep forward through the !isAgent block — tryAgentPassive should be
         // called there, not inside the agent branch
-        var block = src.slice(isAgentIdx, isAgentIdx + 3000);
+        var block = src.slice(isAgentIdx, isAgentIdx + 4200);
         assert.ok(
             block.indexOf('if (!isAgent)') > -1,
             'expected if (!isAgent) guard'
@@ -6596,7 +6596,7 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
     it('init skips tryServerLogs when passive agent succeeds (no duplicate log entries)', function() {
         var src = getInspSrc55();
         var isAgentIdx = src.indexOf('var isAgent = tryAgent()');
-        var block = src.slice(isAgentIdx, isAgentIdx + 3000);
+        var block = src.slice(isAgentIdx, isAgentIdx + 4200);
         // Expect the call sequence: tryAgentPassive(), then conditional tryServerLogs()
         assert.ok(
             /tryAgentPassive\(\)[\s\S]*?if\s*\(\s*!_passiveAgentActive[\s\S]*?tryServerLogs\(\)/.test(block),
@@ -8779,4 +8779,108 @@ describe('80 - SPA input hardening (loadFoldStore shape-guard + form-key escHtml
         assert.ok(src.indexOf('escHtml(keys[k])') > -1, 'expected escHtml(keys[k]) on the form-data section title (XSS hardening)');
     });
 
+});
+
+describe('81 - Inspector per-tab BroadcastChannel data binding (#INS)', function() {
+    var _sbar81, _ijs81;
+    function statusbar81() {
+        return _sbar81 || (_sbar81 = fs.readFileSync(path.join(BM_DIR, '..', 'html', 'statusbar.html'), 'utf8'));
+    }
+    function inspjs81() {
+        return _ijs81 || (_ijs81 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8'));
+    }
+
+    // ── statusbar.html (sender side) ──────────────────────────────────────
+    it('statusbar derives a stable per-tab id from sessionStorage', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("sessionStorage.getItem('__gina_tab_id')") > -1,
+            'expected sessionStorage __gina_tab_id read (stable across this tab\'s navigations)');
+        assert.ok(s.indexOf("sessionStorage.setItem('__gina_tab_id'") > -1,
+            'expected sessionStorage __gina_tab_id write (created once)');
+    });
+
+    it('statusbar opens a per-tab BroadcastChannel keyed by the tab id', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("new BroadcastChannel('gina-inspector-' + _ginaTabId)") > -1,
+            'expected BroadcastChannel("gina-inspector-"+tabId)');
+    });
+
+    it('statusbar publishes __ginaData on the channel at load + update + restore', function() {
+        var s = statusbar81();
+        var n = (s.match(/_ginaPublish\(\);/g) || []).length;
+        assert.ok(n >= 3, 'expected >= 3 _ginaPublish() calls (load + ginaToolbar.update + restore), got ' + n);
+        assert.ok(s.indexOf("postMessage({ type: 'data', payload: window.__ginaData })") > -1,
+            'expected {type:data,payload} publish');
+    });
+
+    it('statusbar replies to a {type:request} with the current payload', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("ev.data.type === 'request'") > -1,
+            'expected the sender to answer the Inspector\'s {type:request} handshake');
+    });
+
+    it('statusbar opens the embedded Inspector with ?ch=<tabId>', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("_embeddedUrl + (_ginaTabId ? '?ch=' + encodeURIComponent(_ginaTabId)") > -1,
+            'expected ?ch= appended to the embedded Inspector open URL');
+    });
+
+    // ── inspector.js (receiver side) ──────────────────────────────────────
+    it('inspector.js defines setupBoundChannel', function() {
+        assert.ok(inspjs81().indexOf('function setupBoundChannel') > -1,
+            'expected setupBoundChannel definition');
+    });
+
+    it('setupBoundChannel binds gina-inspector-<ch>, sets source=broadcast, requests initial data', function() {
+        var s = inspjs81();
+        var i = s.indexOf('function setupBoundChannel');
+        assert.ok(i > -1, 'setupBoundChannel must exist');
+        var body = s.slice(i, i + 1300);
+        assert.ok(body.indexOf("new BroadcastChannel('gina-inspector-' + ch)") > -1,
+            'expected the channel bound by the ?ch= id');
+        assert.ok(body.indexOf("source = 'broadcast'") > -1, "expected source = 'broadcast'");
+        assert.ok(body.indexOf("postMessage({ type: 'request' })") > -1,
+            'expected a {type:request} on connect (BroadcastChannel does not replay)');
+        assert.ok(body.indexOf("ev.data.type !== 'data'") > -1,
+            'expected the handler to ignore non-data frames');
+    });
+
+    it('init reads ?ch= and enters bound mode inside the !isAgent branch', function() {
+        var s = inspjs81();
+        var i = s.indexOf('var isAgent = tryAgent()');
+        var block = s.slice(i, i + 4200);
+        assert.ok(block.indexOf(".get('ch')") > -1, 'expected ?ch= read via URLSearchParams.get');
+        assert.ok(block.indexOf('setupBoundChannel(_boundCh)') > -1, 'expected setupBoundChannel(_boundCh) in init');
+    });
+
+    it('pollData reads _bcLatest in broadcast mode', function() {
+        var s = inspjs81();
+        var i = s.indexOf('function pollData');
+        var body = s.slice(i, i + 900);
+        assert.ok(body.indexOf("source === 'broadcast'") > -1, "expected a source === 'broadcast' branch in pollData");
+        assert.ok(body.indexOf('gd = _bcLatest') > -1, 'expected gd = _bcLatest read');
+    });
+
+    it('pollData error path does NOT reset a broadcast source', function() {
+        var s = inspjs81();
+        assert.ok(s.indexOf("source !== 'localStorage' && source !== 'broadcast'") > -1,
+            'expected the catch-block to preserve a broadcast source (else it reverts to the global channels)');
+    });
+
+    // ── pure-logic replica of the bound-channel message filter ────────────
+    it('bound-channel onmessage applies only well-formed {type:data} frames', function() {
+        var applied = [];
+        // Mirror of setupBoundChannel's onmessage contract.
+        function onmessage(ev) {
+            if (!ev || !ev.data || ev.data.type !== 'data' || !ev.data.payload) return;
+            applied.push(ev.data.payload);
+        }
+        onmessage({ data: { type: 'data', payload: { p: 1 } } }); // applied
+        onmessage({ data: { type: 'request' } });                 // ignored (handshake)
+        onmessage({ data: { type: 'data' } });                    // ignored (no payload)
+        onmessage({ data: null });                                // ignored
+        onmessage(null);                                          // ignored
+        assert.strictEqual(applied.length, 1, 'only the well-formed data frame should apply');
+        assert.strictEqual(applied[0].p, 1);
+    });
 });

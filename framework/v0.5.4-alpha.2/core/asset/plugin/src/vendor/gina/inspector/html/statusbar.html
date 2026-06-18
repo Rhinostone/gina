@@ -3,6 +3,42 @@
     'use strict';
     var d = window.__ginaData;
     if (!d || !d.user) return;
+
+    // ── Inspector per-tab data channel (#INS) ─────────────────────────────
+    // COOP can sever window.opener for the Inspector popup, dropping the
+    // Inspector onto bundle-global channels (the shared localStorage slot +
+    // the worker-wide /_gina/agent SSE) that ANY tab's render or background
+    // XHR clobbers. A per-tab BroadcastChannel — keyed by a sessionStorage id
+    // that is stable across THIS tab's navigations — lets the Inspector bind
+    // to this tab only. We publish the tab's current __ginaData here (page
+    // load) and on every ginaToolbar.update()/restore() (in-tab XHR/pushState
+    // renders), so the bound Inspector follows this tab and ignores others.
+    var _ginaTabId = null;
+    try {
+        _ginaTabId = sessionStorage.getItem('__gina_tab_id');
+        if (!_ginaTabId) {
+            _ginaTabId = 'gt' + Math.random().toString(36).slice(2) + Date.now().toString(36);
+            sessionStorage.setItem('__gina_tab_id', _ginaTabId);
+        }
+    } catch (e) { _ginaTabId = null; }
+    var _ginaBC = null;
+    try {
+        if (_ginaTabId && typeof BroadcastChannel !== 'undefined') {
+            _ginaBC = new BroadcastChannel('gina-inspector-' + _ginaTabId);
+        }
+    } catch (e) { _ginaBC = null; }
+    function _ginaPublish() {
+        if (!_ginaBC) return;
+        try { _ginaBC.postMessage({ type: 'data', payload: window.__ginaData }); } catch (e) {}
+    }
+    // A freshly-opened Inspector posts {type:'request'} (BroadcastChannel does
+    // not replay past messages) — reply with the current payload.
+    if (_ginaBC) {
+        _ginaBC.onmessage = function (ev) {
+            if (ev && ev.data && ev.data.type === 'request') _ginaPublish();
+        };
+    }
+
     var env     = d.user.environment || {};
     var data    = d.user.data        || {};
     var bundle  = env.bundle  || '?';
@@ -167,6 +203,7 @@
 
             // Sync localStorage for the Inspector's fallback channel
             try { localStorage.setItem('__ginaData', JSON.stringify(window.__ginaData)); } catch (e) {}
+            _ginaPublish();
         },
         restore: function () {
             if (!window.__ginaData) return;
@@ -182,6 +219,7 @@
                 } catch (e) {}
             }
             try { localStorage.setItem('__ginaData', JSON.stringify(window.__ginaData)); } catch (e) {}
+            _ginaPublish();
         },
         hasParsedUrls: false
     };
@@ -213,6 +251,7 @@
 
     // Publish data for Inspector via localStorage (works regardless of opener)
     try { localStorage.setItem('__ginaData', JSON.stringify(d)); } catch (e) {}
+    _ginaPublish();
     var webroot = env.webroot || '/';
     if (webroot.charAt(webroot.length - 1) !== '/') webroot += '/';
     var el      = document.createElement('div');
@@ -264,7 +303,7 @@
                 }
             } catch (e) {}
             window.open(
-                _embeddedUrl,
+                _embeddedUrl + (_ginaTabId ? '?ch=' + encodeURIComponent(_ginaTabId) : ''),
                 'gina-inspector',
                 'width=' + w + ',height=' + h + ',left=' + left + ',top=' + top
                 + ',menubar=no,toolbar=no,location=no,status=no,resizable=yes,scrollbars=yes'
