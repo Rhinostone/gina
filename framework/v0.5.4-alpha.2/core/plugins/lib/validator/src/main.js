@@ -886,7 +886,12 @@ function ValidatorPlugin(rules, data, formId) {
 
                         $divs[d].parentElement.removeChild($divs[d]);
                         $err = document.createElement('div');
-                        $err.setAttribute('class', 'form-item-error-message');
+                        // #livecheck — a field being typed in (the active element) surfaces only the
+                        // soft form-item-warning border; its committed error message stays hidden until
+                        // blur. This "refresh" re-create runs AFTER refreshWarning in the live-check
+                        // global pass, so without this focus guard it re-shows the message mid-typing.
+                        // On blur (field no longer active) the message is created shown (focusout commits).
+                        $err.setAttribute('class', ( document.activeElement && document.activeElement.name == name ) ? 'form-item-error-message hidden' : 'form-item-error-message');
 
                         // #A11Y1 (slice 2) — preserve the aria-errormessage wire we own across refresh.
                         if ( _ginaOwnsErrMsg && _ariaErrId ) {

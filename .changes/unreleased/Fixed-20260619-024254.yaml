@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Live form validation now shows only the soft warning border while a field is being edited; its error message is revealed once the field is committed (on blur or submit).'
+time: 2026-06-19T02:42:54.315859+01:00
