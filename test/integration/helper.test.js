@@ -537,6 +537,58 @@ describe('12 - getBundleStartingArgv', function () {
         // Cleanup
         fs.unlinkSync(argvFile);
     });
+
+    // #SEC - bundle/project may be parsed from log content (the `tail --follow`
+    // auto-restart path), so unsafe identifiers must never compose a path that
+    // escapes the tmp dir (the returned argv is executed by the caller).
+    it('rejects path separators in bundle/project (returns null)', function () {
+        assert.equal(getBundleStartingArgv('a/b', 'proj'), null);
+        assert.equal(getBundleStartingArgv('bundle', 'a/b'), null);
+        assert.equal(getBundleStartingArgv('a\\b', 'proj'), null);
+        assert.equal(getBundleStartingArgv('bundle', 'a\\b'), null);
+    });
+
+    it('rejects `..` traversal in bundle/project (returns null)', function () {
+        assert.equal(getBundleStartingArgv('..', '..'), null);
+        assert.equal(getBundleStartingArgv('../../etc/x', 'proj'), null);
+        assert.equal(getBundleStartingArgv('bundle', '../../x'), null);
+    });
+
+    it('rejects empty bundle/project (returns null)', function () {
+        assert.equal(getBundleStartingArgv('', ''), null);
+        assert.equal(getBundleStartingArgv('bundle', ''), null);
+        assert.equal(getBundleStartingArgv('', 'proj'), null);
+    });
+
+    it('does not reach a real file via a separator-bearing name (subtract control)', function () {
+        var tmpDir   = getTmpDir();
+        var argvFile = path.join(tmpDir, 'safedecoy@p.argv');
+        fs.writeFileSync(argvFile, 'node,cli,bundle:start,safedecoy,@p');
+        try {
+            // control: the safe name reads the file
+            var ok = getBundleStartingArgv('safedecoy', 'p');
+            assert.equal(typeof ok, 'string');
+            assert.ok(ok.includes('bundle:start'));
+            // separator-bearing variants must NOT reach the same file
+            assert.equal(getBundleStartingArgv('../safedecoy', 'p'), null);
+            assert.equal(getBundleStartingArgv('./safedecoy', 'p'), null);
+        } finally {
+            fs.unlinkSync(argvFile);
+        }
+    });
+
+    it('accepts benign names with dots and dashes (no false rejection)', function () {
+        var tmpDir   = getTmpDir();
+        var argvFile = path.join(tmpDir, 'my-bundle@my.proj.argv');
+        fs.writeFileSync(argvFile, 'node,cli,bundle:start,my-bundle,@my.proj');
+        try {
+            var result = getBundleStartingArgv('my-bundle', 'my.proj');
+            assert.equal(typeof result, 'string');
+            assert.ok(result.includes('bundle:start'));
+        } finally {
+            fs.unlinkSync(argvFile);
+        }
+    });
 });
 
 

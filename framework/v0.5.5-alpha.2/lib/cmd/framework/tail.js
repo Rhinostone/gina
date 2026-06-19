@@ -3,6 +3,7 @@ var os          = require("os");
 var util        = require('util');
 var net         = require('net');
 var execSync    = require('child_process').execSync;
+var execFileSync = require('child_process').execFileSync;
 
 var EventEmitter    = require('events').EventEmitter;
 var e               = new EventEmitter();
@@ -274,7 +275,14 @@ function Tail(opt, cmd) {
                                         cmdUsedToStart = getBundleStartingArgv(bundle, project);
                                         if (cmdUsedToStart) {
                                             process.stdout.write('[MQTail]['+ bundle +'@'+ project +'] restarting with argv: '+ cmdUsedToStart +'\n' );
-                                            execSync(cmdUsedToStart);
+                                            // #SEC - re-run the saved start argv WITHOUT a shell: split the argv and
+                                            // exec the binary directly so no part of the parsed log content reaches
+                                            // `/bin/sh -c`. The saved argv always carries `bundle:start` (bin/gina
+                                            // rewrites restart->start), so the guard never blocks a legitimate restart.
+                                            var restartArgv = cmdUsedToStart.split(/\s+/).filter(function (a) { return a !== ''; });
+                                            if ( restartArgv.length > 1 && restartArgv.indexOf('bundle:start') > -1 ) {
+                                                execFileSync(restartArgv[0], restartArgv.slice(1), { stdio: ['ignore', 'ignore', 'inherit'] });
+                                            }
                                         }
                                         process.stdout.write('[MQTail]['+ bundle +'@'+ project +'] bundle is going offline !\n' );
 

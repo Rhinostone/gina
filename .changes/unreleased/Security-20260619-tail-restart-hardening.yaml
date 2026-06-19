@@ -1,0 +1,3 @@
+kind: Security
+body: 'Hardened the framework log-tail auto-restart path (`gina tail --follow`): bundle/project identifiers parsed from log output are now rejected when they contain path separators or `..` traversal (confining the saved-argv lookup to the tmp directory), and the saved start command is re-executed with execFileSync (no shell) instead of execSync, as defense-in-depth against command injection via crafted log content.'
+time: 2026-06-19T11:50:31+01:00

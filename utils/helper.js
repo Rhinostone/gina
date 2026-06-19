@@ -394,17 +394,44 @@ function MainHelper(opt) {
 
     /**
      * getBundleStartingArgv
-     * Will get the bundle starting ARGV to allow live restart
+     * Reads the saved start argv for `<bundle>@<project>` from the tmp dir so a
+     * crashed bundle can be live-restarted (see `gina tail --follow`).
      *
-     * @param {string} bundle
-     * @param {string} project
+     * `bundle`/`project` are treated as untrusted (they may be parsed from log
+     * content): values containing path separators or `..` traversal are rejected
+     * and the resolved path is confined to the tmp dir. Returns `null` when the
+     * input is unsafe or no saved-argv file exists.
      *
-     * @returns {string} argv
+     * @param {string} bundle  - Bundle name (sanitized; path separators rejected)
+     * @param {string} project - Project name (sanitized; path separators rejected)
+     *
+     * @returns {string|null} Space-separated argv, or `null`
      * */
     getBundleStartingArgv = function(bundle, project) {
-        bundle = bundle.replace(/(`|\s+)/g, '');
-        project = project.replace(/(`|\s+)/g, '');
-        var filename = _(getTmpDir() +'/'+ bundle +'@'+ project +'.argv', true);
+        // #SEC - `bundle`/`project` can originate from parsed log content (the
+        // `gina tail --follow` auto-restart path), so treat them as untrusted: strip
+        // backticks/whitespace, then reject anything that could escape the tmp dir
+        // (path separators or `..` traversal). The returned value is later executed
+        // by the caller, so a crafted descriptor must NOT redirect the lookup to a
+        // file outside the tmp dir.
+        bundle  = ('' + bundle).replace(/(`|\s+)/g, '');
+        project = ('' + project).replace(/(`|\s+)/g, '');
+
+        if (
+            bundle === '' || project === ''
+            || /[\/\\]/.test(bundle)      || /[\/\\]/.test(project)
+            || bundle.indexOf('..') > -1  || project.indexOf('..') > -1
+        ) {
+            return null;
+        }
+
+        var tmpDir   = _(getTmpDir(), true);
+        var filename = _(tmpDir +'/'+ bundle +'@'+ project +'.argv', true);
+
+        // defense-in-depth: resolved path must stay under the tmp dir
+        if ( ('' + filename).indexOf('' + tmpDir) !== 0 ) {
+            return null;
+        }
 
         var content = null;
         if ( fs.existsSync(filename) ) {
