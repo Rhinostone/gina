@@ -111,7 +111,7 @@
     "@rhinostone/swig": "^2.7.2",
     "engine.io": "^6.6.7",
     "psl": "^1.15.0",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
@@ -123,6 +123,6 @@
     "sass": "1.100.0"
   },
   "overrides": {
-    "ws": "^8.20.1"
+    "ws": "^8.21.0"
   }
 }
