@@ -501,8 +501,10 @@ function CmdHelper(cmd, client, debug) {
 
             // Additional project checking & actions
             if (cmd.projectName != null) {
-                // valid name but not in projects and task != :add, :remove or :import
-                if ( typeof(cmd.projects[cmd.projectName]) == 'undefined' && !/\:(add|import|remove)$/.test(cmd.task) ) {
+                // valid name but not in projects and task != :add, :remove, :import or :restore
+                // (project:restore registers a brand-new on-disk tree from an archive,
+                //  so its @<name> is legitimately not-yet-registered — like :add/:import)
+                if ( typeof(cmd.projects[cmd.projectName]) == 'undefined' && !/\:(add|import|remove|restore)$/.test(cmd.task) ) {
                     errMsg = 'Project ['+ cmd.projectName +'] not found in your projects list';
                     console.error(errMsg);
                     exit(errMsg);

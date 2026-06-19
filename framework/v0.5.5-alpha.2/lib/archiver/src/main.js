@@ -486,8 +486,117 @@ function Archiver() {
 
 
 
+    /**
+     * decompress
+     *
+     * Inverse of `compress()` — extracts a `.zip` archive into a target directory.
+     * Mirrors compress()'s completion contract: emits `archiver-decompress#complete`
+     * `(err, target)` on the singleton and returns an `{ onComplete: fn }` handle
+     * (a trailing callback is also accepted for `promisify`). Uses JSZip 3.x
+     * (`loadAsync` + per-entry `async('nodebuffer')`).
+     *
+     * @param {string} src - absolute path to the `.zip` archive
+     * @param {string} target - output directory (created if missing); entries are
+     *  written at their archive-relative paths under it
+     * @param {object} [options] - reserved for future use
+     * @returns {{ onComplete: function }} completion handle
+     *
+     * @example
+     *  lib.archiver.decompress('/dump/app.zip', '/srv/app/').onComplete(function (err, dir) {
+     *      if (err) { return; }
+     *      // dir now holds the extracted tree
+     *  });
+     */
     this.decompress = function(src, target, options) {
 
+        var path   = require('path');
+        var handle = {
+            onComplete: function onDecompressionCompleted(cb) {
+                self.once('archiver-decompress#complete', function (err, t) {
+                    cb(err, t)
+                })
+            }
+        };
+
+        // Used for `promisify` — same trailing-callback contract as compress()
+        if ( typeof(arguments[arguments.length-1]) == 'function' ) {
+            var _pcb = arguments[arguments.length-1];
+            self.once('archiver-decompress#complete', function (err, t) {
+                return _pcb(err, t)
+            })
+        }
+
+        if ( !/\/$/.test(target) ) {
+            target += '/'
+        }
+        if ( !fs.existsSync(target) ) {
+            fs.mkdirSync(target, { recursive: true });
+        }
+        var targetAbs = path.resolve(target);
+
+        if ( !fs.existsSync(src) ) {
+            // defer so a synchronous error still reaches a listener attached
+            // via the returned handle's onComplete() on the same tick
+            process.nextTick(function () {
+                self.emit('archiver-decompress#complete', new Error('archive not found `'+ src +'`'), null);
+            });
+            return handle;
+        }
+
+        try {
+            var buf = fs.readFileSync(src);
+            JSZip.loadAsync(buf).then(function (zip) {
+
+                var entries = [];
+                zip.forEach(function (relPath, entry) {
+                    entries.push({ relPath: relPath, entry: entry });
+                });
+
+                var i = 0;
+                var next = function () {
+                    if ( i >= entries.length ) {
+                        self.emit('archiver-decompress#complete', false, target);
+                        return;
+                    }
+                    var it   = entries[i++];
+                    var dest = path.resolve(targetAbs, it.relPath);
+
+                    // zip-slip guard: an entry must never escape the target dir
+                    if ( dest !== targetAbs && dest.indexOf(targetAbs + path.sep) !== 0 ) {
+                        self.emit('archiver-decompress#complete', new Error('unsafe entry path in archive: `'+ it.relPath +'`'), null);
+                        return;
+                    }
+
+                    if ( it.entry.dir ) {
+                        if ( !fs.existsSync(dest) ) {
+                            fs.mkdirSync(dest, { recursive: true });
+                        }
+                        return next();
+                    }
+
+                    var parent = path.dirname(dest);
+                    if ( !fs.existsSync(parent) ) {
+                        fs.mkdirSync(parent, { recursive: true });
+                    }
+                    it.entry.async('nodebuffer').then(function (content) {
+                        fs.writeFileSync(dest, content);
+                        next();
+                    }).catch(function (err) {
+                        self.emit('archiver-decompress#complete', err, null);
+                    });
+                };
+                next();
+
+            }).catch(function (err) {
+                self.emit('archiver-decompress#complete', err, null);
+            });
+        } catch (err) {
+            process.nextTick(function () {
+                self.emit('archiver-decompress#complete', err, null);
+            });
+        }
+
+        return handle;
     }
 
     this.compressFromStream = function(readStream, target, options) {

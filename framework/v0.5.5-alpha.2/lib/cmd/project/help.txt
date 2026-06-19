@@ -107,10 +107,10 @@
 
 [ Restore project ]
 
-    N.B.: Only available when ordering for support
+    Rebuilds a project from a project:backup .zip: extracts the source tree to
+    --to and re-registers the project (entry, ports, and the gina symlink).
 
-    $ gina project:restore /var/dump/myproject.tar.gz (will restore in current path)
-    or
-    $ gina project:restore myproject.tar.gz  (will restore from current path to current path: myproject.gna must be under the PWD)
-    or
-    $ gina project:restore /var/dump/myproject.tar.gz —-path=/other/path
+    $ gina project:restore @<project_name> <archive.zip> --to=/new/path
+
+    N.B.: node_modules is not in the backup — run `npm install` afterwards.
+    Pass --force to overwrite an already-registered name or a non-empty target.
