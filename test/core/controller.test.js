@@ -3204,3 +3204,150 @@ describe('28 - throwError early released-response guard on 2-arg/3-arg shapes (#
             '3-arg on http/1.1 must crash at the res.error build');
     });
 });
+
+describe('29 - query: settled HTTP/2 stream released at every non-retry terminal (#B52)', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source structure ----
+
+    it('the #B52 _finalizeStream helper is defined inside _sendRequest with an idempotency guard + the three release ops, in order', function() {
+        var h2Start = src.indexOf('var handleHTTP2ClientRequest = function(');
+        assert.ok(h2Start > -1, 'expected the handleHTTP2ClientRequest anchor');
+        var helperIdx = src.indexOf('var _finalizeStream = function _finalizeStream()', h2Start);
+        assert.ok(helperIdx > h2Start, 'expected the _finalizeStream helper inside handleHTTP2ClientRequest');
+
+        var guardIdx   = src.indexOf('if (_finalized) { return; }', helperIdx);
+        var flagIdx    = src.indexOf('_finalized = true;', guardIdx);
+        var timeoutIdx = src.indexOf('req.setTimeout(0)', flagIdx);
+        var listenIdx  = src.indexOf('req.removeAllListeners()', timeoutIdx);
+        var closeIdx   = src.indexOf('req.close()', listenIdx);
+        assert.ok(guardIdx   > helperIdx,  'helper early-returns when already finalized');
+        assert.ok(flagIdx    > guardIdx,   'helper sets the _finalized flag before the release ops');
+        assert.ok(timeoutIdx > flagIdx,    'helper cancels the stream timeout via setTimeout(0)');
+        assert.ok(listenIdx  > timeoutIdx, 'helper removes the stream listeners');
+        assert.ok(closeIdx   > listenIdx,  'helper closes the stream last');
+    });
+
+    it('the helper releases defensively — each op in try/catch, close() guarded against an already-closed/destroyed stream', function() {
+        var helperIdx = src.indexOf('var _finalizeStream = function _finalizeStream()');
+        var body = src.slice(helperIdx, helperIdx + 400);
+        assert.match(body, /try \{ req\.setTimeout\(0\); \} catch/,        'setTimeout(0) is try/caught');
+        assert.match(body, /try \{ req\.removeAllListeners\(\); \} catch/, 'removeAllListeners() is try/caught');
+        assert.match(body, /try \{ if \(!req\.closed && !req\.destroyed\) \{ req\.close\(\); \} \} catch/,
+            'close() is guarded on !req.closed && !req.destroyed and try/caught');
+    });
+
+    it('_finalizeStream() is invoked at exactly the five non-retry terminals', function() {
+        var h2Start = src.indexOf('var handleHTTP2ClientRequest = function(');
+        var h2End   = src.indexOf('var getSession = function()');
+        assert.ok(h2Start > -1 && h2End > h2Start, 'expected the handleHTTP2ClientRequest structural bounds');
+        var block = src.slice(h2Start, h2End);
+        var calls = block.match(/_finalizeStream\(\);/g) || [];
+        assert.strictEqual(calls.length, 5,
+            'expected exactly 5 _finalizeStream() calls (timeout-exhausted / stream-error / premature-close / 502-exhausted / onEnd-success terminals)');
+    });
+
+    // The four TYPED-error terminals finalize the stream right before the
+    // non-critical swallow, so cleanup happens on BOTH the swallow-return and the
+    // callback/emit path. The 5th call is the onEnd success terminal, placed ahead
+    // of the ALPN/parse path (no swallow follows it). The retry branches do NOT
+    // finalize — they client.destroy() the whole session, tearing the stream down.
+    // The two pre-flight PING swallow sites have no request stream yet, so they
+    // correctly do not finalize. (That is why this pins the finalize->swallow
+    // ORDERING count, not a raw swallow count: there are 7 _swallowIfNonCritical
+    // tokens in the block — 1 comment + 4 terminals + 2 pre-flight.)
+    it('each typed-error terminal finalizes the stream BEFORE its non-critical swallow', function() {
+        var h2Start = src.indexOf('var handleHTTP2ClientRequest = function(');
+        var h2End   = src.indexOf('var getSession = function()');
+        var block   = src.slice(h2Start, h2End);
+        var ordered = block.match(/_finalizeStream\(\);[\s\S]{0,160}?_swallowIfNonCritical\(/g) || [];
+        assert.strictEqual(ordered.length, 4,
+            'all four typed-error terminals must finalize before the swallow (timeout / stream-error / premature-close / 502-exhausted)');
+    });
+
+    // ---- pure logic: idempotent, never-throwing finalize replica ----
+
+    // Mirrors _finalizeStream: a one-shot release of a settled HTTP/2 stream.
+    function makeFinalizer(req) {
+        var finalized = false;
+        return function finalize() {
+            if (finalized) { return; }
+            finalized = true;
+            try { req.setTimeout(0); } catch (e) {}
+            try { req.removeAllListeners(); } catch (e) {}
+            try { if (!req.closed && !req.destroyed) { req.close(); } } catch (e) {}
+        };
+    }
+
+    function makeReqSpy(state) {
+        state = state || {};
+        return {
+            closed: !!state.closed,
+            destroyed: !!state.destroyed,
+            _timeout: null,
+            _listenersCleared: 0,
+            _closed: 0,
+            setTimeout: function(ms) { this._timeout = ms; },
+            removeAllListeners: function() { this._listenersCleared++; },
+            close: function() { this._closed++; this.closed = true; }
+        };
+    }
+
+    it('finalize replica: releases the stream once (cancels timeout, clears listeners, closes)', function() {
+        var req = makeReqSpy();
+        makeFinalizer(req)();
+        assert.strictEqual(req._timeout, 0,           'stream timeout cancelled via setTimeout(0)');
+        assert.strictEqual(req._listenersCleared, 1,  'listeners removed once');
+        assert.strictEqual(req._closed, 1,            'stream closed once');
+    });
+
+    it('finalize replica: repeated invocations are a no-op (the _finalized idempotency guard)', function() {
+        var req = makeReqSpy();
+        var finalize = makeFinalizer(req);
+        finalize(); finalize(); finalize();
+        assert.strictEqual(req._listenersCleared, 1, 'listeners removed exactly once across repeated calls');
+        assert.strictEqual(req._closed, 1,           'stream closed exactly once across repeated calls');
+    });
+
+    it('finalize replica: skips close() on an already-closed or destroyed stream', function() {
+        var closedReq = makeReqSpy({ closed: true });
+        makeFinalizer(closedReq)();
+        assert.strictEqual(closedReq._closed, 0,           'no close() on an already-closed stream');
+        assert.strictEqual(closedReq._listenersCleared, 1, 'listeners still cleared');
+        var destroyedReq = makeReqSpy({ destroyed: true });
+        makeFinalizer(destroyedReq)();
+        assert.strictEqual(destroyedReq._closed, 0,        'no close() on a destroyed stream');
+    });
+
+    it('finalize replica: never throws even if a release op throws (cleanup must not break the response path)', function() {
+        var req = makeReqSpy();
+        req.close = function() { throw new Error('stream already torn down'); };
+        assert.doesNotThrow(function() { makeFinalizer(req)(); });
+        assert.strictEqual(req._listenersCleared, 1, 'the listeners op ran before the throwing close()');
+    });
+
+    // ---- subtract: finalize at the terminal is what releases the stranding listeners ----
+
+    // A non-retry terminal surfaces the typed error to the caller, optionally
+    // finalizing the stream first (#B52). Without the finalize, the stream keeps
+    // its listeners (onQueryError/onQueryClosed/onEnd capture `callback` -> `self`),
+    // stranding the per-request controller + its router.js options.conf clone.
+    function terminalReplica(req, finalize, callback) {
+        var err = { code: 'TIMEOUT', status: 503 };
+        if (finalize) { finalize(); }
+        callback(err);
+    }
+
+    it('subtract: finalizing at the terminal releases the stream listeners; omitting it (pre-fix) retains them', function() {
+        var reqA = makeReqSpy(), cbA = [];
+        terminalReplica(reqA, makeFinalizer(reqA), function(e) { cbA.push(e); });
+        assert.strictEqual(reqA._listenersCleared, 1, 'finalized terminal releases the stream listeners');
+        assert.strictEqual(cbA.length, 1,             'the error still reaches the caller');
+
+        var reqB = makeReqSpy(), cbB = [];
+        terminalReplica(reqB, null, function(e) { cbB.push(e); });
+        assert.strictEqual(reqB._listenersCleared, 0, 'pre-fix: listeners stay attached, stranding the controller + conf clone');
+        assert.strictEqual(cbB.length, 1,             'pre-fix still delivered the error (the retention is silent)');
+    });
+});

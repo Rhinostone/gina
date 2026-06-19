@@ -20,6 +20,17 @@
  *   §03 pure-logic replica — eviction grows module.children; the shipped prune
  *       body keeps only cache-current instances and leaves exports functional.
  *       Includes the subtract case: without the prune, children grows unbounded.
+ *   §04 lib/index.js — the #B32-residual fix: collection/merge/uuid/cache/archiver
+ *       use plain require (not _require), so a gen-0 binding (server.isaac.js:34/:853)
+ *       cannot accumulate dead children on a module the prune can't reach.
+ *   §05 replica — a gen-0 parent retained OFF require.cache grows children every
+ *       request despite the prune (the residual the require.cache walk misses);
+ *       a resident (plain-require'd) child keeps it bounded. §04 locks the fix.
+ *   §06 audit guard — lib/inherits has zero require() calls (#B32-residual
+ *       completeness audit, 2026-06-16). inherits is the only HOT lib gen-0-captured
+ *       AND invoked per-request by load-once modules (router.js / couchbase), so a
+ *       zero-require body is what keeps those sites from reopening the residual; the
+ *       pin trips if any require() is ever added there.
  */
 
 var assert = require('assert');
@@ -143,4 +154,121 @@ test('§03 replica: eviction grows children unbounded; prune releases dead Modul
         try { fs.unlinkSync(tmpFile); } catch (e) { /* best effort */ }
         module.children = module.children.filter(function(c) { return c.id !== resolved; });
     }
+});
+
+test('§04 lib/index.js: leaf/singleton libs use plain require, not _require (#B32-residual guard)', function() {
+    var LIB_INDEX = path.join(BASE, 'framework', FRAMEWORK_DIR, 'lib', 'index.js');
+    var SRC = fs.readFileSync(LIB_INDEX, 'utf8');
+    // collection/merge/uuid are new'd per request from gen-0 bindings held by
+    // load-once modules (server.isaac.js:34 `const Collection = lib.Collection`,
+    // used at :853). _require evicts them every refreshCore(), so each per-request
+    // `new Collection()` pushes a dead merge/uuid Module onto the gen-0
+    // (evicted-but-retained) collection Module — which pruneDeadModuleChildren()
+    // never reaches (require.cache keys only). cache/archiver are the `new X()`
+    // singletons that must not churn. Plain require keeps them resident (cache-hit,
+    // Node dedupes). Flipping any back to _require reintroduces the dev-mode OOM.
+    ['collection', 'merge', 'uuid', 'cache', 'archiver'].forEach(function(p) {
+        assert.match(
+            SRC,
+            new RegExp("[^_]require\\('\\.\\/" + p + "'\\)"),
+            "'" + p + "' must use plain require('./" + p + "') — #B32-residual"
+        );
+        assert.doesNotMatch(
+            SRC,
+            new RegExp("_require\\('\\.\\/" + p + "'\\)"),
+            "'" + p + "' must NOT use _require('./" + p + "') (reintroduces the #B32-residual leak)"
+        );
+    });
+});
+
+test('§05 replica: a gen-0 parent held OFF require.cache leaks despite the prune; a resident child stays bounded', function() {
+    var dir        = os.tmpdir();
+    var childFile  = path.join(dir, 'gina-b32r-child-'  + process.pid + '.js');
+    var parentFile = path.join(dir, 'gina-b32r-parent-' + process.pid + '.js');
+    fs.writeFileSync(childFile, 'module.exports = { v: 1 };');
+    // The parent's exported fn requires the child on every call — the
+    // `server.isaac.js:853 new Collection()` (gen-0 binding) shape.
+    fs.writeFileSync(parentFile,
+        'var c = ' + JSON.stringify(childFile) + ';\n' +
+        'module.exports = { use: function () { return require(c); } };');
+    var childResolved  = require.resolve(childFile);
+    var parentResolved = require.resolve(parentFile);
+
+    function prune() {
+        var ids = Object.keys(require.cache);
+        for (var i = 0; i < ids.length; i++) {
+            var cm = require.cache[ids[i]];
+            if (cm && cm.children && cm.children.length > 0) {
+                cm.children = cm.children.filter(function (ch) { return require.cache[ch.id] === ch; });
+            }
+        }
+    }
+
+    try {
+        // ---- LEAK arm: child _require'd (evicted every request); gen-0 parent held OFF require.cache ----
+        require(parentFile);
+        var parentMod0 = require.cache[parentResolved];   // gen-0 parent Module — we retain this ref
+        var p0use      = parentMod0.exports.use;           // its per-request fn
+        delete require.cache[parentResolved];              // parent evicted → retained ONLY via parentMod0 (the gen-0 const binding)
+        var startLeak = parentMod0.children.length;
+        for (var r = 0; r < 25; r++) {
+            delete require.cache[childResolved]; require(childFile); // refreshCore rebuilds the child (fresh Module in cache)
+            p0use();                                                 // gen-0 parent requires child → fresh Module pushed onto parentMod0.children
+            prune();                                                 // require.cache-scoped: parentMod0 is NOT a cache key → never visited
+        }
+        assert.ok(require.cache[parentResolved] !== parentMod0,
+            'gen-0 parent must be off require.cache (retained only by our ref)');
+        assert.strictEqual(parentMod0.children.length, startLeak + 25,
+            'LEAK: a gen-0 parent off require.cache grows +1 dead child/request despite the prune');
+
+        // ---- FIXED arm: child plain-require'd (never evicted) → cache-hit → Node dedupes → bounded ----
+        delete require.cache[parentResolved];
+        require(parentFile);
+        var parentMod0b = require.cache[parentResolved];
+        var p0useB      = parentMod0b.exports.use;
+        delete require.cache[parentResolved];
+        require(childFile);                                // child resident once and never evicted again (the fix)
+        var startFixed = parentMod0b.children.length;
+        for (var r2 = 0; r2 < 25; r2++) {
+            p0useB();                                      // gen-0 parent requires child → cache-hit on the SAME Module → deduped
+            prune();
+        }
+        assert.ok(parentMod0b.children.length <= startFixed + 1,
+            'FIXED: plain-require (resident child) keeps the gen-0 parent children bounded');
+    } finally {
+        delete require.cache[childResolved];
+        delete require.cache[parentResolved];
+        try { fs.unlinkSync(childFile); } catch (e) { /* best effort */ }
+        try { fs.unlinkSync(parentFile); } catch (e) { /* best effort */ }
+        module.children = module.children.filter(function(c) {
+            return c.id !== childResolved && c.id !== parentResolved;
+        });
+    }
+});
+
+test('§06 lib/inherits: zero require() in code — the gen-0-captured + per-request-invoked HOT lib must never push a child (#B32-residual completeness audit, 2026-06-16)', function() {
+    // Completeness-audit invariant: among the HOT (_require'd) libs, `inherits` is the
+    // only one that load-once modules gen-0-capture AND invoke PER REQUEST
+    // (router.js:594/595/597/664/890 `const inherits = lib.inherits`; couchbase
+    // index.js:718). Because lib/inherits/src/main.js is a pure Object.create
+    // prototype-chain builder with ZERO require() calls, each per-request inherits()
+    // pushes NO child Module onto its gen-0 (evicted-but-retained) module — so those
+    // sites cannot reopen the residual. Measured: +0 children over 200 reqs on the real
+    // module vs a +200 leaking control (the routing per-request methods are likewise
+    // safe — their only in-method require is the non-HOT ./radix, a permanent cache-hit).
+    // If a require() is EVER added to inherits, this pin trips: re-check whether the
+    // target is a HOT (_require'd) lib before updating the pin — a HOT-sibling require
+    // would reintroduce #B32-residual for the router/couchbase per-request sites.
+    var INHERITS_PATH = path.join(BASE, 'framework', FRAMEWORK_DIR, 'lib', 'inherits', 'src', 'main.js');
+    var SRC = fs.readFileSync(INHERITS_PATH, 'utf8');
+    // Strip comments first: the module's JSDoc @example contains a literal
+    // require(...) string, which a raw scan would match (false positive).
+    var code = SRC
+        .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments (incl. JSDoc)
+        .replace(/\/\/[^\n]*/g, '');         // line comments
+    assert.strictEqual(
+        code.indexOf('require('), -1,
+        'lib/inherits/src/main.js must contain ZERO require() calls in code (comments stripped) — ' +
+        'it is gen-0-captured + invoked per-request by router.js / couchbase; a require() here can reopen #B32-residual'
+    );
 });

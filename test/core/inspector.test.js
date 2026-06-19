@@ -6431,50 +6431,39 @@ describe('53 - unredacted snapshot is only stored when scope === local', functio
 // Fix: derive the URL prefix from `window.opener.location.pathname` so the
 // request routes through the same bundle that produced the snapshot.
 
-describe('54 - toggleReveal resolves /_gina/reveal via opener pathname for proxy routing', function() {
+describe('54 - toggleReveal resolves /_gina/reveal via the shared resolveBundleBase()', function() {
 
     var INSPECTOR_JS_54 = path.join(BM_DIR, 'inspector.js');
     var _inspSrc54;
     function getInspSrc54() { return _inspSrc54 || (_inspSrc54 = fs.readFileSync(INSPECTOR_JS_54, 'utf8')); }
 
-    it('toggleReveal prefers ?target= when present (standalone mode)', function() {
+    // resolveBundleBase()'s own 3-fallback internals (?target= -> opener ->
+    // strip) + cross-origin try/catch are pinned in §79; §54 now pins only that
+    // toggleReveal routes through that shared resolver (the inline copy was
+    // folded in — see llms.txt #190 follow-up).
+
+    it('toggleReveal resolves its base via the shared resolveBundleBase()', function() {
         var src = getInspSrc54();
+        var idx = src.indexOf('function toggleReveal');
+        assert.ok(idx > -1, 'toggleReveal function must exist');
+        var body = src.slice(idx, idx + 3000);
         assert.ok(
-            /new URLSearchParams\(window\.location\.search\)/.test(src),
-            'expected URLSearchParams read of window.location.search'
-        );
-        assert.ok(
-            /params\.get\(\s*['"]target['"]\s*\)/.test(src),
-            'expected params.get("target") lookup'
+            /var base\s*=\s*resolveBundleBase\(\)/.test(body),
+            'toggleReveal must resolve its base via resolveBundleBase()'
         );
     });
 
-    it('toggleReveal falls back to window.opener.location.pathname when no target', function() {
+    it('toggleReveal no longer inlines the base resolver', function() {
         var src = getInspSrc54();
+        var idx = src.indexOf('function toggleReveal');
+        var body = src.slice(idx, idx + 3000);
+        // Window-independent negative: the inline resolver's distinctive
+        // `var base = '';` init is globally gone after the fold (0 file-wide),
+        // so this can't trip on neighbouring code the way a `window.opener...`
+        // grep over a fixed-size slice would (jsdoc.md fixed-window brittleness).
         assert.ok(
-            /window\.opener\s*&&\s*window\.opener\.location/.test(src),
-            'expected guard on window.opener + window.opener.location'
-        );
-        assert.ok(
-            /window\.opener\.location\.pathname/.test(src),
-            'expected read of window.opener.location.pathname for bundle-scoped prefix'
-        );
-    });
-
-    it('toggleReveal final fallback strips /_gina/inspector from own pathname', function() {
-        var src = getInspSrc54();
-        assert.ok(
-            /window\.location\.pathname\.replace\(\/\\\/_gina\\\/inspector\.\*\$\//.test(src),
-            'expected /_gina/inspector.*$/ strip as final fallback'
-        );
-    });
-
-    it('toggleReveal strips trailing slashes from every base path source', function() {
-        var src = getInspSrc54();
-        var stripCount = (src.match(/\.replace\(\/\\\/\+\$\//g) || []).length;
-        assert.ok(
-            stripCount >= 3,
-            'expected at least 3 trailing-slash strips (target, opener pathname, own pathname fallback); found ' + stripCount
+            body.indexOf("var base = '';") < 0,
+            'the inline base resolver must be gone from toggleReveal (folded into resolveBundleBase)'
         );
     });
 
@@ -6483,18 +6472,6 @@ describe('54 - toggleReveal resolves /_gina/reveal via opener pathname for proxy
         assert.ok(
             /var url\s*=\s*base\s*\+\s*['"]\/_gina\/reveal['"]/.test(src),
             'expected `var url = base + "/_gina/reveal"` construction'
-        );
-    });
-
-    it('toggleReveal wraps the resolver in try/catch so a cross-origin opener cannot crash it', function() {
-        var src = getInspSrc54();
-        // Find the toggleReveal function body, ensure it contains try/catch around base resolution
-        var idx = src.indexOf('function toggleReveal');
-        assert.ok(idx > -1, 'toggleReveal function must exist');
-        var body = src.slice(idx, idx + 3000);
-        assert.ok(
-            /try\s*\{[\s\S]*?URLSearchParams[\s\S]*?\}\s*catch\s*\(/.test(body),
-            'expected try/catch wrapping the URLSearchParams + opener.location read'
         );
     });
 
@@ -6527,27 +6504,17 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         );
     });
 
-    it('tryAgentPassive derives the bundle URL from window.opener.location.pathname', function() {
+    it('tryAgentPassive resolves the bundle URL via the shared resolveBundleBase()', function() {
         var src = getInspSrc55();
         var idx = src.indexOf('function tryAgentPassive');
         var body = src.slice(idx, idx + 2500);
         assert.ok(
-            /window\.opener\s*&&\s*window\.opener\.location/.test(body),
-            'expected opener.location read for URL derivation'
+            /var base\s*=\s*resolveBundleBase\(\)/.test(body),
+            'tryAgentPassive must resolve its base via resolveBundleBase()'
         );
         assert.ok(
-            /window\.opener\.location\.pathname/.test(body),
-            'expected opener pathname used as base'
-        );
-    });
-
-    it('tryAgentPassive falls back to inspector path when opener is unavailable', function() {
-        var src = getInspSrc55();
-        var idx = src.indexOf('function tryAgentPassive');
-        var body = src.slice(idx, idx + 2500);
-        assert.ok(
-            /_gina\\\/inspector\.\*\$/.test(body) || /\/_gina\/inspector/.test(body),
-            'expected fallback stripping the inspector path'
+            body.indexOf("var base = '';") < 0,
+            'the inline base resolver must be gone from tryAgentPassive (folded into resolveBundleBase; its ?target= branch is inert here)'
         );
     });
 
@@ -6606,15 +6573,8 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         );
     });
 
-    it('tryAgentPassive wraps URL derivation in try/catch for cross-origin safety', function() {
-        var src = getInspSrc55();
-        var idx = src.indexOf('function tryAgentPassive');
-        var body = src.slice(idx, idx + 6000);
-        assert.ok(
-            /try\s*\{[\s\S]*?window\.opener[\s\S]*?\}\s*catch\s*\(/.test(body),
-            'expected try/catch around opener.location read'
-        );
-    });
+    // (cross-origin try/catch safety is now resolveBundleBase()'s concern,
+    //  pinned in §79; tryAgentPassive resolves via that helper — see above.)
 
     it('init wires tryAgentPassive inside the !isAgent branch', function() {
         var src = getInspSrc55();
@@ -6622,7 +6582,7 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
         assert.ok(isAgentIdx > -1);
         // grep forward through the !isAgent block — tryAgentPassive should be
         // called there, not inside the agent branch
-        var block = src.slice(isAgentIdx, isAgentIdx + 3000);
+        var block = src.slice(isAgentIdx, isAgentIdx + 4200);
         assert.ok(
             block.indexOf('if (!isAgent)') > -1,
             'expected if (!isAgent) guard'
@@ -6636,7 +6596,7 @@ describe('55 - Inspector passive /_gina/agent subscription alongside opener', fu
     it('init skips tryServerLogs when passive agent succeeds (no duplicate log entries)', function() {
         var src = getInspSrc55();
         var isAgentIdx = src.indexOf('var isAgent = tryAgent()');
-        var block = src.slice(isAgentIdx, isAgentIdx + 3000);
+        var block = src.slice(isAgentIdx, isAgentIdx + 4200);
         // Expect the call sequence: tryAgentPassive(), then conditional tryServerLogs()
         assert.ok(
             /tryAgentPassive\(\)[\s\S]*?if\s*\(\s*!_passiveAgentActive[\s\S]*?tryServerLogs\(\)/.test(block),
@@ -6692,6 +6652,8 @@ describe('56 - Refresh button soft refresh (live indexes, reveal, passive agent)
         assert.ok(/new\s+XMLHttpRequest\(\)/.test(body), 'expected XMLHttpRequest for reveal refetch');
         assert.ok(/_revealedData\s*=\s*JSON\.parse/.test(body), 'expected _revealedData reassignment on 200');
         assert.ok(/renderTab\(\s*'data'\s*\)/.test(body), 'expected renderTab("data") on success');
+        assert.ok(/var base\s*=\s*resolveBundleBase\(\)/.test(body), 'the reveal refetch must resolve its base via resolveBundleBase()');
+        assert.ok(body.indexOf("var base = '';") < 0, 'the inline base resolver must be gone from the refresh handler (folded into resolveBundleBase)');
     });
 
     it('click handler reopens the passive agent SSE stream when closed', function() {
@@ -8729,4 +8691,196 @@ describe('78 - agent-WS SIGTERM-drain registration in server.js', function() {
         assert.equal(removed.length, 2);
     });
 
+});
+
+
+// ── 79 — resolveBundleBase shared resolver routes /_gina/indexes + /_gina/logs ─
+//
+// fetchLiveIndexes (/_gina/indexes) and tryServerLogs (/_gina/logs) previously
+// derived their base URL with a bare `window.location.pathname` strip — no
+// ?target= / opener fallback — so in proxy-routed multi-bundle setups (bundles
+// sharing a host, differing only by path prefix) they misrouted to the proxy's
+// default bundle. They now go through the shared resolveBundleBase() helper, the
+// same 3-fallback toggleReveal() uses. (toggleReveal / tryAgentPassive and the
+// refresh re-reveal now route through resolveBundleBase() too, pinned by
+// §54/§55/§56 — every per-bundle /_gina/* consumer uses the one resolver.)
+
+describe('79 - resolveBundleBase shared resolver routes /_gina/indexes + /_gina/logs', function() {
+
+    var INSPECTOR_79 = path.join(BM_DIR, 'inspector.js');
+    var _src79;
+    function getSrc79() { return _src79 || (_src79 = fs.readFileSync(INSPECTOR_79, 'utf8')); }
+
+    it('inspector.js defines resolveBundleBase()', function() {
+        assert.ok(getSrc79().indexOf('function resolveBundleBase') > -1, 'expected resolveBundleBase() definition');
+    });
+
+    it('resolveBundleBase implements the 3-fallback (target -> opener -> strip) in try/catch', function() {
+        var src = getSrc79();
+        var idx = src.indexOf('function resolveBundleBase');
+        assert.ok(idx > -1, 'resolveBundleBase must exist');
+        var body = src.slice(idx, idx + 900);
+        assert.ok(/params\.get\(\s*['"]target['"]\s*\)/.test(body), 'expected ?target= lookup (fallback 1)');
+        assert.ok(body.indexOf('window.opener.location.pathname') > -1, 'expected opener pathname (fallback 2)');
+        assert.ok(body.indexOf('window.location.pathname.replace') > -1, 'expected inspector-path strip fallback (fallback 3)');
+        assert.ok(/try\s*\{[\s\S]*?\}\s*catch\s*\(/.test(body), 'expected try/catch for cross-origin opener safety');
+    });
+
+    it('fetchLiveIndexes resolves its base via resolveBundleBase() (no bare strip)', function() {
+        var src = getSrc79();
+        var idx = src.indexOf('function fetchLiveIndexes');
+        assert.ok(idx > -1, 'fetchLiveIndexes must exist');
+        var body = src.slice(idx, idx + 700);
+        assert.ok(/var base\s*=\s*resolveBundleBase\(\)/.test(body), 'fetchLiveIndexes must call resolveBundleBase()');
+        assert.ok(body.indexOf("'/_gina/indexes'") > -1, 'still builds the /_gina/indexes URL');
+        assert.ok(body.indexOf('window.location.pathname.replace') < 0, 'the old bare-strip resolver must be gone from fetchLiveIndexes');
+    });
+
+    it('tryServerLogs resolves its base via resolveBundleBase() (no bare strip)', function() {
+        var src = getSrc79();
+        var idx = src.indexOf('function tryServerLogs');
+        assert.ok(idx > -1, 'tryServerLogs must exist');
+        var body = src.slice(idx, idx + 700);
+        assert.ok(/var base\s*=\s*resolveBundleBase\(\)/.test(body), 'tryServerLogs must call resolveBundleBase()');
+        assert.ok(body.indexOf("'/_gina/logs'") > -1, 'still builds the /_gina/logs URL');
+        assert.ok(body.indexOf('window.location.pathname.replace') < 0, 'the old bare-strip resolver must be gone from tryServerLogs');
+    });
+
+});
+
+
+// ── 80 — SPA input hardening: loadFoldStore shape-guard + form-key escaping ──
+//
+// Two defense-in-depth hardenings in the Inspector SPA:
+//   (C) loadFoldStore() validates the parsed __gina_inspector_folds JSON is a
+//       plain object — a corrupted/tampered primitive would otherwise crash the
+//       (un-try/caught) <details> toggle handler with a strict-mode TypeError.
+//   (D) renderFormDataSections escapes the form-data section key via escHtml
+//       before it reaches innerHTML (the only key/label interpolation in the SPA
+//       that previously lacked escaping).
+
+describe('80 - SPA input hardening (loadFoldStore shape-guard + form-key escHtml)', function() {
+
+    var INSPECTOR_80 = path.join(BM_DIR, 'inspector.js');
+    var _src80;
+    function getSrc80() { return _src80 || (_src80 = fs.readFileSync(INSPECTOR_80, 'utf8')); }
+
+    it('loadFoldStore validates the parsed value is a plain object (not a primitive/array)', function() {
+        var src = getSrc80();
+        var idx = src.indexOf('function loadFoldStore');
+        assert.ok(idx > -1, 'loadFoldStore must exist');
+        var body = src.slice(idx, idx + 700);
+        assert.ok(/typeof\s+\w+\s*===?\s*'object'/.test(body), "expected a `typeof === 'object'` shape check");
+        assert.ok(body.indexOf('!Array.isArray(') > -1, 'expected an !Array.isArray guard (reject array/primitive)');
+    });
+
+    it('renderFormDataSections escapes the form-data section key via escHtml', function() {
+        var src = getSrc80();
+        assert.ok(src.indexOf('escHtml(keys[k])') > -1, 'expected escHtml(keys[k]) on the form-data section title (XSS hardening)');
+    });
+
+});
+
+describe('81 - Inspector per-tab BroadcastChannel data binding (#INS)', function() {
+    var _sbar81, _ijs81;
+    function statusbar81() {
+        return _sbar81 || (_sbar81 = fs.readFileSync(path.join(BM_DIR, '..', 'html', 'statusbar.html'), 'utf8'));
+    }
+    function inspjs81() {
+        return _ijs81 || (_ijs81 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8'));
+    }
+
+    // ── statusbar.html (sender side) ──────────────────────────────────────
+    it('statusbar derives a stable per-tab id from sessionStorage', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("sessionStorage.getItem('__gina_tab_id')") > -1,
+            'expected sessionStorage __gina_tab_id read (stable across this tab\'s navigations)');
+        assert.ok(s.indexOf("sessionStorage.setItem('__gina_tab_id'") > -1,
+            'expected sessionStorage __gina_tab_id write (created once)');
+    });
+
+    it('statusbar opens a per-tab BroadcastChannel keyed by the tab id', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("new BroadcastChannel('gina-inspector-' + _ginaTabId)") > -1,
+            'expected BroadcastChannel("gina-inspector-"+tabId)');
+    });
+
+    it('statusbar publishes __ginaData on the channel at load + update + restore', function() {
+        var s = statusbar81();
+        var n = (s.match(/_ginaPublish\(\);/g) || []).length;
+        assert.ok(n >= 3, 'expected >= 3 _ginaPublish() calls (load + ginaToolbar.update + restore), got ' + n);
+        assert.ok(s.indexOf("postMessage({ type: 'data', payload: window.__ginaData })") > -1,
+            'expected {type:data,payload} publish');
+    });
+
+    it('statusbar replies to a {type:request} with the current payload', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("ev.data.type === 'request'") > -1,
+            'expected the sender to answer the Inspector\'s {type:request} handshake');
+    });
+
+    it('statusbar opens the embedded Inspector with ?ch=<tabId>', function() {
+        var s = statusbar81();
+        assert.ok(s.indexOf("_embeddedUrl + (_ginaTabId ? '?ch=' + encodeURIComponent(_ginaTabId)") > -1,
+            'expected ?ch= appended to the embedded Inspector open URL');
+    });
+
+    // ── inspector.js (receiver side) ──────────────────────────────────────
+    it('inspector.js defines setupBoundChannel', function() {
+        assert.ok(inspjs81().indexOf('function setupBoundChannel') > -1,
+            'expected setupBoundChannel definition');
+    });
+
+    it('setupBoundChannel binds gina-inspector-<ch>, sets source=broadcast, requests initial data', function() {
+        var s = inspjs81();
+        var i = s.indexOf('function setupBoundChannel');
+        assert.ok(i > -1, 'setupBoundChannel must exist');
+        var body = s.slice(i, i + 1300);
+        assert.ok(body.indexOf("new BroadcastChannel('gina-inspector-' + ch)") > -1,
+            'expected the channel bound by the ?ch= id');
+        assert.ok(body.indexOf("source = 'broadcast'") > -1, "expected source = 'broadcast'");
+        assert.ok(body.indexOf("postMessage({ type: 'request' })") > -1,
+            'expected a {type:request} on connect (BroadcastChannel does not replay)');
+        assert.ok(body.indexOf("ev.data.type !== 'data'") > -1,
+            'expected the handler to ignore non-data frames');
+    });
+
+    it('init reads ?ch= and enters bound mode inside the !isAgent branch', function() {
+        var s = inspjs81();
+        var i = s.indexOf('var isAgent = tryAgent()');
+        var block = s.slice(i, i + 4200);
+        assert.ok(block.indexOf(".get('ch')") > -1, 'expected ?ch= read via URLSearchParams.get');
+        assert.ok(block.indexOf('setupBoundChannel(_boundCh)') > -1, 'expected setupBoundChannel(_boundCh) in init');
+    });
+
+    it('pollData reads _bcLatest in broadcast mode', function() {
+        var s = inspjs81();
+        var i = s.indexOf('function pollData');
+        var body = s.slice(i, i + 900);
+        assert.ok(body.indexOf("source === 'broadcast'") > -1, "expected a source === 'broadcast' branch in pollData");
+        assert.ok(body.indexOf('gd = _bcLatest') > -1, 'expected gd = _bcLatest read');
+    });
+
+    it('pollData error path does NOT reset a broadcast source', function() {
+        var s = inspjs81();
+        assert.ok(s.indexOf("source !== 'localStorage' && source !== 'broadcast'") > -1,
+            'expected the catch-block to preserve a broadcast source (else it reverts to the global channels)');
+    });
+
+    // ── pure-logic replica of the bound-channel message filter ────────────
+    it('bound-channel onmessage applies only well-formed {type:data} frames', function() {
+        var applied = [];
+        // Mirror of setupBoundChannel's onmessage contract.
+        function onmessage(ev) {
+            if (!ev || !ev.data || ev.data.type !== 'data' || !ev.data.payload) return;
+            applied.push(ev.data.payload);
+        }
+        onmessage({ data: { type: 'data', payload: { p: 1 } } }); // applied
+        onmessage({ data: { type: 'request' } });                 // ignored (handshake)
+        onmessage({ data: { type: 'data' } });                    // ignored (no payload)
+        onmessage({ data: null });                                // ignored
+        onmessage(null);                                          // ignored
+        assert.strictEqual(applied.length, 1, 'only the well-formed data frame should apply');
+        assert.strictEqual(applied[0].p, 1);
+    });
 });
