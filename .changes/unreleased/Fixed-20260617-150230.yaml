@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator''s `isDate` rule now returns the field object on its valid path (like every other rule), so it chains — e.g. `field.isDate(mask).isRequired()`; the parsed Date stays available on the field''s `value`.'
-time: 2026-06-17T15:02:30+01:00

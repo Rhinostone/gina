@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator isFloat now accepts string float values (e.g. "1.5") by coercing with Number() before checking finiteness and a fractional part. Previously the strict Number(val) === val gate passed only a real JS number, so server-side validation of form and urlencoded input (always strings) wrongly rejected valid floats. Whole numbers still fail, preserving the rule that an integer is not a float.'
-time: 2026-06-15T23:20:13.967914+01:00

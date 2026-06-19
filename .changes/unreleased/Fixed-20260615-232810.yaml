@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator isDate now validates non-ISO date masks (e.g. dd/mm/yyyy). It builds the date from explicit numeric components identified by the mask tokens with a round-trip range check, instead of reformatting a string and handing it to new Date(). Previously a slash mask with a day greater than 12 was parsed as US MM/DD and wrongly rejected; impossible dates such as 2023-02-30 are still rejected.'
-time: 2026-06-15T23:28:10.858298+01:00

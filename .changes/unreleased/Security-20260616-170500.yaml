@@ -1,3 +1,0 @@
-kind: Security
-body: 'Uploads to an unconfigured upload group are now rejected with HTTP 400 instead of streaming through unchecked, closing a bypass of a group''s `allowedExtensions` and `isMultipleAllowed` limits. A file with no group falls back to the default `untagged` group, and `untagged` is no longer exempt from its own configured limits. Back-compat: the shipped `untagged` default now sets `isMultipleAllowed: true`; bundles whose `settings.json` set it to `false`, or that uploaded without configuring `upload.groups`, must add or adjust their upload-group configuration.'
-time: 2026-06-16T17:05:00+01:00

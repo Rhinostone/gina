@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a `--ignore-ports` flag to `gina bundle:add`: pass a comma-separated list of port numbers (e.g. `--ignore-ports=3000,3001`) to exclude them from the availability scan when creating or importing a bundle, on top of the already-assigned ports and the reserved 4100-4199 range that are skipped automatically. Composable with `--start-port-from`.'
-time: 2026-06-15T15:45:12.004273+01:00

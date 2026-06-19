@@ -1,3 +1,0 @@
-kind: Changed
-body: 'Widened the supported Node.js version range to include Node 26. The `engine.node` field is now `>= 22 <27`; the full test suite passes on Node 26.3.0 and Node 26 is now part of the CI test matrix.'
-time: 2026-06-15T02:41:16.833598+01:00

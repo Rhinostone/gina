@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the dev Inspector misrouting its live server-log stream (/_gina/logs) and live database-index lookups (/_gina/indexes) to the wrong bundle in reverse-proxy multi-bundle setups, where several bundles share a host and differ only by a path prefix. Both now resolve the monitored bundle the same way the Data-tab Reveal already did — via the page opener or an explicit ?target= — instead of a bare path strip that hit the proxy default bundle. Single-bundle setups are unaffected. Dev Inspector tooling only.'
-time: 2026-06-17T10:05:00.000000+01:00

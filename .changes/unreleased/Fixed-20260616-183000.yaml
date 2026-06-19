@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed a dev-mode memory leak: with hot-reload active (NODE_ENV_IS_DEV), the framework evicted and re-required its collection, merge, uuid, cache and archiver libraries on every request, so long-lived code that captured those libraries at startup accumulated dead module references that the per-request prune could not reach — a slow heap climb that ended in an out-of-memory crash under sustained dev traffic (for example a long end-to-end run). These five stable libraries are now loaded once (like the logger, job and state singletons), keeping the dev-mode heap flat. Production was never affected (it does not evict modules per request).'
-time: 2026-06-16T18:30:00+01:00

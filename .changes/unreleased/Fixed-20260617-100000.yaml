@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed a rare cross-request data mix-up in the dev Inspector and instrumentation-window data feed for Swig-rendered HTML pages: under concurrent requests, one page''s captured query log and flow timeline could be attributed to another request. The Swig render path now isolates its per-request state the same way the Nunjucks path already does. This affects Inspector observability only — rendered page output was never affected.'
-time: 2026-06-17T10:00:00.000000+01:00
