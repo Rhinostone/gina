@@ -3,6 +3,7 @@
   "--scope",
   "--path",
   "--to",
+  "--out",
   "--homedir",
   "--force",
   "--more",

@@ -98,9 +98,11 @@
 
 [ Backup project ]
 
-    N.B.: Only available when ordering for supoort
+    Archives the project source tree (excluding node_modules) into a .zip.
 
-    $ gina project:backup @<project_name> --path=/var/dump --with-password
+    $ gina project:backup @<project_name> [ --out=/var/dump ] (if no --out given, writes to the current path)
+
+    N.B.: --with-password is not implemented yet — archives are NOT encrypted.
 
 
 [ Restore project ]
