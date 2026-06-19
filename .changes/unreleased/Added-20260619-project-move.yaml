@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added gina project:move to relocate a project source tree to a new filesystem path. The project name, its home directory, the port matrix, and its bundles are preserved (only the registry path is updated). It refuses while any bundle in the project is running, refuses a cross-filesystem target (pointing you to project:import), and reverses the move on failure.'
+time: 2026-06-19T11:42:02+01:00

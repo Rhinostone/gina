@@ -84,6 +84,14 @@
     $ gina project:rename @<project_name> @<new_project_name>
 
 
+[ Move project ]
+
+    Relocates the project source tree to a new path. The project name and its
+    ~/.<project_name> home are unchanged; all bundles must be stopped first.
+
+    $ gina project:move @<project_name> --to=/new/path
+
+
 [ Build project ]
 
     $ gina project:build @<project_name> --scope=local --env=prod
