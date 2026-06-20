@@ -234,3 +234,67 @@ describe('06 - banner assembly with/without engine', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 07 — middleware read is defensive (Bun / absent-MIDDLEWARE resilience)
+// ---------------------------------------------------------------------------
+describe('07 - middleware read resilience', function() {
+
+    var src;
+    function getSrc() {
+        return src || (src = fs.readFileSync(VERSION_SOURCE, 'utf8'));
+    }
+
+    it('reads MIDDLEWARE into a defaulted var, not inline in the object literal', function() {
+        assert.ok(
+            /var middleware\s*=\s*'none'/.test(getSrc()),
+            "expected a `var middleware = 'none'` default before the read"
+        );
+        assert.ok(
+            /"middleware"\s*:\s*middleware\s*,/.test(getSrc()),
+            'expected the version object to use the middleware var, not an inline read'
+        );
+    });
+
+    it('wraps the MIDDLEWARE read in try/catch (degrade to none, not crash)', function() {
+        assert.ok(
+            getSrc().indexOf('catch (middlewareErr)') > -1,
+            'expected the MIDDLEWARE read wrapped in try/catch (middlewareErr)'
+        );
+    });
+
+    it('still references the MIDDLEWARE file (read preserved)', function() {
+        assert.ok(getSrc().indexOf('/MIDDLEWARE') > -1);
+    });
+
+    /**
+     * Replica of the defensive MIDDLEWARE read in version.js init().
+     * Returns the file content, or 'none' on an empty read or a throw.
+     */
+    function resolveMiddleware(readFn) {
+        var middleware = 'none';
+        try {
+            middleware = readFn().toString() || 'none';
+        } catch (middlewareErr) {
+            middleware = 'none';
+        }
+        return middleware;
+    }
+
+    it('returns the file content when the read succeeds', function() {
+        assert.equal(
+            resolveMiddleware(function() { return 'isaac@0.5.5-alpha.2'; }),
+            'isaac@0.5.5-alpha.2'
+        );
+    });
+
+    it("falls back to 'none' when the read throws (absent MIDDLEWARE under Bun)", function() {
+        assert.equal(resolveMiddleware(function() { throw new Error('ENOENT'); }), 'none');
+    });
+
+    it("falls back to 'none' on empty content", function() {
+        assert.equal(resolveMiddleware(function() { return ''; }), 'none');
+    });
+
+});

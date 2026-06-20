@@ -60,6 +60,17 @@ function Version(opt){
             engine = '';
         }
 
+        // Read the framework MIDDLEWARE file defensively — it is normally created
+        // by post_install / framework:init (checkIfMiddlewareFile), but if it is
+        // still absent (e.g. a read-only framework dir) degrade to 'none' instead
+        // of crashing, matching the "when available" guard on the engine read above.
+        var middleware = 'none';
+        try {
+            middleware = fs.readFileSync(_( opt.frameworkPath + '/MIDDLEWARE')).toString() || 'none';
+        } catch (middlewareErr) {
+            middleware = 'none';
+        }
+
         var vers = "",
             short = ( typeof(process.argv[3]) != 'undefined') ? process.argv[3]: false,
             msg = require('./msg.json'),
@@ -67,7 +78,7 @@ function Version(opt){
                 "number"        : GINA_VERSION,
                 "platform"      : process.platform,
                 "arch"          : arch,
-                "middleware"    : fs.readFileSync(_( opt.frameworkPath + '/MIDDLEWARE')).toString() || 'none',
+                "middleware"    : middleware,
                 "engine"        : engine,
                 "copyright"     : require(opt.pack).copyright
             };

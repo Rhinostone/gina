@@ -231,11 +231,47 @@ function Initialize(opt) {
         done()
     }
 
+    /**
+     * Ensures the framework-dir `MIDDLEWARE` file exists before the command runs.
+     *
+     * `MIDDLEWARE` is normally written by `script/post_install.js` at install time,
+     * but it is gitignored + npmignored, so any environment that skips the install
+     * lifecycle never receives it — most notably the Bun runtime (`bun add -g`
+     * blocks dependency postinstalls by default), and also containers / fresh
+     * clones. Its readers (`version.js`, `core/config.js`) then crash or fall back
+     * to `'none'`. This step recreates it (idempotent, and ahead of the command
+     * dispatch in the `begin()` chain) with the same default content
+     * `post_install.js` writes: `isaac@<version>`.
+     *
+     * Runtime-agnostic: on a normal install the file already exists, so the create
+     * branch never runs and behaviour is byte-identical. Creation is best-effort —
+     * a read-only framework directory leaves the file absent and `version.js`
+     * degrades to its `'none'` fallback. It must never pass an error to `done()`:
+     * the `begin()` chain treats a step error as fatal (`process.exit(1)`).
+     *
+     * @private
+     * @param {function} done - Step callback; always invoked with no argument.
+     * @returns {void}
+     */
     self.checkIfMiddlewareFile = function(done) {
         var middlewareFileObj = new _( opt.frameworkPath + '/MIDDLEWARE');
         console.debug('Checking for: '+ middlewareFileObj.toString());
         if ( !middlewareFileObj.existsSync() ) {
             console.debug('Did not find '+ middlewareFileObj.toString());
+            // The install lifecycle didn't run (Bun blocks postinstalls by default;
+            // also containers / fresh clones). Recreate MIDDLEWARE so the downstream
+            // readers get the real value instead of crashing. Best-effort: a
+            // read-only framework dir leaves it absent and version.js degrades to
+            // 'none'. Must NOT done(err) here — begin() treats that as fatal.
+            try {
+                var version    = getEnvVar('GINA_VERSION')
+                              || require(opt.frameworkPath + '/package.json').version;
+                var middleware = 'isaac@' + version; // post_install.js default (its express branch is dead code)
+                fs.writeFileSync( middlewareFileObj.toString(), middleware );
+                console.debug('Created '+ middlewareFileObj.toString() +' ('+ middleware +')');
+            } catch (writeErr) {
+                console.debug('Could not create '+ middlewareFileObj.toString() +': '+ (writeErr.message || writeErr));
+            }
         }
         done()
     }
