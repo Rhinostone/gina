@@ -30,6 +30,8 @@
  *   npm run smoke                  # full matrix: node 22, 24, 26
  *   npm run smoke -- --node=22     # single version (fast iteration)
  *   npm run smoke -- --node=22,24  # a subset
+ *   npm run smoke -- --bun         # Node matrix + the (experimental) Bun leg
+ *   npm run smoke -- --node= --bun # Bun only (for iterating on Bun support)
  *
  * Green -> safe to `npm publish`. Red -> DO NOT publish.
  *
@@ -55,6 +57,7 @@ var { spawnSync } = require('child_process');
 var REPO_ROOT             = path.resolve(__dirname, '..');
 var IN_CONTAINER_SCRIPT   = path.join(__dirname, 'smoke_in_container.js');
 var DEFAULT_NODE_VERSIONS = ['22', '24', '26'];   // mirrors the CI test matrix (.github/workflows/test.yml)
+var DEFAULT_BUN_IMAGE     = 'oven/bun:latest';    // opt-in via --bun (experimental — Bun support in progress)
 
 // ---------------------------------------------------------------------------
 // Small console helpers
@@ -80,6 +83,40 @@ function parseNodeVersions(argv) {
     var arg = argv.filter(function (a) { return a.indexOf('--node=') === 0; }).pop();
     if (!arg) return DEFAULT_NODE_VERSIONS.slice();
     return arg.slice('--node='.length).split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+}
+
+/**
+ * Parses the opt-in `--bun` flag (and optional `--bun-image=<img>` override).
+ * Bun is NOT in the default matrix — Bun support is in progress, so the Bun leg
+ * is experimental and only runs when explicitly requested.
+ *
+ * @inner
+ * @param   {string[]} argv  `process.argv.slice(2)`.
+ * @returns {{enabled: boolean, image: string}}
+ */
+function parseBun(argv) {
+    var enabled = argv.indexOf('--bun') > -1;
+    var imgArg  = argv.filter(function (a) { return a.indexOf('--bun-image=') === 0; }).pop();
+    return { enabled: enabled, image: imgArg ? imgArg.slice('--bun-image='.length) : DEFAULT_BUN_IMAGE };
+}
+
+/**
+ * Builds the ordered list of runtime targets from argv: the Node legs (from
+ * `--node=`, default 22/24/26) followed by the opt-in Bun leg (`--bun`).
+ *
+ * @inner
+ * @param   {string[]} argv
+ * @returns {Array<{label: string, image: string, runtime: string, experimental: boolean}>}
+ */
+function buildTargets(argv) {
+    var targets = parseNodeVersions(argv).map(function (v) {
+        return { label: 'node:' + v, image: 'node:' + v, runtime: 'node', experimental: false };
+    });
+    var bun = parseBun(argv);
+    if (bun.enabled) {
+        targets.push({ label: 'bun', image: bun.image, runtime: 'bun', experimental: true });
+    }
+    return targets;
 }
 
 /**
@@ -114,10 +151,10 @@ function pack(destDir) {
 }
 
 /**
- * Runs the smoke for one Node version in a disposable container.
+ * Runs the smoke for one runtime target in a disposable container.
  *
  * @inner
- * @param   {string} nodeVersion      Node major (image tag), e.g. `'22'`.
+ * @param   {{label: string, image: string, runtime: string, experimental: boolean}} target
  * @param   {string} tarball          Absolute host path to the packed tarball.
  * @param   {string} candidateVersion `package.json` version of the candidate.
  * @returns {('pass'|'fail'|'error')} `pass` when the container smoke exited 0,
@@ -126,9 +163,9 @@ function pack(destDir) {
  *          disk, bad invocation — exit 125/126/127) — a tooling error, NOT a
  *          smoke verdict.
  */
-function runOne(nodeVersion, tarball, candidateVersion) {
-    var image = 'node:' + nodeVersion;
-    process.stdout.write('\n' + bold(BAR) + '\n' + bold('  Smoke — ' + image) + '\n' + bold(BAR) + '\n');
+function runOne(target, tarball, candidateVersion) {
+    process.stdout.write('\n' + bold(BAR) + '\n' +
+        bold('  Smoke — ' + target.label + (target.experimental ? '  (experimental)' : '')) + '\n' + bold(BAR) + '\n');
     var args = [
         'run', '--rm',
         '-v', tarball + ':/tmp/gina.tgz:ro',
@@ -136,7 +173,7 @@ function runOne(nodeVersion, tarball, candidateVersion) {
         '-e', 'GINA_SMOKE_TARBALL=/tmp/gina.tgz',
         '-e', 'GINA_SMOKE_VERSION=' + candidateVersion,
         '-e', 'GINA_LOG_STDOUT=true',
-        image, 'node', '/tmp/smoke.js'
+        target.image, target.runtime, '/tmp/smoke.js'
     ];
     var r = spawnSync('docker', args, { stdio: 'inherit' });
     // Docker reserves 125 (could not run), 126 (not executable), 127 (not found)
@@ -152,13 +189,19 @@ function runOne(nodeVersion, tarball, candidateVersion) {
 // ---------------------------------------------------------------------------
 
 function main() {
-    var versions = parseNodeVersions(process.argv.slice(2));
+    var argv     = process.argv.slice(2);
+    var targets  = buildTargets(argv);
     var pkg      = readJSON(path.join(REPO_ROOT, 'package.json'));
     var isStable = pkg.version.indexOf('-') < 0;
 
+    if (!targets.length) {
+        process.stderr.write('\n' + red('No runtime targets selected.') + ' Pass --node=<versions> and/or --bun.\n');
+        return 2;
+    }
+
     process.stdout.write(bold('gina pre-release container smoke') + '\n');
     process.stdout.write('  candidate version : ' + pkg.version + (isStable ? ' (stable)' : ' (alpha)') + '\n');
-    process.stdout.write('  node versions     : ' + versions.map(function (v) { return 'node:' + v; }).join(', ') + '\n');
+    process.stdout.write('  targets           : ' + targets.map(function (t) { return t.label + (t.experimental ? ' (experimental)' : ''); }).join(', ') + '\n');
 
     // -- Docker reachable? (tooling precondition, not a smoke verdict) --
     var dockerVer = dockerServerVersion();
@@ -184,25 +227,38 @@ function main() {
     if (isStable) {
         process.stdout.write('  ' + bold('note') + '            : stable cut — testing pre-rename bytes (framework code identical; path-rewrite consistency is gated separately by checkDefFrameworkConsistency).\n');
     }
+    if (targets.some(function (t) { return t.experimental; })) {
+        process.stdout.write('  ' + bold('note') + '            : the Bun leg is EXPERIMENTAL — Bun support is in progress; a Bun FAIL is expected until it lands (non-blocking when a Node leg is present).\n');
+    }
 
-    // -- Run the matrix, sequentially --
-    var results = versions.map(function (v) { return { version: v, status: runOne(v, tarball, pkg.version) }; });
+    // -- Run the targets, sequentially --
+    var results = targets.map(function (t) { return { target: t, status: runOne(t, tarball, pkg.version) }; });
 
     try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
 
-    // -- Verdict --
+    // -- Results table --
     process.stdout.write('\n' + bold(BAR) + '\n' + bold('  Results') + '\n' + bold(BAR) + '\n');
     results.forEach(function (r) {
-        var label = r.status === 'pass' ? green('PASS') : (r.status === 'fail' ? red('FAIL') : red('ERROR (could not run)'));
-        process.stdout.write('  node:' + r.version + '  ' + label + '\n');
+        var lbl = r.status === 'pass' ? green('PASS') : (r.status === 'fail' ? red('FAIL') : red('ERROR (could not run)'));
+        process.stdout.write('  ' + r.target.label + (r.target.experimental ? ' (experimental)' : '') + '  ' + lbl + '\n');
     });
     process.stdout.write('\n');
 
-    // A real assertion FAILURE outranks an infra ERROR — a confirmed broken build
-    // is "DO NOT PUBLISH" (1) regardless of an unrelated Docker hiccup elsewhere.
-    var failed  = results.filter(function (r) { return r.status === 'fail';  }).map(function (r) { return 'node:' + r.version; });
-    var errored = results.filter(function (r) { return r.status === 'error'; }).map(function (r) { return 'node:' + r.version; });
+    // -- Verdict. Supported (Node) legs drive the release verdict. Experimental
+    //    (Bun) legs are non-blocking WHEN a supported leg is present (progress
+    //    only); a Bun-only run lets the experimental result drive the exit so it
+    //    can gate red→green during development. A real FAILURE outranks an ERROR.
+    var supported = results.filter(function (r) { return !r.target.experimental; });
+    var deciding  = supported.length ? supported : results;
+    var failed    = deciding.filter(function (r) { return r.status === 'fail';  }).map(function (r) { return r.target.label; });
+    var errored   = deciding.filter(function (r) { return r.status === 'error'; }).map(function (r) { return r.target.label; });
+    var expNotPass = supported.length
+        ? results.filter(function (r) { return r.target.experimental && r.status !== 'pass'; }).map(function (r) { return r.target.label; })
+        : [];
 
+    if (expNotPass.length) {
+        process.stdout.write(bold('experimental: ') + expNotPass.join(', ') + ' did not pass (expected — Bun support in progress; see the leg output above).\n');
+    }
     if (failed.length) {
         process.stdout.write(red('FAIL  SMOKE FAILED on ' + failed.join(', ') + ' — DO NOT PUBLISH gina ' + pkg.version + '.') + '\n' +
             '   Inspect the container output above for the failing step.\n');
@@ -211,11 +267,11 @@ function main() {
     if (errored.length) {
         process.stderr.write(red('COULD NOT RUN the smoke on ' + errored.join(', ') + ' — Docker could not create the container ') +
             '(image pull/extract failure, out of disk, etc.).\n' +
-            '   This is a TOOLING error, not a verdict on gina ' + pkg.version + '. Resolve it (e.g. free disk / `docker system df`) and re-run `npm run smoke`.\n');
+            '   This is a TOOLING error, not a verdict on gina ' + pkg.version + '. Resolve it (e.g. free disk / `docker system df`) and re-run.\n');
         return 2;
     }
     process.stdout.write(green('PASS  SMOKE PASSED — gina ' + pkg.version + ' installs and runs on ' +
-        versions.map(function (v) { return 'node:' + v; }).join(', ') + '. Safe to publish.') + '\n');
+        deciding.map(function (r) { return r.target.label; }).join(', ') + '.' + (supported.length ? ' Safe to publish.' : '')) + '\n');
     return 0;
 }
 
@@ -223,4 +279,4 @@ if (require.main === module) {
     process.exit(main());
 }
 
-module.exports = { parseNodeVersions: parseNodeVersions, pack: pack, dockerServerVersion: dockerServerVersion, runOne: runOne, main: main };
+module.exports = { parseNodeVersions: parseNodeVersions, parseBun: parseBun, buildTargets: buildTargets, pack: pack, dockerServerVersion: dockerServerVersion, runOne: runOne, main: main };

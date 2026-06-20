@@ -136,3 +136,60 @@ describe('smoke gate — in-container source invariants', function () {
         assert.match(CONT_SRC, /'install',\s*'-g',\s*TARBALL/);
     });
 });
+
+
+describe('smoke gate — Bun leg (pure)', function () {
+
+    it('parseBun: --bun enables the leg; absent disables it', function () {
+        assert.equal(ORCH.parseBun([]).enabled, false);
+        assert.equal(ORCH.parseBun(['--bun']).enabled, true);
+    });
+
+    it('parseBun: --bun-image= overrides the default image', function () {
+        assert.equal(ORCH.parseBun(['--bun']).image, 'oven/bun:latest');
+        assert.equal(ORCH.parseBun(['--bun', '--bun-image=oven/bun:1.3']).image, 'oven/bun:1.3');
+    });
+
+    it('buildTargets: default = the 3 node legs, no bun', function () {
+        var t = ORCH.buildTargets([]);
+        assert.deepEqual(t.map(function (x) { return x.label; }), ['node:22', 'node:24', 'node:26']);
+        assert.ok(t.every(function (x) { return x.runtime === 'node' && !x.experimental; }));
+    });
+
+    it('buildTargets: --bun appends an EXPERIMENTAL bun leg after the node legs', function () {
+        var t = ORCH.buildTargets(['--node=22', '--bun']);
+        assert.deepEqual(t.map(function (x) { return x.label; }), ['node:22', 'bun']);
+        var bun = t[t.length - 1];
+        assert.equal(bun.runtime, 'bun');
+        assert.equal(bun.image, 'oven/bun:latest');
+        assert.equal(bun.experimental, true);
+    });
+
+    it('buildTargets: --node= (empty) + --bun = bun only', function () {
+        assert.deepEqual(ORCH.buildTargets(['--node=', '--bun']).map(function (x) { return x.label; }), ['bun']);
+    });
+});
+
+
+describe('smoke gate — Bun leg (source invariants)', function () {
+
+    it('orchestrator launches each target with its OWN runtime as the docker command', function () {
+        assert.match(ORCH_SRC, /target\.image,\s*target\.runtime,\s*'\/tmp\/smoke\.js'/);
+    });
+
+    it('in-container detects the Bun runtime and invokes gina via bun (node-shebang bins cannot run in oven/bun)', function () {
+        assert.match(CONT_SRC, /IS_BUN\s*=\s*\(typeof Bun !== 'undefined'\)/);
+        assert.match(CONT_SRC, /spawnSync\('bun',\s*\[GINA_ENTRY\]/);
+        assert.match(CONT_SRC, /spawn\('bun',\s*\[GINA_CONTAINER/);
+    });
+
+    it('in-container installs via `bun add -g` under Bun (no npm in oven/bun)', function () {
+        assert.match(CONT_SRC, /'add',\s*'-g',\s*TARBALL/);
+    });
+
+    it('the node path is preserved as a branch (supported-runtime contract unchanged)', function () {
+        assert.match(CONT_SRC, /spawnSync\('gina',\s*args/);
+        assert.match(CONT_SRC, /spawn\('gina-container',\s*\[name/);
+        assert.match(CONT_SRC, /'install',\s*'-g',\s*TARBALL/);
+    });
+});

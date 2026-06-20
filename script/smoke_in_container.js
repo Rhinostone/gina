@@ -75,6 +75,17 @@ var POLL_INTERVAL_MS = 300;
 
 var booted = [];   // [{ name, proc, stdout, stderr, exit }] — SIGKILLed on shutdown
 
+// Runtime. The orchestrator launches this script with `node` or `bun` as the
+// container command, so detect which we're under. Under Bun the node-shebang
+// `gina`/`gina-container` bins can't run (oven/bun has no node), so invoke their
+// JS entry points with `bun` directly. (Bun's global install dir is the standard
+// ~/.bun/install/global/node_modules location.)
+var IS_BUN         = (typeof Bun !== 'undefined') || !!(process.versions && process.versions.bun);
+var RUNTIME        = IS_BUN ? 'bun' : 'node';
+var BUN_GINA_DIR   = path.join(os.homedir(), '.bun', 'install', 'global', 'node_modules', 'gina');
+var GINA_ENTRY     = path.join(BUN_GINA_DIR, 'bin', 'gina');
+var GINA_CONTAINER = path.join(BUN_GINA_DIR, 'bin', 'gina-container');
+
 // ---------------------------------------------------------------------------
 // Logging
 // ---------------------------------------------------------------------------
@@ -144,7 +155,9 @@ function gina(args) {
     // gina CLI resolves the project from process.cwd() and ERRORS ("run command
     // from a deleted path") if the container's default CWD ("/") can't serve as a
     // project-resolution base. PROJECT_DIR is created before any gina() call.
-    var r = spawnSync('gina', args, { cwd: PROJECT_DIR, encoding: 'utf8', timeout: 120000 });
+    var r = IS_BUN
+        ? spawnSync('bun', [GINA_ENTRY].concat(args), { cwd: PROJECT_DIR, encoding: 'utf8', timeout: 120000 })
+        : spawnSync('gina', args, { cwd: PROJECT_DIR, encoding: 'utf8', timeout: 120000 });
     return { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '', error: r.error };
 }
 
@@ -158,7 +171,11 @@ function gina(args) {
  */
 function bootBundle(name) {
     var rec = { name: name, proc: null, stdout: '', stderr: '', exit: null };
-    rec.proc = spawn('gina-container', [name, '@' + PROJECT], { cwd: PROJECT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+    if (IS_BUN) {
+        rec.proc = spawn('bun', [GINA_CONTAINER, name, '@' + PROJECT], { cwd: PROJECT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+    } else {
+        rec.proc = spawn('gina-container', [name, '@' + PROJECT], { cwd: PROJECT_DIR, stdio: ['ignore', 'pipe', 'pipe'] });
+    }
     rec.proc.stdout.on('data', function (d) { rec.stdout += d; });
     rec.proc.stderr.on('data', function (d) { rec.stderr += d; });
     rec.proc.on('exit', function (code, signal) { rec.exit = { code: code, signal: signal }; });
@@ -199,19 +216,32 @@ function die(code) { shutdown(); process.exit(code); }
 // ---------------------------------------------------------------------------
 
 async function main() {
-    log('node ' + process.version + ' — tarball ' + TARBALL + (EXPECTED_VERSION ? ' (candidate ' + EXPECTED_VERSION + ')' : ''));
+    log((IS_BUN ? ('bun ' + (process.versions.bun || '')) : ('node ' + process.version)) +
+        ' — tarball ' + TARBALL + (EXPECTED_VERSION ? ' (candidate ' + EXPECTED_VERSION + ')' : ''));
 
     // Every gina() call runs from PROJECT_DIR (see the gina() helper) — create it
     // up front so the CWD is a real directory before the first CLI invocation.
     fs.mkdirSync(PROJECT_DIR, { recursive: true });
 
-    // 1. Install the candidate globally — exercises pre/post-install scripts.
-    log('npm install -g ' + TARBALL + ' (runs pre/post-install) ...');
+    // 1. Install the candidate globally. Node: `npm install -g` (exercises
+    //    pre/post-install). Bun: `bun add -g` — note Bun blocks dependency
+    //    postinstall by default, so ~/.gina + framework deps are NOT bootstrapped;
+    //    the smoke then surfaces the first runtime break under Bun.
     var t0 = Date.now();
-    var inst = spawnSync('npm', ['install', '-g', TARBALL], { stdio: 'inherit', timeout: 600000 });
-    if (inst.error) { fail('could not run npm: ' + inst.error.message); return die(1); }
-    if (inst.status !== 0) { fail('`npm install -g` exited ' + inst.status); return die(1); }
+    var inst;
+    if (IS_BUN) {
+        log('bun add -g ' + TARBALL + ' ...');
+        inst = spawnSync('bun', ['add', '-g', TARBALL], { stdio: 'inherit', timeout: 600000 });
+    } else {
+        log('npm install -g ' + TARBALL + ' (runs pre/post-install) ...');
+        inst = spawnSync('npm', ['install', '-g', TARBALL], { stdio: 'inherit', timeout: 600000 });
+    }
+    if (inst.error) { fail('could not run the ' + RUNTIME + ' installer: ' + inst.error.message); return die(1); }
+    if (inst.status !== 0) { fail('global install exited ' + inst.status); return die(1); }
     ok('installed in ' + Math.round((Date.now() - t0) / 1000) + 's');
+    if (IS_BUN) {
+        log('note: Bun blocks dependency postinstall by default — ~/.gina + framework deps (swig/psl/ws) are NOT auto-bootstrapped; surfacing the first runtime break.');
+    }
 
     // 2. gina version — proves the CLI resolves and runs offline.
     var ver = gina(['version']);
