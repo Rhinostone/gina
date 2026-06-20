@@ -184,6 +184,48 @@ if (process.argv.length >= 3 /**&& /gina$/.test(process.argv[1])*/ ) {
                     : _fwPath;
                 require('module').Module._initPaths();
             }
+
+            // Bun reads NODE_PATH only at process start, and the Module._initPaths()
+            // call above is a callable no-op under it — so bare require('lib/<name>')
+            // from framework entities and controllers fails to resolve at request
+            // time. Re-implement NODE_PATH fallback semantics for Bun: when the
+            // default resolver cannot find a *bare* specifier, retry it against each
+            // NODE_PATH dir (the list now includes the framework path). isBun-gated,
+            // so Node keeps its native NODE_PATH / _initPaths resolution untouched
+            // (zero Node-side change — the shim is never installed under Node).
+            var _runtime = require(ctxObj.paths.gina.root + '/utils/runtime');
+            var _Module  = require('module');
+            if ( _runtime.isBun() && !_Module._ginaBunResolvePatched ) {
+                _Module._ginaBunResolvePatched = true;
+                var _resolvePath      = require('path');
+                var _ginaOrigResolve  = _Module._resolveFilename;
+                var _ginaFallbackDirs = (process.env.NODE_PATH || '').split(_resolvePath.delimiter).filter(Boolean);
+                if ( _ginaFallbackDirs.indexOf(_fwPath) < 0 ) {
+                    _ginaFallbackDirs.push(_fwPath);
+                }
+                _Module._resolveFilename = function (request, parent, isMain, options) {
+                    try {
+                        return _ginaOrigResolve.call(this, request, parent, isMain, options);
+                    } catch (resolveErr) {
+                        // Only bare specifiers fall back — never relative ('./' '../')
+                        // or absolute ('/' '\' 'C:') requests.
+                        if (
+                            typeof request === 'string'
+                            && request.charAt(0) !== '.'
+                            && request.charAt(0) !== '/'
+                            && request.charAt(0) !== '\\'
+                            && !/^[A-Za-z]:/.test(request)
+                        ) {
+                            for (var _gi = 0; _gi < _ginaFallbackDirs.length; _gi++) {
+                                try {
+                                    return _ginaOrigResolve.call(this, _resolvePath.join(_ginaFallbackDirs[_gi], request), parent, isMain, options);
+                                } catch (fallbackErr) { /* try the next NODE_PATH dir */ }
+                            }
+                        }
+                        throw resolveErr;
+                    }
+                };
+            }
         }
 
         setContext('paths', ctxObj.paths);//And so on if you need to.
