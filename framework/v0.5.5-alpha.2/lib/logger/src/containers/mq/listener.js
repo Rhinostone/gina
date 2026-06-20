@@ -292,7 +292,12 @@ function MQListener(opt, cb) {
 
         var listenOption = {
             host: host,
-            port: port
+            // Bun requires a numeric port in the options-object form of
+            // server.listen() — Node coerces a string port ("8125") but Bun
+            // rejects it ("options must have the property port or path").
+            // parseInt is a no-op under Node and lets the MQ listener boot
+            // under the Bun runtime.
+            port: parseInt(port, 10)
         };
         var controller = null;
         // AbortController nodejs >= v15
