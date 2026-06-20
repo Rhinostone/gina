@@ -80,3 +80,32 @@ describe('02 - bin/gina: NODE_PROJECT normalisation replica', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 — source: the daemon-spawn binary is runtime-aware (Bun Stage 4)
+//
+// runAsSubProcess() historically resolved `which node`, which a no-node Bun
+// image cannot satisfy. The binary is now routed through utils/runtime's
+// runtimeBinary(), with `which node` evaluated ONLY under Node (isBun() false),
+// so the Node path is byte-identical and the Bun path spawns the Bun binary.
+// ---------------------------------------------------------------------------
+describe('03 - bin/gina: daemon-spawn binary is runtime-aware', function() {
+
+    it('requires the utils/runtime helper', function() {
+        assert.match(ginaSrc, /require\(__dirname \+ '\/\.\.\/utils\/runtime\.js'\)/);
+    });
+
+    it('gates `which node` behind runtime.isBun() and routes through runtimeBinary()', function() {
+        assert.match(
+            ginaSrc,
+            /runtime\.isBun\(\)\s*\?\s*runtime\.runtimeBinary\(\)\s*:\s*runtime\.runtimeBinary\(execSync\('which node'\)/,
+            'expected nodeBin = isBun() ? runtimeBinary() : runtimeBinary(execSync(which node)...)'
+        );
+    });
+
+    it('still spawns the resolved binary (nodeBin)', function() {
+        assert.match(ginaSrc, /spawn\(nodeBin, argv/);
+    });
+
+});

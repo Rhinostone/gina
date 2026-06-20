@@ -11,6 +11,7 @@ const {exec} = require('child_process');
 const {execSync}   = require('child_process');
 const {spawn}   = require('child_process');
 const os    = require('os');
+var runtime = require(__dirname + '/../utils/runtime.js');
 
 var isWin32 = function() {
     return (os.platform() == 'win32') ? true : false;
@@ -61,7 +62,12 @@ debugPort = (debugPort != null) ? '--inspect-brk=0.0.0.0:'+debugPort : '--inspec
 // console.debug('\r\nDebugger attached.');
 console.log('\nYou should now start debug on port #'+ settings.debug_port +' before doing anything else ...');
 
-var nodeBin         = execSync('which node').toString().trim();
+// Under Bun, `which node` resolves nothing (a Bun image ships no node) — spawn
+// the running Bun binary instead. Under Node this is the byte-identical
+// `which node` result (runtimeBinary() returns its fallback verbatim).
+var nodeBin         = runtime.isBun()
+                        ? runtime.runtimeBinary()
+                        : runtime.runtimeBinary(execSync('which node').toString().trim());
 var cliBin          = __dirname + '/cli';
 
 argv.splice(0, 0, debugPort);
