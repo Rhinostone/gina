@@ -33,7 +33,7 @@ gina-framework(1) -- Framework CLI
     	Restarts the framework.
 
 **-u**, **update**
-    	Get status of the framework.
+    	Reconcile the ~/.gina state files (main.json, settings.json) to the installed framework version. Dry-run by default; pass --fix to apply.
 
 **-e**, **set**
 		Set environment variables

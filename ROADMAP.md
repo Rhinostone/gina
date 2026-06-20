@@ -78,9 +78,9 @@ Stub commands confirmed in source — handler files exist but are empty or comme
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **`project:move`** — Relocate a project's source directory and update all `~/.gina/` registry entries to the new path. Handler is 0 lines. | `0.5.x` | Q1 2027 |
-| 📋 | **`framework:update`** — Self-update the installed Gina framework to the latest (or a specified) version without reinstalling via npm. Handler is 0 lines. | `0.5.x` | Q1 2027 |
-| 📋 | **`project:backup` / `project:restore`** — Archive a project's source, config, and data to a tarball (`backup`), and restore from it (`restore`). Documented in `project/help.txt` as support-only. No handler files exist. | `0.5.x` | Q1 2027 |
+| ✅ | **`project:move`** — Relocate a project's source directory (atomic `renameSync`) and rewrite the `~/.gina/` registry `path`. Refuses while a bundle is running or across filesystems; `--to=/new/path`. | `0.5.5-alpha.2` | 2026-06-19 |
+| ✅ | **`framework:update`** — Reconcile the `~/.gina/` state files (`main.json` `def_framework` + `frameworks` list, `<short>/settings.json`) to the installed framework version. Dry-run by default; `--fix` to apply, `--to-version` to target a specific version, `--format=json`. Automates the post-merge state check with a strict-semver never-regress guard. npm self-update is a planned follow-up — use `npm i -g gina@latest` meanwhile. | `0.5.5-alpha.2` | 2026-06-20 |
+| ✅ | **`project:backup` / `project:restore`** — Archive a project's source tree to a `.zip` (`backup`, symlinks skipped), and rebuild + re-register a project from a backup `.zip` so it is immediately startable (`restore`). | `0.5.5-alpha.2` | 2026-06-19 |
 | 📋 | **`framework:man` / `project:man` / `bundle:man`** — Inline CLI manual pages. Mentioned in `framework/help.txt` but no handler files exist for any group. | `0.5.x` | Q1 2027 |
 
 ---

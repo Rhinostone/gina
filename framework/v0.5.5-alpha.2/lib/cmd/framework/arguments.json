@@ -3,5 +3,10 @@
   "--path",
   "--force",
   "--more",
-  "--scope"
+  "--scope",
+  "--to-version",
+  "--fix",
+  "--apply",
+  "--dry-run",
+  "--format"
 ]

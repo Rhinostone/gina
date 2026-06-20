@@ -13,6 +13,7 @@ usage:
 $ gina --help | -h
 $ gina —-version | -v
 $ gina --status | -t
+$ gina framework:update [ --to-version=<v> ] [ --fix ] [ --format=json ]
 
 $ gina framework:man | man
 $ gina project:man
