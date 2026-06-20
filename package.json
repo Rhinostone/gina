@@ -97,6 +97,7 @@
   "scripts": {
     "test": "node --test test*.test.js",
     "test:e2e": "playwright test test/e2e",
+    "smoke": "node script/smoke_test_tarball.js",
     "types:gen": "node script/generate_gna_types.js",
     "types:check": "node script/generate_gna_types.js --check",
     "prepare": "node script/prepare_version.js",
