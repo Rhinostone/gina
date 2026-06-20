@@ -300,9 +300,15 @@ gna.scope = process.env.NODE_SCOPE = scope;
 gna.os.isWin32 = process.env.isWin32 = isWin32;
 gna.isAborting = false;
 //Cacheless is also defined in the main config : Config::isCacheless().
-process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? true : false;
-process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? true : false;
-process.env.NODE_SCOPE_IS_PRODUCTION = (/^true$/i.test(isProductionScope)) ? true : false;
+// Stored as STRING literals, not booleans: Node coerces a non-string
+// process.env assignment to a string, but Bun preserves the original type —
+// so a boolean here makes the downstream readers throw under Bun
+// (`process.env.NODE_ENV_IS_DEV.toLowerCase()`) or compare wrong
+// (`process.env.NODE_ENV_IS_DEV == 'false'` is never true for a boolean).
+// 'true'/'false' are byte-identical to Node's implicit coercion.
+process.env.NODE_ENV_IS_DEV = (/^true$/i.test(isDev)) ? 'true' : 'false';
+process.env.NODE_SCOPE_IS_LOCAL = (/^true$/i.test(isLocalScope)) ? 'true' : 'false';
+process.env.NODE_SCOPE_IS_PRODUCTION = (/^true$/i.test(isProductionScope)) ? 'true' : 'false';
 process.env.NODE_PORT = parseInt(port);
 // Proxy check thru proxy.json [Optional]
 var proxyPathObj    = new _(projects[projectName].path + '/proxy.json', true);
