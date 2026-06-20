@@ -189,7 +189,13 @@ function runCMD() {
 
     process.env.NODE_BUNDLE     = process.argv[3];
     process.env.NODE_PROJECT    = process.argv[4];
-    process.env.NODE_PROJECT    = process.env.NODE_PROJECT.replace(/\@/, '');
+    // Bun-safety: under Node, assigning an absent argv to an env var coerces to
+    // the string 'undefined' (so .replace works); under Bun it stays real
+    // undefined and .replace throws. Guard the call so Node behaviour is
+    // unchanged (on Node the value is always a string here).
+    if ( typeof process.env.NODE_PROJECT === 'string' ) {
+        process.env.NODE_PROJECT    = process.env.NODE_PROJECT.replace(/\@/, '');
+    }
 
     if (
         /(bundle\:start|bundle\:restart)/.test(process.argv[2])
