@@ -2785,7 +2785,7 @@ describe('24 - query: exhausted 502 retries surface a BAD_GATEWAY error, not suc
     // ---- source structure ----
 
     it('the exhausted-502 branch sits right after the 502 retry guard', function() {
-        var retryGuard = src.indexOf('if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES)');
+        var retryGuard = src.indexOf('if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES');
         var exhausted  = src.indexOf('} else if (httpStatus === 502) {');
         assert.ok(retryGuard > -1, 'the 502 retry guard must exist');
         assert.ok(exhausted > retryGuard,

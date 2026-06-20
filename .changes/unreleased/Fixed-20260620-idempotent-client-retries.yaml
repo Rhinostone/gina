@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Inter-bundle requests made with `self.query()` no longer silently re-execute a non-idempotent request (POST/PUT/PATCH/DELETE) when a transient failure — a stream timeout, connection reset, GOAWAY/premature stream close, or an upstream 502 — occurs after the request was already sent. Auto-retries on both the HTTP/2 and HTTP/1 client paths are now gated on HTTP-method idempotency: only safe methods (GET, HEAD, OPTIONS, TRACE) are retried by default, so a request the upstream already processed is never re-run behind a lost response. A caller whose endpoint is genuinely safe to replay can opt a non-safe method back in per request with `retryUnsafe: true`.'
+time: 2026-06-20T15:30:00+01:00

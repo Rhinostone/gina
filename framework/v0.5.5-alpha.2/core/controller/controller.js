@@ -2874,6 +2874,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         },
         // Will try x3 (0, 1, 2). Hard ceiling is 10 (see retry handler) to bound timer accumulation under sustained failure.
         maxRetry            : 2,
+        // #B53 — when true, allow auto-retry of a non-safe method (POST/PUT/PATCH/DELETE) after
+        // a post-send transient failure. Default false: only safe methods (GET/HEAD/OPTIONS/TRACE)
+        // auto-retry, so a request the upstream already executed is never silently re-run. Opt in
+        // per call only when the target endpoint is genuinely replay-safe. See isRetryableMethod().
+        retryUnsafe         : false,
         // Socket inactivity timeout — accepts "30s", "500ms", "1m" or a number (ms)
         requestTimeout      : "10s",
         agent               : false/**,
@@ -3358,6 +3363,37 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     //     });
     // };
 
+    /**
+     * #B53 — Idempotency guard for inter-bundle client retries.
+     *
+     * A transient failure can land AFTER the upstream bundle already executed its handler
+     * (stream timeout, ECONNRESET, GOAWAY premature-close, proxy 502) — only the response is
+     * lost, not the side effect. Auto-retrying then silently re-executes the request, so a
+     * non-idempotent POST/PUT/PATCH/DELETE runs twice. Both client paths
+     * (handleHTTP1ClientRequest / handleHTTP2ClientRequest) therefore re-send on a transient
+     * failure only when replay is safe.
+     *
+     * Idempotency (PUT/DELETE) is a transport property, not a side-effect property — a PUT or
+     * DELETE fronting a side-effecting handler is still unsafe to replay — so by default only
+     * the HTTP "safe" methods (no side effects, idempotent) auto-retry. A caller that owns a
+     * genuinely replay-safe non-safe endpoint opts in per-call with `retryUnsafe: true`.
+     *
+     * @inner
+     * @param   {string}  method        - HTTP method, any case (HTTP/2 `:method` is already upper-cased).
+     * @param   {boolean} [retryUnsafe] - When strictly `true`, allow re-sending any method.
+     * @returns {boolean} `true` when the request may be safely re-sent on a transient failure.
+     *
+     * @example
+     * isRetryableMethod('GET');         // → true  (safe method)
+     * isRetryableMethod('post');        // → false (non-idempotent, not opted in)
+     * isRetryableMethod('POST', true);  // → true  (caller affirmed replay-safety)
+     */
+    var SAFE_HTTP_METHODS = { GET: true, HEAD: true, OPTIONS: true, TRACE: true };
+    var isRetryableMethod = function(method, retryUnsafe) {
+        if (retryUnsafe === true) { return true; }
+        return SAFE_HTTP_METHODS[ String(method || '').toUpperCase() ] === true;
+    };
+
     var handleHTTP1ClientRequest = function(browser, options, callback, retryCount = 0) {
 
 
@@ -3502,7 +3538,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         req.on('error', function onError(err) {
 
             // If conn is down (ECONNRESET, ETIMEDOUT),retry
-            if (retryCount < Math.min(options.maxRetry, 10)) {
+            // #B53 — but only re-send when replay is safe: a safe method, or a caller that opted
+            // in via options.retryUnsafe. This handler also fires for post-send failures (the
+            // requestTimeout below calls req.destroy() after the body is written), so an unguarded
+            // retry would silently re-execute a non-idempotent request.
+            if (retryCount < Math.min(options.maxRetry, 10) && isRetryableMethod(options.method, options.retryUnsafe)) {
                 const delay = 500 * (retryCount + 1); // Délai progressif
                 return setTimeout(() => handleHTTP1ClientRequest(browser, options, callback, retryCount + 1), delay);
             }
@@ -3979,7 +4019,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         var _NON_HTTP_OPTS = new Set([
             '_body', '_comment', 'ca', 'hostname', 'host', 'port',
             'requestTimeout', 'keepAlive', 'maxSockets', 'keepAliveMsecs', 'maxFreeSockets',
-            'rejectUnauthorized', 'maxRetry', 'agent', 'protocol', 'scheme',
+            'rejectUnauthorized', 'maxRetry', 'retryUnsafe', 'agent', 'protocol', 'scheme',
             'nameservers', 'settings', 'webroot', 'queryData', 'method', 'path'
         ]);
         var headerKeys = Object.keys(headers);
@@ -4059,7 +4099,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             var _tIdx = self.serverInstance._http2Sessions.indexOf(sessKey);
             if (_tIdx !== -1) self.serverInstance._http2Sessions.splice(_tIdx, 1);
             if (!client.destroyed) client.destroy(); // no error arg — suppresses session 'error' event
-            if (retryCount < HTTP2_MAX_RETRIES) {
+            // #B53 — only re-send non-idempotent methods when the caller opted in (replay-safe).
+            if (retryCount < HTTP2_MAX_RETRIES && isRetryableMethod(options[':method'], options.retryUnsafe)) {
                 options.queryData = options._body;
                 var _tNext = retryCount + 1;
                 if (_tNext > 1) {
@@ -4099,7 +4140,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
             // If the session closed exactly when we sent the request (Race Condition)
             // Retry with a fresh connection (up to HTTP2_MAX_RETRIES, with backoff)
-            if (retryCount < HTTP2_MAX_RETRIES && (errorCode === 'ERR_HTTP2_STREAM_ERROR' || errorCode === 'ECONNRESET')) {
+            if (retryCount < HTTP2_MAX_RETRIES && (errorCode === 'ERR_HTTP2_STREAM_ERROR' || errorCode === 'ECONNRESET') && isRetryableMethod(options[':method'], options.retryUnsafe)) {
                 isFinished = true; // Mark current attempt as done
                 cache.delete(sessKey);
                 if (!client.destroyed) client.destroy();
@@ -4185,7 +4226,8 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             if (isFinished) return;
             isFinished = true;
             console.warn('[HTTP2] Premature stream close on '+ options[':method'] +' '+ options[':path'] +' — GOAWAY / session reset (attempt '+ (retryCount + 1) +'/'+ (HTTP2_MAX_RETRIES + 1) +')');
-            if (retryCount < HTTP2_MAX_RETRIES) {
+            // #B53 — only re-send non-idempotent methods when the caller opted in (replay-safe).
+            if (retryCount < HTTP2_MAX_RETRIES && isRetryableMethod(options[':method'], options.retryUnsafe)) {
                 cache.delete(sessKey);
                 var _cIdx = self.serverInstance._http2Sessions.indexOf(sessKey);
                 if (_cIdx !== -1) self.serverInstance._http2Sessions.splice(_cIdx, 1);
@@ -4241,7 +4283,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             // drop between nginx and the bundle — transient on OrbStack ARM64 and in
             // production after a keepalive expiry). Retry after a short delay to give
             // nginx time to reconnect to the bundle before surfacing the error to the caller.
-            if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES) {
+            if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES && isRetryableMethod(options[':method'], options.retryUnsafe)) {
                 var _502Next = retryCount + 1;
                 console.warn('[HTTP2][RETRYING] 502 from '+ options[':authority'] + options[':path'] +' — retry '+ _502Next +'/'+ HTTP2_MAX_RETRIES +' in 2s');
                 setTimeout(function onHttp2RetryAfter502() {
