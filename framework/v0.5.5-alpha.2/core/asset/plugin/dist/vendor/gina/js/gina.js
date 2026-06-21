@@ -19058,9 +19058,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
          *
          * @example
          * // gina default skeleton:
-         * new PopinHandler({ name: 'form', preOpen: true });
+         * new Popin({ name: 'form', preOpen: true });
          * // consumer markup (delete your own pre-open observer, keep your look):
-         * new PopinHandler({ name: 'form', preOpen: true, loadingShell: '<div class="my-skel">…</div>' });
+         * new Popin({ name: 'form', preOpen: true, loadingShell: '<div class="my-skel">…</div>' });
          */
         function showLoadingShell($popin, $el) {
             // Opt-in only — off unless the popin was registered with `preOpen: true`.
