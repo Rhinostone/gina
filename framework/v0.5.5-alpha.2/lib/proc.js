@@ -316,7 +316,14 @@ function Proc(bundle, proc, usePidFile){
                     return;
                 }
 
+                var _uncaughtMsg = '[ FRAMEWORK ][ uncaughtException ][ '+err.code+' ] ' + ((err && err.stack) || err);
                 console.emerg('[ FRAMEWORK ][ uncaughtException ][ '+err.code+' ] ', err.stack);
+                // console.emerg writes via the logger's async process.stdout.write, so the
+                // SIGTERM-driven exit below can truncate it on a pipe (e.g. bin/gina-container).
+                // Guarantee the reason survives — mirrors the gna.js abort/mount, server.js
+                // ServerEngine, server.isaac.js creds, and proc.js procname flush sites
+                // (the boot-exit-flush sweep, 2d99ac60).
+                try { fs.writeSync(2, _uncaughtMsg + '\n'); } catch (_e) { /* best-effort */ }
 
 
                 dismiss(pid, 'SIGTERM');

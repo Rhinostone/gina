@@ -333,9 +333,27 @@ var env                     = (typeof(process.env.NODE_ENV) != 'undefined' && pr
     , scope                 = (typeof(process.env.NODE_SCOPE) != 'undefined' && process.env.NODE_SCOPE) ? process.env.NODE_SCOPE : projects[projectName]['def_scope']
     , isLocalScope          = (scope === projects[projectName]['local_scope']) ? true : false
     , isProductionScope     = (scope === projects[projectName]['production_scope']) ? true : false
-    , port                  = reversePorts[process.env.NODE_BUNDLE +'@'+ process.env.NODE_PROJECT][env][projects[projectName]['def_protocol']][projects[projectName]['def_scheme']]
     , scheme                = projects[projectName]['def_scheme']
 ;
+
+// Guard the ports.reverse.json lookup: a desynced/corrupt manifest (a missing
+// bundle@project / env / protocol / scheme key) otherwise throws a cryptic
+// `TypeError: Cannot read properties of undefined` at module load (bundle exit 1,
+// no actionable reason). Fail fast with a clear, pipe-flushed diagnostic instead.
+var _bundleKey  = process.env.NODE_BUNDLE +'@'+ process.env.NODE_PROJECT
+    , _defProto = projects[projectName]['def_protocol']
+    , _byEnv    = reversePorts[_bundleKey] && reversePorts[_bundleKey][env]
+    , _byProto  = _byEnv && _byEnv[_defProto]
+    , port      = ( _byProto && typeof(_byProto[scheme]) != 'undefined' ) ? _byProto[scheme] : null
+;
+if ( port == null ) {
+    var _portMsg = '[ FRAMEWORK ] could not resolve the listening port for [ '+ _bundleKey +' ] '
+                 + '(env: '+ env +', protocol: '+ _defProto +', scheme: '+ scheme +') — check '
+                 + GINA_HOMEDIR +'/ports.reverse.json';
+    console.emerg(_portMsg);
+    try { fs.writeSync(2, _portMsg + '\n'); } catch (_e) { /* best-effort */ }
+    process.exit(1);
+}
 
 gna.env = process.env.NODE_ENV = env;
 gna.scope = process.env.NODE_SCOPE = scope;

@@ -210,14 +210,20 @@ function Config(opt, contextResetNeeded) {
                     };
 
                 } catch(err) {
-                    console.error(err.stack||err.message);
+                    var _coreMsg = (err.stack||err.message);
+                    console.error(_coreMsg);
+                    // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+                    try { fs.writeSync(2, _coreMsg + '\n'); } catch (_e) { /* best-effort */ }
                     process.exit(1)
                 }
 
                 loadBundlesConfiguration( function(err, file, routing) {
 
                     if (err) {
-                        console.error(err.stack||err.message);
+                        var _bundlesMsg = (err.stack||err.message);
+                        console.error(_bundlesMsg);
+                        // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+                        try { fs.writeSync(2, _bundlesMsg + '\n'); } catch (_e) { /* best-effort */ }
                         setTimeout(() => {
                             process.exit(1);
                         }, 0);
@@ -361,8 +367,11 @@ function Config(opt, contextResetNeeded) {
         try {
             return self.envConf[bundle][env].server['coreConfiguration']
         } catch(err) {
-            console.debug('Could not get server core configuration for <'+ bundle +'>:<'+ env +'>');
+            var _coreConfCtx = 'Could not get server core configuration for <'+ bundle +'>:<'+ env +'>';
+            console.debug(_coreConfCtx);
             console.error(err.stack||err.message);
+            // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+            try { fs.writeSync(2, _coreConfCtx + '\n' + (err.stack||err.message) + '\n'); } catch (_e) { /* best-effort */ }
             process.exit(1);
         }
     }
@@ -1029,6 +1038,8 @@ function Config(opt, contextResetNeeded) {
                     appPort = portsReverse[app+'@'+self.projectName][env][ newContent[app][env].server.protocol ][ newContent[app][env].server.scheme ];
                 } catch (err) {
                     console.emerg('[CONFIG][ settings.server.protocol ] Protocol or scheme settings inconsistency found in `'+ app +'/config/settings`. To fix this, try to run `gina project:import @'+ self.projectName +' --path='+  projectConf.path +'`\n\r'+ err.stack);
+                    // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+                    try { fs.writeSync(2, '[CONFIG][ settings.server.protocol ] Protocol or scheme settings inconsistency for `'+ app +'` — run `gina project:import @'+ self.projectName +'`\n'+ (err.stack||err.message) + '\n'); } catch (_e) { /* best-effort */ }
                     process.exit(1)
                 }
                 //I had to for this one...
@@ -1978,7 +1989,10 @@ function Config(opt, contextResetNeeded) {
                     ) {
                         let ruleName = ( !/\@/.test(rule) ) ? rule +'@'+ bundle : rule;
                         err = new Error('['+ruleName+'] Bad routing syntax for `'+r+'` in requirements : must start with `/` or `validator::`');
-                        console.emerg(err.stack||err.message);
+                        var _routeMsg = (err.stack||err.message);
+                        console.emerg(_routeMsg);
+                        // Guarantee the reason survives process.exit() on an async pipe (e.g. bin/gina-container).
+                        try { fs.writeSync(2, _routeMsg + '\n'); } catch (_e) { /* best-effort */ }
                         process.exit(1);
                     }
                 }

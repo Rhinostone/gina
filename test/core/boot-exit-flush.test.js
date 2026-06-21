@@ -183,3 +183,81 @@ describe('02 - framework boot exit-sites: fs.writeSync flush precedes process.ex
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 — config.js + proc.js:319 — the boot exit-sites the 2d99ac60 sweep MISSED
+// ---------------------------------------------------------------------------
+// The gina logger writes via async process.stdout.write, so a console.emerg /
+// console.error followed by process.exit (or a dismiss-driven SIGTERM exit) can
+// truncate on a loaded pipe — the SAME mechanism §01 proves for the launcher.
+// 2d99ac60 flushed gna.js / server.js / server.isaac.js / proc.js:procname but
+// left config.js (the primary boot-config-failure path) and proc.js:319 (the
+// uncaughtException handler) unflushed. These pins lock the completion sweep.
+describe('03 - config.js + proc.js:319 boot exit-sites: sync flush before exit/dismiss', function() {
+
+    var config, proc;
+    before(function() {
+        config = fs.readFileSync(path.join(FW, 'core/config.js'), 'utf8');
+        proc   = fs.readFileSync(PROC, 'utf8');
+    });
+
+    it('config.js core-content read catch: flush precedes exit', function() {
+        flushPrecedesExit(config, 'var _coreMsg', 'fs.writeSync(2, _coreMsg', 'config.js core read');
+    });
+    it('config.js loadBundlesConfiguration err: flush precedes the (deferred) exit', function() {
+        flushPrecedesExit(config, 'var _bundlesMsg', 'fs.writeSync(2, _bundlesMsg', 'config.js bundles load');
+    });
+    it('config.js getServerCoreConf catch: flush precedes exit', function() {
+        flushPrecedesExit(config, 'var _coreConfCtx', 'fs.writeSync(2, _coreConfCtx', 'config.js getServerCoreConf');
+    });
+    it('config.js protocol/scheme inconsistency: flush precedes exit', function() {
+        flushPrecedesExit(config, 'Protocol or scheme settings inconsistency found in', 'fs.writeSync(2,', 'config.js protocol inconsistency');
+    });
+    it('config.js bad-routing-syntax: flush precedes exit', function() {
+        flushPrecedesExit(config, 'var _routeMsg', 'fs.writeSync(2, _routeMsg', 'config.js routing syntax');
+    });
+    it('config.js requires fs (the flush dependency)', function() {
+        assert.match(config, /require\(['"]fs['"]\)/, 'config.js must require fs');
+    });
+
+    it('proc.js:319 uncaughtException: sync flush precedes dismiss(SIGTERM), console.emerg retained', function() {
+        var i = proc.indexOf('var _uncaughtMsg');
+        assert.ok(i > -1, 'proc.js: _uncaughtMsg anchor not found');
+        var dismissIdx = proc.indexOf("dismiss(pid, 'SIGTERM')", i);
+        assert.ok(dismissIdx > -1, 'proc.js: no dismiss(pid, SIGTERM) after _uncaughtMsg');
+        var slice = proc.slice(i, dismissIdx);
+        assert.ok(slice.indexOf('fs.writeSync(2, _uncaughtMsg') > -1,
+            'expected a synchronous flush before dismiss(SIGTERM)');
+        assert.match(slice, /console\.emerg\(/, 'proc.js:319 must keep its console.emerg alongside the flush');
+    });
+
+});
+
+
+// ---------------------------------------------------------------------------
+// 04 — gna.js:336 portsReverse lookup guard (cryptic TypeError -> actionable)
+// ---------------------------------------------------------------------------
+// The bare 4-level reversePorts[...][env][def_protocol][def_scheme] deref at
+// module load threw a cryptic `TypeError: Cannot read properties of undefined`
+// (exit 1, no actionable reason) on a desynced ports.reverse.json. The guard
+// turns it into a clear, pipe-flushed diagnostic + clean exit.
+describe('04 - gna.js portsReverse lookup guard', function() {
+    var gna;
+    before(function() { gna = fs.readFileSync(GNA, 'utf8'); });
+
+    it('resolves the port via a null-guarded lookup', function() {
+        assert.match(gna, /port\s*=\s*\(\s*_byProto\s*&&\s*typeof\(_byProto\[scheme\]\)/,
+            'expected a guarded port resolution (_byProto && typeof check)');
+        assert.match(gna, /if\s*\(\s*port\s*==\s*null\s*\)\s*\{/, 'expected an if (port == null) fail-fast guard');
+    });
+    it('the guard emits an actionable message and flushes before exit', function() {
+        flushPrecedesExit(gna, 'var _portMsg', 'fs.writeSync(2, _portMsg', 'gna.js port guard');
+        assert.match(gna, /could not resolve the listening port for/, 'expected an actionable port-resolution message');
+    });
+    it('the bare unguarded 4-level reversePorts deref is gone', function() {
+        assert.doesNotMatch(gna,
+            /\[env\]\[projects\[projectName\]\['def_protocol'\]\]\[projects\[projectName\]\['def_scheme'\]\]/,
+            'the bare unguarded reversePorts[...][env][def_protocol][def_scheme] chain should be replaced by the guard');
+    });
+});

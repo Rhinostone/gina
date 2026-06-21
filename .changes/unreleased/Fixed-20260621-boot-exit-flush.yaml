@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Completed the boot-path diagnostic flush so a bundle that aborts during boot — a config read/parse failure, a server core-configuration or port/protocol inconsistency, a bad routing requirement, or any uncaught exception — now writes its reason synchronously to stderr before exiting; the cause survives piped or containerised stdio instead of being truncated to an empty log under load. Also added a clear, actionable error when the listening port cannot be resolved from ports.reverse.json, replacing a cryptic TypeError at boot.'
+time: 2026-06-21T18:45:00+01:00
