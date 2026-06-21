@@ -26,10 +26,10 @@ var console  = lib.logger;
  * By default the command refuses when the framework daemon or any bundle is
  * still running — wiping `~/.gina` would orphan them and strip their run-dir
  * pidfiles. Pass `--force` to reset anyway (the running processes keep running
- * but become untracked). Caveat: framework:init's checkRunningPids prunes
- * run-dir pidfiles (via `ps`) before this handler runs; on a minimal image
- * without `ps` it prunes them all, so the guard can't see running processes
- * there and the reset proceeds as if --force was given.
+ * but become untracked). framework:init's checkRunningPids prunes only stale
+ * run-dir pidfiles (via `process.kill(pid, 0)`) before this handler runs and
+ * keeps the live ones, so the running-process guard is reliable on every
+ * platform, including minimal images without `ps`.
  *
  * Usage:
  *  gina framework:reset
