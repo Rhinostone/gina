@@ -1,0 +1,64 @@
+name: Bun Runtime Smoke (experimental)
+
+# Experimental Bun-runtime support is in progress. This leg runs the SAME
+# end-to-end container smoke as `npm run smoke`, but ONLY against the Bun
+# runtime (oven/bun): it packs the candidate tarball, installs it with
+# `bun add -g` inside a clean oven/bun container, then boots the api + frontend
+# bundles and asserts HTTP 200 under Bun.
+#
+# NON-BLOCKING on purpose (continue-on-error): Bun support has not fully landed,
+# so a red result here is informational and MUST NOT gate develop/master.
+# Promoting this leg into a hard release gate (dropping continue-on-error, and
+# moving --bun out of the smoke's "experimental" set in
+# script/smoke_test_tarball.js) is the explicit "promote --bun into the gate"
+# step, to be done once Bun is green end-to-end and package.json's engine field
+# declares Bun support.
+
+on:
+  push:
+    branches: [develop, master]
+    paths:
+      - 'framework/**'
+      - 'bin/**'
+      - 'utils/**'
+      - 'script/smoke_test_tarball.js'
+      - 'script/smoke_in_container.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/bun-smoke.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'framework/**'
+      - 'bin/**'
+      - 'utils/**'
+      - 'script/smoke_test_tarball.js'
+      - 'script/smoke_in_container.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/bun-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  bun-smoke:
+    name: Bun container smoke (oven/bun)
+    runs-on: ubuntu-latest
+    # Experimental — informational only. A Bun regression marks THIS job red but
+    # must not fail the workflow run while Bun support is in progress.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js (pack the tarball + run the smoke orchestrator)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # ubuntu-latest ships Docker with a running daemon. The orchestrator packs
+      # the candidate with `npm pack --ignore-scripts` (no install, no `prepare`
+      # commit) and runs it in a disposable oven/bun container. `--node=` selects
+      # ZERO Node legs, so the Bun leg drives the exit code. The image is pinned
+      # for reproducibility (bump it as newer Bun releases are validated).
+      - name: Bun-only container smoke
+        run: npm run smoke -- --node= --bun --bun-image=oven/bun:1.3.14
