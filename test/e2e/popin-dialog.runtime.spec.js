@@ -40,6 +40,29 @@ async function gotoAndBoot(page) {
     );
 }
 
+// #B54 — register a legacy popin: inject the trigger FIRST (bindOpen scans the DOM at
+// registration), then construct + .on('ready') to fire init -> registerPopin -> bindOpen.
+// bindOpen renames the trigger id, so callers select it by [data-gina-popin-name].
+async function registerLegacyPopin(page, name, url, preOpen) {
+    await page.evaluate(function (a) {
+        var b = document.createElement('button');
+        b.id = 'legacy-' + a.name;
+        b.setAttribute('data-gina-popin-name', a.name);
+        b.setAttribute('data-gina-popin-url', a.url);
+        b.textContent = 'Open ' + a.name;
+        document.body.appendChild(b);
+    }, { name: name, url: url });
+    return await page.evaluate(function (a) {
+        return new Promise(function (resolve) {
+            setTimeout(function () { resolve('TIMEOUT'); }, 6000);
+            if (typeof window.require !== 'function') { resolve('NO_REQUIRE'); return; }
+            window.require(['gina/popin'], function (Popin) {
+                new Popin({ 'name': a.name, 'preOpen': a.preOpen }).on('ready', function () { resolve('READY'); });
+            });
+        });
+    }, { name: name, preOpen: preOpen });
+}
+
 test.beforeEach(async ({ page }) => {
     await gotoAndBoot(page);
 });
@@ -186,5 +209,57 @@ test.describe('data-gina-dialog runtime (real bundle)', () => {
         await expect(dialog.locator('#slot')).toHaveText('SLOT-TWO');
         await expect(dialog.locator('#partial-chrome')).toHaveText('Chrome stays');
         await expect(dialog.locator('#partial-chrome')).toHaveAttribute('data-kept', 'yes');
+    });
+
+    // --- #B54: one click = one GET (no hover/focus-preload double-fetch) -----------
+
+    test('#B54 legacy (data-gina-popin-name + -url) plain click fires exactly one GET', async ({ page }) => {
+        const reg = await registerLegacyPopin(page, 'b54legacy', '/frag/legacy.html', false);
+        expect(reg).toBe('READY');
+        let requests = 0;
+        page.on('request', (r) => { if (r.url().endsWith('/frag/legacy.html')) { requests++; } });
+        // A plain click warms an in-flight preload via focusin; the legacy click must adopt
+        // it, not fire a second identical GET. (bindOpen renames the id -> select by attr.)
+        await page.click('[data-gina-popin-name="b54legacy"]');
+        await expect(page.locator('dialog').filter({ hasText: 'Legacy body' })).toBeVisible();
+        await page.waitForTimeout(300);
+        expect(requests).toBe(1);
+    });
+
+    test('#B54 new-API (data-gina-dialog-src) plain click fires exactly one GET', async ({ page }) => {
+        await page.evaluate(() => {
+            const a = document.createElement('a');
+            a.id = 'b54-newapi';
+            a.setAttribute('data-gina-dialog', '');
+            a.setAttribute('data-gina-dialog-src', '/frag/ajax.html');
+            a.setAttribute('href', '#');
+            a.textContent = 'Open AJAX';
+            document.body.appendChild(a);
+        });
+        let requests = 0;
+        page.on('request', (r) => { if (r.url().endsWith('/frag/ajax.html')) { requests++; } });
+        // No deliberate hover: focusin (part of the click) warms an in-flight preload that
+        // the click adopts via consumePreload instead of firing a parallel GET.
+        await page.click('#b54-newapi');
+        await expect(page.locator('dialog').filter({ hasText: 'AJAX loaded' })).toBeVisible();
+        await page.waitForTimeout(300);
+        expect(requests).toBe(1);
+    });
+
+    test('#B54 a preOpen popin still shows its skeleton while the adopted preload is in flight', async ({ page }) => {
+        // Delay the fragment so the in-flight window (skeleton up, content not yet) is observable.
+        await page.route('**/frag/legacy.html', async (route) => {
+            await new Promise((r) => setTimeout(r, 1500));
+            await route.continue();
+        });
+        const reg = await registerLegacyPopin(page, 'b54skel', '/frag/legacy.html', true);
+        expect(reg).toBe('READY');
+        await page.click('[data-gina-popin-name="b54skel"]');
+        // In-flight: dialog open with the skeleton, real content not yet present.
+        await expect(page.locator('dialog .gina-popin-skeleton')).toBeVisible();
+        await expect(page.locator('dialog').filter({ hasText: 'Legacy body' })).toHaveCount(0);
+        // After the preload lands: real content swaps in and the skeleton is gone.
+        await expect(page.locator('dialog').filter({ hasText: 'Legacy body' })).toBeVisible({ timeout: 5000 });
+        await expect(page.locator('dialog .gina-popin-skeleton')).toHaveCount(0);
     });
 });

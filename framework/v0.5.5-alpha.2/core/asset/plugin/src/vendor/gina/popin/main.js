@@ -29,6 +29,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
      * @type {object}
      */
     var preloadCache = {};
+    // preloadWaiters[url] = [fn, ...] — callbacks parked by a click that adopted an
+    // in-flight preload; preloadFetch fires them with the body (or null on failure) so a
+    // click reuses the prefetch instead of issuing a second identical GET (#B54).
+    var preloadWaiters = {};
 
     /** @inner @type {object} warn-once registry, keyed by deprecated attribute name */
     var _deprecationWarned = {};
@@ -544,10 +548,16 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             xhrPreload.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
             xhrPreload.onreadystatechange = function () {
                 if ( xhrPreload.readyState == 4 ) {
+                    // #B54 — wake any click that adopted this in-flight preload instead of
+                    // firing its own duplicate GET (see consumePreload).
+                    var _waiters = preloadWaiters[url] || [];
+                    delete preloadWaiters[url];
                     if ( /^2/.test(xhrPreload.status) ) {
                         preloadCache[url] = xhrPreload.responseText;
+                        for ( var _w = 0; _w < _waiters.length; ++_w ) { _waiters[_w](xhrPreload.responseText); }
                     } else {
                         delete preloadCache[url];
+                        for ( var _wf = 0; _wf < _waiters.length; ++_wf ) { _waiters[_wf](null); }
                     }
                 }
             };
@@ -599,17 +609,47 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
         }
 
         /**
-         * consumePreload — if a warmed preload for `url` is cached, apply it to the popin
-         * (deleting the cache entry) and return `true`; else `false` so the caller falls
-         * back to a click-time XHR. A `null` entry is in-flight (reserved, not ready).
+         * consumePreload — reuse a hover/focus preload for `url` instead of firing a second
+         * identical GET on click (#B54):
+         *   - ready (cached body)      -> apply it now; return true.
+         *   - in-flight (null slot)    -> park a waiter that applies the body when the
+         *                                 preload resolves (or runs `onMiss` if it failed);
+         *                                 return true (handled — caller must NOT also load).
+         *   - never warmed (undefined) -> return false so the caller loads itself.
          *
          * @inner
+         * @param {string} url - the resolved popin URL.
+         * @param {object} $popin - the registered popin.
+         * @param {function} [onMiss] - the caller's click-time load, run only if an adopted
+         *   in-flight preload ends up failing.
+         * @returns {boolean} true if the preload was (or will be) consumed.
          */
-        function consumePreload(url, $popin) {
-            if ( preloadCache[url] == null ) {
+        function consumePreload(url, $popin, onMiss) {
+            var slot = preloadCache[url];
+            if ( typeof(slot) == 'undefined' ) {
                 return false;
             }
-            var body = preloadCache[url];
+            if ( slot === null ) {
+                // In-flight: adopt the running preload rather than fire a second GET.
+                // A preOpen popin still gets its instant born-modal skeleton now; the
+                // adopted preload swaps in the real content on arrival — matching the
+                // popinLoad preOpen flow this consume path bypasses (#B54).
+                if ( $popin && $popin.options && $popin.options.preOpen ) {
+                    showLoadingShell($popin, ensurePopinDialog($popin));
+                }
+                if ( typeof(preloadWaiters[url]) == 'undefined' ) {
+                    preloadWaiters[url] = [];
+                }
+                preloadWaiters[url].push(function (body) {
+                    if ( body == null ) {
+                        if ( typeof(onMiss) == 'function' ) { onMiss(); }
+                    } else {
+                        handleLoadedBody(body, $popin, ensurePopinDialog($popin));
+                    }
+                });
+                return true;
+            }
+            var body = slot;
             delete preloadCache[url];
             var $el = ensurePopinDialog($popin);
             handleLoadedBody(body, $popin, $el);
@@ -773,12 +813,13 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     });
                 }
 
-                // Consume a warmed preload if present; else fall through to a click-time XHR.
-                if ( consumePreload(descriptor.src, existing) ) {
+                // Consume a warmed OR in-flight preload; else fall through to a click-time XHR.
+                var loadOptions = merge({ isSynchrone: false, withCredentials: false }, existing.options);
+                var onMiss = function () { popinLoad(name, descriptor.src, loadOptions); };
+                if ( consumePreload(descriptor.src, existing, onMiss) ) {
                     return;
                 }
-                var loadOptions = merge({ isSynchrone: false, withCredentials: false }, existing.options);
-                popinLoad(name, descriptor.src, loadOptions);
+                onMiss();
             } else {
                 openInPageDialog(descriptor, $trigger);
             }
@@ -886,23 +927,6 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                             // console.debug("[POPIN CLICK #3]", $popin.openTrigger, " VS ", e.currentTarget.id);
                             $popin.openTrigger = e.currentTarget.id || e.currentTarget.getAttribute('id');
 
-                            var fired = false;
-                            addListener(gina, $popin.target, 'loaded.'+$popin.id, function(e) {
-                                e.preventDefault();
-
-                                // console.debug('Popin loaded: true, fired: '+ fired + ', $popin.isOpen: '+ $popin.isOpen);
-
-                                if (!fired) {
-                                    fired = true;
-                                    console.debug('active popin should be ', $popin.id);
-                                    gina.popin.activePopinId = $popin.id;
-                                    popinBind(e, $popin);
-                                    if (!$popin.isOpen) {
-                                        popinOpen($popin.name);
-                                    }
-                                }
-                            });
-
                             // loading & binding popin
                             // Non-Preflighted requests
                             var options = {
@@ -914,7 +938,38 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                             if (!url) {
                                 throw new Error('Popin `url` not defined, please check value for `data-gina-popin-url`');
                             }
-                            popinLoad($popin.name, url, options);
+
+                            // The click-time load: registers the loaded.<id> listener that
+                            // injects + opens, then issues the XHR. Wrapped so a consumed
+                            // preload can skip it (#B54), and an adopted-but-failed preload
+                            // can fall back to it.
+                            var doLoad = function() {
+                                var fired = false;
+                                addListener(gina, $popin.target, 'loaded.'+$popin.id, function(e) {
+                                    e.preventDefault();
+
+                                    // console.debug('Popin loaded: true, fired: '+ fired + ', $popin.isOpen: '+ $popin.isOpen);
+
+                                    if (!fired) {
+                                        fired = true;
+                                        console.debug('active popin should be ', $popin.id);
+                                        gina.popin.activePopinId = $popin.id;
+                                        popinBind(e, $popin);
+                                        if (!$popin.isOpen) {
+                                            popinOpen($popin.name);
+                                        }
+                                    }
+                                });
+                                popinLoad($popin.name, url, options);
+                            };
+
+                            // #B54 — reuse a hover/focus preload (warmed OR in-flight) for the
+                            // same URL instead of firing a second identical GET. Mirrors the
+                            // new data-gina-dialog path (openFromTrigger).
+                            if ( consumePreload(url, $popin, doLoad) ) {
+                                return;
+                            }
+                            doLoad();
                         });
 
 

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Popin/dialog triggers no longer fire two identical GET requests on a single click. The hover/focus preload warmed for a `data-gina-popin-url` (legacy) or `data-gina-dialog-src` trigger is now reused by the click — even while the preload is still in flight — instead of racing a second identical request; `preOpen` popins keep their instant loading skeleton.'
+time: 2026-06-21T03:54:23.912884+01:00
