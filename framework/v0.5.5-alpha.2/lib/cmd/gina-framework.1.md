@@ -35,6 +35,9 @@ gina-framework(1) -- Framework CLI
 **-u**, **update**
     	Reconcile the ~/.gina state files (main.json, settings.json) to the installed framework version. Dry-run by default; pass --fix to apply.
 
+**add**
+    	Install a published gina version side-by-side so a bundle can pin it via --gina-version. Downloads from npm, installs its deps, archives + symlinks it, and registers it in main.json. Additive — never changes the default version. Pass --dry-run to preview, --force to overwrite an existing archived copy.
+
 **-e**, **set**
 		Set environment variables
 

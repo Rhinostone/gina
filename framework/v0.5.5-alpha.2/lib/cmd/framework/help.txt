@@ -14,6 +14,13 @@ $ gina --help | -h
 $ gina —-version | -v
 $ gina --status | -t
 $ gina framework:update [ --to-version=<v> ] [ --fix ] [ --format=json ]
+$ gina framework:add <version> [ --force ] [ --dry-run ] [ --format=json ]
+
+    Install a published gina version side-by-side: downloads it from npm,
+    installs its deps, archives it under ~/.gina/archives/framework, symlinks it
+    into the active install, and registers it so a bundle can pin it via
+    --gina-version=<version>. Additive — never changes the default version.
+
 $ gina framework:reset [ --force ]
 
     Factory reset — clears ~/.gina (settings, projects, env, ports) so it
