@@ -14,6 +14,7 @@ var os          = require("os");
 var util        = require('util');
 var promisify   = util.promisify;
 const { execSync } = require('child_process');
+var runtime     = require(__dirname + '/../utils/runtime.js');
 
 
 var isWin32 = function() {
@@ -506,7 +507,12 @@ function PostInstall() {
         var initialDir = process.cwd();
 
 
-        var cmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
+        // Bun-only images ship no npm binary — use `bun install` under Bun. Zero
+        // Node delta: isBun() is false on Node, so cmd is byte-identical to before.
+        // (This nested install only runs from-source — `bun add -g` blocks it.)
+        var cmd = runtime.isBun()
+                      ? 'bun install'
+                      : ( ( isWin32() ) ? 'npm.cmd install' : 'npm install' );
 
         process.chdir( self.versionPath );
 
