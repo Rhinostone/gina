@@ -213,7 +213,12 @@ function runCMD() {
         var tmpPath     = getTmpDir();
         var argFilename = tmpPath +'/'+ process.env.NODE_BUNDLE +'@'+ process.env.NODE_PROJECT +'.argv';
 
-        process.env.NODE_ARGV   = process.argv.slice();
+        // Bun-safety: Node coerces an array assigned to an env var to a comma-
+        // joined string; Bun leaves it a real array (object), so the writeFileSync
+        // below throws "data must be string/Buffer". String(array) reproduces
+        // Node's comma-join exactly (zero Node delta) and matches the comma->space
+        // read in getBundleStartingArgv() (utils/helper.js).
+        process.env.NODE_ARGV   = String(process.argv.slice());
         if (/bundle\:restart/.test(process.argv[2])) {
             process.env.NODE_ARGV = process.env.NODE_ARGV.replace('bundle:restart', 'bundle:start');
         }
@@ -221,7 +226,10 @@ function runCMD() {
         try {
             fs.writeFileSync(argFilename, process.env.NODE_ARGV );
         } catch (err) {
-            console.emerg(err);
+            // bin/gina's `console` is the global console (no lib.logger here), which
+            // has no `.emerg` on either runtime; emerg would itself throw. (This
+            // catch is unreachable on Node, where the write above never throws.)
+            console.error(err);
         }
         help    = null;
         tmpPath = null;

@@ -109,3 +109,85 @@ describe('03 - bin/gina: daemon-spawn binary is runtime-aware', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 04 — source: the NODE_ARGV env write is Bun-safe (String-coerced) + the
+//      catch handler uses console.error (Bun Stage 4 — daemonful bundle:start)
+//
+// `process.env.NODE_ARGV = process.argv.slice()` assigns an ARRAY. Node coerces
+// it to a comma-joined string; Bun leaves it a real array (object), so the
+// writeFileSync below throws and the catch fires — where `console.emerg`
+// (undefined in bin/gina's global-console scope on EITHER runtime) crashed the
+// CLI before bundle:start could reach the daemon. The fix String()-coerces the
+// array (byte-identical to Node's comma-join, matching getBundleStartingArgv's
+// comma->space read) and uses console.error in the catch.
+// ---------------------------------------------------------------------------
+describe('04 - bin/gina: NODE_ARGV env write is Bun-safe', function() {
+
+    it('String()-coerces the argv array before assigning NODE_ARGV', function() {
+        assert.match(
+            ginaSrc,
+            /process\.env\.NODE_ARGV\s*=\s*String\(process\.argv\.slice\(\)\)/,
+            'expected process.env.NODE_ARGV = String(process.argv.slice())'
+        );
+    });
+
+    it('does NOT assign the bare (non-coerced) array — the Bun break', function() {
+        assert.doesNotMatch(
+            ginaSrc,
+            /process\.env\.NODE_ARGV\s*=\s*process\.argv\.slice\(\)\s*;/,
+            'NODE_ARGV must not be the bare array (Bun keeps it an object -> writeFileSync throws)'
+        );
+    });
+
+    it('the .argv writeFileSync catch uses console.error, not the undefined console.emerg', function() {
+        var writeIdx = ginaSrc.indexOf('fs.writeFileSync(argFilename');
+        assert.ok(writeIdx > -1, 'argv writeFileSync not found');
+        var block = ginaSrc.slice(writeIdx, writeIdx + 400);
+        assert.match(block, /catch\s*\(err\)\s*\{[\s\S]*console\.error\(err\)/,
+            'expected console.error(err) in the writeFileSync catch');
+        assert.doesNotMatch(block, /console\.emerg\(err\)/,
+            'console.emerg is undefined in bin/gina (global console) — must not be used');
+    });
+
+});
+
+
+// ---------------------------------------------------------------------------
+// 05 — behaviour: the array->string coercion the .argv persistence relies on,
+//      and its round-trip through getBundleStartingArgv's comma->space read.
+// ---------------------------------------------------------------------------
+describe('05 - bin/gina: NODE_ARGV array coercion replica', function() {
+
+    // mirrors bin/gina:216 — coerce the argv array for the .argv file
+    var coerce   = function(argvArray) { return String(argvArray); };          // FIXED
+    // mirrors getBundleStartingArgv (utils/helper.js): read file, comma->space
+    var readBack = function(onDisk)     { return ('' + onDisk).replace(/\,/g, ' '); };
+
+    var sampleArgv = ['/path/to/bun', '/path/bin/gina', 'bundle:start', 'api', '@proj'];
+
+    it('coerces the argv array to a comma-joined string (Node-identical)', function() {
+        var s = coerce(sampleArgv);
+        assert.strictEqual(typeof s, 'string');
+        assert.strictEqual(s, '/path/to/bun,/path/bin/gina,bundle:start,api,@proj');
+    });
+
+    it('round-trips through the comma->space reader to the exact restart argv', function() {
+        var onDisk      = coerce(sampleArgv);                                   // comma-joined on disk
+        var restored    = readBack(onDisk);                                     // getBundleStartingArgv comma->space
+        var restartArgv = restored.split(/\s+/).filter(function (a) { return a !== ''; });
+        assert.deepEqual(restartArgv, sampleArgv);
+        assert.ok(restartArgv.indexOf('bundle:start') > -1);
+    });
+
+    it('subtract: the bare array (Bun non-coerced) is not writable + has no .replace', function() {
+        // Under Bun, process.env.NODE_ARGV = array leaves it an array (typeof object).
+        assert.strictEqual(typeof sampleArgv, 'object');
+        var writable = (typeof sampleArgv === 'string') || Buffer.isBuffer(sampleArgv);
+        assert.strictEqual(writable, false, 'writeFileSync(file, array) throws — data must be string/Buffer');
+        // the bundle:restart path does NODE_ARGV.replace(...) — arrays have no .replace.
+        assert.strictEqual(typeof sampleArgv.replace, 'undefined');
+    });
+
+});
