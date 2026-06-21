@@ -60,7 +60,8 @@
   ],
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
   "engine": {
-    "node": ">= 22 <27"
+    "node": ">= 22 <27",
+    "bun": ">= 1.2"
   },
   "config": {
     "optionalPrefix": "~/.npm-global",

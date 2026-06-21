@@ -1,18 +1,16 @@
-name: Bun Runtime Smoke (experimental)
+name: Bun Runtime Smoke
 
-# Experimental Bun-runtime support is in progress. This leg runs the SAME
+# Bun is a SUPPORTED runtime (package.json `engine.bun`). This leg runs the SAME
 # end-to-end container smoke as `npm run smoke`, but ONLY against the Bun
 # runtime (oven/bun): it packs the candidate tarball, installs it with
 # `bun add -g` inside a clean oven/bun container, then boots the api + frontend
 # bundles and asserts HTTP 200 under Bun.
 #
-# NON-BLOCKING on purpose (continue-on-error): Bun support has not fully landed,
-# so a red result here is informational and MUST NOT gate develop/master.
-# Promoting this leg into a hard release gate (dropping continue-on-error, and
-# moving --bun out of the smoke's "experimental" set in
-# script/smoke_test_tarball.js) is the explicit "promote --bun into the gate"
-# step, to be done once Bun is green end-to-end and package.json's engine field
-# declares Bun support.
+# BLOCKING: a red result here FAILS the workflow and gates develop/master, the
+# same as the Node test legs. The oven/bun image is PINNED below for
+# reproducibility, so a Bun upstream regression surfaces only on a deliberate
+# pin bump — never as a random CI flake. Bump the pin as newer Bun releases are
+# validated.
 
 on:
   push:
@@ -43,9 +41,6 @@ jobs:
   bun-smoke:
     name: Bun container smoke (oven/bun)
     runs-on: ubuntu-latest
-    # Experimental — informational only. A Bun regression marks THIS job red but
-    # must not fail the workflow run while Bun support is in progress.
-    continue-on-error: true
 
     steps:
       - uses: actions/checkout@v6

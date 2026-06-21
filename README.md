@@ -28,11 +28,12 @@ Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope
 | Hot reload | WatcherService evicts `require.cache` only on file change — zero per-request overhead in dev |
 | K8s ready | `gina-container`, `gina-init`, SIGTERM drain, JSON stdout logging |
 | Dependency injection | Mockable connectors and config for unit testing |
+| Runtime | Node.js 22–26, or **Bun** (`bun add -g gina`) — install + boot validated end-to-end by a CI Bun smoke |
 
 ## Quick start
 
 ```bash
-npm install -g gina@latest --prefix=~/.npm-global
+npm install -g gina@latest --prefix=~/.npm-global   # or, on the Bun runtime: bun add -g gina
 gina project:add @myproject --path=$(pwd)/myproject
 gina bundle:add api @myproject
 gina bundle:start api @myproject

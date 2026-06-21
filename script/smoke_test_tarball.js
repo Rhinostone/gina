@@ -30,14 +30,14 @@
  *   npm run smoke                  # full matrix: node 22, 24, 26
  *   npm run smoke -- --node=22     # single version (fast iteration)
  *   npm run smoke -- --node=22,24  # a subset
- *   npm run smoke -- --bun         # Node matrix + the (experimental) Bun leg
+ *   npm run smoke -- --bun         # Node matrix + the Bun leg
  *   npm run smoke -- --node= --bun # Bun only (for iterating on Bun support)
  *
  * Green -> safe to `npm publish`. Red -> DO NOT publish.
  *
  * Exit codes:
- *   0 — every Node version passed.
- *   1 — at least one Node version FAILED → do not publish.
+ *   0 — every selected runtime passed (Node versions, and Bun when --bun).
+ *   1 — at least one selected runtime FAILED → do not publish.
  *   2 — could not run the gate (Docker unreachable, `npm pack` failed) — this is
  *       a tooling error, NOT a smoke verdict; resolve it and re-run.
  *
@@ -57,7 +57,7 @@ var { spawnSync } = require('child_process');
 var REPO_ROOT             = path.resolve(__dirname, '..');
 var IN_CONTAINER_SCRIPT   = path.join(__dirname, 'smoke_in_container.js');
 var DEFAULT_NODE_VERSIONS = ['22', '24', '26'];   // mirrors the CI test matrix (.github/workflows/test.yml)
-var DEFAULT_BUN_IMAGE     = 'oven/bun:latest';    // opt-in via --bun (experimental — Bun support in progress)
+var DEFAULT_BUN_IMAGE     = 'oven/bun:latest';    // opt-in via --bun (supported runtime; CI pins a specific tag for reproducibility)
 
 // ---------------------------------------------------------------------------
 // Small console helpers
@@ -87,8 +87,9 @@ function parseNodeVersions(argv) {
 
 /**
  * Parses the opt-in `--bun` flag (and optional `--bun-image=<img>` override).
- * Bun is NOT in the default matrix — Bun support is in progress, so the Bun leg
- * is experimental and only runs when explicitly requested.
+ * Bun is a supported runtime but is kept OUT of the default matrix so the plain
+ * `npm run smoke` stays Node-only and fast; the Bun leg runs when requested via
+ * `--bun` (the CI Bun-smoke workflow always requests it).
  *
  * @inner
  * @param   {string[]} argv  `process.argv.slice(2)`.
@@ -114,7 +115,7 @@ function buildTargets(argv) {
     });
     var bun = parseBun(argv);
     if (bun.enabled) {
-        targets.push({ label: 'bun', image: bun.image, runtime: 'bun', experimental: true });
+        targets.push({ label: 'bun', image: bun.image, runtime: 'bun', experimental: false }); // supported runtime (promoted from experimental)
     }
     return targets;
 }
@@ -228,7 +229,7 @@ function main() {
         process.stdout.write('  ' + bold('note') + '            : stable cut — testing pre-rename bytes (framework code identical; path-rewrite consistency is gated separately by checkDefFrameworkConsistency).\n');
     }
     if (targets.some(function (t) { return t.experimental; })) {
-        process.stdout.write('  ' + bold('note') + '            : the Bun leg is EXPERIMENTAL — Bun support is in progress; a Bun FAIL is expected until it lands (non-blocking when a Node leg is present).\n');
+        process.stdout.write('  ' + bold('note') + '            : an experimental leg is present — it is non-blocking when a supported leg is also selected (progress only); its FAIL is informational.\n');
     }
 
     // -- Run the targets, sequentially --
@@ -244,10 +245,10 @@ function main() {
     });
     process.stdout.write('\n');
 
-    // -- Verdict. Supported (Node) legs drive the release verdict. Experimental
-    //    (Bun) legs are non-blocking WHEN a supported leg is present (progress
-    //    only); a Bun-only run lets the experimental result drive the exit so it
-    //    can gate red→green during development. A real FAILURE outranks an ERROR.
+    // -- Verdict. Supported legs (Node, and Bun) drive the release verdict. Any
+    //    experimental leg (none today) is non-blocking when a supported leg is
+    //    present; with only experimental legs they drive the exit. A real
+    //    FAILURE outranks an ERROR.
     var supported = results.filter(function (r) { return !r.target.experimental; });
     var deciding  = supported.length ? supported : results;
     var failed    = deciding.filter(function (r) { return r.status === 'fail';  }).map(function (r) { return r.target.label; });
