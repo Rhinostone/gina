@@ -35,7 +35,7 @@ var CmdHelper = require('./../helper');
  * @example
  *  // machine-readable
  *  $ gina bundle:status api @myproject --format=json
- *  {"bundle":"api","project":"myproject","running":true,"pid":12345,"env":"dev","scheme":"http/2.0","protocol":"https","port":4208,"ports":{...}}
+ *  {"bundle":"api","project":"myproject","framework":"0.5.5-alpha.2","gina_version":null,"running":true,"pid":12345,"env":"dev","scheme":"http/2.0","protocol":"https","port":4208,"ports":{...}}
  */
 function Status(opt, cmd) {
     var self = { format: null };
@@ -136,16 +136,28 @@ function Status(opt, cmd) {
         var preferred = fmt.pickPreferredPort(ports);
         var runState  = fmt.readPidfile(GINA_HOMEDIR + '/run', bundle, projectName);
 
+        // Per-project framework version: the projects.json pin (v-prefixed,
+        // written by project:add) stripped of its leading `v` to match
+        // main.json's bare def_framework; falls back to the global default
+        // when the project is unpinned. The per-bundle gina_version is the
+        // manifest override (null when not pinned via --gina-version).
+        var entry     = self.projects[projectName];
+        var framework = ( typeof(entry.framework) != 'undefined' )
+            ? String(entry.framework).replace(/^v/, '')
+            : ( (self.mainConfig && self.mainConfig.def_framework) || null );
+
         var json = {
-            bundle   : bundle,
-            project  : projectName,
-            running  : runState.running,
-            pid      : runState.pid,
-            env      : preferred ? preferred.env : null,
-            scheme   : preferred ? preferred.scheme : null,
-            protocol : preferred ? preferred.protocol : null,
-            port     : preferred ? preferred.port : null,
-            ports    : ports
+            bundle       : bundle,
+            project      : projectName,
+            framework    : framework,
+            gina_version : (bundles[bundle] && bundles[bundle].gina_version) || null,
+            running      : runState.running,
+            pid          : runState.pid,
+            env          : preferred ? preferred.env : null,
+            scheme       : preferred ? preferred.scheme : null,
+            protocol     : preferred ? preferred.protocol : null,
+            port         : preferred ? preferred.port : null,
+            ports        : ports
         };
 
         if ( /^json?/.test(self.format) ) {

@@ -37,7 +37,7 @@ var CmdHelper = require('./../helper');
  * @example
  *  // every project, machine-readable
  *  $ gina project:status --format=json
- *  [{"project":"myproject","bundles":[{"bundle":"api","project":"myproject","running":true,"pid":12345,...}]}]
+ *  [{"project":"myproject","bundles":[{"bundle":"api","project":"myproject","framework":"0.5.5-alpha.2","gina_version":null,"running":true,"pid":12345,...}]}]
  */
 function Status(opt, cmd) {
     var self = { format: null };
@@ -101,24 +101,36 @@ function Status(opt, cmd) {
      * @returns {Array<object>}
      */
     var collectBundles = function(projectName) {
-        var out  = [];
-        var path = self.projects[projectName].path;
+        var out   = [];
+        var entry = self.projects[projectName];
+        var path  = entry.path;
         var bundles = require( _(path + '/manifest.json') ).bundles;
         bundles = orderBundles(bundles);
+
+        // Per-project framework version: the projects.json pin (v-prefixed,
+        // written by project:add) stripped of its leading `v` to match
+        // main.json's bare def_framework; falls back to the global default
+        // when the project is unpinned.
+        var framework = ( typeof(entry.framework) != 'undefined' )
+            ? String(entry.framework).replace(/^v/, '')
+            : ( (self.mainConfig && self.mainConfig.def_framework) || null );
+
         for (var b in bundles) {
             var ports     = (self.portsReverseData || {})[b + '@' + projectName] || null;
             var preferred = fmt.pickPreferredPort(ports);
             var runState  = fmt.readPidfile(GINA_HOMEDIR + '/run', b, projectName);
             out.push({
-                bundle   : b,
-                project  : projectName,
-                running  : runState.running,
-                pid      : runState.pid,
-                env      : preferred ? preferred.env : null,
-                scheme   : preferred ? preferred.scheme : null,
-                protocol : preferred ? preferred.protocol : null,
-                port     : preferred ? preferred.port : null,
-                ports    : ports
+                bundle       : b,
+                project      : projectName,
+                framework    : framework,
+                gina_version : (bundles[b] && bundles[b].gina_version) || null,
+                running      : runState.running,
+                pid          : runState.pid,
+                env          : preferred ? preferred.env : null,
+                scheme       : preferred ? preferred.scheme : null,
+                protocol     : preferred ? preferred.protocol : null,
+                port         : preferred ? preferred.port : null,
+                ports        : ports
             });
         }
         return out;

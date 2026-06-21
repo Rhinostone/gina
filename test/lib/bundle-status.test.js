@@ -123,3 +123,21 @@ describe('07 - help.txt', function () {
         assert.match(helpTxt, /bundle:status/);
     });
 });
+
+describe('08 - framework version + per-bundle override in --format=json', function () {
+    it('surfaces a per-project framework field in the JSON payload', function () {
+        assert.match(src, /framework\s*:\s*framework/);
+    });
+
+    it('resolves the projects.json pin with the leading v stripped', function () {
+        assert.match(src, /String\(entry\.framework\)\.replace\(\/\^v\/, ''\)/);
+    });
+
+    it('falls back to the global def_framework when the project is unpinned', function () {
+        assert.match(src, /self\.mainConfig && self\.mainConfig\.def_framework/);
+    });
+
+    it('surfaces the per-bundle gina_version manifest override (null when absent)', function () {
+        assert.match(src, /gina_version\s*:\s*\(bundles\[bundle\] && bundles\[bundle\]\.gina_version\) \|\| null/);
+    });
+});
