@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added `gina framework:reset` (shorthand `gina reset`) — a runtime, package-manager-agnostic factory reset that clears `~/.gina` (settings, project registry, env config, port allocations) so it rebuilds to defaults on the next command. Complements `npm install -g gina@latest --reset` (which only runs inside the npm install lifecycle) and gives Bun users a factory reset, since Bun blocks install scripts. Refuses while the daemon or bundles are running, unless `--force`.'
+time: 2026-06-21T13:02:55.706226+01:00

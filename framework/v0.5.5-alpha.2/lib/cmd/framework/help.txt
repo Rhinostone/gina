@@ -14,6 +14,11 @@ $ gina --help | -h
 $ gina —-version | -v
 $ gina --status | -t
 $ gina framework:update [ --to-version=<v> ] [ --fix ] [ --format=json ]
+$ gina framework:reset [ --force ]
+
+    Factory reset — clears ~/.gina (settings, projects, env, ports) so it
+    rebuilds to defaults on the next command. Shorthand: `gina reset`.
+    Refuses while the daemon or bundles are running, unless --force.
 
 $ gina framework:man | man
 $ gina project:man
