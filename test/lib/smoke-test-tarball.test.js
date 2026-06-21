@@ -156,13 +156,13 @@ describe('smoke gate — Bun leg (pure)', function () {
         assert.ok(t.every(function (x) { return x.runtime === 'node' && !x.experimental; }));
     });
 
-    it('buildTargets: --bun appends an EXPERIMENTAL bun leg after the node legs', function () {
+    it('buildTargets: --bun appends a SUPPORTED bun leg after the node legs', function () {
         var t = ORCH.buildTargets(['--node=22', '--bun']);
         assert.deepEqual(t.map(function (x) { return x.label; }), ['node:22', 'bun']);
         var bun = t[t.length - 1];
         assert.equal(bun.runtime, 'bun');
         assert.equal(bun.image, 'oven/bun:latest');
-        assert.equal(bun.experimental, true);
+        assert.equal(bun.experimental, false);
     });
 
     it('buildTargets: --node= (empty) + --bun = bun only', function () {
