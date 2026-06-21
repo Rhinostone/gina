@@ -41,6 +41,9 @@ gina-framework(1) -- Framework CLI
 **list**
     	List the framework versions known to this install: the active version, side-by-side symlinked versions, and archived copies. Pass --all to include versions registered in main.json but not on disk, --format=json for machine output.
 
+**remove**
+    	Remove a side-by-side installed version: unlinks it from the active install, deletes its archived copy, and deregisters it from main.json. Refuses to remove the active default or the real shipped version. Pass --force to remove a version a bundle still pins, --dry-run to preview.
+
 **-e**, **set**
 		Set environment variables
 

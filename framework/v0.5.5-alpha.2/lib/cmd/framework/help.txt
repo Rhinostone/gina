@@ -27,6 +27,13 @@ $ gina framework:list [ --all ] [ --format=json ]
     side-by-side symlinked versions, and archived copies. Pass --all to also
     include versions registered in main.json but not present on disk.
 
+$ gina framework:remove <version> [ --force ] [ --dry-run ] [ --format=json ]
+
+    Remove a side-by-side installed version: unlinks it from the active install,
+    deletes its archived copy, and deregisters it from main.json. Refuses to
+    remove the active default or the real shipped version; pass --force to remove
+    a version a bundle still pins, --dry-run to preview.
+
 $ gina framework:reset [ --force ]
 
     Factory reset — clears ~/.gina (settings, projects, env, ports) so it

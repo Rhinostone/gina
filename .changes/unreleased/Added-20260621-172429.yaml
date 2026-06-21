@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added `gina framework:remove` to remove a side-by-side installed framework version: it unlinks the symlink from the active install, deletes the archived copy, and deregisters it from main.json. Refuses to remove the active default or the real shipped version; `--force` overrides only a bundle pin, `--dry-run` previews, `--format=json` for machine output.'
+time: 2026-06-21T17:24:29+01:00
