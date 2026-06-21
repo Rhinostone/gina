@@ -6,6 +6,9 @@ const util = require('util');
 const promisify = require('util').promisify;
 
 var CmdHelper   = require('./../helper');
+// Runtime detection (Bun vs Node) for the PM-aware reinstall below. Required by a
+// plain relative path (the bare `lib/<name>` form is unavailable in CLI/daemon scope).
+var runtime     = require(__dirname + '/../../../../../utils/runtime.js');
 // `lib` is previously defiened as this file is required by anoth
 // For user output
 var terminal    = lib.logger;
@@ -75,7 +78,8 @@ function Start(opt, cmd) {
 
     /**
      * Checks if the project's node_modules need to be reinstalled due to an arch/platform mismatch.
-     * Reinstalls via `npm install` if needed, then calls cb(false) to proceed.
+     * Reinstalls via `npm install` (or `bun install` under Bun) if needed, then
+     * calls cb(false) to proceed.
      * @inner
      * @private
      * @param {object} opt
@@ -168,7 +172,11 @@ function Start(opt, cmd) {
         // reinstall node_modules if needed
         if ( isNodeModulesReinstallNeeded ) {
             var initialDir = process.cwd();
-            var npmCmd = ( isWin32() ) ? 'npm.cmd install' : 'npm install';
+            // Bun-only images ship no npm — use `bun install` under Bun. Zero Node
+            // delta: isBun() is false on Node, so npmCmd is byte-identical to before.
+            var npmCmd = runtime.isBun()
+                             ? 'bun install'
+                             : ( ( isWin32() ) ? 'npm.cmd install' : 'npm install' );
             process.chdir( _(projectObj.path, true) );
 
             opt.client.write('\nRe-installing node_modules to match arch & platform');
@@ -180,7 +188,13 @@ function Start(opt, cmd) {
             try {
                 result = execSync(npmCmd).toString();
                 var ginaBin = execSync('which gina').toString().trim();
-                execSync(ginaBin +' framework:link @'+ self.projectName);
+                // Run the gina bin under the current runtime so a no-node Bun image
+                // can't fail on the `#!/usr/bin/env node` shebang. Under Node, linkCmd
+                // is byte-identical to the previous direct invocation (zero Node delta).
+                var linkCmd = runtime.isBun()
+                                  ? runtime.runtimeBinary() +' '+ ginaBin +' framework:link @'+ self.projectName
+                                  : ginaBin +' framework:link @'+ self.projectName;
+                execSync(linkCmd);
             } catch (err) {
                 resultError = err;
             }

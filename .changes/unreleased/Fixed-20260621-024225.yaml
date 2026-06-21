@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed `gina bundle:start` failing to reinstall a project''s node_modules under the Bun runtime: the arch/platform reinstall now runs `bun install` (instead of a hardcoded `npm install`) and performs the framework relink through the active runtime, so a bundle starts on a Bun-only image that ships no node or npm binary.'
+time: 2026-06-21T02:42:25.002584+01:00
