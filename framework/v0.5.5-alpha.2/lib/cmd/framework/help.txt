@@ -21,6 +21,12 @@ $ gina framework:add <version> [ --force ] [ --dry-run ] [ --format=json ]
     into the active install, and registers it so a bundle can pin it via
     --gina-version=<version>. Additive — never changes the default version.
 
+$ gina framework:list [ --all ] [ --format=json ]
+
+    List the framework versions known to this install: the active version,
+    side-by-side symlinked versions, and archived copies. Pass --all to also
+    include versions registered in main.json but not present on disk.
+
 $ gina framework:reset [ --force ]
 
     Factory reset — clears ~/.gina (settings, projects, env, ports) so it

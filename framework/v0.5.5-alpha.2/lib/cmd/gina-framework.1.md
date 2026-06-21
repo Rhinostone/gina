@@ -38,6 +38,9 @@ gina-framework(1) -- Framework CLI
 **add**
     	Install a published gina version side-by-side so a bundle can pin it via --gina-version. Downloads from npm, installs its deps, archives + symlinks it, and registers it in main.json. Additive — never changes the default version. Pass --dry-run to preview, --force to overwrite an existing archived copy.
 
+**list**
+    	List the framework versions known to this install: the active version, side-by-side symlinked versions, and archived copies. Pass --all to include versions registered in main.json but not on disk, --format=json for machine output.
+
 **-e**, **set**
 		Set environment variables
 

@@ -8,5 +8,6 @@
   "--fix",
   "--apply",
   "--dry-run",
-  "--format"
+  "--format",
+  "--all"
 ]
