@@ -1082,28 +1082,34 @@ function Initialize(opt) {
                 }
                 let filenameObj = new _( runDir +'/'+ files[f], true );
                 let filename = filenameObj.toString();
-                let pid = fs.readFileSync(filename).toString();
-                if (!pid) {
+                // Liveness via process.kill(pid, 0) instead of a `ps` shell-out:
+                // ps-independent (works on minimal images without procps, and under
+                // Bun) and parses/trims the pid so a trailing newline can't break the
+                // check. Mirrors lib/cmd/framework/reset.js detectRunning.
+                let pid = parseInt(String(fs.readFileSync(filename)).trim(), 10);
+                if (!pid || isNaN(pid)) {
                     filenameObj.rmSync();
                     continue;
                 }
-                let isRunnung = true;
+                let isRunning = false;
                 try {
-                    let found = execSync("ps -p "+ pid +" -o pid="); //.replace(/\n$/g, '') || null;
-                    if (!found) {
-                        isRunnung = false;
-                    }
+                    process.kill(pid, 0);
+                    isRunning = true;
                 } catch (err) {
-                    isRunnung = false;
+                    // EPERM ⇒ process exists but not ours (be conservative, keep it);
+                    // ESRCH ⇒ stale pidfile, prune it.
+                    if (err && err.code === 'EPERM') {
+                        isRunning = true;
+                    }
                 }
 
-                if (!isRunnung) {
+                if (!isRunning) {
                     filenameObj.rmSync();
                     continue;
                 }
 
 
-                console.debug('Process file location: '+ filename +' ['+ pid +'] ['+ isRunnung +']');
+                console.debug('Process file location: '+ filename +' ['+ pid +'] ['+ isRunning +']');
             } // EO for (let f in files) {
         } else {
             console.warn('Run directory `'+ runDir +'` not found !')

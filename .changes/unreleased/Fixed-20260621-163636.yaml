@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`framework:init` now determines run-dir pidfile liveness with `process.kill` instead of shelling out to `ps`, so running bundles are no longer misreported as stopped — and their pidfiles wrongly pruned — on minimal images that do not ship the `ps` utility. The pid is also parsed and trimmed so a trailing newline cannot break the check.'
+time: 2026-06-21T16:36:36.134361+01:00
