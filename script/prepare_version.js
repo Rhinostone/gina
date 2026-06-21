@@ -630,6 +630,29 @@ function PrepareVersion() {
             new _(pack, true).rmSync();
             lib.generator.createFileFromDataSync(JSON.stringify(package, null, 2), pack);
 
+            // keeping framework/v{targetedVersion}/package.json version in lockstep
+            // with the dir name. The file is gitignored and moved byte-for-byte by
+            // the renameSync above, so its version field stays at the prior (pre-cut)
+            // value — drifting away from the framework dir name and shipping a stale
+            // version in the published tarball's sub-manifest. Sibling to
+            // post_publish.js bumpVersion's identical rewrite; warn-don't-fail so a
+            // cut never aborts on it.
+            var fwPackPath = _(frameworkPath + '/package.json', true);
+            try {
+                if ( new _(fwPackPath).existsSync() ) {
+                    var fwPackSrc = fs.readFileSync(fwPackPath, 'utf8');
+                    var fwPackObj = JSON.parse(fwPackSrc);
+                    if (fwPackObj.version !== targetedVersion) {
+                        var oldFwVersion = fwPackObj.version;
+                        fwPackObj.version = targetedVersion;
+                        fs.writeFileSync(fwPackPath, JSON.stringify(fwPackObj, null, 2) + '\n');
+                        console.info('[prepare] Updated framework/v' + targetedVersion + '/package.json version: ' + oldFwVersion + ' -> ' + targetedVersion);
+                    }
+                }
+            } catch (fwErr) {
+                console.warn('[prepare] Could not update framework package.json: ' + (fwErr.message || fwErr));
+            }
+
             // keeping gna.js up to date — replace all framework version path references
             var gnaJsPath = _(ginaPath + '/gna.js', true);
             try {

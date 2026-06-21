@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed a stable release shipping the prior alpha version in `framework/v<version>/package.json` (the published tarball sub-manifest): the version-prepare step now rewrites that `version` field to the cut version when it renames the framework directory, matching the alpha-cut path.'
+time: 2026-06-21T17:30:38+01:00
