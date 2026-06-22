@@ -2069,6 +2069,167 @@ describe('12c - #H13 onWebSocket collision warn (programmatic overrides a declar
 });
 
 
+// 12d — #H13 slice 2: :param matcher source structure
+describe('12d - #H13 slice 2 :param matcher source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('declares the ordered param-pattern registry and the matcher', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server._wsParamHandlers = [];') > -1, 'expected the `server._wsParamHandlers` ordered registry');
+        assert.ok(s.indexOf('server._wsMatchParam = function(pathname)') > -1, 'expected the `_wsMatchParam` matcher');
+    });
+
+    it('routes a `:`-bearing path to the param registry (the /\\:/ placeholder convention)', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('/\\:/.test(wsPath)') > -1, 'expected the /\\:/ placeholder detection at registration (same as lib/routing hasParams)');
+        assert.ok(s.indexOf("server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler })") > -1,
+            'expected the compile-and-push of {pattern, segments, handler}');
+    });
+
+    it('the dispatcher tries the exact map FIRST, then the param scan (exact wins)', function() {
+        var s = getSrc();
+        var exactIdx = s.indexOf('var _wsTarget = server._wsHandlers[_wsPathname];');
+        var paramIdx = s.indexOf('server._wsMatchParam(_wsPathname)');
+        assert.ok(exactIdx > -1 && paramIdx > exactIdx, 'the exact lookup must precede the param fallback');
+    });
+
+    it('the param fallback runs only on an exact miss', function() {
+        assert.ok(getSrc().indexOf("typeof _wsTarget !== 'function' && server._wsParamHandlers.length") > -1,
+            'expected the param scan gated on an exact miss');
+    });
+
+    it('populates request.params before handing off to lib.wsSession.accept', function() {
+        var s = getSrc();
+        var paramsIdx = s.indexOf('request.params = _wsParams || {};');
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request)', paramsIdx);
+        assert.ok(paramsIdx > -1 && acceptIdx > paramsIdx, 'request.params must be set before accept()');
+    });
+
+    it('the matcher decodeURIComponent-captures and rejects an empty segment', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('decodeURIComponent(reqSegs[s])') > -1, 'expected decodeURIComponent on the captured segment');
+        assert.ok(s.indexOf("if (reqSegs[s] === '') { ok = false; break; }") > -1, 'expected the empty-segment rejection');
+    });
+
+    it('warns + overwrites on a duplicate param pattern (last wins for identical patterns)', function() {
+        assert.ok(getSrc().indexOf("console.warn('[ SERVER ] onWebSocket: pattern") > -1,
+            'expected the duplicate-pattern overwrite warn (distinct from the exact-path warn)');
+    });
+});
+
+
+// 12e — #H13 slice 2: :param matcher + exact-first dispatch pure-logic replica.
+// Faithful replica of server._wsMatchParam + the exact-first dispatch; the §12d
+// source pins lock the operators so this replica cannot silently drift.
+describe('12e - #H13 slice 2 :param matcher + exact-first dispatch logic', function() {
+
+    function compile(pattern) { return { pattern: pattern, segments: pattern.split('/') }; }
+
+    function matchParam(pathname, paramHandlers) {
+        var reqSegs = String(pathname || '').split('/');
+        for (var i = 0; i < paramHandlers.length; i++) {
+            var entry = paramHandlers[i];
+            if (entry.segments.length !== reqSegs.length) { continue; }
+            var params = {}, ok = true;
+            for (var s = 0; s < entry.segments.length; s++) {
+                var pat = entry.segments[s];
+                if (pat.charAt(0) === ':') {
+                    if (reqSegs[s] === '') { ok = false; break; }
+                    params[pat.substring(1)] = decodeURIComponent(reqSegs[s]);
+                } else if (pat !== reqSegs[s]) { ok = false; break; }
+            }
+            if (ok) { return { handler: entry.handler, params: params }; }
+        }
+        return null;
+    }
+
+    function dispatch(reqPath, exact, paramHandlers) {
+        var pathname = String(reqPath || '').split('?')[0];
+        var target = exact[pathname];
+        var params = null;
+        if (typeof target !== 'function' && paramHandlers.length) {
+            var m = matchParam(pathname, paramHandlers);
+            if (m) { target = m.handler; params = m.params; }
+        }
+        if (typeof target !== 'function') { return { action: 'status', code: 404 }; }
+        return { action: 'accept', handler: target, params: params || {} };
+    }
+
+    var hExact = function exactH() {};
+    var hRoom  = function roomH() {};
+    var hArea  = function areaH() {};
+
+    it('captures a :param segment into request.params', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        var r = dispatch('/live/foo', {}, ph);
+        assert.equal(r.action, 'accept');
+        assert.equal(r.handler, hRoom);
+        assert.deepEqual(r.params, { room: 'foo' });
+    });
+
+    it('an exact route beats an overlapping :param pattern (and yields empty params)', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        var r = dispatch('/live/all', { '/live/all': hExact }, ph);
+        assert.equal(r.handler, hExact);
+        assert.deepEqual(r.params, {});
+    });
+
+    it('strict segment-count gate — /live and /live/a/b do not match /live/:room', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.equal(dispatch('/live', {}, ph).code, 404);
+        assert.equal(dispatch('/live/a/b', {}, ph).code, 404);
+    });
+
+    it('first-registered wins among two overlapping equal-length :param patterns', function() {
+        var ph = [
+            Object.assign(compile('/live/:room'), { handler: hRoom }),
+            Object.assign(compile('/:area/:room'), { handler: hArea })
+        ];
+        var r = dispatch('/live/foo', {}, ph);
+        assert.equal(r.handler, hRoom, 'the first-declared pattern wins (mirrors gina HTTP first-match)');
+        assert.deepEqual(r.params, { room: 'foo' });
+    });
+
+    it('query string is stripped before param matching', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        var r = dispatch('/live/foo?token=x', {}, ph);
+        assert.equal(r.action, 'accept');
+        assert.deepEqual(r.params, { room: 'foo' });
+    });
+
+    it('an empty captured segment is rejected (/live/ vs /live/:room)', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.equal(dispatch('/live/', {}, ph).code, 404);
+    });
+
+    it('captured values are decodeURIComponent-decoded', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.deepEqual(dispatch('/live/a%20b', {}, ph).params, { room: 'a b' });
+    });
+
+    it('multi-segment capture (/room/:id/user/:uid)', function() {
+        var ph = [Object.assign(compile('/room/:id/user/:uid'), { handler: hRoom })];
+        assert.deepEqual(dispatch('/room/7/user/42', {}, ph).params, { id: '7', uid: '42' });
+    });
+
+    it('an exact match path yields params === {} (never undefined)', function() {
+        var r = dispatch('/live', { '/live': hExact }, []);
+        assert.equal(r.handler, hExact);
+        assert.deepEqual(r.params, {});
+    });
+
+    it('a missing :path is refused, not crashed on', function() {
+        assert.equal(dispatch(undefined, { '/live': hExact }, []).code, 404);
+    });
+
+    it('no handler at all (exact miss + param miss) → 404', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.equal(dispatch('/other', {}, ph).code, 404);
+    });
+});
+
+
 // 13 — h2c flood-defense parity (#H3/#H7/#H13): the cleartext http2 branches
 // must receive the same hardening options as the https branch. The TLS keys
 // never land on those branches (key/cert/ca/pfx/passphrase merge under

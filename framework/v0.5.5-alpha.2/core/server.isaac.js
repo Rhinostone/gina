@@ -697,9 +697,12 @@ function ServerEngineClass(options) {
              * default refusal table above keeps answering 501 for websocket
              * streams when no consumer exists. With handlers registered, an
              * accepted websocket stream is matched on its `:path` pathname
-             * (query string stripped): a hit is answered `:status 200` via
-             * lib.wsSession.accept and handed to the handler as a live
-             * session; a miss is refused with 404. No express middleware runs
+             * (query string stripped): an exact-path hit first, then (#H13
+             * slice 2) an ordered scan of `:param` patterns whose captured
+             * segments populate `request.params` (colon-stripped keys, the
+             * same shape an HTTP controller reads). A hit is answered
+             * `:status 200` via lib.wsSession.accept and handed to the handler
+             * as a live session; a miss is refused with 404. No express middleware runs
              * on the CONNECT path — authentication is the handler's concern
              * (it receives the full request for header/cookie inspection).
              * Registering a path that already has a handler warns and overwrites
@@ -708,24 +711,88 @@ function ServerEngineClass(options) {
              * registered at bundle bootstrap, before onInitialize).
              */
             server._wsHandlers = {};
+            // #H13 slice 2 — ordered registry of `:param` patterns, scanned only
+            // on an exact-match miss. Each entry: { pattern, segments, handler }.
+            // First-registered wins among overlapping equal-length patterns —
+            // mirrors gina's HTTP router, which is first-match by declaration
+            // order (core/server.js routing loop breaks on the first matching
+            // route; there is no cross-route best-score selection). Keeping the
+            // same rule here means WS routing resolves consistently with HTTP.
+            server._wsParamHandlers = [];
+
+            // #H13 slice 2 — match a request pathname against the `:param`
+            // registry. Exact routes are resolved by the caller BEFORE this runs.
+            // Splits on '/' (keeping the leading '' from the leading slash, so
+            // pattern/request segments index-align, mirroring lib/routing). A
+            // strict segment-count gate, then per-segment: a literal must equal
+            // exactly; a `:name` segment captures any NON-EMPTY segment as
+            // `params[name]` (colon-stripped key + decodeURIComponent — the same
+            // shape an HTTP controller reads off req.params). Returns
+            // { handler, params } for the first matching pattern, else null.
+            server._wsMatchParam = function(pathname) {
+                var reqSegs = String(pathname || '').split('/');
+                for (var i = 0; i < server._wsParamHandlers.length; i++) {
+                    var entry = server._wsParamHandlers[i];
+                    if (entry.segments.length !== reqSegs.length) { continue; }
+                    var params = {};
+                    var ok = true;
+                    for (var s = 0; s < entry.segments.length; s++) {
+                        var pat = entry.segments[s];
+                        if (pat.charAt(0) === ':') {
+                            if (reqSegs[s] === '') { ok = false; break; } // reject empty captured segment
+                            params[pat.substring(1)] = decodeURIComponent(reqSegs[s]);
+                        } else if (pat !== reqSegs[s]) {
+                            ok = false; break;
+                        }
+                    }
+                    if (ok) { return { handler: entry.handler, params: params }; }
+                }
+                return null;
+            };
+
             server.onWebSocket = function(wsPath, wsHandler) {
                 if (typeof wsPath !== 'string' || wsPath.length === 0 || typeof wsHandler !== 'function') {
                     throw new TypeError('onWebSocket(path, handler) requires a non-empty path string and a handler function');
                 }
-                if ( typeof server._wsHandlers[wsPath] === 'function' ) {
-                    console.warn('[ SERVER ] onWebSocket: path `'+ wsPath +'` already has a handler — overwriting');
+                // #H13 slice 2 — a path with a `:` segment is a param pattern
+                // (same placeholder convention as lib/routing's hasParams: /\:/).
+                if ( /\:/.test(wsPath) ) {
+                    var _existing = -1;
+                    for (var _p = 0; _p < server._wsParamHandlers.length; _p++) {
+                        if (server._wsParamHandlers[_p].pattern === wsPath) { _existing = _p; break; }
+                    }
+                    if (_existing > -1) {
+                        console.warn('[ SERVER ] onWebSocket: pattern `'+ wsPath +'` already has a handler — overwriting');
+                        server._wsParamHandlers[_existing].handler = wsHandler;
+                    } else {
+                        server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler });
+                    }
+                } else {
+                    if ( typeof server._wsHandlers[wsPath] === 'function' ) {
+                        console.warn('[ SERVER ] onWebSocket: path `'+ wsPath +'` already has a handler — overwriting');
+                    }
+                    server._wsHandlers[wsPath] = wsHandler;
                 }
-                server._wsHandlers[wsPath] = wsHandler;
                 if (typeof server._extendedConnectHandler !== 'function') {
                     server._extendedConnectHandler = function(request, response) {
                         var _wsPathname = String(request.headers[':path'] || '').split('?')[0];
+                        // Exact match wins (slice-1 precedence preserved).
                         var _wsTarget = server._wsHandlers[_wsPathname];
+                        var _wsParams = null;
+                        // #H13 slice 2 — param fallback only on an exact miss.
+                        if (typeof _wsTarget !== 'function' && server._wsParamHandlers.length) {
+                            var _m = server._wsMatchParam(_wsPathname);
+                            if (_m) { _wsTarget = _m.handler; _wsParams = _m.params; }
+                        }
                         if (typeof _wsTarget !== 'function') {
                             // No handler registered for this pathname.
                             response.writeHead(404);
                             response.end();
                             return;
                         }
+                        // Populate request.params (named keys, colon-stripped) so a
+                        // channel handler reads the same shape an HTTP controller does.
+                        request.params = _wsParams || {};
                         var _wsSession = lib.wsSession.accept(request);
                         _wsTarget(_wsSession, request);
                     };

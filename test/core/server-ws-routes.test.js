@@ -200,4 +200,11 @@ describe('#H13 — WS-route registration logic (pure replica)', function() {
         );
         assert.ok(warns.some(function(w) { return /^collision:\/dup/.test(w); }), 'duplicate path warned');
     });
+
+    it('passes a :param route URL through to onWebSocket verbatim (#H13 slice 2 — server.js stays param-agnostic)', function() {
+        var eng = mkEngine();
+        registerWsRoutes({ 'room@b': { method: 'ws', url: '/live/:room', param: { wsHandler: 'feed' } } }, eng, requireOk, function() {});
+        assert.equal(typeof eng.reg['/live/:room'], 'function',
+            'the :param URL is registered verbatim — the isaac dispatcher (not server.js) does the param matching');
+    });
 });

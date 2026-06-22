@@ -410,3 +410,93 @@ describe('08 - real HTTP/2 loopback (extended CONNECT, live Http2Stream)', funct
     });
 
 });
+
+
+// 09 — real HTTP/2 loopback: :param capture onto a live Http2ServerRequest (#H13 slice 2)
+describe('09 - real HTTP/2 loopback (:param capture, live Http2Stream)', function() {
+
+    // Inline mirror of the isaac dispatcher's exact-first → param-scan matcher
+    // (server.isaac.js _wsMatchParam + _extendedConnectHandler). The §12d source
+    // pins + §12e replica in server.isaac.test.js lock the real matcher; the point
+    // HERE is that `request.params` set by that path is readable by the handler
+    // over a genuine extended-CONNECT Http2ServerRequest, alongside accept + echo.
+    function matchParam(pathname, patterns) {
+        var reqSegs = String(pathname || '').split('/');
+        for (var i = 0; i < patterns.length; i++) {
+            var segs = patterns[i].pattern.split('/');
+            if (segs.length !== reqSegs.length) { continue; }
+            var params = {}, ok = true;
+            for (var s = 0; s < segs.length; s++) {
+                if (segs[s].charAt(0) === ':') {
+                    if (reqSegs[s] === '') { ok = false; break; }
+                    params[segs[s].substring(1)] = decodeURIComponent(reqSegs[s]);
+                } else if (segs[s] !== reqSegs[s]) { ok = false; break; }
+            }
+            if (ok) { return { handler: patterns[i].handler, params: params }; }
+        }
+        return null;
+    }
+
+    it('extended CONNECT to /live/foo → handler reads request.params.room over a real stream', async function() {
+        var server = http2.createServer({ settings: { enableConnectProtocol: true } });
+        var seen = { params: null, messages: [] };
+        var liveSessions = [];
+        var paramRoutes = [{ pattern: '/live/:room', handler: function(session, request) {
+            seen.params = request.params;
+            session.send('room=' + request.params.room);
+            session.onMessage(function(d) { seen.messages.push(d); session.send('echo:' + d); });
+        } }];
+
+        server.on('session', function(h2s) { liveSessions.push(h2s); });
+        server.on('request', function(req, res) { if (req.method !== 'CONNECT') { res.end('ok'); } });
+        server.on('connect', function(request, response) {
+            var pathname = String(request.headers[':path'] || '').split('?')[0];
+            var m = matchParam(pathname, paramRoutes);
+            if (!m) { response.writeHead(404); response.end(); return; }
+            request.params = m.params;            // the dispatcher's one-liner under test
+            var session = wsSess.accept(request);
+            m.handler(session, request);
+        });
+
+        await new Promise(function(resolve) { server.listen(0, '127.0.0.1', resolve); });
+        var port = server.address().port;
+
+        var clientOut = { messages: [] };
+        var clientParser = wsf.createParser({
+            isServer  : false,
+            onMessage : function(d) { clientOut.messages.push(d); },
+            onClose   : function() {},
+            onError   : function(e) { clientOut.err = e; }
+        });
+
+        try {
+            await new Promise(function(resolve, reject) {
+                var client = http2.connect('http://127.0.0.1:' + port);
+                var guard = setTimeout(function() { reject(new Error('loopback timed out')); }, 3000);
+                client.on('error', reject);
+                client.on('remoteSettings', function() {
+                    var req = client.request({
+                        ':method': 'CONNECT', ':protocol': 'websocket', ':scheme': 'http',
+                        ':path': '/live/foo', ':authority': '127.0.0.1:' + port
+                    });
+                    req.on('error', reject);
+                    req.on('response', function(headers) {
+                        try { assert.equal(headers[':status'], 200); } catch (e) { return reject(e); }
+                        req.on('data', function(chunk) { clientParser.feed(chunk); });
+                        req.write(clientText('hi'));
+                        setTimeout(function() { req.write(clientClose(1000, 'bye')); req.end(); }, 120);
+                    });
+                    req.on('close', function() { clearTimeout(guard); try { client.close(); } catch (e) {} resolve(); });
+                });
+            });
+        } finally {
+            liveSessions.forEach(function(h2s) { try { h2s.destroy(); } catch (e) {} });
+            await new Promise(function(resolve) { server.close(resolve); });
+        }
+
+        assert.deepEqual(seen.params, { room: 'foo' }, 'handler saw request.params.room === "foo"');
+        assert.deepEqual(seen.messages, ['hi']);
+        assert.ok(clientOut.messages.indexOf('room=foo') > -1, 'client received the captured param echoed back');
+        assert.ok(clientOut.messages.indexOf('echo:hi') > -1, 'client received the message echo');
+    });
+});
