@@ -702,11 +702,18 @@ function ServerEngineClass(options) {
              * session; a miss is refused with 404. No express middleware runs
              * on the CONNECT path — authentication is the handler's concern
              * (it receives the full request for header/cookie inspection).
+             * Registering a path that already has a handler warns and overwrites
+             * (last-write-wins): a programmatic call overrides a routing.json
+             * `method:"ws"` declaration for the same path (declarations are
+             * registered at bundle bootstrap, before onInitialize).
              */
             server._wsHandlers = {};
             server.onWebSocket = function(wsPath, wsHandler) {
                 if (typeof wsPath !== 'string' || wsPath.length === 0 || typeof wsHandler !== 'function') {
                     throw new TypeError('onWebSocket(path, handler) requires a non-empty path string and a handler function');
+                }
+                if ( typeof server._wsHandlers[wsPath] === 'function' ) {
+                    console.warn('[ SERVER ] onWebSocket: path `'+ wsPath +'` already has a handler — overwriting');
                 }
                 server._wsHandlers[wsPath] = wsHandler;
                 if (typeof server._extendedConnectHandler !== 'function') {

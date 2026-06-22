@@ -688,6 +688,63 @@ function Server(options) {
                 process.env.TZ = options.conf[self.appName][self.env].content.settings.region.timeZone;
             }
 
+            // #H13 — register routing.json-declared WebSocket routes (`"method": "ws"`).
+            // Each such route names a connection-handler module via `param.wsHandler`,
+            // resolved under the bundle's `channels/` dir. We register through the
+            // engine's own `onWebSocket(path, handler)` (set up during `new Engine()`
+            // above): on an http/2 isaac bundle with `enableConnectProtocol` it wires
+            // the real dispatcher; otherwise it hits the warn-noop stub, so we never
+            // write a registry nothing reads. This runs BEFORE the `configured` emit
+            // (hence before the bundle's onInitialize), so a programmatic
+            // `app.onWebSocket()` in onInitialize overrides a declaration here.
+            // WS dispatch happens in the engine's extended-CONNECT handler — these
+            // routes never reach handle()/router.route (the `:4816` method filter +
+            // the method-keyed route cache keep a `ws` route from matching an HTTP
+            // request, and the radix-trie candidate is method-filtered in the loop).
+            var _wsRouting           = serverOpt.routing || {};
+            var _wsRegistered        = {};
+            var _wsUnsupportedWarned = false;
+            for (var _wsRule in _wsRouting) {
+                var _wsRoute = _wsRouting[_wsRule];
+                if ( typeof(_wsRoute) != 'object' || _wsRoute === null || !/^ws$/i.test(_wsRoute.method || '') ) {
+                    continue;
+                }
+                if ( typeof(engine.instance.onWebSocket) != 'function' ) {
+                    if ( !_wsUnsupportedWarned ) {
+                        console.warn('[ SERVER ] WebSocket route(s) declared but the `'+ serverOpt.engine +'` engine has no WebSocket support (requires the isaac engine with http2Options.enableConnectProtocol = true)');
+                        _wsUnsupportedWarned = true;
+                    }
+                    continue;
+                }
+                var _wsName = ( _wsRoute.param && typeof(_wsRoute.param.wsHandler) == 'string' && _wsRoute.param.wsHandler != '' )
+                    ? _wsRoute.param.wsHandler
+                    : null;
+                if ( !_wsName ) {
+                    throw new Error('[ SERVER ] WebSocket route `'+ _wsRule +'` must declare `param.wsHandler` (the channels/<name> module to handle it).');
+                }
+                var _wsFile = _(self.conf[self.appName][self.env].bundlesPath + '/' + self.appName + '/channels/' + _wsName + '.js', true);
+                var _wsHandlerFn = null;
+                try {
+                    _wsHandlerFn = require(_wsFile);
+                } catch (_wsErr) {
+                    throw new Error('[ SERVER ] WebSocket route `'+ _wsRule +'`: channel module `channels/'+ _wsName +'.js` could not be loaded ('+ _wsFile +'):\n'+ _wsErr.message);
+                }
+                if ( typeof(_wsHandlerFn) != 'function' ) {
+                    throw new Error('[ SERVER ] WebSocket route `'+ _wsRule +'`: channel module `channels/'+ _wsName +'.js` must export a function (session, request).');
+                }
+                // A route URL may be comma-separated (multi-url) — register each.
+                var _wsUrls = String(_wsRoute.url || '').split(',');
+                for (var _wsi = 0, _wsLen = _wsUrls.length; _wsi < _wsLen; ++_wsi) {
+                    var _wsUrl = _wsUrls[_wsi].trim();
+                    if ( !_wsUrl ) { continue; }
+                    if ( _wsRegistered[_wsUrl] ) {
+                        console.warn('[ SERVER ] WebSocket path `'+ _wsUrl +'` is declared by more than one `method:"ws"` route — last wins (`'+ _wsRule +'`)');
+                    }
+                    _wsRegistered[_wsUrl] = true;
+                    engine.instance.onWebSocket(_wsUrl, _wsHandlerFn);
+                }
+            }
+
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {

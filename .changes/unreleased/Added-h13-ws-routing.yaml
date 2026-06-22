@@ -1,0 +1,3 @@
+kind: Added
+body: 'Declare WebSocket-over-HTTP/2 routes in routing.json: a route with method "ws" and param.wsHandler "<name>" auto-registers the connection handler at bundle/channels/<name>.js at bundle start, with no programmatic app.onWebSocket() call needed. Exact-path match; the handler receives (session, request) and can use the framework lib registry and the ORM (getModel) directly. Requires the isaac engine with http2Options.enableConnectProtocol set to true.'
+time: 2026-06-22T01:26:10+01:00

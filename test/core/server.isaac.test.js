@@ -2051,6 +2051,24 @@ describe('12b - #H13 onWebSocket dispatcher logic', function() {
 });
 
 
+describe('12c - #H13 onWebSocket collision warn (programmatic overrides a declared ws route)', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('onWebSocket warns before overwriting an already-registered path', function() {
+        var s        = getSrc();
+        var warnIdx  = s.indexOf("console.warn('[ SERVER ] onWebSocket: path");
+        assert.ok(warnIdx > -1, 'expected the overwrite console.warn in onWebSocket');
+        var guardIdx = s.lastIndexOf("typeof server._wsHandlers[wsPath] === 'function'", warnIdx);
+        assert.ok(guardIdx > -1 && guardIdx < warnIdx,
+            'the warn must be gated on wsPath already holding a function handler');
+        var storeIdx = s.indexOf('server._wsHandlers[wsPath] = wsHandler;', warnIdx);
+        assert.ok(storeIdx > warnIdx,
+            'the collision check must run before the (unchanged) per-path store (last-write-wins)');
+    });
+});
+
+
 // 13 — h2c flood-defense parity (#H3/#H7/#H13): the cleartext http2 branches
 // must receive the same hardening options as the https branch. The TLS keys
 // never land on those branches (key/cert/ca/pfx/passphrase merge under
