@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added gina framework:man, project:man, bundle:man and service:man to show inline CLI manual pages in the terminal. Each renders the group ronn .1.md page (substituting the version and copyright year) when one exists (framework today), otherwise it falls back to that group help.txt. Runtime-rendered with no build step and no markdown or man dependency.'
-time: 2026-06-20T13:50:00+01:00

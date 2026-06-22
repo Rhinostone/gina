@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added gina project:backup to archive a project source tree into a timestamped .zip. node_modules is excluded and symlinks are skipped (so the framework link is not followed); the archive is written to --out (default: the current directory). The command is read-only — it never changes the source tree or the registry. --with-password is recognised but refused for now, because archive encryption is not yet implemented.'
-time: 2026-06-19T12:55:43+01:00

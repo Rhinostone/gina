@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added gina project:restore to rebuild a project from a project:backup .zip. It extracts the source tree to --to and re-registers the project (registry entry, ports, and the gina symlink) so it is immediately startable; node_modules is not in the backup, so run npm install afterwards. It refuses to overwrite an already-registered name or a non-empty target unless --force is given. This also implements lib/archiver decompress() (the inverse of compress(), via JSZip) with a guard against archive entries escaping the target.'
-time: 2026-06-19T18:51:19+01:00

@@ -1,3 +1,0 @@
-kind: Security
-body: 'Bumped the ws dependency floor to ^8.21.0 to resolve a WebSocket memory-exhaustion denial-of-service advisory (GHSA-96hv-2xvq-fx4p) affecting ws versions below 8.21.0.'
-time: 2026-06-19T10:50:18+01:00

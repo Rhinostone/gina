@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added `gina framework:list` to show the framework versions known to an install — the active version, side-by-side symlinked versions, and archived copies — with `--all` for the full registry and `--format=json` for machine-readable output.'
-time: 2026-06-21T17:11:38+01:00

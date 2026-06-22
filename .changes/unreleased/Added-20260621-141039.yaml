@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added `gina framework:add <version>` to install a published framework version side-by-side, so a bundle can pin it via `--gina-version` or manifest `gina_version`. Downloads the version from npm, installs its dependencies, archives it under `~/.gina/archives/framework`, symlinks it into the active install, and registers it — without ever changing the default version. Supports `--force`, `--dry-run`, and `--format=json`.'
-time: 2026-06-21T14:10:39.795977+01:00
