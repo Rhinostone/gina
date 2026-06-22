@@ -33,8 +33,8 @@ describe('#H13 — WS-route registration source structure (server.js)', function
     });
 
     it('registers through engine.instance.onWebSocket — never writes _wsHandlers directly', function() {
-        assert.ok(src.indexOf('engine.instance.onWebSocket(_wsUrl, _wsHandlerFn)') > -1,
-            'expected registration via engine.instance.onWebSocket');
+        assert.ok(src.indexOf('engine.instance.onWebSocket(_wsUrl, _wsHandlerFn, _wsOptions)') > -1,
+            'expected registration via engine.instance.onWebSocket (slice 3a threads the optional _wsOptions)');
         assert.ok(src.indexOf('_wsHandlers') < 0,
             'server.js must go through onWebSocket (the registry _wsHandlers is an isaac engine internal)');
     });
@@ -64,6 +64,17 @@ describe('#H13 — WS-route registration source structure (server.js)', function
         var regIdx  = src.indexOf('var _wsRouting');
         var emitIdx = src.indexOf("self.emit('configured'", regIdx);
         assert.ok(regIdx > -1 && emitIdx > regIdx, 'WS registration must precede the configured emit');
+    });
+
+    it('reads the optional per-route param.wsOptions and threads it to onWebSocket (slice 3a)', function() {
+        assert.ok(src.indexOf('_wsRoute.param.wsOptions') > -1, 'expected the param.wsOptions read');
+        assert.ok(src.indexOf('var _wsOptions') > -1, 'expected the _wsOptions local');
+        assert.ok(src.indexOf('engine.instance.onWebSocket(_wsUrl, _wsHandlerFn, _wsOptions)') > -1,
+            'expected _wsOptions threaded into the registration call');
+    });
+
+    it('fails loudly at boot when param.wsOptions is present but not an object (slice 3a)', function() {
+        assert.ok(src.indexOf('`param.wsOptions` must be an object') > -1, 'expected the non-object wsOptions boot-guard throw');
     });
 });
 
@@ -206,5 +217,64 @@ describe('#H13 — WS-route registration logic (pure replica)', function() {
         registerWsRoutes({ 'room@b': { method: 'ws', url: '/live/:room', param: { wsHandler: 'feed' } } }, eng, requireOk, function() {});
         assert.equal(typeof eng.reg['/live/:room'], 'function',
             'the :param URL is registered verbatim — the isaac dispatcher (not server.js) does the param matching');
+    });
+});
+
+
+describe('#H13 slice 3a — WS-route wsOptions carriage (pure replica)', function() {
+
+    // Mirrors the slice-3a additions to the server.js loop: read an optional
+    // param.wsOptions (object-or-null; present-but-not-an-object throws at boot)
+    // and pass it as the 3rd onWebSocket argument. Kept separate from the slice-1
+    // replica above (which stays byte-identical) so the carriage is locked here.
+    function registerWithOptions(routing, engineInstance) {
+        var calls = [];
+        for (var rule in routing) {
+            var route = routing[rule];
+            if (typeof route != 'object' || route === null || !/^ws$/i.test(route.method || '')) { continue; }
+            var name = (route.param && typeof route.param.wsHandler == 'string' && route.param.wsHandler != '')
+                ? route.param.wsHandler : null;
+            if (!name) { throw new Error('must declare param.wsHandler'); }
+            if (route.param && typeof route.param.wsOptions != 'undefined'
+                    && (typeof route.param.wsOptions != 'object' || route.param.wsOptions === null)) {
+                throw new Error('`param.wsOptions` must be an object');
+            }
+            var options = (route.param && typeof route.param.wsOptions == 'object' && route.param.wsOptions !== null)
+                ? route.param.wsOptions : null;
+            engineInstance.onWebSocket(String(route.url).trim(), function() {}, options);
+            calls.push(options);
+        }
+        return calls;
+    }
+
+    function mkOptEngine() {
+        var seen = [];
+        return { seen: seen, onWebSocket: function(p, h, o) { seen.push({ path: p, options: o }); } };
+    }
+
+    it('threads a route param.wsOptions object as the 3rd onWebSocket arg', function() {
+        var eng = mkOptEngine();
+        registerWithOptions({ 'live@b': { method: 'ws', url: '/live', param: { wsHandler: 'feed', wsOptions: { protocol: 'chat' } } } }, eng);
+        assert.deepEqual(eng.seen[0].options, { protocol: 'chat' });
+    });
+
+    it('passes null when a ws route declares no wsOptions', function() {
+        var eng = mkOptEngine();
+        registerWithOptions({ 'live@b': { method: 'ws', url: '/live', param: { wsHandler: 'feed' } } }, eng);
+        assert.equal(eng.seen[0].options, null);
+    });
+
+    it('throws at boot when param.wsOptions is present but not an object', function() {
+        var eng = mkOptEngine();
+        assert.throws(function() {
+            registerWithOptions({ 'x@b': { method: 'ws', url: '/x', param: { wsHandler: 'x', wsOptions: 'nope' } } }, eng);
+        }, /param\.wsOptions` must be an object/);
+    });
+
+    it('throws at boot when param.wsOptions is null (typeof null === "object" guard)', function() {
+        var eng = mkOptEngine();
+        assert.throws(function() {
+            registerWithOptions({ 'x@b': { method: 'ws', url: '/x', param: { wsHandler: 'x', wsOptions: null } } }, eng);
+        }, /param\.wsOptions` must be an object/);
     });
 });

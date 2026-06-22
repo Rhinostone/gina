@@ -722,6 +722,17 @@ function Server(options) {
                 if ( !_wsName ) {
                     throw new Error('[ SERVER ] WebSocket route `'+ _wsRule +'` must declare `param.wsHandler` (the channels/<name> module to handle it).');
                 }
+                // #H13 slice 3a — optional per-route session options (maxPayload /
+                // protocol / closeTimeout), threaded to lib.wsSession.accept via
+                // onWebSocket. Present-but-not-an-object fails loudly at boot (mirrors
+                // the wsHandler fail-fast); absent → null (accept defaults apply).
+                if ( _wsRoute.param && typeof(_wsRoute.param.wsOptions) != 'undefined'
+                        && ( typeof(_wsRoute.param.wsOptions) != 'object' || _wsRoute.param.wsOptions === null ) ) {
+                    throw new Error('[ SERVER ] WebSocket route `'+ _wsRule +'`: `param.wsOptions` must be an object');
+                }
+                var _wsOptions = ( _wsRoute.param && typeof(_wsRoute.param.wsOptions) == 'object' && _wsRoute.param.wsOptions !== null )
+                    ? _wsRoute.param.wsOptions
+                    : null;
                 var _wsFile = _(self.conf[self.appName][self.env].bundlesPath + '/' + self.appName + '/channels/' + _wsName + '.js', true);
                 var _wsHandlerFn = null;
                 try {
@@ -741,7 +752,7 @@ function Server(options) {
                         console.warn('[ SERVER ] WebSocket path `'+ _wsUrl +'` is declared by more than one `method:"ws"` route — last wins (`'+ _wsRule +'`)');
                     }
                     _wsRegistered[_wsUrl] = true;
-                    engine.instance.onWebSocket(_wsUrl, _wsHandlerFn);
+                    engine.instance.onWebSocket(_wsUrl, _wsHandlerFn, _wsOptions);
                 }
             }
 

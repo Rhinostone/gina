@@ -1950,7 +1950,7 @@ describe('12 - #H13 onWebSocket registration + dispatcher source structure', fun
     it('source declares the per-path handler registry and the registration method', function() {
         var s = getSrc();
         assert.ok(s.indexOf('server._wsHandlers = {};') > -1, 'expected the `server._wsHandlers` registry literal');
-        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler)') > -1, 'expected the onWebSocket registration method');
+        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler, wsOptions)') > -1, 'expected the onWebSocket registration method (slice 3a adds the optional wsOptions arg)');
         assert.ok(s.indexOf('server._wsHandlers[wsPath] = wsHandler;') > -1, 'expected the per-path handler store');
     });
 
@@ -1984,15 +1984,15 @@ describe('12 - #H13 onWebSocket registration + dispatcher source structure', fun
 
     it('source accepts matched streams through the ws-session bridge', function() {
         assert.ok(
-            getSrc().indexOf('lib.wsSession.accept(request)') > -1,
-            'expected `lib.wsSession.accept(request)` on the matched path'
+            getSrc().indexOf('lib.wsSession.accept(request, _wsOpts || undefined)') > -1,
+            'expected `lib.wsSession.accept(request, _wsOpts || undefined)` on the matched path (slice 3a threads per-route options)'
         );
     });
 
     it('the registration API lives inside the opt-in gate, the safety stub after both branches', function() {
         var s = getSrc();
         var gateIdx = s.indexOf('if (_enableConnectProtocol) {');
-        var defIdx = s.indexOf('server.onWebSocket = function(wsPath, wsHandler)');
+        var defIdx = s.indexOf('server.onWebSocket = function(wsPath, wsHandler, wsOptions)');
         var stubIdx = s.indexOf("typeof server.onWebSocket !== 'function'");
         assert.ok(gateIdx > -1 && defIdx > gateIdx, 'the real onWebSocket must be defined inside the opt-in gate');
         assert.ok(stubIdx > defIdx, 'the cross-protocol stub must come after the gated definition');
@@ -2083,8 +2083,8 @@ describe('12d - #H13 slice 2 :param matcher source structure', function() {
     it('routes a `:`-bearing path to the param registry (the /\\:/ placeholder convention)', function() {
         var s = getSrc();
         assert.ok(s.indexOf('/\\:/.test(wsPath)') > -1, 'expected the /\\:/ placeholder detection at registration (same as lib/routing hasParams)');
-        assert.ok(s.indexOf("server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler })") > -1,
-            'expected the compile-and-push of {pattern, segments, handler}');
+        assert.ok(s.indexOf("server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler, options: wsOptions || null })") > -1,
+            'expected the compile-and-push of {pattern, segments, handler, options}');
     });
 
     it('the dispatcher tries the exact map FIRST, then the param scan (exact wins)', function() {
@@ -2102,7 +2102,7 @@ describe('12d - #H13 slice 2 :param matcher source structure', function() {
     it('populates request.params before handing off to lib.wsSession.accept', function() {
         var s = getSrc();
         var paramsIdx = s.indexOf('request.params = _wsParams || {};');
-        var acceptIdx = s.indexOf('lib.wsSession.accept(request)', paramsIdx);
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request, _wsOpts || undefined)', paramsIdx);
         assert.ok(paramsIdx > -1 && acceptIdx > paramsIdx, 'request.params must be set before accept()');
     });
 
@@ -2226,6 +2226,112 @@ describe('12e - #H13 slice 2 :param matcher + exact-first dispatch logic', funct
     it('no handler at all (exact miss + param miss) → 404', function() {
         var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
         assert.equal(dispatch('/other', {}, ph).code, 404);
+    });
+});
+
+
+// 12f — #H13 slice 3a: per-route wsOptions threading (source structure)
+describe('12f - #H13 slice 3a per-route wsOptions threading source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('declares the parallel exact-path options map, separate from _wsHandlers', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server._wsHandlerOptions = {};') > -1, 'expected the `server._wsHandlerOptions` map literal');
+        assert.ok(s.indexOf('server._wsHandlers = {};') > -1, '`server._wsHandlers` must stay a pure path→handler map');
+    });
+
+    it('onWebSocket takes the optional 3rd wsOptions arg and stores it on the exact map', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler, wsOptions)') > -1, 'expected the 3-arg onWebSocket signature');
+        assert.ok(s.indexOf('server._wsHandlerOptions[wsPath] = wsOptions || null;') > -1, 'expected the exact-path options store');
+    });
+
+    it('the :param push carries an options field; the matcher returns it', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf("handler: wsHandler, options: wsOptions || null })") > -1, 'expected the param-entry options field at push');
+        assert.ok(s.indexOf('return { handler: entry.handler, params: params, options: entry.options };') > -1, 'expected _wsMatchParam to return the matched entry options');
+    });
+
+    it('a :param overwrite replaces options too (last-write-wins)', function() {
+        assert.ok(getSrc().indexOf('server._wsParamHandlers[_existing].options = wsOptions || null;') > -1,
+            'expected the param-overwrite to replace options alongside the handler');
+    });
+
+    it('the dispatcher resolves _wsOpts (exact map first, then the param entry) and threads it to accept', function() {
+        var s = getSrc();
+        var exactIdx  = s.indexOf('server._wsHandlerOptions[_wsPathname] || null;');
+        var paramIdx  = s.indexOf('_wsOpts = _m.options || null;');
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request, _wsOpts || undefined);');
+        assert.ok(exactIdx > -1, 'expected the exact-hit options resolution from the options map');
+        assert.ok(paramIdx > exactIdx, 'expected the param-hit options override after the exact resolution');
+        assert.ok(acceptIdx > paramIdx, 'expected accept(request, _wsOpts || undefined) after _wsOpts is resolved');
+    });
+});
+
+
+// 12g — #H13 slice 3a: wsOptions resolution pure-logic replica (exact-first,
+// then the matched :param entry's options; undefined when a route declares none).
+// Additive — §12e stays byte-identical; the §12f source pins lock the operators.
+describe('12g - #H13 slice 3a wsOptions resolution logic', function() {
+
+    function matchParam(pathname, paramHandlers) {
+        var reqSegs = String(pathname || '').split('/');
+        for (var i = 0; i < paramHandlers.length; i++) {
+            var entry = paramHandlers[i];
+            var segs  = entry.pattern.split('/');
+            if (segs.length !== reqSegs.length) { continue; }
+            var ok = true;
+            for (var s = 0; s < segs.length; s++) {
+                if (segs[s].charAt(0) === ':') { if (reqSegs[s] === '') { ok = false; break; } }
+                else if (segs[s] !== reqSegs[s]) { ok = false; break; }
+            }
+            if (ok) { return entry; }
+        }
+        return null;
+    }
+
+    // Mirrors _extendedConnectHandler's _wsOpts resolution + the accept() arg.
+    function resolveAcceptArg(reqPath, exactHandlers, exactOptions, paramHandlers) {
+        var pathname = String(reqPath || '').split('?')[0];
+        var target = exactHandlers[pathname];
+        var opts   = exactOptions[pathname] || null;
+        if (typeof target !== 'function' && paramHandlers.length) {
+            var m = matchParam(pathname, paramHandlers);
+            if (m) { target = m.handler; opts = m.options || null; }
+        }
+        if (typeof target !== 'function') { return { action: 'status', code: 404 }; }
+        return { action: 'accept', acceptArg: opts || undefined };
+    }
+
+    var H = function() {};
+
+    it('an exact route with options threads them as the accept arg', function() {
+        var r = resolveAcceptArg('/live', { '/live': H }, { '/live': { protocol: 'chat' } }, []);
+        assert.deepEqual(r.acceptArg, { protocol: 'chat' });
+    });
+
+    it('an exact route without options passes undefined to accept (defaults apply)', function() {
+        var r = resolveAcceptArg('/live', { '/live': H }, { '/live': null }, []);
+        assert.equal(r.acceptArg, undefined);
+    });
+
+    it('a :param route carries the matched entry options', function() {
+        var ph = [{ pattern: '/live/:room', handler: H, options: { maxPayload: 1024 } }];
+        var r = resolveAcceptArg('/live/foo', {}, {}, ph);
+        assert.deepEqual(r.acceptArg, { maxPayload: 1024 });
+    });
+
+    it('a :param route without options passes undefined', function() {
+        var ph = [{ pattern: '/live/:room', handler: H, options: null }];
+        var r = resolveAcceptArg('/live/foo', {}, {}, ph);
+        assert.equal(r.acceptArg, undefined);
+    });
+
+    it('exact options win over an overlapping :param entry (exact-first)', function() {
+        var ph = [{ pattern: '/live/:room', handler: H, options: { protocol: 'param' } }];
+        var r = resolveAcceptArg('/live/all', { '/live/all': H }, { '/live/all': { protocol: 'exact' } }, ph);
+        assert.deepEqual(r.acceptArg, { protocol: 'exact' });
     });
 });
 

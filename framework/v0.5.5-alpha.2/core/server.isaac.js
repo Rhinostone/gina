@@ -709,8 +709,17 @@ function ServerEngineClass(options) {
              * (last-write-wins): a programmatic call overrides a routing.json
              * `method:"ws"` declaration for the same path (declarations are
              * registered at bundle bootstrap, before onInitialize).
+             *
+             * #H13 slice 3a — an optional 3rd argument carries per-route session
+             * options (maxPayload / protocol / closeTimeout) forwarded verbatim to
+             * lib.wsSession.accept; a routing.json `method:"ws"` route supplies them
+             * via `param.wsOptions`. Overwriting a path replaces handler AND options.
              */
             server._wsHandlers = {};
+            // #H13 slice 3a — parallel exact-path → per-route options map. Kept
+            // separate from _wsHandlers so that stays a pure path→handler map (the
+            // collision guard tests the literal `_wsHandlers[wsPath]` shape).
+            server._wsHandlerOptions = {};
             // #H13 slice 2 — ordered registry of `:param` patterns, scanned only
             // on an exact-match miss. Each entry: { pattern, segments, handler }.
             // First-registered wins among overlapping equal-length patterns —
@@ -745,12 +754,12 @@ function ServerEngineClass(options) {
                             ok = false; break;
                         }
                     }
-                    if (ok) { return { handler: entry.handler, params: params }; }
+                    if (ok) { return { handler: entry.handler, params: params, options: entry.options }; }
                 }
                 return null;
             };
 
-            server.onWebSocket = function(wsPath, wsHandler) {
+            server.onWebSocket = function(wsPath, wsHandler, wsOptions) {
                 if (typeof wsPath !== 'string' || wsPath.length === 0 || typeof wsHandler !== 'function') {
                     throw new TypeError('onWebSocket(path, handler) requires a non-empty path string and a handler function');
                 }
@@ -764,14 +773,16 @@ function ServerEngineClass(options) {
                     if (_existing > -1) {
                         console.warn('[ SERVER ] onWebSocket: pattern `'+ wsPath +'` already has a handler — overwriting');
                         server._wsParamHandlers[_existing].handler = wsHandler;
+                        server._wsParamHandlers[_existing].options = wsOptions || null;
                     } else {
-                        server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler });
+                        server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler, options: wsOptions || null });
                     }
                 } else {
                     if ( typeof server._wsHandlers[wsPath] === 'function' ) {
                         console.warn('[ SERVER ] onWebSocket: path `'+ wsPath +'` already has a handler — overwriting');
                     }
                     server._wsHandlers[wsPath] = wsHandler;
+                    server._wsHandlerOptions[wsPath] = wsOptions || null;
                 }
                 if (typeof server._extendedConnectHandler !== 'function') {
                     server._extendedConnectHandler = function(request, response) {
@@ -779,10 +790,14 @@ function ServerEngineClass(options) {
                         // Exact match wins (slice-1 precedence preserved).
                         var _wsTarget = server._wsHandlers[_wsPathname];
                         var _wsParams = null;
+                        // #H13 slice 3a — per-route session options resolved alongside
+                        // the handler: an exact hit reads the exact options map; a
+                        // param hit takes the matched entry's options below.
+                        var _wsOpts   = server._wsHandlerOptions[_wsPathname] || null;
                         // #H13 slice 2 — param fallback only on an exact miss.
                         if (typeof _wsTarget !== 'function' && server._wsParamHandlers.length) {
                             var _m = server._wsMatchParam(_wsPathname);
-                            if (_m) { _wsTarget = _m.handler; _wsParams = _m.params; }
+                            if (_m) { _wsTarget = _m.handler; _wsParams = _m.params; _wsOpts = _m.options || null; }
                         }
                         if (typeof _wsTarget !== 'function') {
                             // No handler registered for this pathname.
@@ -793,7 +808,7 @@ function ServerEngineClass(options) {
                         // Populate request.params (named keys, colon-stripped) so a
                         // channel handler reads the same shape an HTTP controller does.
                         request.params = _wsParams || {};
-                        var _wsSession = lib.wsSession.accept(request);
+                        var _wsSession = lib.wsSession.accept(request, _wsOpts || undefined);
                         _wsTarget(_wsSession, request);
                     };
                 }

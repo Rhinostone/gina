@@ -500,3 +500,69 @@ describe('09 - real HTTP/2 loopback (:param capture, live Http2Stream)', functio
         assert.ok(clientOut.messages.indexOf('echo:hi') > -1, 'client received the message echo');
     });
 });
+
+
+// 10 — real HTTP/2 loopback: per-route wsOptions.protocol echoed over a live
+// stream (#H13 slice 3a). The dispatcher resolves a route's param.wsOptions and
+// threads it to accept(request, options); here accept is driven directly with
+// { protocol: 'chat' } to prove the selected subprotocol actually lands on the
+// wire (sec-websocket-protocol response header) against a genuine Http2Stream.
+describe('10 - real HTTP/2 loopback (wsOptions.protocol echoed, live Http2Stream)', function() {
+
+    it('accept(request, { protocol: "chat" }) echoes sec-websocket-protocol over a genuine extended-CONNECT stream', async function() {
+        var server = http2.createServer({ settings: { enableConnectProtocol: true } });
+        var liveSessions = [];
+        server.on('session', function(h2s) { liveSessions.push(h2s); });
+        server.on('request', function(req, res) { if (req.method !== 'CONNECT') { res.end('ok'); } });
+        server.on('connect', function(request, response) {
+            var session = wsSess.accept(request, { protocol: 'chat' });
+            session.onMessage(function(d) { session.send('echo:' + d); });
+        });
+
+        await new Promise(function(resolve) { server.listen(0, '127.0.0.1', resolve); });
+        var port = server.address().port;
+
+        var clientOut = { messages: [] };
+        var clientParser = wsf.createParser({
+            isServer  : false,
+            onMessage : function(d) { clientOut.messages.push(d); },
+            onClose   : function() {},
+            onError   : function(e) { clientOut.err = e; }
+        });
+
+        var responseHeaders = null;
+        try {
+            await new Promise(function(resolve, reject) {
+                var client = http2.connect('http://127.0.0.1:' + port);
+                var guard = setTimeout(function() { reject(new Error('loopback timed out')); }, 3000);
+                client.on('error', reject);
+                client.on('remoteSettings', function() {
+                    var req = client.request({
+                        ':method': 'CONNECT', ':protocol': 'websocket', ':scheme': 'http',
+                        ':path': '/live', ':authority': '127.0.0.1:' + port
+                    });
+                    req.on('error', reject);
+                    req.on('response', function(headers) {
+                        responseHeaders = headers;
+                        try {
+                            assert.equal(headers[':status'], 200);
+                            assert.equal(headers['sec-websocket-protocol'], 'chat');
+                        } catch (e) { return reject(e); }
+                        req.on('data', function(chunk) { clientParser.feed(chunk); });
+                        req.write(clientText('hi'));
+                        setTimeout(function() { req.write(clientClose(1000, 'bye')); req.end(); }, 120);
+                    });
+                    req.on('close', function() { clearTimeout(guard); try { client.close(); } catch (e) {} resolve(); });
+                });
+            });
+        } finally {
+            liveSessions.forEach(function(h2s) { try { h2s.destroy(); } catch (e) {} });
+            await new Promise(function(resolve) { server.close(resolve); });
+        }
+
+        assert.ok(responseHeaders, 'a response frame arrived');
+        assert.equal(responseHeaders['sec-websocket-protocol'], 'chat', 'the selected subprotocol travelled on the wire');
+        assert.deepEqual(clientOut.messages, ['echo:hi'], 'echo still works alongside the protocol option');
+    });
+
+});
