@@ -763,6 +763,18 @@ function ServerEngineClass(options) {
                 if (typeof wsPath !== 'string' || wsPath.length === 0 || typeof wsHandler !== 'function') {
                     throw new TypeError('onWebSocket(path, handler) requires a non-empty path string and a handler function');
                 }
+                // #H13 slice 3b — capture, once, the bundle/env this server serves
+                // (a server serves one bundle) for session.query. The routing.json
+                // registrar (core/server.js) sets server._wsBundle/_wsEnv explicitly
+                // from self.appName/self.env before its first call here; a purely
+                // programmatic caller (onInitialize) falls back to getContext, which
+                // is correct at boot. Capturing at registration avoids the shared
+                // ctx.bundle stack-walk mutation hazard that would bite a lazy
+                // connect/message-time read on a long-lived interleaved session.
+                if (typeof server._wsBundle === 'undefined') {
+                    server._wsBundle = (typeof getContext === 'function') ? getContext('bundle') : null;
+                    server._wsEnv    = (typeof getContext === 'function') ? getContext('env') : null;
+                }
                 // #H13 slice 2 — a path with a `:` segment is a param pattern
                 // (same placeholder convention as lib/routing's hasParams: /\:/).
                 if ( /\:/.test(wsPath) ) {
@@ -809,6 +821,14 @@ function ServerEngineClass(options) {
                         // channel handler reads the same shape an HTTP controller does.
                         request.params = _wsParams || {};
                         var _wsSession = lib.wsSession.accept(request, _wsOpts || undefined);
+                        // #H13 slice 3b — give the channel handler a cross-bundle HTTP
+                        // capability (session.query(options[, data]) → Promise), mirroring
+                        // a controller's self.query(). Attached AFTER accept so
+                        // lib/ws-session stays controller-free. The bundle/env this server
+                        // serves were captured at registration (server._wsBundle/_wsEnv) —
+                        // never resolved lazily here, where the shared getContext('bundle')
+                        // is rewritten by every getConfig/getLib stack-walk.
+                        _wsSession.query = lib.wsQuery.build(server, server._wsBundle, server._wsEnv);
                         _wsTarget(_wsSession, request);
                     };
                 }

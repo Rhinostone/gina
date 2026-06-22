@@ -221,6 +221,36 @@ describe('#H13 — WS-route registration logic (pure replica)', function() {
 });
 
 
+// #H13 slice 3b — the registrar records the bundle/env this server serves on the
+// engine instance (a server serves one bundle) so the isaac dispatcher can build
+// session.query. self.appName/self.env are guaranteed correct at boot, and the
+// explicit set must precede onWebSocket so its getContext fallback is skipped.
+describe('#H13 slice 3b — registrar records bundle/env for session.query', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
+
+    it('sets engine.instance._wsBundle/_wsEnv from self.appName/self.env', function() {
+        assert.ok(src.indexOf('engine.instance._wsBundle = self.appName;') > -1,
+            'expected the explicit _wsBundle = self.appName capture (guaranteed-correct at boot)');
+        assert.match(src, /engine\.instance\._wsEnv\s*=\s*self\.env;/,
+            'expected the explicit _wsEnv = self.env capture');
+    });
+
+    it('sets the bundle/env BEFORE the onWebSocket call (so onWebSocket\'s getContext fallback is skipped)', function() {
+        var bundleIdx = src.indexOf('engine.instance._wsBundle = self.appName;');
+        var regIdx    = src.indexOf('engine.instance.onWebSocket(_wsUrl, _wsHandlerFn, _wsOptions)', bundleIdx);
+        assert.ok(bundleIdx > -1 && regIdx > bundleIdx,
+            'the _wsBundle/_wsEnv set must run before onWebSocket so the registrar value wins over getContext');
+    });
+
+    it('does not introduce the isaac-internal _wsHandlers registry into server.js', function() {
+        assert.ok(src.indexOf('_wsHandlers') < 0,
+            'server.js stays out of the isaac engine internals — it only records _wsBundle/_wsEnv and calls onWebSocket');
+    });
+});
+
+
 describe('#H13 slice 3a — WS-route wsOptions carriage (pure replica)', function() {
 
     // Mirrors the slice-3a additions to the server.js loop: read an optional

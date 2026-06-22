@@ -752,6 +752,12 @@ function Server(options) {
                         console.warn('[ SERVER ] WebSocket path `'+ _wsUrl +'` is declared by more than one `method:"ws"` route — last wins (`'+ _wsRule +'`)');
                     }
                     _wsRegistered[_wsUrl] = true;
+                    // #H13 slice 3b — record the bundle/env this server serves (a server
+                    // serves one bundle) so the dispatcher can build session.query. Set
+                    // explicitly here (self.appName/self.env are guaranteed correct at
+                    // boot) before onWebSocket, so its getContext fallback is skipped.
+                    engine.instance._wsBundle = self.appName;
+                    engine.instance._wsEnv    = self.env;
                     engine.instance.onWebSocket(_wsUrl, _wsHandlerFn, _wsOptions);
                 }
             }

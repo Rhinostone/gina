@@ -1,0 +1,3 @@
+kind: Added
+body: 'WebSocket channel handlers can now make cross-bundle HTTP calls: session.query(options[, data]) returns a Promise (with an optional trailing callback), mirroring a controller''s self.query(). A handler resolves another bundle by hostname (e.g. "api@project/dev") and gets back the parsed response, reusing the running server''s warm HTTP/2 session cache. Works for both routing.json-declared (method "ws") and programmatic (app.onWebSocket) channels. Same-bundle data access via getModel already worked; this adds the inter-bundle HTTP leg getModel cannot do. Requires the isaac engine with http2Options.enableConnectProtocol set to true.'
+time: 2026-06-22T18:30:00+01:00

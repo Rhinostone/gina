@@ -566,3 +566,117 @@ describe('10 - real HTTP/2 loopback (wsOptions.protocol echoed, live Http2Stream
     });
 
 });
+
+
+// 11 — real HTTP/2 loopback: a channel handler calls session.query against a
+// SECOND http2 target and streams the result back over a genuine extended-CONNECT
+// stream (#H13 slice 3b). The isaac dispatcher attaches session.query via
+// lib.wsQuery.build (controller reuse + serverInstance = app + promisify) — that
+// real wiring is locked by ws-query.test.js (source pins + guard/callback) + the
+// server.isaac.test.js §12h dispatcher-attach pins + the live-boot cross-bundle
+// smoke. Like §09's inline matchParam mirror, the point HERE is the END-TO-END
+// shape over a real Http2Stream: a handler `await session.query(...)`s a second
+// http2 target and streams the cross-target result back over the WS channel.
+describe('11 - real HTTP/2 loopback (session.query cross-target round-trip, live Http2Stream)', function() {
+
+    it('a channel handler awaits session.query against a second http2 target and streams the result', async function() {
+        // --- target server (the "other bundle" the cross-bundle query reaches) ---
+        var targetServer   = http2.createServer();
+        var targetSessions = [];
+        targetServer.on('session', function(s) { targetSessions.push(s); });
+        targetServer.on('request', function(req, res) {
+            res.setHeader('content-type', 'application/json');
+            res.end(JSON.stringify({ ok: true, via: 'target', path: req.headers[':path'] }));
+        });
+        await new Promise(function(resolve) { targetServer.listen(0, '127.0.0.1', resolve); });
+        var targetPort = targetServer.address().port;
+
+        // A real http2 GET round-trip to the target — the faithful stand-in for what
+        // lib.wsQuery.build's returned query does via the framework controller.
+        function queryTarget(reqPath) {
+            return new Promise(function(resolve, reject) {
+                var c = http2.connect('http://127.0.0.1:' + targetPort);
+                c.on('error', reject);
+                var rq = c.request({ ':method': 'GET', ':path': reqPath });
+                var body = '';
+                rq.setEncoding('utf8');
+                rq.on('data', function(chunk) { body += chunk; });
+                rq.on('end', function() {
+                    var parsed;
+                    try { parsed = JSON.parse(body); } catch (e) { reject(e); return; }
+                    try { c.close(); } catch (e) {}
+                    resolve(parsed);
+                });
+                rq.on('error', reject);
+            });
+        }
+
+        // --- ws server (the channel handler lives here) ---
+        var wsServer     = http2.createServer({ settings: { enableConnectProtocol: true } });
+        var liveSessions = [];
+        wsServer.on('session', function(s) { liveSessions.push(s); });
+        wsServer.on('request', function(req, res) { if (req.method !== 'CONNECT') { res.end('ok'); } });
+        wsServer.on('connect', function(request, response) {
+            var session = wsSess.accept(request);
+            session.query = function(opt) { return queryTarget(opt.path); };
+            session.onMessage(function(d) {
+                session.query({ path: '/data' })
+                    .then(function(r) { session.send('q:' + JSON.stringify(r)); })
+                    .catch(function(e) { session.send('err:' + e.message); });
+            });
+        });
+        await new Promise(function(resolve) { wsServer.listen(0, '127.0.0.1', resolve); });
+        var wsPort = wsServer.address().port;
+
+        var clientOut = { messages: [] };
+        var clientParser = wsf.createParser({
+            isServer  : false,
+            onMessage : function(d) { clientOut.messages.push(d); },
+            onClose   : function() {},
+            onError   : function(e) { clientOut.err = e; }
+        });
+
+        try {
+            await new Promise(function(resolve, reject) {
+                var client  = http2.connect('http://127.0.0.1:' + wsPort);
+                var guard   = setTimeout(function() { reject(new Error('loopback timed out')); }, 5000);
+                var closing = false;
+                client.on('error', reject);
+                client.on('remoteSettings', function() {
+                    var req = client.request({
+                        ':method': 'CONNECT', ':protocol': 'websocket', ':scheme': 'http',
+                        ':path': '/live', ':authority': '127.0.0.1:' + wsPort
+                    });
+                    req.on('error', reject);
+                    req.on('response', function(headers) {
+                        try { assert.equal(headers[':status'], 200); } catch (e) { return reject(e); }
+                        req.on('data', function(chunk) {
+                            clientParser.feed(chunk);
+                            // close deterministically once the query result has streamed back
+                            if (!closing && clientOut.messages.some(function(m) { return /^q:/.test(m); })) {
+                                closing = true;
+                                req.write(clientClose(1000, 'bye'));
+                                req.end();
+                            }
+                        });
+                        req.write(clientText('go'));
+                    });
+                    req.on('close', function() { clearTimeout(guard); try { client.close(); } catch (e) {} resolve(); });
+                });
+            });
+        } finally {
+            liveSessions.forEach(function(s)   { try { s.destroy(); } catch (e) {} });
+            targetSessions.forEach(function(s) { try { s.destroy(); } catch (e) {} });
+            await new Promise(function(resolve) { wsServer.close(resolve); });
+            await new Promise(function(resolve) { targetServer.close(resolve); });
+        }
+
+        var qMsg = clientOut.messages.find(function(m) { return /^q:/.test(m); });
+        assert.ok(qMsg, 'the client received the cross-target query result streamed back over the WS stream');
+        var payload = JSON.parse(qMsg.slice(2));
+        assert.equal(payload.ok, true, 'the query reached the second http2 target and returned its JSON');
+        assert.equal(payload.via, 'target');
+        assert.equal(payload.path, '/data', 'the query path was honoured by the target');
+    });
+
+});

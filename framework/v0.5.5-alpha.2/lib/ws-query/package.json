@@ -1,0 +1,10 @@
+{
+  "name": "gina-lib-ws-query",
+  "version": "1.0.0",
+  "description": "Cross-bundle HTTP query capability for WebSocket-over-HTTP/2 channel handlers (#H13 slice 3b): session.query(options[, data]) reuses the framework controller's hardened HTTP/1+HTTP/2 client against the live server's warm session cache, mirroring a controller's self.query().",
+  "authors": [ { "name": "Martin-Luther ETOUMAN", "email": "contact@gina.io" } ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": { "node": ">=18.14.0" },
+  "main": "src/main",
+  "license": "MIT"
+}

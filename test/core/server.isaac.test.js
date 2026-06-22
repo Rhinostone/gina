@@ -2336,6 +2336,75 @@ describe('12g - #H13 slice 3a wsOptions resolution logic', function() {
 });
 
 
+// 12h — #H13 slice 3b: session.query seam. The dispatcher attaches a cross-bundle
+// query capability to each accepted session AFTER lib.wsSession.accept (so
+// lib/ws-session stays controller-free), and onWebSocket captures the bundle/env
+// this server serves once (a server serves one bundle), falling back to getContext
+// only when the routing.json registrar did not already set it explicitly.
+describe('12h - #H13 slice 3b session.query seam source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('attaches session.query = lib.wsQuery.build(server, _wsBundle, _wsEnv) on the matched path', function() {
+        assert.ok(getSrc().indexOf('_wsSession.query = lib.wsQuery.build(server, server._wsBundle, server._wsEnv);') > -1,
+            'expected the dispatcher to attach session.query via lib.wsQuery.build with the captured bundle/env');
+    });
+
+    it('attaches session.query AFTER accept and BEFORE the handler is invoked', function() {
+        var s         = getSrc();
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request, _wsOpts || undefined);');
+        var queryIdx  = s.indexOf('_wsSession.query = lib.wsQuery.build(server, server._wsBundle, server._wsEnv);');
+        var callIdx   = s.indexOf('_wsTarget(_wsSession, request);');
+        assert.ok(acceptIdx > -1 && queryIdx > acceptIdx,
+            'session.query must be attached after accept (so lib/ws-session stays controller-free)');
+        assert.ok(callIdx > queryIdx,
+            'session.query must be attached before the channel handler runs');
+    });
+
+    it('captures bundle/env once at registration, gated on _wsBundle being undefined', function() {
+        var s = getSrc();
+        var guardIdx  = s.indexOf("if (typeof server._wsBundle === 'undefined') {");
+        var bundleIdx = s.indexOf("server._wsBundle = (typeof getContext === 'function') ? getContext('bundle') : null;");
+        var envIdx    = s.indexOf("server._wsEnv    = (typeof getContext === 'function') ? getContext('env') : null;");
+        assert.ok(guardIdx > -1, 'expected the typeof-undefined guard (capture only once per server)');
+        assert.ok(bundleIdx > guardIdx, 'expected the getContext(bundle) fallback inside the guard');
+        assert.ok(envIdx > guardIdx, 'expected the getContext(env) fallback inside the guard');
+    });
+});
+
+
+// 12i — #H13 slice 3b: the bundle/env capture precedence is pure logic — the
+// routing.json registrar's explicit self.appName/self.env wins; a purely
+// programmatic onWebSocket (no registrar set) falls back to getContext.
+describe('12i - #H13 slice 3b bundle/env capture precedence logic', function() {
+
+    // Mirrors: registrar sets server._wsBundle = self.appName BEFORE onWebSocket,
+    // and onWebSocket sets it from getContext ONLY when still undefined.
+    function captureBundle(server, registrarBundle, ctxBundle) {
+        // core/server.js registrar (runs first, at boot, for a routing.json ws route):
+        if (typeof registrarBundle !== 'undefined') { server._wsBundle = registrarBundle; }
+        // core/server.isaac.js onWebSocket fallback:
+        if (typeof server._wsBundle === 'undefined') { server._wsBundle = ctxBundle; }
+        return server._wsBundle;
+    }
+
+    it('the registrar value (self.appName) wins over getContext', function() {
+        assert.equal(captureBundle({}, 'fromRegistrar', 'fromGetContext'), 'fromRegistrar');
+    });
+
+    it('a purely programmatic onWebSocket (no registrar value) falls back to getContext', function() {
+        assert.equal(captureBundle({}, undefined, 'fromGetContext'), 'fromGetContext');
+    });
+
+    it('once captured, a later programmatic call does not overwrite it', function() {
+        var server = {};
+        captureBundle(server, 'fromRegistrar', 'fromGetContext');           // registrar first
+        captureBundle(server, undefined, 'fromLaterGetContext');            // later programmatic
+        assert.equal(server._wsBundle, 'fromRegistrar', 'the first (registrar) capture is sticky');
+    });
+});
+
+
 // 13 — h2c flood-defense parity (#H3/#H7/#H13): the cleartext http2 branches
 // must receive the same hardening options as the https branch. The TLS keys
 // never land on those branches (key/cert/ca/pfx/passphrase merge under

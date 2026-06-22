@@ -196,6 +196,14 @@ function Lib() {
         // shutdown drain registration). Consumed by the Isaac engine's
         // onWebSocket dispatcher. Pure factory, so _require is safe.
         wsSession       : _require('./ws-session'),
+        // #H13 slice 3b — cross-bundle session.query() for WS channel handlers.
+        // build(app, bundle, env) → query(options[, data]) → Promise: reuses the
+        // framework controller's hardened HTTP/1+HTTP/2 client (fresh controller
+        // per call) against the live server's warm session cache, mirroring a
+        // controller's self.query(). The Isaac dispatcher attaches it to each
+        // accepted session AFTER lib.wsSession.accept (so ws-session stays
+        // controller-free). Pure factory (no module-scope state), so _require is safe.
+        wsQuery         : _require('./ws-query'),
     };
 
     /**
