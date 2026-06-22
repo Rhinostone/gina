@@ -1950,7 +1950,7 @@ describe('12 - #H13 onWebSocket registration + dispatcher source structure', fun
     it('source declares the per-path handler registry and the registration method', function() {
         var s = getSrc();
         assert.ok(s.indexOf('server._wsHandlers = {};') > -1, 'expected the `server._wsHandlers` registry literal');
-        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler)') > -1, 'expected the onWebSocket registration method');
+        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler, wsOptions)') > -1, 'expected the onWebSocket registration method (slice 3a adds the optional wsOptions arg)');
         assert.ok(s.indexOf('server._wsHandlers[wsPath] = wsHandler;') > -1, 'expected the per-path handler store');
     });
 
@@ -1984,15 +1984,15 @@ describe('12 - #H13 onWebSocket registration + dispatcher source structure', fun
 
     it('source accepts matched streams through the ws-session bridge', function() {
         assert.ok(
-            getSrc().indexOf('lib.wsSession.accept(request)') > -1,
-            'expected `lib.wsSession.accept(request)` on the matched path'
+            getSrc().indexOf('lib.wsSession.accept(request, _wsOpts || undefined)') > -1,
+            'expected `lib.wsSession.accept(request, _wsOpts || undefined)` on the matched path (slice 3a threads per-route options)'
         );
     });
 
     it('the registration API lives inside the opt-in gate, the safety stub after both branches', function() {
         var s = getSrc();
         var gateIdx = s.indexOf('if (_enableConnectProtocol) {');
-        var defIdx = s.indexOf('server.onWebSocket = function(wsPath, wsHandler)');
+        var defIdx = s.indexOf('server.onWebSocket = function(wsPath, wsHandler, wsOptions)');
         var stubIdx = s.indexOf("typeof server.onWebSocket !== 'function'");
         assert.ok(gateIdx > -1 && defIdx > gateIdx, 'the real onWebSocket must be defined inside the opt-in gate');
         assert.ok(stubIdx > defIdx, 'the cross-protocol stub must come after the gated definition');
@@ -2048,6 +2048,360 @@ describe('12b - #H13 onWebSocket dispatcher logic', function() {
         assert.equal(dispatchWs(undefined, { '/live': handler }).code, 404);
     });
 
+});
+
+
+describe('12c - #H13 onWebSocket collision warn (programmatic overrides a declared ws route)', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('onWebSocket warns before overwriting an already-registered path', function() {
+        var s        = getSrc();
+        var warnIdx  = s.indexOf("console.warn('[ SERVER ] onWebSocket: path");
+        assert.ok(warnIdx > -1, 'expected the overwrite console.warn in onWebSocket');
+        var guardIdx = s.lastIndexOf("typeof server._wsHandlers[wsPath] === 'function'", warnIdx);
+        assert.ok(guardIdx > -1 && guardIdx < warnIdx,
+            'the warn must be gated on wsPath already holding a function handler');
+        var storeIdx = s.indexOf('server._wsHandlers[wsPath] = wsHandler;', warnIdx);
+        assert.ok(storeIdx > warnIdx,
+            'the collision check must run before the (unchanged) per-path store (last-write-wins)');
+    });
+});
+
+
+// 12d — #H13 slice 2: :param matcher source structure
+describe('12d - #H13 slice 2 :param matcher source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('declares the ordered param-pattern registry and the matcher', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server._wsParamHandlers = [];') > -1, 'expected the `server._wsParamHandlers` ordered registry');
+        assert.ok(s.indexOf('server._wsMatchParam = function(pathname)') > -1, 'expected the `_wsMatchParam` matcher');
+    });
+
+    it('routes a `:`-bearing path to the param registry (the /\\:/ placeholder convention)', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('/\\:/.test(wsPath)') > -1, 'expected the /\\:/ placeholder detection at registration (same as lib/routing hasParams)');
+        assert.ok(s.indexOf("server._wsParamHandlers.push({ pattern: wsPath, segments: wsPath.split('/'), handler: wsHandler, options: wsOptions || null })") > -1,
+            'expected the compile-and-push of {pattern, segments, handler, options}');
+    });
+
+    it('the dispatcher tries the exact map FIRST, then the param scan (exact wins)', function() {
+        var s = getSrc();
+        var exactIdx = s.indexOf('var _wsTarget = server._wsHandlers[_wsPathname];');
+        var paramIdx = s.indexOf('server._wsMatchParam(_wsPathname)');
+        assert.ok(exactIdx > -1 && paramIdx > exactIdx, 'the exact lookup must precede the param fallback');
+    });
+
+    it('the param fallback runs only on an exact miss', function() {
+        assert.ok(getSrc().indexOf("typeof _wsTarget !== 'function' && server._wsParamHandlers.length") > -1,
+            'expected the param scan gated on an exact miss');
+    });
+
+    it('populates request.params before handing off to lib.wsSession.accept', function() {
+        var s = getSrc();
+        var paramsIdx = s.indexOf('request.params = _wsParams || {};');
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request, _wsOpts || undefined)', paramsIdx);
+        assert.ok(paramsIdx > -1 && acceptIdx > paramsIdx, 'request.params must be set before accept()');
+    });
+
+    it('the matcher decodeURIComponent-captures and rejects an empty segment', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('decodeURIComponent(reqSegs[s])') > -1, 'expected decodeURIComponent on the captured segment');
+        assert.ok(s.indexOf("if (reqSegs[s] === '') { ok = false; break; }") > -1, 'expected the empty-segment rejection');
+    });
+
+    it('warns + overwrites on a duplicate param pattern (last wins for identical patterns)', function() {
+        assert.ok(getSrc().indexOf("console.warn('[ SERVER ] onWebSocket: pattern") > -1,
+            'expected the duplicate-pattern overwrite warn (distinct from the exact-path warn)');
+    });
+});
+
+
+// 12e — #H13 slice 2: :param matcher + exact-first dispatch pure-logic replica.
+// Faithful replica of server._wsMatchParam + the exact-first dispatch; the §12d
+// source pins lock the operators so this replica cannot silently drift.
+describe('12e - #H13 slice 2 :param matcher + exact-first dispatch logic', function() {
+
+    function compile(pattern) { return { pattern: pattern, segments: pattern.split('/') }; }
+
+    function matchParam(pathname, paramHandlers) {
+        var reqSegs = String(pathname || '').split('/');
+        for (var i = 0; i < paramHandlers.length; i++) {
+            var entry = paramHandlers[i];
+            if (entry.segments.length !== reqSegs.length) { continue; }
+            var params = {}, ok = true;
+            for (var s = 0; s < entry.segments.length; s++) {
+                var pat = entry.segments[s];
+                if (pat.charAt(0) === ':') {
+                    if (reqSegs[s] === '') { ok = false; break; }
+                    params[pat.substring(1)] = decodeURIComponent(reqSegs[s]);
+                } else if (pat !== reqSegs[s]) { ok = false; break; }
+            }
+            if (ok) { return { handler: entry.handler, params: params }; }
+        }
+        return null;
+    }
+
+    function dispatch(reqPath, exact, paramHandlers) {
+        var pathname = String(reqPath || '').split('?')[0];
+        var target = exact[pathname];
+        var params = null;
+        if (typeof target !== 'function' && paramHandlers.length) {
+            var m = matchParam(pathname, paramHandlers);
+            if (m) { target = m.handler; params = m.params; }
+        }
+        if (typeof target !== 'function') { return { action: 'status', code: 404 }; }
+        return { action: 'accept', handler: target, params: params || {} };
+    }
+
+    var hExact = function exactH() {};
+    var hRoom  = function roomH() {};
+    var hArea  = function areaH() {};
+
+    it('captures a :param segment into request.params', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        var r = dispatch('/live/foo', {}, ph);
+        assert.equal(r.action, 'accept');
+        assert.equal(r.handler, hRoom);
+        assert.deepEqual(r.params, { room: 'foo' });
+    });
+
+    it('an exact route beats an overlapping :param pattern (and yields empty params)', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        var r = dispatch('/live/all', { '/live/all': hExact }, ph);
+        assert.equal(r.handler, hExact);
+        assert.deepEqual(r.params, {});
+    });
+
+    it('strict segment-count gate — /live and /live/a/b do not match /live/:room', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.equal(dispatch('/live', {}, ph).code, 404);
+        assert.equal(dispatch('/live/a/b', {}, ph).code, 404);
+    });
+
+    it('first-registered wins among two overlapping equal-length :param patterns', function() {
+        var ph = [
+            Object.assign(compile('/live/:room'), { handler: hRoom }),
+            Object.assign(compile('/:area/:room'), { handler: hArea })
+        ];
+        var r = dispatch('/live/foo', {}, ph);
+        assert.equal(r.handler, hRoom, 'the first-declared pattern wins (mirrors gina HTTP first-match)');
+        assert.deepEqual(r.params, { room: 'foo' });
+    });
+
+    it('query string is stripped before param matching', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        var r = dispatch('/live/foo?token=x', {}, ph);
+        assert.equal(r.action, 'accept');
+        assert.deepEqual(r.params, { room: 'foo' });
+    });
+
+    it('an empty captured segment is rejected (/live/ vs /live/:room)', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.equal(dispatch('/live/', {}, ph).code, 404);
+    });
+
+    it('captured values are decodeURIComponent-decoded', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.deepEqual(dispatch('/live/a%20b', {}, ph).params, { room: 'a b' });
+    });
+
+    it('multi-segment capture (/room/:id/user/:uid)', function() {
+        var ph = [Object.assign(compile('/room/:id/user/:uid'), { handler: hRoom })];
+        assert.deepEqual(dispatch('/room/7/user/42', {}, ph).params, { id: '7', uid: '42' });
+    });
+
+    it('an exact match path yields params === {} (never undefined)', function() {
+        var r = dispatch('/live', { '/live': hExact }, []);
+        assert.equal(r.handler, hExact);
+        assert.deepEqual(r.params, {});
+    });
+
+    it('a missing :path is refused, not crashed on', function() {
+        assert.equal(dispatch(undefined, { '/live': hExact }, []).code, 404);
+    });
+
+    it('no handler at all (exact miss + param miss) → 404', function() {
+        var ph = [Object.assign(compile('/live/:room'), { handler: hRoom })];
+        assert.equal(dispatch('/other', {}, ph).code, 404);
+    });
+});
+
+
+// 12f — #H13 slice 3a: per-route wsOptions threading (source structure)
+describe('12f - #H13 slice 3a per-route wsOptions threading source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('declares the parallel exact-path options map, separate from _wsHandlers', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server._wsHandlerOptions = {};') > -1, 'expected the `server._wsHandlerOptions` map literal');
+        assert.ok(s.indexOf('server._wsHandlers = {};') > -1, '`server._wsHandlers` must stay a pure path→handler map');
+    });
+
+    it('onWebSocket takes the optional 3rd wsOptions arg and stores it on the exact map', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('server.onWebSocket = function(wsPath, wsHandler, wsOptions)') > -1, 'expected the 3-arg onWebSocket signature');
+        assert.ok(s.indexOf('server._wsHandlerOptions[wsPath] = wsOptions || null;') > -1, 'expected the exact-path options store');
+    });
+
+    it('the :param push carries an options field; the matcher returns it', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf("handler: wsHandler, options: wsOptions || null })") > -1, 'expected the param-entry options field at push');
+        assert.ok(s.indexOf('return { handler: entry.handler, params: params, options: entry.options };') > -1, 'expected _wsMatchParam to return the matched entry options');
+    });
+
+    it('a :param overwrite replaces options too (last-write-wins)', function() {
+        assert.ok(getSrc().indexOf('server._wsParamHandlers[_existing].options = wsOptions || null;') > -1,
+            'expected the param-overwrite to replace options alongside the handler');
+    });
+
+    it('the dispatcher resolves _wsOpts (exact map first, then the param entry) and threads it to accept', function() {
+        var s = getSrc();
+        var exactIdx  = s.indexOf('server._wsHandlerOptions[_wsPathname] || null;');
+        var paramIdx  = s.indexOf('_wsOpts = _m.options || null;');
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request, _wsOpts || undefined);');
+        assert.ok(exactIdx > -1, 'expected the exact-hit options resolution from the options map');
+        assert.ok(paramIdx > exactIdx, 'expected the param-hit options override after the exact resolution');
+        assert.ok(acceptIdx > paramIdx, 'expected accept(request, _wsOpts || undefined) after _wsOpts is resolved');
+    });
+});
+
+
+// 12g — #H13 slice 3a: wsOptions resolution pure-logic replica (exact-first,
+// then the matched :param entry's options; undefined when a route declares none).
+// Additive — §12e stays byte-identical; the §12f source pins lock the operators.
+describe('12g - #H13 slice 3a wsOptions resolution logic', function() {
+
+    function matchParam(pathname, paramHandlers) {
+        var reqSegs = String(pathname || '').split('/');
+        for (var i = 0; i < paramHandlers.length; i++) {
+            var entry = paramHandlers[i];
+            var segs  = entry.pattern.split('/');
+            if (segs.length !== reqSegs.length) { continue; }
+            var ok = true;
+            for (var s = 0; s < segs.length; s++) {
+                if (segs[s].charAt(0) === ':') { if (reqSegs[s] === '') { ok = false; break; } }
+                else if (segs[s] !== reqSegs[s]) { ok = false; break; }
+            }
+            if (ok) { return entry; }
+        }
+        return null;
+    }
+
+    // Mirrors _extendedConnectHandler's _wsOpts resolution + the accept() arg.
+    function resolveAcceptArg(reqPath, exactHandlers, exactOptions, paramHandlers) {
+        var pathname = String(reqPath || '').split('?')[0];
+        var target = exactHandlers[pathname];
+        var opts   = exactOptions[pathname] || null;
+        if (typeof target !== 'function' && paramHandlers.length) {
+            var m = matchParam(pathname, paramHandlers);
+            if (m) { target = m.handler; opts = m.options || null; }
+        }
+        if (typeof target !== 'function') { return { action: 'status', code: 404 }; }
+        return { action: 'accept', acceptArg: opts || undefined };
+    }
+
+    var H = function() {};
+
+    it('an exact route with options threads them as the accept arg', function() {
+        var r = resolveAcceptArg('/live', { '/live': H }, { '/live': { protocol: 'chat' } }, []);
+        assert.deepEqual(r.acceptArg, { protocol: 'chat' });
+    });
+
+    it('an exact route without options passes undefined to accept (defaults apply)', function() {
+        var r = resolveAcceptArg('/live', { '/live': H }, { '/live': null }, []);
+        assert.equal(r.acceptArg, undefined);
+    });
+
+    it('a :param route carries the matched entry options', function() {
+        var ph = [{ pattern: '/live/:room', handler: H, options: { maxPayload: 1024 } }];
+        var r = resolveAcceptArg('/live/foo', {}, {}, ph);
+        assert.deepEqual(r.acceptArg, { maxPayload: 1024 });
+    });
+
+    it('a :param route without options passes undefined', function() {
+        var ph = [{ pattern: '/live/:room', handler: H, options: null }];
+        var r = resolveAcceptArg('/live/foo', {}, {}, ph);
+        assert.equal(r.acceptArg, undefined);
+    });
+
+    it('exact options win over an overlapping :param entry (exact-first)', function() {
+        var ph = [{ pattern: '/live/:room', handler: H, options: { protocol: 'param' } }];
+        var r = resolveAcceptArg('/live/all', { '/live/all': H }, { '/live/all': { protocol: 'exact' } }, ph);
+        assert.deepEqual(r.acceptArg, { protocol: 'exact' });
+    });
+});
+
+
+// 12h — #H13 slice 3b: session.query seam. The dispatcher attaches a cross-bundle
+// query capability to each accepted session AFTER lib.wsSession.accept (so
+// lib/ws-session stays controller-free), and onWebSocket captures the bundle/env
+// this server serves once (a server serves one bundle), falling back to getContext
+// only when the routing.json registrar did not already set it explicitly.
+describe('12h - #H13 slice 3b session.query seam source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('attaches session.query = lib.wsQuery.build(server, _wsBundle, _wsEnv) on the matched path', function() {
+        assert.ok(getSrc().indexOf('_wsSession.query = lib.wsQuery.build(server, server._wsBundle, server._wsEnv);') > -1,
+            'expected the dispatcher to attach session.query via lib.wsQuery.build with the captured bundle/env');
+    });
+
+    it('attaches session.query AFTER accept and BEFORE the handler is invoked', function() {
+        var s         = getSrc();
+        var acceptIdx = s.indexOf('lib.wsSession.accept(request, _wsOpts || undefined);');
+        var queryIdx  = s.indexOf('_wsSession.query = lib.wsQuery.build(server, server._wsBundle, server._wsEnv);');
+        var callIdx   = s.indexOf('_wsTarget(_wsSession, request);');
+        assert.ok(acceptIdx > -1 && queryIdx > acceptIdx,
+            'session.query must be attached after accept (so lib/ws-session stays controller-free)');
+        assert.ok(callIdx > queryIdx,
+            'session.query must be attached before the channel handler runs');
+    });
+
+    it('captures bundle/env once at registration, gated on _wsBundle being undefined', function() {
+        var s = getSrc();
+        var guardIdx  = s.indexOf("if (typeof server._wsBundle === 'undefined') {");
+        var bundleIdx = s.indexOf("server._wsBundle = (typeof getContext === 'function') ? getContext('bundle') : null;");
+        var envIdx    = s.indexOf("server._wsEnv    = (typeof getContext === 'function') ? getContext('env') : null;");
+        assert.ok(guardIdx > -1, 'expected the typeof-undefined guard (capture only once per server)');
+        assert.ok(bundleIdx > guardIdx, 'expected the getContext(bundle) fallback inside the guard');
+        assert.ok(envIdx > guardIdx, 'expected the getContext(env) fallback inside the guard');
+    });
+});
+
+
+// 12i — #H13 slice 3b: the bundle/env capture precedence is pure logic — the
+// routing.json registrar's explicit self.appName/self.env wins; a purely
+// programmatic onWebSocket (no registrar set) falls back to getContext.
+describe('12i - #H13 slice 3b bundle/env capture precedence logic', function() {
+
+    // Mirrors: registrar sets server._wsBundle = self.appName BEFORE onWebSocket,
+    // and onWebSocket sets it from getContext ONLY when still undefined.
+    function captureBundle(server, registrarBundle, ctxBundle) {
+        // core/server.js registrar (runs first, at boot, for a routing.json ws route):
+        if (typeof registrarBundle !== 'undefined') { server._wsBundle = registrarBundle; }
+        // core/server.isaac.js onWebSocket fallback:
+        if (typeof server._wsBundle === 'undefined') { server._wsBundle = ctxBundle; }
+        return server._wsBundle;
+    }
+
+    it('the registrar value (self.appName) wins over getContext', function() {
+        assert.equal(captureBundle({}, 'fromRegistrar', 'fromGetContext'), 'fromRegistrar');
+    });
+
+    it('a purely programmatic onWebSocket (no registrar value) falls back to getContext', function() {
+        assert.equal(captureBundle({}, undefined, 'fromGetContext'), 'fromGetContext');
+    });
+
+    it('once captured, a later programmatic call does not overwrite it', function() {
+        var server = {};
+        captureBundle(server, 'fromRegistrar', 'fromGetContext');           // registrar first
+        captureBundle(server, undefined, 'fromLaterGetContext');            // later programmatic
+        assert.equal(server._wsBundle, 'fromRegistrar', 'the first (registrar) capture is sticky');
+    });
 });
 
 

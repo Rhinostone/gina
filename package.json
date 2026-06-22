@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency",
   "keywords": [
     "nodejs",
@@ -60,7 +60,8 @@
   ],
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
   "engine": {
-    "node": ">= 22 <27"
+    "node": ">= 22 <27",
+    "bun": ">= 1.2"
   },
   "config": {
     "optionalPrefix": "~/.npm-global",
@@ -72,12 +73,12 @@
     "gina-container": "bin/gina-container",
     "gina-init": "bin/gina-init"
   },
-  "main": "./framework/v0.5.4/core/gna",
+  "main": "./framework/v0.5.5/core/gna",
   "exports": {
     ".": {
       "types": "./types/index.d.ts",
       "import": "./index.mjs",
-      "require": "./framework/v0.5.4/core/gna.js"
+      "require": "./framework/v0.5.5/core/gna.js"
     },
     "./gna": {
       "types": "./types/gna.d.ts",
@@ -97,6 +98,7 @@
   "scripts": {
     "test": "node --test test*.test.js",
     "test:e2e": "playwright test test/e2e",
+    "smoke": "node script/smoke_test_tarball.js",
     "types:gen": "node script/generate_gna_types.js",
     "types:check": "node script/generate_gna_types.js --check",
     "prepare": "node script/prepare_version.js",
@@ -111,7 +113,7 @@
     "@rhinostone/swig": "^2.7.2",
     "engine.io": "^6.6.7",
     "psl": "^1.15.0",
-    "ws": "^8.20.1"
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
@@ -123,6 +125,6 @@
     "sass": "1.100.0"
   },
   "overrides": {
-    "ws": "^8.20.1"
+    "ws": "^8.21.0"
   }
 }

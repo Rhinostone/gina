@@ -964,3 +964,173 @@ describe('09 - GOAWAY handler logs errorCode and lastStreamID (#H5)', function()
     });
 
 });
+
+
+// ─── 10 — #B53 method idempotency guard for inter-bundle retries ─────────────
+//
+// A transient failure can land AFTER the upstream bundle already executed the request
+// (stream timeout / ECONNRESET / GOAWAY premature-close / proxy 502) — only the response
+// is lost, not the side effect. Every retry path (the four HTTP/2 branches above + the
+// HTTP/1 sibling) therefore re-sends a non-idempotent method only when replay is safe:
+// the method is an HTTP "safe" method (GET/HEAD/OPTIONS/TRACE), or the caller affirmed
+// replay-safety via `options.retryUnsafe === true`. Idempotency (PUT/DELETE) is a transport
+// property, not a side-effect property, so PUT/DELETE are NOT auto-retried by default.
+
+// Replica of the shared `isRetryableMethod` helper in controller.js.
+function isRetryableMethodReplica(method, retryUnsafe) {
+    if (retryUnsafe === true) return true;
+    var SAFE = { GET: true, HEAD: true, OPTIONS: true, TRACE: true };
+    return SAFE[String(method || '').toUpperCase()] === true;
+}
+
+// The real guard is an AND conjunct on each branch's existing budget condition. These
+// mirror the four branch shapes so a *behaviour* regression (not just a source edit) is
+// caught — e.g. dropping the guard would flip the POST cases back to `true`.
+function wouldRetry(method, retryCount, max, retryUnsafe) {                       // timeout / close / HTTP1
+    return retryCount < max && isRetryableMethodReplica(method, retryUnsafe);
+}
+function wouldRetryStreamError(errorCode, method, retryCount, max, retryUnsafe) { // HTTP/2 stream error
+    return retryCount < max
+        && (errorCode === 'ERR_HTTP2_STREAM_ERROR' || errorCode === 'ECONNRESET')
+        && isRetryableMethodReplica(method, retryUnsafe);
+}
+function wouldRetry502(httpStatus, method, retryCount, max, retryUnsafe) {        // HTTP/2 502
+    return httpStatus === 502 && retryCount < max && isRetryableMethodReplica(method, retryUnsafe);
+}
+
+describe('10 - #B53 method idempotency guard — replica decision', function() {
+
+    it('safe methods are retryable (GET/HEAD/OPTIONS/TRACE)', function() {
+        ['GET', 'HEAD', 'OPTIONS', 'TRACE'].forEach(function(m) {
+            assert.equal(isRetryableMethodReplica(m), true, m + ' must be retryable');
+        });
+    });
+
+    it('non-safe methods are NOT retryable by default (POST/PUT/PATCH/DELETE)', function() {
+        ['POST', 'PUT', 'PATCH', 'DELETE'].forEach(function(m) {
+            assert.equal(isRetryableMethodReplica(m), false, m + ' must not auto-retry');
+        });
+    });
+
+    it('retryUnsafe===true opts a non-safe method back into retry (escape hatch)', function() {
+        assert.equal(isRetryableMethodReplica('POST', true), true);
+        assert.equal(isRetryableMethodReplica('DELETE', true), true);
+    });
+
+    it('opt-in is strict — only boolean true counts, not other truthy values', function() {
+        assert.equal(isRetryableMethodReplica('POST', 'yes'), false);
+        assert.equal(isRetryableMethodReplica('POST', 1), false);
+        assert.equal(isRetryableMethodReplica('POST', {}), false);
+    });
+
+    it('method match is case-insensitive (HTTP/1 passes raw options.method)', function() {
+        assert.equal(isRetryableMethodReplica('get'), true);
+        assert.equal(isRetryableMethodReplica('post'), false);
+        assert.equal(isRetryableMethodReplica('Post', true), true);
+    });
+
+    it('missing / unknown method is not retryable', function() {
+        assert.equal(isRetryableMethodReplica(undefined), false);
+        assert.equal(isRetryableMethodReplica(null), false);
+        assert.equal(isRetryableMethodReplica(''), false);
+        assert.equal(isRetryableMethodReplica('FOObar'), false);
+    });
+
+});
+
+describe('10 - #B53 method guard — full retry condition (budget AND idempotency)', function() {
+
+    it('GET with budget remaining → retries (timeout / close / HTTP1 shape)', function() {
+        assert.equal(wouldRetry('GET', 0, 2), true);
+        assert.equal(wouldRetry('GET', 1, 2), true);
+    });
+
+    it('POST/PUT/PATCH/DELETE with budget remaining → does NOT retry (the #B53 fix)', function() {
+        assert.equal(wouldRetry('POST', 0, 2), false);
+        assert.equal(wouldRetry('PUT', 0, 2), false);
+        assert.equal(wouldRetry('PATCH', 0, 2), false);
+        assert.equal(wouldRetry('DELETE', 0, 2), false);
+    });
+
+    it('POST with retryUnsafe → retries (opt-in escape hatch)', function() {
+        assert.equal(wouldRetry('POST', 0, 2, true), true);
+    });
+
+    it('budget exhausted → no retry regardless of method or opt-in', function() {
+        assert.equal(wouldRetry('GET', 2, 2), false);
+        assert.equal(wouldRetry('POST', 2, 2, true), false);
+    });
+
+    it('stream-error branch: errorCode whitelist AND method guard both apply', function() {
+        assert.equal(wouldRetryStreamError('ECONNRESET', 'GET', 0, 2), true);
+        assert.equal(wouldRetryStreamError('ERR_HTTP2_STREAM_ERROR', 'GET', 0, 2), true);
+        assert.equal(wouldRetryStreamError('ECONNRESET', 'POST', 0, 2), false);   // method guard blocks
+        assert.equal(wouldRetryStreamError('ECONNREFUSED', 'GET', 0, 2), false);  // not whitelisted
+        assert.equal(wouldRetryStreamError('ECONNRESET', 'POST', 0, 2, true), true); // opt-in
+    });
+
+    it('502 branch: GET 502 with budget → retries; POST 502 → does not (unless opted in)', function() {
+        assert.equal(wouldRetry502(502, 'GET', 0, 2), true);
+        assert.equal(wouldRetry502(502, 'POST', 0, 2), false);
+        assert.equal(wouldRetry502(502, 'POST', 0, 2, true), true);
+        assert.equal(wouldRetry502(200, 'GET', 0, 2), false); // not a 502
+    });
+
+    // ---- subtract: prove the guard is load-bearing (the pre-#B53 shape retries POST) ----
+    it('SUBTRACT: the pre-#B53 shape (no method guard) DOES retry POST — the bug', function() {
+        function wouldRetryPreFix(method, retryCount, max) { return retryCount < max; }
+        assert.equal(wouldRetryPreFix('POST', 0, 2), true,  'pre-fix: POST was silently re-sent (double-execution)');
+        assert.equal(wouldRetry('POST', 0, 2),       false, 'post-fix: POST is not retried');
+        // GET behaviour is unchanged across the fix
+        assert.equal(wouldRetryPreFix('GET', 0, 2), true);
+        assert.equal(wouldRetry('GET', 0, 2),       true);
+    });
+
+});
+
+describe('10 - #B53 source structure — guard wired into every retry branch', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('the shared isRetryableMethod helper is defined with the safe-method set', function() {
+        assert.ok(src.indexOf('var isRetryableMethod = function(method, retryUnsafe)') > -1,
+            'isRetryableMethod helper must exist');
+        assert.ok(src.indexOf('var SAFE_HTTP_METHODS = { GET: true, HEAD: true, OPTIONS: true, TRACE: true }') > -1,
+            'the safe-method set must be GET/HEAD/OPTIONS/TRACE');
+    });
+
+    it('the opt-in default exists and is stripped from outgoing HTTP/2 headers', function() {
+        assert.match(src, /retryUnsafe\s*:\s*false/, 'retryUnsafe must default to false in query() options');
+        assert.ok(src.indexOf("'maxRetry', 'retryUnsafe'") > -1,
+            'retryUnsafe must be in _NON_HTTP_OPTS so it cannot leak as an HTTP header');
+    });
+
+    it('HTTP/2 timeout + close branches gate retry on the method guard (2 bare-budget sites)', function() {
+        var n = (src.match(/if \(retryCount < HTTP2_MAX_RETRIES && isRetryableMethod\(options\[':method'\], options\.retryUnsafe\)\) \{/g) || []).length;
+        assert.equal(n, 2, 'expected the bare-budget guard form in exactly the timeout + close branches');
+    });
+
+    it('HTTP/2 stream-error branch gates retry on the method guard', function() {
+        assert.ok(
+            src.indexOf("(errorCode === 'ERR_HTTP2_STREAM_ERROR' || errorCode === 'ECONNRESET') && isRetryableMethod(options[':method'], options.retryUnsafe)") > -1,
+            'the stream-error retry must also check the method guard');
+    });
+
+    it('HTTP/2 502 branch gates retry on the method guard', function() {
+        assert.ok(
+            src.indexOf("if (httpStatus === 502 && retryCount < HTTP2_MAX_RETRIES && isRetryableMethod(options[':method'], options.retryUnsafe))") > -1,
+            'the 502 retry must also check the method guard');
+    });
+
+    it('the HTTP/1 sibling gates retry on the method guard', function() {
+        assert.ok(
+            src.indexOf("if (retryCount < Math.min(options.maxRetry, 10) && isRetryableMethod(options.method, options.retryUnsafe))") > -1,
+            'handleHTTP1ClientRequest must also check the method guard');
+    });
+
+    it('the guard is invoked at exactly 5 call sites (4 HTTP/2 + 1 HTTP/1)', function() {
+        var calls = (src.match(/isRetryableMethod\(options/g) || []).length;
+        assert.equal(calls, 5, 'expected exactly 5 isRetryableMethod(options...) call sites');
+    });
+
+});

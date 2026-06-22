@@ -1,0 +1,59 @@
+name: Bun Runtime Smoke
+
+# Bun is a SUPPORTED runtime (package.json `engine.bun`). This leg runs the SAME
+# end-to-end container smoke as `npm run smoke`, but ONLY against the Bun
+# runtime (oven/bun): it packs the candidate tarball, installs it with
+# `bun add -g` inside a clean oven/bun container, then boots the api + frontend
+# bundles and asserts HTTP 200 under Bun.
+#
+# BLOCKING: a red result here FAILS the workflow and gates develop/master, the
+# same as the Node test legs. The oven/bun image is PINNED below for
+# reproducibility, so a Bun upstream regression surfaces only on a deliberate
+# pin bump — never as a random CI flake. Bump the pin as newer Bun releases are
+# validated.
+
+on:
+  push:
+    branches: [develop, master]
+    paths:
+      - 'framework/**'
+      - 'bin/**'
+      - 'utils/**'
+      - 'script/smoke_test_tarball.js'
+      - 'script/smoke_in_container.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/bun-smoke.yml'
+  pull_request:
+    branches: [develop, master]
+    paths:
+      - 'framework/**'
+      - 'bin/**'
+      - 'utils/**'
+      - 'script/smoke_test_tarball.js'
+      - 'script/smoke_in_container.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/bun-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  bun-smoke:
+    name: Bun container smoke (oven/bun)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Use Node.js (pack the tarball + run the smoke orchestrator)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      # ubuntu-latest ships Docker with a running daemon. The orchestrator packs
+      # the candidate with `npm pack --ignore-scripts` (no install, no `prepare`
+      # commit) and runs it in a disposable oven/bun container. `--node=` selects
+      # ZERO Node legs, so the Bun leg drives the exit code. The image is pinned
+      # for reproducibility (bump it as newer Bun releases are validated).
+      - name: Bun-only container smoke
+        run: npm run smoke -- --node= --bun --bun-image=oven/bun:1.3.14

@@ -1508,3 +1508,41 @@ describe('25 - PR #35 fix: AJAX (data-gina-dialog-src) path opens', function () 
         assert.equal(opened, true, 'the popin must be opened (pre-fix: no listener → never opened)');
     });
 });
+
+
+// ── 26 — #B54: a click reuses the hover/focus preload (one click = one GET) ───────
+
+describe('26 - Popin: #B54 click consumes the in-flight preload (one click = one GET)', function () {
+
+    it('source: a preloadWaiters registry backs in-flight preload adoption', function () {
+        assert.ok(/var\s+preloadWaiters\s*=/.test(getPopinSrc()), 'expected module-level preloadWaiters');
+    });
+
+    it('source: preloadFetch wakes parked waiters with the body (or null on failure)', function () {
+        var src = getPopinSrc();
+        assert.match(src, /_waiters\[[^\]]+\]\(xhrPreload\.responseText\)/, 'success path feeds the body to waiters');
+        assert.match(src, /_waiters\[[^\]]+\]\(null\)/, 'failure path signals waiters with null');
+    });
+
+    it('source: consumePreload takes an onMiss and parks a waiter for an in-flight (null) slot', function () {
+        var src = getPopinSrc();
+        assert.match(src, /function\s+consumePreload\s*\(\s*url\s*,\s*\$popin\s*,\s*onMiss\s*\)/, 'consumePreload(url, $popin, onMiss)');
+        assert.match(src, /typeof\(slot\)\s*==\s*'undefined'[\s\S]{0,40}return false/, 'undefined slot returns false (caller loads)');
+        assert.ok(src.indexOf('slot === null') > -1, 'in-flight (null) slot is handled distinctly');
+        assert.ok(/preloadWaiters\[url\]\.push/.test(src), 'in-flight slot parks a waiter rather than firing a GET');
+    });
+
+    it('source: the legacy bindOpen click path consumes the preload before loading', function () {
+        var src = getPopinSrc();
+        assert.ok(/var\s+doLoad\s*=\s*function/.test(src), 'legacy click wraps its load in doLoad');
+        assert.match(src, /consumePreload\(url,\s*\$popin,\s*doLoad\)/, 'legacy click consumes the preload, falling back to doLoad');
+    });
+
+    it('source: the new-API openFromTrigger passes an onMiss fallback to consumePreload', function () {
+        assert.match(getPopinSrc(), /consumePreload\(descriptor\.src,\s*existing,\s*onMiss\)/, 'openFromTrigger passes onMiss');
+    });
+
+    it('source: a preOpen popin still gets its skeleton while the adopted preload is in flight', function () {
+        assert.match(getPopinSrc(), /\$popin\.options\.preOpen[\s\S]{0,80}showLoadingShell\(\$popin,\s*ensurePopinDialog\(\$popin\)\)/, 'in-flight preOpen shows the skeleton');
+    });
+});

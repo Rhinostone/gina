@@ -1,0 +1,13 @@
+[
+  "--env",
+  "--path",
+  "--force",
+  "--more",
+  "--scope",
+  "--to-version",
+  "--fix",
+  "--apply",
+  "--dry-run",
+  "--format",
+  "--all"
+]

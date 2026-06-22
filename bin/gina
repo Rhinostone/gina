@@ -29,13 +29,20 @@
 var fs              = require('fs');
 const {spawn}       = require('child_process');
 const {execSync}    = require('child_process');
+var runtime         = require(__dirname + '/../utils/runtime.js');
 
 var restartPid      = null;
 
 function runAsSubProcess() {
 
     var argv            =  Array.from(process.argv);
-    var nodeBin         = execSync('which node').toString().trim();
+    // Under Bun, `which node` resolves nothing (a Bun image ships no node) — spawn
+    // the running Bun binary instead so the daemon child inherits the runtime.
+    // Under Node this is the byte-identical `which node` result: isBun() is false,
+    // so runtimeBinary() returns its fallback verbatim (zero Node delta).
+    var nodeBin         = runtime.isBun()
+                            ? runtime.runtimeBinary()
+                            : runtime.runtimeBinary(execSync('which node').toString().trim());
     var cliBin          = __dirname + '/cli';
     var fakeDaemonPid   = '--fake-daemon-pid='+ process.pid;
 
@@ -189,7 +196,13 @@ function runCMD() {
 
     process.env.NODE_BUNDLE     = process.argv[3];
     process.env.NODE_PROJECT    = process.argv[4];
-    process.env.NODE_PROJECT    = process.env.NODE_PROJECT.replace(/\@/, '');
+    // Bun-safety: under Node, assigning an absent argv to an env var coerces to
+    // the string 'undefined' (so .replace works); under Bun it stays real
+    // undefined and .replace throws. Guard the call so Node behaviour is
+    // unchanged (on Node the value is always a string here).
+    if ( typeof process.env.NODE_PROJECT === 'string' ) {
+        process.env.NODE_PROJECT    = process.env.NODE_PROJECT.replace(/\@/, '');
+    }
 
     if (
         /(bundle\:start|bundle\:restart)/.test(process.argv[2])
@@ -200,7 +213,12 @@ function runCMD() {
         var tmpPath     = getTmpDir();
         var argFilename = tmpPath +'/'+ process.env.NODE_BUNDLE +'@'+ process.env.NODE_PROJECT +'.argv';
 
-        process.env.NODE_ARGV   = process.argv.slice();
+        // Bun-safety: Node coerces an array assigned to an env var to a comma-
+        // joined string; Bun leaves it a real array (object), so the writeFileSync
+        // below throws "data must be string/Buffer". String(array) reproduces
+        // Node's comma-join exactly (zero Node delta) and matches the comma->space
+        // read in getBundleStartingArgv() (utils/helper.js).
+        process.env.NODE_ARGV   = String(process.argv.slice());
         if (/bundle\:restart/.test(process.argv[2])) {
             process.env.NODE_ARGV = process.env.NODE_ARGV.replace('bundle:restart', 'bundle:start');
         }
@@ -208,7 +226,10 @@ function runCMD() {
         try {
             fs.writeFileSync(argFilename, process.env.NODE_ARGV );
         } catch (err) {
-            console.emerg(err);
+            // bin/gina's `console` is the global console (no lib.logger here), which
+            // has no `.emerg` on either runtime; emerg would itself throw. (This
+            // catch is unreachable on Node, where the write above never throws.)
+            console.error(err);
         }
         help    = null;
         tmpPath = null;
