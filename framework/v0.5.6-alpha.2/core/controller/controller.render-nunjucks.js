@@ -331,6 +331,10 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
     if (local._queryLog && local._queryLog.length > 0) {
         data.page.queries = local._queryLog;
     }
+    // #AISTREAM — AI token-stream snapshot parity (rides the data.page clone).
+    if (local._aiLog && local._aiLog.length > 0) {
+        data.page.aiStream = local._aiLog;
+    }
 
     // Two deep clones — one labelled gina (metadata for the Inspector
     // sidebar), one labelled user (mirrors what application code sees).

@@ -288,6 +288,11 @@ module.exports = function renderJSON(jsonObj, deps) {
             if (local._queryLog && local._queryLog.length > 0) {
                 _gdUser.queries = local._queryLog;
             }
+            // #AISTREAM — AI token-stream snapshot (per-request attribution +
+            // persistence) alongside queries/flow; the live view rides inspector#token.
+            if (local._aiLog && local._aiLog.length > 0) {
+                _gdUser.aiStream = local._aiLog;
+            }
             if (local._timeline) {
                 _gdUser.flow = {
                     requestStart : local._timeline.requestStart,

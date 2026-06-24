@@ -1470,10 +1470,19 @@ function ServerEngineClass(options) {
                     } catch (e) {}
                 };
 
+                // #AISTREAM — live AI token-stream frames (distinct event so the SPA
+                // wires incremental appends without touching the data-snapshot path).
+                var _agTokenListener = function(payload) {
+                    try {
+                        _agWrite('event: token\ndata: ' + JSON.stringify(payload) + '\n\n');
+                    } catch (e) {}
+                };
+
                 if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
                 var _agClose = function() {
                     process.removeListener('inspector#data', _agDataListener);
                     process.removeListener('logger#default', _agLogListener);
+                    process.removeListener('inspector#token', _agTokenListener);
                     process.gina._sseConnections.delete(_agClose);
                     try {
                         if (response.stream) response.stream.end();
@@ -1483,6 +1492,7 @@ function ServerEngineClass(options) {
 
                 process.on('inspector#data', _agDataListener);
                 process.on('logger#default', _agLogListener);
+                process.on('inspector#token', _agTokenListener);
                 process.gina._sseConnections.add(_agClose);
                 _agOnClose(_agClose);
 

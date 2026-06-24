@@ -292,9 +292,14 @@ function attachInspectorAgentWs(rawServer, ctx) {
                     ws.send(JSON.stringify({ event: 'log', data: { t: Date.now(), l: level, b: entry.group || '', s: msg, src: 'server' } }));
                 } catch (e) {}
             };
+            // #AISTREAM — live AI token-stream frames (distinct event, same envelope).
+            var _wsTokenListener = function(payload) {
+                try { ws.send(JSON.stringify({ event: 'token', data: payload })); } catch (e) {}
+            };
 
             process.on('inspector#data', _wsDataListener);
             process.on('logger#default', _wsLogListener);
+            process.on('inspector#token', _wsTokenListener);
 
             // Graceful-shutdown drain: proc.js's SIGTERM path invokes every
             // registered closer before _httpServer.close(), so a live agent
@@ -310,6 +315,7 @@ function attachInspectorAgentWs(rawServer, ctx) {
             var _cleanup = function() {
                 process.removeListener('inspector#data', _wsDataListener);
                 process.removeListener('logger#default', _wsLogListener);
+                process.removeListener('inspector#token', _wsTokenListener);
                 if (process.gina._sseConnections) {
                     process.gina._sseConnections.delete(_wsShutdownCloser);
                 }

@@ -325,17 +325,17 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
         var src = getSrc();
         // cache.get(cacheKey) is unique to the cache-HIT path (line 766); cache.has(cacheKey)
         // first appears on the cache-WRITE path (line 47) and would anchor the search wrong.
-        // Window widened from 10000 → 12000 after slice 2 combined the
-        // flow-late-entries patch with the new metrics late-bind in the
-        // cache-hit branch (~500 chars added). Per inspector-server.md
-        // "Source-scanning tests" gotcha: always recheck after substantial
-        // code additions.
+        // Robust anchor form (indexOf-from-cacheGet, matching the sibling tests below at the
+        // content-type / nulling checks): finds res.end on the cache-hit path regardless of
+        // how much inspector-data injection precedes it — the prior fixed 12000-char window
+        // was brittle (#AISTREAM's snapshot attach tipped res.end past it). Per
+        // inspector-server.md "Source-scanning tests" / jsdoc.md fixed-window gotcha: prefer
+        // a structural anchor over a char-distance window.
         var cacheGetIdx = src.indexOf('cache.get(cacheKey)');
         assert.ok(cacheGetIdx > -1, 'cache.get(cacheKey) not found');
-        var block = src.substring(cacheGetIdx, cacheGetIdx + 12000);
         assert.ok(
-            block.indexOf('res.end( htmlContent )') > -1,
-            'expected res.end( htmlContent ) on cache-hit path'
+            src.indexOf('res.end( htmlContent )', cacheGetIdx) > -1,
+            'expected res.end( htmlContent ) on the cache-hit path after cache.get(cacheKey)'
         );
     });
 

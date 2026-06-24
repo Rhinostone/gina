@@ -932,6 +932,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             if (local._queryLog && local._queryLog.length > 0) {
                 data.page.queries = local._queryLog;
             }
+            // #AISTREAM — AI token-stream snapshot (rides the data.page clone into
+            // __gdUser, like queries/flow); the live view rides inspector#token.
+            if (local._aiLog && local._aiLog.length > 0) {
+                data.page.aiStream = local._aiLog;
+            }
             // #FI — snapshot count BEFORE late entries are pushed.
             // data.page.flow.entries is a reference to local._timeline.entries,
             // so reading .length later would include entries pushed after this point.
@@ -1175,6 +1180,10 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             // #QI — inject dev-mode query log into data.page for Inspector
             if (local._queryLog && local._queryLog.length > 0) {
                 data.page.queries = local._queryLog;
+            }
+            // #AISTREAM — AI token-stream snapshot (rides the data.page clone).
+            if (local._aiLog && local._aiLog.length > 0) {
+                data.page.aiStream = local._aiLog;
             }
 
             // #FI — inject dev-mode request timeline for Inspector Flow tab.
