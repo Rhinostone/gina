@@ -9,6 +9,10 @@
 
 var EventEmitter = require('events').EventEmitter;
 
+// #AISTREAM — monotonic per-process stream id (client-side disambiguation of
+// interleaved token streams on the shared /_gina/agent channel).
+var _aiStreamSeq = 0;
+
 /**
  * AI connector wrapper.
  *
@@ -294,6 +298,85 @@ function AI(conn, infos) {
             _started = true;
             emitter.emit('start', { model: model, role: role });
         };
+
+        // ── AI token-stream inspection (#AISTREAM) — gated, additive ──────────
+        // Captured under the same dev / instrumentation-window gate the query
+        // connectors use. The per-request buffer ref is grabbed synchronously (in
+        // the request's async context, where setOptions ran enterWith) and mutated
+        // via closure as events fire — mirroring the query-connector pattern. Chunk
+        // TEXT (and the prompt) ride the wire ONLY when settings.inspector.ai
+        // .captureText is on (seeded onto process.gina at boot); metadata is always
+        // captured. Instrumentation attaches as listeners on the emitter so the
+        // provider-specific paths below stay pure; infer() is unaffected. A live
+        // inspector#token event is emitted per phase for the Inspector's streaming
+        // view (no subscriber ⇒ a cheap no-op).
+        var _aiEnvIsDev = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) );
+        if (_aiEnvIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now())) {
+            var _aiAls = (process.gina && process.gina._queryALS) ? process.gina._queryALS.getStore() : null;
+            var _aiLog = _aiAls ? _aiAls._devAiLog : null;
+            if (_aiLog) {
+                var _captureText = !!(process.gina && process.gina._inspectorAiCaptureText);
+                var _streamId    = 'ai-' + _startMs.toString(36) + '-' + (++_aiStreamSeq);
+                var _aiEntry = {
+                    type         : 'AI',
+                    id           : _streamId,
+                    provider     : conn.provider,
+                    model        : modelName,
+                    role         : null,
+                    promptTokens : null,
+                    outputTokens : null,
+                    chunks       : 0,
+                    durationMs   : 0,
+                    error        : null,
+                    origin       : (infos && infos.bundle) || ''
+                };
+                if (_captureText) {
+                    _aiEntry.prompt = messages;   // raw prompt — captured only when captureText is on
+                    _aiEntry.text   = '';
+                }
+                _aiEntry._startMs = _startMs;
+                _aiLog.push(_aiEntry);
+
+                // 'token' is the SSE/WS event NAME, never a payload key (a bare `token`
+                // key would be wholesale-redacted); phase/index/outputTokens/deltaText
+                // are redaction-safe.
+                var _aiToken = function(frame) {
+                    frame.t  = Date.now();
+                    frame.id = _streamId;
+                    process.emit('inspector#token', frame);
+                };
+
+                emitter.on('start', function(s) {
+                    _aiEntry.model = s.model;
+                    _aiEntry.role  = s.role;
+                    _aiToken({ phase: 'start', model: s.model, role: s.role });
+                });
+                emitter.on('delta', function(d) {
+                    _aiEntry.chunks += 1;
+                    if (typeof d.outputTokens === 'number') { _aiEntry.outputTokens = d.outputTokens; }
+                    if (_captureText && typeof _aiEntry.text === 'string') { _aiEntry.text += d.text; }
+                    var frame = { phase: 'delta', index: d.index, outputTokens: (typeof d.outputTokens === 'number' ? d.outputTokens : null) };
+                    if (_captureText) { frame.deltaText = d.text; }
+                    _aiToken(frame);
+                });
+                emitter.on('done', function(r) {
+                    _aiEntry.durationMs = r.latencyMs;
+                    _aiEntry.model      = r.model;
+                    if (r.usage) {
+                        _aiEntry.promptTokens = r.usage.inputTokens;
+                        _aiEntry.outputTokens = r.usage.outputTokens;
+                    }
+                    _aiToken({ phase: 'done', model: r.model, outputTokens: (r.usage ? r.usage.outputTokens : null), latencyMs: r.latencyMs });
+                });
+                // Internal 'error' listener — records the failure AND guarantees the
+                // emitter always has an 'error' handler while capturing, so a caller
+                // without its own 'error' listener cannot crash on an unhandled event.
+                emitter.on('error', function(err) {
+                    _aiEntry.error = (err && err.message) || String(err);
+                    _aiToken({ phase: 'error', message: _captureText ? ((err && err.message) || String(err)) : null });
+                });
+            }
+        }
 
         // Defer one tick so callers can attach .on('start'/'delta'/...) synchronously
         // after stream() returns, before any event fires (mirrors the Option-B timing).

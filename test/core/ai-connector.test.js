@@ -1112,3 +1112,124 @@ describe('10 - stream(): source structure', function() {
         assert.ok(/latencyMs\s*:\s*Date\.now\(\)\s*-\s*_startMs/.test(src));
     });
 });
+
+
+// ─── 11 — stream(): Inspector capture (#AISTREAM) ─────────────────────────────
+//
+// Drives the REAL stream() with the dev/instrumentation-window gate open and the
+// per-request _devAiLog buffer threaded through process.gina._queryALS, asserting
+// (a) a metadata entry lands in the buffer, (b) chunk text/prompt only when
+// captureText is on, (c) live inspector#token frames fire per phase, and (d) a
+// closed gate captures + emits NOTHING (the subtract-control).
+
+describe('11 - stream(): Inspector capture (#AISTREAM)', function() {
+
+    var AI = require(CONNECTOR_INDEX);
+    var { beforeEach, afterEach }   = require('node:test');
+    var { AsyncLocalStorage }       = require('async_hooks');
+
+    var savedGina, savedEnvDev, tokenFrames;
+    var onToken = function(f) { tokenFrames.push(f); };
+
+    beforeEach(function() {
+        savedGina   = process.gina;
+        savedEnvDev = process.env.NODE_ENV_IS_DEV;
+        tokenFrames = [];
+        process.gina = Object.assign({}, savedGina, {
+            _queryALS               : new AsyncLocalStorage(),
+            _inspectorWindowUntil   : 0,
+            _inspectorActive        : false,
+            _inspectorAiCaptureText : false
+        });
+        process.on('inspector#token', onToken);
+    });
+    afterEach(function() {
+        process.removeListener('inspector#token', onToken);
+        process.gina = savedGina;
+        process.env.NODE_ENV_IS_DEV = savedEnvDev;
+    });
+
+    // Opens the window gate, sets captureText, runs stream() inside the ALS store.
+    var runStream = function(conn, captureText, cb) {
+        process.gina._inspectorWindowUntil   = Date.now() + 60000;
+        process.gina._inspectorAiCaptureText = !!captureText;
+        var aiLog = [];
+        process.gina._queryALS.run({ _devQueryLog: [], _devAiLog: aiLog }, function() {
+            AI(conn, { bundle: 'demo' }).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err, r) {
+                cb(err, r, aiLog);
+            });
+        });
+    };
+
+    it('captures a metadata entry (no text) and emits inspector#token frames under an open window', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient(['He', 'llo'], { prompt_tokens: 3, completion_tokens: 2 }));
+        runStream(conn, false, function(err, r, aiLog) {
+            assert.equal(err, null);
+            assert.equal(aiLog.length, 1, 'one AI stream entry captured');
+            var e = aiLog[0];
+            assert.equal(e.type, 'AI');
+            assert.equal(e.provider, 'deepseek');
+            assert.equal(e.chunks, 2);
+            assert.equal(e.outputTokens, 2);
+            assert.equal(e.promptTokens, 3);
+            assert.equal(typeof e.durationMs, 'number');
+            assert.equal(e.origin, 'demo');
+            assert.ok(!('text' in e),   'no chunk text when captureText is off');
+            assert.ok(!('prompt' in e), 'no prompt when captureText is off');
+            assert.equal(typeof e.id, 'string');
+
+            var phases = tokenFrames.map(function(f) { return f.phase; });
+            assert.ok(phases.indexOf('start') >= 0, 'start frame emitted');
+            assert.equal(phases.filter(function(p) { return p === 'delta'; }).length, 2, 'one delta frame per chunk');
+            assert.ok(phases.indexOf('done') >= 0, 'done frame emitted');
+            tokenFrames.forEach(function(f) {
+                assert.equal(typeof f.id, 'string');
+                assert.equal(typeof f.t, 'number');
+                assert.equal(f.id, e.id, 'frames share the buffer entry id');
+            });
+            tokenFrames.filter(function(f) { return f.phase === 'delta'; }).forEach(function(f) {
+                assert.ok(!('deltaText' in f), 'no deltaText on the wire when captureText is off');
+            });
+            done();
+        });
+    });
+
+    it('includes chunk text + prompt only when captureText is on', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient(['Hel', 'lo'], { prompt_tokens: 3, completion_tokens: 2 }));
+        runStream(conn, true, function(err, r, aiLog) {
+            var e = aiLog[0];
+            assert.equal(e.text, 'Hello');
+            assert.deepEqual(e.prompt, [{ role: 'user', content: 'hi' }]);
+            assert.deepEqual(
+                tokenFrames.filter(function(f) { return f.phase === 'delta'; }).map(function(f) { return f.deltaText; }),
+                ['Hel', 'lo']);
+            done();
+        });
+    });
+
+    it('captures NOTHING and emits NO frames when the gate is closed [subtract-control]', function(_, done) {
+        process.env.NODE_ENV_IS_DEV          = 'false';
+        process.gina._inspectorWindowUntil   = 0;
+        process.gina._inspectorActive        = false;
+        var aiLog = [];
+        var conn = makeStreamConn('openai', openaiStreamClient(['x'], null));
+        process.gina._queryALS.run({ _devQueryLog: [], _devAiLog: aiLog }, function() {
+            AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function() {
+                assert.equal(aiLog.length, 0, 'closed gate captures nothing');
+                assert.equal(tokenFrames.length, 0, 'closed gate emits no inspector#token frames');
+                done();
+            });
+        });
+    });
+
+    it('records the failure on the entry (and an error frame) when the stream errors', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient([], null, new Error('boom_stream')));
+        runStream(conn, false, function(err, r, aiLog) {
+            assert.ok(err instanceof Error);
+            assert.equal(aiLog.length, 1);
+            assert.ok(/boom_stream/.test(aiLog[0].error));
+            assert.equal(tokenFrames.filter(function(f) { return f.phase === 'error'; }).length, 1);
+            done();
+        });
+    });
+});

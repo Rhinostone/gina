@@ -1314,6 +1314,27 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._inspectorWindowUntil       = 0;
                                 }
 
+                                // #AISTREAM — capture the AI token-stream chunk-text
+                                // opt-in from settings.json `inspector.ai.captureText`
+                                // (default false). Metadata is always captured under the
+                                // dev/window gate; the raw prompt + token text rides the
+                                // wire only when this is true (the authenticated channel +
+                                // the dev/window gate are the protection — redaction cannot
+                                // cover free text). Stored on process.gina so the AI
+                                // connector reads the same slot. Fail-closed.
+                                try {
+                                    var _aiInspSettings = (typeof gna.getConfig === 'function') ? gna.getConfig('settings') : null;
+                                    var _aiInspConf     = (_aiInspSettings && _aiInspSettings.inspector && _aiInspSettings.inspector.ai && typeof _aiInspSettings.inspector.ai === 'object')
+                                        ? _aiInspSettings.inspector.ai
+                                        : {};
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorAiCaptureText = (_aiInspConf.captureText === true);
+                                } catch (aiInspErr) {
+                                    console.warn('[inspector-ai] init skipped: ' + (aiInspErr.message || aiInspErr));
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorAiCaptureText = false;
+                                }
+
                                 // #INS8 — dev-only auto-start of the standalone Inspector
                                 // bundle (inspector@gina). Best-effort + fail-closed.
                                 // Gated on:

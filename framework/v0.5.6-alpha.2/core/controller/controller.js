@@ -293,9 +293,16 @@ function SuperController(options) {
             if (!req._devQueryLog) {
                 req._devQueryLog = [];
             }
+            // #AISTREAM — sibling per-request buffer for AI token-stream inspection,
+            // threaded through the SAME _queryALS store for concurrency-correct
+            // attribution (the AI connector's stream() reaches it via getStore()).
+            if (!req._devAiLog) {
+                req._devAiLog = [];
+            }
             local._queryLog = req._devQueryLog;
+            local._aiLog    = req._devAiLog;
             if (process.gina._queryALS) {
-                process.gina._queryALS.enterWith({ _devQueryLog: req._devQueryLog });
+                process.gina._queryALS.enterWith({ _devQueryLog: req._devQueryLog, _devAiLog: req._devAiLog });
             }
             // #FI — propagate request timeline into local for render access
             if (req._devTimeline) {

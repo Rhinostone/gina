@@ -181,6 +181,17 @@
       "key": "",
       "defaultWindowSeconds": 300,
       "maxWindowSeconds": 3600
+    },
+    // #AISTREAM — AI token-stream inspection. The AI connector's stream() surfaces
+    // per-token metadata (model, role, chunk index, running token + latency
+    // counters) to the Inspector under the dev / instrumentation-window gate. The
+    // raw prompt + chunk TEXT is the sensitive part and is OFF the wire by default —
+    // the authenticated /_gina/agent channel + the dev/window gate are the
+    // protection (the key-name redactor cannot cover free text). Set captureText
+    // true to include the chunk text (and prompt) in the live stream frames +
+    // snapshot; leave it false in any shared / production-adjacent deployment.
+    "ai": {
+      "captureText": false
     }
   },
   // #HDR1 — X-Content-Type-Options: nosniff response header applied by
