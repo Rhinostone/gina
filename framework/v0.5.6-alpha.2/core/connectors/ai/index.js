@@ -7,6 +7,8 @@
  */
 'use strict';
 
+var EventEmitter = require('events').EventEmitter;
+
 /**
  * AI connector wrapper.
  *
@@ -32,6 +34,11 @@
  *     if (err) return self.throwError(500, err.message);
  *     self.renderJSON({ reply: result.content });
  * });
+ *
+ * // streaming (token-by-token) — see stream() below
+ * ai.stream(messages)
+ *     .on('delta', function(d) { process.stdout.write(d.text); })
+ *     .onComplete(function(err, result) { });
  * ```
  *
  * Response shape (normalised across all providers):
@@ -51,7 +58,7 @@
  * @constructor
  * @param {object} conn  - Internal connection object from AIConnector.onReady
  * @param {object} infos - { model, bundle, database, scope } from the framework loader
- * @returns {object}     - { client, provider, model, infer }
+ * @returns {object}     - { client, provider, model, infer, stream }
  */
 function AI(conn, infos) {
 
@@ -171,12 +178,269 @@ function AI(conn, infos) {
         return _promise;
     };
 
+    /**
+     * Streaming variant of infer().
+     *
+     * Returns a fresh EventEmitter surfacing the provider's token stream as
+     * ordered events, leaving the buffered infer() untouched. A new emitter is
+     * created per call (no shared-emitter listener accumulation).
+     *
+     * Events (in order):
+     *   - `start` `{ model, role }` — once, when the first chunk arrives.
+     *   - `delta` `{ index, text, outputTokens }` — once per token chunk. `index`
+     *     is a framework-maintained 0-based counter (neither SDK numbers deltas).
+     *     `outputTokens` is the running output-token total where the provider
+     *     exposes it (Anthropic: cumulative on message_delta; OpenAI: null until
+     *     the final usage chunk), else null/0.
+     *   - `done` `{ content, model, usage:{inputTokens,outputTokens}, raw,
+     *     latencyMs[, finishReason] }` — the assembled result (the same normalised
+     *     shape infer() returns, plus framework-measured `latencyMs`). `raw` is the
+     *     provider's final message for Anthropic, null for OpenAI-compatible
+     *     streams (which expose no single final response object).
+     *   - `error` `(err)` — emitted only when an `error` listener is attached, so a
+     *     caller using only `.onComplete(cb)` cannot crash the process on an
+     *     unhandled `error` event; the error still reaches `.onComplete(cb)`.
+     *
+     * Also exposes `.onComplete(cb)` (`cb(err)` | `cb(null, doneResult)`) mirroring
+     * infer(), for callers that only want the assembled result.
+     *
+     * Token-counter honesty: neither SDK provides a per-delta output-token count.
+     * Anthropic emits a cumulative running total on `message_delta`; OpenAI-compatible
+     * providers emit a single end-of-stream usage chunk only when
+     * `stream_options.include_usage` is honored (some providers omit it, so usage may
+     * stay null). `latencyMs` is framework-measured at both branches.
+     *
+     * @param   {Array<object>} messages          - OpenAI-format [{ role, content }] array.
+     * @param   {object}        [options]
+     * @param   {string}        [options.model]       - Override the connector default model.
+     * @param   {number}        [options.maxTokens=1024]
+     * @param   {number}        [options.temperature]
+     * @param   {string}        [options.system]      - System prompt (alternative to a system message).
+     * @returns {EventEmitter}  emitter emitting start/delta/done/error, with an .onComplete(cb) shim.
+     *
+     * @example
+     * // token-by-token
+     * getModel('claude').stream([{ role: 'user', content: 'Tell me a joke.' }])
+     *     .on('start', function(s) { })              // { model, role }
+     *     .on('delta', function(d) { process.stdout.write(d.text); })
+     *     .on('done',  function(r) { })              // { content, model, usage, latencyMs }
+     *     .on('error', function(e) { });
+     *
+     * @example
+     * // assembled result only (mirrors infer())
+     * getModel('claude').stream(messages).onComplete(function(err, result) {
+     *     if (err) return self.throwError(500, err.message);
+     *     self.renderJSON({ reply: result.content });
+     * });
+     */
+    var stream = function(messages, options) {
+        options = options || {};
+        var emitter = new EventEmitter();
+
+        var modelName   = options.model || conn.modelName || '';
+        var maxTokens   = options.maxTokens || 1024;
+        var temperature = (options.temperature !== undefined) ? options.temperature : undefined;
+
+        // Terminal-result shim — mirrors infer()'s .onComplete(cb).
+        var _resolve, _reject, _internalData, _settled = false;
+        var _done = new Promise(function(resolve, reject) {
+            _resolve = resolve;
+            _reject  = reject;
+        });
+        // Absorb the internal rejection so a caller observing failures only via
+        // .on('error') does not also trip an unhandledRejection.
+        _done.catch(function() {});
+
+        emitter.onComplete = function(cb) {
+            _done.then(
+                function()    { cb(null, _internalData); },
+                function(err) { cb(err); }
+            );
+            return emitter;
+        };
+
+        var _settleDone = function(result) {
+            if (_settled) return;
+            _settled = true;
+            _internalData = result;
+            emitter.emit('done', result);
+            _resolve(result);
+        };
+        // 'error' is emitted only when a listener is attached, so a caller using
+        // .onComplete() (and no 'error' listener) cannot crash the process on an
+        // unhandled 'error' event; the rejection still reaches .onComplete(cb).
+        var _settleError = function(err) {
+            if (_settled) return;
+            _settled = true;
+            if (emitter.listenerCount('error') > 0) { emitter.emit('error', err); }
+            _reject(err);
+        };
+
+        if (!modelName) {
+            process.nextTick(function() {
+                _settleError(new Error(
+                    '[AI] No model specified. '
+                    + 'Set "model" in connectors.json or pass { model: "..." } as the second argument.'
+                ));
+            });
+            return emitter;
+        }
+
+        var _startMs = Date.now();
+        var _index   = 0;
+        var _started = false;
+        var emitStart = function(model, role) {
+            if (_started) return;
+            _started = true;
+            emitter.emit('start', { model: model, role: role });
+        };
+
+        // Defer one tick so callers can attach .on('start'/'delta'/...) synchronously
+        // after stream() returns, before any event fires (mirrors the Option-B timing).
+        if (conn.type === 'anthropic') {
+            process.nextTick(function() {
+                try {
+                    // System prompt is a top-level parameter, not a message role.
+                    var systemMsg = options.system || null;
+                    var filteredMessages = messages.filter(function(m) {
+                        if (m.role === 'system') {
+                            if (!systemMsg) systemMsg = m.content;
+                            return false;
+                        }
+                        return true;
+                    });
+
+                    var params = {
+                        model      : modelName,
+                        max_tokens : maxTokens,
+                        messages   : filteredMessages
+                    };
+                    if (systemMsg)                 params.system      = systemMsg;
+                    if (temperature !== undefined) params.temperature = temperature;
+
+                    var _model = modelName, _role = 'assistant',
+                        _outputTokens = 0, _inputTokens = null, _text = '';
+
+                    // The Anthropic MessageStream is itself an EventEmitter.
+                    var sdkStream = conn.client.messages.stream(params);
+
+                    // Raw SSE events carry model/role (message_start) and the
+                    // CUMULATIVE running output-token total (message_delta.usage).
+                    sdkStream.on('streamEvent', function(event) {
+                        if (!event) return;
+                        if (event.type === 'message_start' && event.message) {
+                            _model = event.message.model || _model;
+                            _role  = event.message.role  || _role;
+                            if (event.message.usage
+                                && typeof event.message.usage.input_tokens === 'number') {
+                                _inputTokens = event.message.usage.input_tokens;
+                            }
+                            emitStart(_model, _role);
+                        } else if (event.type === 'message_delta' && event.usage
+                                && typeof event.usage.output_tokens === 'number') {
+                            _outputTokens = event.usage.output_tokens;
+                        }
+                    });
+
+                    // Incremental text chunks.
+                    sdkStream.on('text', function(delta) {
+                        emitStart(_model, _role);
+                        _text += delta;
+                        emitter.emit('delta', { index: _index++, text: delta, outputTokens: _outputTokens });
+                    });
+
+                    sdkStream.on('error', _settleError);
+
+                    sdkStream.finalMessage().then(function(message) {
+                        emitStart(_model, _role);
+                        _settleDone({
+                            content   : (message && message.content && message.content[0] && message.content[0].text) || _text,
+                            model     : (message && message.model) || _model,
+                            usage     : {
+                                inputTokens  : (message && message.usage && message.usage.input_tokens  != null) ? message.usage.input_tokens  : _inputTokens,
+                                outputTokens : (message && message.usage && message.usage.output_tokens != null) ? message.usage.output_tokens : _outputTokens
+                            },
+                            raw       : message || null,
+                            latencyMs : Date.now() - _startMs
+                        });
+                    }, _settleError);
+                } catch (err) {
+                    _settleError(err);
+                }
+            });
+
+        } else {
+            // OpenAI-compatible streaming (chat.completions with stream: true).
+            process.nextTick(function() {
+                (async function() {
+                    try {
+                        var msgs = messages.slice();
+                        if (options.system) {
+                            msgs = [{ role: 'system', content: options.system }].concat(msgs);
+                        }
+
+                        var params = {
+                            model          : modelName,
+                            messages       : msgs,
+                            max_tokens     : maxTokens,
+                            stream         : true,
+                            // Ask for a final usage chunk; honored by most OpenAI-compatible
+                            // providers (some — e.g. Ollama — may omit it, so usage stays null).
+                            stream_options : { include_usage: true }
+                        };
+                        if (temperature !== undefined) params.temperature = temperature;
+
+                        var _model = modelName, _role = 'assistant',
+                            _outputTokens = null, _inputTokens = null, _text = '', _finishReason = null;
+
+                        var sdkStream = await conn.client.chat.completions.create(params);
+
+                        for await (var chunk of sdkStream) {
+                            if (!chunk) continue;
+                            if (chunk.model) { _model = chunk.model; }
+                            var choice = chunk.choices && chunk.choices[0];
+                            if (choice && choice.delta) {
+                                if (choice.delta.role) { _role = choice.delta.role; }
+                                emitStart(_model, _role);
+                                if (typeof choice.delta.content === 'string' && choice.delta.content.length > 0) {
+                                    _text += choice.delta.content;
+                                    emitter.emit('delta', { index: _index++, text: choice.delta.content, outputTokens: _outputTokens });
+                                }
+                                if (choice.finish_reason) { _finishReason = choice.finish_reason; }
+                            }
+                            // Final usage chunk (empty choices) when include_usage is honored.
+                            if (chunk.usage) {
+                                if (typeof chunk.usage.prompt_tokens     === 'number') { _inputTokens  = chunk.usage.prompt_tokens; }
+                                if (typeof chunk.usage.completion_tokens === 'number') { _outputTokens = chunk.usage.completion_tokens; }
+                            }
+                        }
+
+                        emitStart(_model, _role); // ensure 'start' fired even for an empty stream
+                        _settleDone({
+                            content      : _text,
+                            model        : _model,
+                            usage        : { inputTokens: _inputTokens, outputTokens: _outputTokens },
+                            finishReason : _finishReason,
+                            raw          : null,
+                            latencyMs    : Date.now() - _startMs
+                        });
+                    } catch (err) {
+                        _settleError(err);
+                    }
+                })();
+            });
+        }
+
+        return emitter;
+    };
+
     // ── Public interface ──────────────────────────────────────────────────────
     return {
         client   : conn.client,    // raw SDK instance for advanced use
         provider : conn.provider,  // e.g. 'anthropic', 'deepseek', 'ollama'
         model    : conn.modelName, // default model from connectors.json
-        infer    : infer
+        infer    : infer,
+        stream   : stream          // streaming variant of infer() (EventEmitter: start/delta/done/error)
     };
 }
 

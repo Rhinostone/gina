@@ -821,3 +821,294 @@ describe('07 - AI() constructor: exported interface', function() {
     });
 
 });
+
+
+// ─── Streaming mock helpers (shared by §08–§10) ──────────────────────────────
+//
+// These drive the REAL exported stream() (suites 08/09), not a replica — so the
+// behavioral coverage tracks the shipped code (no inert-API trap).
+
+var EventEmitter = require('events').EventEmitter;
+
+var makeStreamConn = function(type, mockClient) {
+    return {
+        client    : mockClient,
+        provider  : type === 'anthropic' ? 'anthropic' : 'deepseek',
+        type      : type,
+        modelName : type === 'anthropic' ? 'claude-opus-4-6' : 'deepseek-chat'
+    };
+};
+
+// Anthropic MessageStream mock: an EventEmitter with .finalMessage(). On
+// finalMessage() it emits message_start -> (text + cumulative message_delta)* ->
+// resolve(finalMsg); or emits 'error' + rejects when errToEmit is set. Events are
+// scheduled on setImmediate so the real stream() has attached its listeners first.
+var anthropicStreamClient = function(deltas, finalMsg, errToEmit) {
+    return {
+        messages: {
+            stream: function(/* params */) {
+                var em = new EventEmitter();
+                em.finalMessage = function() {
+                    return new Promise(function(resolve, reject) {
+                        setImmediate(function() {
+                            if (errToEmit) { em.emit('error', errToEmit); reject(errToEmit); return; }
+                            em.emit('streamEvent', {
+                                type    : 'message_start',
+                                message : { model: finalMsg.model, role: 'assistant', usage: { input_tokens: finalMsg.usage.input_tokens } }
+                            });
+                            var cum = 0;
+                            deltas.forEach(function(d) {
+                                em.emit('text', d);
+                                cum += 1;
+                                em.emit('streamEvent', { type: 'message_delta', usage: { output_tokens: cum } });
+                            });
+                            em.emit('streamEvent', { type: 'message_delta', usage: { output_tokens: finalMsg.usage.output_tokens } });
+                            resolve(finalMsg);
+                        });
+                    });
+                };
+                return em;
+            }
+        }
+    };
+};
+
+// OpenAI-compatible streaming mock: chat.completions.create() resolves to an
+// async-iterable yielding role/content chunks then (optionally) a final usage
+// chunk (empty choices); create() rejects when rejectErr is set.
+var openaiStreamClient = function(deltas, usage, rejectErr) {
+    return {
+        chat: { completions: { create: function(/* params */) {
+            if (rejectErr) { return Promise.reject(rejectErr); }
+            return Promise.resolve({
+                [Symbol.asyncIterator]: function() {
+                    var i = 0, usageSent = false;
+                    return { next: function() {
+                        if (i < deltas.length) {
+                            var content = deltas[i];
+                            var chunk = {
+                                model   : 'deepseek-chat',
+                                choices : [{
+                                    delta         : (i === 0 ? { role: 'assistant', content: content } : { content: content }),
+                                    finish_reason : (i === deltas.length - 1 ? 'stop' : null)
+                                }]
+                            };
+                            i++;
+                            return Promise.resolve({ value: chunk, done: false });
+                        }
+                        if (usage && !usageSent) {
+                            usageSent = true;
+                            return Promise.resolve({ value: { model: 'deepseek-chat', choices: [], usage: usage }, done: false });
+                        }
+                        return Promise.resolve({ value: undefined, done: true });
+                    } };
+                }
+            });
+        } } }
+    };
+};
+
+
+// ─── 08 — stream() — Anthropic provider (real export, mock SDK stream) ────────
+
+describe('08 - stream() — Anthropic provider', function() {
+
+    var AI = require(CONNECTOR_INDEX);
+
+    it('emits start -> ordered deltas -> done with assembled content, usage, latencyMs', function(_, done) {
+        var conn = makeStreamConn('anthropic',
+            anthropicStreamClient(['Hello', ', ', 'world'],
+                { content: [{ text: 'Hello, world' }], model: 'claude-opus-4-6', usage: { input_tokens: 7, output_tokens: 6 } }));
+        var order = [], started = null, deltas = [];
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('start', function(s) { started = s; order.push('start'); })
+            .on('delta', function(d) { deltas.push(d); order.push('delta'); })
+            .on('done',  function(r) {
+                order.push('done');
+                assert.equal(order[0], 'start', 'start fires first');
+                assert.equal(order[order.length - 1], 'done', 'done fires last');
+                assert.equal(order.filter(function(e) { return e === 'delta'; }).length, 3, 'one delta per chunk');
+                assert.equal(started.model, 'claude-opus-4-6');
+                assert.equal(started.role, 'assistant');
+                assert.deepEqual(deltas.map(function(d) { return d.index; }), [0, 1, 2], '0-based delta index');
+                assert.deepEqual(deltas.map(function(d) { return d.text; }), ['Hello', ', ', 'world']);
+                deltas.forEach(function(d) { assert.equal(typeof d.outputTokens, 'number'); });
+                assert.equal(r.content, 'Hello, world');
+                assert.equal(r.model, 'claude-opus-4-6');
+                assert.equal(r.usage.inputTokens, 7);
+                assert.equal(r.usage.outputTokens, 6);
+                assert.equal(typeof r.latencyMs, 'number');
+                assert.ok(r.latencyMs >= 0);
+                assert.ok(r.raw, 'raw carries the provider final message for Anthropic');
+                done();
+            })
+            .on('error', done);
+    });
+
+    it('.onComplete(cb) receives (null, doneResult) on success', function(_, done) {
+        var conn = makeStreamConn('anthropic',
+            anthropicStreamClient(['Hi'], { content: [{ text: 'Hi' }], model: 'claude-opus-4-6', usage: { input_tokens: 2, output_tokens: 1 } }));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err, r) {
+            assert.equal(err, null);
+            assert.equal(r.content, 'Hi');
+            done();
+        });
+    });
+
+    it('emits error (and onComplete(err)) when the SDK stream errors', function(_, done) {
+        var conn = makeStreamConn('anthropic', anthropicStreamClient([], null, new Error('overloaded_error')));
+        var sawErrorEvent = false;
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('error', function(e) { sawErrorEvent = true; assert.ok(/overloaded_error/.test(e.message)); })
+            .onComplete(function(err) {
+                assert.ok(err instanceof Error);
+                assert.ok(sawErrorEvent, 'error event fired before onComplete');
+                done();
+            });
+    });
+
+    it('does NOT crash on error when only .onComplete() is attached (no error listener)', function(_, done) {
+        // No .on('error') — the listenerCount guard must prevent an unhandled
+        // 'error' event from throwing; the error still reaches onComplete.
+        var conn = makeStreamConn('anthropic', anthropicStreamClient([], null, new Error('boom')));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err) {
+            assert.ok(err instanceof Error);
+            assert.ok(/boom/.test(err.message));
+            done();
+        });
+    });
+
+    it('rejects via onComplete when no model is configured', function(_, done) {
+        var conn = {
+            client    : anthropicStreamClient(['x'], { content: [{ text: 'x' }], model: 'm', usage: { input_tokens: 1, output_tokens: 1 } }),
+            provider  : 'anthropic', type: 'anthropic', modelName: null
+        };
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err) {
+            assert.ok(err instanceof Error);
+            assert.ok(/No model/.test(err.message));
+            done();
+        });
+    });
+});
+
+
+// ─── 09 — stream() — OpenAI-compatible providers (real export, mock SDK stream)
+
+describe('09 - stream() — OpenAI-compatible providers', function() {
+
+    var AI = require(CONNECTOR_INDEX);
+
+    it('emits start -> ordered deltas -> done with content, usage (final chunk), finishReason, latencyMs', function(_, done) {
+        var conn = makeStreamConn('openai',
+            openaiStreamClient(['Hel', 'lo', '!'], { prompt_tokens: 4, completion_tokens: 3 }));
+        var order = [], started = null, deltas = [];
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('start', function(s) { started = s; order.push('start'); })
+            .on('delta', function(d) { deltas.push(d); order.push('delta'); })
+            .on('done',  function(r) {
+                order.push('done');
+                assert.equal(order[0], 'start');
+                assert.equal(order[order.length - 1], 'done');
+                assert.equal(started.role, 'assistant');
+                assert.equal(started.model, 'deepseek-chat');
+                assert.deepEqual(deltas.map(function(d) { return d.index; }), [0, 1, 2]);
+                assert.equal(r.content, 'Hello!');
+                assert.equal(r.model, 'deepseek-chat');
+                assert.equal(r.usage.inputTokens, 4);
+                assert.equal(r.usage.outputTokens, 3);
+                assert.equal(r.finishReason, 'stop');
+                assert.equal(r.raw, null, 'no single final response object for OpenAI streams');
+                assert.equal(typeof r.latencyMs, 'number');
+                done();
+            })
+            .on('error', done);
+    });
+
+    it('usage stays null when the provider omits the final usage chunk (e.g. Ollama)', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient(['ok'], null));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err, r) {
+            assert.equal(err, null);
+            assert.equal(r.content, 'ok');
+            assert.equal(r.usage.inputTokens, null);
+            assert.equal(r.usage.outputTokens, null);
+            done();
+        });
+    });
+
+    it('emits error (and onComplete(err)) when create() rejects', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient([], null, new Error('rate_limit_exceeded')));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('error', function(e) { assert.ok(/rate_limit/.test(e.message)); })
+            .onComplete(function(err) { assert.ok(err instanceof Error); done(); });
+    });
+
+    it('passes stream:true and stream_options.include_usage to the SDK', function(_, done) {
+        var capturedParams = null;
+        var conn = makeStreamConn('openai', {
+            chat: { completions: { create: function(params) {
+                capturedParams = params;
+                return Promise.resolve({
+                    [Symbol.asyncIterator]: function() {
+                        var sent = false;
+                        return { next: function() {
+                            if (sent) { return Promise.resolve({ value: undefined, done: true }); }
+                            sent = true;
+                            return Promise.resolve({ value: { model: 'm', choices: [{ delta: { role: 'assistant', content: 'x' }, finish_reason: 'stop' }] }, done: false });
+                        } };
+                    }
+                });
+            } } }
+        });
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function() {
+            assert.equal(capturedParams.stream, true);
+            assert.ok(capturedParams.stream_options && capturedParams.stream_options.include_usage === true);
+            done();
+        });
+    });
+});
+
+
+// ─── 10 — stream() — source pins on the real export ──────────────────────────
+
+describe('10 - stream(): source structure', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR_INDEX, 'utf8'); });
+
+    it('exposes stream on the public interface alongside infer', function() {
+        assert.ok(/stream\s*:\s*stream/.test(src), 'stream is returned from AI()');
+        assert.ok(/var stream = function\(messages, options\)/.test(src), 'stream() is defined');
+    });
+
+    it('infer() remains the buffered single-result method (untouched)', function() {
+        assert.ok(/var infer = function\(messages, options\)/.test(src));
+        assert.ok(/infer\s*:\s*infer/.test(src));
+    });
+
+    it('returns a fresh EventEmitter per call with an .onComplete shim', function() {
+        assert.ok(/new EventEmitter\(\)/.test(src));
+        assert.ok(/emitter\.onComplete\s*=\s*function/.test(src));
+    });
+
+    it('emits start / delta / done events', function() {
+        assert.ok(/emitter\.emit\('start'/.test(src));
+        assert.ok(/emitter\.emit\('delta'/.test(src));
+        assert.ok(/emitter\.emit\('done'/.test(src));
+    });
+
+    it('guards the error emit on a listener (no crash without an error listener)', function() {
+        assert.ok(/listenerCount\('error'\)\s*>\s*0/.test(src));
+    });
+
+    it('branches per provider: Anthropic messages.stream(), OpenAI chat.completions stream:true', function() {
+        assert.ok(/conn\.type === 'anthropic'/.test(src));
+        assert.ok(/messages\.stream\(/.test(src));
+        assert.ok(/chat\.completions\.create/.test(src));
+        assert.ok(/stream\s*:\s*true/.test(src));
+        assert.ok(/include_usage:\s*true/.test(src));
+    });
+
+    it('measures latencyMs framework-side (no SDK-provided latency)', function() {
+        assert.ok(/latencyMs\s*:\s*Date\.now\(\)\s*-\s*_startMs/.test(src));
+    });
+});
