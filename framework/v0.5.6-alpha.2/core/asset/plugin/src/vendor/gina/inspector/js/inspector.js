@@ -106,17 +106,17 @@
     /**
      * Tab order definitions for each layout preset.
      *
-     * - **balanced** (default) — Data, View, Logs, Forms, Query, Flow
-     * - **backend** — Data, Query, Flow, Logs, View, Forms
-     * - **frontend** — View, Data, Forms, Logs, Query, Flow
+     * - **balanced** (default) — Data, View, Logs, Forms, Query, Flow, Stream
+     * - **backend** — Data, Query, Flow, Logs, View, Forms, Stream
+     * - **frontend** — View, Data, Forms, Logs, Query, Flow, Stream
      *
      * Each array contains `data-tab` attribute values in display order.
      * @constant {Object.<string, string[]>}
      */
     var TAB_LAYOUTS = {
-        balanced: ['data', 'view', 'logs', 'forms', 'query', 'flow'],
-        backend:  ['data', 'query', 'flow', 'logs', 'view', 'forms'],
-        frontend: ['view', 'data', 'forms', 'logs', 'query', 'flow']
+        balanced: ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream'],
+        backend:  ['data', 'query', 'flow', 'logs', 'view', 'forms', 'stream'],
+        frontend: ['view', 'data', 'forms', 'logs', 'query', 'flow', 'stream']
     };
 
     /**
@@ -164,6 +164,13 @@
     var _bcLatest = null;
     /** @type {?Object} Latest parsed `__ginaData` payload */
     var ginaData = null;
+    /**
+     * Live AI token-stream buffer (#AISTREAM). Single-slot: it resets whenever a
+     * new stream id arrives, so the Stream tab tails the CURRENT stream. The
+     * end-of-request snapshot (user.aiStream) carries every stream of the request.
+     * @type {{id: ?string, frames: Object[]}}
+     */
+    var _aiStreamBuf = { id: null, frames: [] };
     /** @type {LogEntry[]} In-memory log buffer (capped at {@link MAX_LOG_ENTRIES}) */
     var logs    = [];
     /** @type {number} Read offset into `source.__ginaLogs` for client-side polling */
@@ -1774,6 +1781,9 @@
         }
 
         if (!ginaData) {
+            // #AISTREAM \u2014 the Stream tab renders its live token buffer even before
+            // a snapshot exists, so don't blank it with the "Waiting\u2026" hint.
+            if (name === 'stream') { renderAiStream(treeEl, null); return; }
             treeEl.innerHTML = '<span class="bm-hint">Waiting for source data\u2026</span>';
             return;
         }
@@ -1836,10 +1846,121 @@
                     ? u['data-xhr'].flow : u.flow;
                 content = renderFlowContent(flowData);
                 break;
+            case 'stream':
+                // #AISTREAM — render the snapshot (or live buffer) via textContent
+                // and return before the innerHTML/fold path; token text is untrusted.
+                renderAiStream(treeEl, u.aiStream);
+                return;
         }
 
         treeEl.innerHTML = content || '<span class="bm-empty">No data</span>';
         restoreFoldState(name);
+    }
+
+    // ── AI token-stream tab (#AISTREAM) ──────────────────────────────────────
+
+    /**
+     * Append one live AI token-stream frame to the single-slot buffer and, when
+     * the Stream tab is active, re-render it. The buffer resets whenever a new
+     * stream id arrives, so the pane tails the current stream; the end-of-request
+     * snapshot (`user.aiStream`) carries every stream of the request. Frame shape:
+     * `{ phase:'start'|'delta'|'done'|'error', id, t, ... }`.
+     * @inner
+     * @param {Object} frame - The `inspector#token` frame, already transport-unwrapped.
+     */
+    function appendTokenDelta(frame) {
+        if (!frame || typeof frame !== 'object' || !frame.phase) return;
+        if (frame.id !== _aiStreamBuf.id) {
+            _aiStreamBuf = { id: frame.id || null, frames: [] };   // reset on a new stream id
+        }
+        _aiStreamBuf.frames.push(frame);
+        // Live-tail the buffer directly when the tab is open — NOT via renderTab,
+        // which prioritises the end-of-request snapshot (stale while a NEW stream is
+        // mid-flight, before its inspector#data snapshot has arrived).
+        if (activeTab() === 'stream') {
+            var el = qs('#tree-stream');
+            if (el) el.textContent = formatAiLiveBuffer(_aiStreamBuf);
+        }
+    }
+
+    /**
+     * Format the live token buffer as a plain-text transcript (header + meta line
+     * + accumulated text). Token text is rendered into the pane via textContent by
+     * the caller — never innerHTML — since it is untrusted model output.
+     * @inner
+     * @param {{id: ?string, frames: Object[]}} buf
+     * @returns {string}
+     */
+    function formatAiLiveBuffer(buf) {
+        if (!buf || !buf.id) return '';
+        var model = '', role = '', text = '', chunks = 0, tokens = null, status = 'streaming…';
+        buf.frames.forEach(function (f) {
+            if (f.phase === 'start') { model = f.model || ''; role = f.role || ''; }
+            else if (f.phase === 'delta') {
+                chunks++;
+                if (typeof f.outputTokens === 'number') tokens = f.outputTokens;
+                if (typeof f.deltaText === 'string') text += f.deltaText;
+            } else if (f.phase === 'done') {
+                if (typeof f.outputTokens === 'number') tokens = f.outputTokens;
+                if (f.model) model = f.model;
+                status = 'done' + (typeof f.latencyMs === 'number' ? ' · ' + f.latencyMs + 'ms' : '');
+            } else if (f.phase === 'error') {
+                status = 'error' + (f.message ? ' · ' + f.message : '');
+            }
+        });
+        var head = 'stream ' + buf.id + (model ? '  ' + model : '') + (role ? '  [' + role + ']' : '');
+        var meta = 'chunks=' + chunks + (tokens !== null ? '  tokens=' + tokens : '') + '  ' + status;
+        return head + '\n' + meta + (text ? '\n\n' + text : '');
+    }
+
+    /**
+     * Format the end-of-request AI-stream snapshot (`user.aiStream`) as plain text,
+     * one block per completed stream. `prompt`/`text` appear only when
+     * `inspector.ai.captureText` is enabled server-side.
+     * @inner
+     * @param {Object[]} arr
+     * @returns {string}
+     */
+    function formatAiStreamSnapshot(arr) {
+        if (!arr || !arr.length) return '';
+        return arr.map(function (e) {
+            var head = '● ' + (e.model || '?')
+                + (e.role ? '  [' + e.role + ']' : '')
+                + (e.provider ? '  ' + e.provider : '')
+                + (e.origin ? '  @' + e.origin : '');
+            var bits = [];
+            if (typeof e.chunks === 'number') bits.push('chunks ' + e.chunks);
+            if (e.promptTokens !== null && typeof e.promptTokens !== 'undefined') bits.push('in ' + e.promptTokens);
+            if (e.outputTokens !== null && typeof e.outputTokens !== 'undefined') bits.push('out ' + e.outputTokens);
+            if (typeof e.durationMs === 'number') bits.push(e.durationMs + 'ms');
+            var lines = [head];
+            if (bits.length) lines.push('  ' + bits.join(' · '));
+            if (e.error) lines.push('  error: ' + e.error);
+            if (typeof e.prompt !== 'undefined') {
+                lines.push('  prompt: ' + (typeof e.prompt === 'string' ? e.prompt : JSON.stringify(e.prompt)));
+            }
+            if (typeof e.text === 'string' && e.text) lines.push('  text: ' + e.text);
+            return lines.join('\n');
+        }).join('\n\n');
+    }
+
+    /**
+     * Render the Stream tab pane: the end-of-request snapshot when present, else
+     * the live token buffer. Always writes textContent — token text is untrusted
+     * model output and is never interpolated as HTML.
+     * @inner
+     * @param {Element} el - The `#tree-stream` pane.
+     * @param {?Object[]} snapshot - `user.aiStream`, or null when no snapshot yet.
+     */
+    function renderAiStream(el, snapshot) {
+        if (!el) return;
+        if (snapshot && snapshot.length) {
+            el.textContent = formatAiStreamSnapshot(snapshot);
+        } else if (_aiStreamBuf && _aiStreamBuf.id) {
+            el.textContent = formatAiLiveBuffer(_aiStreamBuf);
+        } else {
+            el.textContent = 'No AI streams captured this request.';
+        }
     }
 
     /**
@@ -3979,6 +4100,11 @@
                 } catch (e) {}
             });
 
+            es.addEventListener('token', function (ev) {
+                // #AISTREAM — live AI token-stream frame (textContent-rendered).
+                try { appendTokenDelta(JSON.parse(ev.data)); } catch (e) {}
+            });
+
             es.addEventListener('open', function () {
                 qs('#bm-dot').className = 'bm-dot ok';
                 // Label stays as "Connecting…" until the first data event updates it
@@ -4092,6 +4218,9 @@
                         if (logs.length > MAX_LOG_ENTRIES) logs.shift();
                         updateLogDot([entry]);
                         scheduleRender();
+                    } else if (frame.event === 'token') {
+                        // #AISTREAM — live AI token-stream frame (textContent-rendered).
+                        appendTokenDelta(frame.data);
                     }
                 } catch (e) {}
             };
@@ -4215,6 +4344,11 @@
                     updateLogDot([entry]);
                     scheduleRender();
                 } catch (e) {}
+            });
+
+            es.addEventListener('token', function (ev) {
+                // #AISTREAM — live AI token-stream frame (textContent-rendered).
+                try { appendTokenDelta(JSON.parse(ev.data)); } catch (e) {}
             });
 
             es.onerror = function () {

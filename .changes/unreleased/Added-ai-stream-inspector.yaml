@@ -1,0 +1,3 @@
+kind: Added
+body: 'The dev Inspector now has an "AI stream" tab that shows AI token streams per request. Streams started with getModel(''<name>'').stream(...) surface live as they arrive — token frames carrying model, role, running token counts and latency — plus an end-of-request snapshot of every stream the request made. Stream metadata is always captured in dev mode; the prompt and generated text ride the wire only when the new inspector.ai.captureText setting is enabled (default off).'
+time: 2026-06-24T10:33:48+01:00

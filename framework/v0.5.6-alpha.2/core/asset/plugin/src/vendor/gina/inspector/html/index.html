@@ -34,6 +34,9 @@
       <button class="bm-tab" data-tab="logs">
         <svg class="bm-tab-icon" viewBox="0 0 16 16"><path d="M2 2.5A1.5 1.5 0 013.5 1h9A1.5 1.5 0 0114 2.5v11a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 012 13.5v-11zM3.5 2a.5.5 0 00-.5.5v11a.5.5 0 00.5.5h9a.5.5 0 00.5-.5v-11a.5.5 0 00-.5-.5h-9zM5 5l2 1.5L5 8V5zm3.5 1.5a.5.5 0 01.5-.5h2a.5.5 0 010 1H9a.5.5 0 01-.5-.5zM5 10h6v1H5v-1z"/></svg>
         Logs<span class="bm-log-dot" id="bm-log-dot"></span></button>
+      <button class="bm-tab" data-tab="stream">
+        <svg class="bm-tab-icon" viewBox="0 0 16 16"><path d="M3 8a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM9.5 8a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM16 8a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" fill="currentColor"/></svg>
+        Stream</button>
     </nav>
     <div class="bm-header-spacer"></div>
     <button class="bm-refresh-btn" id="bm-refresh" title="Refresh now (Shift+click: reload page)" aria-label="Refresh data">
@@ -174,6 +177,13 @@
       <div class="bm-scroll-area" data-tab="flow">
         <div class="bm-tree-root" id="tree-flow"></div>
       </div>
+    </div>
+  </section>
+
+  <!-- ── AI stream tab ── -->
+  <section id="tab-stream" class="bm-panel" aria-label="AI stream">
+    <div class="bm-scroll-area" data-tab="stream">
+      <pre class="bm-raw-view" id="tree-stream"></pre>
     </div>
   </section>
 

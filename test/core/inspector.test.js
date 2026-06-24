@@ -4934,38 +4934,38 @@ describe('44 - Inspector tab layout presets', function() {
         assert.ok(js.indexOf("frontend:") > -1 || js.indexOf("frontend :") > -1, 'expected frontend layout');
     });
 
-    it('balanced layout order is data, view, logs, forms, query, flow', function() {
+    it('balanced layout order is data, view, logs, forms, query, flow, stream', function() {
         var js = getJs();
         var match = js.match(/balanced\s*:\s*\[([^\]]+)\]/);
         assert.ok(match, 'expected balanced array in TAB_LAYOUTS');
         var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/);
-        assert.deepStrictEqual(tabs, ['data', 'view', 'logs', 'forms', 'query', 'flow']);
+        assert.deepStrictEqual(tabs, ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream']);
     });
 
-    it('backend layout order is data, query, flow, logs, view, forms', function() {
+    it('backend layout order is data, query, flow, logs, view, forms, stream', function() {
         var js = getJs();
         var match = js.match(/backend\s*:\s*\[([^\]]+)\]/);
         assert.ok(match, 'expected backend array in TAB_LAYOUTS');
         var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/);
-        assert.deepStrictEqual(tabs, ['data', 'query', 'flow', 'logs', 'view', 'forms']);
+        assert.deepStrictEqual(tabs, ['data', 'query', 'flow', 'logs', 'view', 'forms', 'stream']);
     });
 
-    it('frontend layout order is view, data, forms, logs, query, flow', function() {
+    it('frontend layout order is view, data, forms, logs, query, flow, stream', function() {
         var js = getJs();
         var match = js.match(/frontend\s*:\s*\[([^\]]+)\]/);
         assert.ok(match, 'expected frontend array in TAB_LAYOUTS');
         var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/);
-        assert.deepStrictEqual(tabs, ['view', 'data', 'forms', 'logs', 'query', 'flow']);
+        assert.deepStrictEqual(tabs, ['view', 'data', 'forms', 'logs', 'query', 'flow', 'stream']);
     });
 
-    it('all three layouts contain exactly the same 6 tabs', function() {
+    it('all three layouts contain exactly the same 7 tabs', function() {
         var js = getJs();
-        var expected = ['data', 'flow', 'forms', 'logs', 'query', 'view'];
+        var expected = ['data', 'flow', 'forms', 'logs', 'query', 'stream', 'view'];
         ['balanced', 'backend', 'frontend'].forEach(function (name) {
             var match = js.match(new RegExp(name + '\\s*:\\s*\\[([^\\]]+)\\]'));
             assert.ok(match, 'expected ' + name + ' array');
             var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/).sort();
-            assert.deepStrictEqual(tabs, expected, name + ' must contain all 6 tabs');
+            assert.deepStrictEqual(tabs, expected, name + ' must contain all 7 tabs');
         });
     });
 
@@ -8449,7 +8449,11 @@ describe('77 - #INS8 Inspector SPA WebSocket transport (tryAgentWS)', function()
         var js = getInspJs77();
         var i = js.indexOf('function tryAgentWS');
         assert.ok(i > -1, 'expected tryAgentWS in dist inspector.js');
-        return js.substring(i, i + 4400);
+        // End-anchor on the next function so the whole tryAgentWS body is captured
+        // regardless of internal growth (e.g. the #AISTREAM token branch); the old
+        // fixed +4400 window dropped the onclose fallback guard once that landed.
+        var end = js.indexOf('function tryAgentPassive', i);
+        return js.substring(i, end > i ? end : i + 6000);
     }
 
     it('dist inspector.js defines tryAgentWS()', function() {

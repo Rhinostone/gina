@@ -141,3 +141,77 @@ describe('06 - render delegates: user.aiStream snapshot', function() {
         assert.ok(/data\.page\.aiStream\s*=\s*local\._aiLog/.test(src));
     });
 });
+
+
+// ─── 07 — SPA: AI-stream tab wiring (inspector.js, A1c) ──────────────────────
+describe('07 - SPA: AI-stream tab wiring (inspector.js)', function() {
+
+    var src;
+    before(function() {
+        src = read('core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    });
+
+    it('adds "stream" to all three TAB_LAYOUTS presets', function() {
+        assert.ok(/balanced:[^\n]*'stream'\s*\]/.test(src), 'balanced preset');
+        assert.ok(/backend:[^\n]*'stream'\s*\]/.test(src), 'backend preset');
+        assert.ok(/frontend:[^\n]*'stream'\s*\]/.test(src), 'frontend preset');
+    });
+
+    it('declares the single-slot live token buffer', function() {
+        assert.ok(/var _aiStreamBuf\s*=\s*\{\s*id:\s*null,\s*frames:\s*\[\]\s*\}/.test(src));
+    });
+
+    it('appendTokenDelta resets on a new stream id and accumulates frames', function() {
+        assert.ok(src.indexOf('function appendTokenDelta') > -1, 'function defined');
+        assert.ok(/frame\.id !== _aiStreamBuf\.id/.test(src), 'resets the buffer when the id changes');
+        assert.ok(/_aiStreamBuf\.frames\.push\(frame\)/.test(src), 'accumulates frames');
+    });
+
+    it('wires the token event at all three agent receive sites', function() {
+        // two SSE paths (tryAgent / tryAgentPassive) + one WS path (tryAgentWS)
+        var sse = src.match(/addEventListener\('token',/g);
+        assert.ok(sse && sse.length === 2, 'two SSE token listeners (tryAgent + tryAgentPassive)');
+        assert.ok(src.indexOf("frame.event === 'token'") > -1, 'WS onmessage token branch');
+        var parseCalls = src.match(/appendTokenDelta\(JSON\.parse\(ev\.data\)\)/g);
+        assert.ok(parseCalls && parseCalls.length === 2, 'both SSE branches parse ev.data');
+        assert.ok(src.indexOf('appendTokenDelta(frame.data)') > -1, 'WS branch passes the already-parsed frame.data');
+    });
+
+    it('renderTab has a stream case and a live-buffer guard for the no-snapshot state', function() {
+        assert.ok(/case 'stream':/.test(src), 'switch case');
+        assert.ok(src.indexOf('renderAiStream(treeEl, u.aiStream)') > -1, 'snapshot path reads u.aiStream');
+        assert.ok(src.indexOf('renderAiStream(treeEl, null)') > -1, 'live-buffer fallback when !ginaData');
+    });
+
+    it('renders the stream pane via textContent, never innerHTML (untrusted token text)', function() {
+        // Structural slice: the four AI-stream helpers sit between appendTokenDelta
+        // and the next function (renderRaw). They must write textContent only.
+        var start = src.indexOf('function appendTokenDelta');
+        var end   = src.indexOf('function renderRaw');
+        assert.ok(start > -1 && end > start, 'AI-stream function block located');
+        var block = src.slice(start, end);
+        assert.ok(block.indexOf('.textContent') > -1, 'writes textContent');
+        assert.ok(block.indexOf('.innerHTML') < 0, 'never interpolates token text as innerHTML');
+    });
+});
+
+
+// ─── 08 — SPA: tab markup (index.html) + dist propagation ────────────────────
+describe('08 - SPA: AI-stream tab markup + dist propagation', function() {
+
+    it('index.html adds the nav button and the <pre id="tree-stream"> pane', function() {
+        var html = read('core/asset/plugin/src/vendor/gina/inspector/html/index.html');
+        assert.ok(/<button class="bm-tab" data-tab="stream">/.test(html), 'nav button');
+        assert.ok(/<section id="tab-stream"/.test(html), 'panel section');
+        assert.ok(/<pre[^>]*id="tree-stream"/.test(html), 'pre pane');
+    });
+
+    it('the built dist copies carry the tab (verbatim-copy build)', function() {
+        var distJs   = read('core/asset/plugin/dist/vendor/gina/inspector/inspector.js');
+        var distHtml = read('core/asset/plugin/dist/vendor/gina/inspector/index.html');
+        assert.ok(distJs.indexOf('function appendTokenDelta') > -1, 'dist inspector.js carries appendTokenDelta');
+        assert.ok(distJs.indexOf("case 'stream':") > -1, 'dist inspector.js carries the stream case');
+        assert.ok(/data-tab="stream"/.test(distHtml), 'dist index.html carries the nav button');
+        assert.ok(/id="tree-stream"/.test(distHtml), 'dist index.html carries the pane');
+    });
+});
