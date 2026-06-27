@@ -816,6 +816,12 @@ function Add(opt, cmd) {
      * Iterates over bundles and populates their release targets in the manifest,
      * then writes manifest.json when all bundles are done.
      *
+     * Additive (#B55): an existing bundle entry and its `releases` map are
+     * preserved — only scope×env cells that have no target yet are seeded with a
+     * default. Release targets previously registered under other scopes/envs (and
+     * any custom target path/version) survive a `project:import`; only a bundle
+     * that is new to the manifest gets the default skeleton.
+     *
      * @inner
      * @private
      * @param {object|null} data - Working copy of the manifest; null on first call
@@ -848,14 +854,30 @@ function Add(opt, cmd) {
             var scopes  = self.projects[self.projectName].scopes || self.scopes || self.mainConfig['scopes'][ GINA_SHORT_VERSION ];
             var envs    = self.projects[self.projectName].envs || self.envs || self.mainConfig['envs'][ GINA_SHORT_VERSION ];
 
-            data.bundles[local.bundle] = {
-                "_comment"  : "Your comment goes here.",
-                "version"   : version,
-                "tag"       : ( version.split('.') ).join(''),
-                "src"       : "src/" + local.bundle,
-                "link"      : "bundles/"+ local.bundle,
-                "releases"  : {}
-            };
+            // #B55 — `project:import` must be additive: only seed the default
+            // bundle entry when the bundle is NEW to this manifest. Preserving an
+            // existing entry (and its `releases` map) keeps release targets
+            // previously registered under other scopes/envs — and any custom
+            // target path/version — from being dropped on import. Mirrors the
+            // additive pattern in lib/cmd/bundle/build.js (only set a target when
+            // one is absent). Previously this block reset `releases` to `{}` on
+            // every import, wiping every other scope×env's target.
+            if ( typeof(data.bundles[local.bundle]) == 'undefined' || !data.bundles[local.bundle] ) {
+                data.bundles[local.bundle] = {
+                    "_comment"  : "Your comment goes here.",
+                    "version"   : version,
+                    "tag"       : ( version.split('.') ).join(''),
+                    "src"       : "src/" + local.bundle,
+                    "link"      : "bundles/"+ local.bundle,
+                    "releases"  : {}
+                };
+            }
+            // an existing bundle entry may pre-date the `releases` map
+            if ( typeof(data.bundles[local.bundle].releases) == 'undefined' || !data.bundles[local.bundle].releases ) {
+                data.bundles[local.bundle].releases = {};
+            }
+            // seed any default target path below with the bundle's real version
+            version = data.bundles[local.bundle].version || version;
             //"release/"+ local.bundle +"/local/prod/" + version
             for (let s = 0, sLen = scopes.length; s < sLen; ++s) {
                 let scope = scopes[s];
@@ -871,7 +893,11 @@ function Add(opt, cmd) {
                     if ( typeof(data.bundles[local.bundle].releases[scope][env]) == 'undefined' ) {
                         data.bundles[local.bundle].releases[scope][env] = {}
                     }
-                    data.bundles[local.bundle].releases[scope][env].target = "releases/"+ local.bundle +"/"+ scope +"/"+ env +"/" + version;
+                    // additive: only seed a default target when none exists — never
+                    // clobber a custom target path/version already registered here.
+                    if ( typeof(data.bundles[local.bundle].releases[scope][env].target) == 'undefined' ) {
+                        data.bundles[local.bundle].releases[scope][env].target = "releases/"+ local.bundle +"/"+ scope +"/"+ env +"/" + version;
+                    }
                 }
             }
 

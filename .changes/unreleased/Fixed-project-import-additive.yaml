@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'gina project:import is now additive across release targets. Previously, importing a project for one scope and env rebuilt the per-bundle manifest.json release map from scratch, dropping any targets registered under other scopes or envs (and resetting custom target paths and versions). Import now preserves the existing release map and only seeds a default target for the scope/env cells that have none, so registering a brand-new scope no longer wipes the release targets already in use.'
+time: 2026-06-27T16:02:48+01:00
