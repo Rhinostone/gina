@@ -601,6 +601,25 @@ function EntitySuper(conn, caller, injected) {
         var needDomainExit = false;
         var doError = (type === 'error');
 
+        // #EVTBUS Slice 2a — bridge a whitelisted entity trigger onto the live
+        // Inspector event signal. Default topics [] → no-op (zero overhead); the
+        // allow-list IS the flood control, so this is inert unless an operator
+        // opts in. 'error' is EventEmitter control, never an app event. Ships a
+        // framework-controlled shape summary ({ok,error}) only — never raw rows.
+        if (
+            !doError
+            && process.gina && process.gina._inspectorEventTopics
+            && process.gina._inspectorEventTopics.length
+        ) {
+            try {
+                var _ie = require('lib/inspector-events');
+                if (_ie.matchTopics(type, process.gina._inspectorEventTopics)) {
+                    var _evErr = arguments[1];
+                    _ie.emit(type, { ok: !_evErr, error: (_evErr && _evErr.message) || null }, 'framework');
+                }
+            } catch (_evBridgeErr) {}
+        }
+
         events = this._events;
         if (events)
             doError = (doError && events.error == null);

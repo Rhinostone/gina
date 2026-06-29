@@ -1,0 +1,3 @@
+kind: Added
+body: 'The dev Inspector can bridge selected framework entity events onto its live Event tab via a new settings.inspector.events.topics allow-list (default empty, so nothing is bridged by default). Whitelisted entity trigger names, matched exactly or by a single leading or trailing wildcard, surface as framework-sourced events alongside events emitted explicitly via self.emitEvent, carrying a safe ok/error summary rather than raw record data.'
+time: 2026-06-29T12:29:31.218841+01:00

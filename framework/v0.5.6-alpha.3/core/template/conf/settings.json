@@ -204,7 +204,11 @@
     // channel are the protection; leave false in any shared / production-adjacent
     // deployment.
     "events": {
-      "captureArgs": false
+      "captureArgs": false,
+      // #EVTBUS Slice 2a — allow-list of framework event topics to bridge onto the
+      // Inspector signal (entity triggers, e.g. "account#save" or "N1QL:*"). Exact
+      // names or a single leading/trailing "*" wildcard. Default [] = bridge nothing.
+      "topics": []
     }
   },
   // #HDR1 — X-Content-Type-Options: nosniff response header applied by

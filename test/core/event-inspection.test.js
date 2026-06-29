@@ -353,3 +353,146 @@ describe('11 - SPA: Event tab propagated to dist', function() {
         assert.ok(/id="tree-events"/.test(html));
     });
 });
+
+
+// ─── 12 — inspector-events: source discriminator + matchTopics (Slice 2a) ────
+describe('12 - inspector-events: source discriminator + matchTopics', function() {
+
+    var savedGina, savedDev, frames;
+    var onEvent = function(f) { frames.push(f); };
+
+    beforeEach(function() {
+        savedGina = process.gina;
+        savedDev  = process.env.NODE_ENV_IS_DEV;
+        frames    = [];
+        process.env.NODE_ENV_IS_DEV = 'true';
+        process.on('inspector#event', onEvent);
+        process.gina = {
+            _queryALS                   : new AsyncLocalStorage(),
+            _inspectorWindowUntil       : 0,
+            _inspectorEventsCaptureArgs : false
+        };
+    });
+    afterEach(function() {
+        process.removeListener('inspector#event', onEvent);
+        process.gina = savedGina;
+        if (savedDev === undefined) { delete process.env.NODE_ENV_IS_DEV; }
+        else { process.env.NODE_ENV_IS_DEV = savedDev; }
+    });
+
+    it('defaults source to "app" on the entry AND the frame', function() {
+        process.gina._queryALS.run({ _devEventLog: [] }, function() {
+            var store = process.gina._queryALS.getStore();
+            inspectorEvents.emit('order.created');
+            assert.equal(store._devEventLog[0].source, 'app');
+        });
+        assert.equal(frames[0].source, 'app');
+    });
+
+    it('rides an explicit source ("framework") on the entry AND the frame', function() {
+        process.gina._queryALS.run({ _devEventLog: [] }, function() {
+            var store = process.gina._queryALS.getStore();
+            inspectorEvents.emit('account#save', null, 'framework');
+            assert.equal(store._devEventLog[0].source, 'framework');
+        });
+        assert.equal(frames[0].source, 'framework');
+    });
+
+    it('source always rides even when captureArgs is off (unlike metadata)', function() {
+        process.gina._inspectorEventsCaptureArgs = false;
+        process.gina._queryALS.run({ _devEventLog: [] }, function() {
+            var store = process.gina._queryALS.getStore();
+            inspectorEvents.emit('account#save', { secret: 'x' }, 'framework');
+            assert.equal(store._devEventLog[0].source, 'framework');
+            assert.equal(store._devEventLog[0].meta, undefined, 'metadata stays captureArgs-gated');
+        });
+        assert.equal(frames[0].source, 'framework');
+        assert.equal(frames[0].meta, undefined);
+    });
+
+    it('matchTopics: exact / trailing-* / leading-* / bare-* / connector-prefix / miss / bad input', function() {
+        var m = inspectorEvents.matchTopics;
+        assert.equal(m('account#save',     ['account#save']), true,  'exact');
+        assert.equal(m('account#save',     ['account#*']),    true,  'trailing-* prefix');
+        assert.equal(m('order#insert',     ['*#insert']),     true,  'leading-* suffix');
+        assert.equal(m('anything',         ['*']),            true,  'bare-* matches all');
+        assert.equal(m('N1QL:Order#fetch', ['N1QL:*']),       true,  'connector prefix');
+        assert.equal(m('cache.miss',       ['account#*']),    false, 'miss');
+        assert.equal(m('account#save',     []),               false, 'empty list matches nothing');
+        assert.equal(m('account#save',     'account#*'),      false, 'non-array topics -> false');
+        assert.equal(m(42,                 ['*']),            false, 'non-string name -> false');
+    });
+});
+
+
+// ─── 13 — entity.js: Slice 2a entity-event bridge ────────────────────────────
+describe('13 - entity.js: Slice 2a entity-event bridge', function() {
+
+    var src;
+    before(function() { src = read('core/model/entity.js'); });
+
+    it('bridges a matched non-error emit via lib/inspector-events tagged source framework', function() {
+        assert.ok(src.indexOf("require('lib/inspector-events')") > -1, 'reaches the emit module via the bare-module resolver');
+        assert.ok(/matchTopics\(type,\s*process\.gina\._inspectorEventTopics\)/.test(src), 'gates on the topics allow-list');
+        assert.ok(/\.emit\(type,\s*\{\s*ok:\s*!_evErr/.test(src), 'ships a framework-controlled {ok,error} summary, never raw rows');
+        assert.ok(/,\s*'framework'\)/.test(src), "tags the bridged event source 'framework'");
+    });
+    it('is inert by default: skips error + requires a non-empty topics allow-list', function() {
+        assert.ok(/!doError[\s\S]{0,160}?_inspectorEventTopics\.length/.test(src));
+    });
+    it('wraps the bridge in try/catch so a bridge failure never breaks entity.emit', function() {
+        var s = src.indexOf('#EVTBUS Slice 2a');
+        assert.ok(s > -1, 'bridge block present');
+        var tryIdx   = src.indexOf('try {', s);
+        var catchIdx = src.indexOf('} catch (_evBridgeErr)', tryIdx);
+        assert.ok(tryIdx > s && catchIdx > tryIdx, 'bridge fully guarded by try/catch');
+    });
+
+    // Pure-logic replica of the gate -> match -> emit decision (live entity
+    // instantiation isn't unit-reachable; the replica mirrors the source exactly,
+    // reusing the REAL matchTopics so the matching semantics can't drift).
+    it('replica: emits only for a non-error type matching a non-empty allow-list', function() {
+        var calls = [];
+        var ie = {
+            matchTopics : inspectorEvents.matchTopics,
+            emit        : function(name, meta, source) { calls.push({ name: name, meta: meta, source: source }); }
+        };
+        var bridge = function(type, err, topics) {
+            var doError = (type === 'error');
+            if (!doError && topics && topics.length) {
+                if (ie.matchTopics(type, topics)) {
+                    ie.emit(type, { ok: !err, error: (err && err.message) || null }, 'framework');
+                }
+            }
+        };
+        bridge('account#save', false, []);                         // empty list -> skip
+        bridge('error', new Error('x'), ['*']);                    // error -> skip
+        bridge('cache.miss', false, ['account#*']);                // no match -> skip
+        assert.equal(calls.length, 0);
+        bridge('account#save', false, ['account#*']);              // match, success
+        bridge('account#save', new Error('boom'), ['account#*']);  // match, failure
+        assert.equal(calls.length, 2);
+        assert.deepEqual(calls[0], { name: 'account#save', meta: { ok: true,  error: null },   source: 'framework' });
+        assert.deepEqual(calls[1], { name: 'account#save', meta: { ok: false, error: 'boom' }, source: 'framework' });
+    });
+});
+
+
+// ─── 14 — gna seed + settings template: events.topics allow-list ─────────────
+describe('14 - gna seed + settings: events.topics allow-list', function() {
+
+    it('gna seeds process.gina._inspectorEventTopics from settings (fail-closed [])', function() {
+        var src = read('core/gna.js');
+        assert.ok(/_inspectorEventTopics\s*=\s*Array\.isArray\(_evInspConf\.topics\)\s*\?\s*_evInspConf\.topics\.slice\(\)\s*:\s*\[\]/.test(src), 'seeds from settings.inspector.events.topics, default []');
+        assert.ok(/process\.gina\._inspectorEventTopics\s*=\s*\[\]/.test(src), 'fail-closes to [] in the catch');
+    });
+
+    it('settings template declares inspector.events.topics = [] (default: bridge nothing)', function() {
+        var raw = read('core/template/conf/settings.json');
+        raw  = raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|\s)\/\/.*$/gm, '');
+        var conf = JSON.parse(raw);
+        assert.ok(conf.inspector && conf.inspector.events, 'inspector.events block exists');
+        assert.ok(Array.isArray(conf.inspector.events.topics), 'topics is an array');
+        assert.equal(conf.inspector.events.topics.length, 0, 'default empty = bridge nothing');
+    });
+});

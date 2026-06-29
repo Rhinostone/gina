@@ -1349,10 +1349,15 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                         : {};
                                     if (!process.gina) process.gina = {};
                                     process.gina._inspectorEventsCaptureArgs = (_evInspConf.captureArgs === true);
+                                    // #EVTBUS Slice 2a — allow-list of framework event topics to
+                                    // bridge onto the live signal (entity triggers). Default [] →
+                                    // nothing bridged (zero overhead). Fail-closed.
+                                    process.gina._inspectorEventTopics = Array.isArray(_evInspConf.topics) ? _evInspConf.topics.slice() : [];
                                 } catch (evInspErr) {
                                     console.warn('[inspector-events] init skipped: ' + (evInspErr.message || evInspErr));
                                     if (!process.gina) process.gina = {};
                                     process.gina._inspectorEventsCaptureArgs = false;
+                                    process.gina._inspectorEventTopics = [];
                                 }
 
                                 // #INS8 — dev-only auto-start of the standalone Inspector
