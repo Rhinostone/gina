@@ -164,7 +164,10 @@ function Model(namespace, _config) {
             } else {//Means that no connector was found in models.
 
                 //finished.
-                self.emit('model#ready', new Error('[MODEL]['+ model +'] No connector found'), self.bundle, self.name, conn)
+                // No connector file exists on this path, so there is no connection to pass.
+                // (Previously passed `conn`, undefined in this scope → ReferenceError in the
+                //  error path itself; mirrors the null passed by the sibling error emits above/below.)
+                self.emit('model#ready', new Error('[MODEL]['+ model +'] No connector found'), self.bundle, self.name, null)
             }
 
         } else {
