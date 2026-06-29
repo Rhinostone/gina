@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The development Inspector /_gina/agent SSE endpoint now streams live AI token-stream and application-event frames over the HTTP/1 server, matching the HTTP/2 (isaac) engine SSE and the WebSocket transport. Previously these two live frame types only reached Inspector clients connected over the isaac SSE or the WebSocket.'
+time: 2026-06-29T12:07:21.927904+01:00

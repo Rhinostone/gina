@@ -236,22 +236,29 @@ describe('07 - server.js: WS inspector#event forwarder', function() {
 });
 
 
-// ─── 08 — server.js: SSE agent omits token + event (shared parity gap) ───────
-describe('08 - server.js: SSE agent carries data + log only', function() {
+// ─── 08 — server.js: SSE agent carries data + log + token + event ────────────
+describe('08 - server.js: SSE agent carries data + log + token + event', function() {
 
     var src;
     before(function() { src = read('core/server.js'); });
 
     // The genuine server.js HTTP/1 SSE /_gina/agent handler (distinct from the WS
-    // transport above) forwards inspector#data + logger#default only. Both
-    // inspector#token and inspector#event ride the isaac SSE + the server.js WS
-    // transport, NOT this HTTP/1 SSE path — a pre-existing #AISTREAM parity gap.
-    // A single future slice would add BOTH here together; this pin keeps event
-    // consistent with token (neither on the server.js SSE path).
-    it('omits the SSE token + event forwarders (matches each other)', function() {
+    // transport above) now forwards all four frame types — inspector#data,
+    // logger#default, inspector#token (#AISTREAM) and inspector#event (#EVTBUS) —
+    // matching the isaac SSE and the server.js WS transport. token + event were a
+    // shared parity gap, closed together in one slice.
+    it('defines _agTokenListener + _agEventListener writing distinct SSE frames', function() {
+        assert.ok(src.indexOf('var _agTokenListener = function') > -1, 'SSE token forwarder defined');
+        assert.ok(src.indexOf('var _agEventListener = function') > -1, 'SSE event forwarder defined');
+        assert.ok(src.indexOf("response.write('event: token") > -1, 'distinct SSE token frame');
+        assert.ok(src.indexOf("response.write('event: event") > -1, 'distinct SSE event frame');
+    });
+    it('registers + deregisters the SSE token + event forwarders', function() {
         assert.ok(src.indexOf("process.on('inspector#data', _agDataListener)") > -1, 'SSE data forwarder present');
-        assert.ok(src.indexOf('_agTokenListener') < 0, 'no SSE token forwarder in server.js');
-        assert.ok(src.indexOf('_agEventListener') < 0, 'no SSE event forwarder in server.js (consistent with token)');
+        assert.ok(src.indexOf("process.on('inspector#token', _agTokenListener)") > -1, 'registers token');
+        assert.ok(src.indexOf("process.on('inspector#event', _agEventListener)") > -1, 'registers event');
+        assert.ok(src.indexOf("process.removeListener('inspector#token', _agTokenListener)") > -1, 'deregisters token');
+        assert.ok(src.indexOf("process.removeListener('inspector#event', _agEventListener)") > -1, 'deregisters event');
     });
 });
 
