@@ -304,7 +304,7 @@ Declare any LLM provider in `connectors.json` via `"connector": "ai"`. Named pro
 | `ollama://` | `openai` | Local models: MiMo, Llama, Phi, Qwen-local, Gemma… |
 | `openai://` + `baseURL` | `openai` | Any OpenAI-compatible endpoint / self-hosted vLLM |
 
-`getModel('connectorName')` returns `{ client, provider, model, infer(messages, options) }`.
+`getModel('connectorName')` returns `{ client, provider, model, infer(messages, options), stream(messages, options) }`.
 
 ```javascript
 var ai     = getModel('deepseek');
@@ -314,8 +314,13 @@ var result = await ai.infer([{ role: 'user', content: 'Hello' }]);
 // .onComplete() for backward compat
 ai.infer(messages).onComplete(function(err, result) { ... });
 
-// raw SDK for streaming, embeddings, function calling
-ai.client.chat.completions.create({ stream: true, ... });
+// streaming (token-by-token) — a fresh EventEmitter per call (start/delta/done/error + .onComplete)
+ai.stream(messages)
+    .on('delta', function(d) { process.stdout.write(d.text); })
+    .on('done',  function(r) { /* { content, model, usage, latencyMs } */ });
+
+// raw SDK for embeddings, function calling, etc.
+ai.client.chat.completions.create({ ... });
 ```
 
 - System message: pass `{ role: 'system', content: '...' }` in the array OR use `options.system`
