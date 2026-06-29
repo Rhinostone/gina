@@ -563,8 +563,8 @@ function Couchbase(conn, infos) {
                             //, foundSpecialRightCase = /(\$|\%)\d+\.\w+/.test(qStr)
                         ;
 
-                        // e.g.: c.documentNextId.$2 = $3
-                        // e.g.: n.alertedOn.$1 = true
+                        // e.g.: doc.counters.$2 = $3
+                        // e.g.: doc.flags.$1 = true
                         if (foundSpecialLeftCase) {
                             i = 0; len = args.length;
                             for (; i < len; ++i) {
@@ -572,10 +572,22 @@ function Couchbase(conn, infos) {
                                 if (key > -1) {
                                     p[key] = args[key];
 
-                                    re = new RegExp('(.*)\\.'+ inl[key].replace(/([$%]+)/, '\\$1'));
+                                    // Fixed: a $N used as a dynamic field-path key must be substituted at
+                                    // EVERY occurrence, not just the last. The previous gate + replace both
+                                    // used a greedy `(.*)\.$N` with no /g flag: the greedy prefix bound to
+                                    // the LAST `.$N`, so an earlier same-$N field-path (e.g. once in SET and
+                                    // once in WHERE) survived as a literal $N -> malformed N1QL; a lower $N
+                                    // could also greedily consume a higher `.$NN` ($3 vs $30). The leading
+                                    // dot gates this to field-path position, so value params (`= $N`,
+                                    // `LIMIT $N`) are untouched and still bind positionally; `(?![0-9])`
+                                    // keeps `$3` from matching inside `$30`.
+                                    var paramKeyEsc = params[i].replace(/([$%]+)/, '\\$1');
+                                    re = new RegExp('\\.'+ paramKeyEsc + '(?![0-9])');
                                     if ( re.test(qStr) ) {
                                         p[key] = args[key];
-                                        qStr = qStr.replace( new RegExp('(.*)\\.'+ params[i].replace(/([$%]+)/, '\\$1')), '$1\.'+args[i]);
+                                        // global + dollar-safe function replacer: a plain string replacement
+                                        // would expand $&/$`/$' inside a dynamic field-key value.
+                                        qStr = qStr.replace(new RegExp('\\.'+ paramKeyEsc + '(?![0-9])', 'g'), function () { return '.' + args[i]; });
                                         inl.splice(key, 1);
                                     }
                                 }
