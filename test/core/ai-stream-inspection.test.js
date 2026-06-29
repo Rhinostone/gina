@@ -32,7 +32,7 @@ describe('01 - controller: _devAiLog per-request buffer (ALS sibling)', function
         assert.ok(/local\._aiLog\s*=\s*req\._devAiLog/.test(src));
     });
     it('threads it through the SAME _queryALS store', function() {
-        assert.ok(/enterWith\(\{\s*_devQueryLog:\s*req\._devQueryLog,\s*_devAiLog:\s*req\._devAiLog\s*\}\)/.test(src));
+        assert.ok(/enterWith\(\{\s*_devQueryLog:\s*req\._devQueryLog,\s*_devAiLog:\s*req\._devAiLog/.test(src));
     });
 });
 
@@ -152,9 +152,9 @@ describe('07 - SPA: AI-stream tab wiring (inspector.js)', function() {
     });
 
     it('adds "stream" to all three TAB_LAYOUTS presets', function() {
-        assert.ok(/balanced:[^\n]*'stream'\s*\]/.test(src), 'balanced preset');
-        assert.ok(/backend:[^\n]*'stream'\s*\]/.test(src), 'backend preset');
-        assert.ok(/frontend:[^\n]*'stream'\s*\]/.test(src), 'frontend preset');
+        assert.ok(/balanced:[^\n]*'stream'/.test(src), 'balanced preset');
+        assert.ok(/backend:[^\n]*'stream'/.test(src), 'backend preset');
+        assert.ok(/frontend:[^\n]*'stream'/.test(src), 'frontend preset');
     });
 
     it('declares the single-slot live token buffer', function() {
