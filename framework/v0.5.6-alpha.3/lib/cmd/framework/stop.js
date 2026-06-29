@@ -5,11 +5,17 @@ const {execSync}    = require('child_process');
 
 var CmdHelper   = require('./../helper');
 var console     = lib.logger;
+var fmt         = lib.cmdStatusFormat;
 /**
  * @module gina/lib/cmd/framework/stop
  */
 /**
- * Stops the running Gina framework server.
+ * Stops the running Gina framework server — the socket server on port 8124 and
+ * the co-located MQ listener on 8125 (one process). This is **daemon-only**:
+ * running bundles are detached child processes (spawned `detached: true` by
+ * `bundle:start`) and are NOT stopped, so they keep running with their bound
+ * ports. Before exiting, any bundle still running is surfaced as a non-fatal
+ * notice pointing at `gina bundle:stop` / `gina project:stop`.
  * Optionally targets a specific version via `@{version}` argument.
  *
  * Usage:
@@ -96,6 +102,11 @@ function Stop(opt, cmd) {
      * @param {object} cmd
      */
     var stop = function(opt, cmd) {
+        // framework:stop is daemon-only: the loop below skips every non-`gina-`
+        // pidfile, so running bundles survive this stop. Snapshot them now so
+        // end() can surface a non-fatal notice once the daemon is stopped.
+        self.survivingBundles = collectSurvivingBundles();
+
         var pidFiles = null, err = null;
         try {
             pidFiles = fs.readdirSync(GINA_RUNDIR);
@@ -191,6 +202,78 @@ function Stop(opt, cmd) {
     }
 
     /**
+     * Enumerates the run directory for bundle child-processes that will SURVIVE
+     * this framework stop. `framework:stop` kills only the `gina-v<version>`
+     * daemon; bundles are detached processes registered as
+     * `<bundle>@<project>.pid` files under the run directory (~/.gina/run, shared
+     * across framework versions). Framework-daemon pidfiles (`gina-*`), hidden
+     * files, non-`.pid` files, and malformed names are skipped, and each pidfile
+     * is liveness-probed via lib.cmdStatusFormat.readPidfile so only processes
+     * that are actually running are returned (stale pidfiles are ignored).
+     *
+     * @inner
+     * @private
+     * @returns {Array<{bundle: string, project: string, pid: number}>} live bundles
+     */
+    var collectSurvivingBundles = function() {
+        var out    = [];
+        var runDir = (typeof(GINA_RUNDIR) != 'undefined' && GINA_RUNDIR)
+            ? GINA_RUNDIR
+            : (GINA_HOMEDIR + '/run');
+        var files  = [];
+        try {
+            files = fs.readdirSync(runDir);
+        } catch (e) {
+            // No run directory yet -> nothing running.
+            return out;
+        }
+        for (var i = 0, len = files.length; i < len; i++) {
+            var file = files[i];
+            // skip hidden files, non-pid files, and framework-daemon pidfiles
+            if ( /^\./.test(file) || !/\.pid$/.test(file) || /^gina\-/.test(file) ) {
+                continue;
+            }
+            var base = file.replace(/\.pid$/, '');
+            var at   = base.lastIndexOf('@');
+            if ( at < 1 || at === base.length - 1 ) {
+                // not a `<bundle>@<project>` pidfile — skip
+                continue;
+            }
+            var bundle  = base.substring(0, at);
+            var project = base.substring(at + 1);
+
+            var runState = fmt.readPidfile(runDir, bundle, project);
+            if ( !runState.running ) {
+                // live only — a stale pidfile is not a surviving bundle
+                continue;
+            }
+            out.push({ bundle: bundle, project: project, pid: runState.pid });
+        }
+        return out;
+    }
+
+    /**
+     * Prints a non-fatal notice listing the bundles still running after the
+     * framework daemon was stopped, with the commands to stop them. Called from
+     * end() on a successful stop when collectSurvivingBundles() found live
+     * bundles; never alters the exit code.
+     *
+     * @inner
+     * @private
+     * @param {Array<{bundle: string, project: string, pid: number}>} list
+     */
+    var printSurvivingBundles = function(list) {
+        var str = '\n\r'+ list.length +' bundle(s) still running '
+                + '(framework:stop stops the framework server only, not bundles):\n\r';
+        for (var i = 0, len = list.length; i < len; i++) {
+            str += '    '+ fmt.pad(list[i].bundle +'@'+ list[i].project, 24) +' pid '+ list[i].pid +'\n\r';
+        }
+        str += 'Stop them with `gina bundle:stop <bundle> @<project>` '
+             + 'or `gina project:stop @<project>`.';
+        console.log(str);
+    }
+
+    /**
      * Logs optional output and exits the process.
      * @inner
      * @private
@@ -212,6 +295,11 @@ function Stop(opt, cmd) {
             } else {
                 console.log(output);
             }
+        }
+
+        // daemon-only stop: surface any bundles left running (success exits only).
+        if ( !err && self.survivingBundles && self.survivingBundles.length > 0 ) {
+            printSurvivingBundles(self.survivingBundles);
         }
 
         process.exit( err ? 1:0 )

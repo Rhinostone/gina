@@ -67,6 +67,17 @@ or by using the alias
 $ gina start
 ~~~
 
+Stopping the framework stops the socket server only. Running bundles are
+detached and keep running — stop them with **gina bundle:stop** or
+**gina project:stop**.
+~~~ tty
+$ gina framework:stop
+~~~
+or by using the alias
+~~~ tty
+$ gina stop
+~~~
+
 
 ## AUTHOR
 
