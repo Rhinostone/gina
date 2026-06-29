@@ -21,11 +21,15 @@
  * dev term nor an instrumentation window is open the emit is a cheap no-op with
  * zero subscribers.
  *
- * Mirrors the #AISTREAM AI-token signal. The per-request buffer is a sibling
- * KEY (`_devEventLog`) inside the single `process.gina._queryALS` store (set up
- * in controller.js `setOptions` alongside `_devQueryLog` / `_devAiLog`), reached
- * here via `getStore()`. Capture is gated on the dev term OR an open
- * instrumentation window — identical to the query / AI capture gates.
+ * Mirrors the #AISTREAM AI-token signal, with ONE deliberate divergence: the
+ * live `inspector#event` frame is emitted whenever the gate is open (store or
+ * not), so non-request callers (background jobs, framework lifecycle hooks —
+ * #EVTBUS Slice 2b) reach the stream; #AISTREAM's live `inspector#token` emit is
+ * itself store-gated. The per-request buffer is a sibling KEY (`_devEventLog`)
+ * inside the single `process.gina._queryALS` store (set up in controller.js
+ * `setOptions` alongside `_devQueryLog` / `_devAiLog`), reached here via
+ * `getStore()`. Capture is gated on the dev term OR an open instrumentation
+ * window — identical to the query / AI capture gates.
  *
  * Metadata safety: the event NAME plus framework stamps (`id`, `t`) always ride
  * the wire; the caller-supplied `metadata` object's VALUES ride ONLY when
@@ -55,10 +59,15 @@
 var _eventSeq = 0;
 
 /**
- * Emit an observable application event into the per-request Inspector buffer and
- * the live `inspector#event` stream. No-op (returns `false`) when the dev/window
- * gate is closed, when `name` is invalid, OR when called outside a request's
- * async context (no ALS store — e.g. from a detached timer or a background job).
+ * Emit an observable application event to the Inspector. Once the dev/window gate
+ * passes the live `inspector#event` frame is ALWAYS emitted; the per-request buffer
+ * entry (→ end-of-request `user.events` snapshot) is pushed ONLY inside a request's
+ * async context (when the shared `_queryALS` store exists). Called from a detached
+ * timer, a background job, or a framework lifecycle hook (no store), it still emits
+ * the live frame — only the snapshot half is skipped. A no-op (returns `false`) only
+ * when the gate is closed or `name` is invalid. (This always-on-live contract is the
+ * #EVTBUS Slice 2b unblock; it intentionally diverges from #AISTREAM, whose live
+ * `inspector#token` emit is itself store-gated.)
  *
  * @param {string} name        - Dotted event name, e.g. `'order.created'`. Required, non-empty.
  * @param {Object} [metadata]  - Optional structured metadata. Its VALUES reach the
@@ -67,9 +76,11 @@ var _eventSeq = 0;
  *                               always do.
  * @param {string} [source='app'] - Origin discriminator: `'app'` for an explicit
  *                               `self.emitEvent`, `'framework'` for a bridged framework
- *                               event (#EVTBUS Slice 2a). A framework-controlled field,
+ *                               event (#EVTBUS Slice 2a/2b). A framework-controlled field,
  *                               so it ALWAYS rides the wire (unlike caller metadata).
- * @returns {boolean} `true` if the event was captured, `false` if gated out / no context.
+ * @returns {boolean} `true` if the live frame was emitted (gate open + valid name; the
+ *                    buffer entry is added too when in a request's async context);
+ *                    `false` only when gated out or the name is invalid.
  *
  * @example
  * // From a controller action (preferred — see self.emitEvent):
@@ -89,43 +100,44 @@ function emit(name, metadata, source) {
     if ( !( envIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now()) ) ) {
         return false;
     }
-    // Reach the per-request buffer via the shared `_queryALS` store. Outside a
-    // request's async context `getStore()` is undefined → graceful no-op (mirrors
-    // the AI connector's `_aiAls ? _aiAls._devAiLog : null` guard).
-    var store = (process.gina && process.gina._queryALS) ? process.gina._queryALS.getStore() : null;
-    var buf   = store ? store._devEventLog : null;
-    if (!buf) {
-        return false;
-    }
-
     var captureArgs = !!(process.gina && process.gina._inspectorEventsCaptureArgs);
     var t  = Date.now();
     var id = 'ev-' + t.toString(36) + '-' + (++_eventSeq);
-
-    // Buffer entry (→ `user.events` snapshot). The metadata object is attached
-    // only when captureArgs is on; on the snapshot path it still passes through
-    // lib/inspector-redact (secret-NAMED keys masked), but values are NOT relied
-    // upon to be safe — the opt-in is the contract.
-    // #EVTBUS — `source` discriminates a framework-bridged event (Slice 2a passes
+    // #EVTBUS — `source` discriminates a framework-bridged event (Slice 2a/2b pass
     // 'framework') from an app's own self.emitEvent (default 'app'); a
     // framework-controlled field, so it ALWAYS rides (unlike captureArgs-gated meta).
     var evSource = (typeof source === 'string' && source) ? source : 'app';
-    var entry = {
-        type   : 'event',
-        id     : id,
-        name   : name,
-        t      : t,
-        source : evSource
-    };
-    if (captureArgs && metadata && typeof metadata === 'object') {
-        entry.meta = metadata;
-    }
-    buf.push(entry);
 
-    // Live frame (→ `inspector#event` → `event: event` SSE / `{event:'event'}`
-    // WS). NOT run through redact() — the free-text channel relies on the gate +
-    // the authenticated transport (per #AISTREAM); ships metadata values only
-    // when captureArgs is on.
+    // Snapshot half (→ `user.events`). Reach the per-request buffer via the shared
+    // `_queryALS` store. Outside a request's async context `getStore()` is undefined
+    // → there is no buffer to snapshot onto, so SKIP the push (the live frame below
+    // still ships — that is the Slice 2b lifecycle / background-job unblock). The
+    // metadata object is attached only when captureArgs is on; on the snapshot path
+    // it still passes through lib/inspector-redact (secret-NAMED keys masked), but
+    // values are NOT relied upon to be safe — the opt-in is the contract.
+    var store = (process.gina && process.gina._queryALS) ? process.gina._queryALS.getStore() : null;
+    var buf   = store ? store._devEventLog : null;
+    if (buf) {
+        var entry = {
+            type   : 'event',
+            id     : id,
+            name   : name,
+            t      : t,
+            source : evSource
+        };
+        if (captureArgs && metadata && typeof metadata === 'object') {
+            entry.meta = metadata;
+        }
+        buf.push(entry);
+    }
+
+    // Live half (→ `inspector#event` → `event: event` SSE / `{event:'event'}` WS).
+    // ALWAYS emitted once the gate passes — store or not. NOT run through redact()
+    // — the free-text channel relies on the gate + the authenticated transport (per
+    // #AISTREAM); ships metadata values only when captureArgs is on. NOTE: this
+    // DIVERGES from #AISTREAM, whose live `inspector#token` emit is itself
+    // store-gated (core/connectors/ai/index.js `if (_aiLog)`); #EVTBUS's always-on
+    // contract is the Slice 2b lifecycle-emit requirement (no request context).
     var frame = { name: name, id: id, t: t, source: evSource };
     if (captureArgs && metadata && typeof metadata === 'object') {
         frame.meta = metadata;

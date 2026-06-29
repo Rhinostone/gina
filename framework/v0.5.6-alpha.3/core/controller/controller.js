@@ -1724,10 +1724,12 @@ function SuperController(options) {
     /**
      * #EVTBUS — Emit an observable application event into the Inspector's Event
      * tab. Thin pass-through to `lib.inspectorEvents.emit`: under the dev /
-     * instrumentation-window gate it pushes a `{type:'event',id,name,t}` entry
-     * into the per-request buffer (→ end-of-request `user.events` snapshot) AND
-     * emits a live `inspector#event` frame over `/_gina/agent`. Outside the gate,
-     * or outside a request's async context, it is a cheap no-op (returns false).
+     * instrumentation-window gate it emits a live `inspector#event` frame over
+     * `/_gina/agent`, and — when called inside a request's async context — also
+     * pushes a `{type:'event',id,name,t}` entry into the per-request buffer (→
+     * end-of-request `user.events` snapshot). Called outside a request (a detached
+     * timer / background job) it still emits the live frame; only the snapshot is
+     * skipped. A cheap no-op only when the gate is closed or `name` is invalid.
      *
      * The event NAME always rides the wire; the `metadata` object's VALUES ride
      * only when `settings.inspector.events.captureArgs` is on (default false) —
@@ -1735,7 +1737,8 @@ function SuperController(options) {
      *
      * @param {string} name       - Dotted event name, e.g. `'order.created'`.
      * @param {Object} [metadata] - Optional metadata; values gated by captureArgs.
-     * @returns {boolean} true if captured, false if gated out / no request context.
+     * @returns {boolean} true if the live frame was emitted (gate open + valid name);
+     *                    false only when gated out or the name is invalid.
      *
      * @example
      *   this.checkout = function(req, res, next) {

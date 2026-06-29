@@ -55,11 +55,15 @@ describe('01 - inspector-events.emit(): behaviour', function() {
         assert.equal(frames.length, 0);
     });
 
-    it('no-ops (false) when gate open but outside a request context (no store)', function() {
+    it('emits a LIVE frame (true) when gate open but outside a request context (no store)', function() {
         process.env.NODE_ENV_IS_DEV = 'true';
-        // not inside .run() → getStore() is undefined → graceful no-op
-        assert.equal(inspectorEvents.emit('x.y', { a: 1 }), false);
-        assert.equal(frames.length, 0);
+        // not inside .run() → getStore() is undefined → buffer push skipped, but the
+        // live inspector#event frame still ships (Slice 2b lifecycle/background emit).
+        assert.equal(inspectorEvents.emit('x.y', { a: 1 }), true);
+        assert.equal(frames.length, 1);
+        assert.equal(frames[0].name, 'x.y');
+        assert.equal(frames[0].source, 'app');
+        assert.equal(frames[0].meta, undefined);   // captureArgs off in beforeEach
     });
 
     it('no-ops (false) on an invalid name', function() {
