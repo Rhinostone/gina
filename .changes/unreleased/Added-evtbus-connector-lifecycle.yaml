@@ -1,0 +1,3 @@
+kind: Added
+body: 'The dev Inspector can now surface framework connector-lifecycle events on its live Event tab: when a database connector re-establishes its connection (a "ready" lifecycle event, e.g. on reconnect), it appears as a framework-sourced <connector>#ready event carrying a safe ok/error summary. Bridging is opt-in through the same settings.inspector.events.topics allow-list as entity events (default empty, so nothing is bridged) and matched by exact name or a single leading or trailing wildcard; these lifecycle events stream live only, with no per-request snapshot.'
+time: 2026-06-29T13:53:36Z

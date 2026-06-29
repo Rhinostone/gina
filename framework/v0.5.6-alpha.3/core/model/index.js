@@ -191,6 +191,34 @@ function Model(namespace, _config) {
             self.connectors[_connector] = {};
             var connector = new Connector( self.getConfig(_connector) );
 
+            // #EVTBUS Slice 2b — bridge a connector's recurring lifecycle 'ready'
+            // emit onto the live Inspector event signal. couchbase re-fires 'ready'
+            // on every reconnect (its keepAlive ping + onError handler re-run
+            // connect()), so this surfaces connection churn in the Inspector. Generic:
+            // only couchbase emits 'ready' today, but any connector that re-emits it
+            // is covered. Attached ONCE here in the construct-once branch (the
+            // connector instance is cached + retained for the process life), so
+            // reconnect re-emits reuse this single listener — no per-reconnect
+            // accumulation; the onReady consumer below is a one-shot .once('ready').
+            // Lifecycle events fire outside any request, so they reach the live
+            // stream only via the Slice 2b always-on emit (no per-request snapshot).
+            // Gated on the same allow-list as the entity bridge (default [] → inert,
+            // the opt-in IS the flood control); ships only a framework-controlled
+            // {ok,error} summary tagged source 'framework', never connection
+            // internals. Whole block try/catch'd so a bridge failure never breaks
+            // connector setup.
+            connector.on('ready', function(_evErr) {
+                try {
+                    if ( process.gina && process.gina._inspectorEventTopics && process.gina._inspectorEventTopics.length ) {
+                        var _ie     = require('lib/inspector-events');
+                        var _evName = _connector + '#ready';
+                        if ( _ie.matchTopics(_evName, process.gina._inspectorEventTopics) ) {
+                            _ie.emit(_evName, { ok: !_evErr, error: (_evErr && _evErr.message) || null }, 'framework');
+                        }
+                    }
+                } catch (_evBridgeErr) {}
+            });
+
             connector.onReady( function(err, conn){
                 self.connectors[_connector].err = err;
                 self.connectors[_connector].conn = conn;

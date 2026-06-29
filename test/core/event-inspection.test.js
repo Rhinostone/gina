@@ -500,3 +500,75 @@ describe('14 - gna seed + settings: events.topics allow-list', function() {
         assert.equal(conf.inspector.events.topics.length, 0, 'default empty = bridge nothing');
     });
 });
+
+
+// ─── 15 — model/index: Slice 2b connector-lifecycle bridge ───────────────────
+describe('15 - model/index: Slice 2b connector-lifecycle bridge', function() {
+
+    var src;
+    before(function() { src = read('core/model/index.js'); });
+
+    it('attaches an additive connector.on(ready) lifecycle listener', function() {
+        assert.ok(src.indexOf("connector.on('ready'") > -1, 'additive lifecycle listener');
+        assert.ok(src.indexOf("require('lib/inspector-events')") > -1, 'reaches the emit module via the bare-module resolver');
+    });
+    it('builds a <connector>#ready name and gates on the topics allow-list', function() {
+        assert.ok(/_evName\s*=\s*_connector\s*\+\s*'#ready'/.test(src), 'builds <connector>#ready from the connector name');
+        assert.ok(/matchTopics\(_evName,\s*process\.gina\._inspectorEventTopics\)/.test(src), 'gates on the topics allow-list');
+        assert.ok(/_inspectorEventTopics\s*&&\s*process\.gina\._inspectorEventTopics\.length/.test(src), 'requires a non-empty allow-list (inert by default)');
+    });
+    it('ships a framework-controlled {ok,error} summary tagged source framework', function() {
+        assert.ok(/_ie\.emit\(_evName,\s*\{\s*ok:\s*!_evErr/.test(src), 'ships {ok,...} from the ready err arg, never connection internals');
+        assert.ok(/error:\s*\(_evErr\s*&&\s*_evErr\.message\)\s*\|\|\s*null/.test(src), 'error summary from the ready err arg');
+        assert.ok(/,\s*'framework'\)/.test(src), "tags the bridged event source 'framework'");
+    });
+    it('attaches once in the construct-once branch, before onReady (no per-reconnect accumulation)', function() {
+        var guardIdx = src.indexOf("typeof(self.connectors[_connector]) == 'undefined'");
+        var ncIdx    = src.indexOf('new Connector(');
+        var onIdx    = src.indexOf("connector.on('ready'");
+        var orIdx    = src.indexOf('connector.onReady(');
+        assert.ok(guardIdx > -1 && onIdx > guardIdx, 'inside the cache-miss / construct-once branch');
+        assert.ok(ncIdx > -1 && onIdx > ncIdx, 'after new Connector()');
+        assert.ok(orIdx > onIdx, 'before onReady (so an early ready is never missed)');
+    });
+    it('wraps the bridge in try/catch so a bridge failure never breaks connector setup', function() {
+        var s = src.indexOf('#EVTBUS Slice 2b');
+        assert.ok(s > -1, 'bridge block present');
+        var tryIdx   = src.indexOf('try {', s);
+        var catchIdx = src.indexOf('} catch (_evBridgeErr)', tryIdx);
+        assert.ok(tryIdx > s && catchIdx > tryIdx, 'bridge fully guarded by try/catch');
+    });
+
+    // Pure-logic replica of the gate -> match -> emit decision (a live connector
+    // reconnect isn't unit-reachable; the replica mirrors the source exactly,
+    // reusing the REAL matchTopics so the matching semantics can't drift). The
+    // ready err arg is `false` on a successful (re)connect, an Error on a failed one.
+    it('replica: emits <connector>#ready only for a non-empty matching allow-list', function() {
+        var calls = [];
+        var ie = {
+            matchTopics : inspectorEvents.matchTopics,
+            emit        : function(name, meta, source) { calls.push({ name: name, meta: meta, source: source }); }
+        };
+        var bridge = function(connectorName, evErr, topics) {
+            try {
+                if (topics && topics.length) {
+                    var evName = connectorName + '#ready';
+                    if (ie.matchTopics(evName, topics)) {
+                        ie.emit(evName, { ok: !evErr, error: (evErr && evErr.message) || null }, 'framework');
+                    }
+                }
+            } catch (_e) {}
+        };
+        bridge('couchbase', false, []);                                 // empty list -> skip
+        bridge('couchbase', false, ['account#*']);                      // no match -> skip
+        bridge('mysql',     false, ['couchbase#*']);                    // mysql#ready vs couchbase#* -> skip
+        assert.equal(calls.length, 0);
+        bridge('couchbase', false, ['couchbase#ready']);                // exact, (re)connect ok
+        bridge('couchbase', new Error('econnrefused'), ['couchbase#*']);// match, (re)connect failed
+        bridge('couchbase', false, ['*#ready']);                        // leading-* suffix, ok
+        assert.equal(calls.length, 3);
+        assert.deepEqual(calls[0], { name: 'couchbase#ready', meta: { ok: true,  error: null },          source: 'framework' });
+        assert.deepEqual(calls[1], { name: 'couchbase#ready', meta: { ok: false, error: 'econnrefused' }, source: 'framework' });
+        assert.deepEqual(calls[2], { name: 'couchbase#ready', meta: { ok: true,  error: null },          source: 'framework' });
+    });
+});
