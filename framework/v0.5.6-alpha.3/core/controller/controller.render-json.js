@@ -293,6 +293,10 @@ module.exports = function renderJSON(jsonObj, deps) {
             if (local._aiLog && local._aiLog.length > 0) {
                 _gdUser.aiStream = local._aiLog;
             }
+            // #EVTBUS — observable application-event snapshot; the live view rides inspector#event.
+            if (local._eventLog && local._eventLog.length > 0) {
+                _gdUser.events = local._eventLog;
+            }
             if (local._timeline) {
                 _gdUser.flow = {
                     requestStart : local._timeline.requestStart,

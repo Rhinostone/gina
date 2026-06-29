@@ -335,6 +335,10 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
     if (local._aiLog && local._aiLog.length > 0) {
         data.page.aiStream = local._aiLog;
     }
+    // #EVTBUS — observable application-event snapshot parity; the live view rides inspector#event.
+    if (local._eventLog && local._eventLog.length > 0) {
+        data.page.events = local._eventLog;
+    }
 
     // Two deep clones — one labelled gina (metadata for the Inspector
     // sidebar), one labelled user (mirrors what application code sees).

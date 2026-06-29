@@ -296,10 +296,15 @@ function attachInspectorAgentWs(rawServer, ctx) {
             var _wsTokenListener = function(payload) {
                 try { ws.send(JSON.stringify({ event: 'token', data: payload })); } catch (e) {}
             };
+            // #EVTBUS — live application-event frames (distinct event, same envelope).
+            var _wsEventListener = function(payload) {
+                try { ws.send(JSON.stringify({ event: 'event', data: payload })); } catch (e) {}
+            };
 
             process.on('inspector#data', _wsDataListener);
             process.on('logger#default', _wsLogListener);
             process.on('inspector#token', _wsTokenListener);
+            process.on('inspector#event', _wsEventListener);
 
             // Graceful-shutdown drain: proc.js's SIGTERM path invokes every
             // registered closer before _httpServer.close(), so a live agent
@@ -316,6 +321,7 @@ function attachInspectorAgentWs(rawServer, ctx) {
                 process.removeListener('inspector#data', _wsDataListener);
                 process.removeListener('logger#default', _wsLogListener);
                 process.removeListener('inspector#token', _wsTokenListener);
+                process.removeListener('inspector#event', _wsEventListener);
                 if (process.gina._sseConnections) {
                     process.gina._sseConnections.delete(_wsShutdownCloser);
                 }

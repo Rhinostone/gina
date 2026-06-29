@@ -937,6 +937,11 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             if (local._aiLog && local._aiLog.length > 0) {
                 data.page.aiStream = local._aiLog;
             }
+            // #EVTBUS — observable application-event snapshot (rides the data.page
+            // clone like queries/flow); the live view rides inspector#event.
+            if (local._eventLog && local._eventLog.length > 0) {
+                data.page.events = local._eventLog;
+            }
             // #FI — snapshot count BEFORE late entries are pushed.
             // data.page.flow.entries is a reference to local._timeline.entries,
             // so reading .length later would include entries pushed after this point.
@@ -1184,6 +1189,10 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             // #AISTREAM — AI token-stream snapshot (rides the data.page clone).
             if (local._aiLog && local._aiLog.length > 0) {
                 data.page.aiStream = local._aiLog;
+            }
+            // #EVTBUS — observable application-event snapshot (rides the data.page clone).
+            if (local._eventLog && local._eventLog.length > 0) {
+                data.page.events = local._eventLog;
             }
 
             // #FI — inject dev-mode request timeline for Inspector Flow tab.

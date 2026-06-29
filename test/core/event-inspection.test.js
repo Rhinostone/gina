@@ -200,3 +200,80 @@ describe('05 - settings template: inspector.events.captureArgs default', functio
         assert.equal(conf.inspector.events.captureArgs, false);
     });
 });
+
+
+// ─── 06 — server.isaac: SSE inspector#event forwarder ────────────────────────
+describe('06 - server.isaac: SSE inspector#event forwarder', function() {
+
+    var src;
+    before(function() { src = read('core/server.isaac.js'); });
+
+    it('defines _agEventListener writing an event: event SSE frame', function() {
+        assert.ok(src.indexOf('var _agEventListener = function') > -1);
+        assert.ok(src.indexOf('event: event') > -1, 'distinct SSE event name (not data/log/token)');
+    });
+    it('registers + deregisters on inspector#event', function() {
+        assert.ok(src.indexOf("process.on('inspector#event', _agEventListener)") > -1);
+        assert.ok(src.indexOf("process.removeListener('inspector#event', _agEventListener)") > -1);
+    });
+});
+
+
+// ─── 07 — server.js: WS inspector#event forwarder ────────────────────────────
+describe('07 - server.js: WS inspector#event forwarder', function() {
+
+    var src;
+    before(function() { src = read('core/server.js'); });
+
+    it('defines _wsEventListener sending an event: event envelope', function() {
+        assert.ok(src.indexOf('var _wsEventListener = function') > -1);
+        assert.ok(src.indexOf("event: 'event', data: payload") > -1);
+    });
+    it('registers + deregisters on inspector#event', function() {
+        assert.ok(src.indexOf("process.on('inspector#event', _wsEventListener)") > -1);
+        assert.ok(src.indexOf("process.removeListener('inspector#event', _wsEventListener)") > -1);
+    });
+});
+
+
+// ─── 08 — server.js: SSE agent omits token + event (shared parity gap) ───────
+describe('08 - server.js: SSE agent carries data + log only', function() {
+
+    var src;
+    before(function() { src = read('core/server.js'); });
+
+    // The genuine server.js HTTP/1 SSE /_gina/agent handler (distinct from the WS
+    // transport above) forwards inspector#data + logger#default only. Both
+    // inspector#token and inspector#event ride the isaac SSE + the server.js WS
+    // transport, NOT this HTTP/1 SSE path — a pre-existing #AISTREAM parity gap.
+    // A single future slice would add BOTH here together; this pin keeps event
+    // consistent with token (neither on the server.js SSE path).
+    it('omits the SSE token + event forwarders (matches each other)', function() {
+        assert.ok(src.indexOf("process.on('inspector#data', _agDataListener)") > -1, 'SSE data forwarder present');
+        assert.ok(src.indexOf('_agTokenListener') < 0, 'no SSE token forwarder in server.js');
+        assert.ok(src.indexOf('_agEventListener') < 0, 'no SSE event forwarder in server.js (consistent with token)');
+    });
+});
+
+
+// ─── 09 — render delegates + window emit: user.events snapshot ───────────────
+describe('09 - render delegates + window emit: user.events snapshot', function() {
+
+    it('render-json attaches _gdUser.events gated on local._eventLog.length', function() {
+        var src = read('core/controller/controller.render-json.js');
+        assert.ok(/if \(local\._eventLog && local\._eventLog\.length > 0\) \{\s*_gdUser\.events = local\._eventLog;/.test(src));
+    });
+    it('render-swig attaches data.page.events on BOTH cache paths', function() {
+        var src = read('core/controller/controller.render-swig.js');
+        var matches = src.match(/data\.page\.events = local\._eventLog;/g) || [];
+        assert.equal(matches.length, 2, 'cache-hit + cache-miss');
+    });
+    it('render-nunjucks attaches data.page.events', function() {
+        var src = read('core/controller/controller.render-nunjucks.js');
+        assert.ok(/data\.page\.events = local\._eventLog;/.test(src));
+    });
+    it('inspector-window-emit attaches _gdUser.events (prod-window path)', function() {
+        var src = read('core/controller/inspector-window-emit.js');
+        assert.ok(/if \(local\._eventLog && local\._eventLog\.length > 0\) \{\s*_gdUser\.events = local\._eventLog;/.test(src));
+    });
+});
