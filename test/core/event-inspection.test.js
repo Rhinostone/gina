@@ -277,3 +277,72 @@ describe('09 - render delegates + window emit: user.events snapshot', function()
         assert.ok(/if \(local\._eventLog && local\._eventLog\.length > 0\) \{\s*_gdUser\.events = local\._eventLog;/.test(src));
     });
 });
+
+
+// ─── 10 — SPA: Event tab wiring (src) ────────────────────────────────────────
+describe('10 - SPA: Event tab wiring (src)', function() {
+
+    var js, html;
+    before(function() {
+        js   = read('core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+        html = read('core/asset/plugin/src/vendor/gina/inspector/html/index.html');
+    });
+
+    it('declares an accumulating _eventBuf with a cap (not single-slot like tokens)', function() {
+        assert.ok(/var _eventBuf\s*=\s*\[\]/.test(js));
+        assert.ok(/var EVENT_BUF_MAX/.test(js));
+    });
+    it('appendAppEvent accumulates and renders via textContent (never innerHTML)', function() {
+        assert.ok(/function appendAppEvent\(frame\)/.test(js));
+        assert.ok(/_eventBuf\.push\(frame\)/.test(js));
+        assert.ok(/_eventBuf\.length > EVENT_BUF_MAX/.test(js), 'caps the rolling buffer');
+        var s = js.indexOf('function appendAppEvent');
+        var e = js.indexOf('function formatEventBuffer', s);
+        assert.ok(s > -1 && e > s);
+        var blk = js.substring(s, e);
+        assert.ok(blk.indexOf('.textContent') > -1, 'renders via textContent');
+        assert.ok(blk.indexOf('.innerHTML') < 0, 'must not use innerHTML (untrusted event text)');
+    });
+    it('renderTab has a case events rendering the snapshot/buffer', function() {
+        assert.ok(/case 'events':/.test(js));
+        assert.ok(/renderAppEvents\(treeEl, u\.events\)/.test(js));
+    });
+    it('renders the Event tab even before a snapshot (!ginaData guard)', function() {
+        assert.ok(/if \(name === 'events'\) \{ renderAppEvents\(treeEl, null\); return; \}/.test(js));
+    });
+    it('wires events into all three TAB_LAYOUTS presets', function() {
+        var s   = js.indexOf('var TAB_LAYOUTS');
+        var lay = js.substring(s, js.indexOf('};', s) + 2);
+        assert.equal((lay.match(/'events'/g) || []).length, 3);
+    });
+    it('subscribes to the event frame at the 3 agent receive sites', function() {
+        assert.equal((js.match(/es\.addEventListener\('event',/g) || []).length, 2, 'SSE: tryAgent + tryAgentPassive');
+        assert.ok(/frame\.event === 'event'/.test(js), 'WS branch');
+    });
+    it('index.html declares the Events tab button + panel', function() {
+        assert.ok(/data-tab="events"/.test(html));
+        assert.ok(/id="tab-events"/.test(html));
+        assert.ok(/id="tree-events"/.test(html));
+    });
+});
+
+
+// ─── 11 — SPA: Event tab propagated to dist ──────────────────────────────────
+describe('11 - SPA: Event tab propagated to dist', function() {
+
+    var js, html;
+    before(function() {
+        js   = read('core/asset/plugin/dist/vendor/gina/inspector/inspector.js');
+        html = read('core/asset/plugin/dist/vendor/gina/inspector/index.html');
+    });
+
+    it('dist inspector.js carries appendAppEvent + case events + the event listener', function() {
+        assert.ok(/function appendAppEvent\(frame\)/.test(js));
+        assert.ok(/case 'events':/.test(js));
+        assert.ok(/es\.addEventListener\('event',/.test(js));
+    });
+    it('dist index.html carries the Events tab button + panel', function() {
+        assert.ok(/data-tab="events"/.test(html));
+        assert.ok(/id="tree-events"/.test(html));
+    });
+});

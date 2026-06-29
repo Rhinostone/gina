@@ -106,17 +106,17 @@
     /**
      * Tab order definitions for each layout preset.
      *
-     * - **balanced** (default) — Data, View, Logs, Forms, Query, Flow, Stream
-     * - **backend** — Data, Query, Flow, Logs, View, Forms, Stream
-     * - **frontend** — View, Data, Forms, Logs, Query, Flow, Stream
+     * - **balanced** (default) — Data, View, Logs, Forms, Query, Flow, Stream, Events
+     * - **backend** — Data, Query, Flow, Logs, View, Forms, Stream, Events
+     * - **frontend** — View, Data, Forms, Logs, Query, Flow, Stream, Events
      *
      * Each array contains `data-tab` attribute values in display order.
      * @constant {Object.<string, string[]>}
      */
     var TAB_LAYOUTS = {
-        balanced: ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream'],
-        backend:  ['data', 'query', 'flow', 'logs', 'view', 'forms', 'stream'],
-        frontend: ['view', 'data', 'forms', 'logs', 'query', 'flow', 'stream']
+        balanced: ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream', 'events'],
+        backend:  ['data', 'query', 'flow', 'logs', 'view', 'forms', 'stream', 'events'],
+        frontend: ['view', 'data', 'forms', 'logs', 'query', 'flow', 'stream', 'events']
     };
 
     /**
@@ -171,6 +171,16 @@
      * @type {{id: ?string, frames: Object[]}}
      */
     var _aiStreamBuf = { id: null, frames: [] };
+    /**
+     * Live application-event buffer (#EVTBUS). Unlike the single-slot token buffer,
+     * this ACCUMULATES discrete events (capped at EVENT_BUF_MAX) so the Event tab
+     * shows the rolling sequence as they fire; the end-of-request snapshot
+     * (user.events) carries the events of one request.
+     * @type {Object[]}
+     */
+    var _eventBuf     = [];
+    /** @constant {number} Cap on the rolling live event buffer. */
+    var EVENT_BUF_MAX = 500;
     /** @type {LogEntry[]} In-memory log buffer (capped at {@link MAX_LOG_ENTRIES}) */
     var logs    = [];
     /** @type {number} Read offset into `source.__ginaLogs` for client-side polling */
@@ -1784,6 +1794,8 @@
             // #AISTREAM \u2014 the Stream tab renders its live token buffer even before
             // a snapshot exists, so don't blank it with the "Waiting\u2026" hint.
             if (name === 'stream') { renderAiStream(treeEl, null); return; }
+            // #EVTBUS — same for the Event tab's rolling live buffer.
+            if (name === 'events') { renderAppEvents(treeEl, null); return; }
             treeEl.innerHTML = '<span class="bm-hint">Waiting for source data\u2026</span>';
             return;
         }
@@ -1850,6 +1862,12 @@
                 // #AISTREAM — render the snapshot (or live buffer) via textContent
                 // and return before the innerHTML/fold path; token text is untrusted.
                 renderAiStream(treeEl, u.aiStream);
+                return;
+            case 'events':
+                // #EVTBUS — render the rolling live buffer (or the request snapshot)
+                // via textContent; return before the innerHTML/fold path. Event
+                // names + metadata are app-controlled but treated as untrusted.
+                renderAppEvents(treeEl, u.events);
                 return;
         }
 
@@ -1960,6 +1978,72 @@
             el.textContent = formatAiLiveBuffer(_aiStreamBuf);
         } else {
             el.textContent = 'No AI streams captured this request.';
+        }
+    }
+
+    // ── Application-event tab (#EVTBUS) ──────────────────────────────────────
+
+    /**
+     * Append one live application-event frame to the rolling buffer (capped at
+     * EVENT_BUF_MAX) and, when the Event tab is active, re-render it directly.
+     * Unlike appendTokenDelta (single-slot, reset per stream id), events ACCUMULATE
+     * — each frame is one discrete event. Rendered via textContent (event names +
+     * optional metadata are app-controlled but treated as untrusted).
+     * @inner
+     * @param {Object} frame - The inspector#event frame `{ name, id, t, meta? }`.
+     */
+    function appendAppEvent(frame) {
+        if (!frame || typeof frame !== 'object' || !frame.name) { return; }
+        _eventBuf.push(frame);
+        if (_eventBuf.length > EVENT_BUF_MAX) { _eventBuf.shift(); }
+        // Live-tail directly when the tab is open — NOT via renderTab (which a data
+        // snapshot would re-render). Mirrors appendTokenDelta's direct-render.
+        if (activeTab() === 'events') {
+            var el = qs('#tree-events');
+            if (el) { el.textContent = formatEventBuffer(_eventBuf); }
+        }
+    }
+
+    /**
+     * Format an array of event frames/entries as a plain-text transcript — one line
+     * per event (time · name · compact metadata, present only when captureArgs is
+     * enabled server-side). Rendered via textContent by the caller; never innerHTML.
+     * @inner
+     * @param {Object[]} arr
+     * @returns {string}
+     */
+    function formatEventBuffer(arr) {
+        if (!arr || !arr.length) { return 'No events captured.'; }
+        return arr.map(function (e) {
+            var ts = '';
+            try { ts = new Date(e.t).toISOString().substr(11, 12); } catch (x) { ts = ''; }
+            var line = (ts ? ts + '  ' : '') + (e.name || '?');
+            if (e.meta && typeof e.meta === 'object') {
+                var s;
+                try { s = JSON.stringify(e.meta); } catch (x) { s = '[unserialisable]'; }
+                line += '  ' + s;
+            }
+            return line;
+        }).join('\n');
+    }
+
+    /**
+     * Render the Event tab pane. Prefers the rolling live buffer (events accumulate
+     * across the session); falls back to the request snapshot (`user.events`) when
+     * no live frames have arrived (e.g. opener-only mode without an agent stream).
+     * Always textContent — event names + metadata are treated as untrusted.
+     * @inner
+     * @param {Element} el - The `#tree-events` pane.
+     * @param {?Object[]} snapshot - `user.events`, or null.
+     */
+    function renderAppEvents(el, snapshot) {
+        if (!el) { return; }
+        if (_eventBuf.length) {
+            el.textContent = formatEventBuffer(_eventBuf);
+        } else if (snapshot && snapshot.length) {
+            el.textContent = formatEventBuffer(snapshot);
+        } else {
+            el.textContent = 'No events captured.';
         }
     }
 
@@ -4105,6 +4189,11 @@
                 try { appendTokenDelta(JSON.parse(ev.data)); } catch (e) {}
             });
 
+            es.addEventListener('event', function (ev) {
+                // #EVTBUS — live application-event frame (textContent-rendered).
+                try { appendAppEvent(JSON.parse(ev.data)); } catch (e) {}
+            });
+
             es.addEventListener('open', function () {
                 qs('#bm-dot').className = 'bm-dot ok';
                 // Label stays as "Connecting…" until the first data event updates it
@@ -4221,6 +4310,9 @@
                     } else if (frame.event === 'token') {
                         // #AISTREAM — live AI token-stream frame (textContent-rendered).
                         appendTokenDelta(frame.data);
+                    } else if (frame.event === 'event') {
+                        // #EVTBUS — live application-event frame (textContent-rendered).
+                        appendAppEvent(frame.data);
                     }
                 } catch (e) {}
             };
@@ -4349,6 +4441,11 @@
             es.addEventListener('token', function (ev) {
                 // #AISTREAM — live AI token-stream frame (textContent-rendered).
                 try { appendTokenDelta(JSON.parse(ev.data)); } catch (e) {}
+            });
+
+            es.addEventListener('event', function (ev) {
+                // #EVTBUS — live application-event frame (textContent-rendered).
+                try { appendAppEvent(JSON.parse(ev.data)); } catch (e) {}
             });
 
             es.onerror = function () {

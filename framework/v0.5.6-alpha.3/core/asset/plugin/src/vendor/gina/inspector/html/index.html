@@ -37,6 +37,9 @@
       <button class="bm-tab" data-tab="stream">
         <svg class="bm-tab-icon" viewBox="0 0 16 16"><path d="M3 8a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM9.5 8a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM16 8a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" fill="currentColor"/></svg>
         Stream</button>
+      <button class="bm-tab" data-tab="events">
+        <svg class="bm-tab-icon" viewBox="0 0 16 16"><path d="M1 8h3l2-5 3 11 2.5-6H15" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" stroke-linecap="round"/></svg>
+        Events</button>
     </nav>
     <div class="bm-header-spacer"></div>
     <button class="bm-refresh-btn" id="bm-refresh" title="Refresh now (Shift+click: reload page)" aria-label="Refresh data">
@@ -184,6 +187,13 @@
   <section id="tab-stream" class="bm-panel" aria-label="AI stream">
     <div class="bm-scroll-area" data-tab="stream">
       <pre class="bm-raw-view" id="tree-stream"></pre>
+    </div>
+  </section>
+
+  <!-- Application events tab -->
+  <section id="tab-events" class="bm-panel" aria-label="Application events">
+    <div class="bm-scroll-area" data-tab="events">
+      <pre class="bm-raw-view" id="tree-events"></pre>
     </div>
   </section>
 

@@ -4934,38 +4934,38 @@ describe('44 - Inspector tab layout presets', function() {
         assert.ok(js.indexOf("frontend:") > -1 || js.indexOf("frontend :") > -1, 'expected frontend layout');
     });
 
-    it('balanced layout order is data, view, logs, forms, query, flow, stream', function() {
+    it('balanced layout order is data, view, logs, forms, query, flow, stream, events', function() {
         var js = getJs();
         var match = js.match(/balanced\s*:\s*\[([^\]]+)\]/);
         assert.ok(match, 'expected balanced array in TAB_LAYOUTS');
         var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/);
-        assert.deepStrictEqual(tabs, ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream']);
+        assert.deepStrictEqual(tabs, ['data', 'view', 'logs', 'forms', 'query', 'flow', 'stream', 'events']);
     });
 
-    it('backend layout order is data, query, flow, logs, view, forms, stream', function() {
+    it('backend layout order is data, query, flow, logs, view, forms, stream, events', function() {
         var js = getJs();
         var match = js.match(/backend\s*:\s*\[([^\]]+)\]/);
         assert.ok(match, 'expected backend array in TAB_LAYOUTS');
         var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/);
-        assert.deepStrictEqual(tabs, ['data', 'query', 'flow', 'logs', 'view', 'forms', 'stream']);
+        assert.deepStrictEqual(tabs, ['data', 'query', 'flow', 'logs', 'view', 'forms', 'stream', 'events']);
     });
 
-    it('frontend layout order is view, data, forms, logs, query, flow, stream', function() {
+    it('frontend layout order is view, data, forms, logs, query, flow, stream, events', function() {
         var js = getJs();
         var match = js.match(/frontend\s*:\s*\[([^\]]+)\]/);
         assert.ok(match, 'expected frontend array in TAB_LAYOUTS');
         var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/);
-        assert.deepStrictEqual(tabs, ['view', 'data', 'forms', 'logs', 'query', 'flow', 'stream']);
+        assert.deepStrictEqual(tabs, ['view', 'data', 'forms', 'logs', 'query', 'flow', 'stream', 'events']);
     });
 
-    it('all three layouts contain exactly the same 7 tabs', function() {
+    it('all three layouts contain exactly the same 8 tabs', function() {
         var js = getJs();
-        var expected = ['data', 'flow', 'forms', 'logs', 'query', 'stream', 'view'];
+        var expected = ['data', 'events', 'flow', 'forms', 'logs', 'query', 'stream', 'view'];
         ['balanced', 'backend', 'frontend'].forEach(function (name) {
             var match = js.match(new RegExp(name + '\\s*:\\s*\\[([^\\]]+)\\]'));
             assert.ok(match, 'expected ' + name + ' array');
             var tabs = match[1].replace(/'/g, '').replace(/"/g, '').split(/\s*,\s*/).sort();
-            assert.deepStrictEqual(tabs, expected, name + ' must contain all 7 tabs');
+            assert.deepStrictEqual(tabs, expected, name + ' must contain all 8 tabs');
         });
     });
 
