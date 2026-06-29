@@ -1335,6 +1335,26 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     process.gina._inspectorAiCaptureText = false;
                                 }
 
+                                // #EVTBUS — opt-in from settings.json `inspector.events.captureArgs`
+                                // (default false). The event NAME + framework stamps are always
+                                // captured under the dev/window gate; the caller's metadata VALUES
+                                // ride the wire only when this is true (gate + opt-in + authenticated
+                                // channel are the protection — key-name redaction cannot cover
+                                // arbitrary arg values). Stored on process.gina so lib/inspector-events
+                                // reads a cheap slot. Fail-closed.
+                                try {
+                                    var _evInspSettings = (typeof gna.getConfig === 'function') ? gna.getConfig('settings') : null;
+                                    var _evInspConf     = (_evInspSettings && _evInspSettings.inspector && _evInspSettings.inspector.events && typeof _evInspSettings.inspector.events === 'object')
+                                        ? _evInspSettings.inspector.events
+                                        : {};
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorEventsCaptureArgs = (_evInspConf.captureArgs === true);
+                                } catch (evInspErr) {
+                                    console.warn('[inspector-events] init skipped: ' + (evInspErr.message || evInspErr));
+                                    if (!process.gina) process.gina = {};
+                                    process.gina._inspectorEventsCaptureArgs = false;
+                                }
+
                                 // #INS8 — dev-only auto-start of the standalone Inspector
                                 // bundle (inspector@gina). Best-effort + fail-closed.
                                 // Gated on:

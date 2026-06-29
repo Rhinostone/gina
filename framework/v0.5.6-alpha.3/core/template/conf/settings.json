@@ -192,6 +192,19 @@
     // snapshot; leave it false in any shared / production-adjacent deployment.
     "ai": {
       "captureText": false
+    },
+    // #EVTBUS — observable application-event inspection. A bundle surfaces a
+    // named runtime event via self.emitEvent(name, meta) / lib/inspector-events;
+    // it shows up in the Inspector's Event tab (live inspector#event frame +
+    // end-of-request user.events snapshot) under the dev / instrumentation-window
+    // gate. The event NAME + framework stamps always ride the wire; the caller's
+    // metadata VALUES are OFF by default — set captureArgs true to include them in
+    // the frames + snapshot. Like captureText above, the key-name redactor cannot
+    // sanitise arbitrary arg values, so the gate + this opt-in + the authenticated
+    // channel are the protection; leave false in any shared / production-adjacent
+    // deployment.
+    "events": {
+      "captureArgs": false
     }
   },
   // #HDR1 — X-Content-Type-Options: nosniff response header applied by

@@ -299,10 +299,18 @@ function SuperController(options) {
             if (!req._devAiLog) {
                 req._devAiLog = [];
             }
+            // #EVTBUS — sibling per-request buffer for observable application
+            // events (self.emitEvent / lib.inspectorEvents.emit), threaded through
+            // the SAME _queryALS store as queries/AI for concurrency-correct
+            // attribution (emit reaches it via getStore()).
+            if (!req._devEventLog) {
+                req._devEventLog = [];
+            }
             local._queryLog = req._devQueryLog;
             local._aiLog    = req._devAiLog;
+            local._eventLog = req._devEventLog;
             if (process.gina._queryALS) {
-                process.gina._queryALS.enterWith({ _devQueryLog: req._devQueryLog, _devAiLog: req._devAiLog });
+                process.gina._queryALS.enterWith({ _devQueryLog: req._devQueryLog, _devAiLog: req._devAiLog, _devEventLog: req._devEventLog });
             }
             // #FI — propagate request timeline into local for render access
             if (req._devTimeline) {
@@ -1711,6 +1719,33 @@ function SuperController(options) {
                 return { content: _r.content, model: _r.model, usage: _r.usage };
             });
         }, jobOpts);
+    };
+
+    /**
+     * #EVTBUS — Emit an observable application event into the Inspector's Event
+     * tab. Thin pass-through to `lib.inspectorEvents.emit`: under the dev /
+     * instrumentation-window gate it pushes a `{type:'event',id,name,t}` entry
+     * into the per-request buffer (→ end-of-request `user.events` snapshot) AND
+     * emits a live `inspector#event` frame over `/_gina/agent`. Outside the gate,
+     * or outside a request's async context, it is a cheap no-op (returns false).
+     *
+     * The event NAME always rides the wire; the `metadata` object's VALUES ride
+     * only when `settings.inspector.events.captureArgs` is on (default false) —
+     * the gate + opt-in + authenticated channel are the protection, not redaction.
+     *
+     * @param {string} name       - Dotted event name, e.g. `'order.created'`.
+     * @param {Object} [metadata] - Optional metadata; values gated by captureArgs.
+     * @returns {boolean} true if captured, false if gated out / no request context.
+     *
+     * @example
+     *   this.checkout = function(req, res, next) {
+     *       // ... create the order ...
+     *       self.emitEvent('order.created', { orderId: order.id });
+     *       self.renderJSON({ ok: true });
+     *   };
+     */
+    this.emitEvent = function(name, metadata) {
+        return lib.inspectorEvents.emit(name, metadata);
     };
 
 

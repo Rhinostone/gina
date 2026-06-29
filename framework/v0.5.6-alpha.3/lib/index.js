@@ -136,6 +136,10 @@ function Lib() {
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.
         routingIntrospect: _require('./routing-introspect'),
+        // #EVTBUS — observable application-event emit hook (self.emitEvent /
+        // lib.inspectorEvents.emit). Stateless (no module-scope state beyond a
+        // best-effort counter), so the dev-mode-hot-reloadable _require is safe.
+        inspectorEvents : _require('./inspector-events'),
         // Shared run-state / port display primitives (pad, pickPreferredPort,
         // readPidfile) for the bundle:list / service:list / bundle:status /
         // project:status CLI handlers. Pure (same contract as routing-introspect).

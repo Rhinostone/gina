@@ -1,0 +1,8 @@
+{
+    "name": "inspector-events",
+    "version": "0.0.1",
+    "description": "#EVTBUS — observable application-event emit hook for the Inspector event signal (gated, opt-in metadata).",
+    "main": "src/main",
+    "private": true,
+    "license": "MIT"
+}
