@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'AI connectors now expose their inference API through getModel(): getModel(name).infer(...) and getModel(name).stream(...) work as documented. Previously the model loader treated an AI connector factory like an entity manager, so getModel() returned only a bare connection wrapper without infer/stream — and self.inferAsync plus AI token-stream capture, which build on it, were unreachable.'
+time: 2026-06-29T22:07:46Z

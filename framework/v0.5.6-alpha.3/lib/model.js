@@ -12,6 +12,17 @@ var inherits    = require('./inherits');
 var math        = require('./math');
 //var checkSum    = math.checkSum;
 
+// Connector types that expose a lowercase-keyed service interface (e.g. the AI
+// connector's { client, provider, model, infer, stream }) instead of an
+// Uppercase-keyed entity manager. These bypass the entity-class build loops
+// (in loadAllModels#done and reloadModels): their factory result is merged onto
+// the model object as-is, so getModel(name) returns the service methods
+// (e.g. .infer / .stream). Routing here BEFORE the entity-class guard is what
+// makes getModel('<aiConnector>') expose infer/stream — without it the guard
+// throws on the first lowercase key (`client`). Keep this predicate identical in
+// both builder branches; a new service connector opts in by name here.
+var SERVICE_CONNECTOR_TYPES = { ai: true };
+
 /**
  * @module lib/model
  * @description Singleton registry that tracks loaded models, entities, and
@@ -304,6 +315,19 @@ function ModelUtil() {
 
                                 self.setConnection(bundle, name, conn);
 
+                                // AI / service connectors return a lowercase-keyed public interface
+                                // ({ client, provider, model, infer, stream }) rather than an Uppercase-keyed
+                                // entity manager. Merge that interface onto the model object — preserving the
+                                // _connection + getConnection already set by onModelReady — and skip the entity
+                                // loops below, whose Uppercase-first guard would otherwise throw on the first
+                                // lowercase key (`client`).
+                                if ( SERVICE_CONNECTOR_TYPES[ conf.content['connectors'][name].connector ] ) {
+                                    for (var svcKey in entitiesManager) {
+                                        self.models[bundle][name][svcKey] = entitiesManager[svcKey];
+                                    }
+                                    continue;
+                                }
+
                                 // step 1: creating entities classes in the context
                                 // must be done only when all models conn are alive because of `cross models/database use cases`
                                 for (var nttClass in entitiesManager) {
@@ -457,6 +481,18 @@ function ModelUtil() {
                     }
 
                     self.setConnection(bundle, name, conn);
+
+                    // See done() in loadAllModels — AI/service connectors return a lowercase-keyed
+                    // public interface, not an entity manager. Re-merge it onto the just-reset model
+                    // object (the lines above re-seed _connection/getConnection) and skip the entity
+                    // loops + their Uppercase-first guard.
+                    if ( SERVICE_CONNECTOR_TYPES[ conf.content['connectors'][name].connector ] ) {
+                        for (var svcKey in entitiesManager) {
+                            self.models[bundle][name][svcKey] = entitiesManager[svcKey];
+                        }
+                        console.debug('[ MODEL ][ '+ name +' ][ '+ bundle +'] loaded AI connector ');
+                        continue;
+                    }
                     // creating entities instances
                     // must be done only when all models conn are alive because of `cross models/database use cases`
                     for (var nttClass in entitiesManager) {
