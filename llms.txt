@@ -236,6 +236,7 @@ SELECT * FROM users WHERE id = $1 AND t._scope = $scope
 - `@return {number}` → first key of first row (COUNT queries)
 - `$scope` — Couchbase only: substituted as a string literal, not a positional parameter
 - Placeholders: SQLite `?`, MySQL `?`, ScyllaDB `?`, PostgreSQL `$1 $2 …`, Couchbase `$1 $2 …`
+- Dynamic field-path key (Couchbase): a `$N` in field-path position (`<field>.$N`, e.g. `SET doc.flags.$2 = $3`) is interpolated as a literal identifier at **every** occurrence, while value placeholders (`= $N`, `LIMIT $N`) still bind positionally; `%N` is not supported as a field-path key
 
 ---
 
