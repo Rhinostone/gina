@@ -1673,8 +1673,23 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     e.emit('complete', instance);
                                 });
                             } catch(loadErr) {
-                                console.error('[ FRAMEWORK ] Model loading failed: ' + (loadErr.stack||loadErr.message));
-                                e.emit('complete', instance);
+                                // #B57 — fail fast on a synchronous model-init failure instead of
+                                // swallowing it and booting a degraded bundle. The throw aborts the
+                                // WHOLE model build (no per-model isolation), so getModel() would
+                                // later hand back a bare { _connection, getConnection } and the bundle
+                                // would 500 at call-time with a cryptic TypeError. Mirrors the
+                                // framework's existing fail-fast convention: the onInitialize path
+                                // (server.js ServerEngine catch -> process.exit(1)), async connectors
+                                // (proc.js uncaughtException -> SIGTERM), and connection errors
+                                // (onModelReady -> process.exit(1)).
+                                // Was: console.error('[ FRAMEWORK ] Model loading failed: ' + ...) +
+                                //      e.emit('complete', instance)  (swallow -> degraded boot).
+                                var _loadMsg = '[ FRAMEWORK ] Model loading failed — aborting boot: ' + (loadErr.stack || loadErr.message || loadErr);
+                                console.emerg(_loadMsg);
+                                // boot-exit-flush: process.exit() truncates async stdout/stderr on a
+                                // pipe (e.g. bin/gina-container); fs.writeSync blocks until flushed.
+                                try { fs.writeSync(2, _loadMsg + '\n'); } catch (_e) { /* best-effort */ }
+                                process.exit(1);
                             }
                         }
                         // -- EO
