@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added a `--stream` mode to `connector:infer` that streams the inference as newline-delimited JSON (NDJSON) — one frame per line on stdout: a `start` frame, a `delta` frame per token, then a terminal `done` frame (content, model, usage, latency) or an `error` frame. Token counters are passed through verbatim and never fabricated — they are `null` when the provider does not report them (some providers report token usage only in a final chunk, or omit it entirely). `--stream` always emits NDJSON regardless of `--format`, for token-by-token consumption from CI or a shell.'
+time: 2026-06-30T05:53:11+01:00

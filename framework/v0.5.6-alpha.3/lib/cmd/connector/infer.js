@@ -9,10 +9,11 @@ var CmdHelper = require('./../helper');
 /**
  * Exercises a configured AI connector OUTSIDE a request — resolves a
  * project's connector config, instantiates the connector directly, and runs
- * a single buffered inference, writing the normalised result to stdout. The
- * runtime sibling of the config-only `connector:add` / `connector:list`
- * tooling: a connector can be smoke-tested for connectivity + credentials
- * from CI/automation, and a one-off inference can be scripted from a shell.
+ * a single buffered inference (or a token stream with `--stream`), writing the
+ * result to stdout. The runtime sibling of the config-only `connector:add` /
+ * `connector:list` tooling: a connector can be smoke-tested for connectivity +
+ * credentials from CI/automation, and a one-off inference can be scripted from
+ * a shell.
  *
  * `getModel` is deliberately NOT used: it reads from a per-bundle registry
  * populated only by `loadAllModels()` at bundle boot (empty in CLI scope),
@@ -41,6 +42,7 @@ var CmdHelper = require('./../helper');
  *   gina connector:infer <connector> @<project> --message="..."
  *   gina connector:infer <connector> <bundle> @<project> --message="..." --system="..."
  *   gina connector:infer <connector> @<project> --message="..." --format=json
+ *   gina connector:infer <connector> @<project> --message="..." --stream   # NDJSON token frames
  *   echo '[{"role":"user","content":"hi"}]' | gina connector:infer <connector> @<project>
  *
  * Exit codes: 0 on a completed inference; non-zero (reason on stderr) on
@@ -175,7 +177,13 @@ function Infer(opt, cmd) {
         if (!built) return; // buildMessages already exited
         var options = buildOptions(p, built.system);
 
-        runInference(projectPath, entry, built.messages, options);
+        // --stream drives a token stream (NDJSON frames on stdout, always —
+        // regardless of --format); otherwise a single buffered inference.
+        if (p['stream']) {
+            runStream(projectPath, entry, built.messages, options);
+        } else {
+            runInference(projectPath, entry, built.messages, options);
+        }
     };
 
     /**
@@ -392,6 +400,108 @@ function Infer(opt, cmd) {
     };
 
     /**
+     * Instantiates the AI connector directly and STREAMS one inference as
+     * newline-delimited JSON (NDJSON) — one frame per line on stdout. Mirrors
+     * {@link runInference}'s bootstrap (`setPath('project')` → `new
+     * AIConnector(entry).onReady` → `AI(conn)`) but drives `ai.stream(...)`
+     * instead of `ai.infer(...)`. Frame shapes:
+     *
+     *   {"type":"start","model":<m>,"role":<r>}
+     *   {"type":"delta","index":<i>,"text":<t>,"outputTokens":<n|null>}
+     *   {"type":"done","content":<c>,"model":<m>,
+     *    "usage":{"inputTokens":<n|null>,"outputTokens":<n|null>},
+     *    "latencyMs":<n|null>[,"finishReason":<s>]}
+     *   {"type":"error","error":{"message":<s>}}
+     *
+     * Token counters are passed through verbatim and NEVER fabricated:
+     * OpenAI-family deltas carry `outputTokens: null` until the final chunk, and
+     * some providers (e.g. ollama) omit the final usage chunk entirely — those
+     * stay `null`. `finishReason` is OpenAI-family-only (absent on Anthropic).
+     * The heavy provider `raw` payload is omitted. `--stream` always emits
+     * NDJSON regardless of `--format`.
+     *
+     * The `ai.stream()` emitter is fresh per call and DEFERS its provider call
+     * one tick, so every listener is attached SYNCHRONOUSLY here before any
+     * event fires. The `error` event is listener-gated by the connector (it
+     * only emits when a listener is attached) — wiring one is REQUIRED, not
+     * optional. Exit 0 on `done`; exit 1 on a connector/stream error.
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @param {object} entry - Resolved connector entry (secrets already substituted)
+     * @param {object[]} messages - OpenAI-format messages
+     * @param {object} options - stream() options (model/maxTokens/temperature/system)
+     */
+    var runStream = function (projectPath, entry, messages, options) {
+        var AIConnector, AI;
+        try {
+            AIConnector = require('../../../core/connectors/ai/lib/connector');
+            AI          = require('../../../core/connectors/ai/index');
+        } catch (e) {
+            console.error('[connector:infer] failed to load the AI connector core: ' + e.message);
+            process.exit(1);
+            return;
+        }
+
+        // AIConnector requires the provider SDK from getPath('project')/node_modules.
+        setPath('project', projectPath);
+
+        var connector = new AIConnector(entry);
+        connector.onReady(function (err, conn) {
+            if (err) {
+                // A connector-build failure (missing SDK, bad protocol) surfaces
+                // as a terminal NDJSON error frame so a consumer parsing stdout
+                // gets a uniform { type: 'error' } regardless of where it failed.
+                emitFrame({ type: 'error', error: { message: err.message } });
+                process.exit(1);
+                return;
+            }
+
+            var ai      = AI(conn);
+            var emitter = ai.stream(messages, options);
+
+            // Attach SYNCHRONOUSLY — stream() defers the provider call one tick,
+            // so these are wired before any event fires. The 'error' listener is
+            // mandatory: the connector only emits 'error' when one is attached.
+            emitter.on('start', function (s) {
+                emitFrame({ type: 'start', model: s.model, role: s.role });
+            });
+            emitter.on('delta', function (d) {
+                emitFrame({
+                    type         : 'delta',
+                    index        : d.index,
+                    text         : d.text,
+                    outputTokens : (typeof d.outputTokens === 'number') ? d.outputTokens : null
+                });
+            });
+            emitter.on('done', function (result) {
+                var u     = result.usage || {};
+                var frame = {
+                    type    : 'done',
+                    content : result.content,
+                    model   : result.model,
+                    usage   : {
+                        inputTokens  : (typeof u.inputTokens  === 'number') ? u.inputTokens  : null,
+                        outputTokens : (typeof u.outputTokens === 'number') ? u.outputTokens : null
+                    },
+                    latencyMs : (typeof result.latencyMs === 'number') ? result.latencyMs : null
+                };
+                // finishReason is OpenAI-family-only (absent on Anthropic's done).
+                if (typeof result.finishReason !== 'undefined' && result.finishReason !== null) {
+                    frame.finishReason = result.finishReason;
+                }
+                emitFrame(frame);
+                process.exit(0);
+            });
+            emitter.on('error', function (e) {
+                emitFrame({ type: 'error', error: { message: (e && e.message) ? e.message : String(e) } });
+                process.exit(1);
+            });
+        });
+    };
+
+    /**
      * Writes the normalised inference result. JSON mode emits
      * `{ content, model, usage }` (the heavy provider `raw` is omitted for
      * CLI use). Text mode writes the content verbatim to stdout (so
@@ -415,6 +525,23 @@ function Infer(opt, cmd) {
         var inTok  = (typeof u.inputTokens  === 'number') ? u.inputTokens  : 'n/a';
         var outTok = (typeof u.outputTokens === 'number') ? u.outputTokens : 'n/a';
         process.stderr.write('— ' + (result.model || 'unknown model') + '  (tokens in: ' + inTok + ', out: ' + outTok + ')\n');
+    };
+
+    /**
+     * Writes one NDJSON frame (a JSON object) to stdout, newline-terminated.
+     * Uses synchronous `fs.writeSync(1, ...)` rather than `process.stdout.write`
+     * so each frame reaches the pipe IMMEDIATELY (real-time streaming) and the
+     * terminal `done`/`error` frame is never truncated by the `process.exit()`
+     * that follows it — `process.exit()` tears the process down without
+     * draining the async stdout buffer on a pipe (the framework's
+     * boot-exit-flush rule). Used by {@link runStream} only.
+     *
+     * @inner
+     * @private
+     * @param {object} frame - The NDJSON frame to serialise.
+     */
+    var emitFrame = function (frame) {
+        fs.writeSync(1, JSON.stringify(frame) + '\n');
     };
 
     init();

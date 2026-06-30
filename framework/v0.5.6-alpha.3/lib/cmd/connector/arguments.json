@@ -20,5 +20,6 @@
   "--message",
   "--system",
   "--max-tokens",
-  "--temperature"
+  "--temperature",
+  "--stream"
 ]

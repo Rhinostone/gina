@@ -353,6 +353,10 @@ describe('12 - arguments.json', function () {
             assert.ok(argsArr.indexOf(f) > -1, f + ' must be registered');
         });
     });
+
+    it('registers --stream (slice 2)', function () {
+        assert.ok(argsArr.indexOf('--stream') > -1, '--stream must be registered');
+    });
 });
 
 
@@ -386,6 +390,12 @@ describe('13 - help + cli registration', function () {
 
     it('bin/cli registers `connector:` in allowedOffline (infer dispatches offline)', function () {
         assert.match(cliSrc, /allowedOffline\s*=\s*\[[\s\S]*?'connector:'[\s\S]*?\]/);
+    });
+
+    it('help.txt documents the --stream NDJSON option (slice 2)', function () {
+        assert.match(helpTxt, /--stream\b/);
+        assert.match(helpTxt, /NDJSON/);
+        assert.match(helpTxt, /one JSON object per line/);
     });
 });
 
@@ -526,5 +536,212 @@ describe('18 - jsonShape (replica)', function () {
         var out = jsonShape({ content: 'hi', model: 'm', usage: { inputTokens: 1, outputTokens: 2 }, raw: { huge: true } });
         assert.deepEqual(out, { content: 'hi', model: 'm', usage: { inputTokens: 1, outputTokens: 2 } });
         assert.equal('raw' in out, false);
+    });
+});
+
+
+// ===========================================================================
+// Slice 2 — --stream NDJSON. Source-pins on runStream's structure + frame
+// mapping, then pure-logic replicas of the event→frame mapping. The live
+// stream() behaviour (mock SDK clients) is covered by
+// test/core/ai-connector.test.js — these pin the HANDLER's consumption of it.
+// ===========================================================================
+
+// The runStream region of infer.js (defined between runInference and emitResult).
+function streamBody() {
+    return src.substring(src.indexOf('var runStream'), src.indexOf('var emitResult'));
+}
+
+
+// ---------------------------------------------------------------------------
+// 19 — stream branch source (runStream + --stream)
+// ---------------------------------------------------------------------------
+
+describe('19 - stream branch source (runStream + --stream)', function () {
+
+    it('routes init() to runStream when p[stream] is set, else runInference', function () {
+        assert.match(src, /if \(p\['stream'\]\)\s*\{\s*runStream\(projectPath, entry, built\.messages, options\);/);
+        assert.match(src, /\} else \{\s*runInference\(projectPath, entry, built\.messages, options\);/);
+    });
+
+    it('runStream mirrors the runInference bootstrap (require core / setPath / new AIConnector / onReady / AI / stream)', function () {
+        var rs = streamBody();
+        assert.match(rs, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/lib\/connector'\)/);
+        assert.match(rs, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/index'\)/);
+        assert.match(rs, /setPath\('project', projectPath\);/);
+        assert.match(rs, /var connector = new AIConnector\(entry\);/);
+        assert.match(rs, /connector\.onReady\(function \(err, conn\)/);
+        assert.match(rs, /var ai\s+= AI\(conn\);/);
+        assert.match(rs, /var emitter = ai\.stream\(messages, options\);/);
+    });
+
+    it('wires start/delta/done/error listeners (the error listener is mandatory — it is listener-gated)', function () {
+        var rs = streamBody();
+        assert.match(rs, /emitter\.on\('start',/);
+        assert.match(rs, /emitter\.on\('delta',/);
+        assert.match(rs, /emitter\.on\('done',/);
+        assert.match(rs, /emitter\.on\('error',/);
+    });
+
+    it('exits 0 inside the done handler and 1 inside the error handler', function () {
+        var rs = streamBody();
+        // Unbounded non-greedy: the first exit(0) after the done handler opens IS
+        // the done handler's own (runStream's other exits are exit(1)); likewise
+        // the first exit(1) after the error handler opens is its own.
+        assert.match(rs, /emitter\.on\('done', function \(result\) \{[\s\S]*?process\.exit\(0\);/);
+        assert.match(rs, /emitter\.on\('error', function \(e\) \{[\s\S]*?process\.exit\(1\);/);
+    });
+
+    it('writes frames via synchronous fs.writeSync(1, ...) so the terminal frame is not truncated by process.exit', function () {
+        assert.match(src, /var emitFrame = function \(frame\)/);
+        assert.match(src, /fs\.writeSync\(1, JSON\.stringify\(frame\) \+ '\\n'\)/);
+    });
+
+    it('maps the start frame to { type, model, role }', function () {
+        var rs = streamBody();
+        assert.match(rs, /emitFrame\(\{ type: 'start', model: s\.model, role: s\.role \}\)/);
+    });
+
+    it('maps the delta frame to { type, index, text, outputTokens } with honest null passthrough', function () {
+        var rs = streamBody();
+        assert.match(rs, /type\s*:\s*'delta'/);
+        assert.match(rs, /index\s*:\s*d\.index/);
+        assert.match(rs, /text\s*:\s*d\.text/);
+        assert.match(rs, /outputTokens\s*:\s*\(typeof d\.outputTokens\s+===\s*'number'\)\s*\?[\s\S]{0,30}?:\s*null/);
+    });
+
+    it('maps the done frame (content/model/usage/latencyMs) with honest null counters', function () {
+        var rs = streamBody();
+        assert.match(rs, /type\s*:\s*'done'/);
+        assert.match(rs, /content\s*:\s*result\.content/);
+        assert.match(rs, /model\s*:\s*result\.model/);
+        assert.match(rs, /inputTokens\s*:\s*\(typeof u\.inputTokens\s+===\s*'number'\)\s*\?[\s\S]{0,30}?:\s*null/);
+        assert.match(rs, /outputTokens\s*:\s*\(typeof u\.outputTokens\s+===\s*'number'\)\s*\?[\s\S]{0,30}?:\s*null/);
+        assert.match(rs, /latencyMs\s*:\s*\(typeof result\.latencyMs\s+===\s*'number'\)\s*\?[\s\S]{0,30}?:\s*null/);
+    });
+
+    it('includes finishReason only when present (OpenAI-family only; Anthropic done has none)', function () {
+        var rs = streamBody();
+        assert.match(rs, /if \(typeof result\.finishReason !== 'undefined' && result\.finishReason !== null\)/);
+        assert.match(rs, /frame\.finishReason = result\.finishReason;/);
+    });
+
+    it('maps the error frame to { type: error, error: { message } }', function () {
+        var rs = streamBody();
+        assert.match(rs, /type: 'error', error: \{ message:/);
+    });
+
+    it('does NOT branch on self.format in runStream (--stream is always NDJSON)', function () {
+        assert.doesNotMatch(streamBody(), /self\.format/);
+    });
+});
+
+
+// ===========================================================================
+// 20 — stream frame mapping (pure-logic replicas of runStream's inline maps)
+// ===========================================================================
+
+// Replica of runStream's start-frame mapping.
+function startFrame(s) {
+    return { type: 'start', model: s.model, role: s.role };
+}
+// Replica of runStream's delta-frame mapping (numeric passthrough, else null).
+function deltaFrame(d) {
+    return {
+        type         : 'delta',
+        index        : d.index,
+        text         : d.text,
+        outputTokens : (typeof d.outputTokens === 'number') ? d.outputTokens : null
+    };
+}
+// Replica of runStream's done-frame mapping (honest null counters + conditional finishReason).
+function doneFrame(result) {
+    var u     = result.usage || {};
+    var frame = {
+        type    : 'done',
+        content : result.content,
+        model   : result.model,
+        usage   : {
+            inputTokens  : (typeof u.inputTokens  === 'number') ? u.inputTokens  : null,
+            outputTokens : (typeof u.outputTokens === 'number') ? u.outputTokens : null
+        },
+        latencyMs : (typeof result.latencyMs === 'number') ? result.latencyMs : null
+    };
+    if (typeof result.finishReason !== 'undefined' && result.finishReason !== null) {
+        frame.finishReason = result.finishReason;
+    }
+    return frame;
+}
+// Replica of runStream's error-frame mapping.
+function errorFrame(e) {
+    return { type: 'error', error: { message: (e && e.message) ? e.message : String(e) } };
+}
+
+
+describe('20 - stream frame mapping (replica)', function () {
+
+    it('start frame carries model + role', function () {
+        assert.deepEqual(startFrame({ model: 'qwen2.5:0.5b', role: 'assistant' }),
+            { type: 'start', model: 'qwen2.5:0.5b', role: 'assistant' });
+    });
+
+    it('delta passes a numeric outputTokens through (incl. 0)', function () {
+        assert.deepEqual(deltaFrame({ index: 3, text: ' assist', outputTokens: 7 }),
+            { type: 'delta', index: 3, text: ' assist', outputTokens: 7 });
+        assert.deepEqual(deltaFrame({ index: 0, text: 'Hi', outputTokens: 0 }),
+            { type: 'delta', index: 0, text: 'Hi', outputTokens: 0 });
+    });
+
+    it('delta coerces null/undefined outputTokens to null (OpenAI-family null-until-final — never fabricated)', function () {
+        assert.equal(deltaFrame({ index: 1, text: '!', outputTokens: null }).outputTokens, null);
+        assert.equal(deltaFrame({ index: 2, text: '?' }).outputTokens, null);
+    });
+
+    it('done passes real usage numbers + latencyMs + finishReason through', function () {
+        assert.deepEqual(
+            doneFrame({ content: 'Hi! How can I assist you today?', model: 'qwen2.5:0.5b', usage: { inputTokens: 34, outputTokens: 10 }, latencyMs: 1115, finishReason: 'stop' }),
+            { type: 'done', content: 'Hi! How can I assist you today?', model: 'qwen2.5:0.5b', usage: { inputTokens: 34, outputTokens: 10 }, latencyMs: 1115, finishReason: 'stop' }
+        );
+    });
+
+    it('done coerces missing/null usage to null (e.g. ollama omits the final usage chunk)', function () {
+        assert.deepEqual(doneFrame({ content: 'x', model: 'm', usage: { inputTokens: null, outputTokens: null }, latencyMs: 50 }).usage,
+            { inputTokens: null, outputTokens: null });
+        var g = doneFrame({ content: 'y', model: 'm' }); // no usage object at all
+        assert.deepEqual(g.usage, { inputTokens: null, outputTokens: null });
+        assert.equal(g.latencyMs, null);
+    });
+
+    it('done omits finishReason when absent (Anthropic done has none)', function () {
+        var f = doneFrame({ content: 'x', model: 'm', usage: { inputTokens: 1, outputTokens: 2 }, latencyMs: 5 });
+        assert.equal('finishReason' in f, false);
+    });
+
+    it('done includes finishReason when present (OpenAI-family)', function () {
+        assert.equal(doneFrame({ content: 'x', model: 'm', usage: {}, latencyMs: 5, finishReason: 'length' }).finishReason, 'length');
+    });
+
+    it('error frame extracts an Error message', function () {
+        assert.deepEqual(errorFrame(new Error("404 model 'llama3.2' not found")),
+            { type: 'error', error: { message: "404 model 'llama3.2' not found" } });
+    });
+
+    it('error frame stringifies a non-Error', function () {
+        assert.deepEqual(errorFrame('plain string'), { type: 'error', error: { message: 'plain string' } });
+    });
+
+    it('every frame serialises to a single NDJSON line', function () {
+        [ startFrame({ model: 'm', role: 'r' }),
+          deltaFrame({ index: 0, text: 'hi', outputTokens: null }),
+          doneFrame({ content: 'x', model: 'm', usage: {}, latencyMs: 1, finishReason: 'stop' }),
+          errorFrame(new Error('e')) ].forEach(function (frame) {
+            assert.equal(JSON.stringify(frame).indexOf('\n'), -1, 'a frame JSON line must contain no literal newline');
+        });
+    });
+
+    it('a delta whose text contains a newline still serialises to ONE NDJSON line (JSON escapes it, round-trips back)', function () {
+        var line = JSON.stringify(deltaFrame({ index: 0, text: 'line1\nline2', outputTokens: null }));
+        assert.equal(line.indexOf('\n'), -1);
+        assert.equal(JSON.parse(line).text, 'line1\nline2');
     });
 });
