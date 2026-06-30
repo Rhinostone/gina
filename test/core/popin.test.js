@@ -1546,3 +1546,159 @@ describe('26 - Popin: #B54 click consumes the in-flight preload (one click = one
         assert.match(getPopinSrc(), /\$popin\.options\.preOpen[\s\S]{0,80}showLoadingShell\(\$popin,\s*ensurePopinDialog\(\$popin\)\)/, 'in-flight preOpen shows the skeleton');
     });
 });
+
+
+// ── 27 — Popin: native <dialog> UA-close routes through popinClose ─────────────────
+//
+// A native <dialog> opened with showModal() can be closed by the user agent — pressing
+// Escape, or submitting a `<form method="dialog">` inside it — which fires the element's
+// native `close` event WITHOUT calling popinClose(). popinClose() is the only path that
+// resets `isOpen`, runs popinUnbind() (clearing an AJAX popin's innerHTML + removing its
+// `loaded.<id>` listener) and restores the toolbar, so a UA close otherwise leaves the
+// reused element stale and `isOpen` stuck true. popinOpen() now binds a one-time native
+// `close` listener (gated on useDialogMode) that runs popinClose() when the dialog closed
+// while still flagged open.
+//
+// jsdom ^29 has no native <dialog> (no showModal()/Escape, no native `close` event), so —
+// same convention as blocks 16-22 — a test-local replica of the bind + handler is exercised
+// against a jsdom element (a synthetic `close` event stands in for the UA close), and the
+// source-inspection pins at the end lock the production source to the same shape so the
+// replica cannot drift.
+
+// Replica of the popinClose cleanup relevant to a UA close — MUST mirror popin/main.js
+// popinClose(): early-return when already closed, call $el.close(), clear the AJAX popin's
+// innerHTML (popinUnbind, gated on !isInPageDialog), then flip isOpen=false. (The real
+// popinClose does more — toolbar restore, focus return, header teardown — out of scope for
+// the close-routing contract under test here.)
+function popinCloseReplica($popin) {
+    if ( !$popin.isOpen ) {
+        return;                          // mirrors popinClose's `if (!$popin.isOpen) return`
+    }
+    if ( $popin.target && typeof($popin.target.close) === 'function' ) {
+        $popin.target.close();           // in a real browser this queues the async `close` event
+    }
+    if ( $popin.target && !$popin.isInPageDialog ) {
+        $popin.target.innerHTML = '';    // popinUnbind clears AJAX popin content
+    }
+    $popin.isOpen = false;               // set AFTER close() but synchronously — before any queued event
+    $popin._cleanupCount = ($popin._cleanupCount || 0) + 1;
+}
+
+// Replica of the popinOpen close-sync bind — MUST mirror popin/main.js.
+function bindCloseSyncReplica($el, $popin, useDialogMode) {
+    if ( useDialogMode && $el && !$el._ginaCloseSyncBound ) {
+        $el._ginaCloseSyncBound = true;
+        $el.addEventListener('close', function () {
+            if ( $popin.isOpen ) {
+                popinCloseReplica($popin);
+            }
+        });
+    }
+}
+
+describe('27 - Popin: native <dialog> UA-close routes through popinClose', function () {
+
+    // --- behavioral (jsdom + replica) ---
+
+    it('UA close (synthetic `close` event) while open → cleanup runs (isOpen false, AJAX content cleared)', function () {
+        var doc = makeDoc();
+        var d = makeDialog(doc, true);
+        d.$el.innerHTML = '<p>fragment A</p>';
+        var $popin = { name: 'demo', isOpen: true, target: d.$el, isInPageDialog: false };
+        bindCloseSyncReplica(d.$el, $popin, true);
+
+        // UA closes the dialog (Escape / method="dialog") — only the native event fires.
+        d.$el.dispatchEvent(new doc.defaultView.Event('close'));
+
+        assert.equal($popin.isOpen, false, 'isOpen reset by the close listener');
+        assert.equal(d.$el.innerHTML, '', 'stale AJAX content cleared');
+        assert.equal($popin._cleanupCount, 1, 'cleanup ran exactly once');
+    });
+
+    it("de-dup: the plugin's own popinClose cleans up once; the queued `close` event then no-ops", function () {
+        var doc = makeDoc();
+        var d = makeDialog(doc, true);
+        d.$el.innerHTML = '<p>fragment A</p>';
+        var $popin = { name: 'demo', isOpen: true, target: d.$el, isInPageDialog: false };
+        bindCloseSyncReplica(d.$el, $popin, true);
+
+        // Plugin-initiated close: popinClose sets isOpen=false synchronously...
+        popinCloseReplica($popin);
+        assert.equal($popin._cleanupCount, 1, 'plugin close cleaned up once');
+        assert.equal($popin.isOpen, false);
+
+        // ...then the `close` event that popinClose's $el.close() queued fires — guard no-ops.
+        d.$el.dispatchEvent(new doc.defaultView.Event('close'));
+        assert.equal($popin._cleanupCount, 1, 'queued close event did NOT double-run cleanup');
+    });
+
+    it('listener is bound once across element reuse (_ginaCloseSyncBound guard)', function () {
+        var doc = makeDoc();
+        var d = makeDialog(doc, true);
+        var $popin = { name: 'demo', isOpen: true, target: d.$el, isInPageDialog: false };
+        bindCloseSyncReplica(d.$el, $popin, true);   // popinOpen #1
+        bindCloseSyncReplica(d.$el, $popin, true);   // popinOpen #2 — element reused, must not re-bind
+
+        d.$el.dispatchEvent(new doc.defaultView.Event('close'));
+        assert.equal($popin._cleanupCount, 1, 'a single close fires cleanup once (no stacked listeners)');
+    });
+
+    it('non-dialog mode → no native close listener bound', function () {
+        var doc = makeDoc();
+        var d = makeDiv(doc);    // <div>, not <dialog>
+        var $popin = { name: 'demo', isOpen: true, target: d.$el };
+        bindCloseSyncReplica(d.$el, $popin, false);  // useDialogMode:false
+        assert.notEqual(d.$el._ginaCloseSyncBound, true, 'no close-sync flag in non-dialog mode');
+        d.$el.dispatchEvent(new doc.defaultView.Event('close'));
+        assert.equal($popin._cleanupCount, undefined, 'no cleanup (a <div> has no native close)');
+    });
+
+    it('in-page dialog content is preserved on UA close (isInPageDialog guard)', function () {
+        var doc = makeDoc();
+        var d = makeDialog(doc, true);
+        d.$el.innerHTML = '<p>authored content</p>';
+        var $popin = { name: 'demo', isOpen: true, target: d.$el, isInPageDialog: true };
+        bindCloseSyncReplica(d.$el, $popin, true);
+        d.$el.dispatchEvent(new doc.defaultView.Event('close'));
+        assert.equal($popin.isOpen, false, 'isOpen still reset for an in-page dialog');
+        assert.equal(d.$el.innerHTML, '<p>authored content</p>', 'authored content preserved (not an AJAX popin)');
+    });
+
+    // --- source-inspection pins (lock the production source to the replica above) ---
+
+    it('source: popinOpen binds a one-time native `close` listener gated on useDialogMode', function () {
+        assert.match(
+            getPopinSrc(),
+            /self\.options\.useDialogMode\s*&&\s*\$el\s*&&\s*!\$el\._ginaCloseSyncBound/,
+            'expected the useDialogMode + once-guard gate in popinOpen'
+        );
+        assert.match(getPopinSrc(), /\$el\._ginaCloseSyncBound\s*=\s*true;/, 'expected the once-bind flag set');
+        assert.match(getPopinSrc(), /\$el\.addEventListener\(\s*['"]close['"]/, 'expected a native `close` listener (DOM addEventListener)');
+    });
+
+    it('source: the close listener runs popinClose only while still flagged open', function () {
+        assert.match(
+            getPopinSrc(),
+            /addEventListener\(\s*['"]close['"][\s\S]{0,220}?if\s*\(\s*\$popin\.isOpen\s*\)[\s\S]{0,80}?popinClose\(\s*\$popin\.name\s*\)/,
+            'close handler must guard on $popin.isOpen then call popinClose($popin.name)'
+        );
+    });
+
+    it('source: the close-sync bind precedes `$popin.isOpen = true` in popinOpen', function () {
+        var src = getPopinSrc();
+        var bindIdx = src.indexOf('!$el._ginaCloseSyncBound');
+        var openIdx = src.indexOf('$popin.isOpen = true');
+        assert.ok(bindIdx > -1, 'gate present');
+        assert.ok(openIdx > -1, '$popin.isOpen = true present');
+        assert.ok(bindIdx < openIdx, 'the close listener is bound before isOpen is set true');
+    });
+
+    // --- dist freshness (the served bundle must carry the fix) ---
+
+    it('served gina.min.js carries the _ginaCloseSyncBound close-sync listener', function () {
+        assert.ok(
+            getDistMinSrc().indexOf('_ginaCloseSyncBound') > -1,
+            'served gina.min.js is missing _ginaCloseSyncBound — rebuild the bundle from source'
+        );
+    });
+});

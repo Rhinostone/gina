@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A native `<dialog>` popin closed by the user agent — pressing Escape, or submitting a `<form method="dialog">` inside it — now runs the same cleanup as the close button. Previously only the framework''s own close paths cleaned up, so a user-agent close left a reused AJAX popin with stale content and its open state stuck, making the next open of a shared-name popin show the previous fragment.'
+time: 2026-06-30T04:13:47+01:00

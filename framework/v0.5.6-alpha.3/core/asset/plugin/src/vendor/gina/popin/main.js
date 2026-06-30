@@ -2296,6 +2296,30 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 }
             }
 
+            // A native <dialog> can be closed by the user agent — pressing Escape, or
+            // submitting a `<form method="dialog">` inside it — which fires the element's
+            // native `close` event WITHOUT going through popinClose(). popinClose() is the
+            // only path that resets `isOpen`, runs popinUnbind() (clearing an AJAX popin's
+            // innerHTML + removing its `loaded.<id>` listener) and restores the toolbar, so
+            // a UA close otherwise leaves the reused element stale and `isOpen` stuck true.
+            // Bind a one-time native `close` listener that runs the same cleanup. We listen
+            // to `close` (not `cancel`): `close` fires for BOTH Escape and method="dialog";
+            // `cancel` is Escape-only. De-dup: on the plugin's own close, popinClose() sets
+            // isOpen=false synchronously before the queued `close` event fires, so the guard
+            // below sees isOpen===false and no-ops (popinClose() also re-guards on !isOpen),
+            // and popinClose()'s $el.close() on an already-closed dialog is a spec no-op so
+            // there is no recursion. `_ginaCloseSyncBound` keeps it to one listener across
+            // element reuse; gated on useDialogMode (non-dialog mode is a <div>, no `close`
+            // event). Native addEventListener — NOT gina's addListener (the custom event bus).
+            if ( self.options.useDialogMode && $el && !$el._ginaCloseSyncBound ) {
+                $el._ginaCloseSyncBound = true;
+                $el.addEventListener('close', function () {
+                    if ( $popin.isOpen ) {
+                        popinClose($popin.name);
+                    }
+                });
+            }
+
             $popin.isOpen = true;
             // so it can be forwarded to the handler who is listening
             $popin.target = $el;
