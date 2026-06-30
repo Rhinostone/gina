@@ -30,6 +30,14 @@
     infer <connector> <bundle> @<project>
                                  Same, against the bundle's merged
                                  shared+bundle connector view.
+    test                         Probe every connector in every registered
+                                 project for readiness (config, driver,
+                                 secrets). Exit non-zero on any failure.
+    test @<project>              Probe every connector in one project
+                                 (shared + all bundles).
+    test <connector> @<project>  Probe one connector (shared / merged view).
+    test <connector> <bundle> @<project>
+                                 Probe one connector as <bundle> sees it.
     help                         Show this message.
 
   Options (list):
@@ -131,6 +139,22 @@
                                  verbatim (null when the provider does not report
                                  them — never fabricated).
 
+  Options (test):
+
+    --connect                    Add a live connectivity probe on top of the
+                                 default validate-only checks (config, driver,
+                                 secrets). For `ai` connectors this calls the
+                                 provider's models.list — a credentialed request
+                                 that authenticates with ZERO generation tokens
+                                 (for ollama:// it confirms the local server is
+                                 up). For DB/cache connectors the live probe is
+                                 reported as SKIPPED for now (config / driver /
+                                 secrets are still validated) — the live DB/cache
+                                 probe is a follow-up. `--connect` never spends
+                                 generation tokens.
+    --format=json                Emit the machine-readable readiness report
+                                 instead of the human-readable text.
+
   Output columns (list, text mode):
 
     [ ok ]  driver installed, or built-in (node:sqlite).
@@ -213,6 +237,21 @@
     `--stream` emits NDJSON token frames (one JSON object per line —
     start / delta / done / error) on stdout regardless of `--format`.
 
+    `connector:test` probes configured connectors for readiness and exits
+    non-zero on any failure (so it can gate CI). The default is validate-only
+    and offline: for each connector it checks that the type / `ai` protocol is
+    recognised, the npm driver is installed at <project>/node_modules, and
+    every `${secret:KEY}` placeholder resolves from the environment — no
+    network, no connector instantiated. `--connect` adds a live probe: for
+    `ai` connectors it calls the provider's models.list (a credentialed
+    request with ZERO generation-token cost; `ollama://` confirms the local
+    server is up), resolving `${secret:KEY}` the same way `connector:infer`
+    does (the value is never printed). For DB/cache connectors the live
+    `--connect` probe is reported as SKIPPED for now (config / driver / secrets
+    are still validated); the live DB/cache probe is a follow-up. Like
+    `connector:infer`, a detached CLI sees only its own environment, not
+    secrets a supervisor injects at bundle start.
+
     `connectors.json` files are parsed with `//` and `/* */` comment
     tolerance. `connector:add`, `connector:rm`, and `connector:migrate`
     preserve any comment header above the first `{`, but mid-body
@@ -273,4 +312,11 @@
                                                                        Override the model (e.g. an ollama:// connector)
     echo '[{"role":"user","content":"hi"}]' | gina connector:infer claude @myproject
                                                                        Multi-turn messages piped as JSON on stdin
+
+    gina connector:test @myproject                                     Validate every connector in a project (config + driver + secrets)
+    gina connector:test claude @myproject                              Validate one connector (shared / merged view)
+    gina connector:test claude api @myproject                          Validate one connector as the api bundle sees it
+    gina connector:test @myproject --format=json                       Machine-readable readiness report for CI
+    gina connector:test claude @myproject --connect                    Add the live probe (ai: models.list, zero tokens)
+    gina connector:test                                                Validate every connector in every registered project
 

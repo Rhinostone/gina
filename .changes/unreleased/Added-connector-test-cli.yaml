@@ -1,0 +1,3 @@
+kind: Added
+body: '`gina connector:test` — probe configured connectors for readiness and exit non-zero on any failure (CI-friendly). Validate-only by default and offline: for each connector it checks the type / `ai` protocol is recognised, the npm driver is installed, and every `${secret:KEY}` placeholder resolves from the environment. `--connect` adds a live probe — for `ai` connectors it calls the provider models.list (zero generation tokens; `ollama://` confirms the local server is up). `gina connector:test [<connector> [<bundle>]] @<project>` tests one connector or every connector in a project; `--format=json` emits a machine-readable readiness report.'
+time: 2026-06-30T15:16:55+01:00

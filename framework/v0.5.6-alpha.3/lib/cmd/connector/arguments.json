@@ -21,5 +21,6 @@
   "--system",
   "--max-tokens",
   "--temperature",
-  "--stream"
+  "--stream",
+  "--connect"
 ]
