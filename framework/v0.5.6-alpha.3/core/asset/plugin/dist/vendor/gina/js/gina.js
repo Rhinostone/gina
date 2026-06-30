@@ -5406,7 +5406,13 @@ function Routing() {
                     }
                     let condition = params.requirements[_key];
                     if ( /^\//.test(condition) ) {
-                        condition = condition.substring(1, condition.lastIndexOf('/')-1);
+                        // Strip the surrounding `/…/<flags>` delimiters to the bare pattern body.
+                        // End index is lastIndexOf('/') (exclusive), NOT -1: the `-1` over-stripped
+                        // the final body char, so a requirement ending `…)/i` (group-close right
+                        // before the flag) lost its closing `)` → `new RegExp(condition)` threw
+                        // "Invalid regular expression: Unterminated group", 500ing every DELETE
+                        // dispatch that scanned it (a `…)$/i` requirement merely lost its `$` anchor).
+                        condition = condition.substring(1, condition.lastIndexOf('/'));
                     } else if ( /^validator\:\:/.test(condition) && await fitsWithRequirements(uRo[p], uRe[p], params, request, response, next) ) {
                         ++score;
                         continue;
