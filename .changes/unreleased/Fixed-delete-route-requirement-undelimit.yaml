@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'DELETE route matching no longer crashes with a 500 ("Invalid regular expression ... Unterminated group") when a route requirements pattern ends in a group-close immediately before the regex flag (for example /(^null$|^[0-9A-Za-z]{6}$)/i). An off-by-one in the DELETE-only requirement un-delimiting over-stripped the final pattern character, so the first such route reached while scanning broke the entire DELETE dispatch — even a DELETE to an unrelated route. A requirement ending )$/i previously lost its $ end anchor silently; it is now kept.'
+time: 2026-06-30T22:46:47+01:00
