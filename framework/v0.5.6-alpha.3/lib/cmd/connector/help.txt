@@ -130,7 +130,8 @@
     --protocol=<uri>             Override the connector protocol scheme.
     --format=json                Emit `{ content, model, usage }` as JSON
                                  instead of the text content + usage footer.
-                                 (The heavy provider `raw` payload is omitted.)
+                                 (The heavy provider `raw` payload is omitted
+                                 unless --raw is given.)
     --stream                     Stream the inference as newline-delimited JSON
                                  (NDJSON) — one frame per line on stdout
                                  (start / delta / done / error) for token-by-token
@@ -138,6 +139,13 @@
                                  --format. Token counters are passed through
                                  verbatim (null when the provider does not report
                                  them — never fabricated).
+    --raw                        Include the heavy provider `raw` payload
+                                 (omitted by default). With --format=json it
+                                 adds a `raw` field carrying the full provider
+                                 response. With --stream it adds `raw` to the
+                                 `done` frame: Anthropic's final message object,
+                                 or null for OpenAI-family streams (which expose
+                                 no single final object). No effect in text mode.
 
   Options (test):
 
@@ -233,9 +241,10 @@
     `secret:` prefix is NOT substituted.) Offline providers such as
     `ollama://` (localhost:11434, no key) work with no network access to a
     paid API. Text mode writes the content to stdout and a model/usage
-    footer to stderr; `--format=json` emits `{ content, model, usage }`.
-    `--stream` emits NDJSON token frames (one JSON object per line —
-    start / delta / done / error) on stdout regardless of `--format`.
+    footer to stderr; `--format=json` emits `{ content, model, usage }`
+    (add `--raw` to include the full provider response). `--stream` emits
+    NDJSON token frames (one JSON object per line — start / delta / done /
+    error) on stdout regardless of `--format`.
 
     `connector:test` probes configured connectors for readiness and exits
     non-zero on any failure (so it can gate CI). The default is validate-only
@@ -306,6 +315,8 @@
                                                                        Bundle-scoped connector, with a system prompt
     gina connector:infer claude @myproject --message="ping" --format=json
                                                                        Machine-readable { content, model, usage }
+    gina connector:infer claude @myproject --message="ping" --format=json --raw
+                                                                       Same, plus the full provider response under `raw`
     gina connector:infer claude @myproject --message="Write a haiku" --stream
                                                                        Stream tokens as NDJSON frames (one JSON object per line)
     gina connector:infer local-llm @myproject --message="hi" --model=llama3.2

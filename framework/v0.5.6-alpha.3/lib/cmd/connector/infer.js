@@ -105,6 +105,11 @@ function Infer(opt, cmd) {
 
         var p = self.params || {};
 
+        // --raw opts the heavy provider response into the JSON / stream-done
+        // output (omitted by default for CLI use). Boolean presence flag,
+        // mirroring how p['stream'] gates runStream.
+        self.raw = !!p['raw'];
+
         // Positionals: [0] connector logical name, [1] optional bundle name.
         var positionals   = extractPositionals(process.argv);
         var connectorName = positionals[0] || null;
@@ -172,7 +177,8 @@ function Infer(opt, cmd) {
             return;
         }
 
-        // Build the messages array (stdin JSON wins when piped) + per-call options.
+        // Build the messages array (--message wins; piped stdin JSON is the
+        // fallback) + per-call options.
         var built = buildMessages(p);
         if (!built) return; // buildMessages already exited
         var options = buildOptions(p, built.system);
@@ -281,10 +287,12 @@ function Infer(opt, cmd) {
     };
 
     /**
-     * Builds the OpenAI-format messages array. When stdin is piped (non-TTY),
-     * a JSON messages array on stdin takes precedence; otherwise `--message`
-     * (with optional `--system`) is used. Exits (code 1) on malformed stdin
-     * JSON or when no prompt is supplied.
+     * Builds the OpenAI-format messages array. `--message` (with optional
+     * `--system`) takes precedence; only when no `--message` is supplied is a
+     * JSON messages array piped on stdin (non-TTY) used instead. Exits (code 1)
+     * on malformed stdin JSON, or when neither a prompt nor stdin content is
+     * supplied. Checking `--message` first means an accidentally-non-TTY stdin
+     * (a heredoc, CI, or `< file`) never overrides an explicit `--message`.
      *
      * @inner
      * @private
@@ -294,7 +302,13 @@ function Infer(opt, cmd) {
     var buildMessages = function (p) {
         var system = (p['system'] && p['system'] !== true) ? String(p['system']) : null;
 
-        // stdin JSON wins when piped.
+        // --message wins over stdin when both are present.
+        var message = (typeof p['message'] === 'string') ? p['message'] : null;
+        if (message) {
+            return { messages: [{ role: 'user', content: message }], system: system };
+        }
+
+        // No --message: fall back to a JSON messages array piped on stdin.
         if (!process.stdin.isTTY) {
             var raw = '';
             try { raw = fs.readFileSync(0, 'utf8'); } catch (e) { raw = ''; }
@@ -317,13 +331,10 @@ function Infer(opt, cmd) {
             }
         }
 
-        var message = (typeof p['message'] === 'string') ? p['message'] : null;
-        if (!message) {
-            console.error('[connector:infer] provide a prompt: --message="..." (optionally with --system="..."), or pipe a messages JSON array on stdin.');
-            process.exit(1);
-            return null;
-        }
-        return { messages: [{ role: 'user', content: message }], system: system };
+        // Neither --message nor stdin content.
+        console.error('[connector:infer] provide a prompt: --message="..." (optionally with --system="..."), or pipe a messages JSON array on stdin.');
+        process.exit(1);
+        return null;
     };
 
     /**
@@ -417,8 +428,10 @@ function Infer(opt, cmd) {
      * OpenAI-family deltas carry `outputTokens: null` until the final chunk, and
      * some providers (e.g. ollama) omit the final usage chunk entirely — those
      * stay `null`. `finishReason` is OpenAI-family-only (absent on Anthropic).
-     * The heavy provider `raw` payload is omitted. `--stream` always emits
-     * NDJSON regardless of `--format`.
+     * The heavy provider `raw` payload is omitted by default; `--raw` adds a
+     * `raw` field to the `done` frame (Anthropic's final message object, or
+     * `null` for OpenAI-family streams, which expose no single final object).
+     * `--stream` always emits NDJSON regardless of `--format`.
      *
      * The `ai.stream()` emitter is fresh per call and DEFERS its provider call
      * one tick, so every listener is attached SYNCHRONOUSLY here before any
@@ -491,6 +504,13 @@ function Infer(opt, cmd) {
                 if (typeof result.finishReason !== 'undefined' && result.finishReason !== null) {
                     frame.finishReason = result.finishReason;
                 }
+                // --raw opts the provider raw into the done frame. For a STREAM,
+                // Anthropic's done.raw is the final message object, but
+                // OpenAI-family raw is null (the stream exposes no single final
+                // object) — surfacing null there is correct, not a bug. Coerced
+                // to null so JSON.stringify emits an explicit "raw": null rather
+                // than dropping the key entirely.
+                if ( self.raw ) frame.raw = (typeof result.raw === 'undefined') ? null : result.raw;
                 emitFrame(frame);
                 process.exit(0);
             });
@@ -502,39 +522,53 @@ function Infer(opt, cmd) {
     };
 
     /**
-     * Writes the normalised inference result. JSON mode emits
-     * `{ content, model, usage }` (the heavy provider `raw` is omitted for
-     * CLI use). Text mode writes the content verbatim to stdout (so
-     * `> file` captures only the content) and a model/usage footer to stderr.
+     * Writes the normalised inference result. JSON mode (`--format=json`,
+     * matched strictly with `===` so `jsonl`/`json5` fall to text) emits
+     * `{ content, model, usage }` — the heavy provider `raw` is omitted by
+     * default for CLI use, and added back as a `raw` field only under `--raw`
+     * (for a buffered inference `result.raw` is the full provider response).
+     * Text mode writes the content verbatim to stdout (so `> file` captures
+     * only the content) and a model/usage footer to stderr.
+     *
+     * Both paths use synchronous `fs.writeSync` (fd 1 / fd 2) rather than the
+     * async `process.stdout` / `process.stderr` stream writers, so the output
+     * is not truncated by the `process.exit(0)` that {@link runInference} fires
+     * on the next line — `process.stdout` / `process.stderr` are ASYNCHRONOUS on
+     * a pipe (`| jq`, `$(…)`, CI), and `process.exit()` tears the process down
+     * without draining their buffers (the framework's boot-exit-flush rule).
+     * Mirrors {@link emitFrame}.
      *
      * @inner
      * @private
      * @param {object} result - infer() normalised result { content, model, usage, raw }
      */
     var emitResult = function (result) {
-        if ( /^json?/.test(self.format) ) {
-            process.stdout.write(JSON.stringify({
+        if ( self.format === 'json' ) {
+            var payload = {
                 content : result.content,
                 model   : result.model,
                 usage   : result.usage
-            }));
+            };
+            if ( self.raw ) payload.raw = result.raw;
+            fs.writeSync(1, JSON.stringify(payload));
             return;
         }
-        process.stdout.write((result.content || '') + '\n');
+        fs.writeSync(1, (result.content || '') + '\n');
         var u      = result.usage || {};
         var inTok  = (typeof u.inputTokens  === 'number') ? u.inputTokens  : 'n/a';
         var outTok = (typeof u.outputTokens === 'number') ? u.outputTokens : 'n/a';
-        process.stderr.write('— ' + (result.model || 'unknown model') + '  (tokens in: ' + inTok + ', out: ' + outTok + ')\n');
+        fs.writeSync(2, '— ' + (result.model || 'unknown model') + '  (tokens in: ' + inTok + ', out: ' + outTok + ')\n');
     };
 
     /**
      * Writes one NDJSON frame (a JSON object) to stdout, newline-terminated.
-     * Uses synchronous `fs.writeSync(1, ...)` rather than `process.stdout.write`
-     * so each frame reaches the pipe IMMEDIATELY (real-time streaming) and the
-     * terminal `done`/`error` frame is never truncated by the `process.exit()`
-     * that follows it — `process.exit()` tears the process down without
-     * draining the async stdout buffer on a pipe (the framework's
-     * boot-exit-flush rule). Used by {@link runStream} only.
+     * Uses synchronous `fs.writeSync(1, ...)` rather than the async
+     * `process.stdout` stream so each frame reaches the pipe IMMEDIATELY
+     * (real-time streaming) and the terminal `done`/`error` frame is never
+     * truncated by the `process.exit()` that follows it — `process.exit()`
+     * tears the process down without draining the async stdout buffer on a
+     * pipe (the framework's boot-exit-flush rule). Used by {@link runStream}
+     * only.
      *
      * @inner
      * @private

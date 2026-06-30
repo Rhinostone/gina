@@ -18,12 +18,12 @@
  *   (e) non-AI rejection via cfg.isAIConnector(entry)
  *   (f) secrets.resolve in try/catch, key surfaced via _ginaSecretKey (never the value)
  *   (g) ad-hoc overrides applied to the entry; --model applied to options, not the entry
- *   (h) buildMessages — stdin-JSON-wins gate, flag fallback
+ *   (h) buildMessages — --message-wins gate, stdin fallback
  *   (i) buildOptions — model/system/max-tokens/temperature
  *   (j) direct bootstrap — setPath('project'), relative require of the AI core,
  *       AIConnector.onReady → AI(conn).infer(...).then/.catch
- *   (k) emitResult — JSON { content, model, usage } (raw omitted), text content
- *       to stdout + usage footer to stderr
+ *   (k) emitResult — JSON { content, model, usage } (raw added only under --raw),
+ *       content + usage footer written via synchronous fs.writeSync (fd 1 / fd 2)
  *   (l) help.txt + arguments.json + bin/cli allowedOffline registration
  *
  * The merge/select/AI-subtype logic lives in lib/connector-config (covered by
@@ -224,10 +224,10 @@ describe('07 - overrides', function () {
 
 
 // ---------------------------------------------------------------------------
-// 08 — buildMessages (stdin wins, flag fallback)
+// 08 — buildMessages (--message wins, stdin fallback)
 // ---------------------------------------------------------------------------
 
-describe('08 - buildMessages', function () {
+describe('08 - buildMessages (--message wins, stdin fallback)', function () {
 
     it('reads stdin only when piped (non-TTY)', function () {
         assert.match(src, /if \(!process\.stdin\.isTTY\)/);
@@ -238,7 +238,7 @@ describe('08 - buildMessages', function () {
         assert.match(src, /if \(!Array\.isArray\(parsed\)\)/);
     });
 
-    it('falls back to --message as a user message', function () {
+    it('uses --message as the prompt (wins over stdin)', function () {
         assert.match(src, /var message = \(typeof p\['message'\] === 'string'\) \? p\['message'\] : null;/);
         assert.match(src, /role: 'user', content: message/);
     });
@@ -307,27 +307,39 @@ describe('10 - direct AIConnector + AI bootstrap', function () {
 
 
 // ---------------------------------------------------------------------------
-// 11 — emitResult (raw omitted)
+// 11 — emitResult (synchronous fs.writeSync, --raw opt-in, strict json gate)
 // ---------------------------------------------------------------------------
 
 describe('11 - emitResult', function () {
 
-    it('emits { content, model, usage } as JSON', function () {
-        assert.match(src, /JSON\.stringify\(\{[\s\S]*?content\s*:\s*result\.content,[\s\S]*?model\s*:\s*result\.model,[\s\S]*?usage\s*:\s*result\.usage[\s\S]*?\}\)/);
+    it('emits { content, model, usage } as JSON (built as a payload object)', function () {
+        assert.match(src, /var payload = \{[\s\S]*?content\s*:\s*result\.content,[\s\S]*?model\s*:\s*result\.model,[\s\S]*?usage\s*:\s*result\.usage[\s\S]*?\}/);
+        assert.match(src, /fs\.writeSync\(1, JSON\.stringify\(payload\)\)/);
     });
 
-    it('omits the heavy provider `raw` payload everywhere', function () {
-        assert.doesNotMatch(src, /result\.raw/);
+    it('omits the heavy provider `raw` by default; includes it only under --raw (self.raw-gated)', function () {
+        // raw is opt-in: both emit sites add it only inside an `if ( self.raw )` guard.
+        assert.match(src, /if \(\s*self\.raw\s*\) payload\.raw = result\.raw;/);
+        assert.match(src, /if \(\s*self\.raw\s*\) frame\.raw =/);
     });
 
-    it('writes content to stdout and the model/usage footer to stderr', function () {
-        assert.match(src, /process\.stdout\.write\(\(result\.content/);
-        assert.match(src, /process\.stderr\.write\(/);
+    it('writes content to stdout (fd 1) and the model/usage footer to stderr (fd 2) synchronously', function () {
+        assert.match(src, /fs\.writeSync\(1, \(result\.content/);
+        assert.match(src, /fs\.writeSync\(2, /);
         assert.match(src, /tokens in:/);
     });
 
-    it('guards JSON output with /^json?/ test', function () {
-        assert.match(src, /\/\^json\?\/\.test\(self\.format\)/);
+    it('never buffers output via process.stdout/stderr.write (truncates on a pipe before process.exit)', function () {
+        // emitResult was the only place that wrote to process.stdout/stderr; after
+        // the pipe-flush fix neither appears anywhere in the handler (the stream
+        // path already used fs.writeSync). Window-independent absence pin.
+        assert.doesNotMatch(src, /process\.stdout\.write/);
+        assert.doesNotMatch(src, /process\.stderr\.write/);
+    });
+
+    it("guards JSON output with a strict self.format === 'json' (jsonl/json5 fall to text)", function () {
+        assert.match(src, /self\.format === 'json'/);
+        assert.doesNotMatch(src, /\/\^json\?\/\.test\(self\.format\)/);
     });
 });
 
@@ -448,7 +460,7 @@ function buildOptions(p, system) {
     return options;
 }
 
-// Mirrors emitResult's JSON shape (raw omitted).
+// Mirrors emitResult's default JSON shape (raw omitted; --raw is covered in §23).
 function jsonShape(result) {
     return { content: result.content, model: result.model, usage: result.usage };
 }
@@ -743,5 +755,141 @@ describe('20 - stream frame mapping (replica)', function () {
         var line = JSON.stringify(deltaFrame({ index: 0, text: 'line1\nline2', outputTokens: null }));
         assert.equal(line.indexOf('\n'), -1);
         assert.equal(JSON.parse(line).text, 'line1\nline2');
+    });
+});
+
+
+// ===========================================================================
+// 21 — buildMessages precedence (replica). --message wins over stdin; stdin is
+// the fallback; no-input is the terminal error. Mirrors the reworked source
+// order so an accidentally-non-TTY stdin (heredoc/CI/< file) never overrides an
+// explicit --message.
+// ===========================================================================
+
+// Mirrors the precedence decision of the reworked buildMessages.
+function chooseSource(p, stdinRaw, isTTY) {
+    var message = (typeof p['message'] === 'string') ? p['message'] : null;
+    if (message) return { from: 'message', content: message };
+    if (!isTTY) {
+        var raw = (stdinRaw || '').trim();
+        if (raw) return { from: 'stdin', raw: raw };
+    }
+    return { from: 'none' };
+}
+
+describe('21 - buildMessages precedence (replica)', function () {
+
+    it('--message wins even when valid stdin is piped (non-TTY)', function () {
+        assert.deepEqual(
+            chooseSource({ message: 'hi' }, '[{"role":"user","content":"piped"}]', false),
+            { from: 'message', content: 'hi' });
+    });
+
+    it('falls back to stdin when no --message and stdin is piped', function () {
+        assert.deepEqual(
+            chooseSource({}, '[{"role":"user","content":"piped"}]', false),
+            { from: 'stdin', raw: '[{"role":"user","content":"piped"}]' });
+    });
+
+    it('an accidentally non-TTY empty stdin + a valid --message uses the message (no hard exit)', function () {
+        assert.deepEqual(chooseSource({ message: 'hi' }, '', false), { from: 'message', content: 'hi' });
+    });
+
+    it('no --message + empty piped stdin yields the no-input terminal', function () {
+        assert.deepEqual(chooseSource({}, '   ', false), { from: 'none' });
+    });
+
+    it('no --message + a TTY (no pipe) yields the no-input terminal', function () {
+        assert.deepEqual(chooseSource({}, '', true), { from: 'none' });
+    });
+
+    it('ignores a bare --message flag (boolean true), falling back to stdin', function () {
+        assert.deepEqual(
+            chooseSource({ message: true }, '[{"role":"user","content":"piped"}]', false),
+            { from: 'stdin', raw: '[{"role":"user","content":"piped"}]' });
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 22 — buildMessages source order (--message checked + returned before stdin)
+// ---------------------------------------------------------------------------
+
+// The buildMessages region of infer.js (between buildMessages and buildOptions).
+function messagesBody() {
+    return src.substring(src.indexOf('var buildMessages'), src.indexOf('var buildOptions'));
+}
+
+describe('22 - buildMessages source order', function () {
+
+    it('reads p[message] before the !process.stdin.isTTY stdin branch', function () {
+        var body     = messagesBody();
+        var msgIdx   = body.indexOf("p['message']");
+        var stdinIdx = body.indexOf('process.stdin.isTTY');
+        assert.ok(msgIdx > -1 && stdinIdx > -1, 'both checks must exist');
+        assert.ok(msgIdx < stdinIdx, '--message must be checked before stdin');
+    });
+
+    it('returns on --message before touching stdin', function () {
+        assert.match(messagesBody(),
+            /if \(message\) \{\s*return \{ messages: \[\{ role: 'user', content: message \}\][\s\S]*?\}/);
+    });
+});
+
+
+// ===========================================================================
+// 23 — --raw opt-in: the heavy provider raw is omitted by default and added
+// back only under --raw, on BOTH the buffered JSON path and the stream done
+// frame. For a STREAM, OpenAI-family raw is null (no single final object) —
+// surfaced as an explicit "raw":null, which is correct, not a bug.
+// ===========================================================================
+
+// Replica of emitResult's JSON payload raw opt-in.
+function jsonShapeRaw(result, raw) {
+    var payload = { content: result.content, model: result.model, usage: result.usage };
+    if (raw) payload.raw = result.raw;
+    return payload;
+}
+// Replica of runStream's done-frame raw opt-in (self.raw gate + null coercion).
+function doneFrameRaw(result, raw) {
+    var frame = doneFrame(result);
+    if (raw) frame.raw = (typeof result.raw === 'undefined') ? null : result.raw;
+    return frame;
+}
+
+describe('23 - --raw opt-in (replica + registration)', function () {
+
+    it('buffered JSON omits raw by default, includes result.raw under --raw', function () {
+        var r = { content: 'hi', model: 'm', usage: { inputTokens: 1, outputTokens: 2 }, raw: { full: 'provider response' } };
+        assert.equal('raw' in jsonShapeRaw(r, false), false);
+        assert.deepEqual(jsonShapeRaw(r, true).raw, { full: 'provider response' });
+    });
+
+    it('stream done frame omits raw by default, includes it under --raw', function () {
+        var r = { content: 'x', model: 'm', usage: { inputTokens: 1, outputTokens: 2 }, latencyMs: 5, raw: { msg: true } };
+        assert.equal('raw' in doneFrameRaw(r, false), false);
+        assert.deepEqual(doneFrameRaw(r, true).raw, { msg: true });
+    });
+
+    it('stream done frame surfaces an explicit null when the provider gives no final object (OpenAI-family)', function () {
+        var r = { content: 'x', model: 'm', usage: {}, latencyMs: 5 }; // no raw key
+        var f = doneFrameRaw(r, true);
+        assert.equal('raw' in f, true);
+        assert.equal(f.raw, null);
+        assert.match(JSON.stringify(f), /"raw":null/); // explicit, not dropped
+    });
+
+    it('init stashes self.raw from p[raw] (boolean presence flag)', function () {
+        assert.match(src, /self\.raw = !!p\['raw'\];/);
+    });
+
+    it('arguments.json registers --raw', function () {
+        assert.ok(argsArr.indexOf('--raw') > -1, '--raw must be registered');
+    });
+
+    it('help.txt documents --raw under Options (infer) + an example', function () {
+        assert.match(helpTxt, /--raw\b/);
+        assert.match(helpTxt, /provider `raw` payload/);
+        assert.match(helpTxt, /--format=json --raw/);
     });
 });

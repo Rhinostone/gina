@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'gina connector:infer now writes its buffered result with synchronous I/O, so the full output is no longer truncated when stdout is a pipe (for example | jq, command substitution, or CI) — previously the process could exit before the OS pipe buffer was flushed, cutting off large responses. --message now takes precedence over a piped stdin messages array (an accidentally non-TTY stdin such as a heredoc or redirected file no longer overrides an explicit --message), and --format is matched strictly so only --format=json emits JSON while jsonl and json5 fall back to the text output.'
+time: 2026-06-30T20:50:17+01:00
