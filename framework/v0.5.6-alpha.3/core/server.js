@@ -3695,7 +3695,12 @@ function Server(options) {
                         'method': 'POST',
                         'bundle' : self.appName
                     };
-                    var busboy = Busboy({ headers: request.headers });
+                    // defParamCharset:'utf8' — decode the Content-Disposition `filename=`
+                    // param as UTF-8 rather than busboy's latin1 default; otherwise a UTF-8
+                    // filename ("Accusé de réception.pdf") is mojibaked ("AccusÃ© de rÃ©ception.pdf").
+                    // The RFC 5987 `filename*` form is self-describing and unaffected; the
+                    // field `name` param is ASCII, so this only corrects the plain filename path.
+                    var busboy = Busboy({ headers: request.headers, defParamCharset: 'utf8' });
 
                     // busboy.on('field', function(fieldname, val, fieldnameTruncated, valTruncated) {
                     //     console.log('Field [' + fieldname + ']: value: ' + inspect(val));
