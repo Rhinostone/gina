@@ -8,8 +8,16 @@
 'use strict';
 
 var EventEmitter = require('events').EventEmitter;
-var gina         = require('../../../../core/gna');
-var lib          = gina.lib;
+// The AI connector core only needs `lib.logger` + `lib.inherits`. Reaching them
+// via the full `core/gna` bootstrap made this module un-loadable outside a real
+// bundle boot: `core/gna.js`'s module-load resolves a *started* bundle's listening
+// port and `process.exit(1)`s when it can't, so an offline/CLI consumer (e.g.
+// `gina connector:infer`, incl. its `--stream` mode) crashed before it could
+// reach onReady. Require the `lib` registry directly — it is the IDENTICAL object that
+// `gna.lib` exposes (`core/gna.js` itself does `gna.lib = require('./../lib')`),
+// so bundle-runtime behaviour is unchanged while CLI scope can load it standalone.
+// var gina      = require('../../../../core/gna'); var lib = gina.lib;
+var lib          = require('../../../../lib');
 var console      = lib.logger;
 var inherits     = lib.inherits;
 

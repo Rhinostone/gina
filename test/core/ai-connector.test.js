@@ -96,6 +96,21 @@ describe('01 - AI connector: lib/connector.js source', function() {
         assert.ok(/apiKey\s*:\s*conf\.apiKey\s*\|\|\s*'no-key'/.test(src));
     });
 
+    it('requires the `lib` registry directly (not the full core/gna bootstrap) so it loads outside a bundle boot', function() {
+        // core/gna.js resolves a STARTED bundle's listening port at module-load
+        // and process.exit(1)s when it cannot, so reaching `gina.lib` through it
+        // made this module un-loadable in CLI/offline scope (e.g. connector:infer).
+        // Require the lib registry directly — the IDENTICAL object gna.lib exposes
+        // (gna.js itself does `gna.lib = require('./../lib')`).
+        assert.ok(/var lib\s*=\s*require\('\.\.\/\.\.\/\.\.\/\.\.\/lib'\)/.test(src),
+            'connector.js must require ../../../../lib directly');
+        // No ACTIVE require of core/gna. The old line is commented out, and a
+        // commented line starts with `//`, so an anchored ^ match excludes it —
+        // this trips only on a re-introduced active `var gina = require(...)`.
+        assert.ok(!/^var gina\s*=\s*require/m.test(src),
+            'connector.js must not actively require core/gna at module load');
+    });
+
 });
 
 
