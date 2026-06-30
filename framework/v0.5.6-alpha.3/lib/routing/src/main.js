@@ -382,6 +382,7 @@ function Routing() {
                         continue;
                     }
                     let condition = params.requirements[_key];
+                    let conditionFlags = '';
                     if ( /^\//.test(condition) ) {
                         // Strip the surrounding `/…/<flags>` delimiters to the bare pattern body.
                         // End index is lastIndexOf('/') (exclusive), NOT -1: the `-1` over-stripped
@@ -389,6 +390,12 @@ function Routing() {
                         // before the flag) lost its closing `)` → `new RegExp(condition)` threw
                         // "Invalid regular expression: Unterminated group", 500ing every DELETE
                         // dispatch that scanned it (a `…)$/i` requirement merely lost its `$` anchor).
+                        // Preserve the trailing `/<flags>` too (the segment after the closing `/`)
+                        // and pass it to new RegExp, mirroring the GET path (fitsWithRequirements):
+                        // a requirement written `/.../i` now matches case-insensitively on DELETE as
+                        // well. Previously the flags were dropped here, so DELETE matched
+                        // case-sensitively while GET honoured them — a silent DELETE/GET mismatch.
+                        conditionFlags = condition.substring(condition.lastIndexOf('/') + 1);
                         condition = condition.substring(1, condition.lastIndexOf('/'));
                     } else if ( /^validator\:\:/.test(condition) && await fitsWithRequirements(uRo[p], uRe[p], params, request, response, next) ) {
                         ++score;
@@ -397,7 +404,7 @@ function Routing() {
                     if (
                         /^:/.test(uRo[p])
                         && typeof(condition) != 'undefined'
-                        && new RegExp(condition).test(uRe[p])
+                        && new RegExp(condition, conditionFlags).test(uRe[p])
                     ) {
                         ++score;
                         request[method][uRo[p].substring(1)] = uRe[p];
