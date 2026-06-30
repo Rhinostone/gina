@@ -149,6 +149,13 @@ function Lib() {
         // install hint + connector:add --install range resolution + connector:list
         // driver introspection).
         connectorRegistry: _require('./connector-registry'),
+        // Pure connector-entry resolver (merge shared+bundle connectors.json,
+        // bundle wins; select by name; AI-subtype detection). Consumed by the
+        // connector:* runtime CLI handlers (connector:infer) to resolve a
+        // single connector conf outside a request. Returns a fresh entry so the
+        // caller can run lib.secrets.resolve() on it in place. Pure (same
+        // contract as connector-registry / cmd-status-format).
+        connectorConfig : _require('./connector-config'),
         // Pure resolver that picks between a project-installed @rhinostone/swig
         // (or swig-twig) and the framework's bundled copy. Opt-in via
         // settings.json > swig.useProject; default-off. Returns a decision

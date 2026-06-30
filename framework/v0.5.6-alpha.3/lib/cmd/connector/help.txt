@@ -24,6 +24,12 @@
                                  bundles) for known issues. Dry run by
                                  default.
     migrate <bundle> @<project>  Scan just the bundle's connectors.json.
+    infer <connector> @<project> Run a one-off inference against a configured
+                                 AI connector (shared config). Smoke-tests
+                                 connectivity + credentials outside a request.
+    infer <connector> <bundle> @<project>
+                                 Same, against the bundle's merged
+                                 shared+bundle connector view.
     help                         Show this message.
 
   Options (list):
@@ -101,6 +107,23 @@
     --format=json                Emit machine-readable JSON instead of the
                                  human-readable text summary.
 
+  Options (infer):
+
+    --message=<text>             The user prompt. Required unless a messages
+                                 JSON array is piped on stdin.
+    --system=<text>              Optional system prompt.
+    --model=<id>                 Override the connector's default model for
+                                 this call.
+    --max-tokens=<n>             Max tokens in the response (default 1024).
+    --temperature=<n>            Sampling temperature.
+    --api-key=<value>            Override the connector's apiKey with a
+                                 literal (bypasses ${secret:...} resolution).
+    --base-url=<url>             Override the provider base URL.
+    --protocol=<uri>             Override the connector protocol scheme.
+    --format=json                Emit `{ content, model, usage }` as JSON
+                                 instead of the text content + usage footer.
+                                 (The heavy provider `raw` payload is omitted.)
+
   Output columns (list, text mode):
 
     [ ok ]  driver installed, or built-in (node:sqlite).
@@ -166,6 +189,21 @@
     auto-migrate connectors.json at bundle boot. Run it in CI or before
     committing.
 
+    `connector:infer` only works with `ai` connectors (it errors cleanly on
+    any other type). It resolves the connector config the same way
+    `connector:list` does (shared, or shared+bundle merged when a bundle is
+    named), then instantiates the connector directly — it does NOT boot the
+    bundle. The provider SDK (`@anthropic-ai/sdk` or `openai`) must be
+    installed in the project's node_modules. `${secret:KEY}` placeholders
+    (typically the `apiKey`) are resolved from the CLI's own environment;
+    the resolved value is never printed. A detached CLI does not inherit
+    secrets a supervisor injects at bundle start — export the key in this
+    shell or pass `--api-key=<literal>`. (A bare `${ENV_VAR}` without the
+    `secret:` prefix is NOT substituted.) Offline providers such as
+    `ollama://` (localhost:11434, no key) work with no network access to a
+    paid API. Text mode writes the content to stdout and a model/usage
+    footer to stderr; `--format=json` emits `{ content, model, usage }`.
+
     `connectors.json` files are parsed with `//` and `/* */` comment
     tolerance. `connector:add`, `connector:rm`, and `connector:migrate`
     preserve any comment header above the first `{`, but mid-body
@@ -213,4 +251,15 @@
     gina connector:migrate api @myproject                              Dry-run lint of the api bundle only
     gina connector:migrate @myproject --fix                            Apply auto-fixable issues (inject $schema)
     gina connector:migrate @myproject --format=json                    JSON report for scripting / CI
+
+    gina connector:infer claude @myproject --message="Say hi in one word"
+                                                                       One-off inference against a shared AI connector
+    gina connector:infer claude api @myproject --message="..." --system="You are terse."
+                                                                       Bundle-scoped connector, with a system prompt
+    gina connector:infer claude @myproject --message="ping" --format=json
+                                                                       Machine-readable { content, model, usage }
+    gina connector:infer local-llm @myproject --message="hi" --model=llama3.2
+                                                                       Override the model (e.g. an ollama:// connector)
+    echo '[{"role":"user","content":"hi"}]' | gina connector:infer claude @myproject
+                                                                       Multi-turn messages piped as JSON on stdin
 
