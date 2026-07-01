@@ -535,3 +535,115 @@ describe('17 - summarize (replica)', function () {
         assert.deepEqual(summarize([]), { total: 0, passed: 0, failed: 0 });
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 18 — envvar check (inert bare ${ENV_VAR} placeholders)
+// ---------------------------------------------------------------------------
+
+describe('18 - envvar (inert placeholder) check', function () {
+
+    it('declares the anchored UPPER_SNAKE inert-placeholder regex', function () {
+        assert.match(src, /var INERT_PLACEHOLDER_RE\s*=\s*\//);
+        // the UPPER_SNAKE class excludes ${secret:KEY} (lowercase prefix + colon)
+        // and lowercase whisper templates (${bundle}, ${host}, …)
+        assert.match(src, /\[A-Z_\]\[A-Z0-9_\]\*/);
+    });
+
+    it('collectInertPlaceholders walks nested values and matches the regex', function () {
+        assert.match(src, /var collectInertPlaceholders = function \(node, path, out\)/);
+        assert.match(src, /INERT_PLACEHOLDER_RE\.test\(node\)/);
+    });
+
+    it('adds an `envvar` check that fails on any inert placeholder', function () {
+        assert.match(src, /var inert = collectInertPlaceholders\(entry\);/);
+        assert.match(src, /name\s*:\s*'envvar'/);
+        assert.match(src, /ok\s*:\s*inert\.length === 0/);
+    });
+
+    it('surfaces the fix (use ${secret:KEY}) and echoes the literal token (not a secret)', function () {
+        assert.match(src, /use \$\{secret:KEY\}/);
+        assert.match(src, /p\.path \+ '=' \+ p\.value/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 19 — missing project path fails (not a silent pass)
+// ---------------------------------------------------------------------------
+
+// NOTE: single-project / bare-invocation missing-path is NOT handled by a
+// connector:test check — it already exits non-zero earlier, inside the shared
+// isCmdConfigured() → loadAssets() (ENOENT writing manifest.json to the gone
+// dir). self.projectName is not resolved until inside that call, so a clean
+// pre-emptive guard here is infeasible without a shared-infra change. The
+// defensive guard below covers the testAllProjects code path.
+describe('19 - missing project path (defensive testAllProjects guard)', function () {
+
+    it('all-projects mode flips anyFail on a missing path (so the run exits non-zero)', function () {
+        assert.match(src, /if \( !ppath \|\| !fs\.existsSync\(ppath\) \) \{\s*self\.anyFail = true;/);
+        assert.match(src, /status: 'missing'/);
+    });
+
+    it('renders the missing path as a FAIL in text output', function () {
+        assert.match(src, /\(project path missing — FAIL\)/);
+    });
+});
+
+
+// ===========================================================================
+// Pure-logic replica — the inert-placeholder detector (Narrow: whole-string
+// UPPER_SNAKE, excludes ${secret:} and lowercase whisper templates).
+// ===========================================================================
+
+// Mirrors test.js INERT_PLACEHOLDER_RE + collectInertPlaceholders.
+var INERT_RE = /^\$\{[A-Z_][A-Z0-9_]*\}$/;
+function collectInert(node, path, out) {
+    out  = out  || [];
+    path = path || '';
+    if (node == null) return out;
+    if (typeof node === 'string') {
+        if (INERT_RE.test(node)) out.push({ path: path || '(value)', value: node });
+        return out;
+    }
+    if (typeof node === 'object') {
+        for (var k in node) {
+            if (Object.prototype.hasOwnProperty.call(node, k)) {
+                collectInert(node[k], path ? (path + '.' + k) : k, out);
+            }
+        }
+    }
+    return out;
+}
+
+
+describe('20 - collectInert (replica)', function () {
+
+    it('flags a bare ${ENV_VAR} apiKey', function () {
+        var r = collectInert({ connector: 'ai', protocol: 'anthropic://', apiKey: '${ANTHROPIC_API_KEY}' });
+        assert.deepEqual(r, [{ path: 'apiKey', value: '${ANTHROPIC_API_KEY}' }]);
+    });
+
+    it('does NOT flag a ${secret:KEY} placeholder (the working form)', function () {
+        assert.deepEqual(collectInert({ apiKey: '${secret:ANTHROPIC_API_KEY}' }), []);
+    });
+
+    it('does NOT flag lowercase whisper templates the framework resolves at load', function () {
+        assert.deepEqual(collectInert({ database: '${bundle}', host: '${host}', scope: '${scope}' }), []);
+    });
+
+    it('does NOT flag embedded (non-whole-string) or literal values', function () {
+        assert.deepEqual(collectInert({ protocol: 'anthropic://', url: 'Bearer ${ANTHROPIC_API_KEY}', model: 'claude-x' }), []);
+    });
+
+    it('walks nested values and reports a dotted path', function () {
+        assert.deepEqual(
+            collectInert({ options: { auth: { apiKey: '${OPENAI_API_KEY}' } } }),
+            [{ path: 'options.auth.apiKey', value: '${OPENAI_API_KEY}' }]
+        );
+    });
+
+    it('collects multiple inert placeholders', function () {
+        assert.equal(collectInert({ apiKey: '${A_KEY}', password: '${B_PASS}' }).length, 2);
+    });
+});

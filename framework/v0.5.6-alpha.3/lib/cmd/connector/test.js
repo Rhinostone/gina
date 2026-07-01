@@ -10,9 +10,12 @@ var CmdHelper = require('./../helper');
  * Probes a project's configured connectors for readiness OUTSIDE a request —
  * resolves the connector config (shared, or shared+bundle merged), and for
  * each connector validates that (a) its `connector` type / `ai` protocol is
- * recognised, (b) its npm driver is installed at `<project>/node_modules`, and
+ * recognised, (b) its npm driver is installed at `<project>/node_modules`,
  * (c) every `${secret:KEY}` placeholder it requires resolves from the current
- * environment. Exits non-zero when ANY connector fails a check, so it can gate
+ * environment, and (d) no config value is a bare `${ENV_VAR}` placeholder
+ * (config-load substitutes only `${secret:KEY}`, so a bare `${ENV_VAR}` would be
+ * used verbatim as the value). Exits non-zero when ANY connector fails a check,
+ * so it can gate
  * a CI / pre-deploy step. The runtime sibling of `connector:list` (which only
  * reports driver-install status) and `secrets:check` (which only reports env
  * presence) — `connector:test` answers the single question "is this connector
@@ -54,8 +57,9 @@ var CmdHelper = require('./../helper');
  *
  * Exit codes: 0 when every probed connector passes every check; 1 when any
  * connector fails (unknown type / driver not installed / required secret unset
- * / live `--connect` probe failed), or on a usage error (unregistered project /
- * bundle, bad `--format`, connector not found).
+ * / inert `${ENV_VAR}` placeholder / live `--connect` probe failed), or on a
+ * usage error (unregistered project / bundle, missing project directory, bad
+ * `--format`, connector not found).
  *
  * @class Test
  * @constructor
@@ -338,6 +342,54 @@ function Test(opt, cmd) {
     };
 
     /**
+     * Whole-string bare `${ENV_VAR}` placeholder — UPPER_SNAKE, NO `secret:`
+     * prefix. `core/config.js` only substitutes `${secret:KEY}` (via
+     * `lib.secrets`); a bare `${ENV_VAR}` is written verbatim, so the connector
+     * would use the literal placeholder as its value. Lowercase whisper
+     * templates (`${bundle}`, `${host}`, `${scope}`, …) ARE resolved at load, so
+     * the anchored UPPER_SNAKE class deliberately excludes them — and excludes
+     * `${secret:KEY}` too, whose `secret:` prefix has a lowercase letter and a
+     * colon.
+     *
+     * @inner
+     * @constant
+     * @type {RegExp}
+     */
+    var INERT_PLACEHOLDER_RE = /^\$\{[A-Z_][A-Z0-9_]*\}$/;
+
+    /**
+     * Collects every string value in `node` that is an inert bare `${ENV_VAR}`
+     * placeholder (see `INERT_PLACEHOLDER_RE`). Walks nested objects / arrays so
+     * a placeholder anywhere in the entry is surfaced. The collected value is
+     * the placeholder text itself (e.g. `"${ANTHROPIC_API_KEY}"`), which is NOT
+     * a secret — it is the literal, unresolved token — so it is safe to echo.
+     *
+     * @inner
+     * @private
+     * @param {*} node - Connector entry, or a nested value during recursion
+     * @param {string} [path] - Dotted field path, for the report
+     * @param {Array<{path:string, value:string}>} [out]
+     * @returns {Array<{path:string, value:string}>}
+     */
+    var collectInertPlaceholders = function (node, path, out) {
+        out  = out  || [];
+        path = path || '';
+        if (node == null) return out;
+        if (typeof node === 'string') {
+            if (INERT_PLACEHOLDER_RE.test(node)) out.push({ path: path || '(value)', value: node });
+            return out;
+        }
+        if (typeof node === 'object') {
+            for (var k in node) {
+                if (Object.prototype.hasOwnProperty.call(node, k)) {
+                    collectInertPlaceholders(node[k], path ? (path + '.' + k) : k, out);
+                }
+            }
+        }
+        return out;
+    };
+
+    /**
      * A connector passes overall when every NON-skipped check is `ok`. A
      * skipped check (e.g. a deferred DB `--connect` probe) does not fail the
      * connector. Pure — exercised directly by the test suite.
@@ -423,6 +475,22 @@ function Test(opt, cmd) {
                 ? 'no secrets required'
                 : (keys.length + ' required: ' + setCount + ' set, ' + (keys.length - setCount) + ' unset'),
             keys   : statuses
+        });
+
+        // (4) placeholders — a bare ${ENV_VAR} is INERT: config-load substitutes
+        //     only ${secret:KEY}, so a bare ${ENV_VAR} is written verbatim and the
+        //     connector would use the literal placeholder string as its value. The
+        //     surfaced text is the unresolved token, not a secret, so it is safe
+        //     to echo. (Lowercase whisper templates like ${bundle} are excluded.)
+        var inert = collectInertPlaceholders(entry);
+        checks.push({
+            name   : 'envvar',
+            ok     : inert.length === 0,
+            detail : (inert.length === 0)
+                ? 'no inert ${ENV_VAR} placeholders'
+                : (inert.length + ' inert ${ENV_VAR} placeholder' + (inert.length === 1 ? '' : 's')
+                    + ' — use ${secret:KEY}: ' + inert.map(function (p) { return p.path + '=' + p.value; }).join(', ')),
+            inert  : inert
         });
 
         var result = {
@@ -686,7 +754,8 @@ function Test(opt, cmd) {
         for (var i = 0; i < names.length; i++) {
             var pname = names[i];
             var ppath = self.projects[pname].path;
-            if ( !fs.existsSync(ppath) ) {
+            if ( !ppath || !fs.existsSync(ppath) ) {
+                self.anyFail = true;
                 report.projects.push({ project: pname, status: 'missing', connectors: [] });
                 continue;
             }
@@ -784,7 +853,7 @@ function Test(opt, cmd) {
                 + ':');
 
             if (proj.status === 'missing') {
-                console.log('  (project path missing)');
+                console.log('  (project path missing — FAIL)');
                 continue;
             }
             if (!proj.connectors || proj.connectors.length === 0) {
