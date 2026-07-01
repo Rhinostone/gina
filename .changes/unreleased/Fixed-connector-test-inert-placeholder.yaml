@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'gina connector:test now fails a connector whose config carries a bare ${ENV_VAR} placeholder (for example an apiKey of ${ANTHROPIC_API_KEY}). Such a placeholder is never substituted at config-load time — only ${secret:KEY} placeholders are resolved from the environment — so the connector would otherwise use the literal placeholder string as its value; the default validate-only run previously reported it as passing. A new `envvar` check surfaces the offending field and the fix (use ${secret:KEY}), and a registered project whose directory is missing is now reported as a failure in the all-projects report.'
-time: 2026-07-01T02:35:56+01:00

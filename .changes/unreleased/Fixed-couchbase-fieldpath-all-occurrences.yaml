@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The Couchbase connector now substitutes a positional placeholder used as a dynamic field-path key (a `<field>.$N` component, e.g. `SET doc.flags.$2 = $3`) at every occurrence in a prepared statement. Previously, when the same `$N` was used as a field-path component in more than one clause (for example once in SET and once in WHERE), only the last occurrence was interpolated and the earlier one was left as a literal `$N`, producing malformed N1QL; a lower-numbered placeholder could also bleed into a higher-numbered one (`$3` into `$30`). Value placeholders (`= $N`, `LIMIT $N`) are unaffected and still bind positionally.'
-time: 2026-06-29T16:40:28+01:00

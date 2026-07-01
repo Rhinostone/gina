@@ -1,3 +1,0 @@
-kind: Added
-body: 'gina connector:infer gains a --raw flag that opts the heavy provider response back into the output (omitted by default for CLI use). With --format=json it adds a raw field carrying the full provider response; with --stream it adds raw to the final done frame (the final provider message object, or null for OpenAI-compatible streams, which expose no single final object). It has no effect in text mode.'
-time: 2026-06-30T20:50:18+01:00

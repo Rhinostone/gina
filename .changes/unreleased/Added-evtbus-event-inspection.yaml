@@ -1,3 +1,0 @@
-kind: Added
-body: 'Observable application events in the Inspector: emit a named runtime event with self.emitEvent(name, metadata) — or lib/inspector-events from model or background-job code — and see it live in a new Inspector "Events" tab. Events emitted within a request also appear in the end-of-request snapshot; events emitted outside a request (a background job or detached timer) still stream live. Capture is gated to dev mode or an open instrumentation window; the event name always rides the wire, while metadata values are opt-in via settings.inspector.events.captureArgs (default off).'
-time: 2026-06-29T12:00:00Z

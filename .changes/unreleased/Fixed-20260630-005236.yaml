@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Model-initialization failures at boot on a bundle without an onInitialize handler are no longer silently swallowed. Previously such a bundle started in a degraded state (its model layer dead) and failed later with a cryptic call-time error; it now aborts the boot with a clear message, matching the fail-fast behavior of every other model-init failure path.'
-time: 2026-06-30T00:52:36.180926+01:00

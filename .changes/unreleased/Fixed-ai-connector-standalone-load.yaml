@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The AI connector core now loads the framework''s `lib` registry directly instead of going through the full framework bootstrap, so a configured AI connector can be instantiated outside a running bundle — e.g. by `gina connector:infer` in an offline/CLI context. Previously the bootstrap''s bundle-boot path (which resolves a started bundle''s listening port) made the connector core un-loadable anywhere but inside a live bundle.'
-time: 2026-06-30T05:53:10+01:00

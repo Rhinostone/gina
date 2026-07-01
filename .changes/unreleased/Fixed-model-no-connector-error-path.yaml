@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The model loader no longer crashes with a ReferenceError when a connectors.json entry has no resolvable connector module. The "No connector found" error path referenced an undefined variable while constructing its own error, masking the real diagnostic; it now reports the missing connector cleanly.'
-time: 2026-06-29T22:07:47Z

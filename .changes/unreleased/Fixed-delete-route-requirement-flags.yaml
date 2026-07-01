@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'DELETE route matching now honours the regex flags on a route requirements pattern (for example /^foo$/i), matching the GET path. Previously the DELETE-only matcher dropped the trailing flags when un-delimiting the pattern, so a requirement written to be case-insensitive matched case-sensitively on DELETE while the same pattern matched case-insensitively on GET.'
-time: 2026-06-30T23:09:20+01:00

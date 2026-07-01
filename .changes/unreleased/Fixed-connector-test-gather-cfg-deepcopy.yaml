@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina connector:test` now resolves every connector entry through the shared connector-config resolver — the same deep-copying path `connector:infer` uses — instead of an inline shallow merge. When testing a whole project or every registered project, each entry is now a fresh deep copy, so an in-place ${secret:KEY} resolution during a --connect live probe can no longer mutate the shared parsed-config cache through a nested placeholder.'
-time: 2026-07-01T03:15:00+01:00

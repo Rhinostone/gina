@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Multipart upload filenames carrying non-ASCII UTF-8 characters in the plain Content-Disposition `filename=` parameter are now decoded as UTF-8 instead of busboy''s latin1 default. A filename such as "Accusé de réception.pdf" previously reached the upload handler mojibaked ("AccusÃ© de rÃ©ception.pdf") and was persisted under that mangled name. The RFC 5987 `filename*` form (self-describing) and ASCII field names are unaffected.'
-time: 2026-06-30T18:00:00+01:00

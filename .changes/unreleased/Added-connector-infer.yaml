@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a `connector:infer` CLI command that runs a one-off inference against a configured AI connector outside a request: `gina connector:infer <connector> @<project> --message="..."` (or a messages JSON array piped on stdin). It resolves the project''s shared + bundle connector config and credentials (`${secret:KEY}` from the environment, never echoed), instantiates the connector directly without booting the bundle, and prints the normalised result — `--format=json` for machine output. Useful for smoke-testing connectivity and credentials from CI/automation, or scripting a one-off inference from the shell. Errors cleanly on a non-AI connector.'
-time: 2026-06-30T03:51:41Z

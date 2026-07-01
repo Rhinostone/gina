@@ -1,3 +1,0 @@
-kind: Changed
-body: '`gina stop` (alias of `framework:stop`) now lists any bundles still running when it exits and points to `gina bundle:stop` / `gina project:stop` — it stops the framework socket server only, not the detached bundle processes, which keep running. The framework CLI `--help` and man page now document `start`/`stop`/`restart` and make the daemon-only scope of `stop` explicit.'
-time: 2026-06-29T14:27:48Z
