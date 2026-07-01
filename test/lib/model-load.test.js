@@ -110,3 +110,72 @@ describe('02 - #B29: zero-connector dispatch fires cb (pure-logic replica)', fun
         assert.equal(dispatch(undefined, false), true);
     });
 });
+
+
+describe('03 - #B57: no-onInitialize model-load failure fails fast (not swallowed)', function() {
+
+    // The no-onInitialize boot path (core/gna.js) wraps loadAllModels in a
+    // try/catch. It used to SWALLOW a synchronous model-init throw (console.error
+    // + e.emit('complete')) and boot a degraded bundle whose entire model layer
+    // is dead — getModel() then returns a bare { _connection, getConnection } and
+    // the bundle 500s at call-time with a cryptic TypeError. #B57 makes it fail
+    // fast (emerg + fd-2 flush + process.exit(1)), matching the framework's
+    // existing convention on every other model-init-failure path.
+    var gnaSrc;
+    before(function() { gnaSrc = fs.readFileSync(path.join(FW, 'core/gna.js'), 'utf8'); });
+
+    // structural bound: the catch body, from `catch(loadErr)` to the `// -- EO`
+    // marker. Comment-stripped so the negative pin doesn't trip on the explanatory
+    // "Was: … e.emit('complete') …" note in the catch (the jsdoc.md own-comment trap).
+    function catchBody() {
+        var ci = gnaSrc.indexOf('catch(loadErr)');
+        var eo = gnaSrc.indexOf('// -- EO', ci);
+        assert.ok(ci >= 0 && eo > ci, 'catch(loadErr) + // -- EO bound not found');
+        return gnaSrc.slice(ci, eo).replace(/^\s*\/\/.*$/gm, '');
+    }
+
+    it('the no-onInitialize loadAllModels is still wrapped in try/catch(loadErr)', function() {
+        assert.ok(gnaSrc.indexOf('No onInitialize handler') >= 0, 'no-onInitialize block present');
+        assert.match(gnaSrc, /catch\s*\(\s*loadErr\s*\)/);
+    });
+
+    it('the catch FAILS FAST: console.emerg + fs.writeSync(2 + process.exit(1) + names the abort', function() {
+        var body = catchBody();
+        assert.match(body, /console\.emerg\(/,         'must emerg the failure (loud)');
+        assert.match(body, /fs\.writeSync\(\s*2\s*,/,  'must flush to fd 2 (boot-exit-flush)');
+        assert.match(body, /process\.exit\(\s*1\s*\)/, 'must exit(1) — fail fast');
+        assert.match(body, /aborting boot/i,           'must name it a model-load abort');
+    });
+
+    it('the catch NO LONGER swallows by emitting "complete" (block-scoped negative pin)', function() {
+        assert.doesNotMatch(catchBody(), /e\.emit\(\s*['"]complete['"]/,
+            'the swallow (emit complete inside the catch) must be gone');
+    });
+
+    it('the SUCCESS path still emits "complete" (preserved — the original commit goal)', function() {
+        var blockIdx = gnaSrc.indexOf('No onInitialize handler');
+        var catchIdx = gnaSrc.indexOf('catch(loadErr)', blockIdx);
+        var successBlock = gnaSrc.slice(blockIdx, catchIdx);
+        assert.match(successBlock, /e\.emit\(\s*['"]complete['"]\s*,\s*instance\s*\)/,
+            'success path must still emit complete');
+    });
+
+    // pure-logic replica: the same synchronous model-init throw -> fail-fast ABORTS
+    // vs. the old swallow CONTINUES (the subtract that demonstrates the bug).
+    it('replica: a sync model-init throw -> fail-fast aborts; the old swallow would have continued', function() {
+        function boot(failFast) {
+            var out = [];
+            try {
+                // a synchronous model-build throw (the uppercase entity-class guard,
+                // or a syntax error in an entity .js file) on a sync (sqlite) connector
+                throw new Error('Entity Class `2fa` should start with an uppercase !');
+            } catch (loadErr) {
+                if (failFast) { out.push('exit:1'); }       // #B57 — abort boot
+                else { out.push('emit:complete'); }         // old behaviour — swallow -> degraded boot
+            }
+            return out;
+        }
+        assert.deepEqual(boot(true),  ['exit:1']);
+        assert.deepEqual(boot(false), ['emit:complete']);
+    });
+});

@@ -254,3 +254,139 @@ describe('05 - getCluster delegation (pure-logic replica)', function() {
     });
 
 });
+
+
+// ─── 06 — dynamic field-path $N substituted at EVERY occurrence (source pins) ─
+
+describe('06 - field-path $N substitution: every occurrence (source pins)', function() {
+
+    var blk, code;
+    before(function() {
+        var src = fs.readFileSync(CONNECTOR, 'utf8');
+        // isolate the foundSpecialLeftCase substitution loop
+        var start = src.indexOf('if (foundSpecialLeftCase) {');
+        var rest  = src.slice(start);
+        var end   = rest.indexOf('if ( sdkVersion == 3 )');
+        blk  = end > -1 ? rest.slice(0, end) : rest;
+        // strip comments before negative pins: the explanatory comment in the block
+        // intentionally names the old greedy `(.*)` shape it replaced, which would
+        // otherwise trip the "(.*) is gone" pin (jsdoc.md negative-pin-vs-comment trap).
+        code = blk.replace(/\/\/.*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    });
+
+    it('escapes the placeholder once into a reusable paramKeyEsc', function() {
+        assert.ok(
+            code.indexOf('var paramKeyEsc = params[i].replace(') > -1,
+            'expected a single paramKeyEsc = params[i].replace(/([$%]+)/, ...) extraction'
+        );
+    });
+
+    it('gates field-path position with a leading dot + digit boundary (no greedy prefix)', function() {
+        assert.ok(
+            code.indexOf("paramKeyEsc + '(?![0-9])');") > -1,
+            "gate regex must be /\\.<key>(?![0-9])/ — leading dot + digit boundary, no greedy (.*) prefix"
+        );
+    });
+
+    it('rewrites EVERY occurrence: global (g) flag + dollar-safe function replacer', function() {
+        assert.ok(
+            code.indexOf("paramKeyEsc + '(?![0-9])', 'g')") > -1,
+            'replace must carry the global (g) flag so all field-path occurrences are rewritten'
+        );
+        assert.ok(
+            code.indexOf("function () { return '.' + args[i]; }") > -1,
+            'replace must use a function replacer (dollar-safe), never a string replacement that would expand $&/$`/$\''
+        );
+    });
+
+    it('keeps the digit boundary on BOTH the gate and the replace', function() {
+        var n = (code.match(/\(\?!\[0-9\]\)/g) || []).length;
+        assert.ok(n >= 2, 'expected (?![0-9]) on both the gate and the global replace; found ' + n);
+    });
+
+    it('removed the greedy (.*) prefix capture and the $1 re-emit (defect gone)', function() {
+        assert.ok(code.indexOf('(.*)') === -1, 'the greedy (.*) prefix capture must be gone from the substitution');
+        assert.ok(code.indexOf("'$1\\.'+args[i]") === -1, "the old '$1.'+args[i] greedy re-emit replacement must be gone");
+    });
+
+});
+
+
+// ─── 07 — dynamic field-path $N substitution behaviour (pure-logic replica) ──
+
+describe('07 - field-path $N substitution behaviour (pure-logic replica)', function() {
+
+    // Mirrors the foundSpecialLeftCase loop in
+    // framework/v*\/core/connectors/couchbase/index.js line-for-line (post-fix).
+    function substitute(body, params, inlineParams, args) {
+        var qStr = body.slice(0), inl = inlineParams.slice(), re = null, key, i, len;
+        var foundSpecialLeftCase = /\w+\.(\$|\%)/.test(qStr);
+        if (foundSpecialLeftCase) {
+            i = 0; len = args.length;
+            for (; i < len; ++i) {
+                key = inl.indexOf(params[i]);
+                if (key > -1) {
+                    var paramKeyEsc = params[i].replace(/([$%]+)/, '\\$1');
+                    re = new RegExp('\\.' + paramKeyEsc + '(?![0-9])');
+                    if (re.test(qStr)) {
+                        qStr = qStr.replace(new RegExp('\\.' + paramKeyEsc + '(?![0-9])', 'g'), function () { return '.' + args[i]; });
+                        inl.splice(key, 1);
+                    }
+                }
+            }
+        }
+        return qStr;
+    }
+
+    // inlineParams mirrors index.js:436-443 (deduped $N from the body, order of first use).
+    function inlineParamsOf(body) { return Array.from(new Set(body.match(/\$\w+/g))); }
+
+    it('substitutes the SAME $N field-path key in BOTH a SET and a WHERE (the reported bug)', function() {
+        var body = 'UPDATE bucket AS d SET d.flags.$2 = $3 WHERE d.id = $1 AND d.flags.$2 IS MISSING RETURNING d.id;';
+        var out  = substitute(body, ['$1', '$2', '$3'], inlineParamsOf(body), ['doc-1', 'seen', true]);
+        assert.equal(out, 'UPDATE bucket AS d SET d.flags.seen = $3 WHERE d.id = $1 AND d.flags.seen IS MISSING RETURNING d.id;');
+        assert.doesNotMatch(out, /\.\$\d+/, 'no literal .$N field-path placeholder may survive');
+    });
+
+    it('mixes a field-path $N with value params: field-path interpolated, values stay positional', function() {
+        var body = 'UPDATE bucket AS d SET d.counters.$2 = $3 WHERE d.id = $1 RETURNING d.id;';
+        var out  = substitute(body, ['$1', '$2', '$3'], inlineParamsOf(body), ['doc-1', 'hits', 5]);
+        assert.equal(out, 'UPDATE bucket AS d SET d.counters.hits = $3 WHERE d.id = $1 RETURNING d.id;');
+        assert.match(out, /= \$3 /,       'value param $3 must remain positional (not interpolated)');
+        assert.match(out, /d\.id = \$1 /, 'value param $1 must remain positional (not interpolated)');
+    });
+
+    it('keeps two DISTINCT field-path params (each used once) working', function() {
+        var body = 'UPDATE bucket AS d SET d.a.$2 = 1, d.b.$3 = 2 WHERE d.id = $1 RETURNING d.id;';
+        var out  = substitute(body, ['$1', '$2', '$3'], inlineParamsOf(body), ['doc-1', 'alpha', 'beta']);
+        assert.equal(out, 'UPDATE bucket AS d SET d.a.alpha = 1, d.b.beta = 2 WHERE d.id = $1 RETURNING d.id;');
+    });
+
+    it('respects the digit boundary: $3 does not substitute inside $30', function() {
+        var body = 'UPDATE bucket AS d SET d.x.$3 = 1, d.y.$30 = 2 WHERE d.id = $1 RETURNING d.id;';
+        // comment order forces $3 to be processed before $30; both are field-path keys
+        var out  = substitute(body, ['$1', '$3', '$30'], inlineParamsOf(body), ['doc-1', 'K3', 'K30']);
+        assert.equal(out, 'UPDATE bucket AS d SET d.x.K3 = 1, d.y.K30 = 2 WHERE d.id = $1 RETURNING d.id;');
+    });
+
+    it('handles the same $N as BOTH a field-path key and a value', function() {
+        var body = 'UPDATE bucket AS d SET d.flags.$2 = $2 WHERE d.id = $1 RETURNING d.id;';
+        var out  = substitute(body, ['$1', '$2'], inlineParamsOf(body), ['doc-1', 'seen']);
+        // the field-path .$2 is interpolated; the value `= $2` stays positional
+        assert.equal(out, 'UPDATE bucket AS d SET d.flags.seen = $2 WHERE d.id = $1 RETURNING d.id;');
+    });
+
+    it("does not dollar-expand a field-key value containing $& (function replacer, not string)", function() {
+        var body = 'UPDATE bucket AS d SET d.flags.$2 = 1 WHERE d.id = $1;';
+        var out  = substitute(body, ['$1', '$2'], inlineParamsOf(body), ['doc-1', 'a$&b']);
+        assert.equal(out, 'UPDATE bucket AS d SET d.flags.a$&b = 1 WHERE d.id = $1;');
+    });
+
+    it('leaves %N field-paths untouched (this loop only extracts $N)', function() {
+        var body = 'UPDATE bucket AS d SET d.flags.%2 = 1 WHERE d.id = $1 RETURNING d.id;';
+        // params/inlineParams are matched with /\$\w+/g, so %2 is never extracted -> never substituted
+        var out  = substitute(body, ['$1'], inlineParamsOf(body), ['doc-1', 'seen']);
+        assert.equal(out, body, '%N is not handled by this substitution loop (no regression, no new support)');
+    });
+
+});

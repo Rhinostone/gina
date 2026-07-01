@@ -279,3 +279,131 @@ describe('04 - getRouteByUrl: param is cloned + substitution propagated (no sing
         assert.equal(r1.param.file, 'includes/widget-:id', '...but the returned route keeps the un-substituted :placeholder — broken');
     });
 });
+
+
+// ─── 05 — DELETE-branch requirement un-delimit: off-by-one over-strip ("Unterminated group") ───
+//
+// parseRouting()'s DELETE-only branch (gated `/^(delete)$/i.test(method)`) un-delimits each scanned
+// route's `/…/<flags>` requirement to its bare body before `new RegExp(condition).test(uRe)`. The
+// body extraction used `substring(1, condition.lastIndexOf('/') - 1)`, which over-stripped the FINAL
+// body char: a requirement ending `…)/i` (group-close immediately before the flag) lost its closing
+// `)` → unterminated group → `new RegExp` threw SyntaxError, 500ing EVERY DELETE dispatch that
+// scanned such a route (independent of the DELETE's actual target route). A `…)$/i` requirement
+// merely lost its `$` end-anchor (silently looser). Fix: end index is lastIndexOf('/') (exclusive).
+
+describe('05 - DELETE-branch requirement un-delimit: off-by-one over-strip (Unterminated group)', function() {
+
+    // Pure replicas of the un-delimit step (the body guarded by /^\//.test(condition)).
+    function undelimit(condition)       { return condition.substring(1, condition.lastIndexOf('/')); }     // fixed
+    function undelimit_buggy(condition) { return condition.substring(1, condition.lastIndexOf('/') - 1); } // pre-fix
+
+    // The two real requirement shapes a consuming app declares in routing.json:
+    var UNSAFE = '/(^null$|^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$|^[0-9A-Za-z]{6}$)/i'; // ends `)/i`
+    var SAFE   = '/^(add|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}|[0-9A-Za-z]{6})$/i';      // ends `)$/i`
+
+    it('source: the off-by-one `substring(1, lastIndexOf(\'/\') - 1)` over-strip is gone', function() {
+        assert.ok(
+            !/substring\(\s*1\s*,\s*condition\.lastIndexOf\(['"]\/['"]\)\s*-\s*1\s*\)/.test(src),
+            "the buggy `substring(1, condition.lastIndexOf('/')-1)` un-delimit must be removed"
+        );
+    });
+
+    it('source: the DELETE branch un-delimits with lastIndexOf(\'/\') (exclusive end, no -1)', function() {
+        assert.ok(
+            /condition\s*=\s*condition\.substring\(\s*1\s*,\s*condition\.lastIndexOf\(['"]\/['"]\)\s*\)/.test(src),
+            "un-delimit must be condition.substring(1, condition.lastIndexOf('/'))"
+        );
+    });
+
+    it('FIXED: a `)/i` requirement no longer mangles into an unterminated group', function() {
+        var body = undelimit(UNSAFE);
+        assert.doesNotThrow(function() { new RegExp(body); }, 'fixed un-delimit must produce a valid regex');
+        assert.ok(new RegExp(body).test('a1b2c3'), 'a valid 6-char id must match');
+        assert.ok(new RegExp(body).test('null'),   'the `null` literal alternative must match');
+        assert.ok(!new RegExp(body).test('!!'),     'an invalid value must not match');
+    });
+
+    it('FIXED: a `)$/i` requirement keeps its `$` end-anchor (no longer silently dropped)', function() {
+        var body = undelimit(SAFE);
+        assert.doesNotThrow(function() { new RegExp(body); });
+        assert.ok(new RegExp(body).test('add'),          'a valid literal must match');
+        assert.ok(new RegExp(body).test('a1b2c3'),       'a valid 6-char id must match');
+        assert.ok(!new RegExp(body).test('a1b2c3EXTRA'), 'the `$` anchor must reject an overlong value');
+    });
+
+    it('SUBTRACT (pre-fix `-1`): the `)/i` requirement throws "Unterminated group"', function() {
+        var body = undelimit_buggy(UNSAFE);
+        assert.throws(function() { new RegExp(body); }, SyntaxError,
+            'the old over-strip must throw SyntaxError on a `)/i` requirement');
+    });
+
+    it('SUBTRACT (pre-fix `-1`): the `)$/i` requirement survives but loses its `$` end-anchor', function() {
+        var body = undelimit_buggy(SAFE);
+        assert.doesNotThrow(function() { new RegExp(body); }, 'a `)$/i` requirement does not crash under the old code...');
+        assert.ok(new RegExp(body).test('a1b2c3EXTRA'),
+            '...but its `$` anchor was dropped, so an overlong value wrongly matched');
+    });
+});
+
+
+// ─── 06 — DELETE-branch requirement un-delimit: regex flags preserved (DELETE/GET parity) ───
+//
+// The DELETE branch un-delimits a `/…/<flags>` requirement to its bare body before compiling it.
+// §05 fixed the body extraction (off-by-one); this section locks the follow-up: the trailing
+// `/<flags>` segment is now preserved and passed as `new RegExp(condition, conditionFlags)`,
+// mirroring the GET path (fitsWithRequirements, which compiles `new RegExp(re, flags)`). Before
+// this, a `/…/i` requirement matched case-INSENSITIVELY on GET but case-SENSITIVELY on DELETE
+// (the flag was silently dropped) — a DELETE/GET inconsistency.
+
+describe('06 - DELETE-branch requirement un-delimit: regex flags preserved (DELETE/GET parity)', function() {
+
+    // Pure replicas of the un-delimit step: body (between delimiters) + flags (after the closing /).
+    function bodyOf(c)  { return c.substring(1, c.lastIndexOf('/')); }
+    function flagsOf(c) { return c.substring(c.lastIndexOf('/') + 1); }
+
+    var CI      = '/^foo$/i';                          // a case-insensitive requirement
+    var NOFLAG  = '/^bar$/';                           // a flagless requirement (back-compat)
+    var UNSAFE  = '/(^null$|^[0-9A-Za-z]{6}$)/i';      // the real `)/i` shape from §05, but with its flag exercised
+
+    it('source: the DELETE branch extracts the trailing flags (substring after the closing /)', function() {
+        assert.ok(
+            /conditionFlags\s*=\s*condition\.substring\(\s*condition\.lastIndexOf\(['"]\/['"]\)\s*\+\s*1\s*\)/.test(src),
+            "the DELETE branch must extract flags via condition.substring(condition.lastIndexOf('/') + 1)"
+        );
+    });
+
+    it('source: the DELETE branch compiles with the preserved flags (new RegExp(condition, conditionFlags))', function() {
+        assert.ok(
+            /new RegExp\(\s*condition\s*,\s*conditionFlags\s*\)/.test(src),
+            'the DELETE requirement must be compiled as new RegExp(condition, conditionFlags)'
+        );
+    });
+
+    it('FIXED: a `/…/i` requirement preserves its `i` flag and matches case-insensitively', function() {
+        var body = bodyOf(CI), flags = flagsOf(CI);
+        assert.equal(body, '^foo$');
+        assert.equal(flags, 'i');
+        assert.ok(new RegExp(body, flags).test('FOO'), 'the i flag must make FOO match ^foo$');
+        assert.ok(new RegExp(body, flags).test('foo'), 'and the exact-case value still matches');
+    });
+
+    it('SUBTRACT (flag dropped = old DELETE behaviour): `/…/i` matched case-sensitively', function() {
+        var body = bodyOf(CI); // compiled WITHOUT flags, as the DELETE branch used to
+        assert.ok(!new RegExp(body).test('FOO'), 'without the i flag, FOO must NOT match ^foo$ (the old bug)');
+        assert.ok(new RegExp(body).test('foo'),  'only the exact-case value matched');
+    });
+
+    it('back-compat: a flagless `/…/` requirement yields empty flags and still matches', function() {
+        assert.equal(flagsOf(NOFLAG), '');
+        assert.ok(new RegExp(bodyOf(NOFLAG), flagsOf(NOFLAG)).test('bar'));
+        assert.ok(!new RegExp(bodyOf(NOFLAG), flagsOf(NOFLAG)).test('BAR'), 'no flag → still case-sensitive');
+    });
+
+    it('parity: the real `)/i` requirement compiles AND is case-insensitive (body + flags together)', function() {
+        var body = bodyOf(UNSAFE), flags = flagsOf(UNSAFE);
+        assert.equal(flags, 'i');
+        assert.doesNotThrow(function() { new RegExp(body, flags); }, 'body+flags must be a valid regex');
+        assert.ok(new RegExp(body, flags).test('A1B2C3'), 'a 6-char id matches case-insensitively (uppercase)');
+        assert.ok(new RegExp(body, flags).test('NULL'),   'the `null` literal matches case-insensitively too');
+    });
+});

@@ -1,6 +1,6 @@
 # Gina
 
-[![npm version](https://img.shields.io/npm/v/gina)](https://www.npmjs.com/package/gina) [![npm downloads](https://img.shields.io/npm/dm/gina)](https://www.npmjs.com/package/gina) [![GitHub stars](https://img.shields.io/github/stars/gina-io/gina)](https://github.com/gina-io/gina/stargazers) [![Tests](https://github.com/gina-io/gina/actions/workflows/test.yml/badge.svg)](https://github.com/gina-io/gina/actions/workflows/test.yml) [![Socket Badge](https://socket.dev/api/badge/npm/package/gina)](https://socket.dev/npm/package/gina) [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D%2022-brightgreen)](https://nodejs.org) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![npm version](https://img.shields.io/npm/v/gina)](https://www.npmjs.com/package/gina) [![npm downloads](https://img.shields.io/npm/dm/gina)](https://www.npmjs.com/package/gina) [![GitHub stars](https://img.shields.io/github/stars/gina-io/gina)](https://github.com/gina-io/gina/stargazers) [![Tests](https://github.com/gina-io/gina/actions/workflows/test.yml/badge.svg)](https://github.com/gina-io/gina/actions/workflows/test.yml) [![Socket Badge](https://socket.dev/api/badge/npm/package/gina)](https://socket.dev/npm/package/gina) [![Node.js >= 22](https://img.shields.io/badge/node-%3E%3D%2022-brightgreen)](https://nodejs.org) [![Bun >= 1.2](https://img.shields.io/badge/Bun-%3E%3D%201.2-brightgreen)](https://bun.sh) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Documentation:** [gina.io/docs](https://gina.io/docs/) · **Issues:** [GitHub](https://github.com/gina-io/gina/issues) · **Changelog:** [CHANGELOG.md](./CHANGELOG.md)
 
@@ -40,16 +40,13 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
-## What's in 0.5.5
+## What's in 0.5.6
 
-- **WebSocket routes in `routing.json`.** Declare a WebSocket-over-HTTP/2 endpoint with `"method": "ws"` and a `param.wsHandler` pointing at a `channels/<name>.js` handler — auto-registered at bundle start, no `app.onWebSocket()` call needed. Routes support `:param` path segments and per-route `param.wsOptions` (`maxPayload` / `protocol` / `closeTimeout`).
-- **Cross-bundle calls from a channel handler.** A WebSocket handler can now call another bundle over HTTP with `session.query()` — the same warm-HTTP/2-session call a controller makes with `self.query()`.
-- **Framework versions side-by-side.** `gina framework:add <version>` installs a published framework version alongside the active one so a bundle can pin it via `--gina-version`; `framework:list` / `framework:remove` / `framework:update` / `framework:reset` round out the set.
-- **Project lifecycle CLI.** `gina project:move --to=<path>` relocates a project's source tree (and its registry entry); `project:backup` / `project:restore` archive a project to a `.zip` and rebuild it.
-- **Inline CLI man pages.** `gina framework:man` (and `project:man` / `bundle:man` / `service:man`) renders a command group's manual page in the terminal.
-- **Bun is now a supported runtime.** Install with `bun add -g gina`; the install + boot path is validated end-to-end by a CI Bun smoke.
-- **Idempotent HTTP/2 client retries.** Inter-bundle `self.query()` now auto-retries only HTTP safe methods on a transient transport failure, so a `POST` / `PUT` / `PATCH` / `DELETE` the upstream already executed is no longer silently replayed; opt a non-safe call back in with `retryUnsafe: true`.
-- **Security.** A WebSocket denial-of-service fix via an `ws` dependency override (reached through `engine.io`), plus log-tail restart hardening.
+- **AI-connector CLI suite.** `gina connector:infer <connector> @<project> --message="…"` runs a one-off inference against a configured AI connector **outside a running bundle** — resolves the merged connector config + `${secret:KEY}` credentials (never echoed), instantiates the connector directly, and prints the normalised result. `--stream` emits token frames as NDJSON, `--raw` adds the full provider response, `--format=json` for machine output. `gina connector:test [<connector>] @<project>` probes connectors for readiness (driver installed, `${secret:KEY}` resolvable), exits non-zero on any failure (CI-friendly); `--connect` adds a zero-generation-token live provider check.
+- **Streaming AI inference.** `getModel('<name>').stream(messages, options)` returns an EventEmitter emitting `start` / `delta` / `done` / `error` for token-by-token inference across Anthropic and every OpenAI-compatible provider (plus an `.onComplete(cb)` shim); the buffered `infer()` is unchanged.
+- **AI stream + application events in the Inspector.** A new dev-Inspector **"AI stream"** tab shows token streams per request; a new **"Events"** tab surfaces named application events emitted with `self.emitEvent(name, metadata)`, with opt-in bridges (`settings.inspector.events.topics`) that surface whitelisted entity events and database connector-lifecycle (`<connector>#ready`) events.
+- **`getModel()` exposes the AI inference API.** `getModel(name).infer(…)` and `getModel(name).stream(…)` now work as documented — previously an AI connector returned only a bare connection wrapper.
+- **Robustness fixes.** Boot aborts with a clear message on a model-init failure instead of starting degraded (#B57); a corrupt `~/.gina/projects.json` registration is skipped with a warning instead of crashing every command (#B59); DELETE-route requirement regexes honour their flags and no longer crash on a group-close-before-flag pattern; multipart upload filenames with non-ASCII UTF-8 characters are decoded correctly; a native `<dialog>` popin closed by the user agent (Escape / dialog-method form) runs the same cleanup as the close button; the Couchbase connector substitutes a positional placeholder used as a dynamic field-path key at every occurrence; `gina project:import` is now additive across release targets; `gina stop` reports any bundles still running.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 

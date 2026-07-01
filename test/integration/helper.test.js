@@ -1019,3 +1019,212 @@ describe('19 - loadAssets: per-bundle def_env uses loop variable not cmd.project
         assert.equal(cmd.bundlesByProject.solo.api.def_env, 'dev');
     });
 });
+
+
+// 20 — isCmdConfigured/loadAssets: a corrupt projects.json registration is
+// skipped / clean-exited, not turned into an emerg stack-dump + exit(1) (#B59)
+//
+// A corrupt registration in ~/.gina/projects.json (an empty/undefined `.path`,
+// or a valid-length `.path` at a deleted dir) used to hard-exit EVERY gina
+// command: the global `_()` path helper throws on undefined / '' / length<=2
+// (helpers/path.js:67), and lib/generator.createFileFromDataSync does no
+// `mkdir -p`, so a write into a gone dir ENOENTs — all caught by isCmdConfigured's
+// try (:537-541 -> console.emerg(err.stack) + exit(1)). Three throw sites:
+//   Path 1  the :262 registry loop `new _(cmd.projects[p].path).existsSync()`
+//           — fires for EVERY command that runs isCmdConfigured, whether or not
+//             it targets the corrupt project.
+//   Path 3  the :366 targeted deref `_(cmd.projects[name].path, true)`
+//           — fires when the command TARGETS an empty-path project.
+//   Path 2  loadAssets' auto-manifest write into a gone project dir.
+// The fix: pre-check + warn+skip the corrupt entry (Path 1, mirrors #B24's
+// degrade-and-continue), treat an empty targeted path like an undefined one so
+// it reaches the clean guard (Path 3), and clean-exit with an actionable message
+// when the targeted project's dir is gone (Path 2). Verified live via the
+// isolated-home A/B smoke (scratchpad/b59-smoke.sh): PRE-FIX all three cases
+// stack-dump; FIXED, `bundle:list` renders (Path 1) and the targeted cases exit
+// cleanly with "path no longer exists — re-add / remove --force".
+describe('20 - corrupt projects.json registration is skipped/clean-exited, not fatal (#B59)', function () {
+
+    var SRC = fs.readFileSync(HELPER_CMD_SOURCE, 'utf8');
+
+    // ---- Path 1: the :262 registry loop (fires for EVERY command) -----------
+    describe('20a - Path 1: :262 registry loop warns + skips a corrupt-path project', function () {
+
+        it('source: a warn + continue guards the loop before new _(path).existsSync()', function () {
+            var loopIdx = SRC.indexOf('for (let p in cmd.projects) {');
+            var pushIdx = SRC.indexOf('cmd.projectsList[pIndex] = p;', loopIdx);
+            assert.ok(loopIdx > -1 && pushIdx > loopIdx, 'the projects loop + push must exist');
+            var body = SRC.slice(loopIdx, pushIdx);
+            assert.match(body, /empty\/invalid path in projects\.json/, 'a #B59 skip warning must precede the push');
+            assert.match(body, /continue\s*;/, 'a `continue` must skip the corrupt entry');
+            // the pre-check mirrors helpers/path.js:67's reject set (undefined / '' / length<=2)
+            assert.match(body, /_projectPath\.length\s*<=\s*2/, 'the guard mirrors path.js length<=2 threshold');
+            assert.match(body, /new _\(_projectPath\)\.existsSync\(\)/, 'existsSync now runs on the pre-checked local, not a raw deref');
+        });
+
+        // Pure-logic replica of the loop-body decision (no daemon / CmdHelper).
+        var existingDirs = ['/real/project/alpha'];
+        function throwingUnderscore(p) {   // mirrors helpers/path.js:67 + PathObject.existsSync
+            if (typeof p == 'undefined' || !p || p == '' || p.length <= 2) {
+                throw new Error('This source cannot be used: `' + p + '`');
+            }
+            return { existsSync: function () { return existingDirs.indexOf(p) > -1; } };
+        }
+        // PRE-#B59 (buggy): unguarded new _(path) inside the loop.
+        function loopOld(projects) {
+            var list = [];
+            for (var p in projects) {
+                if (throwingUnderscore(projects[p].path).existsSync()) list.push(p);   // throws on ''
+            }
+            return list;
+        }
+        // POST-#B59 (fixed): pre-check the path, warn+skip the corrupt set.
+        function loopFixed(projects, warn) {
+            var list = [];
+            for (var p in projects) {
+                var pp = (projects[p] && typeof projects[p] == 'object') ? projects[p].path : null;
+                if (typeof pp == 'undefined' || !pp || pp == '' || pp.length <= 2) { warn(p); continue; }
+                if (throwingUnderscore(pp).existsSync()) list.push(p);
+            }
+            return list;
+        }
+
+        it('MEASUREMENT: the old loop throws on a single empty-path entry (would abort every command)', function () {
+            assert.throws(function () {
+                loopOld({ alpha: { path: '/real/project/alpha' }, bad: { path: '' } });
+            }, /This source cannot be used/);
+        });
+
+        it('fixed: an empty-path entry is warned + skipped; valid existing projects still listed', function () {
+            var warned = [];
+            var list = loopFixed({
+                alpha: { path: '/real/project/alpha' },   // valid + existing -> listed
+                bad:   { path: '' },                       // corrupt -> warn + skip
+                gone:  { path: '/real/project/gone' }      // valid length, dir gone -> silently skipped
+            }, function (p) { warned.push(p); });
+            assert.deepEqual(list, ['alpha'], 'only the existing valid project is listed');
+            assert.deepEqual(warned, ['bad'], 'only the corrupt-path entry is warned (not the gone-dir one)');
+        });
+
+        it('fixed: undefined / null / too-short paths and a non-object entry are all skipped without throwing', function () {
+            var warned = [];
+            assert.doesNotThrow(function () {
+                var list = loopFixed({
+                    u: { path: undefined }, n: { path: null }, s: { path: '/a' }, bad: 42, ok: { path: '/real/project/alpha' }
+                }, function (p) { warned.push(p); });
+                assert.deepEqual(list, ['ok'], 'only the valid existing project is listed');
+            });
+            assert.deepEqual(warned.sort(), ['bad', 'n', 's', 'u'], 'every corrupt/unusable entry is warned+skipped');
+        });
+    });
+
+    // ---- Path 3: the :366 targeted deref (empty path treated like undefined) --
+    describe('20b - Path 3: :366 targeted deref treats an empty path like an undefined one', function () {
+
+        it('source: the else-if requires a non-empty length>2 path before _(path)', function () {
+            var idx = SRC.indexOf('cmd.projectLocation = _(cmd.projects[cmd.projectName].path, true);');
+            assert.ok(idx > -1, 'the :366 deref must exist');
+            var head = SRC.lastIndexOf('else if (', idx);
+            var cond = SRC.slice(head, idx);
+            assert.match(cond, /&&\s*cmd\.projects\[cmd\.projectName\]\.path\b/, 'the condition requires a truthy .path');
+            assert.match(cond, /String\(cmd\.projects\[cmd\.projectName\]\.path\)\.length\s*>\s*2/, 'the condition requires length>2 (mirrors path.js)');
+        });
+
+        // Replica of the if / else-if / else projectLocation decision, from a cwd
+        // whose basename ('elsewhere') != the project name ('proj') so the first
+        // `if` is false and the else-if is the deciding branch.
+        function makeResolver(useFixedCond) {
+            return function (path, registered) {
+                var cwd = '/cwd/elsewhere', name = 'proj';
+                var projects = {}; if (registered) projects[name] = { path: path };
+                var _ = function (p) {   // mirrors helpers/path.js:67
+                    if (typeof p == 'undefined' || !p || p == '' || p.length <= 2) throw new Error('This source cannot be used: `' + p + '`');
+                    return p;
+                };
+                if (typeof projects[name] != 'undefined'
+                    && (useFixedCond
+                        ? (projects[name].path && String(projects[name].path).length > 2)   // #B59 fixed
+                        : (typeof projects[name].path != 'undefined'))) {                    // pre-#B59
+                    return _(projects[name].path);
+                }
+                return _(cwd);   // cwd fallback (undefined path already lands here; empty now too)
+            };
+        }
+        var resolveOld   = makeResolver(false);
+        var resolveFixed = makeResolver(true);
+
+        it('MEASUREMENT: the old condition throws on a targeted empty path', function () {
+            assert.throws(function () { resolveOld('', true); }, /This source cannot be used/);
+        });
+        it('fixed: a targeted empty path falls through to the cwd fallback (no throw, like an undefined path)', function () {
+            assert.equal(resolveFixed('', true), '/cwd/elsewhere');
+        });
+        it('fixed: a targeted valid path is still resolved', function () {
+            assert.equal(resolveFixed('/real/project/proj', true), '/real/project/proj');
+        });
+    });
+
+    // ---- Path 2: loadAssets auto-manifest write into a GONE dir --------------
+    describe('20c - Path 2: loadAssets fails cleanly when the targeted project dir is gone', function () {
+
+        it('source: an fs.existsSync guard with a clean message + exit precedes the manifest auto-write', function () {
+            var guardIdx = SRC.indexOf('fs.existsSync(cmd.projects[cmd.projectName].path)');
+            assert.ok(guardIdx > -1, 'the #B59 gone-dir fs.existsSync guard must exist');
+            var noLongerIdx = SRC.indexOf('no longer exists', guardIdx);
+            var exitIdx     = SRC.indexOf('return exit(', guardIdx);
+            var writeIdx    = SRC.indexOf('lib.generator.createFileFromDataSync(', guardIdx);
+            assert.ok(noLongerIdx > guardIdx, 'the guard emits a clean "no longer exists" message');
+            assert.ok(exitIdx > guardIdx, 'the guard clean-exits (exit(1))');
+            assert.ok(writeIdx > exitIdx, 'the auto-manifest write follows the guard (i.e. is skipped when the dir is gone)');
+        });
+
+        function throwingCreate() { var e = new Error("ENOENT: no such file or directory, open '<gone>/manifest.json'"); e.code = 'ENOENT'; throw e; }
+
+        // PRE-#B59 (buggy): auto-write with no dir check -> ENOENT when the dir is gone.
+        function manifestBranchOld(opts) {
+            if (opts.manifestExists) return { action: 'read' };
+            opts.create();   // createFileFromDataSync -> ENOENT throw for a gone dir
+            return { action: 'wrote' };
+        }
+        // POST-#B59 (fixed): gone dir -> clean exit sentinel, no write.
+        function manifestBranchFixed(opts) {
+            if (opts.manifestExists) return { action: 'read' };
+            if (!opts.dirExists) { opts.exit(); return { action: 'clean-exit' }; }   // #B59
+            opts.create();
+            return { action: 'wrote' };
+        }
+
+        it('MEASUREMENT: the old branch throws ENOENT when the project dir is gone', function () {
+            assert.throws(function () {
+                manifestBranchOld({ manifestExists: false, create: throwingCreate });
+            }, /ENOENT/);
+        });
+
+        it('fixed: a gone project dir -> clean exit, no createFileFromDataSync call', function () {
+            var created = 0, exited = 0;
+            var out = manifestBranchFixed({
+                manifestExists: false, dirExists: false,
+                create: function () { created++; throwingCreate(); },
+                exit: function () { exited++; }
+            });
+            assert.equal(out.action, 'clean-exit');
+            assert.equal(created, 0, 'the auto-write is NOT attempted when the dir is gone');
+            assert.equal(exited, 1, 'a clean exit is taken instead of the emerg stack-dump');
+        });
+
+        it('fixed: dir present + manifest missing -> the auto-write still runs (legit recreate, unchanged)', function () {
+            var created = 0;
+            var out = manifestBranchFixed({
+                manifestExists: false, dirExists: true,
+                create: function () { created++; }, exit: function () {}
+            });
+            assert.equal(out.action, 'wrote');
+            assert.equal(created, 1, 'the manifest is recreated when the dir exists but the manifest is missing');
+        });
+
+        it('fixed: dir present + manifest present -> read (unchanged)', function () {
+            var out = manifestBranchFixed({ manifestExists: true, dirExists: true, create: function () {}, exit: function () {} });
+            assert.equal(out.action, 'read');
+        });
+    });
+});

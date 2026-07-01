@@ -10,6 +10,7 @@ var { describe, it, before } = require('node:test');
 var assert  = require('node:assert/strict');
 var path    = require('path');
 var fs      = require('fs');
+var cp      = require('child_process');
 
 var FW = require('../fw');
 var CONNECTOR_INDEX = path.join(FW, 'core/connectors/ai/index.js');
@@ -94,6 +95,46 @@ describe('01 - AI connector: lib/connector.js source', function() {
 
     it('defaults apiKey to "no-key" for providers that do not require one (Ollama)', function() {
         assert.ok(/apiKey\s*:\s*conf\.apiKey\s*\|\|\s*'no-key'/.test(src));
+    });
+
+    it('requires the `lib` registry directly (not the full core/gna bootstrap) so it loads outside a bundle boot', function() {
+        // core/gna.js resolves a STARTED bundle's listening port at module-load
+        // and process.exit(1)s when it cannot, so reaching `gina.lib` through it
+        // made this module un-loadable in CLI/offline scope (e.g. connector:infer).
+        // Require the lib registry directly — the IDENTICAL object gna.lib exposes
+        // (gna.js itself does `gna.lib = require('./../lib')`).
+        assert.ok(/var lib\s*=\s*require\('\.\.\/\.\.\/\.\.\/\.\.\/lib'\)/.test(src),
+            'connector.js must require ../../../../lib directly');
+        // No ACTIVE require of core/gna. The old line is commented out, and a
+        // commented line starts with `//`, so an anchored ^ match excludes it —
+        // this trips only on a re-introduced active `var gina = require(...)`.
+        assert.ok(!/^var gina\s*=\s*require/m.test(src),
+            'connector.js must not actively require core/gna at module load');
+    });
+
+    it('BEHAVIOURAL: `require(connector.js)` loads standalone in a fresh node process (exit 0)', { timeout: 20000 }, async function() {
+        // The source pin above proves connector.js requires ../../../../lib
+        // directly rather than the core/gna bootstrap. This proves the effect
+        // end to end: a bare `require(<connector.js>)` in a fresh process — no
+        // bundle boot, no framework bootstrap — loads cleanly and exits 0. A
+        // regression re-introducing the core/gna bootstrap would exit non-zero
+        // (gna.js resolves a started bundle's port and process.exit(1)s when it
+        // cannot). Any logger MQ-connect warning on stderr is expected offline
+        // noise and does not change the exit code — only the code is asserted.
+        var result = await new Promise(function(resolve) {
+            var child = cp.spawn(process.execPath, ['-e', 'require(' + JSON.stringify(CONNECTOR_LIB) + ')'], {
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+            var captured = '';
+            child.stdout.on('data', function(d) { captured += d; });
+            child.stderr.on('data', function(d) { captured += d; });
+            child.on('exit', function(code, signal) { resolve({ code: code, signal: signal, out: captured }); });
+            child.on('error', function(e) { resolve({ code: null, error: e.message, out: captured }); });
+        });
+        assert.equal(result.code, 0,
+            'expected `require(connector.js)` in a fresh process to exit 0' +
+            (result.error ? ' (spawn error: ' + result.error + ')' : '') +
+            (result.out ? ' — captured: ' + JSON.stringify(result.out.slice(0, 300)) : ''));
     });
 
 });
@@ -820,4 +861,416 @@ describe('07 - AI() constructor: exported interface', function() {
         });
     });
 
+});
+
+
+// ─── Streaming mock helpers (shared by §08–§10) ──────────────────────────────
+//
+// These drive the REAL exported stream() (suites 08/09), not a replica — so the
+// behavioral coverage tracks the shipped code (no inert-API trap).
+
+var EventEmitter = require('events').EventEmitter;
+
+var makeStreamConn = function(type, mockClient) {
+    return {
+        client    : mockClient,
+        provider  : type === 'anthropic' ? 'anthropic' : 'deepseek',
+        type      : type,
+        modelName : type === 'anthropic' ? 'claude-opus-4-6' : 'deepseek-chat'
+    };
+};
+
+// Anthropic MessageStream mock: an EventEmitter with .finalMessage(). On
+// finalMessage() it emits message_start -> (text + cumulative message_delta)* ->
+// resolve(finalMsg); or emits 'error' + rejects when errToEmit is set. Events are
+// scheduled on setImmediate so the real stream() has attached its listeners first.
+var anthropicStreamClient = function(deltas, finalMsg, errToEmit) {
+    return {
+        messages: {
+            stream: function(/* params */) {
+                var em = new EventEmitter();
+                em.finalMessage = function() {
+                    return new Promise(function(resolve, reject) {
+                        setImmediate(function() {
+                            if (errToEmit) { em.emit('error', errToEmit); reject(errToEmit); return; }
+                            em.emit('streamEvent', {
+                                type    : 'message_start',
+                                message : { model: finalMsg.model, role: 'assistant', usage: { input_tokens: finalMsg.usage.input_tokens } }
+                            });
+                            var cum = 0;
+                            deltas.forEach(function(d) {
+                                em.emit('text', d);
+                                cum += 1;
+                                em.emit('streamEvent', { type: 'message_delta', usage: { output_tokens: cum } });
+                            });
+                            em.emit('streamEvent', { type: 'message_delta', usage: { output_tokens: finalMsg.usage.output_tokens } });
+                            resolve(finalMsg);
+                        });
+                    });
+                };
+                return em;
+            }
+        }
+    };
+};
+
+// OpenAI-compatible streaming mock: chat.completions.create() resolves to an
+// async-iterable yielding role/content chunks then (optionally) a final usage
+// chunk (empty choices); create() rejects when rejectErr is set.
+var openaiStreamClient = function(deltas, usage, rejectErr) {
+    return {
+        chat: { completions: { create: function(/* params */) {
+            if (rejectErr) { return Promise.reject(rejectErr); }
+            return Promise.resolve({
+                [Symbol.asyncIterator]: function() {
+                    var i = 0, usageSent = false;
+                    return { next: function() {
+                        if (i < deltas.length) {
+                            var content = deltas[i];
+                            var chunk = {
+                                model   : 'deepseek-chat',
+                                choices : [{
+                                    delta         : (i === 0 ? { role: 'assistant', content: content } : { content: content }),
+                                    finish_reason : (i === deltas.length - 1 ? 'stop' : null)
+                                }]
+                            };
+                            i++;
+                            return Promise.resolve({ value: chunk, done: false });
+                        }
+                        if (usage && !usageSent) {
+                            usageSent = true;
+                            return Promise.resolve({ value: { model: 'deepseek-chat', choices: [], usage: usage }, done: false });
+                        }
+                        return Promise.resolve({ value: undefined, done: true });
+                    } };
+                }
+            });
+        } } }
+    };
+};
+
+
+// ─── 08 — stream() — Anthropic provider (real export, mock SDK stream) ────────
+
+describe('08 - stream() — Anthropic provider', function() {
+
+    var AI = require(CONNECTOR_INDEX);
+
+    it('emits start -> ordered deltas -> done with assembled content, usage, latencyMs', function(_, done) {
+        var conn = makeStreamConn('anthropic',
+            anthropicStreamClient(['Hello', ', ', 'world'],
+                { content: [{ text: 'Hello, world' }], model: 'claude-opus-4-6', usage: { input_tokens: 7, output_tokens: 6 } }));
+        var order = [], started = null, deltas = [];
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('start', function(s) { started = s; order.push('start'); })
+            .on('delta', function(d) { deltas.push(d); order.push('delta'); })
+            .on('done',  function(r) {
+                order.push('done');
+                assert.equal(order[0], 'start', 'start fires first');
+                assert.equal(order[order.length - 1], 'done', 'done fires last');
+                assert.equal(order.filter(function(e) { return e === 'delta'; }).length, 3, 'one delta per chunk');
+                assert.equal(started.model, 'claude-opus-4-6');
+                assert.equal(started.role, 'assistant');
+                assert.deepEqual(deltas.map(function(d) { return d.index; }), [0, 1, 2], '0-based delta index');
+                assert.deepEqual(deltas.map(function(d) { return d.text; }), ['Hello', ', ', 'world']);
+                deltas.forEach(function(d) { assert.equal(typeof d.outputTokens, 'number'); });
+                assert.equal(r.content, 'Hello, world');
+                assert.equal(r.model, 'claude-opus-4-6');
+                assert.equal(r.usage.inputTokens, 7);
+                assert.equal(r.usage.outputTokens, 6);
+                assert.equal(typeof r.latencyMs, 'number');
+                assert.ok(r.latencyMs >= 0);
+                assert.ok(r.raw, 'raw carries the provider final message for Anthropic');
+                done();
+            })
+            .on('error', done);
+    });
+
+    it('.onComplete(cb) receives (null, doneResult) on success', function(_, done) {
+        var conn = makeStreamConn('anthropic',
+            anthropicStreamClient(['Hi'], { content: [{ text: 'Hi' }], model: 'claude-opus-4-6', usage: { input_tokens: 2, output_tokens: 1 } }));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err, r) {
+            assert.equal(err, null);
+            assert.equal(r.content, 'Hi');
+            done();
+        });
+    });
+
+    it('emits error (and onComplete(err)) when the SDK stream errors', function(_, done) {
+        var conn = makeStreamConn('anthropic', anthropicStreamClient([], null, new Error('overloaded_error')));
+        var sawErrorEvent = false;
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('error', function(e) { sawErrorEvent = true; assert.ok(/overloaded_error/.test(e.message)); })
+            .onComplete(function(err) {
+                assert.ok(err instanceof Error);
+                assert.ok(sawErrorEvent, 'error event fired before onComplete');
+                done();
+            });
+    });
+
+    it('does NOT crash on error when only .onComplete() is attached (no error listener)', function(_, done) {
+        // No .on('error') — the listenerCount guard must prevent an unhandled
+        // 'error' event from throwing; the error still reaches onComplete.
+        var conn = makeStreamConn('anthropic', anthropicStreamClient([], null, new Error('boom')));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err) {
+            assert.ok(err instanceof Error);
+            assert.ok(/boom/.test(err.message));
+            done();
+        });
+    });
+
+    it('rejects via onComplete when no model is configured', function(_, done) {
+        var conn = {
+            client    : anthropicStreamClient(['x'], { content: [{ text: 'x' }], model: 'm', usage: { input_tokens: 1, output_tokens: 1 } }),
+            provider  : 'anthropic', type: 'anthropic', modelName: null
+        };
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err) {
+            assert.ok(err instanceof Error);
+            assert.ok(/No model/.test(err.message));
+            done();
+        });
+    });
+});
+
+
+// ─── 09 — stream() — OpenAI-compatible providers (real export, mock SDK stream)
+
+describe('09 - stream() — OpenAI-compatible providers', function() {
+
+    var AI = require(CONNECTOR_INDEX);
+
+    it('emits start -> ordered deltas -> done with content, usage (final chunk), finishReason, latencyMs', function(_, done) {
+        var conn = makeStreamConn('openai',
+            openaiStreamClient(['Hel', 'lo', '!'], { prompt_tokens: 4, completion_tokens: 3 }));
+        var order = [], started = null, deltas = [];
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('start', function(s) { started = s; order.push('start'); })
+            .on('delta', function(d) { deltas.push(d); order.push('delta'); })
+            .on('done',  function(r) {
+                order.push('done');
+                assert.equal(order[0], 'start');
+                assert.equal(order[order.length - 1], 'done');
+                assert.equal(started.role, 'assistant');
+                assert.equal(started.model, 'deepseek-chat');
+                assert.deepEqual(deltas.map(function(d) { return d.index; }), [0, 1, 2]);
+                assert.equal(r.content, 'Hello!');
+                assert.equal(r.model, 'deepseek-chat');
+                assert.equal(r.usage.inputTokens, 4);
+                assert.equal(r.usage.outputTokens, 3);
+                assert.equal(r.finishReason, 'stop');
+                assert.equal(r.raw, null, 'no single final response object for OpenAI streams');
+                assert.equal(typeof r.latencyMs, 'number');
+                done();
+            })
+            .on('error', done);
+    });
+
+    it('usage stays null when the provider omits the final usage chunk (e.g. Ollama)', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient(['ok'], null));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err, r) {
+            assert.equal(err, null);
+            assert.equal(r.content, 'ok');
+            assert.equal(r.usage.inputTokens, null);
+            assert.equal(r.usage.outputTokens, null);
+            done();
+        });
+    });
+
+    it('emits error (and onComplete(err)) when create() rejects', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient([], null, new Error('rate_limit_exceeded')));
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }])
+            .on('error', function(e) { assert.ok(/rate_limit/.test(e.message)); })
+            .onComplete(function(err) { assert.ok(err instanceof Error); done(); });
+    });
+
+    it('passes stream:true and stream_options.include_usage to the SDK', function(_, done) {
+        var capturedParams = null;
+        var conn = makeStreamConn('openai', {
+            chat: { completions: { create: function(params) {
+                capturedParams = params;
+                return Promise.resolve({
+                    [Symbol.asyncIterator]: function() {
+                        var sent = false;
+                        return { next: function() {
+                            if (sent) { return Promise.resolve({ value: undefined, done: true }); }
+                            sent = true;
+                            return Promise.resolve({ value: { model: 'm', choices: [{ delta: { role: 'assistant', content: 'x' }, finish_reason: 'stop' }] }, done: false });
+                        } };
+                    }
+                });
+            } } }
+        });
+        AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function() {
+            assert.equal(capturedParams.stream, true);
+            assert.ok(capturedParams.stream_options && capturedParams.stream_options.include_usage === true);
+            done();
+        });
+    });
+});
+
+
+// ─── 10 — stream() — source pins on the real export ──────────────────────────
+
+describe('10 - stream(): source structure', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR_INDEX, 'utf8'); });
+
+    it('exposes stream on the public interface alongside infer', function() {
+        assert.ok(/stream\s*:\s*stream/.test(src), 'stream is returned from AI()');
+        assert.ok(/var stream = function\(messages, options\)/.test(src), 'stream() is defined');
+    });
+
+    it('infer() remains the buffered single-result method (untouched)', function() {
+        assert.ok(/var infer = function\(messages, options\)/.test(src));
+        assert.ok(/infer\s*:\s*infer/.test(src));
+    });
+
+    it('returns a fresh EventEmitter per call with an .onComplete shim', function() {
+        assert.ok(/new EventEmitter\(\)/.test(src));
+        assert.ok(/emitter\.onComplete\s*=\s*function/.test(src));
+    });
+
+    it('emits start / delta / done events', function() {
+        assert.ok(/emitter\.emit\('start'/.test(src));
+        assert.ok(/emitter\.emit\('delta'/.test(src));
+        assert.ok(/emitter\.emit\('done'/.test(src));
+    });
+
+    it('guards the error emit on a listener (no crash without an error listener)', function() {
+        assert.ok(/listenerCount\('error'\)\s*>\s*0/.test(src));
+    });
+
+    it('branches per provider: Anthropic messages.stream(), OpenAI chat.completions stream:true', function() {
+        assert.ok(/conn\.type === 'anthropic'/.test(src));
+        assert.ok(/messages\.stream\(/.test(src));
+        assert.ok(/chat\.completions\.create/.test(src));
+        assert.ok(/stream\s*:\s*true/.test(src));
+        assert.ok(/include_usage:\s*true/.test(src));
+    });
+
+    it('measures latencyMs framework-side (no SDK-provided latency)', function() {
+        assert.ok(/latencyMs\s*:\s*Date\.now\(\)\s*-\s*_startMs/.test(src));
+    });
+});
+
+
+// ─── 11 — stream(): Inspector capture (#AISTREAM) ─────────────────────────────
+//
+// Drives the REAL stream() with the dev/instrumentation-window gate open and the
+// per-request _devAiLog buffer threaded through process.gina._queryALS, asserting
+// (a) a metadata entry lands in the buffer, (b) chunk text/prompt only when
+// captureText is on, (c) live inspector#token frames fire per phase, and (d) a
+// closed gate captures + emits NOTHING (the subtract-control).
+
+describe('11 - stream(): Inspector capture (#AISTREAM)', function() {
+
+    var AI = require(CONNECTOR_INDEX);
+    var { beforeEach, afterEach }   = require('node:test');
+    var { AsyncLocalStorage }       = require('async_hooks');
+
+    var savedGina, savedEnvDev, tokenFrames;
+    var onToken = function(f) { tokenFrames.push(f); };
+
+    beforeEach(function() {
+        savedGina   = process.gina;
+        savedEnvDev = process.env.NODE_ENV_IS_DEV;
+        tokenFrames = [];
+        process.gina = Object.assign({}, savedGina, {
+            _queryALS               : new AsyncLocalStorage(),
+            _inspectorWindowUntil   : 0,
+            _inspectorActive        : false,
+            _inspectorAiCaptureText : false
+        });
+        process.on('inspector#token', onToken);
+    });
+    afterEach(function() {
+        process.removeListener('inspector#token', onToken);
+        process.gina = savedGina;
+        process.env.NODE_ENV_IS_DEV = savedEnvDev;
+    });
+
+    // Opens the window gate, sets captureText, runs stream() inside the ALS store.
+    var runStream = function(conn, captureText, cb) {
+        process.gina._inspectorWindowUntil   = Date.now() + 60000;
+        process.gina._inspectorAiCaptureText = !!captureText;
+        var aiLog = [];
+        process.gina._queryALS.run({ _devQueryLog: [], _devAiLog: aiLog }, function() {
+            AI(conn, { bundle: 'demo' }).stream([{ role: 'user', content: 'hi' }]).onComplete(function(err, r) {
+                cb(err, r, aiLog);
+            });
+        });
+    };
+
+    it('captures a metadata entry (no text) and emits inspector#token frames under an open window', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient(['He', 'llo'], { prompt_tokens: 3, completion_tokens: 2 }));
+        runStream(conn, false, function(err, r, aiLog) {
+            assert.equal(err, null);
+            assert.equal(aiLog.length, 1, 'one AI stream entry captured');
+            var e = aiLog[0];
+            assert.equal(e.type, 'AI');
+            assert.equal(e.provider, 'deepseek');
+            assert.equal(e.chunks, 2);
+            assert.equal(e.outputTokens, 2);
+            assert.equal(e.promptTokens, 3);
+            assert.equal(typeof e.durationMs, 'number');
+            assert.equal(e.origin, 'demo');
+            assert.ok(!('text' in e),   'no chunk text when captureText is off');
+            assert.ok(!('prompt' in e), 'no prompt when captureText is off');
+            assert.equal(typeof e.id, 'string');
+
+            var phases = tokenFrames.map(function(f) { return f.phase; });
+            assert.ok(phases.indexOf('start') >= 0, 'start frame emitted');
+            assert.equal(phases.filter(function(p) { return p === 'delta'; }).length, 2, 'one delta frame per chunk');
+            assert.ok(phases.indexOf('done') >= 0, 'done frame emitted');
+            tokenFrames.forEach(function(f) {
+                assert.equal(typeof f.id, 'string');
+                assert.equal(typeof f.t, 'number');
+                assert.equal(f.id, e.id, 'frames share the buffer entry id');
+            });
+            tokenFrames.filter(function(f) { return f.phase === 'delta'; }).forEach(function(f) {
+                assert.ok(!('deltaText' in f), 'no deltaText on the wire when captureText is off');
+            });
+            done();
+        });
+    });
+
+    it('includes chunk text + prompt only when captureText is on', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient(['Hel', 'lo'], { prompt_tokens: 3, completion_tokens: 2 }));
+        runStream(conn, true, function(err, r, aiLog) {
+            var e = aiLog[0];
+            assert.equal(e.text, 'Hello');
+            assert.deepEqual(e.prompt, [{ role: 'user', content: 'hi' }]);
+            assert.deepEqual(
+                tokenFrames.filter(function(f) { return f.phase === 'delta'; }).map(function(f) { return f.deltaText; }),
+                ['Hel', 'lo']);
+            done();
+        });
+    });
+
+    it('captures NOTHING and emits NO frames when the gate is closed [subtract-control]', function(_, done) {
+        process.env.NODE_ENV_IS_DEV          = 'false';
+        process.gina._inspectorWindowUntil   = 0;
+        process.gina._inspectorActive        = false;
+        var aiLog = [];
+        var conn = makeStreamConn('openai', openaiStreamClient(['x'], null));
+        process.gina._queryALS.run({ _devQueryLog: [], _devAiLog: aiLog }, function() {
+            AI(conn, {}).stream([{ role: 'user', content: 'hi' }]).onComplete(function() {
+                assert.equal(aiLog.length, 0, 'closed gate captures nothing');
+                assert.equal(tokenFrames.length, 0, 'closed gate emits no inspector#token frames');
+                done();
+            });
+        });
+    });
+
+    it('records the failure on the entry (and an error frame) when the stream errors', function(_, done) {
+        var conn = makeStreamConn('openai', openaiStreamClient([], null, new Error('boom_stream')));
+        runStream(conn, false, function(err, r, aiLog) {
+            assert.ok(err instanceof Error);
+            assert.equal(aiLog.length, 1);
+            assert.ok(/boom_stream/.test(aiLog[0].error));
+            assert.equal(tokenFrames.filter(function(f) { return f.phase === 'error'; }).length, 1);
+            done();
+        });
+    });
 });
