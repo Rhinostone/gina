@@ -10,6 +10,7 @@ var { describe, it, before } = require('node:test');
 var assert  = require('node:assert/strict');
 var path    = require('path');
 var fs      = require('fs');
+var cp      = require('child_process');
 
 var FW = require('../fw');
 var CONNECTOR_INDEX = path.join(FW, 'core/connectors/ai/index.js');
@@ -109,6 +110,31 @@ describe('01 - AI connector: lib/connector.js source', function() {
         // this trips only on a re-introduced active `var gina = require(...)`.
         assert.ok(!/^var gina\s*=\s*require/m.test(src),
             'connector.js must not actively require core/gna at module load');
+    });
+
+    it('BEHAVIOURAL: `require(connector.js)` loads standalone in a fresh node process (exit 0)', { timeout: 20000 }, async function() {
+        // The source pin above proves connector.js requires ../../../../lib
+        // directly rather than the core/gna bootstrap. This proves the effect
+        // end to end: a bare `require(<connector.js>)` in a fresh process — no
+        // bundle boot, no framework bootstrap — loads cleanly and exits 0. A
+        // regression re-introducing the core/gna bootstrap would exit non-zero
+        // (gna.js resolves a started bundle's port and process.exit(1)s when it
+        // cannot). Any logger MQ-connect warning on stderr is expected offline
+        // noise and does not change the exit code — only the code is asserted.
+        var result = await new Promise(function(resolve) {
+            var child = cp.spawn(process.execPath, ['-e', 'require(' + JSON.stringify(CONNECTOR_LIB) + ')'], {
+                stdio: ['ignore', 'pipe', 'pipe']
+            });
+            var captured = '';
+            child.stdout.on('data', function(d) { captured += d; });
+            child.stderr.on('data', function(d) { captured += d; });
+            child.on('exit', function(code, signal) { resolve({ code: code, signal: signal, out: captured }); });
+            child.on('error', function(e) { resolve({ code: null, error: e.message, out: captured }); });
+        });
+        assert.equal(result.code, 0,
+            'expected `require(connector.js)` in a fresh process to exit 0' +
+            (result.error ? ' (spawn error: ' + result.error + ')' : '') +
+            (result.out ? ' — captured: ' + JSON.stringify(result.out.slice(0, 300)) : ''));
     });
 
 });
