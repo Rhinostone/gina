@@ -367,6 +367,42 @@ function Infer(opt, cmd) {
     };
 
     /**
+     * Loads the AI connector core — the `AIConnector` class and the `AI`
+     * factory — via a relative require of the framework's AI connector, then
+     * points `getPath('project')` at `projectPath` so `AIConnector` resolves the
+     * provider SDK from `<projectPath>/node_modules`. Shared by both runners
+     * ({@link runInference} / {@link runStream}); the require paths are
+     * version-agnostic (relative, not through `getModel`, whose registry is
+     * empty in CLI/offline scope).
+     *
+     * Exits the process (code 1) with a diagnostic when the AI core cannot be
+     * loaded; the `return null` after `process.exit(1)` is defensive (so a
+     * stubbed `process.exit` still short-circuits the caller).
+     *
+     * @inner
+     * @private
+     * @param {string} projectPath
+     * @returns {{AIConnector: function, AI: function}|null} The loaded core, or
+     *   `null` after a fatal load error (the process has already exited).
+     */
+    var loadAiCore = function (projectPath) {
+        var AIConnector, AI;
+        try {
+            AIConnector = require('../../../core/connectors/ai/lib/connector');
+            AI          = require('../../../core/connectors/ai/index');
+        } catch (e) {
+            console.error('[connector:infer] failed to load the AI connector core: ' + e.message);
+            process.exit(1);
+            return null;
+        }
+
+        // AIConnector requires the provider SDK from getPath('project')/node_modules.
+        setPath('project', projectPath);
+
+        return { AIConnector: AIConnector, AI: AI };
+    };
+
+    /**
      * Instantiates the AI connector directly and runs one buffered inference.
      * `setPath('project', ...)` points `getPath('project')` (used by
      * AIConnector to require the provider SDK) at the TARGET project's
@@ -380,18 +416,10 @@ function Infer(opt, cmd) {
      * @param {object} options - infer() options (model/maxTokens/temperature/system)
      */
     var runInference = function (projectPath, entry, messages, options) {
-        var AIConnector, AI;
-        try {
-            AIConnector = require('../../../core/connectors/ai/lib/connector');
-            AI          = require('../../../core/connectors/ai/index');
-        } catch (e) {
-            console.error('[connector:infer] failed to load the AI connector core: ' + e.message);
-            process.exit(1);
-            return;
-        }
-
-        // AIConnector requires the provider SDK from getPath('project')/node_modules.
-        setPath('project', projectPath);
+        var core = loadAiCore(projectPath);
+        if (!core) return;
+        var AIConnector = core.AIConnector;
+        var AI          = core.AI;
 
         var connector = new AIConnector(entry);
         connector.onReady(function (err, conn) {
@@ -450,18 +478,10 @@ function Infer(opt, cmd) {
      * @param {object} options - stream() options (model/maxTokens/temperature/system)
      */
     var runStream = function (projectPath, entry, messages, options) {
-        var AIConnector, AI;
-        try {
-            AIConnector = require('../../../core/connectors/ai/lib/connector');
-            AI          = require('../../../core/connectors/ai/index');
-        } catch (e) {
-            console.error('[connector:infer] failed to load the AI connector core: ' + e.message);
-            process.exit(1);
-            return;
-        }
-
-        // AIConnector requires the provider SDK from getPath('project')/node_modules.
-        setPath('project', projectPath);
+        var core = loadAiCore(projectPath);
+        if (!core) return;
+        var AIConnector = core.AIConnector;
+        var AI          = core.AI;
 
         var connector = new AIConnector(entry);
         connector.onReady(function (err, conn) {

@@ -307,6 +307,39 @@ describe('10 - direct AIConnector + AI bootstrap', function () {
 
 
 // ---------------------------------------------------------------------------
+// 10a — shared loadAiCore helper (the extracted AI-core bootstrap)
+// ---------------------------------------------------------------------------
+
+// The loadAiCore region of infer.js (defined just before runInference).
+function loadAiCoreBody() {
+    return src.substring(src.indexOf('var loadAiCore'), src.indexOf('var runInference'));
+}
+
+describe('10a - shared loadAiCore helper', function () {
+
+    it('requires the AI connector core via relative paths (version-agnostic)', function () {
+        var lc = loadAiCoreBody();
+        assert.match(lc, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/lib\/connector'\)/);
+        assert.match(lc, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/index'\)/);
+    });
+
+    it('points getPath(project) at the target project before returning', function () {
+        assert.match(loadAiCoreBody(), /setPath\('project', projectPath\);/);
+    });
+
+    it('returns the { AIConnector, AI } pair for the runners to consume', function () {
+        assert.match(loadAiCoreBody(), /return \{ AIConnector: AIConnector, AI: AI \};/);
+    });
+
+    it('is the single bootstrap both runners delegate to (no inlined require/setPath in runInference)', function () {
+        var inferBody = src.substring(src.indexOf('var runInference'), src.indexOf('var runStream'));
+        assert.match(inferBody, /var core = loadAiCore\(projectPath\);/);
+        assert.doesNotMatch(inferBody, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/lib\/connector'\)/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
 // 11 — emitResult (synchronous fs.writeSync, --raw opt-in, strict json gate)
 // ---------------------------------------------------------------------------
 
@@ -576,11 +609,11 @@ describe('19 - stream branch source (runStream + --stream)', function () {
         assert.match(src, /\} else \{\s*runInference\(projectPath, entry, built\.messages, options\);/);
     });
 
-    it('runStream mirrors the runInference bootstrap (require core / setPath / new AIConnector / onReady / AI / stream)', function () {
+    it('runStream mirrors the runInference bootstrap (loadAiCore / new AIConnector / onReady / AI / stream)', function () {
         var rs = streamBody();
-        assert.match(rs, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/lib\/connector'\)/);
-        assert.match(rs, /require\('\.\.\/\.\.\/\.\.\/core\/connectors\/ai\/index'\)/);
-        assert.match(rs, /setPath\('project', projectPath\);/);
+        // The AI-core require + setPath now live in the shared loadAiCore helper
+        // (see §10a); runStream delegates to it rather than inlining the bootstrap.
+        assert.match(rs, /var core = loadAiCore\(projectPath\);/);
         assert.match(rs, /var connector = new AIConnector\(entry\);/);
         assert.match(rs, /connector\.onReady\(function \(err, conn\)/);
         assert.match(rs, /var ai\s+= AI\(conn\);/);
