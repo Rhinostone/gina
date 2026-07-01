@@ -65,12 +65,12 @@
     --database=<name>            Database, bucket, or keyspace name.
     --username=<name>            Authentication username.
     --password=<value>           Authentication password. Supports
-                                 \${ENV_VAR} interpolation.
+                                 \${secret:KEY} interpolation.
     --scope=<scope>              Data isolation scope. One of: local,
                                  beta, production, testing.
     --model=<id>                 AI connector only. Default model id.
     --api-key=<value>            AI connector only. API key. Supports
-                                 \${ENV_VAR} interpolation.
+                                 \${secret:KEY} interpolation.
     --base-url=<url>             AI connector only. Override the provider
                                  base URL (OpenAI-compatible providers).
     --driver-version=<range>     Optional semver range to pin the driver
@@ -292,8 +292,8 @@
                                                                        Shared Redis under a custom name
     gina connector:add mydb api @myproject --connector=mysql --database=mydb --username=root
                                                                        Bundle-scoped MySQL entry
-    gina connector:add claude @myproject --connector=ai --protocol=anthropic:// --api-key=\${ANTHROPIC_API_KEY}
-                                                                       AI connector with env-var secret
+    gina connector:add claude @myproject --connector=ai --protocol=anthropic:// --api-key='${secret:ANTHROPIC_API_KEY}'
+                                                                       AI connector with a secret-backed key
     gina connector:add session @myproject --connector=redis --driver-version=^5.0.0 --force
                                                                        Pin driver version, overwrite existing
     gina connector:add redis @myproject --install

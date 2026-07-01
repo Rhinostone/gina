@@ -52,13 +52,13 @@ var inherits     = lib.inherits;
  *   "claude": {
  *     "connector" : "ai",
  *     "protocol"  : "anthropic://",
- *     "apiKey"    : "${ANTHROPIC_API_KEY}",
+ *     "apiKey"    : "${secret:ANTHROPIC_API_KEY}",
  *     "model"     : "claude-opus-4-6"
  *   },
  *   "deepseek": {
  *     "connector" : "ai",
  *     "protocol"  : "deepseek://",
- *     "apiKey"    : "${DEEPSEEK_API_KEY}",
+ *     "apiKey"    : "${secret:DEEPSEEK_API_KEY}",
  *     "model"     : "deepseek-chat"
  *   },
  *   "local": {
@@ -74,7 +74,7 @@ var inherits     = lib.inherits;
  * @constructor
  * @param {object}  conf             - Connector config from connectors.json
  * @param {string}  conf.protocol    - Provider protocol (e.g. "anthropic://", "deepseek://")
- * @param {string}  [conf.apiKey]    - API key. Supports ${ENV_VAR} substitution
+ * @param {string}  [conf.apiKey]    - API key. Supports ${secret:KEY} substitution
  * @param {string}  [conf.model]     - Default model identifier
  * @param {string}  [conf.baseURL]   - Override the default base URL (openai-family only)
  */

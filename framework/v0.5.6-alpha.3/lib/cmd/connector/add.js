@@ -42,11 +42,11 @@ var CmdHelper = require('./../helper');
  *                              gina framework socket port.)
  *   --database=<name>         Database / bucket / keyspace name.
  *   --username=<name>         Authentication username.
- *   --password=<value>        Authentication password. `${ENV_VAR}` preserved.
+ *   --password=<value>        Authentication password. `${secret:KEY}` supported.
  *   --scope=<scope>           One of: local, beta, production, testing.
  *   --model=<id>              AI connector only. Default model identifier.
- *   --api-key=<value>         AI connector only. API key. `${ENV_VAR}`
- *                             preserved.
+ *   --api-key=<value>         AI connector only. API key. `${secret:KEY}`
+ *                             supported.
  *   --base-url=<url>          AI connector only. Custom base URL.
  *   --driver-version=<range>  Optional semver range to pin the driver install.
  *                             (Not `--version=` — `--version` is reserved
@@ -60,7 +60,7 @@ var CmdHelper = require('./../helper');
  * Usage:
  *   gina connector:add session @myproject --connector=redis --host=127.0.0.1 --connector-port=6379
  *   gina connector:add mydb api @myproject --connector=mysql --database=mydb --username=root
- *   gina connector:add claude @myproject --connector=ai --protocol=anthropic:// --api-key=\${ANTHROPIC_API_KEY}
+ *   gina connector:add claude @myproject --connector=ai --protocol=anthropic:// --api-key='${secret:ANTHROPIC_API_KEY}'
  *   gina connector:add redis @myproject --install
  *
  * @class Add
