@@ -126,6 +126,16 @@ describe('03 - lib registry consumption', function () {
         assert.equal(/require\(\s*['"]lib\/connector-config['"]\s*\)/.test(src), false);
         assert.equal(/require\(\s*['"]lib\/connector-registry['"]\s*\)/.test(src), false);
     });
+
+    it('gatherConnectors resolves every entry through cfg.resolve (deep copy), not an inline merge', function () {
+        // Both the bundle loop (override + bundle-only) and the shared-only loop
+        // route entries through the shared cfg resolver, so each gathered entry
+        // is a fresh deep copy (parity with resolveSingle). The inline shallowMerge
+        // is gone — the merge/select logic lives only in lib/connector-config.
+        assert.match(src, /entry\s*:\s*cfg\.resolve\(sharedJson, bJson, bk\)\.entry/);
+        assert.match(src, /entry:\s*cfg\.resolve\(sharedJson, \{\}, sk\)\.entry/);
+        assert.doesNotMatch(src, /var shallowMerge = function/);
+    });
 });
 
 

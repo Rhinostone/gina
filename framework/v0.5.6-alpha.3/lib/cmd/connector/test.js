@@ -247,25 +247,6 @@ function Test(opt, cmd) {
     };
 
     /**
-     * Shallow-merge two connector entries, `bundle` winning on a key
-     * collision — the runtime precedence (`core/config.js`). Mirrors
-     * `connector:list`'s inline merge.
-     *
-     * @inner
-     * @private
-     * @param {object} shared
-     * @param {object} bundle
-     * @returns {object}
-     */
-    var shallowMerge = function (shared, bundle) {
-        var out = {};
-        var k;
-        for (k in shared) { out[k] = shared[k]; }
-        for (k in bundle) { out[k] = bundle[k]; }
-        return out;
-    };
-
-    /**
      * Resolves the npm driver for a connector entry. For `ai`, reads
      * `entry.protocol` and resolves via `registry.getAIDriver(scheme)`;
      * otherwise via `registry.getDriver(type)` (falling back to the logical
@@ -622,10 +603,13 @@ function Test(opt, cmd) {
 
     /**
      * Enumerates every connector declared in a project — shared entries plus
-     * each bundle's, keeping the raw entry so it can be probed. A bundle entry
-     * that overrides a shared key is merged (bundle wins); shared keys no
-     * bundle touches are emitted once. Mirrors `connector:list`'s
-     * `gatherProjectRows`, but returns the entry (not a formatted row).
+     * each bundle's. Each entry is resolved through the shared `cfg` resolver
+     * (the same one resolveSingle uses): a fresh DEEP copy, never an alias of
+     * the parsed-JSON (requireJSON) cache, with a bundle entry winning on a key
+     * collision. Deep-copying means a downstream in-place secrets-resolve on the
+     * entry can never poison that cache. Shared keys no bundle touches are
+     * emitted once. Mirrors `connector:list`'s `gatherProjectRows`, but returns
+     * the entry (not a formatted row).
      *
      * @inner
      * @private
@@ -656,14 +640,21 @@ function Test(opt, cmd) {
                     if (bk === '$schema') continue;
                     var overrode = (typeof sharedKeys[bk] !== 'undefined');
                     if (overrode) sharedOverridden[bk] = true;
-                    var entry = overrode ? shallowMerge(sharedKeys[bk], bJson[bk]) : bJson[bk];
-                    out.push({ name: bk, bundle: bName, source: overrode ? 'override' : 'bundle', entry: entry });
+                    // Resolve through the shared cfg (deep copy, bundle wins) so
+                    // every gathered entry is a fresh object — parity with
+                    // resolveSingle, and safe against a downstream secrets-resolve.
+                    out.push({
+                        name   : bk,
+                        bundle : bName,
+                        source : overrode ? 'override' : 'bundle',
+                        entry  : cfg.resolve(sharedJson, bJson, bk).entry
+                    });
                 }
             }
         }
         for (var sk in sharedKeys) {
             if (sharedOverridden[sk]) continue;
-            out.push({ name: sk, bundle: null, source: 'shared', entry: sharedKeys[sk] });
+            out.push({ name: sk, bundle: null, source: 'shared', entry: cfg.resolve(sharedJson, {}, sk).entry });
         }
         return out;
     };
