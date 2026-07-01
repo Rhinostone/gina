@@ -259,7 +259,21 @@ function CmdHelper(cmd, client, debug) {
             cmd.projects    = requireJSON( cmd.projectConfigPath );
             var pIndex      = 0;
             for (let p in cmd.projects) {
-                if ( new _(cmd.projects[p].path).existsSync() ) {
+                // #B59 — a corrupt registration (empty / undefined / too-short `.path`,
+                // or a non-object entry) would make the global `_()` path helper throw
+                // (helpers/path.js:67 rejects undefined / '' / length<=2), which the outer
+                // catch (:537-541) turns into a `console.emerg` stack-dump + `exit(1)` —
+                // aborting EVERY gina command, not just those targeting the corrupt project.
+                // Pre-check the exact set `_()` would reject and SKIP it with a clean,
+                // actionable warning instead (mirrors #B24's degrade-and-continue).
+                var _projectPath = ( cmd.projects[p] && typeof(cmd.projects[p]) == 'object' )
+                                    ? cmd.projects[p].path
+                                    : null;
+                if ( typeof(_projectPath) == 'undefined' || !_projectPath || _projectPath == '' || _projectPath.length <= 2 ) {
+                    console.warn('Project @'+ p +' has an empty/invalid path in projects.json — skipping; re-add with `gina project:add @'+ p +' --path=<path>` (or remove the stale entry).');
+                    continue;
+                }
+                if ( new _(_projectPath).existsSync() ) {
                     cmd.projectsList[pIndex] = p;
                     pIndex++
                 }
@@ -347,7 +361,16 @@ function CmdHelper(cmd, client, debug) {
                             }
                             else if (
                                 typeof(cmd.projects[cmd.projectName]) !=  'undefined'
-                                && typeof(cmd.projects[cmd.projectName].path) !=  'undefined'
+                                // #B59 — treat an empty / too-short `.path` the SAME as an
+                                // undefined one (the existing `typeof != 'undefined'` test
+                                // already routes an undefined path to the cwd-fallback `else`
+                                // below). A bare `_('')` here would throw (helpers/path.js:67)
+                                // → the outer catch's emerg stack-dump, even though loadAssets
+                                // already has a clean "path no longer exists" guard (#B59, below)
+                                // for exactly this targeted-corrupt-project case. Skipping the
+                                // throw lets control reach that clean exit.
+                                && cmd.projects[cmd.projectName].path
+                                && String(cmd.projects[cmd.projectName].path).length > 2
                             ) {
                                 cmd.projectLocation = _(cmd.projects[cmd.projectName].path, true);
                             }
@@ -656,6 +679,22 @@ function CmdHelper(cmd, client, debug) {
                 if ( /\:remove$/.test(cmd.task) && cmd.params['force'] ) {
                     console.warn('Project manifest.json not found at '+ cmd.projectManifestPath +' — proceeding with registry-only removal (--force).');
                     cmd.projectData = { project: cmd.projectName, version: '0.0.0', bundles: {} };
+                } else if ( ! fs.existsSync(cmd.projects[cmd.projectName].path) ) {
+                    // #B59 — the project DIRECTORY itself is gone (a valid-length path pointing
+                    // at a deleted dir, or an empty/invalid `.path`). The recreate `else` below
+                    // would ENOENT-throw: createFileFromDataSync does NOT `mkdir -p` its parent
+                    // (lib/generator/index.js), the env.json mirror write (~:885) has the same
+                    // shape, and the homedir/bundles/releases mkdirSync blocks further down would
+                    // otherwise RESURRECT the deleted tree as an empty skeleton. The pre-existing
+                    // gone-dir guard (`exists=false; return`, ~:910) sits AFTER both writes, so it
+                    // never runs. Fail cleanly with an actionable message instead of the outer
+                    // catch (:537-541) turning it into a `console.emerg` stack-dump + exit(1).
+                    // (`project:remove --force` is the branch above; a SEPARATE `else if` here —
+                    // not a guard atop the recreate `else` — keeps that branch byte-identical.
+                    // fs.existsSync tests an empty `.path` without `_()` throwing.)
+                    var _err59 = 'Project ['+ cmd.projectName +'] path `'+ cmd.projects[cmd.projectName].path +'` no longer exists — re-add it with `gina project:add @'+ cmd.projectName +' --path=<path>`, or remove the stale entry with `gina project:remove @'+ cmd.projectName +' --force`.';
+                    console.error(_err59);
+                    return exit(_err59);
                 } else {
                     if ( !/^project\:(add|import)/.test(cmd.task) ) {
                         console.warn('Project manifest.json not found. Trying to fix it ...');

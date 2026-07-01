@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A corrupt project registration in `~/.gina/projects.json` — an empty or missing path, or a path pointing at a deleted directory — no longer aborts EVERY gina command with a stack-trace dump. A registry entry with an empty/invalid path is now skipped with a clear warning (re-add it with `gina project:add`), and running a command against a project whose directory has been deleted prints an actionable message (re-add it, or remove the stale entry with `gina project:remove --force`) instead of crashing.'
+time: 2026-07-01T11:13:51+01:00
