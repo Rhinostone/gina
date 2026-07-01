@@ -107,6 +107,23 @@ describe('03 - fresh object', function () {
         assert.equal(shared.claude.a, 1, 'must not mutate the shared source');
         assert.equal(bundle.claude.b, 2, 'must not mutate the bundle source');
     });
+
+    it('DEEP-clones nested values — mutating a nested value never touches the source', function () {
+        var shared = { claude: { connector: 'ai', options: { apiKey: '${secret:K}' } } };
+        var e = cfg.resolve(shared, {}, 'claude').entry;
+        e.options.apiKey = 'resolved';   // simulate lib.secrets.resolve() mutating in place
+        assert.equal(shared.claude.options.apiKey, '${secret:K}', 'nested source value must be untouched');
+        assert.notEqual(e.options, shared.claude.options, 'nested object must be a fresh reference');
+    });
+
+    it('DEEP-clones the winning side across a merge', function () {
+        var shared = { db: { connector: 'mysql', a: 1 } };
+        var bundle = { db: { opts: { pool: { min: 1 } } } };
+        var e = cfg.resolve(shared, bundle, 'db').entry;   // source: merged
+        e.opts.pool.min = 99;
+        assert.equal(bundle.db.opts.pool.min, 1, 'bundle nested value must be untouched');
+        assert.notEqual(e.opts, bundle.db.opts, 'merged nested object must be a fresh reference');
+    });
 });
 
 
@@ -132,5 +149,19 @@ describe('04 - isAIConnector', function () {
         assert.equal(cfg.isAIConnector(null), false);
         assert.equal(cfg.isAIConnector(['ai']), false);
         assert.equal(cfg.isAIConnector('ai'), false);
+    });
+
+    it('true via the key-fallback when the entry has no connector field (key === ai)', function () {
+        assert.equal(cfg.isAIConnector({ protocol: 'ollama://' }, 'ai'), true);
+        assert.equal(cfg.isAIConnector({}, 'ai'), true);
+    });
+
+    it('the explicit connector field wins over the key', function () {
+        assert.equal(cfg.isAIConnector({ connector: 'mysql' }, 'ai'), false);
+        assert.equal(cfg.isAIConnector({ connector: 'ai' }, 'db'), true);
+    });
+
+    it('key-fallback does not fire for a non-ai key', function () {
+        assert.equal(cfg.isAIConnector({ protocol: 'x' }, 'redis'), false);
     });
 });

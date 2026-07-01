@@ -177,8 +177,8 @@ describe('04 - resolveConnectorEntry', function () {
 
 describe('05 - non-AI guard', function () {
 
-    it('rejects any connector for which cfg.isAIConnector(entry) is false', function () {
-        assert.match(src, /if \(!cfg\.isAIConnector\(entry\)\)/);
+    it('rejects any connector for which cfg.isAIConnector(entry, connectorName) is false', function () {
+        assert.match(src, /if \(!cfg\.isAIConnector\(entry, connectorName\)\)/);
         assert.match(src, /only works with AI connectors/);
     });
 });

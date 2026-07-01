@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'connector:infer now recognises an AI connector declared as just "ai": { ... } with no explicit "connector" field (the shape connector:add writes when the name equals the type). It previously rejected such an entry with a self-contradictory "is a `ai` connector, not `ai`" error, because it required the "connector" field while connector:list and connector:test already accept the entry key as a fallback. Separately, the lib/connector-config resolver now returns a DEEP copy of the selected entry, so resolving a nested ${secret:KEY} placeholder in place can never mutate the shared parsed-JSON (requireJSON) cache.'
+time: 2026-07-01T02:44:11+01:00

@@ -149,7 +149,10 @@ function Infer(opt, cmd) {
         }
 
         // infer/stream are AI-specific — reject any non-`ai` connector cleanly.
-        if (!cfg.isAIConnector(entry)) {
+        // Pass connectorName so a connector written as just `"ai": {…}` (no
+        // `connector` field) is recognised via the key-fallback (matches
+        // connector:list / connector:test).
+        if (!cfg.isAIConnector(entry, connectorName)) {
             var type = (entry && entry.connector) ? entry.connector : connectorName;
             console.error('Connector `' + connectorName + '` is a `' + type + '` connector, not `ai`. `connector:infer` only works with AI connectors.');
             process.exit(1);

@@ -23,17 +23,18 @@
  * passes the parsed objects in, so the module is unit-testable by a direct
  * `require`. Same contract as `lib/connector-registry` and `lib/cmd-status-format`.
  *
- * The selected entry is always a FRESH object (never an alias of the input
- * JSON), so the caller may resolve `${secret:KEY}` placeholders on it in place
- * — `lib.secrets.resolve(entry)` mutates its argument — without poisoning the
- * `requireJSON` cache the parsed JSON came from.
+ * The selected entry is always a FRESH DEEP COPY (never an alias of the input
+ * JSON at any nesting level), so the caller may resolve `${secret:KEY}`
+ * placeholders on it in place — `lib.secrets.resolve(entry)` mutates its
+ * argument, recursing into nested objects — without poisoning the `requireJSON`
+ * cache the parsed JSON came from.
  *
  * @example
  * var cfg    = lib.connectorConfig;
  * var shared = requireJSON(_(project.path + '/shared/config/connectors.json', true));
  * var bundle = requireJSON(_(project.path + '/' + src + '/config/connectors.json', true));
  * var res    = cfg.resolve(shared, bundle, 'claude'); // { entry, source }
- * if (res.entry && cfg.isAIConnector(res.entry)) { ... }
+ * if (res.entry && cfg.isAIConnector(res.entry, 'claude')) { ... }
  */
 
 /**
@@ -49,39 +50,63 @@ function isPlainObject(v) {
 }
 
 /**
- * Shallow-copy a connector entry into a fresh object. A non-plain-object input
+ * Deep-clone a plain-object or array value; primitives (and any non-plain
+ * object such as `null`) are returned as-is. Recurses so no nested object or
+ * array is shared by reference with the input.
+ *
+ * @inner
+ * @private
+ * @param {*} v
+ * @returns {*}
+ */
+function deepCloneValue(v) {
+    if (Array.isArray(v)) {
+        var arr = [];
+        for (var i = 0; i < v.length; i++) { arr[i] = deepCloneValue(v[i]); }
+        return arr;
+    }
+    if (isPlainObject(v)) {
+        var obj = {};
+        for (var ok in v) {
+            if (Object.prototype.hasOwnProperty.call(v, ok)) { obj[ok] = deepCloneValue(v[ok]); }
+        }
+        return obj;
+    }
+    return v;
+}
+
+/**
+ * Deep-copy a connector entry into a fresh object — every nested object / array
+ * is a fresh copy, never an alias of the input JSON. A non-plain-object input
  * (a malformed `connectors.json` value) is returned unchanged — the caller's
- * {@link isAIConnector} guard rejects it downstream.
+ * {@link isAIConnector} guard rejects it downstream. The deep copy lets the
+ * caller resolve `${secret:KEY}` placeholders on the entry in place (which
+ * recurses into nested values) without mutating the `requireJSON` cache.
  *
  * @inner
  * @private
  * @param {*} entry
- * @returns {*} A new object when `entry` is a plain object; otherwise `entry`.
+ * @returns {*} A new deep-cloned object when `entry` is a plain object; otherwise `entry`.
  */
 function cloneEntry(entry) {
     if (!isPlainObject(entry)) {
         return entry;
     }
-    var out = {};
-    for (var k in entry) {
-        if (Object.prototype.hasOwnProperty.call(entry, k)) {
-            out[k] = entry[k];
-        }
-    }
-    return out;
+    return deepCloneValue(entry);
 }
 
 /**
- * Shallow-merge two connector entries into a fresh object, `bundle` winning on
- * a key collision — the same precedence the runtime applies in `core/config.js`
- * (a bundle `connectors.json` overrides the shared one). When either side is
- * not a plain object, the plain-object side is returned (cloned).
+ * Deep-merge two connector entries into a fresh object, `bundle` winning on a
+ * key collision — the same precedence the runtime applies in `core/config.js`
+ * (a bundle `connectors.json` overrides the shared one). Every value is a fresh
+ * deep copy, so no nested object / array is shared with either input. When
+ * either side is not a plain object, the plain-object side is returned (cloned).
  *
  * @inner
  * @private
  * @param {*} shared - The shared-dir entry.
  * @param {*} bundle - The bundle entry (wins on collision).
- * @returns {*} A new merged object.
+ * @returns {*} A new deep-merged object.
  */
 function mergeEntry(shared, bundle) {
     if (!isPlainObject(shared)) { return cloneEntry(bundle); }
@@ -89,10 +114,10 @@ function mergeEntry(shared, bundle) {
     var out = {};
     var k;
     for (k in shared) {
-        if (Object.prototype.hasOwnProperty.call(shared, k)) { out[k] = shared[k]; }
+        if (Object.prototype.hasOwnProperty.call(shared, k)) { out[k] = deepCloneValue(shared[k]); }
     }
     for (k in bundle) {
-        if (Object.prototype.hasOwnProperty.call(bundle, k)) { out[k] = bundle[k]; }
+        if (Object.prototype.hasOwnProperty.call(bundle, k)) { out[k] = deepCloneValue(bundle[k]); }
     }
     return out;
 }
@@ -144,22 +169,31 @@ function resolve(sharedJson, bundleJson, name) {
 }
 
 /**
- * True when `entry` is an AI connector (its `connector` field is `'ai'`). The
- * AI-specific `infer()` / `stream()` surface only exists for this subtype, so
- * `connector:infer` rejects anything else.
+ * True when `entry` is an AI connector. Its `connector` field is `'ai'`, OR —
+ * when the entry has no `connector` field — its logical `key` is `'ai'`. The
+ * key-fallback (`entry.connector || key`) mirrors how `connector:list` /
+ * `connector:test` resolve a connector's type, so an entry written by
+ * `connector:add` as just `"ai": { ... }` (name === type ⇒ no `connector`
+ * field) is recognised. Passing no `key` keeps the strict `connector === 'ai'`
+ * behaviour. The AI-specific `infer()` / `stream()` surface only exists for
+ * this subtype, so `connector:infer` rejects anything else.
  *
  * @memberof module:gina/lib/connector-config
  * @function isAIConnector
  * @param {*} entry - A connector entry (or anything).
+ * @param {string} [key] - The connector's logical key, used as the type when
+ *                         the entry has no explicit `connector` field.
  * @returns {boolean}
  *
  * @example
  * isAIConnector({ connector: 'ai', protocol: 'ollama://' }); // true
  * isAIConnector({ connector: 'mysql' });                     // false
+ * isAIConnector({ protocol: 'ollama://' }, 'ai');            // true  (key fallback)
+ * isAIConnector({ protocol: 'ollama://' });                  // false (no key, no connector field)
  * isAIConnector(null);                                       // false
  */
-function isAIConnector(entry) {
-    return !!(isPlainObject(entry) && entry.connector === 'ai');
+function isAIConnector(entry, key) {
+    return !!(isPlainObject(entry) && ((entry.connector || key) === 'ai'));
 }
 
 module.exports = {
