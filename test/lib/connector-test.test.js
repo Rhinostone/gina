@@ -588,6 +588,16 @@ describe('18 - envvar (inert placeholder) check', function () {
 // dir). self.projectName is not resolved until inside that call, so a clean
 // pre-emptive guard here is infeasible without a shared-infra change. The
 // defensive guard below covers the testAllProjects code path.
+//
+// #B59 update (2026-07-01): that shared-infra change SHIPPED (`helper.js` now
+// degrades a corrupt / gone / empty `.path` to a clean exit — "path no longer
+// exists — re-add / remove --force" — instead of a `console.emerg` stack-dump).
+// Re-measured via an isolated-home smoke: a TARGETED `connector:test` /
+// `connector:infer @<empty-or-gone-path>` is pre-empted inside
+// `isCmdConfigured()` -> `loadAssets()` BEFORE this handler's `.path` read
+// (init / testSingle / testProject), so the reverted NIT-4 empty-path guard
+// stays correctly unreachable dead code — now clean-pre-empted, not
+// crash-pre-empted. See `bug-fixes.md #B59` / `cli-handlers.md §30`-§31.
 describe('19 - missing project path (defensive testAllProjects guard)', function () {
 
     it('all-projects mode flips anyFail on a missing path (so the run exits non-zero)', function () {
