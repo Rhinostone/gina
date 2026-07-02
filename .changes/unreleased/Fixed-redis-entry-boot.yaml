@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A `connectors.json` entry with `"connector": "redis"` no longer aborts the bundle boot. The model layer loads a `lib/connector.js` for every declared connector and treated the Redis connector''s missing one as fatal — so even the documented Redis session-store configuration could not boot with its entry declared. The Redis connector now ships a no-op boot connector that opens no connection and requires no driver.'
+time: 2026-07-02T15:44:40+01:00
