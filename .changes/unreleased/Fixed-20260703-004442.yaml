@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed a production-mode HTTP 500 on every swig-rendered route carrying a cache setting in routing.json: the render cache writer referenced render()-scoped state from module scope (ReferenceError: self is not defined); the cache flag and error reporter are now threaded into writeCache as parameters'
+time: 2026-07-03T00:44:42.526233+01:00

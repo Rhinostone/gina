@@ -1094,18 +1094,18 @@ describe('12 - function-scoped captures of per-request refs (#M1 race fix)', fun
 
     // ── (b) source structure: writeCache signature takes req, res params ─
 
-    it('writeCache signature includes `req, res` parameters', function() {
+    it('writeCache signature includes `req, res, cacheIsEnabled, throwError` parameters', function() {
         var src = getSrc();
         assert.ok(
-            /async\s+function\s+writeCache\s*\(\s*bundle\s*,\s*opt\s*,\s*htmlContent\s*,\s*req\s*,\s*res\s*\)/.test(src),
-            'writeCache must take `bundle, opt, htmlContent, req, res` — req/res are render()-captured copies (race-safe)'
+            /async\s+function\s+writeCache\s*\(\s*bundle\s*,\s*opt\s*,\s*htmlContent\s*,\s*req\s*,\s*res\s*,\s*cacheIsEnabled\s*,\s*throwError\s*\)/.test(src),
+            'writeCache must take `bundle, opt, htmlContent, req, res, cacheIsEnabled, throwError` — everything render()-scoped is threaded as parameters (module scope has no render()-scoped bindings)'
         );
     });
 
-    it('writeCache call sites pass `req, res` (no falling back to closure reads inside writeCache)', function() {
+    it('writeCache call sites pass `req, res` and the render-scoped flag + throwError', function() {
         var src = getSrc();
-        var matches = src.match(/await\s+writeCache\([^)]*,\s*req\s*,\s*res\s*\)/g);
-        assert.ok(matches && matches.length >= 2, 'expected at least 2 `writeCache(..., req, res)` call sites (cache-write + post-asset-injection)');
+        var matches = src.match(/await\s+writeCache\([^)]*,\s*req\s*,\s*res\s*,\s*self\.serverInstance\._cacheIsEnabled\s*,\s*self\.throwError\s*\)/g);
+        assert.ok(matches && matches.length >= 2, 'expected at least 2 `writeCache(..., req, res, self.serverInstance._cacheIsEnabled, self.throwError)` call sites (cache-write + post-asset-injection)');
     });
 
     // ── (c) source structure: terminal exits still null the CLOSURE ─────
@@ -1932,5 +1932,91 @@ describe('19 - released-response guard (#B45)', function() {
                     && /Cannot read properties of null \(reading 'stream'\)/.test(err.message);
             },
             'the unguarded render head must reproduce the released-response crash');
+    });
+});
+
+// 20 — writeCache module-scope safety: the prod cache-path 500 regression.
+// writeCache is a MODULE-LEVEL function while `self`/`local` are deliberately
+// FUNCTION-scoped inside render() (#INS10 race fix), so any bare `self`
+// reference inside writeCache is a ReferenceError on every prod request whose
+// route carries a `cache` setting (the guard short-circuits first when the
+// route has none, and dev/cacheless callers skip writeCache under default
+// settings — which is why the crash surfaced only on production deployments).
+describe('20 - writeCache module-scope safety (prod cache-path 500 regression)', function() {
+    var _src = null;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    /**
+     * Slices the module-level region from the writeCache declaration to
+     * `module.exports` (writeCache is the last declaration before it), with
+     * comments stripped so prose mentions can never satisfy or trip the pins.
+     *
+     * @inner
+     * @returns {string} comment-stripped module-level tail region
+     */
+    function getWriteCacheRegion() {
+        var src = getSrc();
+        var start = src.indexOf('async function writeCache');
+        var end = src.indexOf('module.exports');
+        assert.ok(start > 0 && end > start, 'expected `async function writeCache` followed by `module.exports`');
+        return src.substring(start, end)
+            .replace(/\/\/[^\n]*/g, '')
+            .replace(/\/\*[\s\S]*?\*\//g, '');
+    }
+
+    it('writeCache body never references `self` (module scope has no render()-scoped bindings)', function() {
+        var region = getWriteCacheRegion();
+        assert.ok(!/\bself\b/.test(region),
+            'writeCache (module-level) must not reference `self` — it is function-scoped inside render() per the #INS10 race fix; thread values as parameters instead');
+    });
+
+    it('module-level guard reading a function-scoped binding throws ReferenceError (the pre-fix 500); the param-threaded guard does not', function() {
+        // Premise: Node defines no global `self` (unlike browsers/workers) —
+        // that absence is exactly what turned the pre-fix guard into a crash.
+        assert.strictEqual(typeof self, 'undefined', 'premise: no global `self` in Node');
+
+        // Pre-fix replica of the writeCache guard (controller.render-swig.js:47 shape).
+        var preFix = function(routingCache) {
+            if (
+                typeof(routingCache) == 'undefined'
+                || !routingCache
+                || String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
+            ) {
+                return 'skip';
+            }
+            return 'write';
+        };
+        // Route WITH a cache setting → the third condition is evaluated → ReferenceError (the production 500).
+        assert.throws(function() { preFix('memory'); }, ReferenceError,
+            'pre-fix shape must throw ReferenceError when a route carries a cache setting');
+        // Route WITHOUT a cache key short-circuits before the deref — bundles with
+        // zero cached routes were unaffected, matching the field report.
+        assert.strictEqual(preFix(undefined), 'skip');
+        assert.strictEqual(preFix(false), 'skip');
+
+        // Post-fix replica: the flag is threaded as a parameter.
+        var postFix = function(routingCache, cacheIsEnabled) {
+            if (
+                typeof(routingCache) == 'undefined'
+                || !routingCache
+                || String(cacheIsEnabled).toLowerCase() !== 'true'
+            ) {
+                return 'skip';
+            }
+            return 'write';
+        };
+        assert.strictEqual(postFix('memory', true), 'write');
+        assert.strictEqual(postFix('memory', 'true'), 'write');
+        assert.strictEqual(postFix('memory', 'false'), 'skip');
+        assert.strictEqual(postFix('memory', undefined), 'skip');
+        assert.strictEqual(postFix(undefined, true), 'skip');
+    });
+
+    it('both call sites thread the flag + throwError from the render-scoped controller', function() {
+        var src = getSrc();
+        var matches = src.match(/await\s+writeCache\([^)]*self\.serverInstance\._cacheIsEnabled\s*,\s*self\.throwError\s*\)/g);
+        assert.ok(matches, 'no flag-threading writeCache call sites found');
+        assert.strictEqual(matches.length, 2,
+            'expected exactly 2 call sites threading self.serverInstance._cacheIsEnabled + self.throwError into writeCache (cache-write + post-asset-injection)');
     });
 });

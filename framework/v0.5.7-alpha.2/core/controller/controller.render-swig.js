@@ -35,16 +35,21 @@ var getData             = null
  * @param {string} htmlContent - Compiled HTML string to cache
  * @param {object} req         - Per-request request captured by render() (function-scoped, race-safe)
  * @param {object} res         - Per-request response captured by render() (function-scoped, race-safe)
+ * @param {boolean|string} cacheIsEnabled - Server-level cache flag threaded by render(); writeCache
+ *                               is module-level and has no access to render()-scoped bindings
+ * @param {function} throwError - Render-scoped controller `throwError` (closure-bound), threaded
+ *                               for the `invalidateOnEvents` validation branch
  * @returns {Promise<void>}
  */
-async function writeCache(bundle, opt, htmlContent, req, res) {
+async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, throwError) {
     if (
         typeof(req.routing.cache) == 'undefined'
         ||
         ! req.routing.cache
         ||
-        // replaced: /^true$/i.test() (#P6)
-        String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
+        // replaced: /^true$/i.test() (#P6); flag threaded as a param — module scope
+        // has no render()-scoped bindings (see the #INS10 note at the top of this file)
+        String(cacheIsEnabled).toLowerCase() !== 'true'
     ) {
         return;
     }
@@ -124,7 +129,7 @@ async function writeCache(bundle, opt, htmlContent, req, res) {
         // Invalidation
         if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
             if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-                return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
+                return throwError(res, 500, new Error('cache.invalidateOn must be an array'));
             }
             // Placing event listeners
             cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
@@ -977,7 +982,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     && typeof(req.routing.cache) != 'undefined'
                     && req.method.toUpperCase() === 'GET'
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res);
+                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)
@@ -1742,7 +1747,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         && req.method.toUpperCase() === 'GET'
                     )
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res);
+                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)
