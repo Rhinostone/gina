@@ -25,14 +25,16 @@
  *     deferred functions run at once; the rest queue. This is the whole point
  *     of moving the work out-of-band — a burst of requests must not fan out
  *     into N unbounded concurrent (and expensive) LLM calls.
- *   - **Pluggable store, memory in v1.** Records persist behind a small
+ *   - **Pluggable store, memory by default.** Records persist behind a small
  *     callback-shaped store interface (`set / get / remove / list / sweep`).
- *     v1 ships the in-memory store; a connector-backed store (for multi-pod,
- *     where a job created on one pod is polled on another) is a drop-in
- *     follow-up — no API change, because the interface is callback-shaped
- *     from day one. The deferred *function* always lives in the creating
- *     process's memory (a closure cannot be serialised); only the *record*
- *     (state / result / error) goes in the store.
+ *     The in-memory store is the default; a connector-backed store is a
+ *     drop-in via `start({ store })` — SQLite ships first
+ *     (`core/connectors/sqlite/lib/job-store.js`, wired from `app.json`'s
+ *     `jobs.store` through `lib/job-store`), making records survive a bundle
+ *     restart and readable cross-process. The deferred *function* always
+ *     lives in the creating process's memory (a closure cannot be
+ *     serialised); only the *record* (state / result / error) goes in the
+ *     store.
  *   - **Self-contained TTL sweep.** Terminal (completed / failed) records past
  *     their TTL are purged by an unref'd `setInterval` (the SQLite
  *     session-store cleanup pattern) — NOT `lib/cron`, which is dormant (not
@@ -48,12 +50,17 @@
  *         "maxConcurrency": 4,
  *         "ttl":           3600,
  *         "sweepInterval":  300,
- *         "idSize":          21
+ *         "idSize":          21,
+ *         "store":         "jobsDb"
  *       }
  *     }
  *
  * `core/gna.js`'s `server.on('started')` callback calls `lib.job.start(...)`
- * once per bundle with this block.
+ * once per bundle with this block. `store` (optional) names a
+ * `config/connectors.json` entry; gna.js resolves it through `lib/job-store`
+ * into a connector-backed store (records survive restarts / are visible
+ * cross-process) and fails the boot if it cannot be built. Absent `store`
+ * means the in-memory store, as before.
  *
  * @package    gina.framework
  * @namespace  lib.job
@@ -515,7 +522,13 @@ function retryWebhook(record, payload, attempt, reason) {
 
 /**
  * Get-merge-set a partial patch onto a record. Store-agnostic (works for the
- * sync memory store and a future async connector store).
+ * sync memory store and an async connector store).
+ *
+ * NOT atomic across the get/set pair. Safe because every writer for a given id
+ * runs sequentially by construction — create, then the worker, then settle,
+ * then the webhook outcome, all on the origin pod (other pods only read). Do
+ * not add a concurrent same-id update() caller without adding per-id
+ * serialisation first.
  *
  * @inner
  * @param   {string}   id
@@ -587,10 +600,18 @@ function create(fn, opts) {
         expiresAt:   null
     };
 
-    _store.set(id, record, noop);
     _queue.push({ id: id, fn: fn });
-    // Defer so create() returns the id before the function starts.
-    setImmediate(drain);
+    // Defer so create() returns the id before the function starts — and pump
+    // only once the store has landed the record: with an async connector store
+    // an immediate drain could reach runOne's get() before the set() has
+    // persisted, and the vanished-record guard would silently drop the job.
+    // (The memory store fires this callback synchronously — identical timing.)
+    _store.set(id, record, function(setErr) {
+        if (setErr) {
+            console.warn('[lib.job] create: store.set failed for job `' + id + '` — the job will be dropped: ' + (setErr.message || setErr));
+        }
+        setImmediate(drain);
+    });
     return id;
 }
 
@@ -721,6 +742,12 @@ function start(opts) {
     }
     if (!_store) {
         _store = (opts.store && typeof opts.store === 'object') ? opts.store : createMemoryStore();
+    } else if (opts.store && typeof opts.store === 'object' && opts.store !== _store) {
+        // Store adoption is once-only: a store arriving after one is installed
+        // (e.g. a create() already ran ensureStarted() and defaulted to the
+        // memory store) would strand the earlier records, so it is refused —
+        // loudly, because silently ignoring it loses the configured durability.
+        console.warn('[lib.job] start: a job store is already installed — the `store` option was ignored. Wire `jobs.store` before the first create().');
     }
     ensureSweepTimer();
     return true;

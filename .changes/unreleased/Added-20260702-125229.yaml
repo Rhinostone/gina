@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added a connector-backed job store to the async-job primitive: point `jobs.store` (app.json) at a `connectors.json` entry and job records persist in SQLite (`node:sqlite` built-in, zero new dependencies) — they survive bundle restarts and are readable cross-process, while the deferred function still runs in the creating process. A configured store that cannot be built fails the boot instead of silently degrading to the in-memory store, and the create/worker race on async stores was hardened away for future backends.'
+time: 2026-07-02T12:52:29.030758+01:00
