@@ -1,0 +1,3 @@
+kind: Added
+body: 'Failed async jobs can now retry: pass `maxAttempts` to `self.startJob` / `lib.job.create` and a failed attempt is retried on the creating process with exponential backoff (`jobs.retryBackoffMs` in app.json, default 1000 ms, doubling per attempt). Between attempts the record returns to `pending` with the last error and a `nextRetryAt` timestamp visible, and it cannot be purged by the TTL sweep; `failed` and `completed` remain strictly terminal, and the completion webhook fires exactly once, after the final attempt. The default stays a single attempt — behavior is unchanged unless you opt in.'
+time: 2026-07-02T16:12:00+01:00

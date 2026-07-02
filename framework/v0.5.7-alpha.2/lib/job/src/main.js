@@ -25,6 +25,12 @@
  *     deferred functions run at once; the rest queue. This is the whole point
  *     of moving the work out-of-band — a burst of requests must not fan out
  *     into N unbounded concurrent (and expensive) LLM calls.
+ *   - **Failed-job retry (opt-in).** `create(fn, { maxAttempts: N })` retries
+ *     a failed attempt with exponential backoff (`retryBackoffMs`, default
+ *     1s, doubling); the record returns to `pending` (last error and
+ *     `nextRetryAt` stay visible) until the final attempt — `failed` is
+ *     strictly terminal. The deferred fn lives only in the creating process,
+ *     so only the origin pod retries; other pods just read records.
  *   - **Pluggable store, memory by default.** Records persist behind a small
  *     callback-shaped store interface (`set / get / remove / list / sweep`).
  *     The in-memory store is the default; a connector-backed store is a
@@ -51,6 +57,7 @@
  *         "ttl":           3600,
  *         "sweepInterval":  300,
  *         "idSize":          21,
+ *         "retryBackoffMs": 1000,
  *         "store":         "jobsDb"
  *       }
  *     }
@@ -81,8 +88,9 @@ var uuid = require('../../uuid/src/main');
 
 /**
  * Job lifecycle states. A job moves `PENDING -> RUNNING -> COMPLETED | FAILED`.
- * A terminal `FAILED` job may be returned to `PENDING` only by an explicit
- * retry (sweeper-driven; not implemented in v1).
+ * With retries (`maxAttempts > 1`) a failed attempt moves `RUNNING -> PENDING`
+ * (rescheduled with backoff on the creating process) — `FAILED` and
+ * `COMPLETED` are strictly terminal.
  *
  * @memberof module:gina/lib/job
  * @constant
@@ -149,6 +157,17 @@ var DEFAULT_WEBHOOK_BACKOFF_MS = 500;
 var DEFAULT_WEBHOOK_TIMEOUT_MS = 5000;
 
 /**
+ * Default base delay (ms) between attempts of a failed job with retries
+ * remaining (`maxAttempts > 1`) — doubles on each attempt (the webhook-retry
+ * backoff shape).
+ *
+ * @memberof module:gina/lib/job
+ * @constant
+ * @type {number}
+ */
+var DEFAULT_RETRY_BACKOFF_MS = 1000;
+
+/**
  * The active record store (memory store by default). `null` until the first
  * {@link create} or {@link start}.
  *
@@ -198,6 +217,15 @@ var _webhookTimeoutMs = DEFAULT_WEBHOOK_TIMEOUT_MS;
  * @type {?string}
  */
 var _webhookSecret = null;
+/** @inner @type {number} */
+var _retryBackoffMs = DEFAULT_RETRY_BACKOFF_MS;
+/**
+ * Pending retry timers (unref'd). Tracked so {@link reset} can cancel them —
+ * a timer firing after a reset would re-enqueue into a torn-down store.
+ * @inner
+ * @type {Set<*>}
+ */
+var _retryTimers = new Set();
 
 /**
  * No-op callback used when a caller omits one.
@@ -213,14 +241,15 @@ function noop() {}
  * @property {*}           result      - The resolved value once `completed`; `null` otherwise.
  * @property {?{name:string, message:string, stack:?string}} error - Serialised error once `failed`; `null` otherwise.
  * @property {number}      attempts    - How many times the worker has run the function.
- * @property {number}      maxAttempts - Retry ceiling (1 in v1 — retry is a follow-up).
+ * @property {number}      maxAttempts - Retry ceiling (default 1 — run once). Above 1, a failed attempt is retried with backoff on the creating process.
  * @property {?string}     callbackUrl - Webhook URL POSTed `{ id, state, result, error }` on completion when set.
  * @property {?Object}     meta        - Caller-supplied opaque metadata.
  * @property {number}      createdAt   - Epoch ms at creation.
  * @property {number}      updatedAt   - Epoch ms of the last transition.
  * @property {?number}     startedAt   - Epoch ms the worker began; `null` while pending.
  * @property {?number}     finishedAt  - Epoch ms of the terminal transition; `null` until then.
- * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal.
+ * @property {?number}     expiresAt   - Epoch ms after which a terminal record is sweepable; `null` until terminal — deliberately including while a retry is pending, so the sweep can never purge a retryable job.
+ * @property {?number}     nextRetryAt - Epoch ms of the next scheduled attempt while a failed attempt awaits its retry; `null` once terminal (absent if the job never settled).
  * @property {?number}     webhookDeliveredAt - Epoch ms a completion webhook succeeded; absent until delivered.
  * @property {?boolean}    webhookFailed      - `true` once webhook delivery exhausts its retries; absent otherwise.
  * @property {?string}     webhookError       - Last webhook failure reason; absent on success.
@@ -384,33 +413,61 @@ function runOne(entry) {
         rec.startedAt = Date.now();
         rec.updatedAt = rec.startedAt;
         rec.attempts  = (rec.attempts || 0) + 1;
+        // Carried to settle() so the retry decision needs no extra store read
+        // (the fn itself rides on the entry — it exists only in this process).
+        entry.attempts    = rec.attempts;
+        entry.maxAttempts = rec.maxAttempts || 1;
         _store.set(id, rec, function() {
             Promise.resolve().then(function() {
                 return entry.fn();
             }).then(function(result) {
-                settle(id, result, null);
+                settle(id, result, null, entry);
             }, function(rejErr) {
-                settle(id, null, rejErr);
+                settle(id, null, rejErr, entry);
             });
         });
     });
 }
 
 /**
- * Write the terminal state for a job, free the worker slot, and pump the
- * queue again.
+ * Route a finished attempt. A failed attempt with retries remaining
+ * (`attempts < maxAttempts`) is rescheduled: the record returns to `pending`
+ * with the serialised failure kept visible and an informational
+ * `nextRetryAt`, while `expiresAt` stays `null` so the sweep can never purge
+ * a retryable job. Otherwise the terminal state is written, the worker slot
+ * freed, and the queue pumped again. `failed` / `completed` are strictly
+ * terminal, and the completion webhook fires only on that final transition.
  *
  * @inner
  * @param   {string} id
  * @param   {*}      result - Resolved value on success.
  * @param   {*}      err    - Thrown / rejected value on failure (mutually exclusive with `result`).
+ * @param   {{id:string, fn:function, attempts:number, maxAttempts:number}} entry - In-process queue entry (carries the deferred fn for a reschedule).
  * @returns {void}
  */
-function settle(id, result, err) {
-    var now   = Date.now();
+function settle(id, result, err, entry) {
+    var now = Date.now();
+
+    // Retry path — only the process that created the job holds the fn, so a
+    // reschedule can only ever originate here: a pod that merely reads the
+    // record through a shared store never reaches this code for that id.
+    if (err && entry && entry.attempts < entry.maxAttempts) {
+        var delay = _retryBackoffMs * Math.pow(2, entry.attempts - 1);
+        update(id, {
+            state:       STATES.PENDING,
+            error:       serializeError(err),
+            nextRetryAt: now + delay
+        }, function() {
+            _running--;
+            drain();
+            scheduleRetry(entry, delay);
+        });
+        return;
+    }
+
     var patch = err
-        ? { state: STATES.FAILED,    error: serializeError(err), finishedAt: now, expiresAt: now + _ttl * 1000 }
-        : { state: STATES.COMPLETED, result: result,             finishedAt: now, expiresAt: now + _ttl * 1000 };
+        ? { state: STATES.FAILED,    error: serializeError(err), nextRetryAt: null, finishedAt: now, expiresAt: now + _ttl * 1000 }
+        : { state: STATES.COMPLETED, result: result, error: null, nextRetryAt: null, finishedAt: now, expiresAt: now + _ttl * 1000 };
 
     update(id, patch, function(uErr, rec) {
         _running--;
@@ -422,6 +479,31 @@ function settle(id, result, err) {
             try { deliverWebhook(rec); } catch (_e) { /* webhook never crashes the worker */ }
         }
     });
+}
+
+/**
+ * Arm the unref'd backoff timer that re-enqueues a failed attempt's entry.
+ * The timer closure is what keeps the deferred function alive between
+ * attempts (no separate registry). {@link reset} cancels pending timers so
+ * none can fire into a torn-down store, and the timer re-checks the store
+ * before re-queueing (a reset may race an already-elapsed timer). Re-entry
+ * goes through the normal queue, so retries respect `maxConcurrency` like
+ * any other job.
+ *
+ * @inner
+ * @param   {{id:string, fn:function}} entry
+ * @param   {number} delay - Backoff delay (ms).
+ * @returns {void}
+ */
+function scheduleRetry(entry, delay) {
+    var t = setTimeout(function() {
+        _retryTimers.delete(t);
+        if (!_store) return; // reset() raced the timer
+        _queue.push(entry);
+        drain();
+    }, delay);
+    if (t && typeof t.unref === 'function') t.unref();
+    _retryTimers.add(t);
 }
 
 /**
@@ -563,7 +645,7 @@ function update(id, patch, cb) {
  * @param   {Object}   [opts]
  * @param   {string}   [opts.callbackUrl]     - Webhook URL notified on completion (consumed by the webhook slice).
  * @param   {Object}   [opts.meta]            - Opaque metadata stored on the record.
- * @param   {number}   [opts.maxAttempts=1]   - Retry ceiling (retry is a follow-up; v1 runs once).
+ * @param   {number}   [opts.maxAttempts=1]   - Retry ceiling. Above 1, a failed attempt is retried on the creating process with exponential backoff (`retryBackoffMs`); `failed` is only ever the state after the last attempt.
  * @returns {string}                          - The job id.
  * @throws  {TypeError}                        - When `fn` is not a function.
  *
@@ -703,6 +785,7 @@ function sweep(cb) {
  * @param   {number}   [opts.ttl=3600]           - Terminal-record TTL (seconds).
  * @param   {number}   [opts.sweepInterval=300]  - Sweep interval (seconds); `0` disables the internal timer.
  * @param   {number}   [opts.idSize=21]          - jobId length (characters).
+ * @param   {number}   [opts.retryBackoffMs=1000]    - Base delay (ms) between attempts of a failed job with retries remaining; doubles each attempt.
  * @param   {number}   [opts.webhookMaxAttempts=3]   - Completion-webhook retry ceiling.
  * @param   {number}   [opts.webhookBackoffMs=500]   - Webhook backoff base (ms); doubles each retry.
  * @param   {number}   [opts.webhookTimeoutMs=5000]  - Per-attempt webhook request timeout (ms).
@@ -727,6 +810,9 @@ function start(opts) {
     }
     if (typeof opts.idSize === 'number' && opts.idSize > 0) {
         _idSize = Math.floor(opts.idSize);
+    }
+    if (typeof opts.retryBackoffMs === 'number' && opts.retryBackoffMs >= 0) {
+        _retryBackoffMs = Math.floor(opts.retryBackoffMs);
     }
     if (typeof opts.webhookMaxAttempts === 'number' && opts.webhookMaxAttempts > 0) {
         _webhookMaxAttempts = Math.floor(opts.webhookMaxAttempts);
@@ -755,13 +841,14 @@ function start(opts) {
 
 /**
  * Snapshot of worker state. Useful for tests (asserting the concurrency cap)
- * and a future admin view.
+ * and a future admin view. `retryWaiting` counts failed attempts currently
+ * awaiting their backoff timer.
  *
  * @memberof module:gina/lib/job
- * @returns {{running:number, queued:number, maxConcurrency:number}}
+ * @returns {{running:number, queued:number, maxConcurrency:number, retryWaiting:number}}
  */
 function stats() {
-    return { running: _running, queued: _queue.length, maxConcurrency: _maxConcurrency };
+    return { running: _running, queued: _queue.length, maxConcurrency: _maxConcurrency, retryWaiting: _retryTimers.size };
 }
 
 /**
@@ -799,6 +886,8 @@ function reset() {
         clearInterval(_sweepTimer);
         _sweepTimer = null;
     }
+    _retryTimers.forEach(function(t) { clearTimeout(t); });
+    _retryTimers.clear();
     _store          = null;
     _queue          = [];
     _running        = 0;
@@ -810,6 +899,7 @@ function reset() {
     _webhookBackoffMs   = DEFAULT_WEBHOOK_BACKOFF_MS;
     _webhookTimeoutMs   = DEFAULT_WEBHOOK_TIMEOUT_MS;
     _webhookSecret      = null;
+    _retryBackoffMs     = DEFAULT_RETRY_BACKOFF_MS;
 }
 
 module.exports = {
@@ -827,6 +917,7 @@ module.exports = {
     DEFAULT_TTL:            DEFAULT_TTL,
     DEFAULT_SWEEP_INTERVAL: DEFAULT_SWEEP_INTERVAL,
     DEFAULT_ID_SIZE:        DEFAULT_ID_SIZE,
+    DEFAULT_RETRY_BACKOFF_MS: DEFAULT_RETRY_BACKOFF_MS,
     DEFAULT_WEBHOOK_MAX_ATTEMPTS: DEFAULT_WEBHOOK_MAX_ATTEMPTS,
     DEFAULT_WEBHOOK_BACKOFF_MS:   DEFAULT_WEBHOOK_BACKOFF_MS,
     DEFAULT_WEBHOOK_TIMEOUT_MS:   DEFAULT_WEBHOOK_TIMEOUT_MS
