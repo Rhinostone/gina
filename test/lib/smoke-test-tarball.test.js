@@ -193,3 +193,40 @@ describe('smoke gate — Bun leg (source invariants)', function () {
         assert.match(CONT_SRC, /'install',\s*'-g',\s*TARBALL/);
     });
 });
+
+// npm 12 readiness: (a) pack() must accept BOTH `npm pack --json` output
+// shapes — npm <= 11 emits an ARRAY of entries, npm 12 an OBJECT keyed by
+// package name (`meta[0].filename` is undefined on the latter and the gate
+// died with "could not determine packed tarball filename"); (b) the
+// in-container npm install must opt the tarball's install scripts back in —
+// npm 12 blocks dependency install scripts by default, and a tarball resolves
+// to a file: identity that the name-based allow-scripts cannot match.
+describe('smoke gate — npm 12 readiness (pack JSON shape + install-scripts opt-in)', function () {
+
+    it('pack() normalizes array and object-keyed `npm pack --json` shapes', function () {
+        assert.match(ORCH_SRC, /Array\.isArray\(meta\)/);
+        assert.match(ORCH_SRC, /Object\.keys\(meta\)\.map\(function\s*\(k\)\s*\{\s*return meta\[k\];\s*\}\)/);
+        assert.match(ORCH_SRC, /entries\[0\]\s*&&\s*entries\[0\]\.filename/);
+    });
+
+    it('pure replica: both shapes yield the tarball filename; unknown shapes yield none', function () {
+        var resolveFilename = function (meta) {
+            var entries = Array.isArray(meta)
+                ? meta
+                : ( (meta && typeof meta === 'object')
+                    ? Object.keys(meta).map(function (k) { return meta[k]; })
+                    : [] );
+            return entries[0] && entries[0].filename;
+        };
+        assert.equal(resolveFilename([{ filename: 'gina-1.0.0.tgz' }]), 'gina-1.0.0.tgz');
+        assert.equal(resolveFilename({ gina: { filename: 'gina-1.0.0.tgz' } }), 'gina-1.0.0.tgz');
+        assert.equal(resolveFilename(null), undefined);
+        assert.equal(resolveFilename('str'), undefined);
+        // premise of the pre-fix break: [0] on the npm 12 object shape is undefined
+        assert.equal(({ gina: { filename: 'x.tgz' } })[0], undefined);
+    });
+
+    it('in-container npm install opts the tarball scripts back in for npm 12', function () {
+        assert.match(CONT_SRC, /'install',\s*'-g',\s*TARBALL,\s*'--dangerously-allow-all-scripts'/);
+    });
+});

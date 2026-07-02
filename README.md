@@ -40,6 +40,8 @@ gina bundle:start api @myproject
 open https://localhost:3100
 ```
 
+> **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
+
 ## What's in 0.5.6
 
 - **AI-connector CLI suite.** `gina connector:infer <connector> @<project> --message="…"` runs a one-off inference against a configured AI connector **outside a running bundle** — resolves the merged connector config + `${secret:KEY}` credentials (never echoed), instantiates the connector directly, and prints the normalised result. `--stream` emits token frames as NDJSON, `--raw` adds the full provider response, `--format=json` for machine output. `gina connector:test [<connector>] @<project>` probes connectors for readiness (driver installed, `${secret:KEY}` resolvable), exits non-zero on any failure (CI-friendly); `--connect` adds a zero-generation-token live provider check.
