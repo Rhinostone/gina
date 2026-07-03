@@ -1283,6 +1283,40 @@ function Server(options) {
 
 
     /**
+     * Confines a resolved static-asset filename to its intended base directory,
+     * rejecting path-traversal escapes (`../`, and their `%2e%2e` / `%2F` encoded
+     * variants once decoded) that would otherwise canonicalise to a sibling under
+     * the shared root. Both paths are normalised with `path.resolve`, then a
+     * separator-aware containment check is applied so a base of `/srv/app/lib`
+     * cannot be bypassed by a sibling such as `/srv/app/lib-secrets`. Callers must
+     * settle percent-decoding on `filename` BEFORE calling — both static resolvers
+     * `safeDecodeURIComponent()` first, so `%2e%2e` / `%2F` are already `..` / `/`
+     * here. Purely lexical (no symlink following) — matches the existing
+     * CVE-2023-25345 boundary-check idiom in `controller.render-swig.js`.
+     *
+     * @inner
+     * @private
+     * @param {string} filename - The concatenated candidate filesystem path (decoded)
+     * @param {string} base     - The intended base directory (mapping target or publicPath)
+     * @returns {string|null} The canonical in-base path, or `null` when it escapes `base`
+     * @example
+     * confineToBase('/srv/app/js/lib/../../../config/secret.json', '/srv/app/js/lib'); // → null
+     * confineToBase('/srv/app/js/lib/app.js', '/srv/app/js/lib');                      // → '/srv/app/js/lib/app.js'
+     */
+    var confineToBase = function(filename, base) {
+        if ( typeof(filename) != 'string' || typeof(base) != 'string' || base.length === 0 ) {
+            return null;
+        }
+        var _resolvedBase = path.resolve(base);
+        var _resolvedFile = path.resolve(filename);
+        // separator-aware containment: identical to base, or a proper child of it
+        if ( _resolvedFile === _resolvedBase || _resolvedFile.indexOf(_resolvedBase + path.sep) === 0 ) {
+            return _resolvedFile;
+        }
+        return null;
+    }
+
+    /**
      * Resolves a request URL to an absolute asset filename by consulting
      * `publicResources`, `staticResources`, reverse-routing aliases, and
      * the bundle's `content.statics` map. Returns `'404.html'` when not found.
@@ -1311,6 +1345,7 @@ function Server(options) {
             , path          = null
             , altConf       = ( typeof(staticProps.firstLevel) != 'undefined' && typeof(self.conf.reverseRouting) != 'undefined' ) ? self.conf.reverseRouting[staticProps.firstLevel] : false
             , backedupPath  = null
+            , _base         = null // #B64 — intended base dir to confine `filename` against
         ;
         if (
             staticProps.isFile && staticsArr.indexOf(url) > -1
@@ -1334,10 +1369,25 @@ function Server(options) {
                 } else {
                     filename = (bundleConf.staticResources.indexOf(path) > -1) ? bundleConf.content.statics[path] + url.replace(path, '/') : bundleConf.content.statics[staticProps.firstLevel] + url.replace(staticProps.firstLevel, '/');
                 }
+                // #B64 path-traversal guard — the mapped filename above is
+                // `<mapping target> + <url remainder>` by raw concatenation, so a
+                // decoded `../` in the remainder escapes the target dir. Capture the
+                // matched mapping target as the base to confine against (below).
+                _base = (bundleConf.staticResources.indexOf(path) > -1) ? bundleConf.content.statics[path] : bundleConf.content.statics[staticProps.firstLevel];
             } else {
                 filename = ( bundleConf.staticResources.indexOf(url) > -1 ) ? bundleConf.content.statics[url] : bundleConf.publicPath + url;
+                // #B64 path-traversal guard — exact-match mapping target, else the
+                // bundle `publicPath` (for the `publicPath + url` fallback).
+                _base    = ( bundleConf.staticResources.indexOf(url) > -1 ) ? bundleConf.content.statics[url] : bundleConf.publicPath;
             }
 
+
+            // #B64 — reject any path that canonicalises outside its base dir
+            // (traversal). Returns notFound (`404.html`) — identical to a missing
+            // file, no distinct signal. Guards every caller (HTTP/2 push, asset
+            // catalog) at this single resolver chokepoint.
+            if ( confineToBase(filename, _base) === null )
+                return notFound;
 
             if ( !fs.existsSync(filename) )
                 return notFound;
@@ -2359,6 +2409,10 @@ function Server(options) {
         var isCacheless       = bundleConf.isCacheless;
         // by default
         var filename        = bundleConf.publicPath + pathname;
+        // #B64 path-traversal guard — the intended base dir for `filename`. Starts
+        // at publicPath (the default build above) and is re-pointed to the matched
+        // statics mapping target in each branch below, then confined post-decode.
+        var _staticBase     = bundleConf.publicPath;
         var isFilenameDir   = null
             , stat          = null
             , dirname       = null
@@ -2374,6 +2428,7 @@ function Server(options) {
         var staticIndex     = bundleConf.staticResources.indexOf(pathname);
         if ( staticProps.isStaticFilename && staticIndex > -1 ) {
             filename =  bundleConf.content.statics[ bundleConf.staticResources[staticIndex] ]
+            _staticBase = filename; // #B64 — exact single-file mapping; base = the file itself
         } else {
             var s = 0, sLen = bundleConf.staticResources.length;
             for ( ; s < sLen; ++s ) {
@@ -2383,6 +2438,8 @@ function Server(options) {
                 //                       `staticResources` path.
                 // if ( eval('/^' + bundleConf.staticResources[s].replace(/\//g,'\\/') +'/').test(pathname) ) {
                 if ( new RegExp('^' + bundleConf.staticResources[s].replace(/\//g,'\\/')).test(pathname) ) {
+                    // #B64 — capture the matched mapping target as the confinement base
+                    _staticBase = bundleConf.content.statics[ bundleConf.staticResources[s] ];
                     filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ pathname.replace(bundleConf.staticResources[s], '');
                     break;
                 }
@@ -2393,6 +2450,8 @@ function Server(options) {
                 var key = pathname.replace(pathname.split('/').splice(-1), '');
                 for ( ; s < sLen; ++s ) {
                     if ( bundleConf.staticResources[s] == key ) {
+                        // #B64 — capture the matched mapping target as the confinement base
+                        _staticBase = bundleConf.content.statics[ bundleConf.staticResources[s] ];
                         filename = bundleConf.content.statics[ bundleConf.staticResources[s] ] +'/'+ pathname.replace(bundleConf.staticResources[s], '');
                         break;
                     }
@@ -2410,6 +2469,15 @@ function Server(options) {
         // and crash the bundle. Fall back to the raw filename on a bad escape.
         // was: filename = decodeURIComponent(filename);
         filename = safeDecodeURIComponent(filename);
+        // #B64 path-traversal guard — `filename` above is `<base> + '/' + <url
+        // remainder>` (or `publicPath + pathname`) by raw concatenation, so a
+        // decoded `../` (incl. %2F / %2e%2e, now settled by the line above)
+        // escapes the base dir. Reject anything resolving outside `_staticBase`
+        // with a plain 404 — identical to a missing file, no distinct signal.
+        // Guards BOTH the fs.readFile and fs.createReadStream sinks below.
+        if ( confineToBase(filename, _staticBase) === null ) {
+            return throwError(response, 404, 'Page not found: \n' + pathname, next);
+        }
         let filenameObj = new _(filename, true);
         filenameObj.exists(function onStaticExists(exists) {
         // fs.exists(filename, function onStaticExists(exists) {
