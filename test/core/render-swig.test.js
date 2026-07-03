@@ -2020,3 +2020,94 @@ describe('20 - writeCache module-scope safety (prod cache-path 500 regression)',
             'expected exactly 2 call sites threading self.serverInstance._cacheIsEnabled + self.throwError into writeCache (cache-write + post-asset-injection)');
     });
 });
+
+describe('21 - per-request deps are function-scoped in render() (#B61 module-scope race)', function() {
+    var _src = null;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+    function stripComments(s) { return s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''); }
+
+    /**
+     * Comment-stripped module prefix: file start → the writeCache declaration
+     * (the first and only module-level function). In prod this module is a
+     * shared singleton across concurrent requests, so nothing per-request may
+     * be declared in this region — a module-scoped capture reassigned by every
+     * incoming render() makes a render suspended at an await resume with a
+     * concurrent request's closures.
+     *
+     * @inner
+     * @returns {string} comment-stripped module-level prefix region
+     */
+    function getModulePrefix() {
+        var src = getSrc();
+        var end = src.indexOf('async function writeCache');
+        assert.ok(end > 0, 'expected `async function writeCache` in source');
+        return stripComments(src.substring(0, end));
+    }
+
+    it('module scope declares no per-request state', function() {
+        var prefix = getModulePrefix();
+        assert.ok(
+            !/var\s+(getData|hasViews|setResources|SwigFilters|headersSent|cachePath|self|local)\b/.test(prefix),
+            'a per-request binding is declared at module scope — it must be function-scoped inside render() (#B61)'
+        );
+        // The pre-fix block used the comma-continued `, name = null` declaration form.
+        assert.ok(
+            !/,\s*(getData|hasViews|setResources|SwigFilters|headersSent|cachePath)\s*=\s*null/.test(prefix),
+            'the pre-#B61 comma-continued module declaration block is back — per-request deps must be function-scoped'
+        );
+    });
+
+    it('render() captures every dep with `var` (function-scoped), including the engine ref', function() {
+        var src = getSrc();
+        ['self', 'local', 'getData', 'hasViews', 'setResources', 'swig', 'SwigFilters', 'headersSent'].forEach(function(name) {
+            assert.match(
+                src,
+                new RegExp('var\\s+' + name + '\\s*=\\s*deps\\.' + name + '\\s*;'),
+                '`var ' + name + ' = deps.' + name + ';` missing from render() — dep no longer function-scoped'
+            );
+        });
+        assert.match(src, /var\s+cachePath\s*=\s*null\s*;/,
+            'function-scoped `var cachePath = null;` missing from render()');
+        // A declaration-less dep assignment recreates the shared module slot
+        // (or, for the engine ref, an implicit global — the file is non-strict).
+        assert.ok(
+            !/^\s*(getData|hasViews|setResources|swig|SwigFilters|headersSent)\s*=\s*deps\./m.test(stripComments(src)),
+            'a dep is assigned without `var` — module-scope / implicit-global capture reintroduced (#B61)'
+        );
+    });
+
+    it('interleaved-render replica: module-scoped capture executes the concurrent request\'s closure; function-scoped does not (subtract)', async function() {
+        // Mirrors the delegate shape: a capture assigned at entry, one call
+        // before the template-read await (the getData at the top of the try),
+        // one after it (the `merge(data, getData())` restore). Two renders in
+        // the same tick both suspend at the await before either resumes, so
+        // under module scope the second assignment always clobbers the first.
+        function mkDelegate(mode) {
+            var modGetData = null; // module-scope analog: shared across calls
+            return async function render(deps) {
+                var fnGetData = null;
+                if (mode === 'module') { modGetData = deps.getData; }
+                else { fnGetData = deps.getData; }
+                var read = function() { return (mode === 'module') ? modGetData : fnGetData; };
+                read()();                                            // pre-await call
+                await new Promise(function(r) { setImmediate(r); }); // the template read
+                read()();                                            // post-await restore
+            };
+        }
+        function mkDeps(counts, tag) { return { getData: function() { counts[tag]++; } }; }
+
+        // SUBTRACT — the pre-#B61 module-scope shape: render A resumes with B's closure.
+        var cm = { A: 0, B: 0 };
+        var dm = mkDelegate('module');
+        await Promise.all([dm(mkDeps(cm, 'A')), dm(mkDeps(cm, 'B'))]);
+        assert.deepStrictEqual(cm, { A: 1, B: 3 },
+            'module-scope shape must show the measured 1/3 asymmetry (A\'s post-await call lands on B\'s closure)');
+
+        // Fixed function-scope shape: each render keeps its own closure.
+        var cf = { A: 0, B: 0 };
+        var df = mkDelegate('function');
+        await Promise.all([df(mkDeps(cf, 'A')), df(mkDeps(cf, 'B'))]);
+        assert.deepStrictEqual(cf, { A: 2, B: 2 },
+            'function-scope shape must call each render\'s own closure exactly twice');
+    });
+});
