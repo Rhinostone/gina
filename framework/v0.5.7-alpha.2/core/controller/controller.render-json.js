@@ -7,12 +7,15 @@ var statusCodes         = requireJSON( _( getPath('gina').core + '/status.codes'
 // Inspector secret redaction (dev-mode only — never touches the actual response body)
 var inspectorRedact     = require('lib/inspector-redact');
 
-// Inherited from controller
-var self                = null
-    , local             = null
-    , headersSent       = null
-    , cachePath         = null
-;
+// Inherited from controller.
+// #B63 (sibling of the render-swig #B61 / render-stream #B62 race fixes):
+// the per-request deps are FUNCTION-scoped inside renderJSON() and threaded
+// into the module-level writeCache() as parameters — nothing per-request
+// lives at module scope. In prod this module is a shared singleton across
+// concurrent requests; a module-scoped capture is reassigned by every
+// incoming renderJSON, so writeCache resumed after its writeFile await
+// reading a CONCURRENT request's controller (measured: the cache-config
+// error path reported through the other request's throwError).
 
 
 /**
@@ -24,29 +27,35 @@ var self                = null
  * @param {string} bundle      - Bundle name (used as cache-key namespace)
  * @param {object} opt         - Server cache configuration (`opt.path`, `opt.ttl`)
  * @param {string} jsonContent - Serialised JSON string to cache
+ * @param {object} req         - Per-request request captured by renderJSON (race-safe)
+ * @param {object} res         - Per-request response captured by renderJSON (race-safe)
+ * @param {boolean|string} cacheIsEnabled - Server-level cache flag threaded by renderJSON
+ * @param {function} throwError - Render-scoped controller `throwError` (closure-bound), threaded
+ *                               for the `invalidateOnEvents` validation branch
  * @returns {Promise<void>}
  */
-// `res` (the captured response from renderJSON) is passed in so the post-
-// await throwError below does not dereference a nulled `local.res`. Pre-
-// await reads of `local.req`/`local.res` (lines 31-86) are part of
-// renderJSON's synchronous call (it is not async), so they are safe — the
-// race window opens only after `await fs.promises.writeFile` at line 100.
-async function writeCache(bundle, opt, jsonContent, res) {
+// Every render-scoped value is threaded as a parameter — writeCache is
+// module-level and must not read the per-request bindings, which are
+// function-scoped inside renderJSON (#B63). The post-await throwError uses
+// the captured `res` so it never dereferences a nulled `local.res`, and the
+// captured `throwError` so a concurrent renderJSON entering during the
+// writeFile await can never re-route this request's error reporting.
+async function writeCache(bundle, opt, jsonContent, req, res, cacheIsEnabled, throwError) {
     if (
-        typeof(local.req.routing.cache) == 'undefined'
+        typeof(req.routing.cache) == 'undefined'
         ||
-        ! local.req.routing.cache
+        ! req.routing.cache
         ||
-        ! /^true$/i.test(self.serverInstance._cacheIsEnabled)
+        ! /^true$/i.test(cacheIsEnabled)
     ) {
         return;
     }
-    // before: "data:" + local.req.originalUrl  (#C3 — added bundle namespace to prevent silent collisions when two bundles serve the same URL path)
-    var cacheKey = "data:" + bundle + ":" + local.req.originalUrl;
-    var responseHeaders = local.res.getHeaders() || {};
+    // before: "data:" + originalUrl only  (#C3 — added bundle namespace to prevent silent collisions when two bundles serve the same URL path)
+    var cacheKey = "data:" + bundle + ":" + req.originalUrl;
+    var responseHeaders = res.getHeaders() || {};
 
     // Caching kinds are: `memory` & `fs`
-    var cachingOption = ( typeof(local.req.routing.cache) == 'string' ) ? { type: local.req.routing.cache } : JSON.clone(local.req.routing.cache);
+    var cachingOption = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : JSON.clone(req.routing.cache);
     if ( typeof(cachingOption.ttl) == 'undefined' ) {
         cachingOption.ttl = opt.ttl
     }
@@ -88,7 +97,7 @@ async function writeCache(bundle, opt, jsonContent, res) {
     // - prioritize content linked to sessions
     // - default ttl is 3600 sec
     if ( /^fs$/i.test(cachingOption.type) ) {
-        var url = local.req.originalUrl;
+        var url = req.originalUrl;
         if ( /\/$/.test(url) ) {
             url += 'index'
         }
@@ -116,11 +125,11 @@ async function writeCache(bundle, opt, jsonContent, res) {
     // Invalidation
     if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
         if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-            // #M1 — post-await read goes through the captured `res` (passed
-            // from renderJSON) rather than `local.res`, which renderJSON may
-            // have nulled at its terminal exit between the writeFile await
-            // and this resume point.
-            return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
+            // #M1/#B63 — this resume point sits after the writeFile await:
+            // both the response AND the reporting controller come from the
+            // threaded parameters (renderJSON's captures), never from the
+            // module scope a concurrent request may have moved on from.
+            return throwError(res, 500, new Error('cache.invalidateOn must be an array'));
         }
         // Placing event listeners
         cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
@@ -141,10 +150,12 @@ async function writeCache(bundle, opt, jsonContent, res) {
  * @returns {void}
  */
 module.exports = function renderJSON(jsonObj, deps) {
-    // Inherited from controller
-    self            = deps.self;
-    local           = deps.local;
-    headersSent     = deps.headersSent;
+    // Inherited from controller — function-scoped (#B63): a concurrent
+    // renderJSON must not reassign this render's captures while its
+    // fire-and-forget writeCache is suspended at the writeFile await.
+    var self            = deps.self;
+    var local           = deps.local;
+    var headersSent     = deps.headersSent;
 
     // preventing multiple call of self.renderJSON() when controller is rendering from another required controller
     if (local.options.renderingStack.length > 1) {
@@ -165,7 +176,6 @@ module.exports = function renderJSON(jsonObj, deps) {
 
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
-    cachePath       = self.serverInstance._cachePath;
 
     var request     = local.req;
     var response    = local.res;
@@ -441,7 +451,7 @@ module.exports = function renderJSON(jsonObj, deps) {
             && typeof(request.routing.cache) != 'undefined'
             && /^GET$/i.test(request.method)
         ) {
-            writeCache(self._options.bundle, local.options.conf.server.cache, data, response).catch(function(err) {
+            writeCache(self._options.bundle, local.options.conf.server.cache, data, request, response, self.serverInstance._cacheIsEnabled, self.throwError).catch(function(err) {
                 console.error('[render-json] writeCache failed:', err);
             });
         }

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the JSON render delegate''s cache writer reporting a cache-configuration error through a concurrent request''s controller under production concurrency: the module-level writeCache resumed after its file-write await reading the module-scoped controller reference, which any renderJSON entering during the suspension had reassigned. Every render-scoped value is now threaded into writeCache as a parameter and the delegate''s per-request dependencies are function-scoped.'
+time: 2026-07-03T02:02:00+01:00
