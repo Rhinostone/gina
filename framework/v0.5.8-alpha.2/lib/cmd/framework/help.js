@@ -5,18 +5,20 @@ var path    = require('path');
  * @module gina/lib/cmd/framework/help
  */
 /**
- * Prints the framework CLI help.
+ * Prints the Gina CLI help.
  *
- * Handles `gina --help`, `gina -h`, and `gina help` — all aliased to
- * `framework:help` (see `lib/cmd/aliases.json`). Reads and prints the command
- * reference at `lib/cmd/framework/help.txt`, then exits.
+ * Handles `gina --help`, `gina -h`, and `gina help [<group>]` — all aliased to
+ * `framework:help` (see `lib/cmd/aliases.json`). With no group it prints the
+ * top-level command reference at `lib/cmd/framework/help.txt`; with a known
+ * group (e.g. `gina help bundle`) it prints that group's `lib/cmd/<group>/help.txt`,
+ * falling back to the framework help for an unknown group.
  *
  * Opening a Gina directory in the OS file manager is a separate concern handled
  * by the `open` command (`gina open <key>` / `gina -o <key>` — see `./open`).
  *
  * Usage:
  *  gina --help | -h
- *  gina help
+ *  gina help [<group>]
  *
  * @class Help
  * @constructor
@@ -26,16 +28,45 @@ var path    = require('path');
  *  $ gina --help
  *  $ gina -h
  *  $ gina help
+ *  $ gina help bundle
  */
 function Help(opt) {
 
     /**
-     * Reads and prints `lib/cmd/framework/help.txt` to stdout, then exits.
+     * Resolves which help.txt to print. `gina help <group>` targets
+     * `lib/cmd/<group>/help.txt` when it exists; otherwise the framework help.
+     *
+     * The group is validated against a strict `[a-z][a-z0-9-]*` pattern (no `.`
+     * or path separators) so it can never traverse outside `lib/cmd`; the
+     * containment check is belt-and-suspenders.
+     *
+     * @inner
+     * @private
+     * @returns {string} Absolute path to the help.txt to print.
+     */
+    var resolveHelpFile = function() {
+        var frameworkHelp = path.join(__dirname, 'help.txt');
+        var group         = process.argv[3];
+
+        if ( group && /^[a-z][a-z0-9-]*$/.test(group) ) {
+            var cmdDir    = path.resolve(__dirname, '..');        // lib/cmd
+            var candidate = path.join(cmdDir, group, 'help.txt');
+
+            if ( candidate.indexOf(cmdDir + path.sep) === 0 && fs.existsSync(candidate) ) {
+                return candidate;
+            }
+        }
+
+        return frameworkHelp;
+    };
+
+    /**
+     * Reads and prints the resolved help.txt to stdout, then exits.
      * @inner
      * @private
      */
     var init = function() {
-        var file = path.join(__dirname, 'help.txt');
+        var file = resolveHelpFile();
 
         if ( !fs.existsSync(file) ) {
             console.error('gina: no CLI help available at the moment. Try `man gina`.');

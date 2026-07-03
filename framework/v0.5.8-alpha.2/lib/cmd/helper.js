@@ -1569,7 +1569,6 @@ function CmdHelper(cmd, client, debug) {
             , file      = _( __dirname +'/'+ taskGroup +'/help.txt', true )
             , errMsg    = 'No help available for `'+ taskGroup +'` command line at the moment. Please try again on the next release';
 
-        console.log('file ', file);
         if ( !fs.existsSync(file) ) {
 
             console.error(errMsg);

@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina <group>:help` (e.g. `gina bundle:help`) no longer prints a stray `file <path>` debug line before the help text.'
+time: 2026-07-03T15:20:01+01:00
