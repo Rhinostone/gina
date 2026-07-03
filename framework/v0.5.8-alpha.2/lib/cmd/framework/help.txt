@@ -12,7 +12,7 @@ usage:
 
 $ gina --help | -h
 $ gina help [<group>]
-$ gina —-version | -v
+$ gina --version | -v
 $ gina --status | -t
 $ gina framework:start | start
 

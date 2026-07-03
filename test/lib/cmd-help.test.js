@@ -130,6 +130,11 @@ describe('04 - framework help.txt contract', function () {
         assert.match(helpTxt, /gina help \[<group>\]/);
         assert.match(helpTxt, /usage:/i);
     });
+
+    it('uses ASCII double-dash flags (no em-dash `—-` typos)', function () {
+        assert.match(helpTxt, /gina --version/);
+        assert.doesNotMatch(helpTxt, /—-/);
+    });
 });
 
 
