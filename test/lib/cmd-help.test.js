@@ -125,8 +125,9 @@ describe('04 - framework help.txt contract', function () {
         assert.ok(helpTxt.length > 0, 'help.txt should carry the command reference');
     });
 
-    it('help.txt advertises `gina --help | -h` and a usage section', function () {
+    it('help.txt advertises `gina --help | -h`, `gina help [<group>]` and a usage section', function () {
         assert.match(helpTxt, /gina --help \| -h/);
+        assert.match(helpTxt, /gina help \[<group>\]/);
         assert.match(helpTxt, /usage:/i);
     });
 });
