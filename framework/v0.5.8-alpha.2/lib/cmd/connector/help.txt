@@ -30,6 +30,12 @@
     infer <connector> <bundle> @<project>
                                  Same, against the bundle's merged
                                  shared+bundle connector view.
+    models <connector> @<project>
+                                 List the models a configured AI connector's
+                                 provider can serve (its live catalogue).
+    models <connector> <bundle> @<project>
+                                 Same, against the bundle's merged
+                                 shared+bundle connector view.
     test                         Probe every connector in every registered
                                  project for readiness (config, driver,
                                  secrets). Exit non-zero on any failure.
@@ -147,6 +153,19 @@
                                  or null for OpenAI-family streams (which expose
                                  no single final object). No effect in text mode.
 
+  Options (models):
+
+    --format=json                Emit `{ project, connector, provider, count,
+                                 models }` (plus `bundle` when a bundle is
+                                 named) instead of one model id per line. Each
+                                 `models[]` entry is passed through verbatim
+                                 from the provider (SDK shapes differ; only
+                                 `id` is guaranteed present).
+    --api-key=<value>            Override the connector's apiKey with a
+                                 literal (bypasses ${secret:...} resolution).
+    --base-url=<url>             Override the provider base URL.
+    --protocol=<uri>             Override the connector protocol scheme.
+
   Options (test):
 
     --connect                    Add a live connectivity probe on top of the
@@ -246,6 +265,20 @@
     NDJSON token frames (one JSON object per line — start / delta / done /
     error) on stdout regardless of `--format`.
 
+    `connector:models` lists the models a configured AI connector's provider
+    can serve — it makes the same `models.list()` call `connector:test
+    --connect` uses, but surfaces the model ids instead of just a count (for
+    populating a model picker, scripting a "offers model X?" check, or
+    auditing reach). It only works with `ai` connectors, resolves the config
+    and instantiates the connector exactly like `connector:infer` (no bundle
+    boot; the provider SDK must be installed in the project), and never prints
+    credentials. Offline providers (`ollama://`) work with no internet. Text
+    mode prints one model id per line to stdout (count footer to stderr);
+    `--format=json` emits `{ project, connector, provider, count, models }`
+    with each entry passed through from the provider. A provider client that
+    exposes no `models.list` is reported UNSUPPORTED with a non-zero exit —
+    never a fabricated empty list.
+
     `connector:test` probes configured connectors for readiness and exits
     non-zero on any failure (so it can gate CI). The default is validate-only
     and offline: for each connector it checks that the type / `ai` protocol is
@@ -323,6 +356,10 @@
                                                                        Override the model (e.g. an ollama:// connector)
     echo '[{"role":"user","content":"hi"}]' | gina connector:infer claude @myproject
                                                                        Multi-turn messages piped as JSON on stdin
+
+    gina connector:models claude @myproject                            List the models the connector's provider can serve (one id per line)
+    gina connector:models claude api @myproject                        Same, as the api bundle sees it (merged shared+bundle)
+    gina connector:models claude @myproject --format=json              Machine-readable { project, connector, provider, count, models }
 
     gina connector:test @myproject                                     Validate every connector in a project (config + driver + secrets)
     gina connector:test claude @myproject                              Validate one connector (shared / merged view)
