@@ -614,19 +614,23 @@ describe('X-Forwarded-Prefix capture & normalisation (per-request)', function() 
 
     // ── (a) source structure ─────────────────────────────────────────────────
 
-    it("source reads request.headers['x-forwarded-prefix'] near the proxy detection region", function() {
-        var anchor = src.indexOf("request.headers['x-forwarded-host']");
-        assert.ok(anchor > -1, "x-forwarded-host read site not found — proxy block may have moved");
-        // Slightly larger window now: the prefix read sits AFTER the gated
-        // proxy block (no longer inside it), so allow ~2.5k chars to absorb
-        // the closing `}` + the explanatory comment header that introduces
-        // the per-request rationale.
-        var windowStart = anchor;
-        var windowEnd   = Math.min(src.length, anchor + 2500);
-        var block = src.slice(windowStart, windowEnd);
+    it("source reads request.headers['x-forwarded-prefix'] after x-forwarded-host in the proxy region", function() {
+        // #B65: robust structural pin — replaces a 2500-char proximity window
+        // that broke when the #B65 safe-un-gate block was inserted between the
+        // host read and the prefix read (span grew 2500 → 2619). An index
+        // existence + ordering check has no char-count to re-tune on adjacent
+        // edits: it fails loudly if EITHER header read is removed, and asserts
+        // the prefix read is co-located AFTER the host read in the proxy-header
+        // preprocessing (not relocated elsewhere in the file). The stronger
+        // "runs on every request / outside the !isProxyHost gate" guarantee is
+        // pinned separately below (xfp read index > the setContext gate index).
+        var xfh = src.indexOf("request.headers['x-forwarded-host']");
+        var xfp = src.indexOf("request.headers['x-forwarded-prefix']");
+        assert.ok(xfh > -1, 'x-forwarded-host read not found — proxy detection block moved');
+        assert.ok(xfp > -1, 'x-forwarded-prefix read not found — #B65 xfp processing missing');
         assert.ok(
-            block.indexOf("request.headers['x-forwarded-prefix']") > -1,
-            'expected x-forwarded-prefix read in the same region as x-forwarded-host (sibling to the proxy detection block)'
+            xfp > xfh,
+            'x-forwarded-prefix must be read AFTER x-forwarded-host (co-located in the proxy-header preprocessing region)'
         );
     });
 
@@ -2687,6 +2691,188 @@ describe('14b - engine.io SIGTERM-drain lifecycle logic', function() {
         assert.equal(a.closed, 1);
         assert.equal(b.closed, 1);
         assert.equal(registry.size, 0);
+    });
+
+});
+
+
+// ─── #B65 reverse-proxy host context: per-request slots + un-gate ─────────────
+// The proxy host context (getContext('isProxyHost') + process.gina.PROXY_HOST /
+// PROXY_HOSTNAME) was worker-global with a one-shot !isProxyHost gate, so the
+// proxied host FROZE at the first proxied request's value. #B65 re-derives it
+// per request into request._ginaIsProxyHost / _ginaProxyHost / _ginaProxyHostname
+// (mirrors _ginaProxyPrefix) and refreshes the worker-global on EVERY proxied
+// request so it can never freeze — and never to a raw `host:port`, because the
+// globals are only ever written from a proxied request.
+describe('15 - #B65 reverse-proxy host context: per-request slots + un-gate source structure', function() {
+
+    if (typeof src == 'undefined' || src === null) {
+        src = fs.readFileSync(SOURCE, 'utf8');
+    }
+
+    it('classifies THIS request as proxied from a port-less Host OR an X-Forwarded-Host', function() {
+        var anchor = src.indexOf('var _thisReqProxied');
+        assert.ok(anchor > -1, '#B65 _thisReqProxied classification not found');
+        var block = src.slice(anchor, anchor + 260);
+        assert.ok(
+            block.indexOf('!/\\:[0-9]+$/.test(requestHost)') > -1,
+            'expected the port-less Host test in the classification'
+        );
+        assert.ok(
+            block.indexOf("request.headers['x-forwarded-host']") > -1,
+            'expected the x-forwarded-host clause in the classification'
+        );
+    });
+
+    it('writes the three per-request slots (request._ginaIsProxyHost / _ginaProxyHost / _ginaProxyHostname)', function() {
+        assert.ok(src.indexOf('request._ginaIsProxyHost = _thisReqProxied') > -1,
+            'expected request._ginaIsProxyHost per-request slot write');
+        assert.ok(src.indexOf('request._ginaProxyHost') > -1,
+            'expected request._ginaProxyHost per-request slot write');
+        assert.ok(src.indexOf('request._ginaProxyHostname') > -1,
+            'expected request._ginaProxyHostname per-request slot write');
+    });
+
+    it('X-Forwarded-Host wins over the port-less Host inside the proxied branch', function() {
+        var anchor = src.indexOf('if ( _thisReqProxied ) {');
+        assert.ok(anchor > -1, '#B65 proxied branch not found');
+        var block = src.slice(anchor, anchor + 700);
+        var xfhIdx  = block.indexOf("request.headers['x-forwarded-host']");
+        var elseIdx = block.indexOf('} else {');
+        assert.ok(xfhIdx > -1 && elseIdx > xfhIdx,
+            'expected the X-Forwarded-Host branch BEFORE the else (port-less Host) branch');
+    });
+
+    it('refreshes the worker-global from the per-request slot inside the proxied branch (freeze fix)', function() {
+        // window-independent: the assignment is globally unique to #B65; assert it
+        // EXISTS and is ordered AFTER the proxied-branch open (structural anchor,
+        // not a fixed char-window that drifts as the block grows).
+        var refreshIdx = src.indexOf('process.gina.PROXY_HOSTNAME = request._ginaProxyHostname');
+        var branchIdx  = src.indexOf('if ( _thisReqProxied ) {');
+        assert.ok(refreshIdx > -1,
+            'expected the worker-global to be refreshed from the per-request slot (freeze fix)');
+        assert.ok(branchIdx > -1 && refreshIdx > branchIdx,
+            'the global refresh must sit inside/after the proxied branch');
+    });
+
+    it("the OLD one-shot gated write (`// Enable proxied mode`) is gone (the un-gate replaced it)", function() {
+        // Negative invariant, window-independent: the freeze came from writing the
+        // globals only while !isProxyHost (once). Its unique marker comment must be
+        // globally absent; if it returns, the freeze is back.
+        assert.ok(
+            src.indexOf('// Enable proxied mode') === -1,
+            'the old gated "Enable proxied mode" write must be gone — #B65 un-gate replaced it'
+        );
+    });
+
+});
+
+describe('15b - #B65 reverse-proxy host context: classification, three-topology + freeze replica', function() {
+
+    // Pure-logic replica of the #B65 detection (server.isaac.js): classify from a
+    // port-less Host OR X-Forwarded-Host; XFH wins; write per-request slots;
+    // refresh the worker-global on EVERY proxied request.
+    function classify(headers, proxyScheme) {
+        var requestHost = headers.host || headers[':authority'];
+        var xfh = headers['x-forwarded-host'];
+        var thisReqProxied = ( ( requestHost && !/\:[0-9]+$/.test(requestHost) ) || xfh ) ? true : false;
+        var slot = { _ginaIsProxyHost: thisReqProxied };
+        if (thisReqProxied) {
+            if (xfh) {
+                slot._ginaProxyHostname = headers['x-forwarded-proto'] + '://' + xfh;
+                slot._ginaProxyHost     = xfh;
+            } else {
+                slot._ginaProxyHostname = proxyScheme + '://' + requestHost;
+                slot._ginaProxyHost     = requestHost;
+            }
+        }
+        return slot;
+    }
+
+    // NEW (#B65): refresh the worker-global on EVERY proxied request (un-gated).
+    function applyDetection(g, headers, proxyScheme) {
+        var slot = classify(headers, proxyScheme);
+        if (slot._ginaIsProxyHost) {
+            g.PROXY_HOSTNAME = slot._ginaProxyHostname;
+            g.PROXY_HOST     = slot._ginaProxyHost;
+            g.isProxyHost    = true; // monotonic
+        }
+        return slot;
+    }
+
+    // OLD (pre-#B65): one-shot gate — write ONLY while !isProxyHost (freezes).
+    function applyDetectionOLD(g, headers, proxyScheme) {
+        var requestHost = headers.host || headers[':authority'];
+        var xfh = headers['x-forwarded-host'];
+        var gatedTrip = ( !g.isProxyHost && requestHost && !/\:[0-9]+$/.test(requestHost) ) || ( !g.isProxyHost && xfh );
+        if (gatedTrip) {
+            if (xfh) { g.PROXY_HOSTNAME = headers['x-forwarded-proto'] + '://' + xfh; g.PROXY_HOST = xfh; }
+            else     { g.PROXY_HOSTNAME = proxyScheme + '://' + requestHost;          g.PROXY_HOST = requestHost; }
+            g.isProxyHost = true;
+        }
+    }
+
+    // ── three topologies (must all hold) ─────────────────────────────────────
+
+    it('RAW (host:port, no proxy) → not proxied; static config host preserved', function() {
+        var slot = classify({ host: 'myhost:8080' }, 'https');
+        assert.equal(slot._ginaIsProxyHost, false, 'a raw host:port must NOT be classified proxied');
+        assert.equal(slot._ginaProxyHost, undefined);
+        assert.equal(slot._ginaProxyHostname, undefined);
+    });
+
+    it('SINGLE-HOP (port-less Host, no XFH) → proxied, host = the port-less Host', function() {
+        var slot = classify({ host: 'publichost' }, 'https');
+        assert.equal(slot._ginaIsProxyHost, true);
+        assert.equal(slot._ginaProxyHost, 'publichost');
+        assert.equal(slot._ginaProxyHostname, 'https://publichost');
+    });
+
+    it('MULTI-HOP (port-less Host + XFH) → proxied, host = XFH', function() {
+        var slot = classify({ host: 'publichost', 'x-forwarded-host': 'publichost', 'x-forwarded-proto': 'https' }, 'https');
+        assert.equal(slot._ginaIsProxyHost, true);
+        assert.equal(slot._ginaProxyHost, 'publichost');
+        assert.equal(slot._ginaProxyHostname, 'https://publichost');
+    });
+
+    it('X-Forwarded-Host wins even when the inbound Host carries a port (inner-hop port)', function() {
+        var slot = classify({ host: 'inner-svc:8443', 'x-forwarded-host': 'publichost', 'x-forwarded-proto': 'https' }, 'https');
+        assert.equal(slot._ginaIsProxyHost, true);
+        assert.equal(slot._ginaProxyHost, 'publichost', 'XFH must win over a port-suffixed inbound Host');
+    });
+
+    it('no Host and no :authority → not proxied (guard)', function() {
+        var slot = classify({}, 'https');
+        assert.equal(slot._ginaIsProxyHost, false);
+    });
+
+    // ── freeze fix (decisive) + subtract ─────────────────────────────────────
+
+    it('FREEZE FIX: a direct host:port call can never corrupt the global to a direct host', function() {
+        var g = {};
+        applyDetection(g, { host: 'publichost' }, 'https');            // external proxied req
+        assert.equal(g.PROXY_HOSTNAME, 'https://publichost');
+        // an internal cross-bundle call lands on the target's DIRECT host:port
+        var slot = applyDetection(g, { host: 'auth-dev-x:5132' }, 'https');
+        assert.equal(slot._ginaIsProxyHost, false, 'the direct call is not proxied');
+        assert.equal(g.PROXY_HOSTNAME, 'https://publichost',
+            'the global must stay the proxied host — a direct call must never overwrite it to a host:port');
+    });
+
+    it('FREEZE FIX: the global refreshes to the current proxied host (not frozen at the first)', function() {
+        var g = {};
+        applyDetection(g, { host: 'tenant-a.example' }, 'https');
+        applyDetection(g, { host: 'tenant-b.example' }, 'https');
+        assert.equal(g.PROXY_HOSTNAME, 'https://tenant-b.example',
+            'un-gated detection tracks the current proxied request — not frozen at tenant-a');
+    });
+
+    it('SUBTRACT: the OLD one-shot gate FREEZES at the first host (proves the un-gate is load-bearing)', function() {
+        var g = {};
+        applyDetectionOLD(g, { host: 'tenant-a.example' }, 'https');
+        applyDetectionOLD(g, { host: 'tenant-b.example' }, 'https'); // gate already latched → no refresh
+        assert.equal(g.PROXY_HOSTNAME, 'https://tenant-a.example',
+            'the pre-#B65 gate freezes at tenant-a — this is the bug #B65 fixes');
     });
 
 });

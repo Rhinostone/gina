@@ -3351,3 +3351,89 @@ describe('29 - query: settled HTTP/2 stream released at every non-retry terminal
         assert.strictEqual(cbB.length, 1,             'pre-fix still delivered the error (the retention is silent)');
     });
 });
+
+
+// ─── #B65 caller-side X-Forwarded-Host forward: per-request slot, not the latch ──
+// query() forwards the proxied host on an internal cross-bundle call. #B65 keys
+// the forward on THIS request's per-request slot (request._ginaIsProxyHost /
+// _ginaProxyHost) instead of the sticky worker-global latch + frozen global, so
+// the internal call carries the host the triggering request actually arrived
+// with — and falls back to the worker-global for req-less callers (released-
+// response / ws-query paths).
+describe('30 - #B65 caller-side X-Forwarded-Host forward source structure', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it("query() derives isProxyHost from the per-request slot first, then the global", function() {
+        assert.ok(
+            src.indexOf("( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false )") > -1,
+            'expected the per-request-slot-preferred isProxyHost derivation in query()'
+        );
+    });
+
+    it("forwards THIS request's proxied host (slot) with the worker-global as fallback", function() {
+        assert.ok(
+            src.indexOf("( local.req && local.req._ginaProxyHost ) ? local.req._ginaProxyHost : process.gina.PROXY_HOST") > -1,
+            'expected the X-Forwarded-Host forward to prefer local.req._ginaProxyHost, falling back to process.gina.PROXY_HOST'
+        );
+    });
+
+    it("keeps the worker-global fallbacks present (back-compat for req-less callers)", function() {
+        // The forward block must retain getContext('isProxyHost') and
+        // process.gina.PROXY_HOST as fallbacks — a req-less caller (released
+        // response / ws-query, local.req null) still forwards the global value.
+        var anchor = src.indexOf("options.headers['x-forwarded-host']");
+        assert.ok(anchor > -1, 'x-forwarded-host forward site not found');
+        var block = src.slice(anchor - 200, anchor + 200);
+        assert.ok(block.indexOf('process.gina.PROXY_HOST') > -1,
+            'the worker-global fallback must remain for req-less callers');
+    });
+
+});
+
+describe('30b - #B65 caller-side forward decision: pure-logic replica', function() {
+
+    // Pure-logic replica of the #B65 forward decision (controller.js query()):
+    // prefer the per-request slot; fall back to the worker-global; forward only
+    // when this request is proxied.
+    function forwardDecision(localReq, globalIsProxy, globalProxyHost) {
+        var isProxyHost = ( localReq && typeof(localReq._ginaIsProxyHost) != 'undefined' )
+            ? localReq._ginaIsProxyHost
+            : ( globalIsProxy || false );
+        var headers = {};
+        if (isProxyHost) {
+            headers['x-forwarded-host'] = ( localReq && localReq._ginaProxyHost )
+                ? localReq._ginaProxyHost
+                : globalProxyHost;
+        }
+        return headers;
+    }
+
+    it('slot wins over a STALE/frozen worker-global (per-request freeze immunity on the caller side)', function() {
+        var h = forwardDecision({ _ginaIsProxyHost: true, _ginaProxyHost: 'publichost' }, true, 'STALE-frozen-host');
+        assert.equal(h['x-forwarded-host'], 'publichost',
+            'the internal call must carry THIS request slot host, not the stale global');
+    });
+
+    it('a raw/direct triggering request (slot=false) forwards NOTHING even if the global latched true', function() {
+        var h = forwardDecision({ _ginaIsProxyHost: false }, true, 'publichost');
+        assert.equal(h['x-forwarded-host'], undefined,
+            'a request that arrived raw must not forward a proxied host from the latched global');
+    });
+
+    it('req-less caller (local.req null) falls back to the worker-global (back-compat)', function() {
+        var h = forwardDecision(null, true, 'publichost');
+        assert.equal(h['x-forwarded-host'], 'publichost');
+    });
+
+    it('req-less caller + global not proxied → no forward', function() {
+        var h = forwardDecision(null, false, undefined);
+        assert.equal(h['x-forwarded-host'], undefined);
+    });
+
+    it('proxied slot but slot host missing → falls back to the global host', function() {
+        var h = forwardDecision({ _ginaIsProxyHost: true }, true, 'publichost');
+        assert.equal(h['x-forwarded-host'], 'publichost');
+    });
+
+});
