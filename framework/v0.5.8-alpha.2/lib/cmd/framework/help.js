@@ -1,52 +1,59 @@
 var console = lib.logger;
-var open    = require('./open');
+var fs      = require('fs');
+var path    = require('path');
 /**
  * @module gina/lib/cmd/framework/help
  */
 /**
- * Displays help by opening a relevant documentation path.
- * Delegates to the `open` command with the given key.
+ * Prints the framework CLI help.
+ *
+ * Handles `gina --help`, `gina -h`, and `gina help` — all aliased to
+ * `framework:help` (see `lib/cmd/aliases.json`). Reads and prints the command
+ * reference at `lib/cmd/framework/help.txt`, then exits.
+ *
+ * Opening a Gina directory in the OS file manager is a separate concern handled
+ * by the `open` command (`gina open <key>` / `gina -o <key>` — see `./open`).
  *
  * Usage:
- *  gina framework:help [<key>]
+ *  gina --help | -h
+ *  gina help
  *
  * @class Help
  * @constructor
- * @param {object} opt - Parsed command-line options
+ * @param {object} opt - Parsed command-line options (unused; help reads help.txt).
+ *
+ * @example
+ *  $ gina --help
+ *  $ gina -h
+ *  $ gina help
  */
 function Help(opt) {
+
+    /**
+     * Reads and prints `lib/cmd/framework/help.txt` to stdout, then exits.
+     * @inner
+     * @private
+     */
     var init = function() {
-        if ( typeof(process.argv[3]) == 'undefined') {
-            proceed('framework')
-        } else {
-            proceed(process.argv[3])
+        var file = path.join(__dirname, 'help.txt');
+
+        if ( !fs.existsSync(file) ) {
+            console.error('gina: no CLI help available at the moment. Try `man gina`.');
+            process.exit(1);
+            return;
         }
-    }
 
-    var proceed = function(key){
-        switch (key) {
-            case 'homedir':
-            case 'home':
-                open(GINA_HOMEDIR)
-                break;
-
-            case 'fwk':
-            case 'framework':
-                open(GINA_DIR)
-                break;
-
-            case 'service':
-            case 'services':
-                open(GINA_DIR + '/services')
-                break;
-            case 'lib':
-                open(getPath('gina').lib)
-                break;
-            default:
-                console.debug('running default');
+        try {
+            console.log( '\n' + fs.readFileSync(file, 'utf8') );
+        } catch (err) {
+            console.error( err.stack || err );
+            process.exit(1);
+            return;
         }
-    }
 
-    init()
+        process.exit(0);
+    };
+
+    init();
 };
-module.exports = Help
+module.exports = Help;
