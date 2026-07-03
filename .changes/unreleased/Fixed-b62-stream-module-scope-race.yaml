@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed two cross-request defects in the streaming render delegate under production concurrency: a finishing stream released a concurrent request''s req/res refs mid-stream instead of its own (leaving its own unreleased), and a stream error was reported through the concurrent request''s controller. The per-request dependencies are now function-scoped.'
-time: 2026-07-03T01:52:00+01:00

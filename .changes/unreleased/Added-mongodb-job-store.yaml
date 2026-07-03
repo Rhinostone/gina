@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a MongoDB backend for the connector-backed job store: point `jobs.store` (app.json) at a `connectors.json` entry with `"connector": "mongodb"` (same `uri`/`host`/`database` keys as the MongoDB session store; the driver is resolved from the consuming project `node_modules`) and job records live on a shared mongod — restart-durable and visible across processes and pods, while the deferred function still runs in the creating process. Expiry stays sweep-driven for parity with the other stores: no server-side TTL reaping.'
-time: 2026-07-02T14:52:42+01:00
