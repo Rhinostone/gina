@@ -233,8 +233,14 @@ async function main() {
         log('bun add -g ' + TARBALL + ' ...');
         inst = spawnSync('bun', ['add', '-g', TARBALL], { stdio: 'inherit', timeout: 600000 });
     } else {
-        log('npm install -g ' + TARBALL + ' (runs pre/post-install) ...');
-        inst = spawnSync('npm', ['install', '-g', TARBALL], { stdio: 'inherit', timeout: 600000 });
+        // npm 12 blocks dependency install scripts by default (allowScripts).
+        // A tarball install resolves to a file: identity, so the name-based
+        // `--allow-scripts=gina` opt-in cannot match it — the all-scripts
+        // escape hatch is the only opt-in that works for a tarball, and this
+        // is a throwaway container. Harmless on npm <= 11: unknown CLI
+        // configs only warn there, and install scripts already run by default.
+        log('npm install -g ' + TARBALL + ' --dangerously-allow-all-scripts (runs pre/post-install) ...');
+        inst = spawnSync('npm', ['install', '-g', TARBALL, '--dangerously-allow-all-scripts'], { stdio: 'inherit', timeout: 600000 });
     }
     if (inst.error) { fail('could not run the ' + RUNTIME + ' installer: ' + inst.error.message); return die(1); }
     if (inst.status !== 0) { fail('global install exited ' + inst.status); return die(1); }

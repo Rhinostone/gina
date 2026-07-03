@@ -176,8 +176,22 @@ try {
     var pathMatches = [];
     var contentMatches = [];
 
-    for (var i = 0; i < parsed.length; i++) {
-        var files = parsed[i].files || [];
+    // npm <= 11 emits an ARRAY of pack entries; npm 12 emits an OBJECT keyed
+    // by package name (pack/publish JSON output synchronized in npm 12).
+    // Normalize both to an entries array — and fail CLOSED below when zero
+    // files were recognized: an unknown output shape must block the publish,
+    // never vacuously pass (under npm 12 the old array-indexed loop iterated
+    // zero times and reported a clean pack without scanning anything).
+    var entries = Array.isArray(parsed)
+        ? parsed
+        : ( (parsed && typeof parsed === 'object')
+            ? Object.keys(parsed).map(function(k) { return parsed[k]; })
+            : [] );
+    var totalFiles = 0;
+
+    for (var i = 0; i < entries.length; i++) {
+        var files = entries[i].files || [];
+        totalFiles += files.length;
         for (var j = 0; j < files.length; j++) {
             var p = files[j].path;
 
@@ -192,6 +206,12 @@ try {
                 }
             }
         }
+    }
+
+    if (totalFiles === 0) {
+        console.error('[prepack] ERROR: unrecognized `npm pack --json` output shape — zero files scanned.');
+        console.error('[prepack] Failing closed — the leak scan must never pass without scanning the pack listing.');
+        process.exit(1);
     }
 
     var failed = false;

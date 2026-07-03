@@ -30,13 +30,18 @@
  * @param {object}        deps           Injected by controller: { self, local, headersSent }
  */
 
-var self, local, headersSent;
-
 module.exports = function renderStream(asyncIterable, contentType, deps) {
 
-    self        = deps.self;
-    local       = deps.local;
-    headersSent = deps.headersSent;
+    // #B62 (sibling of the render-swig #B61 race fix): the per-request deps
+    // are FUNCTION-scoped. In prod this module is a shared singleton across
+    // concurrent requests; with module-scoped captures, the fire-and-forget
+    // _doStream IIFE below resumed after its `for await` reading a CONCURRENT
+    // request's refs — its catch reported errors through the other request's
+    // controller, and its finally nulled the OTHER request's live
+    // local.req/res/next mid-stream (measured) while never releasing its own.
+    var self        = deps.self;
+    var local       = deps.local;
+    var headersSent = deps.headersSent;
 
     // Prevent double-render (same guard used by renderJSON / renderTEXT)
     if (local.options.renderingStack.length > 1) return false;

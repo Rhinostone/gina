@@ -53,11 +53,11 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
 
     // ── (b) source structure: writeCache signature takes res param ──────
 
-    it('writeCache signature includes `res` parameter', function() {
+    it('writeCache signature threads the per-request captures as parameters', function() {
         var src = getSrc();
         assert.ok(
-            /async\s+function\s+writeCache\s*\(\s*bundle\s*,\s*opt\s*,\s*jsonContent\s*,\s*res\s*\)/.test(src),
-            'writeCache must take `bundle, opt, jsonContent, res` — res is the renderJSON-captured response (race-safe)'
+            /async\s+function\s+writeCache\s*\(\s*bundle\s*,\s*opt\s*,\s*jsonContent\s*,\s*req\s*,\s*res\s*,\s*cacheIsEnabled\s*,\s*throwError\s*\)/.test(src),
+            'writeCache must take `bundle, opt, jsonContent, req, res, cacheIsEnabled, throwError` — every render-scoped value is threaded (race-safe, #M1/#B63)'
         );
     });
 
@@ -68,16 +68,16 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
         // line 100, `local.res` may have been nulled by renderJSON's terminal
         // exit. The fix routes the throwError through the captured `res` instead.
         assert.ok(
-            /return\s+self\.throwError\(\s*res\s*,\s*500\s*,\s*new\s+Error\('cache\.invalidateOn must be an array'/.test(src),
-            "expected `return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'))` (post-await throwError uses captured res, not local.res)"
+            /return\s+throwError\(\s*res\s*,\s*500\s*,\s*new\s+Error\('cache\.invalidateOn must be an array'/.test(src),
+            "expected `return throwError(res, 500, new Error('cache.invalidateOn must be an array'))` (post-await throwError uses the threaded params — captured res + render-scoped throwError, #B63)"
         );
     });
 
     it('writeCache call site passes `response` (the renderJSON-captured ref)', function() {
         var src = getSrc();
         assert.ok(
-            /writeCache\(self\._options\.bundle,\s*local\.options\.conf\.server\.cache,\s*data,\s*response\)/.test(src),
-            'writeCache call site must pass `response` (the captured ref from renderJSON line 152-153)'
+            /writeCache\(self\._options\.bundle,\s*local\.options\.conf\.server\.cache,\s*data,\s*request,\s*response,\s*self\.serverInstance\._cacheIsEnabled,\s*self\.throwError\)/.test(src),
+            'writeCache call site must pass the renderJSON captures + the server cache flag + the controller throwError (#B63)'
         );
     });
 
@@ -197,5 +197,103 @@ describe('03 - released-response guard (#B36)', function() {
                     && /Cannot read properties of null \(reading 'stream'\)/.test(err.message);
             },
             'the unguarded renderJSON head must reproduce the released-response crash');
+    });
+});
+
+
+// ─── 04 — per-request deps are function-scoped (#B63) ───────────────────────
+
+describe('04 - per-request deps are function-scoped; writeCache reads only its parameters (#B63 module-scope race)', function() {
+
+    var _src = null;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+    function stripComments(s) { return s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''); }
+
+    it('module scope declares no per-request state', function() {
+        var src = getSrc();
+        var prefix = stripComments(src.substring(0, src.indexOf('async function writeCache')));
+        assert.ok(
+            !/var\s+(self|local|headersSent|cachePath)\b/.test(prefix),
+            'a per-request binding is declared at module scope — it must be function-scoped inside renderJSON() (#B63)'
+        );
+        assert.ok(
+            !/,\s*(local|headersSent|cachePath)\s*=\s*null/.test(prefix),
+            'the pre-#B63 comma-continued module declaration block is back'
+        );
+    });
+
+    it('renderJSON captures the deps with `var` (function-scoped)', function() {
+        var src = getSrc();
+        ['self', 'local', 'headersSent'].forEach(function(name) {
+            assert.match(
+                src,
+                new RegExp('var\\s+' + name + '\\s*=\\s*deps\\.' + name + '\\s*;'),
+                '`var ' + name + ' = deps.' + name + ';` missing from renderJSON() — dep no longer function-scoped'
+            );
+        });
+        // The dead module-scoped cachePath (assigned, never read) must not return
+        // as an implicit global now that the module declaration is gone.
+        assert.ok(
+            !/^\s*cachePath\s*=/m.test(stripComments(src)),
+            'a `cachePath =` assignment exists — it was removed as dead (write-only) in #B63 and would now be an implicit global'
+        );
+    });
+
+    it('writeCache body reads only its parameters — never the per-request bindings', function() {
+        var src = getSrc();
+        var start = src.indexOf('async function writeCache');
+        var end = src.indexOf('module.exports');
+        assert.ok(start > 0 && end > start, 'expected writeCache followed by module.exports');
+        var body = stripComments(src.substring(start, end));
+        assert.ok(!/\bself\b/.test(body),
+            'writeCache references `self` — it is function-scoped inside renderJSON; thread values as parameters (#B60/#B63)');
+        assert.ok(!/\blocal\b/.test(body),
+            'writeCache references `local` — it is function-scoped inside renderJSON; thread values as parameters (#B63)');
+    });
+
+    it('interleaved replica: a module-scoped controller capture routes the post-await error through the CONCURRENT request; the threaded parameter does not (subtract)', async function() {
+        // Mirror of the writeCache shape: fire-and-forget async helper, one
+        // await (the cache write), then an error-path call on the controller.
+        // Two renders in the same tick both suspend at the await before either
+        // resumes, so under module scope the second assignment always wins.
+        function mkDelegate(mode) {
+            var modSelf = null; // module-scope analog: shared across calls
+            return function renderJSON(deps) {
+                if (mode === 'module') { modSelf = deps.self; }
+                ;(async function writeCache(throwError) {
+                    await Promise.resolve(); // the cache-write suspension
+                    if (mode === 'module') { modSelf.throwError(); }
+                    else { throwError(); }
+                })(deps.self.throwError);
+            };
+        }
+        function mkDeps(threwOn, tag) {
+            return { self: { throwError: function() { threwOn.push(tag); } } };
+        }
+        // settle() must be scheduled in a LATER event-loop phase than the
+        // replica's continuations, structurally — not by wall-clock. A
+        // setTimeout-based settle races on a delayed event-loop turn: the
+        // timers phase runs before the check phase, so an elapsed timer
+        // asserts before setImmediate continuations ever fire (measured on
+        // the 2-core CI runners as tm=[]). Microtask continuations + a
+        // setImmediate settle cannot reorder: pending microtasks always
+        // drain before the check phase.
+        function settle() { return new Promise(function(r) { setImmediate(r); }); }
+
+        // SUBTRACT — the pre-#B63 module-scope shape: A's error lands on B's controller.
+        var tm = [];
+        var dm = mkDelegate('module');
+        dm(mkDeps(tm, 'A')); dm(mkDeps(tm, 'B'));
+        await settle();
+        assert.deepStrictEqual(tm, ['B', 'B'],
+            'module-scope shape must route BOTH post-await errors through the last-assigned controller (the measured wrong-controller routing)');
+
+        // Fixed shape: the controller method is threaded as a parameter.
+        var tf = [];
+        var df = mkDelegate('param');
+        df(mkDeps(tf, 'A')); df(mkDeps(tf, 'B'));
+        await settle();
+        assert.deepStrictEqual(tf.sort(), ['A', 'B'],
+            'threaded-parameter shape must route each error through its own controller');
     });
 });

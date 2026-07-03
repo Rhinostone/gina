@@ -1421,16 +1421,36 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     var _jobsConf    = (_jobsAppConf && _jobsAppConf.jobs && typeof _jobsAppConf.jobs === 'object')
                                         ? _jobsAppConf.jobs
                                         : {};
-                                    lib.job.start({
+                                    var _jobsStartOpts = {
                                         maxConcurrency: _jobsConf.maxConcurrency,
                                         ttl:            _jobsConf.ttl,
                                         sweepInterval:  _jobsConf.sweepInterval,
                                         idSize:         _jobsConf.idSize,
+                                        retryBackoffMs: _jobsConf.retryBackoffMs,
                                         webhookMaxAttempts: _jobsConf.webhookMaxAttempts,
                                         webhookBackoffMs:   _jobsConf.webhookBackoffMs,
                                         webhookTimeoutMs:   _jobsConf.webhookTimeoutMs,
                                         webhookSecret:      _jobsConf.webhookSecret
-                                    });
+                                    };
+                                    // #AI6 connector-backed store — `jobs.store` names a
+                                    // connectors.json entry, resolved through lib/job-store.
+                                    // Fail-fast when the configured store cannot be built
+                                    // (#B57 shape): the config explicitly asked for durable
+                                    // records, so a silent memory fallback would hide the
+                                    // misconfig and lose the durability it asked for. An
+                                    // ABSENT `jobs.store` key still means the memory store.
+                                    if (typeof _jobsConf.store === 'string' && _jobsConf.store.length > 0) {
+                                        try {
+                                            _jobsStartOpts.store = lib.JobStore(_jobsConf.store);
+                                        } catch (jobsStoreErr) {
+                                            var _jobsStoreMsg = '[lib.job] jobs.store `' + _jobsConf.store + '` could not be built — aborting boot: ' + (jobsStoreErr.message || jobsStoreErr);
+                                            console.emerg(_jobsStoreMsg + '\n' + (jobsStoreErr.stack || ''));
+                                            // process.exit() truncates async stdio on a pipe — flush synchronously first.
+                                            fs.writeSync(2, _jobsStoreMsg + '\n');
+                                            process.exit(1);
+                                        }
+                                    }
+                                    lib.job.start(_jobsStartOpts);
                                 } catch (jobsErr) {
                                     console.warn('[lib.job] init skipped: ' + (jobsErr.message || jobsErr));
                                 }

@@ -84,6 +84,10 @@ function Lib() {
         archiver        : require('./archiver'),
         cmd             : _require('./cmd'),
         SessionStore    : _require('./session-store'),
+        // #AI6 — connector-backed job-store factory (lib/job `start({store})`).
+        // Stateless dispatcher invoked ONCE at boot from gna.js; _require like
+        // SessionStore (no instance/singleton state to protect from eviction).
+        JobStore        : _require('./job-store'),
         SwigFilters     : _require('./swig-filters'),
         Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
         uuid            : require('./uuid'),      // #B32-residual — plain require (pushed as a child of the gen-0 collection module per `new Collection()`). See Collection note above.

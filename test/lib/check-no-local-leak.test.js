@@ -239,3 +239,75 @@ describe('05 - content-leak error header generalised to surface both leak classe
     });
 
 });
+
+// 06 — npm 12 pack-JSON dual shape + zero-files fail-closed guard.
+// npm <= 11 emits `npm pack --json` as an ARRAY of pack entries; npm 12 emits
+// an OBJECT keyed by package name. The pre-fix `parsed.length` loop iterated
+// ZERO times over the object shape, so the scan reported a clean pack without
+// scanning anything — a vacuous pass on this security gate. The fix normalizes
+// both shapes AND fails closed when zero files were recognized, so no future
+// shape change can vacuously pass again.
+describe('06 - npm 12 pack-JSON dual shape + fail-closed guard', function () {
+
+    it('normalizes both the array (npm <= 11) and object-keyed (npm 12) shapes', function () {
+        assert.ok(SRC.indexOf('Array.isArray(parsed)') > -1,
+            'expected the Array.isArray(parsed) shape test');
+        assert.ok(/Object\.keys\(parsed\)\.map\(function\s*\(k\)\s*\{\s*return parsed\[k\];\s*\}\)/.test(SRC),
+            'expected the object-keyed shape to be mapped to an entries array');
+        assert.ok(/for\s*\(var i = 0; i < entries\.length; i\+\+\)/.test(SRC),
+            'the scan loop must iterate the NORMALIZED entries, not the raw parse');
+    });
+
+    it('fails closed when zero files were recognized (exit 1 before any OK)', function () {
+        var gIdx = SRC.indexOf('if (totalFiles === 0) {');
+        assert.ok(gIdx > -1, 'expected the totalFiles === 0 fail-closed guard');
+        var window = SRC.substring(gIdx, gIdx + 400);
+        assert.ok(/process\.exit\(1\)/.test(window),
+            'the zero-files guard must process.exit(1)');
+        var okIdx = SRC.indexOf('[prepack] OK:');
+        assert.ok(okIdx > gIdx, 'the fail-closed guard must sit BEFORE the OK exit');
+    });
+
+    it('pure-logic replica: both shapes normalize identically; unknown shapes trip the guard; the pre-fix loop was vacuous on the npm 12 shape', function () {
+        var normalize = function (parsed) {
+            return Array.isArray(parsed)
+                ? parsed
+                : ( (parsed && typeof parsed === 'object')
+                    ? Object.keys(parsed).map(function (k) { return parsed[k]; })
+                    : [] );
+        };
+        var countFiles = function (entries) {
+            var total = 0;
+            for (var i = 0; i < entries.length; i++) {
+                total += (entries[i].files || []).length;
+            }
+            return total;
+        };
+        var files = [{ path: 'a.js' }, { path: 'b.js' }, { path: 'CLAUDE.md' }];
+        var arrShape = [{ id: 'x@1.0.0', files: files }];          // npm <= 11
+        var objShape = { x: { id: 'x@1.0.0', files: files } };     // npm 12
+
+        assert.equal(countFiles(normalize(arrShape)), 3);
+        assert.equal(countFiles(normalize(objShape)), 3);
+        assert.deepEqual(
+            normalize(objShape)[0].files.map(function (f) { return f.path; }),
+            normalize(arrShape)[0].files.map(function (f) { return f.path; }),
+            'both shapes must yield the same scanned paths'
+        );
+
+        // Unknown shapes -> zero files -> the guard fires (fail closed).
+        assert.equal(countFiles(normalize(null)), 0);
+        assert.equal(countFiles(normalize(42)), 0);
+        assert.equal(countFiles(normalize('str')), 0);
+
+        // Subtract: the PRE-FIX loop indexed the raw parse — over the npm 12
+        // object shape `parsed.length` is undefined, the loop body never ran,
+        // and the scan passed vacuously (zero files looked, zero leaks found).
+        var preFixIterations = 0;
+        var parsed = objShape;
+        for (var i = 0; i < parsed.length; i++) { preFixIterations++; }
+        assert.equal(preFixIterations, 0,
+            'premise: the pre-fix loop is a no-op on the npm 12 shape — the defect the guard now blocks');
+    });
+
+});

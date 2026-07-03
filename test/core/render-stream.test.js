@@ -590,3 +590,101 @@ describe('11 - renderStream: released-response guard (#B38)', function() {
             /Cannot read properties of null \(reading 'stream'\)/);
     });
 });
+
+
+// ─── 12 — per-request deps are function-scoped (#B62) ───────────────────────
+
+describe('12 - renderStream: per-request deps are function-scoped (#B62 module-scope race)', function() {
+
+    function stripComments(s) { return s.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, ''); }
+
+    it('module scope declares no per-request state; deps are captured with `var`', function() {
+        var src = fs.readFileSync(RENDER_STREAM, 'utf8');
+        var prefix = stripComments(src.substring(0, src.indexOf('module.exports')));
+        assert.ok(
+            !/var\s+(self|local|headersSent)\b/.test(prefix),
+            'a per-request binding is declared at module scope — the _doStream IIFE resumes post-await and would read a concurrent request\'s refs (#B62)'
+        );
+        ['self', 'local', 'headersSent'].forEach(function(name) {
+            assert.match(
+                src,
+                new RegExp('var\\s+' + name + '\\s*=\\s*deps\\.' + name + '\\s*;'),
+                '`var ' + name + ' = deps.' + name + ';` missing — dep no longer function-scoped'
+            );
+        });
+    });
+
+    it('a stream finishing while a second is mid-stream releases its OWN triplet, not the concurrent request\'s (real delegate)', async function() {
+        var relA, relB;
+        var gateA = new Promise(function(r) { relA = r; });
+        var gateB = new Promise(function(r) { relB = r; });
+        async function* iterA() { yield 'a'; await gateA; yield 'a2'; }
+        async function* iterB() { yield 'b'; await gateB; yield 'b2'; }
+
+        var depsA = makeDeps(), depsB = makeDeps();
+        renderStream(iterA(), 'text/plain', depsA); // A suspends mid-stream
+        renderStream(iterB(), 'text/plain', depsB); // pre-#B62: module refs now = B's
+        await sleep(5);
+
+        relA(); // A finishes while B is STILL streaming
+        await sleep(5);
+        assert.notStrictEqual(depsB.local.req, null,
+            'B\'s triplet was nulled mid-stream by A\'s finally — module-scope capture is back (#B62)');
+        assert.strictEqual(depsA.local.req, null,
+            'A\'s own triplet must be released when A\'s stream ends');
+
+        relB();
+        await sleep(5);
+        assert.strictEqual(depsB.local.req, null, 'B\'s triplet must be released at B\'s own end');
+    });
+
+    it('a stream error is reported through the request\'s OWN controller (real delegate)', async function() {
+        var relC, relD;
+        var gateC = new Promise(function(r) { relC = r; });
+        var gateD = new Promise(function(r) { relD = r; });
+        async function* iterC() { yield 'c'; await gateC; throw new Error('boom'); }
+        async function* iterD() { yield 'd'; await gateD; yield 'd2'; }
+
+        var threwOn = [];
+        var depsC = makeDeps({}, { throwError: function() { threwOn.push('C'); } });
+        var depsD = makeDeps({}, { throwError: function() { threwOn.push('D'); } });
+        renderStream(iterC(), 'text/plain', depsC); // C suspends
+        renderStream(iterD(), 'text/plain', depsD); // pre-#B62: module self now = D's
+        await sleep(5);
+
+        relC(); // C's iterable throws
+        await sleep(5);
+        assert.deepStrictEqual(threwOn, ['C'],
+            'C\'s stream error must be reported through C\'s own throwError, not the concurrent request\'s');
+
+        relD();
+        await sleep(5);
+    });
+
+    it('subtract: the module-scope shape cross-nulls the concurrent request (pure-logic replica)', async function() {
+        // Mirror of the pre-#B62 delegate shape: captures at module-analog scope
+        // (shared across calls), a fire-and-forget IIFE whose finally nulls them.
+        var modLocal = null;
+        function delegate(gate, local) {
+            modLocal = local;
+            ;(async function _doStream() {
+                try { await gate; } finally {
+                    modLocal.req = null; modLocal.res = null; modLocal.next = null;
+                }
+            })();
+        }
+        var relA2, relB2;
+        var gA = new Promise(function(r) { relA2 = r; });
+        var gB = new Promise(function(r) { relB2 = r; });
+        var localA = { req: 1, res: 1, next: 1 }, localB = { req: 1, res: 1, next: 1 };
+
+        delegate(gA, localA);
+        delegate(gB, localB); // modLocal now = B's
+        relA2();              // A finishes first
+        await sleep(5);
+        assert.strictEqual(localB.req, null, 'replica premise: A\'s finally nulls B\'s triplet under module scope');
+        assert.strictEqual(localA.req, 1, 'replica premise: A\'s own triplet is never released under module scope');
+        relB2();
+        await sleep(5);
+    });
+});

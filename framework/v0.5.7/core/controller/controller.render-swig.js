@@ -13,17 +13,13 @@ var emitInspectorWindowData = require('./inspector-window-emit');
 var blacklistRe       = /[<>]/g;
 
 // Inherited from controller.
-// #INS10 race fix: `self` / `local` are NOT declared module-scoped — they are
-// captured FUNCTION-scoped inside render() (see the deps unpack) so concurrent
-// renders never share them. The refs below stay module-scoped (read pre-await).
-var getData             = null
-    , hasViews          = null
-    , setResources      = null
-    // Default filters
-    , SwigFilters       = null
-    , headersSent       = null
-    , cachePath         = null
-;
+// #B61 (completes the #INS10 race fix): ALL per-request deps are captured
+// FUNCTION-scoped inside render() — nothing per-request lives at module scope.
+// In prod this module is a shared singleton across concurrent requests, and a
+// module-scoped capture is reassigned by every incoming render; a render
+// suspended at an await would resume reading a CONCURRENT request's closures
+// (measured: the post-await setResources / getData calls executed the other
+// request's functions, gap-filling its page data into this render's context).
 
 /**
  * Write the rendered HTML to the cache store (memory or file system).
@@ -35,16 +31,21 @@ var getData             = null
  * @param {string} htmlContent - Compiled HTML string to cache
  * @param {object} req         - Per-request request captured by render() (function-scoped, race-safe)
  * @param {object} res         - Per-request response captured by render() (function-scoped, race-safe)
+ * @param {boolean|string} cacheIsEnabled - Server-level cache flag threaded by render(); writeCache
+ *                               is module-level and has no access to render()-scoped bindings
+ * @param {function} throwError - Render-scoped controller `throwError` (closure-bound), threaded
+ *                               for the `invalidateOnEvents` validation branch
  * @returns {Promise<void>}
  */
-async function writeCache(bundle, opt, htmlContent, req, res) {
+async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, throwError) {
     if (
         typeof(req.routing.cache) == 'undefined'
         ||
         ! req.routing.cache
         ||
-        // replaced: /^true$/i.test() (#P6)
-        String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
+        // replaced: /^true$/i.test() (#P6); flag threaded as a param — module scope
+        // has no render()-scoped bindings (see the #INS10 note at the top of this file)
+        String(cacheIsEnabled).toLowerCase() !== 'true'
     ) {
         return;
     }
@@ -124,7 +125,7 @@ async function writeCache(bundle, opt, htmlContent, req, res) {
         // Invalidation
         if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
             if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-                return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
+                return throwError(res, 500, new Error('cache.invalidateOn must be an array'));
             }
             // Placing event listeners
             cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
@@ -162,23 +163,28 @@ async function writeCache(bundle, opt, htmlContent, req, res) {
 module.exports = async function render(userData, displayInspector, errOptions, deps) {
 
     // Inherited from controller.
-    // #INS10 race fix — `self` / `local` are FUNCTION-scoped (`var`), not module-
-    // scoped: render() is async, so a render suspended at an await must not have
-    // its `self` / `local` overwritten by a concurrent render — otherwise the
-    // post-await Inspector emit (prod-window egress + dev `inspector#data`) would
-    // carry the other request's `_queryLog` / `_timeline`. Mirrors render-nunjucks.js.
-    // (getData / hasViews / SwigFilters / headersSent stay module-scoped: read
-    //  before the first await, so they are not the documented race vector.)
+    // #INS10 / #B61 race fix — EVERY per-request dep is FUNCTION-scoped (`var`):
+    // render() is async, so a render suspended at an await must not have its
+    // captures overwritten by a concurrent render. #INS10 (8674c514) scoped
+    // `self` / `local` for the post-await Inspector emit; #B61 completes the
+    // sweep — getData / setResources were still module-scoped yet are read
+    // AFTER the template-read await (the setResources call and the
+    // `merge(data, getData())` restore further down), so a concurrent render's
+    // reassignment executed the OTHER request's closures and gap-filled its
+    // page data into this render. cachePath is likewise read post-await on the
+    // layout-cache path, and the engine ref was assigned as an implicit global.
     var self            = deps.self;
     var local           = deps.local;
-    getData         = deps.getData;
-    hasViews        = deps.hasViews;
-    setResources    = deps.setResources;
+    var getData         = deps.getData;
+    var hasViews        = deps.hasViews;
+    var setResources    = deps.setResources;
     // Default filters
-    swig            = deps.swig;
-    SwigFilters     = deps.SwigFilters;
-    headersSent     = deps.headersSent;
-;
+    var swig            = deps.swig;
+    var SwigFilters     = deps.SwigFilters;
+    var headersSent     = deps.headersSent;
+    // Assigned on the layout-cache path once localOptions is resolved; read
+    // post-await there (.gitignore drop + the {% extends %} rewrite).
+    var cachePath       = null;
     // Function-scoped captures of per-request refs. The exported render()
     // is async with multiple await boundaries (template + layout reads,
     // cache writes). Between yields, `local.req` / `local.res` / `local.next`
@@ -977,7 +983,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     && typeof(req.routing.cache) != 'undefined'
                     && req.method.toUpperCase() === 'GET'
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res);
+                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)
@@ -1742,7 +1748,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         && req.method.toUpperCase() === 'GET'
                     )
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res);
+                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)

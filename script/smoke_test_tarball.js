@@ -146,7 +146,14 @@ function pack(destDir) {
     if (r.status !== 0) throw new Error('npm pack failed:\n' + (r.stderr || r.stdout || '(no output)'));
     var meta;
     try { meta = JSON.parse(r.stdout); } catch (e) { throw new Error('could not parse `npm pack --json` output:\n' + r.stdout); }
-    var filename = meta && meta[0] && meta[0].filename;
+    // npm <= 11 emits an ARRAY of pack entries; npm 12 emits an OBJECT keyed
+    // by package name (pack/publish JSON output synchronized). Accept both.
+    var entries = Array.isArray(meta)
+        ? meta
+        : ( (meta && typeof meta === 'object')
+            ? Object.keys(meta).map(function(k) { return meta[k]; })
+            : [] );
+    var filename = entries[0] && entries[0].filename;
     if (!filename) throw new Error('could not determine packed tarball filename from `npm pack --json`');
     return path.join(destDir, filename);
 }
