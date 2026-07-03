@@ -261,7 +261,7 @@ describe('04 - per-request deps are function-scoped; writeCache reads only its p
             return function renderJSON(deps) {
                 if (mode === 'module') { modSelf = deps.self; }
                 ;(async function writeCache(throwError) {
-                    await new Promise(function(r) { setImmediate(r); }); // the cache write
+                    await Promise.resolve(); // the cache-write suspension
                     if (mode === 'module') { modSelf.throwError(); }
                     else { throwError(); }
                 })(deps.self.throwError);
@@ -270,7 +270,15 @@ describe('04 - per-request deps are function-scoped; writeCache reads only its p
         function mkDeps(threwOn, tag) {
             return { self: { throwError: function() { threwOn.push(tag); } } };
         }
-        function settle() { return new Promise(function(r) { setTimeout(r, 10); }); }
+        // settle() must be scheduled in a LATER event-loop phase than the
+        // replica's continuations, structurally — not by wall-clock. A
+        // setTimeout-based settle races on a delayed event-loop turn: the
+        // timers phase runs before the check phase, so an elapsed timer
+        // asserts before setImmediate continuations ever fire (measured on
+        // the 2-core CI runners as tm=[]). Microtask continuations + a
+        // setImmediate settle cannot reorder: pending microtasks always
+        // drain before the check phase.
+        function settle() { return new Promise(function(r) { setImmediate(r); }); }
 
         // SUBTRACT — the pre-#B63 module-scope shape: A's error lands on B's controller.
         var tm = [];
