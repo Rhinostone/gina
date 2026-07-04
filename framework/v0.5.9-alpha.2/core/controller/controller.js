@@ -553,7 +553,24 @@ function SuperController(options) {
             //     }
             // }
 
-            set('page.environment.hostname', hostname);
+            // #B66 — the hostname whispered to the browser (gina.config.hostname).
+            // On a proxied deployment (per-request #B65 classification) whisper the
+            // PUBLIC host-only origin (scheme://public-host, port-less — the webroot is
+            // whispered separately below) instead of the bundle's INTERNAL
+            // scheme://host:port(+webroot). This closes an information-disclosure AND
+            // lets the browser routing self-check flip isProxyHost=true (it cannot while
+            // the whispered value carries a port/webroot the self-check can't strip), so
+            // cross-bundle toUrl resolves same-origin. The internal `hostname` var above
+            // is left byte-identical — it still feeds _proxyHostname + the routing clone
+            // below. RAW (direct host:port) whispers the internal value, byte-identical.
+            // `_ginaProxyHostname` is the per-request #B65 slot (host-only, forwarded
+            // scheme); per-request (NOT a process-global) so it can't leak across a mix
+            // of proxied + direct requests. See server.isaac.js for the writer.
+            var _publicHostname = hostname;
+            if ( local.req && local.req._ginaIsProxyHost === true && local.req._ginaProxyHostname ) {
+                _publicHostname = local.req._ginaProxyHostname;
+            }
+            set('page.environment.hostname', _publicHostname);
             // Updating _config.rootDomain - 2024/04/15
             // _config.rootDomain = domainLib.getRootDomain(hostname).value;
 

@@ -3437,3 +3437,90 @@ describe('30b - #B65 caller-side forward decision: pure-logic replica', function
     });
 
 });
+
+describe('31 - #B66 client-only hostname whisper (proxied → public host-only) source structure', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('computes a client-only _publicHostname defaulting to the internal hostname', function() {
+        assert.ok(src.indexOf('var _publicHostname = hostname;') > -1,
+            'expected `var _publicHostname = hostname;` (defaults to the internal value)');
+    });
+
+    it('overrides _publicHostname with the per-request proxied host-only slot, strict === true', function() {
+        assert.ok(
+            src.indexOf("if ( local.req && local.req._ginaIsProxyHost === true && local.req._ginaProxyHostname ) {") > -1,
+            'expected the strict === true gate on the per-request #B65 slot');
+        assert.ok(src.indexOf('_publicHostname = local.req._ginaProxyHostname;') > -1,
+            'expected the override to use local.req._ginaProxyHostname (host-only, forwarded scheme)');
+    });
+
+    it('whispers _publicHostname (NOT the internal hostname var) into page.environment.hostname', function() {
+        assert.ok(src.indexOf("set('page.environment.hostname', _publicHostname);") > -1,
+            'expected page.environment.hostname to be set from _publicHostname');
+        assert.ok(src.indexOf("set('page.environment.hostname', hostname);") < 0,
+            'the old whisper of the internal `hostname` var must be gone');
+    });
+
+    it('leaves the internal hostname var + _proxyHostname byte-identical (still reference `hostname`)', function() {
+        assert.ok(src.indexOf('var hostname    = _config.hostname + _config.server.webroot;') > -1,
+            'the internal hostname var (feeds _proxyHostname + routing clone) must be unchanged');
+        assert.ok(src.indexOf('ctx.config.envConf._proxyHostname = (isProxyHost) ? hostname : null;') > -1,
+            '_proxyHostname must still derive from the internal `hostname`, not the client-only _publicHostname');
+    });
+
+    it('_publicHostname is confined to the whisper (declaration + override + set — exactly 3 refs)', function() {
+        var n = (src.match(/_publicHostname/g) || []).length;
+        assert.equal(n, 3,
+            'expected _publicHostname only at its declaration, override, and the set() call — found ' + n);
+    });
+
+});
+
+describe('31b - #B66 client-only hostname whisper: pure-logic replica (3-mode)', function() {
+
+    // Pure-logic replica of the #B66 S1 decision (controller.js ~556): whisper the
+    // per-request proxied host-only value when this request is proxied; otherwise the
+    // bundle's internal hostname. Mirrors the strict === true gate on the #B65 slot.
+    function publicHostname(localReq, internalHostname) {
+        var out = internalHostname;
+        if ( localReq && localReq._ginaIsProxyHost === true && localReq._ginaProxyHostname ) {
+            out = localReq._ginaProxyHostname;
+        }
+        return out;
+    }
+
+    var INTERNAL = 'http://internal-a:5101/app/';   // scheme://host:port + webroot (leaks + can't flip the client self-check)
+
+    it('mode 1 multi-hop (proxied, forwarded scheme) → the host-only public origin', function() {
+        var h = publicHostname({ _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public.example' }, INTERNAL);
+        assert.equal(h, 'https://public.example');
+    });
+
+    it('mode 2 single-hop (proxied) → the host-only public origin', function() {
+        var h = publicHostname({ _ginaIsProxyHost: true, _ginaProxyHostname: 'http://public.example' }, INTERNAL);
+        assert.equal(h, 'http://public.example');
+    });
+
+    it('mode 3 RAW (direct host:port, slot false) → the internal value, byte-identical', function() {
+        var h = publicHostname({ _ginaIsProxyHost: false }, INTERNAL);
+        assert.equal(h, INTERNAL);
+    });
+
+    it('req-less / absent slot → the internal value (back-compat)', function() {
+        assert.equal(publicHostname(null, INTERNAL), INTERNAL);
+        assert.equal(publicHostname({}, INTERNAL), INTERNAL);
+    });
+
+    it('strict === true: a truthy-but-non-true slot does NOT flip to the proxied host', function() {
+        var h = publicHostname({ _ginaIsProxyHost: 'true', _ginaProxyHostname: 'http://public.example' }, INTERNAL);
+        assert.equal(h, INTERNAL, 'only a strict boolean true whispers the proxied host');
+    });
+
+    it('SUBTRACT: without the gate, the internal host is always whispered (the leak)', function() {
+        function preB66(localReq, internalHostname) { return internalHostname; }
+        assert.equal(preB66({ _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public.example' }, INTERNAL), INTERNAL,
+            'pre-fix, a proxied request still whispered the internal host — this is the disclosure #B66 closes');
+    });
+
+});

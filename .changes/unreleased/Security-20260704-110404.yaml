@@ -1,0 +1,3 @@
+kind: Security
+body: 'Fixed a browser-side internal-host information disclosure on reverse-proxied deployments. The client gina.config.hostname and the fetched /_gina/assets/routing.json no longer serialize each bundle''s internal scheme://host:port to the browser — a proxied client now receives a public host-only origin and a host-stripped routing map, while direct host:port access stays byte-identical. This also fixes cross-bundle client getRoute(...).toUrl(), which previously resolved to the unreachable internal host on such deployments and now resolves same-origin.'
+time: 2026-07-04T11:04:04.407973+01:00
