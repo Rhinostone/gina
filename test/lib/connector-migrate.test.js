@@ -16,7 +16,8 @@
  *   (f) resolveTargets — shared + every bundle when no <bundle>, single
  *       bundle entry when <bundle> is passed, exits on unknown bundle
  *   (g) scanFile — two check types (`missing-schema`, `bare-key-no-connector`),
- *       header capture before first `{`, requireJSON for parsing,
+ *       comment-aware header capture (lib.jsonConfigHeader.splitHeader),
+ *       requireJSON for parsing,
  *       exists/parseError short-circuit, severity + fixable flags
  *   (h) applyFixes — only fixable today is missing-schema; $schema
  *       pinned at top, remaining keys preserved in order, file
@@ -243,9 +244,9 @@ describe('07 - scanFile', function () {
         assert.match(src, /if \(!report\.exists\) return report;/);
     });
 
-    it('captures the raw text before the first `{` as the header', function () {
-        assert.match(src, /var firstBrace = raw\.indexOf\('\{'\);/);
-        assert.match(src, /report\.header = \(firstBrace > 0\) \? raw\.slice\(0, firstBrace\) : '';/);
+    it('captures the header via the comment-aware lib.jsonConfigHeader.splitHeader', function () {
+        assert.match(src, /report\.header = lib\.jsonConfigHeader\.splitHeader\(raw\)\.header;/);
+        assert.doesNotMatch(src, /raw\.indexOf\('\{'\)/);
     });
 
     it('parses the body with requireJSON for comment tolerance', function () {

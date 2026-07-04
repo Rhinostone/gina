@@ -546,18 +546,20 @@ describe('08 - getConfig: proxy hostname override guard', function() {
 
     // ── (a) source structure ─────────────────────────────────────────────────
 
-    it('source contains the PROXY_HOSTNAME undefined guard in getConfig', function() {
-        // The fix: typeof(process.gina.PROXY_HOSTNAME) != 'undefined' prevents
-        // overwriting a valid hostname with undefined when proxy detection is
-        // a false positive (browser Origin header triggers isProxyHost = true
-        // but no PROXY_HOSTNAME was ever set).
+    it('source contains the (per-request) proxy-hostname undefined guard in getConfig', function() {
+        // The guard prevents overwriting a valid hostname with undefined when proxy
+        // detection is a false positive (browser Origin header triggers isProxyHost
+        // = true but no proxy hostname was ever set). #B66 S2b re-points it from the
+        // bare worker-global onto the per-request _proxyHostname (which itself falls
+        // back to process.gina.PROXY_HOSTNAME for req-less/Express callers), so the
+        // guard now reads typeof(_proxyHostname) != 'undefined'. The intent is unchanged.
         var start = src.indexOf('this.getConfig = function(name)');
         assert.ok(start > -1, 'getConfig definition not found in source');
         var end = src.indexOf('\n    }', start) + 6;
         var block = src.slice(start, end);
         assert.ok(
-            block.indexOf("typeof(process.gina.PROXY_HOSTNAME) != 'undefined'") > -1,
-            'expected PROXY_HOSTNAME undefined guard inside getConfig'
+            block.indexOf("typeof(_proxyHostname) != 'undefined'") > -1,
+            'expected the per-request _proxyHostname undefined guard inside getConfig'
         );
     });
 
@@ -3434,6 +3436,324 @@ describe('30b - #B65 caller-side forward decision: pure-logic replica', function
     it('proxied slot but slot host missing → falls back to the global host', function() {
         var h = forwardDecision({ _ginaIsProxyHost: true }, true, 'publichost');
         assert.equal(h['x-forwarded-host'], 'publichost');
+    });
+
+});
+
+describe('31 - #B66 client-only hostname whisper (proxied → public host-only) source structure', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('computes a client-only _publicHostname defaulting to the internal hostname', function() {
+        assert.ok(src.indexOf('var _publicHostname = hostname;') > -1,
+            'expected `var _publicHostname = hostname;` (defaults to the internal value)');
+    });
+
+    it('overrides _publicHostname with the per-request proxied host-only slot, strict === true', function() {
+        assert.ok(
+            src.indexOf("if ( local.req && local.req._ginaIsProxyHost === true && local.req._ginaProxyHostname ) {") > -1,
+            'expected the strict === true gate on the per-request #B65 slot');
+        assert.ok(src.indexOf('_publicHostname = local.req._ginaProxyHostname;') > -1,
+            'expected the override to use local.req._ginaProxyHostname (host-only, forwarded scheme)');
+    });
+
+    it('whispers _publicHostname (NOT the internal hostname var) into page.environment.hostname', function() {
+        assert.ok(src.indexOf("set('page.environment.hostname', _publicHostname);") > -1,
+            'expected page.environment.hostname to be set from _publicHostname');
+        assert.ok(src.indexOf("set('page.environment.hostname', hostname);") < 0,
+            'the old whisper of the internal `hostname` var must be gone');
+    });
+
+    it('leaves the internal hostname var + _proxyHostname byte-identical (still reference `hostname`)', function() {
+        assert.ok(src.indexOf('var hostname    = _config.hostname + _config.server.webroot;') > -1,
+            'the internal hostname var (feeds _proxyHostname + routing clone) must be unchanged');
+        assert.ok(src.indexOf('ctx.config.envConf._proxyHostname = (isProxyHost) ? hostname : null;') > -1,
+            '_proxyHostname must still derive from the internal `hostname`, not the client-only _publicHostname');
+    });
+
+    it('_publicHostname is confined to the whisper (declaration + override + set — exactly 3 refs)', function() {
+        var n = (src.match(/_publicHostname/g) || []).length;
+        assert.equal(n, 3,
+            'expected _publicHostname only at its declaration, override, and the set() call — found ' + n);
+    });
+
+});
+
+describe('31b - #B66 client-only hostname whisper: pure-logic replica (3-mode)', function() {
+
+    // Pure-logic replica of the #B66 S1 decision (controller.js ~556): whisper the
+    // per-request proxied host-only value when this request is proxied; otherwise the
+    // bundle's internal hostname. Mirrors the strict === true gate on the #B65 slot.
+    function publicHostname(localReq, internalHostname) {
+        var out = internalHostname;
+        if ( localReq && localReq._ginaIsProxyHost === true && localReq._ginaProxyHostname ) {
+            out = localReq._ginaProxyHostname;
+        }
+        return out;
+    }
+
+    var INTERNAL = 'http://internal-a:5101/app/';   // scheme://host:port + webroot (leaks + can't flip the client self-check)
+
+    it('mode 1 multi-hop (proxied, forwarded scheme) → the host-only public origin', function() {
+        var h = publicHostname({ _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public.example' }, INTERNAL);
+        assert.equal(h, 'https://public.example');
+    });
+
+    it('mode 2 single-hop (proxied) → the host-only public origin', function() {
+        var h = publicHostname({ _ginaIsProxyHost: true, _ginaProxyHostname: 'http://public.example' }, INTERNAL);
+        assert.equal(h, 'http://public.example');
+    });
+
+    it('mode 3 RAW (direct host:port, slot false) → the internal value, byte-identical', function() {
+        var h = publicHostname({ _ginaIsProxyHost: false }, INTERNAL);
+        assert.equal(h, INTERNAL);
+    });
+
+    it('req-less / absent slot → the internal value (back-compat)', function() {
+        assert.equal(publicHostname(null, INTERNAL), INTERNAL);
+        assert.equal(publicHostname({}, INTERNAL), INTERNAL);
+    });
+
+    it('strict === true: a truthy-but-non-true slot does NOT flip to the proxied host', function() {
+        var h = publicHostname({ _ginaIsProxyHost: 'true', _ginaProxyHostname: 'http://public.example' }, INTERNAL);
+        assert.equal(h, INTERNAL, 'only a strict boolean true whispers the proxied host');
+    });
+
+    it('SUBTRACT: without the gate, the internal host is always whispered (the leak)', function() {
+        function preB66(localReq, internalHostname) { return internalHostname; }
+        assert.equal(preB66({ _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public.example' }, INTERNAL), INTERNAL,
+            'pre-fix, a proxied request still whispered the internal host — this is the disclosure #B66 closes');
+    });
+
+});
+
+// ─── #B66 S2b — server-side serve-time host rewrites: per-request slot, not latch ─
+// #B65 request-scoped the reverse-proxy host and un-froze the worker-global, but
+// FOUR serve-time host rewrites in controller.js still read the sticky worker-global
+// latch: (1) the setOptions routing-clone gate + the page.environment.proxyHost/
+// Hostname whisper, (2) getNodeRes' proxied-hostname build, (3) redirect's target
+// host, (4) getConfig's hostname/host override. On a mixed proxied+direct worker
+// (or a concurrent request to a different public host, or a multi-tenant worker)
+// these resolved the LAST-proxied global instead of the request in hand. S2b
+// re-points each to THIS request's #B65 slot (local.req._ginaIsProxyHost /
+// _ginaProxyHost / _ginaProxyHostname), keeping the worker-global as the MANDATORY
+// fallback — the Express engine never sets the slots, and getConfig is reachable
+// req-less (ws-query / released-response / async health probe). Left deliberately
+// out of scope: the isSpecialCase PROXY_HOST comparisons (cross-bundle-link
+// heuristic a stale global can't flip) and query()'s PROXY_SCHEME (boot-static,
+// not a per-request freeze). The re-point was also verified live before/after on
+// the REAL getConfig via a standalone createTestInstance harness driving the
+// actual controller.js through a mixed proxied/direct interleave (2 fails → 5/5).
+describe('32 - #B66 S2b server-side serve-time proxy-host rewrites source structure', function() {
+
+    var src = fs.readFileSync(SOURCE, 'utf8');
+
+    it('site 1 (setOptions routing-clone) gate reads the per-request slot first', function() {
+        assert.ok(
+            src.indexOf("var isProxyHost = ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false );") > -1,
+            'expected the setOptions routing-clone gate to prefer local.req._ginaIsProxyHost'
+        );
+    });
+
+    it('site 1 whisper (page.environment.proxyHost/Hostname) reads the per-request slot', function() {
+        assert.ok(
+            src.indexOf("set('page.environment.proxyHost', ( local.req && local.req._ginaProxyHost ) ? local.req._ginaProxyHost : process.gina.PROXY_HOST);") > -1,
+            'expected the proxyHost whisper to prefer local.req._ginaProxyHost'
+        );
+        assert.ok(
+            src.indexOf("set('page.environment.proxyHostname', ( local.req && local.req._ginaProxyHostname ) ? local.req._ginaProxyHostname : process.gina.PROXY_HOSTNAME);") > -1,
+            'expected the proxyHostname whisper to prefer local.req._ginaProxyHostname'
+        );
+    });
+
+    it('site 2 (getNodeRes) last-resort host fallback prefers the slot before the global', function() {
+        assert.ok(
+            src.indexOf("local.req.headers.host||local.req.headers[':host']||local.req._ginaProxyHost||process.gina.PROXY_HOST") > -1,
+            'expected getNodeRes to prefer local.req._ginaProxyHost, falling back to process.gina.PROXY_HOST'
+        );
+    });
+
+    it('site 3 (redirect) freeze-prone catch-all term prefers the slot, keeps the global fallback', function() {
+        assert.ok(
+            src.indexOf("( ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost === true : typeof(process.gina.PROXY_HOSTNAME) != 'undefined' )") > -1,
+            'expected the redirect clause-E to prefer local.req._ginaIsProxyHost === true, falling back to the global existence check'
+        );
+        assert.ok(
+            src.indexOf("? ( ( local.req && local.req._ginaProxyHostname ) ? local.req._ginaProxyHostname : process.gina.PROXY_HOSTNAME )") > -1,
+            'expected the redirect target host to prefer local.req._ginaProxyHostname'
+        );
+    });
+
+    it('site 4 (getConfig) derives isProxyHost + host/hostname from the slot with a global fallback', function() {
+        assert.ok(
+            src.indexOf("var _isProxyHost   = ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false );") > -1,
+            'expected getConfig to derive _isProxyHost from the slot first');
+        assert.ok(src.indexOf('var _proxyHostname = ( local.req && local.req._ginaProxyHostname )') > -1,
+            'expected getConfig to derive _proxyHostname from the slot');
+        assert.ok(src.indexOf('var _proxyHost     = ( local.req && local.req._ginaProxyHost )') > -1,
+            'expected getConfig to derive _proxyHost from the slot');
+        assert.match(src, /tmp\.hostname\s*=\s*_proxyHostname;/,
+            'getConfig must assign the per-request _proxyHostname, not the bare global');
+        assert.match(src, /tmp\.host\s*=\s*_proxyHost;/,
+            'getConfig must assign the per-request _proxyHost, not the bare global');
+    });
+
+    it('every re-pointed site retains the worker-global as fallback (Express + req-less back-compat)', function() {
+        // The slot-with-fallback shape must keep getContext('isProxyHost') and the
+        // process.gina.PROXY_* reads present — Express never sets the slots and
+        // getConfig is reachable req-less; both degrade to the never-frozen global.
+        assert.ok(src.indexOf("getContext('isProxyHost') || false") > -1,
+            'the worker-global isProxyHost fallback must remain');
+        assert.ok(src.indexOf('process.gina.PROXY_HOSTNAME') > -1 && src.indexOf('process.gina.PROXY_HOST') > -1,
+            'the worker-global host fallbacks must remain');
+    });
+
+    it('the isSpecialCase PROXY_HOST comparisons are deliberately LEFT (cross-bundle heuristic, out of scope)', function() {
+        // S2b does not touch the two isSpecialCase comparisons — a stale global
+        // cannot flip them for a genuine direct call (a direct :host never equals
+        // the public proxy host). They stay reading the global by design.
+        assert.ok(src.indexOf("local.req.headers[':host'] != process.gina.PROXY_HOST") > -1,
+            'the isSpecialCase :host != PROXY_HOST comparison(s) must remain unchanged');
+    });
+
+});
+
+describe('32b - #B66 S2b serve-time host resolution: pure-logic replicas', function() {
+
+    // The shared re-point decision (setOptions / getNodeRes / getConfig gate):
+    // prefer THIS request's slot; fall back to the never-frozen worker-global.
+    function classify(localReq, globalIsProxy) {
+        return ( localReq && typeof(localReq._ginaIsProxyHost) != 'undefined' )
+            ? localReq._ginaIsProxyHost
+            : ( globalIsProxy || false );
+    }
+
+    // --- getConfig hostname/host override (site 4) -------------------------------
+    function getConfigHost(localReq, globalIsProxy, globalProxyHostname, globalProxyHost, configHostname, configHost) {
+        var isProxyHost   = classify(localReq, globalIsProxy);
+        var proxyHostname = ( localReq && localReq._ginaProxyHostname ) ? localReq._ginaProxyHostname : globalProxyHostname;
+        var proxyHost     = ( localReq && localReq._ginaProxyHost )     ? localReq._ginaProxyHost     : globalProxyHost;
+        var out = { hostname: configHostname, host: configHost };
+        if ( isProxyHost && typeof(configHostname) != 'undefined' && typeof(proxyHostname) != 'undefined' ) {
+            out.hostname = proxyHostname;
+            out.host     = proxyHost;
+        }
+        return out;
+    }
+
+    it('getConfig: proxied-to-B request resolves THIS request host B, not the stale global A', function() {
+        var r = getConfigHost({ _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public-b.example', _ginaProxyHost: 'public-b.example' },
+            true, 'https://public-a.example', 'public-a.example', 'http://internal:5101', 'internal:5101');
+        assert.equal(r.hostname, 'https://public-b.example');
+        assert.equal(r.host, 'public-b.example');
+    });
+
+    it('getConfig: raw/direct request (slot=false) resolves the config host even when the global latched true', function() {
+        var r = getConfigHost({ _ginaIsProxyHost: false }, true, 'https://public-a.example', 'public-a.example', 'http://internal:5101', 'internal:5101');
+        assert.equal(r.hostname, 'http://internal:5101');
+        assert.equal(r.host, 'internal:5101');
+    });
+
+    it('getConfig: req-less caller (local.req null) falls back to the worker-global (back-compat)', function() {
+        var r = getConfigHost(null, true, 'https://public-a.example', 'public-a.example', 'http://internal:5101', 'internal:5101');
+        assert.equal(r.hostname, 'https://public-a.example');
+        assert.equal(r.host, 'public-a.example');
+    });
+
+    it('getConfig: pure-direct worker (never proxied) resolves the config host', function() {
+        var r = getConfigHost({ _ginaIsProxyHost: false }, false, undefined, undefined, 'http://internal:5101', 'internal:5101');
+        assert.equal(r.hostname, 'http://internal:5101');
+    });
+
+    it('getConfig SUBTRACT: the pre-S2b global read picks up the stale host on a raw request (the leak)', function() {
+        function preS2b(globalIsProxy, globalProxyHostname, configHostname) {
+            return ( globalIsProxy && typeof(configHostname) != 'undefined' && typeof(globalProxyHostname) != 'undefined' )
+                ? globalProxyHostname : configHostname;
+        }
+        // raw request arrives on a worker whose global latched to public-a — pre-fix
+        // getConfig returns the stale proxied host; S2b returns the config host.
+        assert.equal(preS2b(true, 'https://public-a.example', 'http://internal:5101'), 'https://public-a.example',
+            'pre-S2b, a direct request on a proxied worker leaked the stale global host — this is what S2b closes');
+        var fixed = getConfigHost({ _ginaIsProxyHost: false }, true, 'https://public-a.example', 'public-a.example', 'http://internal:5101', 'internal:5101');
+        assert.equal(fixed.hostname, 'http://internal:5101');
+    });
+
+    // --- redirect clause-E + target host (site 3) -------------------------------
+    // isProxyHost = (clauses A-D from THIS request's headers) OR (re-pointed clause E).
+    function redirectIsProxyHost(localReq, clausesAtoD, globalHostnameDefined) {
+        var clauseE = ( localReq && typeof(localReq._ginaIsProxyHost) != 'undefined' )
+            ? localReq._ginaIsProxyHost === true
+            : globalHostnameDefined;
+        return clausesAtoD || clauseE;
+    }
+    function redirectHostname(isProxyHost, localReq, globalProxyHostname, configHostname) {
+        return isProxyHost
+            ? ( ( localReq && localReq._ginaProxyHostname ) ? localReq._ginaProxyHostname : globalProxyHostname )
+            : configHostname;
+    }
+
+    it('redirect: raw request (slot=false) on a proxied worker is NOT misclassified (clause E no longer fires)', function() {
+        assert.equal(redirectIsProxyHost({ _ginaIsProxyHost: false }, false, true), false,
+            'a raw request must not inherit "proxied" from the worker-global once slots exist');
+    });
+
+    it('redirect: proxied request (slot=true) → proxied, target = THIS request host B not stale A', function() {
+        var isP = redirectIsProxyHost({ _ginaIsProxyHost: true }, false, true);
+        assert.equal(isP, true);
+        assert.equal(redirectHostname(isP, { _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public-b.example' }, 'https://public-a.example', 'http://internal:5101'),
+            'https://public-b.example');
+    });
+
+    it('redirect: clauses A-D still classify proxied per-request even when the slot is false', function() {
+        // The header heuristics (e.g. x-nginx-proxy) are preserved — only clause E moved.
+        assert.equal(redirectIsProxyHost({ _ginaIsProxyHost: false }, true, false), true,
+            'a header-heuristic match must still classify the request proxied');
+    });
+
+    it('redirect: req-less/Express (slot undefined) falls back to the global existence check', function() {
+        assert.equal(redirectIsProxyHost(null, false, true), true, 'worker saw a proxy → proxied (back-compat)');
+        assert.equal(redirectIsProxyHost(null, false, false), false, 'no proxy ever → not proxied');
+        assert.equal(redirectHostname(true, null, 'https://public-a.example', 'http://internal:5101'), 'https://public-a.example',
+            'req-less target host falls back to the worker-global');
+    });
+
+    it('redirect SUBTRACT: pre-S2b clause E (global existence) misclassifies a raw request on a proxied worker', function() {
+        function preS2bClauseE(clausesAtoD, globalHostnameDefined) { return clausesAtoD || globalHostnameDefined; }
+        assert.equal(preS2bClauseE(false, true), true,
+            'pre-S2b, a raw request was classified proxied merely because the worker had seen a proxy — the freeze/leak');
+        assert.equal(redirectIsProxyHost({ _ginaIsProxyHost: false }, false, true), false,
+            'S2b classifies it correctly from THIS request');
+    });
+
+    // --- getNodeRes last-resort host fallback (site 2) --------------------------
+    function getNodeResHost(localReq, globalProxyHost) {
+        return localReq.headers.host || localReq.headers[':host'] || localReq._ginaProxyHost || globalProxyHost;
+    }
+
+    it('getNodeRes: header host wins; no header + slot → slot; no header + no slot → global', function() {
+        assert.equal(getNodeResHost({ headers: { host: 'req-host' }, _ginaProxyHost: 'slot-host' }, 'global-host'), 'req-host');
+        assert.equal(getNodeResHost({ headers: {}, _ginaProxyHost: 'slot-host' }, 'global-host'), 'slot-host',
+            'no request header → THIS request slot host, not the stale global');
+        assert.equal(getNodeResHost({ headers: {} }, 'global-host'), 'global-host', 'req-less-ish → the worker-global fallback');
+    });
+
+    // --- setOptions whisper values (site 1) ------------------------------------
+    function whisper(localReq, globalProxyHost, globalProxyHostname) {
+        var isProxyHost = classify(localReq, false);
+        var out = {};
+        if ( /^true$/.test(isProxyHost) ) {
+            out.proxyHost     = ( localReq && localReq._ginaProxyHost )     ? localReq._ginaProxyHost     : globalProxyHost;
+            out.proxyHostname = ( localReq && localReq._ginaProxyHostname ) ? localReq._ginaProxyHostname : globalProxyHostname;
+        }
+        return out;
+    }
+
+    it('setOptions whisper: a proxied request whispers THIS request host, a raw request whispers nothing', function() {
+        var p = whisper({ _ginaIsProxyHost: true, _ginaProxyHost: 'public-b.example', _ginaProxyHostname: 'https://public-b.example' }, 'public-a.example', 'https://public-a.example');
+        assert.equal(p.proxyHost, 'public-b.example');
+        assert.equal(p.proxyHostname, 'https://public-b.example');
+        var r = whisper({ _ginaIsProxyHost: false }, 'public-a.example', 'https://public-a.example');
+        assert.equal(r.proxyHost, undefined, 'a raw request whispers no proxy host');
     });
 
 });

@@ -1301,11 +1301,18 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
     it('routing.json asset setHeader site wraps in an inline !options.hidePoweredBy guard', function() {
         var routingMatch = src.indexOf('\\_gina\\/assets\\/routing\\.json');
         assert.ok(routingMatch > -1, '/_gina/assets/routing.json regex anchor not found');
-        var afterRouting = src.slice(routingMatch, routingMatch + 1500);
-        assert.ok(afterRouting.indexOf('if (!options.hidePoweredBy)') > -1,
+        // #B66 — structural ordering pin (was a fixed `slice(anchor, anchor + 1500)`
+        // window; the #B66 stripped-routing branch + Cache-Control comment were
+        // inserted between the anchor and the guard, pushing it past 1500). Assert the
+        // guard + its guarded setHeader exist AFTER the routing.json anchor and in
+        // order, with no brittle char cap — per the jsdoc.md "structural anchor, not
+        // char-distance" lesson + the #B65 §617 X-Forwarded-Prefix precedent.
+        var guardIdx = src.indexOf('if (!options.hidePoweredBy)', routingMatch);
+        var xpbIdx   = src.indexOf("response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION);", routingMatch);
+        assert.ok(guardIdx > routingMatch,
             'routing.json asset handler must wrap response.setHeader in `if (!options.hidePoweredBy)`');
-        assert.ok(afterRouting.indexOf("response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION);") > -1,
-            'routing.json asset handler must still emit the header via setHeader when the gate is open');
+        assert.ok(xpbIdx > guardIdx,
+            'routing.json asset handler must emit X-Powered-By via setHeader inside (after) the open gate');
     });
 
     it('helper and inline gate both read options.hidePoweredBy (exactly 2 reads)', function() {
@@ -2873,6 +2880,130 @@ describe('15b - #B65 reverse-proxy host context: classification, three-topology 
         applyDetectionOLD(g, { host: 'tenant-b.example' }, 'https'); // gate already latched → no refresh
         assert.equal(g.PROXY_HOSTNAME, 'https://tenant-a.example',
             'the pre-#B65 gate freezes at tenant-a — this is the bug #B65 fixes');
+    });
+
+});
+
+describe('16 - #B66 host-stripped routing.json for proxied clients source structure', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('boot-builds a host-stripped variant by cloning the full map and dropping host+hostname', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('var _routingStripped = JSON.clone(_routing);') > -1,
+            'expected _routingStripped cloned from the (already comment/middleware-stripped) full map');
+        assert.ok(s.indexOf('const { host, hostname, ...cleanStripped } = _routingStripped[_routingStrippedKeys[si]];') > -1,
+            'expected each route to drop host + hostname via rest-destructuring (keeping the rest)');
+    });
+
+    it('keeps webroot in the stripped variant (never destructured away — load-bearing for client toUrl)', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf('const { host, hostname, ...cleanStripped }') > -1);
+        assert.ok(s.indexOf('const { host, hostname, webroot,') < 0,
+            'webroot must NOT be dropped — the client toUrl path relies on route.webroot');
+    });
+
+    it('writes + compresses the stripped file to disk (routing.stripped.json + .br/.gz)', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf("targetFile  = 'routing.stripped.json';") > -1,
+            'expected the stripped file write block');
+        var wIdx = s.indexOf("targetFile  = 'routing.stripped.json';");
+        // the stripped write reuses the same brotli/gzip machinery as the full block (ordering, no fixed window)
+        assert.ok(s.indexOf('brotliBin', wIdx) > wIdx, 'the stripped write must also brotli-compress for prod parity');
+        assert.ok(s.indexOf('gZipBin', wIdx) > wIdx, 'the stripped write must also gzip-compress for prod parity');
+    });
+
+    it('registers the stripped variant as a second localAssets entry', function() {
+        var s = getSrc();
+        assert.ok(s.indexOf("file    : 'routing.stripped.json',") > -1,
+            'expected a routing.stripped.json entry in localAssets');
+    });
+
+    it('the routing.json handler serves the stripped asset when the request is proxied (strict === true)', function() {
+        var s = getSrc();
+        var anchor = s.indexOf('\\_gina\\/assets\\/routing\\.json');
+        assert.ok(anchor > -1, 'routing.json handler anchor not found');
+        var branchIdx = s.indexOf('if ( request._ginaIsProxyHost === true ) {', anchor);
+        var selectIdx = s.indexOf("assetsCollection.findOne({ file: 'routing.stripped.json' })", anchor);
+        assert.ok(branchIdx > anchor,
+            'expected the proxied branch gated on the per-request #B65 slot, after the routing.json anchor');
+        assert.ok(selectIdx > branchIdx,
+            'the proxied branch must select the stripped asset');
+    });
+
+    it('marks the proxied (stripped) response private, RAW (full) public', function() {
+        var s = getSrc();
+        assert.ok(
+            s.indexOf("response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, max-age=86400' : 'public, max-age=86400');") > -1,
+            'expected a private-if-proxied / public-if-raw cache-control branch (a shared cache must not cross-serve variants)');
+    });
+
+});
+
+describe('16b - #B66 host-stripped routing.json: pure-logic replica', function() {
+
+    // Pure-logic replica of the #B66 S2 boot strip + serve-time selection.
+    function stripRoute(route) {
+        var out = {};
+        for (var k in route) { if (k !== 'host' && k !== 'hostname') out[k] = route[k]; }
+        return out;
+    }
+    function selectAsset(isProxy, fullAsset, strippedAsset) {
+        var a = fullAsset;
+        if (isProxy === true && strippedAsset) a = strippedAsset;
+        return a;
+    }
+    function cacheControl(isProxy) {
+        return (isProxy === true) ? 'private, max-age=86400' : 'public, max-age=86400';
+    }
+
+    // neutral fixture route (internal host+port), framework-generic
+    var FULL_ROUTE = {
+        url: '/app/', method: 'GET', param: { control: 'home' },
+        bundle: 'other', host: 'internal-a', hostname: 'http://internal-a:5101', webroot: '/app/'
+    };
+
+    it('strip drops host + hostname, KEEPS webroot/url/param', function() {
+        var st = stripRoute(FULL_ROUTE);
+        assert.equal('host' in st, false);
+        assert.equal('hostname' in st, false);
+        assert.equal(st.webroot, '/app/');
+        assert.equal(st.url, '/app/');
+        assert.deepEqual(st.param, { control: 'home' });
+    });
+
+    it('stripped blob carries NO internal-host marker (webroot survives)', function() {
+        var blob = JSON.stringify({ 'r@other': stripRoute(FULL_ROUTE) });
+        assert.ok(blob.indexOf('internal-a') < 0, 'no internal host in the stripped blob');
+        assert.ok(blob.indexOf('5101') < 0, 'no internal port in the stripped blob');
+        assert.ok(blob.indexOf('/app/') > -1, 'webroot must survive');
+    });
+
+    it('serve-time selection: proxied → stripped, raw → full', function() {
+        var full = { file: 'routing.json' }, stripped = { file: 'routing.stripped.json' };
+        assert.equal(selectAsset(true,  full, stripped).file, 'routing.stripped.json');
+        assert.equal(selectAsset(false, full, stripped).file, 'routing.json');
+    });
+
+    it('strict === true: a truthy-but-non-true flag serves the FULL (raw) asset', function() {
+        var full = { file: 'routing.json' }, stripped = { file: 'routing.stripped.json' };
+        assert.equal(selectAsset('true', full, stripped).file, 'routing.json');
+    });
+
+    it('missing stripped asset → falls back to full (defensive)', function() {
+        var full = { file: 'routing.json' };
+        assert.equal(selectAsset(true, full, undefined).file, 'routing.json');
+    });
+
+    it('cache-control: private when proxied, public when raw', function() {
+        assert.equal(cacheControl(true),  'private, max-age=86400');
+        assert.equal(cacheControl(false), 'public, max-age=86400');
+    });
+
+    it('SUBTRACT: without the strip, the internal host survives in the served blob (the leak)', function() {
+        var blob = JSON.stringify({ 'r@other': FULL_ROUTE }); // pre-#B66: full route served to proxied clients
+        assert.ok(blob.indexOf('internal-a') > -1 && blob.indexOf('5101') > -1,
+            'pre-fix, the proxied client received the internal host:port — this is the disclosure #B66 closes');
     });
 
 });

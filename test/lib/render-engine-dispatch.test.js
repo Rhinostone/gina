@@ -2629,7 +2629,10 @@ describe('05f - #NJ4 Early Hints 103 engine-agnostic (data-feed via setResources
 
     it('getNodeRes gates h2Links writes on !self.isCacheless() (production only)', function () {
         var idx  = CONTROLLER_SRC.indexOf('var getNodeRes = function');
-        var body = CONTROLLER_SRC.slice(idx, idx + 3000);
+        // window widened 3000 -> 3400: #B66 S2b added a ~230-char comment + the
+        // per-request host-fallback line near the top of getNodeRes, pushing the
+        // isCacheless gate to offset ~3077 (still inside the function).
+        var body = CONTROLLER_SRC.slice(idx, idx + 3400);
         assert.match(body, /!self\.isCacheless\(\)/);
     });
 

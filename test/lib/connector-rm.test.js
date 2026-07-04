@@ -16,8 +16,9 @@
  *   (d) resolveConnectorType — lenient entry.connector-vs-key fallback
  *   (e) scanSiblings — shared + bundle scan, sameKey + sameDriver
  *   (f) target resolution — shared vs bundle path, manifest.bundles lookup
- *   (g) readExistingFile — must exist (errors when missing), header-before-
- *       first-brace capture, requireJSON for comment tolerance
+ *   (g) readExistingFile — must exist (errors when missing), comment-aware
+ *       header capture (via lib.jsonConfigHeader.splitHeader), requireJSON
+ *       for comment tolerance
  *   (h) existence guard — inherited-from-shared hint when bundle-level rm
  *       finds no entry but shared has one
  *   (i) project-level --force gate — refuses to remove shared while any
@@ -223,9 +224,9 @@ describe('06 - readExistingFile', function () {
         assert.match(src, /does not exist — nothing to remove/);
     });
 
-    it('captures the raw text before the first `{` as the header', function () {
-        assert.match(src, /var firstBrace = raw\.indexOf\('\{'\);/);
-        assert.match(src, /var header\s*= \(firstBrace > 0\) \? raw\.slice\(0, firstBrace\) : '';/);
+    it('captures the header via the comment-aware lib.jsonConfigHeader.splitHeader', function () {
+        assert.match(src, /var header = lib\.jsonConfigHeader\.splitHeader\(raw\)\.header;/);
+        assert.doesNotMatch(src, /raw\.indexOf\('\{'\)/);
     });
 
     it('parses the body with requireJSON for comment tolerance', function () {

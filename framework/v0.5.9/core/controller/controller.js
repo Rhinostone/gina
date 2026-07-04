@@ -512,11 +512,19 @@ function SuperController(options) {
             //     && /^true$/i.test(req.headers['x-nginx-proxy'])
             // ) ? true : false;
             // setContext('isProxyHost', isProxyHost);
-            var isProxyHost = getContext('isProxyHost') || false;
+            // #B66 S2b — the routing-clone gate (drives the _proxyHostname derivation
+            // + the per-route host rewrite below) AND the browser-whispered proxy host
+            // (page.environment.proxyHost/proxyHostname -> gina.config.* via loader.js)
+            // read THIS request's per-request #B65 classification (local.req slots)
+            // instead of the sticky worker-global latch, so a mixed proxied+direct (or
+            // concurrent multi-host) worker resolves the request in hand, not the last
+            // proxied global. The worker-global stays the fallback for req-less/Express
+            // paths that never set the slots.
+            var isProxyHost = ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false );
             set('page.environment.isProxyHost', isProxyHost);
             if ( /^true$/.test(isProxyHost) ) {
-                set('page.environment.proxyHost', process.gina.PROXY_HOST);
-                set('page.environment.proxyHostname', process.gina.PROXY_HOSTNAME);
+                set('page.environment.proxyHost', ( local.req && local.req._ginaProxyHost ) ? local.req._ginaProxyHost : process.gina.PROXY_HOST);
+                set('page.environment.proxyHostname', ( local.req && local.req._ginaProxyHostname ) ? local.req._ginaProxyHostname : process.gina.PROXY_HOSTNAME);
             }
 
             var _config = ctx.config.envConf[options.conf.bundle][process.env.NODE_ENV];
@@ -553,7 +561,24 @@ function SuperController(options) {
             //     }
             // }
 
-            set('page.environment.hostname', hostname);
+            // #B66 — the hostname whispered to the browser (gina.config.hostname).
+            // On a proxied deployment (per-request #B65 classification) whisper the
+            // PUBLIC host-only origin (scheme://public-host, port-less — the webroot is
+            // whispered separately below) instead of the bundle's INTERNAL
+            // scheme://host:port(+webroot). This closes an information-disclosure AND
+            // lets the browser routing self-check flip isProxyHost=true (it cannot while
+            // the whispered value carries a port/webroot the self-check can't strip), so
+            // cross-bundle toUrl resolves same-origin. The internal `hostname` var above
+            // is left byte-identical — it still feeds _proxyHostname + the routing clone
+            // below. RAW (direct host:port) whispers the internal value, byte-identical.
+            // `_ginaProxyHostname` is the per-request #B65 slot (host-only, forwarded
+            // scheme); per-request (NOT a process-global) so it can't leak across a mix
+            // of proxied + direct requests. See server.isaac.js for the writer.
+            var _publicHostname = hostname;
+            if ( local.req && local.req._ginaIsProxyHost === true && local.req._ginaProxyHostname ) {
+                _publicHostname = local.req._ginaProxyHostname;
+            }
+            set('page.environment.hostname', _publicHostname);
             // Updating _config.rootDomain - 2024/04/15
             // _config.rootDomain = domainLib.getRootDomain(hostname).value;
 
@@ -970,7 +995,10 @@ function SuperController(options) {
             , rLen          = resArr.length
             , obj           = null
             , str           = ''
-            , isProxyHost   = getContext('isProxyHost')
+            // #B66 S2b — read THIS request's per-request #B65 proxy classification
+            // (slot) instead of the sticky worker-global latch; worker-global stays
+            // the fallback for req-less/Express paths that never set the slot.
+            , isProxyHost   = ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false )
             , requestHost   = ( /http\/2/.test(local.options.conf.server.protocol) )
                     ? local.req.headers[':host']
                     : local.req.headers.host
@@ -999,7 +1027,9 @@ function SuperController(options) {
             && !isSpecialCase
         ) {
 
-            hostname    = scheme + '://'+ (local.req.headers.host||local.req.headers[':host']||process.gina.PROXY_HOST);
+            // #B66 S2b — last-resort host fallback prefers THIS request's slot over the
+            // worker-global (local.req is guaranteed here — headers are dereferenced above).
+            hostname    = scheme + '://'+ (local.req.headers.host||local.req.headers[':host']||local.req._ginaProxyHost||process.gina.PROXY_HOST);
 
             // replaced: /^(80|443)$/ + new RegExp(requestPort+'$') — use string methods (#P1, #P12)
             if (
@@ -2203,12 +2233,18 @@ function SuperController(options) {
                 typeof(local.req.headers['x-nginx-proxy']) != 'undefined'
                 && String(local.req.headers['x-nginx-proxy']).toLowerCase() === 'true'
                 ||
-                typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
+                // #B66 S2b — the freeze-prone catch-all term: prefer THIS request's
+                // per-request #B65 classification (slot) over the worker-global "has this
+                // worker ever seen a proxy" latch, so a raw/direct request on a worker
+                // that previously served a proxied one is not misclassified as proxied.
+                // Worker-global stays the fallback for req-less/Express paths (no slot).
+                ( ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost === true : typeof(process.gina.PROXY_HOSTNAME) != 'undefined' )
             ) ? true : false;
 
             // var isProxyHost = getContext('isProxyHost');
+            // #B66 S2b — redirect target host prefers THIS request's slot over the worker-global.
             var hostname = (isProxyHost)
-                    ? process.gina.PROXY_HOSTNAME
+                    ? ( ( local.req && local.req._ginaProxyHostname ) ? local.req._ginaProxyHostname : process.gina.PROXY_HOSTNAME )
                     : ctx.config.envConf[bundle][env].hostname;
 
 
@@ -4952,13 +4988,23 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             tmp = JSON.clone(local.options.conf);
         }
 
+        // #B66 S2b — prefer THIS request's per-request proxy classification (the
+        // #B65 slots on local.req) over the sticky worker-global latch, so a mixed
+        // proxied+direct worker (or a concurrent request to a different public host)
+        // resolves the host for the request in hand, not the last-proxied global.
+        // getConfig is reachable req-less (ws-query, released-response, the async
+        // health probe) AND under the Express engine (which never sets the slots),
+        // so the worker-global stays the fallback whenever the slot is absent.
+        var _isProxyHost   = ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false );
+        var _proxyHostname = ( local.req && local.req._ginaProxyHostname ) ? local.req._ginaProxyHostname : process.gina.PROXY_HOSTNAME;
+        var _proxyHost     = ( local.req && local.req._ginaProxyHost )     ? local.req._ginaProxyHost     : process.gina.PROXY_HOST;
         if (
-            getContext('isProxyHost')
+            _isProxyHost
             && typeof(tmp.hostname) != 'undefined'
-            && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
+            && typeof(_proxyHostname) != 'undefined'
         ) {
-            tmp.hostname    = process.gina.PROXY_HOSTNAME;
-            tmp.host        = process.gina.PROXY_HOST;
+            tmp.hostname    = _proxyHostname;
+            tmp.host        = _proxyHost;
         }
         return tmp;
     }

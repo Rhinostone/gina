@@ -25,7 +25,7 @@ var CmdHelper = require('./../helper');
  *   2. the framework's built-in driver range table (DRIVER_MAP / AI_DRIVER_MAP)
  *
  * Leading header comments at the top of an existing `connectors.json` are
- * preserved verbatim (everything before the first `{`). Mid-body `//` or
+ * preserved verbatim (everything before the first non-comment `{`). Mid-body `//` or
  * `/* * /` comments are lost — the JSON body is rewritten from the parsed
  * object graph. See help.txt for the caveat.
  *
@@ -349,7 +349,7 @@ function Add(opt, cmd) {
 
     /**
      * Reads the existing `connectors.json` (if any), preserves any leading
-     * comment header (everything before the first `{`), and parses the
+     * comment header (everything before the first non-comment `{`), and parses the
      * JSON body with comment tolerance via `requireJSON`.
      *
      * Returns `{ header: string, data: object }`. On a parse failure, exits
@@ -379,8 +379,10 @@ function Add(opt, cmd) {
             process.exit(1);
             return null;
         }
-        var firstBrace = raw.indexOf('{');
-        var header     = (firstBrace > 0) ? raw.slice(0, firstBrace) : '';
+        // Comment-aware: the scaffolded template's `// "couchbase": {` puts a
+        // brace inside a comment, so a naive first-brace scan lands there and
+        // corrupts the rewrite. splitHeader finds the first STRUCTURAL `{`.
+        var header = lib.jsonConfigHeader.splitHeader(raw).header;
         var data;
         try {
             data = requireJSON(target) || {};
@@ -435,7 +437,7 @@ function Add(opt, cmd) {
      * @inner
      * @private
      * @param {string} target
-     * @param {string} header - Text before the first `{` in the existing file
+     * @param {string} header - Text before the first non-comment `{` in the existing file
      * @param {object} data - Full merged config object
      */
     var writeFile = function (target, header, data) {

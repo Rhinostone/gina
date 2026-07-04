@@ -334,6 +334,20 @@ function ServerEngineClass(options) {
 
         }// EO for routing keys
 
+        // #B66 — a host-stripped variant of the routing map, served to PROXIED clients
+        // so the browser never receives any bundle's INTERNAL scheme://host:port (an
+        // information disclosure) and cross-bundle client toUrl resolves same-origin.
+        // Drop each route's `host` + `hostname`; KEEP `webroot` (the client toUrl path
+        // relies on it). Proxy-host-agnostic + boot-static like the full map above; the
+        // serve-time handler picks stripped-vs-full per request on request._ginaIsProxyHost.
+        // See the #B66 handler branch below.
+        var _routingStripped = JSON.clone(_routing);
+        var _routingStrippedKeys = Object.keys(_routingStripped);
+        for (var si = 0; si < _routingStrippedKeys.length; ++si) {
+            const { host, hostname, ...cleanStripped } = _routingStripped[_routingStrippedKeys[si]];
+            _routingStripped[_routingStrippedKeys[si]] = cleanStripped;
+        }// EO for stripped routing keys
+
         // Checking if brotli is installed
         var brotliBin = null;
         try {
@@ -420,6 +434,53 @@ function ServerEngineClass(options) {
             }
         }
 
+        // #B66 — write + (br/gz)-compress the host-stripped variant to disk, mirroring
+        // the full routing.json above. Served to proxied clients by the #B66 handler
+        // branch; RAW clients keep the full blob (the full write above is untouched).
+        if (_routingStripped) {
+            targetFile  = 'routing.stripped.json';
+            // Storing to disk
+            console.debug(`Writing ${targetFile} to: ${targetDir}/${targetFile}`);
+            fd = fs.openSync(targetDir +'/'+ targetFile, 'w'); // Open file for writing
+            buffer = Buffer.from( JSON.stringify(_routingStripped) );
+            fs.writeSync(fd, buffer, 0, buffer.length, 0); // Write the buffer
+            fs.closeSync(fd); // Close the file descriptor
+
+            // Adding brotli version (see the full routing.json block above)
+            try {
+                if (brotliBin) {
+                    brFileObj = new _(targetDir +'/'+ targetFile +'.br');
+                    if ( brFileObj.existsSync() ) {
+                        brFileObj.rmSync();
+                    }
+                    cmd = brotliBin +' --best '+ _(targetDir +'/'+ targetFile, true);
+                    exec(cmd, function(brCmdErr, stdout) {
+                        if (brCmdErr) { console.error('[ SERVER ] brotli compression error: ' + (brCmdErr.stack || brCmdErr.message)); return; }
+                        if (stdout) console.debug(stdout.toString().trim());
+                    });
+                }
+            } catch (brError) {
+                console.error('[ SERVER ] '+ brError.stack);
+            }
+
+            // Adding GZip version
+            try {
+                if (gZipBin) {
+                    gzFileObj = new _(targetDir +'/'+ targetFile +'.gz');
+                    if ( gzFileObj.existsSync() ) {
+                        gzFileObj.rmSync();
+                    }
+                    cmd = gZipBin +' -9 -k '+ _(targetDir +'/'+ targetFile, true);
+                    exec(cmd, function(gzCmdErr, stdout) {
+                        if (gzCmdErr) { console.error('[ SERVER ] gzip compression error: ' + (gzCmdErr.stack || gzCmdErr.message)); return; }
+                        if (stdout) console.debug(stdout.toString().trim());
+                    });
+                }
+            } catch (gzError) {
+                console.error('[ SERVER ] '+ gzError.stack);
+            }
+        }
+
 
         buffer = null;
         fd = null;
@@ -428,6 +489,12 @@ function ServerEngineClass(options) {
         localAssets = [
             {
                 file    : 'routing.json',
+                path    : targetDir,
+                mime    : 'application/json; charset=utf8'
+            },
+            // #B66 — host-stripped variant, served to proxied clients (see handler branch)
+            {
+                file    : 'routing.stripped.json',
                 path    : targetDir,
                 mime    : 'application/json; charset=utf8'
             }
@@ -1688,9 +1755,22 @@ function ServerEngineClass(options) {
                 // server.toApi(reques, response)
                 // console.debug('[ SERVER ][200] '+ request.url);
                 localAsset = assetsCollection.findOne({ file: request.url.split(/\//g).slice(-1).toString() });
+                // #B66 — on a proxied deployment serve the host-stripped routing.json so
+                // the browser never receives any bundle's INTERNAL scheme://host:port (an
+                // information disclosure) and cross-bundle client toUrl resolves
+                // same-origin. Gated on the per-request #B65 classification; RAW (direct
+                // host:port) keeps the full blob, byte-identical.
+                if ( request._ginaIsProxyHost === true ) {
+                    var _strippedRoutingAsset = assetsCollection.findOne({ file: 'routing.stripped.json' });
+                    if (_strippedRoutingAsset) {
+                        localAsset = _strippedRoutingAsset;
+                    }
+                }
                 response.setHeader('content-type', localAsset.mime);
                 response.setHeader('vary', 'Origin');
-                response.setHeader('cache-control', 'public, max-age=86400');
+                // #B66 — a shared cache must not cross-serve the stripped (proxied) and
+                // full (raw) variants under the same URL; mark the proxied variant private.
+                response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, max-age=86400' : 'public, max-age=86400');
                 response.setHeader('x-content-type-options', 'nosniff');
                 response.setHeader('x-frame-options', 'DENY');
                 response.setHeader('x-xss-protection', '1; mode=block');

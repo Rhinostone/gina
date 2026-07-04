@@ -5138,7 +5138,6 @@ function Routing() {
             urlProps.hostname   = config.envConf[bundle][env].hostname;
             urlProps.host       = config.envConf[bundle][env].host;
             urlProps.webroot    = config.envConf[bundle][env].server.webroot;
-            console.debug("[self.getUrlProps][isProxyHost = "+ getContext('isProxyHost') +"] hostname ", config.envConf[bundle][env].hostname, vs, process.gina.PROXY_HOSTNAME);
         }
 
         return urlProps;

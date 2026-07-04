@@ -24,7 +24,7 @@ var CmdHelper = require('./../helper');
  * user can decide whether to keep the driver installed.
  *
  * Leading header comments at the top of an existing `connectors.json`
- * (everything before the first `{`) are preserved verbatim. Mid-body
+ * (everything before the first non-comment `{`) are preserved verbatim. Mid-body
  * `//` or `/* * /` comments are lost — the body is rewritten from the
  * parsed object graph. Same caveat as `connector:add`.
  *
@@ -269,7 +269,7 @@ function Remove(opt, cmd) {
 
     /**
      * Reads the existing `connectors.json`, preserves the leading comment
-     * header (everything before the first `{`), and parses the body with
+     * header (everything before the first non-comment `{`), and parses the body with
      * comment tolerance. Exits on parse or I/O failure. Returns null when
      * the target file does not exist at all — that's an error for
      * `connector:rm` because there's nothing to remove.
@@ -293,8 +293,10 @@ function Remove(opt, cmd) {
             process.exit(1);
             return null;
         }
-        var firstBrace = raw.indexOf('{');
-        var header     = (firstBrace > 0) ? raw.slice(0, firstBrace) : '';
+        // Comment-aware: the scaffolded template's `// "couchbase": {` puts a
+        // brace inside a comment, so a naive first-brace scan lands there and
+        // corrupts the rewrite. splitHeader finds the first STRUCTURAL `{`.
+        var header = lib.jsonConfigHeader.splitHeader(raw).header;
         var data;
         try {
             data = requireJSON(target) || {};
