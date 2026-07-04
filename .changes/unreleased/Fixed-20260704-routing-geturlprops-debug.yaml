@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed a latent `ReferenceError` in server-side URL-property resolution for routes flagged with a redirect control: a leftover debug statement referenced an undefined variable and would throw whenever the redirect route `toUrl()` was resolved server-side. The stray debug statement has been removed.'
-time: 2026-07-04T14:20:41+01:00

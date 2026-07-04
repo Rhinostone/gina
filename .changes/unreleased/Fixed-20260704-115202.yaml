@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `connector:add`, `connector:rm`, and `connector:migrate --fix` corrupting a `connectors.json` that carries a comment header. The scaffolded bundle template''s example block contains a `{` inside a `//` comment, and the write-back split the file at the first raw `{` — which landed inside that comment, commenting out the JSON body''s opening brace and dropping the rest of the header, so the file no longer parsed (`connector:list`, `connector:test`, and the bundle''s own connector load then failed). The header/body split is now comment-aware and preserves the full comment header verbatim; a comment-free `connectors.json` rewrites byte-for-byte as before.'
-time: 2026-07-04T11:52:02+01:00
