@@ -1,3 +1,0 @@
-kind: Added
-body: '`gina help <group>` now prints help for that command group (e.g. `gina help bundle` shows the bundle command reference), falling back to the top-level help for an unknown group.'
-time: 2026-07-03T15:20:00+01:00

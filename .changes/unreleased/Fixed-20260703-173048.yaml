@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Running `gina <group>:<action>` with an unrecognised action in a valid command group — e.g. `gina connector` / `gina framework:connector` (connector is its own command group), or `gina -V` — now prints a clear "not a valid command" message that points to `gina help` (and suggests the matching command group when the action names one), instead of crashing with a raw Node "Cannot find module" stack trace.'
-time: 2026-07-03T17:30:48.824825+01:00
