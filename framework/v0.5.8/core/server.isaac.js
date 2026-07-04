@@ -1617,23 +1617,42 @@ function ServerEngineClass(options) {
             isProxyHost = getContext('isProxyHost') || false;
             requestHost = request.headers.host || request.headers[':authority'];
             // console.debug('[PROXY_HOST][isProxyHost='+ isProxyHost +'] request.headers.host -> ' + request.headers.host + '  VS request.headers[":authority"] '+ request.headers[':authority'] +' | '+ request.url);
-            if (
-                !isProxyHost
-                && !/\:[0-9]+$/.test(requestHost)
-                ||
-                !isProxyHost
-                && request.headers['x-forwarded-host']
-            ) {
-                // Enable proxied mode
-                process.gina.PROXY_HOSTNAME = process.gina.PROXY_SCHEME +'://'+ requestHost;
-                process.gina.PROXY_HOST     = requestHost;
-                // For internal services communications - Eg.: Controller::query()
-                if (request.headers['x-forwarded-host']) {
-                    process.gina.PROXY_HOSTNAME = request.headers['x-forwarded-proto'] +'://'+ request.headers['x-forwarded-host'];
-                    process.gina.PROXY_HOST     = request.headers['x-forwarded-host'];
-                    // console.debug('[PROXY_HOST][X-FORWARDED-PROTO] override request.headers["x-forwarded-host"] -> ' + request.headers['x-forwarded-host']);
+            // #B65 — request-scope the reverse-proxy host context. Classify THIS
+            // request as proxied when its inbound Host is port-less (a reverse proxy
+            // rewrote it) OR it carries an X-Forwarded-Host; a raw `host:port` access
+            // (no proxy) is never classified proxied, so its URL builders keep
+            // resolving the static config host. The per-request result is stashed on
+            // the request (request._ginaIsProxyHost / _ginaProxyHost / _ginaProxyHostname
+            // — mirrors request._ginaProxyPrefix below) so concurrent requests can't
+            // contaminate each other. The worker-global PROXY_* is refreshed on EVERY
+            // proxied request (NOT gated on the sticky `isProxyHost` latch) so it can
+            // never FREEZE at the first proxied request's value — the same one-shot-gate
+            // defect the x-forwarded-prefix block below calls out. Because the globals
+            // are only ever written from a proxied request, they can never freeze to a
+            // `host:port` (raw) value.
+            var _thisReqProxied = (
+                ( requestHost && !/\:[0-9]+$/.test(requestHost) )
+                || request.headers['x-forwarded-host']
+            ) ? true : false;
+            request._ginaIsProxyHost = _thisReqProxied;
+            if ( _thisReqProxied ) {
+                // this request's proxied host/hostname — X-Forwarded-Host wins (multi-hop:
+                // TLS-terminating ingress -> inner proxy -> bundle), else the port-less
+                // Host (single-hop: reverse proxy -> bundle).
+                if ( request.headers['x-forwarded-host'] ) {
+                    request._ginaProxyHostname = request.headers['x-forwarded-proto'] +'://'+ request.headers['x-forwarded-host'];
+                    request._ginaProxyHost     = request.headers['x-forwarded-host'];
+                } else {
+                    request._ginaProxyHostname = process.gina.PROXY_SCHEME +'://'+ requestHost;
+                    request._ginaProxyHost     = requestHost;
                 }
-                // Forcing context - also available for workers
+                // Refresh the worker-global on EVERY proxied request (freeze fix) — the
+                // value is always this request's proxied host, so a later internal
+                // direct-host call inherits a correct (never direct-frozen) global.
+                // For internal services communications - Eg.: Controller::query()
+                process.gina.PROXY_HOSTNAME = request._ginaProxyHostname;
+                process.gina.PROXY_HOST     = request._ginaProxyHost;
+                // Forcing context - also available for workers (monotonic: only ever true)
                 setContext('isProxyHost', true);
             }
 

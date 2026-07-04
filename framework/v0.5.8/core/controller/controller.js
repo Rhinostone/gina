@@ -3133,7 +3133,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         var ctx             = getContext()
             , protocol      = null
             , scheme        = null
-            , isProxyHost   = getContext('isProxyHost')
+            // #B65 — prefer THIS request's proxy classification (per-request slot) over
+            // the sticky worker-global latch, so the internal-call forward reflects the
+            // triggering request; fall back to the global for req-less callers.
+            , isProxyHost   = ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) ? local.req._ginaIsProxyHost : ( getContext('isProxyHost') || false )
             , bundle        = null
             , webroot       = options.webroot || ctx.gina.config.envConf[ctx.bundle][ctx.env].server.webroot;// bundle servers's webroot by default
         ;
@@ -3197,8 +3200,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         }
 
         if (isProxyHost) {
+            // #B65 — forward THIS request's proxied host (per-request slot), falling back
+            // to the worker-global for req-less callers (released-response / ws-query).
             // X-Forwarded-Host
-            options.headers['x-forwarded-host'] = process.gina.PROXY_HOST;
+            options.headers['x-forwarded-host'] = ( local.req && local.req._ginaProxyHost ) ? local.req._ginaProxyHost : process.gina.PROXY_HOST;
             // X-Forwarded-Proto
             options.headers['x-forwarded-proto'] = process.gina.PROXY_SCHEME;
         }

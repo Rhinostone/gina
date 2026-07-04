@@ -11,7 +11,8 @@
 usage:
 
 $ gina --help | -h
-$ gina —-version | -v
+$ gina help [<group>]
+$ gina --version | -v
 $ gina --status | -t
 $ gina framework:start | start
 

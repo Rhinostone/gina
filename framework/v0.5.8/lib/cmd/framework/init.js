@@ -156,6 +156,37 @@ function Initialize(opt) {
         var filename ='/cmd/' + opt.task.topic + '/' + opt.task.action + '.js'
         var path = getPath('gina').lib + filename;
 
+        // Unknown command → print a clean, actionable message instead of a raw
+        // `Cannot find module` stack. `bin/cli` already rejects an unknown GROUP
+        // cleanly; this covers a known group with an unknown ACTION — e.g.
+        // `gina framework:connector`, `gina connector` (auto-prefixed to the same
+        // `framework:connector`), or `gina -V` (→ `framework:-V`). A genuine error
+        // thrown from inside a real handler still falls through to the try/catch
+        // below and keeps its stack for debugging.
+        if ( !fs.existsSync(path) ) {
+            var cmdName   = opt.task.topic + ':' + opt.task.action;
+            var groupHelp = getPath('gina').lib + '/cmd/' + opt.task.action + '/help.txt';
+            var lines     = [ "gina: '" + cmdName + "' is not a valid command." ];
+
+            // Did-you-mean: the unknown action is itself a real command group
+            // (same test `gina help <group>` uses). Covers the `connector` case.
+            if ( /^[a-z][a-z0-9-]*$/.test(opt.task.action) && fs.existsSync(groupHelp) ) {
+                lines.push('');
+                lines.push("'" + opt.task.action + "' is a command group. Try:  gina help " + opt.task.action);
+            }
+
+            lines.push('');
+            lines.push("Run 'gina help' for all commands, or 'gina help " + opt.task.topic + "' for the " + opt.task.topic + " group.");
+
+            var message = lines.join('\n');
+            console.error(message);
+            if (opt.client) {
+                opt.client.write(message + '\n');
+            }
+            process.exit(1);
+            return;
+        }
+
         try {
             if ( GINA_ENV_IS_DEV || process.env.NODE_ENV_IS_DEV ) {
                 delete require.cache[require.resolve(path)];
