@@ -18,8 +18,9 @@
  *   (g) buildEntry — flag-to-entry mapping, scope enum validation,
  *       `connector` omitted when type matches the logical name,
  *       port cast to Number when numeric
- *   (h) readExistingFile — existence check, header-before-first-brace
- *       capture, requireJSON for comment tolerance, parent-dir exists check
+ *   (h) readExistingFile — existence check, comment-aware header capture
+ *       (via lib.jsonConfigHeader.splitHeader), requireJSON for comment
+ *       tolerance, parent-dir exists check
  *   (i) mergeEntry — $schema pinned first, existing key order preserved,
  *       overwrite replaces in place, new entry appended
  *   (j) writeFile — delegates to lib.generator.createFileFromDataSync,
@@ -384,9 +385,11 @@ describe('10 - readExistingFile', function () {
         assert.match(src, /Config directory does not exist/);
     });
 
-    it('captures the raw text before the first `{` as the header', function () {
-        assert.match(src, /var firstBrace = raw\.indexOf\('\{'\);/);
-        assert.match(src, /var header\s*= \(firstBrace > 0\) \? raw\.slice\(0, firstBrace\) : '';/);
+    it('captures the header via the comment-aware lib.jsonConfigHeader.splitHeader', function () {
+        assert.match(src, /var header = lib\.jsonConfigHeader\.splitHeader\(raw\)\.header;/);
+        // the old raw.indexOf-of-brace split (which landed inside the template's
+        // `// "couchbase": {` comment and corrupted the rewrite) must be gone
+        assert.doesNotMatch(src, /raw\.indexOf\('\{'\)/);
     });
 
     it('parses the body with requireJSON for comment tolerance', function () {

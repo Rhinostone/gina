@@ -36,7 +36,7 @@ var CmdHelper = require('./../helper');
  * when a concrete migration (e.g. #CN8 Couchbase SDK v2 removal at
  * `0.4.0`) lands with a real before/after shape.
  *
- * Leading comment headers (everything before the first `{`) are preserved
+ * Leading comment headers (everything before the first non-comment `{`) are preserved
  * verbatim when `--fix` writes the file — same convention as `add.js` and
  * `remove.js`. Mid-body comments are lost on rewrite.
  *
@@ -285,8 +285,10 @@ function Migrate(opt, cmd) {
             report.parseError = 'read failed: ' + e.message;
             return report;
         }
-        var firstBrace = raw.indexOf('{');
-        report.header = (firstBrace > 0) ? raw.slice(0, firstBrace) : '';
+        // Comment-aware: the scaffolded template's `// "couchbase": {` puts a
+        // brace inside a comment, so a naive first-brace scan lands there and
+        // corrupts a --fix rewrite. splitHeader finds the first STRUCTURAL `{`.
+        report.header = lib.jsonConfigHeader.splitHeader(raw).header;
 
         var data;
         try {

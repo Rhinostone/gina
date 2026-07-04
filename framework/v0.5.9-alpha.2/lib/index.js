@@ -160,6 +160,14 @@ function Lib() {
         // caller can run lib.secrets.resolve() on it in place. Pure (same
         // contract as connector-registry / cmd-status-format).
         connectorConfig : _require('./connector-config'),
+        // Comment-aware header/body splitter for JSON-with-comments config
+        // files. firstStructuralBraceIndex / splitHeader find the first `{`
+        // that is NOT inside a `//` or block comment, so a rewrite preserves a
+        // leading comment header verbatim (the scaffolded connectors.json
+        // template carries `// "couchbase": {` — a brace inside a comment).
+        // Consumed by the connector:add / connector:rm / connector:migrate
+        // handlers. Pure (same contract as cmd-status-format / routing-introspect).
+        jsonConfigHeader: _require('./json-config-header'),
         // Pure resolver that picks between a project-installed @rhinostone/swig
         // (or swig-twig) and the framework's bundled copy. Opt-in via
         // settings.json > swig.useProject; default-off. Returns a decision
