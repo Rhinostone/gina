@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-image-build",
+  "version": "1.0.0",
+  "description": "Pure OCI packaging primitives for the image:build CLI command — Containerfile synthesis, build-context staging, deterministic port computation (bin/gina-init allocator replica) and container-host descriptor resolution.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

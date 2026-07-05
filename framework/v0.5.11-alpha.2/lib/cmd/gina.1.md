@@ -23,6 +23,7 @@ framework
 project
 bundle
 connector
+image
 model
 dev
 view

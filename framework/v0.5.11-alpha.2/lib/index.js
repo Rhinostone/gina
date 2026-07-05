@@ -168,6 +168,12 @@ function Lib() {
         // Consumed by the connector:add / connector:rm / connector:migrate
         // handlers. Pure (same contract as cmd-status-format / routing-introspect).
         jsonConfigHeader: _require('./json-config-header'),
+        // Pure OCI packaging primitives for the image:build CLI handler —
+        // Containerfile synthesis, build-context staging, deterministic port
+        // computation (bin/gina-init allocator replica) and container-host
+        // descriptor resolution. Pure (same contract as cmd-status-format /
+        // routing-introspect).
+        imageBuild      : _require('./image-build'),
         // Pure resolver that picks between a project-installed @rhinostone/swig
         // (or swig-twig) and the framework's bundled copy. Opt-in via
         // settings.json > swig.useProject; default-off. Returns a decision
