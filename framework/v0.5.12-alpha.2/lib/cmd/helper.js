@@ -459,6 +459,20 @@ function CmdHelper(cmd, client, debug) {
 
                     cmd.projectArgvList.push( argv[i].replace('@', '') )
 
+                } else if ( /^\@/.test(argv[i]) ) {
+                    // #B69 — an `@` token whose FIRST char fails the detection class
+                    // above (`@Myproject`, `@-x`, a bare `@`) was SILENTLY DROPPED:
+                    // cmd.projectName stayed null, so the command fell through to the
+                    // cwd-project / all-projects resolution and ran against the WRONG
+                    // scope with exit 0 — a mutating task (e.g. bundle:add) could write
+                    // to the cwd project while reporting success. Reject it loudly
+                    // instead. Same message + exit shape as the isValidName guard above,
+                    // whose reject branch is unreachable for detected tokens (detection
+                    // and isValidName test the same first-char predicate).
+                    errMsg = '[ '+ argv[i] +' ] is not a valid project name. Please, try something else: @[a-z0-9_.]';
+                    console.error(errMsg);
+                    exit(errMsg);
+                    return false;
                 } else if (mightBeASomeBundle && !/^\@/.test(argv[i]) && isValidName(argv[i]) ) { // bundles list
                     cmd.bundles.push( argv[i] )
                 }
