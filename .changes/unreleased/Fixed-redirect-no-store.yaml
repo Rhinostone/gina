@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Framework-emitted redirects (controller redirect calls and route-declared redirect controls) now carry Cache-Control: no-cache, no-store, must-revalidate plus Pragma and Expires whenever the request is classified as reverse-proxied, matching the existing dev-mode behavior. A proxied redirect target host is derived from proxy context, so a browser-cacheable 301 could permanently pin a transient value in client caches; the no-store set also rides the inter-bundle query 3xx forward path now.'
-time: 2026-07-05T15:06:02+01:00
