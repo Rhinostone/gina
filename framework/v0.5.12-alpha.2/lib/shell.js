@@ -24,16 +24,19 @@ function Shell () {
     var self = this;
     var local = {
         chdir : undefined,
-        console: undefined
+        console: undefined,
+        env : undefined
     };
 
     /**
      * Configure the shell instance.
-     * Supported keys: `chdir` (working directory), `console` (custom logger).
+     * Supported keys: `chdir` (working directory), `console` (custom logger),
+     * `env` (environment for spawned processes).
      *
      * @param {object}  opt           - Options map
      * @param {string}  [opt.chdir]   - Working directory for spawned processes
      * @param {object}  [opt.console] - Custom logger instance (defaults to `lib/logger`)
+     * @param {object}  [opt.env]     - Environment for spawned processes (defaults to inheriting the current `process.env`)
      * @throws {Error} When an unsupported option key is passed
      * @returns {void}
      */
@@ -100,11 +103,11 @@ function Shell () {
                 cmdline = cmdline.split(' ')
             }
 
-            cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: root, stdio: [ 'ignore', out, err ] })
+            cmd = spawn(cmdline.splice(0,1).toString(), cmdline, { cwd: root, stdio: [ 'ignore', out, err ], env: local.env })
 
         } else {
             _console.debug('running: ssh ', cmdline);
-            cmd = spawn('ssh', [ self.host, cmdline ], { stdio: [ 'ignore', out, err ] })
+            cmd = spawn('ssh', [ self.host, cmdline ], { stdio: [ 'ignore', out, err ], env: local.env })
         }
 
         cmd.on('stdout', function(data) {

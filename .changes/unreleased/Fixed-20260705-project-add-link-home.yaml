@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'project:add exited 1 after a successful registration whenever the framework home was overridden (GINA_HOMEDIR): the CLI bootstrap strips GINA_* from process.env, so the spawned link child resolved the default home, missed the just-registered project, and failed the node_modules/gina symlink step. The child now receives the parent''s home explicitly (the Shell helper gains an opt-in env option), and a genuine link failure surfaces the tail of the child''s captured output in the error instead of discarding it.'
+time: 2026-07-05T21:41:21+01:00

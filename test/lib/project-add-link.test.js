@@ -22,6 +22,13 @@
  * never returns an Error) — now a self-resolved CLI invocation wrapped in
  * try/catch routing failures through end().
  *
+ * §08/§09 lock the follow-up hardening: the CLI bootstrap sweeps GINA_* out of
+ * process.env, so linkGina re-exports GINA_HOMEDIR to the spawned child (a home
+ * override otherwise never reaches it — the child resolves the default home,
+ * misses the just-registered project, and the link fails after registration
+ * landed), and the tail of the child's captured output is appended to the
+ * postcondition error instead of being discarded with the Shell temp logs.
+ *
  * Run standalone:
  *   node --test test/lib/project-add-link.test.js
  */
@@ -307,6 +314,122 @@ describe('07 - framework start/restart invoke the self-resolved bin/gina wrapper
         // absolute-path invocation to stay PATH-independent end-to-end
         var ginaSrc = fs.readFileSync(resolved, 'utf8');
         assert.ok(ginaSrc.indexOf("__dirname + '/cli'") > -1);
+    });
+
+});
+
+
+// ── 08 — env re-export: the spawned CLI child must see the parent's home ─────
+//
+// The CLI bootstrap sweeps every GINA_*/VENDOR_*/USER_* key out of process.env
+// into the framework context (read back via getEnvVar), so a spawned child
+// inherits none of them. linkGina must re-export the home explicitly or, under
+// a home override, the child resolves the default home, misses the
+// just-registered project, and the link fails after registration landed —
+// project:add then exits 1 on an otherwise-successful registration.
+
+describe('08 - linkGina re-exports the framework home to the spawned CLI child', function() {
+
+    var SHELL_PATH = path.join(FW, 'lib/shell.js');
+    var SHELL_SRC = fs.readFileSync(SHELL_PATH, 'utf8');
+
+    it('Shell supports an `env` option (declared in the options map)', function() {
+        assert.match(
+            SHELL_SRC,
+            /var local = \{\s*chdir : undefined,\s*console: undefined,\s*env : undefined\s*\}/,
+            'expected the Shell options map to carry an `env` slot (setOptions rejects unknown keys)'
+        );
+    });
+
+    it('the local spawn passes the configured env through', function() {
+        assert.ok(
+            SHELL_SRC.indexOf("{ cwd: root, stdio: [ 'ignore', out, err ], env: local.env }") > -1,
+            'expected the runLocal spawn to receive `env: local.env` (undefined = inherit, existing callers unchanged)'
+        );
+    });
+
+    it('linkGina composes the child env from process.env plus an explicit GINA_HOMEDIR', function() {
+        assert.match(
+            LG,
+            /env\s*:\s*Object\.assign\(\{\},\s*process\.env,\s*\{\s*GINA_HOMEDIR\s*:\s*GINA_HOMEDIR\s*\}\s*\)/,
+            'expected linkGina to re-export the home to the spawned child'
+        );
+    });
+
+    it('the env rides the same setOptions call as chdir, ahead of the run', function() {
+        var soIdx  = LG.indexOf('npm.setOptions({');
+        var envIdx = LG.indexOf('env', soIdx);
+        var runIdx = LG.indexOf('.run([ process.execPath,');
+        assert.ok(soIdx > -1 && envIdx > soIdx && envIdx < runIdx);
+    });
+
+    // Mirrors the composed-env shape, driven with a post-sweep process.env
+    // (the sweep leaves NO GINA_* behind).
+    function composeEnv(sweptEnv, home) {
+        return Object.assign({}, sweptEnv, { GINA_HOMEDIR: home });
+    }
+
+    it('replica: a post-sweep env gains GINA_HOMEDIR without losing other keys', function() {
+        var swept = { PATH: '/usr/bin', HOME: '/home/someone' }; // no GINA_* — the sweep removed them
+        var env = composeEnv(swept, '/tmp/custom-home/.gina');
+        assert.equal(env.GINA_HOMEDIR, '/tmp/custom-home/.gina');
+        assert.equal(env.PATH, '/usr/bin');
+        assert.equal(env.HOME, '/home/someone');
+        assert.ok(!('GINA_HOMEDIR' in swept), 'the source env object must not be mutated');
+    });
+
+    it('subtract: plain post-sweep inheritance carries NO home for the child (the defect condition)', function() {
+        var swept = { PATH: '/usr/bin', HOME: '/home/someone' };
+        var inherited = Object.assign({}, swept); // pre-fix shape: bare inheritance of the swept env
+        assert.ok(
+            !('GINA_HOMEDIR' in inherited),
+            'post-sweep inheritance loses the home override — the child would resolve the default home'
+        );
+    });
+
+});
+
+
+// ── 09 — failure observability: the child's captured output is surfaced ──────
+
+describe('09 - linkGina appends the child output tail to the postcondition error', function() {
+
+    it('builds a bounded childOutput from the Shell data argument', function() {
+        assert.ok(
+            LG.indexOf("'\\n[ link output ] '+ String(data).trim().slice(-800)") > -1,
+            'expected a bounded tail of the child output (its stdio otherwise vanishes with the Shell temp logs)'
+        );
+    });
+
+    it('appends childOutput to the postcondition error message', function() {
+        var errIdx = LG.indexOf("err = new Error('Could not create the gina symlink");
+        assert.ok(errIdx > -1);
+        var stmt = LG.slice(errIdx, LG.indexOf(';', errIdx));
+        assert.ok(stmt.indexOf('+ childOutput') > -1, 'the error must carry the child output tail');
+    });
+
+    // Mirrors the childOutput construction line-for-line.
+    function buildChildOutput(data) {
+        return ( data && String(data).trim().length > 0 ) ? '\n[ link output ] '+ String(data).trim().slice(-800) : '';
+    }
+
+    it('replica: child output present → tail appended', function() {
+        var out = buildChildOutput('project [ x ] not found\n');
+        assert.equal(out, '\n[ link output ] project [ x ] not found');
+    });
+
+    it('replica: output longer than 800 chars is tail-bounded and keeps the trailing text', function() {
+        var noise = new Array(900).join('a') + 'THE-ERROR';
+        var out = buildChildOutput(noise);
+        assert.ok(out.length <= '\n[ link output ] '.length + 800);
+        assert.ok(out.indexOf('THE-ERROR') > -1, 'the tail must keep the trailing error text');
+    });
+
+    it('replica: empty / whitespace-only / absent output → no suffix', function() {
+        assert.equal(buildChildOutput(''), '');
+        assert.equal(buildChildOutput('   \n'), '');
+        assert.equal(buildChildOutput(null), '');
+        assert.equal(buildChildOutput(undefined), '');
     });
 
 });

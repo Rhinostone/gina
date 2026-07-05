@@ -926,6 +926,14 @@ function Add(opt, cmd) {
      * the Shell helper reports any stderr output as an error even when the command
      * succeeded.
      *
+     * The child is spawned with the parent's environment PLUS an explicit
+     * GINA_HOMEDIR: the CLI bootstrap moves every GINA_* key out of process.env
+     * (read back via getEnvVar), so without the re-export a home override would
+     * never reach the child — it would resolve the default home, miss the
+     * just-registered project, and fail the link. When the postcondition fails,
+     * the tail of the child's captured output is appended to the error so the
+     * child's own failure message is not lost with its temp logs.
+     *
      * @inner
      * @private
      * @param {function} onError - Called with an Error when the gina symlink is still missing after the link attempt
@@ -935,7 +943,13 @@ function Add(opt, cmd) {
 
         var npm = new Shell();
 
-        npm.setOptions({ chdir: self.projectLocation });
+        // Re-export the home: the bootstrap env sweep strips GINA_* from
+        // process.env, so the child would otherwise resolve the default home
+        // and miss a project registered under a GINA_HOMEDIR override.
+        npm.setOptions({
+            chdir   : self.projectLocation,
+            env     : Object.assign({}, process.env, { GINA_HOMEDIR: GINA_HOMEDIR })
+        });
         npm
             // .run('npm link gina', true)
             // was: .run('gina link @'+ self.projectName, true)
@@ -948,7 +962,11 @@ function Add(opt, cmd) {
 
                 var ginaModule = _(self.projectLocation + '/node_modules/gina', true);
                 if ( !fs.existsSync(ginaModule) ) {
-                    err = new Error('Could not create the gina symlink in [ '+ self.projectLocation +'/node_modules ]'+ ( err ? '\n'+ ( err.stack || err ) : '' ));
+                    // The child's stdio goes to temp logs the Shell helper deletes on
+                    // close; the real failure is printed by the child through the
+                    // logger (on stdout), so surface its tail with the error.
+                    var childOutput = ( data && String(data).trim().length > 0 ) ? '\n[ link output ] '+ String(data).trim().slice(-800) : '';
+                    err = new Error('Could not create the gina symlink in [ '+ self.projectLocation +'/node_modules ]'+ ( err ? '\n'+ ( err.stack || err ) : '' ) + childOutput);
                     if ( typeof(onError) != 'undefined' ) {
                         return onError(err);
                     }
