@@ -1,0 +1,11 @@
+[
+  "--env",
+  "--scope",
+  "--emit",
+  "--format",
+  "--stream",
+  "--tag",
+  "--platform",
+  "--start-port-from",
+  "--gina-version"
+]

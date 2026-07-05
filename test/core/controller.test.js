@@ -3826,3 +3826,119 @@ describe('33 - #B67 host-only envConf._proxyHostname (a hostname must not carry 
     });
 
 });
+
+describe('34 - redirect cache hardening: no-store folded into headInfos for dev OR proxied requests', function() {
+
+    var src  = fs.readFileSync(SOURCE, 'utf8');
+    // Full-line comments stripped so negative pins never trip on the file's own comments.
+    var code = src.replace(/^\s*\/\/.*$/gm, '');
+
+    // End-anchored body slice (structural, not a fixed char window): start = the redirect
+    // signature, end = the next method's JSDoc title — insertions inside redirect cannot
+    // silently drift the pins out of the slice.
+    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var endIdx   = src.indexOf('Move files to assets dir', startIdx);
+    var body     = src.substring(startIdx, endIdx);
+
+    // ── (a) source structure ─────────────────────────────────────────────────────
+
+    it('body slice anchors resolve in order', function() {
+        assert.ok(startIdx > -1, 'redirect signature anchor not found');
+        assert.ok(endIdx > startIdx, 'end anchor (next method JSDoc) must follow the signature');
+    });
+
+    it('the cache gate is dev OR proxied', function() {
+        assert.ok(
+            body.indexOf('if (self.isCacheless() || isProxyHost) {') > -1,
+            'expected the widened gate `self.isCacheless() || isProxyHost` in the redirect body'
+        );
+    });
+
+    it('the no-store set is folded into headInfos BEFORE a single writeHead', function() {
+        var hIdx = body.indexOf('var headInfos');
+        var gIdx = body.indexOf('if (self.isCacheless() || isProxyHost) {');
+        var tIdx = body.indexOf("'cache-control': 'no-cache, no-store, must-revalidate'");
+        var wIdx = body.indexOf('res.writeHead(code, headInfos);');
+        assert.ok(hIdx > -1, 'headInfos build not found');
+        assert.ok(gIdx > hIdx, 'gate must follow the headInfos build');
+        assert.ok(tIdx > gIdx, 'the no-store merge must sit inside the gate');
+        assert.ok(wIdx > tIdx, 'the single writeHead must follow the conditional fold');
+    });
+
+    it('exactly one status write; the old trio-in-the-writeHead-call form is gone file-wide', function() {
+        var writes = body.match(/res\.writeHead\(code, headInfos\);/g) || [];
+        assert.equal(writes.length, 1, 'expected exactly one res.writeHead(code, headInfos);');
+        assert.ok(code.indexOf('writeHead(code, merge(') < 0, 'the no-store set must ride in headInfos, never in the writeHead call');
+    });
+
+    it('the cross-bundle payload serializes headInfos AFTER the fold (the 3xx forward inherits the set)', function() {
+        var tIdx = body.indexOf("'cache-control': 'no-cache, no-store, must-revalidate'");
+        var pIdx = body.indexOf('JSON.stringify({ status: code, headers: headInfos })');
+        assert.ok(pIdx > -1, 'redirectObject payload build not found');
+        assert.ok(pIdx > tIdx, 'the payload must be built from headInfos after the conditional fold');
+    });
+
+    // ── (b) pure logic — gate matrix + forward inheritance ───────────────────────
+
+    var NO_STORE = {
+        'cache-control': 'no-cache, no-store, must-revalidate',
+        'pragma': 'no-cache',
+        'expires': '0'
+    };
+    // mirrors the redirect body: headInfos build + conditional fold (keys are disjoint,
+    // so target-wins vs source-wins merge semantics cannot differ here)
+    function buildRedirectHead(path, isCacheless, isProxyHost) {
+        var headInfos = { 'location': path };
+        if (isCacheless || isProxyHost) {
+            for (var k in NO_STORE) {
+                headInfos[k] = NO_STORE[k];
+            }
+        }
+        return headInfos;
+    }
+    // mirrors the query() 3xx intercept: local.res.writeHead(data.status, data.headers) + end()
+    function forwardReplica(redirectObjectJson) {
+        var data = JSON.parse(redirectObjectJson);
+        var wrote = [];
+        if (data.status && /^3/.test(data.status) && typeof data.headers !== 'undefined') {
+            wrote.push([data.status, data.headers]);
+        }
+        return wrote;
+    }
+
+    it('prod + raw: location only — byte-compatible with the previous behavior', function() {
+        var h = buildRedirectHead('/target/', false, false);
+        assert.deepEqual(h, { 'location': '/target/' });
+    });
+
+    it('prod + proxied: the no-store set rides with the Location', function() {
+        var h = buildRedirectHead('https://public.example/target/', false, true);
+        assert.equal(h['cache-control'], NO_STORE['cache-control']);
+        assert.equal(h.pragma, 'no-cache');
+        assert.equal(h.expires, '0');
+        assert.equal(h.location, 'https://public.example/target/');
+    });
+
+    it('dev keeps the set with or without a proxy (unchanged dev contract)', function() {
+        assert.equal(buildRedirectHead('/t/', true, false)['cache-control'], NO_STORE['cache-control']);
+        assert.equal(buildRedirectHead('/t/', true, true)['cache-control'], NO_STORE['cache-control']);
+    });
+
+    it('forward inheritance: the intercept replays the folded headers verbatim', function() {
+        var payload = JSON.stringify({ status: 301, headers: buildRedirectHead('https://public.example/t/', false, true) });
+        var wrote = forwardReplica(payload);
+        assert.equal(wrote.length, 1);
+        assert.equal(wrote[0][0], 301);
+        assert.equal(wrote[0][1]['cache-control'], NO_STORE['cache-control'], 'the forwarded copy must carry the no-store set');
+    });
+
+    it('SUBTRACT — the pre-fix shape (set only in the write call) loses it on the forward path', function() {
+        // pre-fix: headInfos stayed { location } and the no-store set was merged into the
+        // writeHead CALL argument only — the serialized payload therefore never carried it.
+        var preFixHeadInfos = { 'location': 'https://public.example/t/' };
+        var payload = JSON.stringify({ status: 301, headers: preFixHeadInfos });
+        var wrote = forwardReplica(payload);
+        assert.equal(typeof wrote[0][1]['cache-control'], 'undefined', 'pre-fix forward goes out bare — proving the fold is load-bearing');
+    });
+
+});
