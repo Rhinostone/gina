@@ -614,12 +614,21 @@ function SuperController(options) {
                 ctx.config.envConf._isRoutingUpdateNeeded = false;
             }
 
+            // #B67 — a hostname must never carry a webroot. Previously this wrote
+            // `hostname` (= _config.hostname + server.webroot), so getRoute's
+            // `PROXY_HOSTNAME || envConf._proxyHostname` fallback (main.js:1105)
+            // appended a child bundle's webroot to a value already ending in the
+            // parent's webroot -> the <host>/<webroot>//<webroot> blend. Write the
+            // host-only `_config.hostname`; the primary public-host resolution now
+            // comes from the engine-agnostic PROXY_HOSTNAME refresh (router.js),
+            // leaving this a webroot-free fallback. Compare host-only too, so the
+            // change-detection does not spuriously refire every request.
             if (
                 typeof(ctx.config.envConf._proxyHostname) == 'undefined'
                 ||
-                hostname != ctx.config.envConf._proxyHostname
+                _config.hostname != ctx.config.envConf._proxyHostname
             ) {
-                ctx.config.envConf._proxyHostname = (isProxyHost) ? hostname : null;
+                ctx.config.envConf._proxyHostname = (isProxyHost) ? _config.hostname : null;
                 ctx.config.envConf._isRoutingUpdateNeeded = true;
             }
 

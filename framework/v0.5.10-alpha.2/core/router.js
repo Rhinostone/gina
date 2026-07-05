@@ -245,6 +245,38 @@ function Router(env, scope) {
 
         setContext('isProxyHost', isProxyHost);
 
+        // #B67 — lift the reverse-proxy host derivation to this engine-agnostic
+        // point so BOTH engines (isaac + express) resolve a cross-bundle
+        // getRoute('<route>@<bundle>').toUrl() to the PUBLIC host. server.isaac.js
+        // already stashes the per-request slots + refreshes the worker-global
+        // process.gina.PROXY_HOSTNAME (host-only, public), but that block is
+        // isaac-only; an Express-engine request (or a slot-less isaac request)
+        // reaches getRoute with getContext('isProxyHost')=true, PROXY_HOSTNAME
+        // falsy, and envConf._proxyHostname = host+webroot -> getRoute falls back
+        // (main.js:1105) to the host+webroot value -> the
+        // <host>/<webroot>//<webroot> blend. Gated on THIS request's proxied
+        // classification (port-less inbound Host, or an X-Forwarded-Host), NOT on
+        // the sticky isProxyHost latch, so it can never freeze at a `host:port`
+        // (raw) value (the #B65 freeze-guard). Host-only, public; scheme prefers
+        // X-Forwarded-Proto (TLS-terminating proxy) then PROXY_SCHEME then the
+        // bundle scheme.
+        var proxyReqHost = request.headers.host || request.headers[':authority'];
+        var proxyReqIsProxied = (
+            ( proxyReqHost && !/\:[0-9]+$/.test(proxyReqHost) )
+            || request.headers['x-forwarded-host']
+        ) ? true : false;
+        if ( proxyReqIsProxied ) {
+            var proxyReqScheme = request.headers['x-forwarded-proto']
+                || process.gina.PROXY_SCHEME
+                || conf.server.scheme;
+            if ( request.headers['x-forwarded-host'] ) {
+                process.gina.PROXY_HOSTNAME = proxyReqScheme +'://'+ request.headers['x-forwarded-host'];
+                process.gina.PROXY_HOST     = request.headers['x-forwarded-host'];
+            } else {
+                process.gina.PROXY_HOSTNAME = proxyReqScheme +'://'+ proxyReqHost;
+                process.gina.PROXY_HOST     = proxyReqHost;
+            }
+        }
 
 
         /**
