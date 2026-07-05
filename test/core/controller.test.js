@@ -3464,11 +3464,15 @@ describe('31 - #B66 client-only hostname whisper (proxied → public host-only) 
             'the old whisper of the internal `hostname` var must be gone');
     });
 
-    it('leaves the internal hostname var + _proxyHostname byte-identical (still reference `hostname`)', function() {
+    it('leaves the internal hostname var unchanged; _proxyHostname is now host-only per #B67 (supersedes the #B66 byte-identical note)', function() {
+        // #B67 revisited the #B66 S1 "_proxyHostname byte-identical" decision: the internal
+        // `hostname` var (host+webroot) still feeds the per-route routing clone, but
+        // envConf._proxyHostname is now the host-only _config.hostname (a hostname must not
+        // carry a webroot — see controller.test.js §33 + router.test.js §12).
         assert.ok(src.indexOf('var hostname    = _config.hostname + _config.server.webroot;') > -1,
-            'the internal hostname var (feeds _proxyHostname + routing clone) must be unchanged');
-        assert.ok(src.indexOf('ctx.config.envConf._proxyHostname = (isProxyHost) ? hostname : null;') > -1,
-            '_proxyHostname must still derive from the internal `hostname`, not the client-only _publicHostname');
+            'the internal hostname var (feeds the per-route routing clone) must be unchanged');
+        assert.ok(src.indexOf('ctx.config.envConf._proxyHostname = (isProxyHost) ? _config.hostname : null;') > -1,
+            '_proxyHostname now derives from the host-only _config.hostname (#B67), not the host+webroot hostname var');
     });
 
     it('_publicHostname is confined to the whisper (declaration + override + set — exactly 3 refs)', function() {
@@ -3754,6 +3758,71 @@ describe('32b - #B66 S2b serve-time host resolution: pure-logic replicas', funct
         assert.equal(p.proxyHostname, 'https://public-b.example');
         var r = whisper({ _ginaIsProxyHost: false }, 'public-a.example', 'https://public-a.example');
         assert.equal(r.proxyHost, undefined, 'a raw request whispers no proxy host');
+    });
+
+});
+
+describe('33 - #B67 host-only envConf._proxyHostname (a hostname must not carry a webroot)', function() {
+
+    var src  = fs.readFileSync(SOURCE, 'utf8');
+    // Full-line comments stripped so the negative pin never trips on the file's own comments.
+    var code = src.replace(/^\s*\/\/.*$/gm, '');
+
+    // ── (a) source structure ──────────────────────────────────────────────────────
+
+    it('carries the #B67 trace marker', function() {
+        assert.ok(src.indexOf('#B67') > -1, 'expected the #B67 trace marker at the _proxyHostname write');
+    });
+
+    it('writes the host-only _config.hostname (NOT the host+webroot `hostname` var)', function() {
+        assert.ok(
+            src.indexOf('ctx.config.envConf._proxyHostname = (isProxyHost) ? _config.hostname : null;') > -1,
+            'envConf._proxyHostname must be set to the host-only _config.hostname'
+        );
+        assert.ok(
+            code.indexOf('ctx.config.envConf._proxyHostname = (isProxyHost) ? hostname : null;') < 0,
+            'the old host+webroot write (? hostname : null) must be gone'
+        );
+    });
+
+    it('change-detection compares the host-only value too (so it does not spuriously refire every request)', function() {
+        assert.ok(
+            src.indexOf('_config.hostname != ctx.config.envConf._proxyHostname') > -1,
+            'the guard must compare _config.hostname, matching the written value'
+        );
+    });
+
+    // ── (b) pure logic ────────────────────────────────────────────────────────────
+
+    // mirrors controller.js:622 — envConf._proxyHostname = (isProxyHost) ? _config.hostname : null
+    function proxyHostnameStore(isProxyHost, configHostname) {
+        return (isProxyHost) ? configHostname : null;
+    }
+    // mirrors getRoute:1105 fallback + toUrl for a cross-bundle child route (webroot /c/, url /c/path)
+    function fallbackToUrl(proxyHostname, childWebroot, childUrl) {
+        var url = ( /\/$/.test(childUrl) && childUrl != '/' ) ? childUrl.substring(0, childUrl.length - 1) : childUrl;
+        var finalUrl = ('' + url).replace(new RegExp('^(' + childWebroot + '|\\/$)'), childWebroot);
+        return ('' + proxyHostname) + finalUrl;
+    }
+
+    it('a proxied request stores the host-only hostname (no trailing webroot slash)', function() {
+        var stored = proxyHostnameStore(true, 'https://parent-internal:5127');
+        assert.equal(stored, 'https://parent-internal:5127');
+        assert.ok(!/\/$/.test(stored), 'a stored proxy hostname must not end in a webroot slash');
+    });
+
+    it('a raw request stores null', function() {
+        assert.equal(proxyHostnameStore(false, 'https://parent-internal:5127'), null);
+    });
+
+    it('host-only stored value: the getRoute fallback yields NO double-webroot blend', function() {
+        var stored = proxyHostnameStore(true, 'https://parent-internal:5127'); // post-fix (host-only)
+        assert.equal(fallbackToUrl(stored, '/c/', '/c/path'), 'https://parent-internal:5127/c/path', 'host-only fallback → a single, clean webroot');
+    });
+
+    it('SUBTRACT — the pre-fix host+webroot value reproduces the blend in the same fallback', function() {
+        var preFix = 'https://parent-internal:5127/p/'; // == _config.hostname + server.webroot (the old write)
+        assert.equal(fallbackToUrl(preFix, '/c/', '/c/path'), 'https://parent-internal:5127/p//c/path', 'the old host+webroot store blends — proving host-only is load-bearing');
     });
 
 });

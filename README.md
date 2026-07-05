@@ -42,12 +42,9 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
-## What's in 0.5.9
+## What's in 0.5.10
 
-- **Security — reverse-proxied deployments no longer disclose a bundle's internal host to the browser (#B66).** The client `gina.config.hostname` and the fetched `/_gina/assets/routing.json` no longer serialize each bundle's internal `scheme://host:port` — a proxied client now receives a public host-only origin and a host-stripped routing map, while direct `host:port` access stays byte-identical. This also fixes cross-bundle client `getRoute(...).toUrl()`, which previously resolved to the unreachable internal host on such deployments and now resolves same-origin.
-- **Fixed — server-side proxy host context is request-scoped (#B66).** The server-side URL, redirect, and config resolvers (`self.getConfig()`, `self.redirect()`, server-rendered asset host resolution, and the per-request routing clone) now resolve the host of the request in hand rather than the last proxied host the worker served. A worker that serves a mix of proxied and direct traffic — or several public hostnames — no longer inherits a stale proxied host. Single-public-host-per-worker deployments are unchanged.
-- **Fixed — `connector:add` / `connector:rm` / `connector:migrate --fix` no longer corrupt a comment-headed `connectors.json`.** The header/body split is now comment-aware, so a `connectors.json` that carries a leading comment header (including the scaffolded example block) is preserved verbatim instead of being truncated into an unparseable file. A comment-free `connectors.json` still rewrites byte-for-byte as before.
-- **Fixed — latent `ReferenceError` in server-side URL resolution for redirect routes.** A leftover debug statement referenced an undefined variable and would throw whenever a redirect-flagged route's `toUrl()` was resolved server-side; it has been removed.
+- **Fixed — server-side cross-bundle `getRoute('route@bundle').toUrl()` now resolves the public host on reverse-proxied deployments (#B67).** A controller building a cross-bundle URL server-side — e.g. `self.redirect(getRoute('<route>@<otherBundle>').toUrl())` — could emit an unreachable internal host with a doubled web root on a proxied request; it now resolves the public host for both the Isaac and Express engines. This completes the `0.5.9` client-side cross-bundle URL fix (#B66) on the server side. Single-public-host-per-worker deployments are otherwise unchanged.
 
 See the full [Changelog](./CHANGELOG.md) and [Roadmap](./ROADMAP.md).
 

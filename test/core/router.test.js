@@ -947,3 +947,109 @@ describe('11 - #B52-residual: narrowed per-request conf clone', function() {
     });
 
 });
+
+describe('12 - #B67 engine-agnostic proxy-host refresh + cross-bundle toUrl resolution', function() {
+
+    var src  = fs.readFileSync(SOURCE, 'utf8');
+    // Full-line comments stripped so negative pins never trip on the file's own comments.
+    var code = src.replace(/^\s*\/\/.*$/gm, '');
+
+    // ── (a) source structure: the engine-agnostic PROXY_HOSTNAME refresh ──────────
+
+    it('carries the #B67 trace marker at the refresh site', function() {
+        assert.ok(src.indexOf('#B67') > -1, 'expected the #B67 trace marker');
+    });
+
+    it('classifies THIS request proxied via a port-less Host OR X-Forwarded-Host (the #B65 gate, not the sticky isProxyHost latch)', function() {
+        assert.ok(code.indexOf('var proxyReqIsProxied = (') > -1, 'expected a per-request proxied classification (proxyReqIsProxied)');
+        assert.ok(src.indexOf('!/\\:[0-9]+$/.test(proxyReqHost)') > -1, 'classification must test the inbound Host for a trailing port');
+        assert.ok(src.indexOf("request.headers['x-forwarded-host']") > -1, 'classification must also accept X-Forwarded-Host');
+    });
+
+    it('sets PROXY_HOSTNAME (host-only, public) ONLY inside the per-request proxied gate (never unconditionally)', function() {
+        var gateIdx  = code.indexOf('if ( proxyReqIsProxied ) {');
+        var writeIdx = code.indexOf('process.gina.PROXY_HOSTNAME = proxyReqScheme');
+        assert.ok(gateIdx > -1, 'expected the `if ( proxyReqIsProxied )` gate');
+        assert.ok(writeIdx > gateIdx, 'PROXY_HOSTNAME must be written inside the proxied gate — the #B65 freeze-guard');
+    });
+
+    it('scheme precedence: X-Forwarded-Proto then PROXY_SCHEME then the bundle scheme', function() {
+        assert.ok(
+            src.indexOf("request.headers['x-forwarded-proto']") > -1
+            && src.indexOf('process.gina.PROXY_SCHEME') > -1
+            && src.indexOf('conf.server.scheme') > -1,
+            'proxyReqScheme must prefer x-forwarded-proto, then PROXY_SCHEME, then conf.server.scheme'
+        );
+    });
+
+    it('lives at the engine-agnostic point — AFTER setContext(isProxyHost) in core/router.js — so BOTH engines traverse it', function() {
+        // The refresh lives in core/router.js (this SOURCE), which runs for isaac AND express
+        // (server.express.js sets zero proxy state). Placement right after setContext proves it.
+        var ctxIdx = src.indexOf("setContext('isProxyHost', isProxyHost);");
+        var b67Idx = src.indexOf('var proxyReqHost = request.headers.host');
+        assert.ok(ctxIdx > -1 && b67Idx > -1, 'both anchors present');
+        assert.ok(b67Idx > ctxIdx, 'the #B67 refresh must follow setContext(isProxyHost) at the engine-agnostic router point');
+    });
+
+    // ── (b) pure logic: derivation → PROXY_HOSTNAME → getRoute/toUrl composition ──
+
+    // mirrors router.js: the #B67 refresh (proxied classification + host-only public derivation)
+    function deriveProxyHostname(headers, bundleScheme, proxyScheme) {
+        var reqHost = headers.host || headers[':authority'];
+        var proxied = ( (reqHost && !/\:[0-9]+$/.test(reqHost)) || headers['x-forwarded-host'] ) ? true : false;
+        if (!proxied) { return { proxied: false, PROXY_HOSTNAME: undefined }; }
+        var scheme = headers['x-forwarded-proto'] || proxyScheme || bundleScheme;
+        if (headers['x-forwarded-host']) { return { proxied: true, PROXY_HOSTNAME: scheme + '://' + headers['x-forwarded-host'] }; }
+        return { proxied: true, PROXY_HOSTNAME: scheme + '://' + reqHost };
+    }
+
+    // mirrors lib/routing getRoute:1101-1105 (proxy_hostname pick) + :1130 trailing-slash strip
+    // + toUrl:1187-1206 (host + webroot-adjusted url)
+    function resolveToUrl(route, isProxyHost, PROXY_HOSTNAME, proxyHostnameFallback) {
+        var r = Object.assign({}, route);
+        r.isProxyHost = isProxyHost;
+        if (isProxyHost) { r.proxy_hostname = PROXY_HOSTNAME || proxyHostnameFallback; } // getRoute:1105
+        var url = ( /\/$/.test(r.url) && r.url != '/' ) ? r.url.substring(0, r.url.length - 1) : r.url; // :1130
+        var wroot    = r.webroot;
+        var hostname = '' + r.hostname;
+        if (r.isProxyHost) { hostname = '' + r.proxy_hostname; } // toUrl:1191-1192
+        var finalUrl = ('' + url).replace(new RegExp('^(' + wroot + '|\\/$)'), wroot);
+        return hostname + finalUrl;
+    }
+
+    // framework-generic fixture: a PARENT bundle (webroot /p/, host parent-internal:5127) renders a
+    // cross-bundle link to a CHILD route (webroot /c/, host child-internal:5131, distinct port).
+    var childRoute          = { bundle: 'child', hostname: 'https://child-internal:5131', host: 'child-internal:5131', webroot: '/c/', url: '/c/path', param: { control: 'home' } };
+    var CHILD_INTERNAL      = 'https://child-internal:5131';
+    var PARENT_HOST_WEBROOT = 'https://parent-internal:5127/p/'; // the pre-fix envConf._proxyHostname (host+webroot)
+
+    it('multi-hop (Ingress→RP→POD, X-Forwarded-Host): PUBLIC host + child webroot', function() {
+        var d = deriveProxyHostname({ host: 'ingress.internal', 'x-forwarded-host': 'public.example', 'x-forwarded-proto': 'https' }, 'https', undefined);
+        assert.equal(d.PROXY_HOSTNAME, 'https://public.example');
+        assert.equal(resolveToUrl(childRoute, true, d.PROXY_HOSTNAME, CHILD_INTERNAL), 'https://public.example/c/path');
+    });
+
+    it('single-hop (RP→POD, port-less Host, no XFH — the reported pod shape): PUBLIC host + child webroot', function() {
+        var d = deriveProxyHostname({ host: 'public.example', 'x-forwarded-proto': 'https', 'x-nginx-proxy': 'true' }, 'https', undefined);
+        assert.equal(d.PROXY_HOSTNAME, 'https://public.example');
+        assert.equal(resolveToUrl(childRoute, true, d.PROXY_HOSTNAME, CHILD_INTERNAL), 'https://public.example/c/path');
+    });
+
+    it('RAW direct (port-ful Host, no proxy): NOT proxied → child-internal host + child webroot', function() {
+        var d = deriveProxyHostname({ host: 'child-internal:5131' }, 'https', undefined);
+        assert.equal(d.proxied, false, 'a port-ful Host with no XFH is not proxied');
+        assert.equal(resolveToUrl(childRoute, false, undefined, undefined), 'https://child-internal:5131/c/path');
+    });
+
+    it('SUBTRACT — pre-fix inputs (PROXY_HOSTNAME falsy + host+webroot fallback) reproduce the #B67 blend', function() {
+        // Before #B67: router.js did not refresh PROXY_HOSTNAME engine-agnostically (falsy for a
+        // slot-less request) AND controller.js wrote envConf._proxyHostname = host+webroot; getRoute
+        // then fell back to that host+webroot value → the double-webroot blend.
+        assert.equal(
+            resolveToUrl(childRoute, true, undefined, PARENT_HOST_WEBROOT),
+            'https://parent-internal:5127/p//c/path',
+            'the pre-fix inputs must reproduce the blend — proving the reliably-set PROXY_HOSTNAME + host-only fallback are load-bearing'
+        );
+    });
+
+});
