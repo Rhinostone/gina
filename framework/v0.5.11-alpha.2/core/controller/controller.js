@@ -2063,7 +2063,9 @@ function SuperController(options) {
      * And Where `ignoreWebRoot` is an optional parameter used to ignore web root settings (Standalone mode or user set web root)
      * `ignoreWebRoot` behaves the like set to `false` by default
      *
-     * N.B.: Gina will tell browsers not to cache redirections if you are using `dev` environement
+     * N.B.: Gina will tell browsers not to cache redirections when running in the `dev` environment
+     * OR when the request is classified as reverse-proxied — a proxied redirect's target host is
+     * composed from proxy context, so a browser-cacheable 301 would freeze a transient value
      *
      * Trobleshouting:
      * ---------------
@@ -2411,15 +2413,19 @@ function SuperController(options) {
                     'location': path
                 };
 
-                if (self.isCacheless()) {
-                    res.writeHead(code, merge(headInfos, {
+                // A proxied request's redirect target is composed from proxy context (see the
+                // `hostname` pick above): a browser-cacheable 301 would freeze a transient value
+                // permanently. Folded into `headInfos` — not the writeHead call — so the
+                // inter-bundle query 3xx intercepts, which replay `{ status, headers }`
+                // verbatim, inherit the no-store set too.
+                if (self.isCacheless() || isProxyHost) {
+                    headInfos = merge(headInfos, {
                         'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
                         'pragma': 'no-cache',
                         'expires': '0'
-                    }))
-                } else {
-                    res.writeHead(code, headInfos)
+                    });
                 }
+                res.writeHead(code, headInfos);
                 // in case of query from another bundle waiting for a response
                 var redirectObject = JSON.stringify({ status: code, headers: headInfos });
 
