@@ -72,7 +72,7 @@ async function onExec() {
         // registration never runs). The sibling guard further down (resolving
         // GINA_FRAMEWORK_DIR) runs too late — after this require.
         if ( !fs.existsSync(frameworkPath) ) {
-            process.stderr.write('gina: framework version ' + version + ' is not installed (expected at ' + frameworkPath + ').\nInstalled package version is ' + packObj.version + '.\nTry:\n  $ gina framework:install ' + version + '\n');
+            process.stderr.write('gina: framework version ' + version + ' is not installed (expected at ' + frameworkPath + ').\nInstalled package version is ' + packObj.version + '.\nTry:\n  $ gina framework:add ' + version + '\n');
             return process.exit(1);
         }
         var generator   = require(frameworkPath + '/lib/generator');
@@ -282,7 +282,7 @@ async function onExec() {
         }
 
         if ( !fs.existsSync(frameworkPath) ) {
-            console.alert('Could not find version ' + version + '.\nFirst try:\n$ gina framework:install ' + version);
+            console.alert('Could not find version ' + version + '.\nFirst try:\n$ gina framework:add ' + version);
             process.exit(1)
         }
 

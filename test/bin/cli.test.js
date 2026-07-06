@@ -125,11 +125,11 @@ describe('03 - bin/cli: framework version existence guard precedes the require',
         );
     });
 
-    it('the early guard points the user at `gina framework:install <version>`', function() {
+    it('the early guard points the user at `gina framework:add <version>`', function() {
         var src      = fs.readFileSync(CLI_SOURCE, 'utf8');
         var guardIdx = src.indexOf('!fs.existsSync(frameworkPath)');
         var window   = src.slice(guardIdx, guardIdx + 500);
-        assert.ok(/framework:install/.test(window), 'expected framework:install hint in the early guard');
+        assert.ok(/framework:add/.test(window), 'expected framework:add hint in the early guard');
     });
 
     it('the early guard fails fast via process.exit(1)', function() {

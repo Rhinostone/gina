@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the CLI framework-not-installed guard messages, which told users to run a non-existent `gina framework:install <version>` command; they now point at the real `gina framework:add <version>` command.'
+time: 2026-07-06T23:45:35+01:00
