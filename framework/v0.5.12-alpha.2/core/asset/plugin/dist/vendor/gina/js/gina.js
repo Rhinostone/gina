@@ -18081,7 +18081,13 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     // firing its own duplicate GET (see consumePreload).
                     var _waiters = preloadWaiters[url] || [];
                     delete preloadWaiters[url];
-                    if ( /^2/.test(xhrPreload.status) ) {
+                    // #B80 — only cache a genuinely HTML fragment. A JSON response (an
+                    // isXhrRedirect / reload / data payload) must NOT be injected as popin
+                    // content: defer it to the click-time popinLoad, whose completion tail
+                    // handles isXhrRedirect/reload/JSON exactly as a non-preloaded click.
+                    // Mirrors popinLoad's own detection (`/application\/json/.test(Content-Type)`).
+                    var _ct = xhrPreload.getResponseHeader('Content-Type');
+                    if ( /^2/.test(xhrPreload.status) && !/application\/json/.test(_ct || '') ) {
                         preloadCache[url] = xhrPreload.responseText;
                         for ( var _w = 0; _w < _waiters.length; ++_w ) { _waiters[_w](xhrPreload.responseText); }
                     } else {

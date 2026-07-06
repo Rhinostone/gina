@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A hover- or focus-warmed AJAX popin trigger (`data-gina-dialog-src` / legacy `data-gina-popin-url`) whose GET returned an XHR redirect (an `application/json` `{isXhrRedirect, location}` response) opened the popin showing the raw JSON as its body instead of following the redirect. The hover/focus preload now declines JSON responses, so the click defers to the standard load path that handles the redirect/reload exactly as a non-preloaded click (such a trigger re-fetches once on click).'
+time: 2026-07-06T21:27:23+01:00

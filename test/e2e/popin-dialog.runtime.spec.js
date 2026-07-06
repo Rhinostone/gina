@@ -262,4 +262,29 @@ test.describe('data-gina-dialog runtime (real bundle)', () => {
         await expect(page.locator('dialog').filter({ hasText: 'Legacy body' })).toBeVisible({ timeout: 5000 });
         await expect(page.locator('dialog .gina-popin-skeleton')).toHaveCount(0);
     });
+
+    // --- #B80: a warmed preload of a redirect-JSON trigger must NOT inject the raw JSON ---
+
+    test('#B80 a warmed legacy popin whose GET returns an XHR redirect tunnels to `location`, never injects the raw JSON', async ({ page }) => {
+        // /redirect-frag returns application/json {isXhrRedirect,location}. Pre-#B80 the
+        // hover preload cached that JSON and consumePreload injected it verbatim as the
+        // popin body (raw JSON on screen). The fix declines JSON at preloadFetch so the
+        // click defers to popinLoad, whose _self tunnel loads `location` (/frag/ajax.html).
+        const reg = await registerLegacyPopin(page, 'b80redirect', '/redirect-frag', false);
+        expect(reg).toBe('READY');
+
+        // Warm the preload: hover issues the GET; wait for it to land so the decline-JSON
+        // decision is made before the click. (bindOpen renamed the id -> select by attr.)
+        const preloaded = page.waitForResponse((r) => r.url().endsWith('/redirect-frag'));
+        await page.hover('[data-gina-popin-name="b80redirect"]');
+        await preloaded;
+        await page.waitForTimeout(150);
+
+        // Click: the declined preload falls through to popinLoad's redirect tunnel, which
+        // loads the location fragment. The popin shows the tunnel target, NOT the raw JSON.
+        await page.click('[data-gina-popin-name="b80redirect"]');
+        await expect(page.locator('dialog').filter({ hasText: 'AJAX loaded' })).toBeVisible();
+        // The pre-#B80 regression injected the JSON body verbatim; assert it never appears.
+        await expect(page.locator('dialog').filter({ hasText: 'isXhrRedirect' })).toHaveCount(0);
+    });
 });
