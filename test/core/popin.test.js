@@ -1702,3 +1702,132 @@ describe('27 - Popin: native <dialog> UA-close routes through popinClose', funct
         );
     });
 });
+
+
+// ── 28 — Popin: #B77 _self redirect-tunnel loads-then-returns (blind-open timer removed) ─
+//
+// A proxied/tunnelled redirect JSON response (isXhrRedirect + location, default _self)
+// used to: $popin.load(location) then setTimeout(50, () => { if (!$popin.isOpen) $popin.open() }).
+// That blind 50 ms timer was a vestigial v0.1.0 (2021, 4d85d084) race-inducer: when a
+// follow-up load took longer than 50 ms, the timer fired open() against a not-yet-injected
+// (skeleton/empty) target — an intermittent unhandled-deref crash. It is unnecessary because
+// the already-armed `loaded.<id>` listener opens CONTENT-FIRST (it injects the body via
+// popinBind/handleLoadedBody, THEN calls popinOpen). The _self branch now just loads and
+// returns. The `return;` also preserves the pre-existing window.open() fall-through guard —
+// non-_self targets (blank/parent/top) still reach window.open, _self never does.
+//
+// NOTE: this fix is scoped to the popin plugin's OWN _self redirect. A structurally
+// identical blind timer lives in a sibling path — the validator plugin's
+// `Validator::Popin now redirecting` handler (core/plugins/lib/validator/src/main.js) —
+// which is a SEPARATE code path with a different safety profile (it can $popin.load() a
+// DIFFERENT popin whose loaded.<id> listener may not be armed, so its timer may be
+// load-bearing). That sibling is deliberately NOT touched here; the served gina.min.js
+// therefore still carries exactly one blind timer (the validator one) by design.
+
+describe('28 - Popin: #B77 _self redirect-tunnel loads-then-returns (blind-open timer removed)', function () {
+
+    // --- behavioral (pure-logic replicas) ---
+
+    it('logic: the armed loaded listener injects the redirect body then opens (content-first)', function () {
+        // Replica of the loaded.<id> listener contract the _self redirect relies on:
+        // $popin.load() fires loaded.<id> with the body; the (already-armed) listener injects
+        // it into the popin element and THEN opens — so content is present at open time, which
+        // is exactly why the blind 50 ms open timer is unnecessary.
+        var openedWithContent = null;
+        var $el = { innerHTML: '' };
+        function applyContent(el, body) { el.innerHTML = (typeof body === 'string' ? body.trim() : ''); }
+        function popinOpen($popin) { openedWithContent = $popin.target.innerHTML; $popin.isOpen = true; }
+        var $popin = { name: 'p1', id: 'p1', isOpen: false, target: $el };
+
+        function loadedListener(ev) {
+            applyContent($popin.target, ev.detail);      // popinBind / handleLoadedBody inject
+            if (!$popin.isOpen) { popinOpen($popin); }    // ...then popinOpen
+        }
+        loadedListener({ detail: '<p class="fetched">REDIRECT BODY</p>' });
+
+        assert.equal($popin.isOpen, true, 'the popin opened via the armed loaded listener');
+        assert.ok(openedWithContent.indexOf('fetched') > -1,
+            'content was already injected when the popin opened (content-first — no blind timer needed)');
+    });
+
+    it('subtract: the removed blind 50 ms timer opened before a slow load injected (the race)', function () {
+        // Model the two events the removed timer raced: the blind open (fixed 50 ms) vs the
+        // loaded-listener injection (arrives when the follow-up load completes — here > 50 ms).
+        var log = [];
+        var $el = { innerHTML: '' };
+        var $popin = { isOpen: false, target: $el };
+        function blindOpenTimer() {                         // the removed setTimeout(...,50) body
+            if (!$popin.isOpen) {
+                $popin.isOpen = true;
+                log.push('open@50:content=' + JSON.stringify($popin.target.innerHTML));
+            }
+        }
+        function slowLoadInject(body) { $popin.target.innerHTML = body; log.push('inject@120'); }
+
+        blindOpenTimer();                                   // t=50ms — timer fires first
+        slowLoadInject('<p class="fetched">BODY</p>');      // t=120ms — content arrives after
+
+        assert.equal(log[0], 'open@50:content=""',
+            'the blind timer opened against an EMPTY target (the not-yet-injected skeleton — the crash source)');
+        assert.equal(log[1], 'inject@120', 'content was injected only AFTER the popin had already opened');
+        assert.equal($popin.isOpen, true);
+    });
+
+    // --- source-inspection pins (lock the production source to the removal) ---
+
+    it('source: the _self redirect branch loads then returns — no setTimeout/onPopinredirect blind open', function () {
+        var src = getPopinSrc();
+        var selfIdx = src.indexOf('/^_self$/.test(_target)');
+        var winIdx  = src.indexOf('window.open(result.location', selfIdx);
+        assert.ok(selfIdx > -1, 'the _self redirect branch is present');
+        assert.ok(winIdx > selfIdx, 'the window.open fall-through follows the _self branch');
+        var branch = src.substring(selfIdx, winIdx);
+        assert.ok(branch.indexOf('.load( $popin.name, popinUrl, $popin.options )') > -1,
+            'the _self branch must still issue the popin load');
+        assert.ok(/\.load\([^;]*\);[\s\S]*?return;/.test(branch),
+            'the _self branch must return immediately after the load');
+        assert.equal(branch.indexOf('setTimeout'), -1,
+            'the _self branch must NOT arm a blind-open setTimeout (removed #B77)');
+        assert.equal(branch.indexOf('onPopinredirect'), -1,
+            'the blind-open timer callback must be gone');
+    });
+
+    it('source: the _self branch return; sits before window.open (non-_self targets only reach it)', function () {
+        var src = getPopinSrc();
+        var selfIdx = src.indexOf('/^_self$/.test(_target)');
+        var winIdx  = src.indexOf('window.open(result.location', selfIdx);
+        var loadIdx = src.indexOf('.load( $popin.name, popinUrl, $popin.options )', selfIdx);
+        var retIdx  = src.indexOf('return;', loadIdx);
+        assert.ok(selfIdx > -1 && winIdx > -1 && loadIdx > -1, 'branch + load + window.open all present');
+        assert.ok(retIdx > loadIdx && retIdx < winIdx,
+            'the _self branch return; is between the load and window.open — so a _self redirect never window.opens');
+    });
+
+    // --- dist freshness (the served bundle must carry the removal) ---
+
+    it('served gina.js (gina/popin module): the _self branch loads-then-returns, timer gone', function () {
+        var dist = getDistSrc();
+        var modIdx = dist.indexOf("define('gina/popin'");
+        assert.ok(modIdx > -1, 'gina/popin AMD module present in gina.js');
+        var selfIdx = dist.indexOf('/^_self$/.test(_target)', modIdx);
+        var winIdx  = dist.indexOf('window.open(result.location', selfIdx);
+        assert.ok(selfIdx > modIdx && winIdx > selfIdx, 'the popin _self branch is present in the built module');
+        var branch = dist.substring(selfIdx, winIdx);
+        assert.ok(branch.indexOf('.load( $popin.name, popinUrl, $popin.options )') > -1, 'load present in built module');
+        assert.equal(branch.indexOf('setTimeout'), -1,
+            'no blind-open timer in the built gina/popin _self branch — rebuild the bundle if this fails');
+        assert.equal(branch.indexOf('onPopinredirect'), -1, 'timer callback gone from the built module');
+    });
+
+    it('served gina.min.js: the popin _self branch carries no blind-open timer', function () {
+        var min = getDistMinSrc();
+        var selfIdx = min.indexOf('/^_self$/.test');
+        assert.ok(selfIdx > -1, 'the popin _self branch is present in the minified bundle');
+        var winIdx = min.indexOf('window.open(', selfIdx);
+        assert.ok(winIdx > selfIdx, 'window.open follows the _self branch');
+        var branch = min.substring(selfIdx, winIdx);   // scoped to the popin _self branch only
+        assert.ok(/\.load\(/.test(branch), 'the _self branch still issues the popin load in the served bundle');
+        assert.equal(branch.indexOf('setTimeout'), -1,
+            'the popin _self branch must carry no setTimeout blind-open in the served bundle (rebuild if this fails)');
+    });
+});

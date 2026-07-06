@@ -19421,14 +19421,15 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                                                     popinUrl = result.location;
                                                 }
 
+                                                // was: a blind 50 ms timer that force-opened the popin if it
+                                                // wasn't open yet. Vestigial (v0.1.0, 2021, 4d85d084) race-inducer:
+                                                // a follow-up load slower than 50 ms let the timer open() against
+                                                // a not-yet-injected (skeleton/empty) target. The already-armed
+                                                // `loaded.<id>` listener opens content-first (injects the body,
+                                                // then popinOpen), so the load alone suffices — no blind open.
                                                 $popin
                                                     .load( $popin.name, popinUrl, $popin.options );
-                                                return setTimeout( function onPopinredirect($popin){
-                                                    if (!$popin.isOpen) {
-                                                        $popin.open();
-                                                        return;
-                                                    }
-                                                }, 50, $popin);
+                                                return;
                                             }
 
 

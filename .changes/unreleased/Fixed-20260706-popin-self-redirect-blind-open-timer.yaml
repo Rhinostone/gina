@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A popin (or `data-gina-dialog`) redirect that tunnels back to the same target (`_self`) no longer intermittently opens the popin against an empty, not-yet-loaded body. The redirect handler used to issue the follow-up load and then force the popin open after a fixed 50 ms delay; when that load took longer than 50 ms, the popin could open before its content arrived. It now issues the load and lets the popin open once the content is in place (the framework already opens it content-first). Redirects to other targets (`_blank` / `_parent` / `_top`) are unaffected.'
+time: 2026-07-06T17:13:45+01:00
