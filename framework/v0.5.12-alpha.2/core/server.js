@@ -2523,14 +2523,19 @@ function Server(options) {
                     response.setHeader('location', request.url);
                     request = checkPreflightRequest(request, response);
                     completeHeaders(null, request, response);
+                    // The redirect status is unconditional — mirroring the HTTP/2
+                    // sibling above; only the no-cache set is dev-gated. Without
+                    // it, a non-dev directory hit answered 200 with a Location
+                    // header browsers ignore (a blank page instead of the index).
+                    var _dirHeaders = {
+                        'content-type': bundleConf.server.coreConfiguration.mime[ext]
+                    };
                     if (isCacheless) {
-                        response.writeHead(301, {
-                            'cache-control': 'no-cache, no-store, must-revalidate', // preventing browsers from using cache
-                            'pragma': 'no-cache',
-                            'expires': '0',
-                            'content-type': bundleConf.server.coreConfiguration.mime[ext]
-                        });
+                        _dirHeaders['cache-control'] = 'no-cache, no-store, must-revalidate'; // preventing browsers from using cache
+                        _dirHeaders['pragma'] = 'no-cache';
+                        _dirHeaders['expires'] = '0';
                     }
+                    response.writeHead(301, _dirHeaders);
                     response.end()
                 }
 
