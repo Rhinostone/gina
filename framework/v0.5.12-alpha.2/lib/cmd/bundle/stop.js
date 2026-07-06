@@ -46,6 +46,11 @@ function Stop(opt, cmd) {
         opt.notStopped = [];
 
         if (!self.name) {
+            // bulk mode needs at least one bundle — `self.bundles[0]` is undefined on a zero-bundle project
+            if ( !self.bundles || !self.bundles.length ) {
+                opt.msg = 'No bundles found in project `@'+ self.projectName +'`. Nothing to stop.';
+                return end(opt, cmd);
+            }
             stop(opt, cmd, 0);
         } else {
             stop(opt, cmd);

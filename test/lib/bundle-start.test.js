@@ -104,3 +104,67 @@ describe('02 - nodeModulesErr path uses the same end() shape', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 — Zero-bundle bulk start exits early, before the per-bundle loop.
+// The unguarded bulk entry read
+// `self.bundlesByProject[<project>][undefined].def_env` — an uncaught
+// TypeError that, dispatched through the framework command socket, took the
+// whole daemon down (measured live: daemon dead, every later online command
+// refused). The early exit answers the client and keeps the daemon alive.
+// ---------------------------------------------------------------------------
+describe('03 - zero-bundle bulk start takes the early exit', function() {
+
+    function initBlock() {
+        var startIdx = src.indexOf('var init = function');
+        assert.ok(startIdx !== -1, 'init() declaration not found — test needs updating');
+        var endIdx = src.indexOf('var checkArchAgainstNodeModules = function', startIdx);
+        assert.ok(endIdx !== -1, 'checkArchAgainstNodeModules declaration not found — cannot end-anchor the init slice');
+        return src.slice(startIdx, endIdx);
+    }
+
+    var block = initBlock();
+
+    it('guards the bulk branch on an empty self.bundles', function() {
+        assert.ok(
+            /if \( !self\.bundles \|\| !self\.bundles\.length \)/.test(block),
+            'init() must refuse bulk mode when the project has no bundles'
+        );
+    });
+
+    it('the guard sits inside the bulk (!self.name) branch, ahead of start(opt, cmd, 0)', function() {
+        var bulkIdx  = block.indexOf('if (!self.name)');
+        var guardIdx = block.indexOf('!self.bundles.length');
+        var loopIdx  = block.indexOf('start(opt, cmd, 0)');
+        assert.ok(bulkIdx !== -1 && guardIdx !== -1 && loopIdx !== -1, 'expected tokens missing from init()');
+        assert.ok(bulkIdx < guardIdx, 'the empty-bundles guard must be inside the bulk branch');
+        assert.ok(guardIdx < loopIdx, 'the guard must run BEFORE the bulk loop is entered');
+    });
+
+    it('tells the client the project has no bundles, with the bundle:add hint', function() {
+        assert.ok(
+            block.indexOf('No bundles found in project') !== -1
+                && block.indexOf('bundle:add') !== -1,
+            'the refusal must explain the state and how to fix it'
+        );
+    });
+
+    it('ends via the established error idiom — end(opt, cmd, false, undefined, true)', function() {
+        assert.ok(
+            /return end\(opt, cmd, false, undefined, true\);/.test(block),
+            'the early exit must ride end() so the client socket is answered and closed — ' +
+            'never a bare return (hanging client) and never a throw (daemon kill)'
+        );
+    });
+
+    it('SUBTRACT — the unguarded bulk entry derefs `.def_env` off undefined (the measured daemon-killer)', function() {
+        assert.throws(function() {
+            var bundles = [];
+            var bundle = bundles[0];                             // undefined
+            var bundlesByProject = { myproject: { frontend: { def_env: 'dev' } } };
+            return bundlesByProject.myproject[bundle].def_env;   // TypeError
+        }, TypeError);
+    });
+
+});

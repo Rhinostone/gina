@@ -70,6 +70,12 @@ function Start(opt, cmd) {
         opt.notStarted = [];
 
         if (!self.name) {
+            // bulk mode needs at least one bundle — `self.bundles[0]` is undefined on a zero-bundle
+            // project, and the resulting throw would take down the framework daemon (bin/cmd)
+            if ( !self.bundles || !self.bundles.length ) {
+                opt.msg = 'No bundles found in project `@'+ self.projectName +'`.\nDid you run `gina bundle:add <bundle> @'+ self.projectName +'` first?';
+                return end(opt, cmd, false, undefined, true);
+            }
             return start(opt, cmd, 0);
         }
 

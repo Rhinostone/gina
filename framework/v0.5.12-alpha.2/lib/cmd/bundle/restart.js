@@ -60,6 +60,13 @@ function Restart(opt, cmd) {
         opt.onlineCount = 0;
         opt.notStarted = [];
         if (!self.name) {
+            // bulk mode needs at least one bundle — `self.bundles[0]` is undefined on a zero-bundle project
+            if ( !self.bundles || !self.bundles.length ) {
+                var noBundleMsg = 'No bundles found in project `@'+ self.projectName +'`.\nDid you run `gina bundle:add <bundle> @'+ self.projectName +'` first?';
+                console.error(noBundleMsg);
+                opt.client.write(noBundleMsg);
+                return end(opt, cmd, false, undefined, true);
+            }
             restart(opt, cmd, 0);
         } else {
             restart(opt, cmd);
@@ -80,17 +87,6 @@ function Restart(opt, cmd) {
         var isBulkRestart = (typeof(bundleIndex) != 'undefined') ? true : false;
         var bundle = (isBulkRestart) ? self.bundles[bundleIndex] : self.name;
 
-        // console.debug('bundle -> ', bundle);
-        var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
-        var scope = ( typeof(self.bundlesByProject[self.projectName][bundle].def_scope) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_scope : self.defaultScope;
-        // console.debug('env -> ', env);
-        var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
-        // console.debug('protocol -> ', protocol);
-        var scheme = self.bundlesByProject[self.projectName][bundle].def_scheme;
-        // console.debug('scheme -> ', scheme);
-        var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];
-        // console.debug('port -> ', bundlePort);
-
         var msg = null;
         if (!isDefined('bundle', bundle)) {
 
@@ -100,6 +96,19 @@ function Restart(opt, cmd) {
             end(opt, cmd, isBulkRestart, bundleIndex, true)
 
         } else {
+
+            // registry lookups belong behind the isDefined guard — an unregistered
+            // bundle name has no `bundlesByProject` entry to deref
+            // console.debug('bundle -> ', bundle);
+            var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
+            var scope = ( typeof(self.bundlesByProject[self.projectName][bundle].def_scope) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_scope : self.defaultScope;
+            // console.debug('env -> ', env);
+            var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
+            // console.debug('protocol -> ', protocol);
+            var scheme = self.bundlesByProject[self.projectName][bundle].def_scheme;
+            // console.debug('scheme -> ', scheme);
+            var bundlePort = self.portsReverseData[bundle + '@' + self.projectName][env][protocol][scheme];
+            // console.debug('port -> ', bundlePort);
 
             isRealApp(bundle, function(err, appPath) {
                 if (err) {
