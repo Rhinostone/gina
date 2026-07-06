@@ -125,6 +125,10 @@ function Add(opt, cmd) {
                 // cloning it
                 let currentEnv = { ...process.env };
                 currentEnv['NODE_OPTIONS'] = self.nodeParams.join(' ');
+                // Re-export the home: the bootstrap env sweep strips GINA_* from
+                // process.env, so the child would otherwise resolve the default
+                // home and register the scope there instead of the active one.
+                currentEnv['GINA_HOMEDIR'] = GINA_HOMEDIR;
                 let execOptions = {
                     cwd: self.projectLocation,
                     // Inherit stdio to see the debug prompt in the console
@@ -132,12 +136,16 @@ function Add(opt, cmd) {
                     // Pass the debug options via the environment variables
                     env: currentEnv
                 };
-                let cmd = 'gina scope:add '+ self.scope;
-                console.warn('['+ self.stask +'] running: '+ cmd);
-                console.log(execSync( cmd , execOptions).toString().trim());
+                // A PATH-resolved `gina` is not guaranteed to exist or to be this
+                // install — invoke the running install's own CLI instead.
+                let cmd = '"'+ process.execPath +'" "'+ require('path').resolve(__dirname, '../../../../..', 'bin/cli') +'" scope:add '+ self.scope;
+                console.warn('['+ self.task +'] running: '+ cmd);
+                // With inherited stdio, execSync returns null — the child's output
+                // already reached the console; do not read the return value.
+                execSync( cmd , execOptions);
                 self.scopes.push(self.scope);
             } catch (scopeErr) {
-                console.error('[scope]['+ self.scope  +'] could not be set.');
+                console.error('[scope]['+ self.scope +'] could not be set: '+ (scopeErr.message || scopeErr));
                 process.exit(1);
             }
         }
@@ -147,6 +155,10 @@ function Add(opt, cmd) {
                 // cloning it
                 let currentEnv = { ...process.env };
                 currentEnv['NODE_OPTIONS'] = self.nodeParams.join(' ');
+                // Re-export the home: the bootstrap env sweep strips GINA_* from
+                // process.env, so the child would otherwise resolve the default
+                // home and register the environment there instead of the active one.
+                currentEnv['GINA_HOMEDIR'] = GINA_HOMEDIR;
                 let execOptions = {
                     cwd: self.projectLocation,
                     // Inherit stdio to see the debug prompt in the console
@@ -154,12 +166,16 @@ function Add(opt, cmd) {
                     // Pass the debug options via the environment variables
                     env: currentEnv
                 };
-                let cmd = 'gina env:add '+ self.env;
-                console.warn('['+ self.stask +'] running: '+ cmd);
-                console.log(execSync( cmd , execOptions).toString().trim());
+                // A PATH-resolved `gina` is not guaranteed to exist or to be this
+                // install — invoke the running install's own CLI instead.
+                let cmd = '"'+ process.execPath +'" "'+ require('path').resolve(__dirname, '../../../../..', 'bin/cli') +'" env:add '+ self.env;
+                console.warn('['+ self.task +'] running: '+ cmd);
+                // With inherited stdio, execSync returns null — the child's output
+                // already reached the console; do not read the return value.
+                execSync( cmd , execOptions);
                 self.envs.push(self.env);
             } catch (envErr) {
-                console.error('[env]['+ self.env  +'] could not be set.');
+                console.error('[env]['+ self.env +'] could not be set: '+ (envErr.message || envErr));
                 process.exit(1);
             }
         }

@@ -29,6 +29,13 @@
  * landed), and the tail of the child's captured output is appended to the
  * postcondition error instead of being discarded with the Shell temp logs.
  *
+ * §10 locks the same two defect classes in the --scope/--env child blocks
+ * (`scope:add` / `env:add` children): self-resolved CLI instead of a
+ * PATH-resolved `gina`, GINA_HOMEDIR re-exported past the bootstrap sweep, and
+ * the inherited-stdio execSync return no longer dereferenced (it is null under
+ * inherited stdio, so reading it misreported every successful child as a
+ * failure and exited 1).
+ *
  * Run standalone:
  *   node --test test/lib/project-add-link.test.js
  */
@@ -430,6 +437,108 @@ describe('09 - linkGina appends the child output tail to the postcondition error
         assert.equal(buildChildOutput('   \n'), '');
         assert.equal(buildChildOutput(null), '');
         assert.equal(buildChildOutput(undefined), '');
+    });
+
+});
+
+
+// ── 10 — the --scope/--env child blocks: self-resolved CLI + home re-export ──
+
+describe('10 - project:add --scope/--env children run the self-resolved CLI with the home re-exported', function() {
+
+    // Structural end-anchored slices: scope block runs up to the env block's
+    // guard; env block runs up to the manifest-creation comment.
+    var scopeIdx = SRC.indexOf("if ( self.scope && !isDefined('scope', self.scope) )");
+    var envIdx   = SRC.indexOf("if ( self.env && !isDefined('env', self.env) )");
+    var manIdx   = SRC.indexOf('// creating project manifest');
+    var SCOPE_BLK = (scopeIdx > -1 && envIdx > scopeIdx) ? SRC.slice(scopeIdx, envIdx) : '';
+    var ENV_BLK   = (envIdx > -1 && manIdx > envIdx) ? SRC.slice(envIdx, manIdx) : '';
+
+    it('both blocks were found by their structural anchors', function() {
+        assert.ok(SCOPE_BLK.length > 0, 'scope block anchor missing');
+        assert.ok(ENV_BLK.length > 0, 'env block anchor missing');
+    });
+
+    [ ['scope', function() { return SCOPE_BLK; }, "'gina scope:add '", 'scope:add' ],
+      ['env',   function() { return ENV_BLK;   }, "'gina env:add '",   'env:add'   ]
+    ].forEach(function(spec) {
+        var name = spec[0], blkFn = spec[1], oldLiteral = spec[2], task = spec[3];
+
+        it('['+ name +'] re-exports GINA_HOMEDIR onto the child env after the process.env spread', function() {
+            var blk = blkFn();
+            var spreadIdx = blk.indexOf('{ ...process.env }');
+            var homeIdx = blk.indexOf("currentEnv['GINA_HOMEDIR'] = GINA_HOMEDIR");
+            assert.ok(spreadIdx > -1, 'expected the process.env spread');
+            assert.ok(homeIdx > spreadIdx, 'expected the GINA_HOMEDIR re-export after the spread (the sweep strips it from process.env)');
+        });
+
+        it('['+ name +'] invokes the running install\'s own CLI (process.execPath + resolved bin/cli)', function() {
+            var blk = blkFn();
+            assert.ok(blk.indexOf('process.execPath') > -1, 'expected process.execPath');
+            assert.ok(
+                blk.indexOf("resolve(__dirname, '../../../../..', 'bin/cli')") > -1,
+                'expected the 5-up self-resolved bin/cli (the linkGina idiom)'
+            );
+            assert.ok(blk.indexOf("'\" "+ task +" '+") > -1, 'expected the '+ task +' task on the self-resolved CLI');
+        });
+
+        it('['+ name +'] no longer shells out to a PATH-resolved `gina`', function() {
+            assert.ok(
+                stripComments(blkFn()).indexOf(oldLiteral) < 0,
+                'the PATH-resolved '+ oldLiteral +' literal must be gone (repo checkouts / second installs resolve wrong)'
+            );
+        });
+
+        it('['+ name +'] does not dereference the inherited-stdio execSync return', function() {
+            var blk = stripComments(blkFn());
+            assert.ok(blk.indexOf('.toString()') < 0, 'the null-return dereference must be gone');
+            assert.ok(blk.indexOf('execSync( cmd , execOptions);') > -1, 'expected the bare execSync call');
+        });
+
+        it('['+ name +'] the catch surfaces the child error instead of a bare mislabel', function() {
+            assert.ok(blkFn().indexOf('could not be set: ') > -1, 'expected the real error appended to the message');
+        });
+    });
+
+    it('the undefined `self.stask` log token is gone from live code file-wide', function() {
+        // comment-stripped: the dead commented-out import blocks legitimately
+        // keep the old token in `//` lines.
+        assert.ok(stripComments(SRC).indexOf('self.stask') < 0, 'the warn prefix must use the real self.task');
+    });
+
+    // Mirrors the child-env composition line-for-line.
+    function composeChildEnv(sweptEnv, nodeParams, home) {
+        var currentEnv = Object.assign({}, sweptEnv);
+        currentEnv['NODE_OPTIONS'] = nodeParams.join(' ');
+        currentEnv['GINA_HOMEDIR'] = home;
+        return currentEnv;
+    }
+
+    it('replica: a post-sweep env gains GINA_HOMEDIR and keeps the NODE_OPTIONS forward', function() {
+        var swept = { PATH: '/usr/bin', HOME: '/home/someone' }; // no GINA_* — the sweep removed them
+        var env = composeChildEnv(swept, ['--inspect=1234'], '/tmp/custom-home/.gina');
+        assert.equal(env.GINA_HOMEDIR, '/tmp/custom-home/.gina');
+        assert.equal(env.NODE_OPTIONS, '--inspect=1234');
+        assert.equal(env.PATH, '/usr/bin');
+        assert.ok(!('GINA_HOMEDIR' in swept), 'the source env object must not be mutated');
+    });
+
+    it('subtract: the pre-fix return dereference throws on the inherited-stdio null return', function() {
+        // Old shape: console.log(execSync(cmd, {stdio:'inherit'}).toString().trim())
+        // — execSync returns null when stdout is not piped, so a SUCCESSFUL child
+        // still threw here and was misreported as "could not be set" + exit 1.
+        function oldShape(execSyncReturn) {
+            return execSyncReturn.toString().trim();
+        }
+        assert.throws(function() { oldShape(null); }, TypeError);
+    });
+
+    it('subtract: the fixed shape ignores the return and cannot throw on it', function() {
+        function fixedShape(execSyncReturn) {
+            // bare call — the return value is deliberately unread
+            return true;
+        }
+        assert.equal(fixedShape(null), true);
     });
 
 });
