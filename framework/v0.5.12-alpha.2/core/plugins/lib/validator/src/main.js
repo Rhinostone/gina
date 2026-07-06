@@ -117,7 +117,9 @@ function ValidatorPlugin(rules, data, formId) {
         'validateFormById'  : null,
         'setOptions'        : null,
         'resetErrorsDisplay': null,
-        'resetFields'       : null
+        'resetFields'       : null,
+        'setErrorLabels'    : null,
+        '_errorLabelsByCulture' : {}
     };
 
     // validator proto
@@ -7777,6 +7779,40 @@ function ValidatorPlugin(rules, data, formId) {
             return forEachField($formOrElement, allFields, allRules, fields, $fields, rules, cb, 0);
     }
 
+    /**
+     * setErrorLabels — register per-culture overrides for gina's built-in rule
+     * error labels (browser only). Global to the validator: all bound forms share
+     * the built-in label catalog. Call once, typically keyed off gina.config.culture
+     * (whispered from the request's negotiated culture):
+     *   gina.validator.setErrorLabels({ isRequired: '...' });          // current culture
+     *   gina.validator.setErrorLabels({ isRequired: '...' }, 'fr_FR'); // explicit culture
+     * English defaults fill any rule the app does not translate; a per-field/rule
+     * `error` string still wins. Custom user-defined rules already carry app messages
+     * and are untouched.
+     *
+     * @param   {object} labels      - { ruleName: message } for one culture.
+     * @param   {string} [culture]   - Target culture; defaults to gina.config.culture.
+     * @returns {object} the validator instance (chainable).
+     * */
+    var setErrorLabels = function (labels, culture) {
+        if ( !labels || typeof(labels) != 'object' ) {
+            return instance;
+        }
+        if ( !culture ) {
+            culture = ( typeof(gina) != 'undefined' && gina.config && gina.config.culture )
+                ? gina.config.culture
+                : 'en';
+        }
+        if ( !instance._errorLabelsByCulture ) {
+            instance._errorLabelsByCulture = {};
+        }
+        instance._errorLabelsByCulture[culture] = merge(
+            JSON.clone(labels),
+            instance._errorLabelsByCulture[culture] || {}
+        );
+        return instance;
+    };
+
     var setupInstanceProto = function() {
 
         instance.target                 = document;
@@ -7787,6 +7823,7 @@ function ValidatorPlugin(rules, data, formId) {
         instance.resetFields            = resetFields;
         instance.handleErrorsDisplay    = handleErrorsDisplay;
         instance.send                   = send;
+        instance.setErrorLabels         = setErrorLabels;
         //instance.handleXhrResponse      = handleXhrResponse;
     }
 

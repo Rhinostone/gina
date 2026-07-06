@@ -114,7 +114,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         'excluded': []
     };
 
-    local.errorLabels = {
+    // Built-in rule labels default to English. When the browser has a negotiated
+    // culture on `gina.config.culture` AND the app registered per-culture overrides
+    // via `gina.validator.setErrorLabels()`, overlay that culture's labels over the
+    // English defaults (app label wins per key, English fills gaps — same merge
+    // direction as `setErrorLabels()` below). Fallback: exact culture (`fr_FR`) ->
+    // base language (`fr`) -> English. Server-side (`!isGFFCtx`) and when nothing is
+    // registered, English is used verbatim. A per-field/rule `error` still wins over
+    // all of this (see `this.error || local.errorLabels[...]` at each rule).
+    var _defaultErrorLabels = {
         'is': 'Condition not satisfied',
         'isEmail': 'A valid email is required',
         'isRequired': 'Cannot be left empty',
@@ -142,6 +150,24 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         'isApiError': 'Condition not satisfied',
         'isInList': 'Must be one of: %s'
     };
+    local.errorLabels = _defaultErrorLabels;
+    if (
+        isGFFCtx
+        && typeof(gina) != 'undefined'
+        && typeof(gina.validator) != 'undefined'
+        && gina.validator._errorLabelsByCulture
+        && typeof(gina.config) != 'undefined'
+        && gina.config.culture
+    ) {
+        var _culture       = gina.config.culture;
+        var _baseLang      = ( _culture.indexOf('_') > 0 ) ? _culture.substr(0, _culture.indexOf('_')) : _culture;
+        var _cultureLabels = gina.validator._errorLabelsByCulture[_culture]
+            || ( _baseLang ? gina.validator._errorLabelsByCulture[_baseLang] : null )
+            || null;
+        if (_cultureLabels) {
+            local.errorLabels = merge(JSON.clone(_cultureLabels), _defaultErrorLabels);
+        }
+    }
     var self  = null;
     if (!data) {
         throw new Error('missing data param')

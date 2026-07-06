@@ -69,7 +69,9 @@ window['onGinaLoaded']      = function(gina) {
         /**@js_externs webroot*/
         'webroot' : '{{ page.environment.webroot }}',
         /**@js_externs protocol*/
-        'protocol' : '{{ page.environment.protocol }}'
+        'protocol' : '{{ page.environment.protocol }}',
+        /**@js_externs culture*/
+        'culture' : '{{ page.environment.culture }}'
     };
 
     if (

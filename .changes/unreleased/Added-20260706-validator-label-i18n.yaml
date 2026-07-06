@@ -1,0 +1,3 @@
+kind: Added
+body: 'FormValidator built-in rule error messages can now be localised per culture on the client. The negotiated request culture is exposed to the browser as `gina.config.culture`, and an app registers its own per-culture label overrides via `gina.validator.setErrorLabels(labels[, culture])`; English defaults fill any untranslated rule, with a culture -> base-language -> English fallback. This matches the framework per-bundle i18n model — custom rule messages were already localisable, and this closes the gap for the built-in labels without the framework shipping translations. Server-side rendering keeps the English defaults for now.'
+time: 2026-07-06T23:57:00+01:00

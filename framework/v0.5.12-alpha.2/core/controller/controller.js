@@ -686,6 +686,11 @@ function SuperController(options) {
             set('page.environment.port', options.conf.server.port);
             set('page.environment.debugPort', options.conf.server.debugPort);
             set('page.environment.pid', process.pid);
+            // Whisper the request's negotiated culture (server.js negotiateCulture,
+            // underscore form e.g. `fr_FR`) to the browser as `gina.config.culture`,
+            // so the client validator can select app-registered per-culture built-in
+            // rule labels. Empty string when i18n is inactive / no culture negotiated.
+            set('page.environment.culture', (req && req.culture) ? req.culture : '');
 
             // #CSRF2 — expose CSRF token + pre-formatted hidden input to swig templates.
             // The Csrf plugin (core/plugins/lib/csrf/src/main.js) attaches `req.csrfToken`
