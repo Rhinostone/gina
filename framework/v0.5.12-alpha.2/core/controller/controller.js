@@ -2258,6 +2258,22 @@ function SuperController(options) {
                     ? ( ( local.req && local.req._ginaProxyHostname ) ? local.req._ginaProxyHostname : process.gina.PROXY_HOSTNAME )
                     : ctx.config.envConf[bundle][env].hostname;
 
+            // #B75 — mirror #B68's no-store onto the XHR/popin redirect JSON exits.
+            // These renderJSON responses carry a proxy-context-derived target host
+            // (popin.url / location), exactly like the writeHead 30x Location, so a
+            // heuristically-cacheable copy could replay a stale host after a fix ships.
+            // Gated identically to the writeHead path (dev OR proxied); a direct-prod
+            // redirect stays byte-identical. Set on local.res so render-json's HTTP/2
+            // getHeaders() fold and the HTTP/1.1 path both carry it.
+            var _applyNoStoreToRedirectJSON = function() {
+                var _noStoreNeeded = ( self.isCacheless() || isProxyHost );
+                if ( _noStoreNeeded ) {
+                    local.res.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                    local.res.setHeader('pragma', 'no-cache');
+                    local.res.setHeader('expires', '0');
+                }
+            };
+
 
             if (route) { // will go with route first
 
@@ -2359,7 +2375,13 @@ function SuperController(options) {
                             redirectObj.location = path;
                         }
                         if (requestParams.count() > 0)  {
-                            var userSession = req.session.user || req.session;
+                            // #B75 — a session-less bundle (no Session plugin mounted) must
+                            // not deref req.session.user here (an XHR redirect carrying
+                            // request params would 500). Null userSession falls to the else
+                            // branch, where inheritedData rides in the URL as before.
+                            var userSession = ( typeof(req.session) != 'undefined' && req.session )
+                                ? ( req.session.user || req.session )
+                                : null;
                             if ( userSession && local.haltedRequestUrlResumed ) {
                                 // will be reused for server.js on `case : 'GET'`
                                 userSession.inheritedData = requestParams;
@@ -2372,6 +2394,7 @@ function SuperController(options) {
                             }
                         }
 
+                        _applyNoStoreToRedirectJSON(); // #B75
                         self.renderJSON(redirectObj);
                         return;
                     }
@@ -2382,6 +2405,7 @@ function SuperController(options) {
                 }
                 // Popin redirect
                 if ( isPopinContext ) {
+                    _applyNoStoreToRedirectJSON(); // #B75
                     return self.renderJSON({
                         isXhrRedirect: true,
                         popin: {

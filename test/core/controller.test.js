@@ -3942,3 +3942,107 @@ describe('34 - redirect cache hardening: no-store folded into headInfos for dev 
     });
 
 });
+
+describe('35 - redirect XHR/popin JSON exits inherit the no-store hardening (#B75) + session-less guard', function() {
+
+    var src  = fs.readFileSync(SOURCE, 'utf8');
+    // Full-line comments stripped so negative pins never trip on the file's own comments.
+    var code = src.replace(/^\s*\/\/.*$/gm, '');
+
+    // End-anchored slice of the redirect body (same structural anchors as §34).
+    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var endIdx   = src.indexOf('Move files to assets dir', startIdx);
+    var body     = src.substring(startIdx, endIdx);
+
+    // ── (a) source structure ─────────────────────────────────────────────────────
+
+    it('a no-store helper for the JSON redirect exits exists, gated on dev OR proxied', function() {
+        var hIdx = body.indexOf('var _applyNoStoreToRedirectJSON = function()');
+        assert.ok(hIdx > -1, 'expected the _applyNoStoreToRedirectJSON helper');
+        var gIdx = body.indexOf('var _noStoreNeeded = ( self.isCacheless() || isProxyHost );', hIdx);
+        assert.ok(gIdx > hIdx, 'the helper must gate on ( self.isCacheless() || isProxyHost )');
+        // the trio, set on local.res (so render-json's HTTP/2 getHeaders() fold + HTTP/1.1 both carry it)
+        assert.ok(body.indexOf("local.res.setHeader('cache-control', 'no-cache, no-store, must-revalidate')", gIdx) > gIdx, 'cache-control no-store');
+        assert.ok(body.indexOf("local.res.setHeader('pragma', 'no-cache')", gIdx) > gIdx, 'pragma');
+        assert.ok(body.indexOf("local.res.setHeader('expires', '0')", gIdx) > gIdx, 'expires');
+    });
+
+    it('the helper is invoked before BOTH renderJSON redirect exits', function() {
+        // exit 1: the isXMLRequest()+params branch -> renderJSON(redirectObj)
+        var callA = body.indexOf('_applyNoStoreToRedirectJSON();');
+        var jsonA = body.indexOf('self.renderJSON(redirectObj);');
+        assert.ok(callA > -1 && jsonA > callA, 'helper call must precede renderJSON(redirectObj)');
+        // exit 2: the popin branch -> renderJSON({ isXhrRedirect ... popin })
+        var popIdx = body.indexOf('// Popin redirect');
+        var callB  = body.indexOf('_applyNoStoreToRedirectJSON();', popIdx);
+        var jsonB  = body.indexOf('return self.renderJSON({', popIdx);
+        assert.ok(callB > popIdx && jsonB > callB, 'helper call must precede the popin renderJSON');
+    });
+
+    it('exactly two JSON-exit invocations of the helper', function() {
+        var calls = body.match(/_applyNoStoreToRedirectJSON\(\);/g) || [];
+        assert.equal(calls.length, 2, 'expected exactly two helper call sites (the two renderJSON redirect exits)');
+    });
+
+    it('the #B68 writeHead gate literal stays unique (helper did not reuse it)', function() {
+        var writeHeadGate = body.match(/if \(self\.isCacheless\(\) \|\| isProxyHost\) \{/g) || [];
+        assert.equal(writeHeadGate.length, 1, 'the writeHead gate literal must remain unique to #B68 (§34 depends on it)');
+    });
+
+    it('the session-less guard replaces the unguarded req.session.user deref', function() {
+        assert.ok(
+            body.indexOf("var userSession = ( typeof(req.session) != 'undefined' && req.session )") > -1,
+            'expected the guarded userSession form'
+        );
+        assert.ok(code.indexOf('var userSession = req.session.user || req.session;') < 0, 'the unguarded deref must be gone');
+    });
+
+    // ── (b) pure logic ───────────────────────────────────────────────────────────
+
+    // mirrors the helper's setHeader trio under the gate
+    function applyNoStore(isCacheless, isProxyHost) {
+        var headers = {};
+        if (isCacheless || isProxyHost) {
+            headers['cache-control'] = 'no-cache, no-store, must-revalidate';
+            headers['pragma'] = 'no-cache';
+            headers['expires'] = '0';
+        }
+        return headers;
+    }
+
+    it('proxied prod: the JSON redirect gets no-store (the gap #B75 closes)', function() {
+        var h = applyNoStore(false, true);
+        assert.equal(h['cache-control'], 'no-cache, no-store, must-revalidate');
+        assert.equal(h.pragma, 'no-cache');
+        assert.equal(h.expires, '0');
+    });
+
+    it('direct prod: the JSON redirect stays header-free (byte-identical to pre-#B75)', function() {
+        assert.deepEqual(applyNoStore(false, false), {});
+    });
+
+    it('dev keeps the set with or without a proxy', function() {
+        assert.equal(applyNoStore(true, false)['cache-control'], 'no-cache, no-store, must-revalidate');
+        assert.equal(applyNoStore(true, true)['cache-control'], 'no-cache, no-store, must-revalidate');
+    });
+
+    // mirrors the session-less guard
+    function resolveUserSession(session) {
+        return ( typeof(session) != 'undefined' && session ) ? (session.user || session) : null;
+    }
+
+    it('session-less guard: resolves to null instead of throwing', function() {
+        assert.equal(resolveUserSession(undefined), null);
+        assert.equal(resolveUserSession(null), null);
+        var s = { user: { id: 1 } };
+        assert.equal(resolveUserSession(s), s.user);
+        var s2 = { id: 2 }; // a session with no .user
+        assert.equal(resolveUserSession(s2), s2);
+    });
+
+    it('SUBTRACT — the pre-fix unguarded deref throws when no session is mounted', function() {
+        function preFix(session) { return session.user || session; } // the old line
+        assert.throws(function() { preFix(undefined); }, /Cannot read propert/);
+    });
+
+});
