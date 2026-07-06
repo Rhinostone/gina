@@ -64,7 +64,10 @@ function Start(opt, cmd) {
         console.info('Starting all bundles in @' + self.projectName + ' ...');
         console.debug('Executing: ' + _cmd);
 
-        exec(_cmd, { maxBuffer: 1024 * 500 }, function(err, stdout, stderr) {
+        // Re-export the home: the bootstrap env sweep strips GINA_* from
+        // process.env, so the delegated bundle command would otherwise act
+        // on the default home (see linkGina in project/add.js).
+        exec(_cmd, { maxBuffer: 1024 * 500, env: Object.assign({}, process.env, { GINA_HOMEDIR: GINA_HOMEDIR }) }, function(err, stdout, stderr) {
             if (stdout) {
                 console.log(stdout);
             }

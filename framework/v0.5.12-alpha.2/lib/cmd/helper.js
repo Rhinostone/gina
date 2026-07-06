@@ -1173,9 +1173,13 @@ function CmdHelper(cmd, client, debug) {
                     // returning an Error (the old `instanceof Error` check was dead
                     // code) — invoke the running install's own CLI instead.
                     var selfCli = require('path').resolve(__dirname, '../../../..', 'bin/cli');
+                    // Re-export the home: the bootstrap env sweep strips GINA_* from
+                    // process.env, so the link children would otherwise resolve the
+                    // default home (see linkGina in project/add.js).
+                    var _linkEnv = Object.assign({}, process.env, { GINA_HOMEDIR: GINA_HOMEDIR });
                     console.info('[helper] Running: '+ process.execPath +' '+ selfCli +' link-node-modules @'+cmd.projectName +cmd.paramsStringified);
                     try {
-                        execSync('"'+ process.execPath +'" "'+ selfCli +'" link-node-modules @'+cmd.projectName +cmd.paramsStringified);// +' --inspect-gina'
+                        execSync('"'+ process.execPath +'" "'+ selfCli +'" link-node-modules @'+cmd.projectName +cmd.paramsStringified, { env: _linkEnv });// +' --inspect-gina'
                     } catch (linkErr) {
                         var linkErrOutput = (linkErr.stderr) ? linkErr.stderr.toString().trim() : (linkErr.message || linkErr.stack);
                         console.error(linkErrOutput);
@@ -1184,7 +1188,7 @@ function CmdHelper(cmd, client, debug) {
 
                     console.info('[helper] Running: '+ process.execPath +' '+ selfCli +' link @'+cmd.projectName +cmd.paramsStringified);
                     try {
-                        console.debug(execSync('"'+ process.execPath +'" "'+ selfCli +'" link @'+cmd.projectName +cmd.paramsStringified).toString().trim());// +' --inspect-gina'
+                        console.debug(execSync('"'+ process.execPath +'" "'+ selfCli +'" link @'+cmd.projectName +cmd.paramsStringified, { env: _linkEnv }).toString().trim());// +' --inspect-gina'
                     } catch (err) {
                         var errOutput = (err.stderr) ? err.stderr.toString().trim() : (err.message || err.stack);
                         console.emerg(errOutput);

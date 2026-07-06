@@ -542,3 +542,74 @@ describe('10 - project:add --scope/--env children run the self-resolved CLI with
     });
 
 });
+
+
+// ── 11 — home re-export at the remaining CLI child spawn sites ───────────────
+//
+// The CmdHelper auto-link execSyncs and the project:start/stop/restart bundle
+// delegations spawn children with the post-sweep process.env — under a
+// GINA_HOMEDIR override they resolved the DEFAULT home and silently created
+// links / scaffold artifacts there (measured: link-node-modules "fixed" a
+// manifest and linked node_modules under the wrong home, exit 0).
+
+describe('11 - CmdHelper auto-link children receive the re-exported home', function() {
+
+    var HELPER_PATH = path.join(FW, 'lib/cmd/helper.js');
+    var HELPER_SRC = fs.readFileSync(HELPER_PATH, 'utf8');
+    var blockIdx = HELPER_SRC.indexOf('// linking node-modules & gina');
+    var endIdx = HELPER_SRC.indexOf('cmd.protocols.sort()', blockIdx);
+    var BLOCK = (blockIdx > -1 && endIdx > blockIdx) ? HELPER_SRC.slice(blockIdx, endIdx) : '';
+
+    it('the block composes the child env from process.env plus an explicit GINA_HOMEDIR', function() {
+        assert.match(
+            BLOCK,
+            /var _linkEnv = Object\.assign\(\{\},\s*process\.env,\s*\{\s*GINA_HOMEDIR\s*:\s*GINA_HOMEDIR\s*\}\s*\)/,
+            'expected the _linkEnv composition (the sweep strips GINA_* from process.env)'
+        );
+    });
+
+    it('both auto-link execSyncs carry the composed env', function() {
+        var count = (BLOCK.match(/\{ env: _linkEnv \}/g) || []).length;
+        assert.equal(count, 2, 'expected both the link-node-modules and link children to receive _linkEnv');
+    });
+
+    it('the env is composed before the first child runs', function() {
+        // comment-stripped: the historical `// was: err = execSync(...)` line
+        // sits above the composition and would otherwise match first.
+        var live = stripComments(BLOCK);
+        var envIdx  = live.indexOf('var _linkEnv');
+        var execIdx = live.indexOf('execSync(');
+        assert.ok(envIdx > -1 && execIdx > envIdx);
+    });
+
+});
+
+describe('11b - project start/stop/restart delegations receive the re-exported home', function() {
+
+    ['start', 'stop', 'restart'].forEach(function(name) {
+        var FILE_PATH = path.join(FW, 'lib/cmd/project/' + name + '.js');
+        var FILE_SRC = fs.readFileSync(FILE_PATH, 'utf8');
+
+        it('[' + name + '] the exec options carry maxBuffer plus the composed env', function() {
+            assert.ok(
+                FILE_SRC.indexOf('exec(_cmd, { maxBuffer: 1024 * 500, env: Object.assign({}, process.env, { GINA_HOMEDIR: GINA_HOMEDIR }) }') > -1,
+                'expected the delegated bundle:' + name + ' child to receive the re-exported home'
+            );
+        });
+
+        it('[' + name + '] the bare pre-fix options shape is gone', function() {
+            assert.ok(
+                stripComments(FILE_SRC).indexOf('exec(_cmd, { maxBuffer: 1024 * 500 },') < 0,
+                'the env-less exec options must not come back (post-sweep inheritance loses the home)'
+            );
+        });
+    });
+
+    it('subtract: the pre-fix options object carries no home for the child', function() {
+        var preFix = { maxBuffer: 1024 * 500 };
+        assert.ok(!('env' in preFix), 'pre-fix shape: the child inherits the post-sweep env — no home override reaches it');
+        var fixed = { maxBuffer: 1024 * 500, env: Object.assign({}, { PATH: '/usr/bin' }, { GINA_HOMEDIR: '/tmp/ovr/.gina' }) };
+        assert.equal(fixed.env.GINA_HOMEDIR, '/tmp/ovr/.gina');
+    });
+
+});
