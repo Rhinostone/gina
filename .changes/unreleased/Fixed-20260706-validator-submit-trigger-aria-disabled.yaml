@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'FormValidator no longer natively disables a form''s submit `<button>` while live-checking reports the form invalid. A natively-disabled `<button>` emits no click event, so the trigger became a dead no-op with no feedback. The invalid submit trigger is now marked `aria-disabled="true"` plus the class `gina-form-submit-disabled` and stays operable, so a click still surfaces every field error and focuses the first invalid field — while the actual submit stays gated on validity. Consumers should style the `[aria-disabled="true"]` / `.gina-form-submit-disabled` submit-trigger state (the framework ships no button CSS). A submit button rendered `disabled` in markup still enables on valid input or when live-check is off.'
+time: 2026-07-06T16:37:53+01:00

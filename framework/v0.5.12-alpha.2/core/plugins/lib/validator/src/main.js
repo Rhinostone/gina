@@ -6517,14 +6517,31 @@ function ValidatorPlugin(rules, data, formId) {
         ) {
             console.warn('This might be normal, so do not worry if this form is handled by your javascript: `'+ $formInstance.id +'`\nGina could not complete `updateSubmitTriggerState()`: `submitTrigger` might not be attached to form instance `'+ $formInstance.id +'`\nTo disable this warning, You just need to disable `Form Live Checking on your form by adding to your <form>: `data-gina-form-live-check-enabled=false``')
         } else if ( document.getElementById($formInstance.submitTrigger) ) {
+            // Represent the "invalid + live-check-on" state with aria-disabled + a class
+            // INSTEAD of the native `disabled` property. A natively-disabled <button>
+            // emits no click event, so the form-level click -> validate -> show-all-errors
+            // -> focus-first guard (the `validate.<id>` listener) never fires: the button
+            // looks dead and gives zero feedback. aria-disabled keeps the trigger operable,
+            // so the click still runs validation (revealing every invalid field + focusing
+            // the first) while `isValid()` (the real gate) still blocks the send. Mirrors
+            // gina's own <a>-tag submit-trigger handling, which already uses aria-disabled
+            // in-flight. The show branch KEEPS clearing native `disabled` so a trigger
+            // rendered `disabled` in markup still enables on valid / when live-check is off.
+            // Tag-agnostic: setAttribute/classList work for both <button> and <a> submit
+            // triggers. Consumers must style the [aria-disabled="true"] /
+            // .gina-form-submit-disabled state (the framework ships no button CSS).
+            var $submitTrigger = document.getElementById($formInstance.submitTrigger);
             if (
                 /^true$/i.test(isFormValid)
                 ||
                 !/^(true)$/i.test($formInstance.target.dataset.ginaFormLiveCheckEnabled)
-            ) { // show submitTrigge
-                document.getElementById($formInstance.submitTrigger).disabled = false;
-            } else { // hide submitTrigger
-                document.getElementById($formInstance.submitTrigger).disabled = true;
+            ) { // show submitTrigger
+                $submitTrigger.disabled = false;
+                $submitTrigger.removeAttribute('aria-disabled');
+                $submitTrigger.classList.remove('gina-form-submit-disabled');
+            } else { // hide submitTrigger (perceivable but not operable, NOT native-disabled)
+                $submitTrigger.setAttribute('aria-disabled', 'true');
+                $submitTrigger.classList.add('gina-form-submit-disabled');
             }
         }
     }
