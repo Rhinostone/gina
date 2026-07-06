@@ -60,13 +60,20 @@ function Restart(opt, cmd) {
             if ( !/^\d\.\d/.test(shortVersion) ) {
                 err = new Error('Wrong version: '+ version);
                 console.log(err.message);
-                return;
+                // Flush + exit non-zero instead of a bare `return`: the bare
+                // return bypassed end()'s process.exit, so with the CLI's MQ
+                // listener up the event loop never emptied (hang on
+                // `gina restart @<garbage>`). writeSync guarantees the message
+                // survives the exit on a pipe (boot-exit-flush).
+                fs.writeSync(2, err.message +'\n');
+                process.exit(1);
             }
             var availableVersions = requireJSON(_(GINA_HOMEDIR +'/main.json', true)).frameworks[shortVersion];
-            if ( availableVersions.indexOf(version) < 0 ) {
+            if ( !availableVersions || availableVersions.indexOf(version) < 0 ) {
                 err = new Error('Version not installed: '+ version);
                 console.log(err.message);
-                return;
+                fs.writeSync(2, err.message +'\n');
+                process.exit(1);
             }
 
             self.version = version;

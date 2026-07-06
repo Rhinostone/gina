@@ -21,6 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  */
+var fs  = require('fs');
 var cmd = {};
 // cmd options
 cmd.option = [];
@@ -136,21 +137,39 @@ cmd.onExec = function(client, isFromFramework, opt) {
             // But can be overriden with argument: @{version_number}
             // eg.: gina stop @1.0.0
             self.version = getEnvVar('GINA_VERSION');// jshint ignore:line
-            // checkcking version number
-            if ( typeof(opt.argv[3]) != 'undefined' && /^@/.test(opt.argv[3]) ) {
+            // checkcking version number — ONLY for the framework topic.
+            // `gina start @<version>` overrides the daemon version here, but a
+            // `project:start @<project>` / `service:start @<project>` reaches
+            // this same action=='start' branch (topic 'project' / 'service')
+            // and its @<project> ref must NOT be parsed as a version — it falls
+            // through to the dispatch below, which loads the topic's own start.js
+            // (project/service). Without the `topic == 'framework'` guard the
+            // project ref failed /^\d\.\d/ → `Wrong version` + a bare `return`
+            // that never called process.exit: with the CLI's MQ listener up the
+            // event loop never emptied (hang), and via the `gina` wrapper it
+            // exited 0 without ever delegating.
+            if ( opt.task.topic == 'framework'
+                && typeof(opt.argv[3]) != 'undefined' && /^@/.test(opt.argv[3]) ) {
                 var err = null;
                 var version = opt.argv[3].replace(/\@/, '');
                 var shortVersion = version.split('.').splice(0,2).join('.');
                 if ( !/^\d\.\d/.test(shortVersion) ) {
                     err = new Error('Wrong version: '+ version);
                     console.log(err.message);
-                    return;
+                    // Flush + exit non-zero instead of a bare `return`: stdout is
+                    // async on a pipe, so writeSync guarantees the message
+                    // survives process.exit (boot-exit-flush); process.exit fires
+                    // bin/cli's `process.on('exit')` → MQ listener teardown, so
+                    // the reject can no longer hang the CLI.
+                    fs.writeSync(2, err.message +'\n');
+                    process.exit(1);
                 }
                 var availableVersions = requireJSON(_(getEnvVar('GINA_HOMEDIR') +'/main.json', true)).frameworks[shortVersion];// jshint ignore:line
-                if ( availableVersions.indexOf(version) < 0 ) {
+                if ( !availableVersions || availableVersions.indexOf(version) < 0 ) {
                     err = new Error('Version not installed: '+ version);
                     console.log(err.message);
-                    return;
+                    fs.writeSync(2, err.message +'\n');
+                    process.exit(1);
                 }
 
                 self.version = version;

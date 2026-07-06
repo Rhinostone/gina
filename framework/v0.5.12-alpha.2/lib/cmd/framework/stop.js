@@ -71,7 +71,7 @@ function Stop(opt, cmd) {
                     break;
                 }
                 let availableVersions = requireJSON(_(GINA_HOMEDIR +'/main.json', true)).frameworks[shortVersion];
-                if ( availableVersions.indexOf(version) < 0 ) {
+                if ( !availableVersions || availableVersions.indexOf(version) < 0 ) {
                     err = new Error('Version not installed: '+ version);
                     console.log(err.message);
                     break;
@@ -83,7 +83,12 @@ function Stop(opt, cmd) {
         }
 
         if ( err ) {
-            return;
+            // Flush + exit non-zero instead of a bare `return`: the bare return
+            // bypassed end()'s process.exit, so with the CLI's MQ listener up the
+            // event loop never emptied (hang on `gina stop @<garbage>`). writeSync
+            // guarantees the message survives the exit on a pipe (boot-exit-flush).
+            fs.writeSync(2, err.message +'\n');
+            process.exit(1);
         }
         console.debug('Stopping framework v'+ self.version);
 
