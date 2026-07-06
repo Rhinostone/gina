@@ -5266,6 +5266,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *
      * @param {object} [session] - Defaults to the current `req.session` / `req.session.user`
      * @returns {boolean}
+     *
+     * @example
+     * // Guard a post-login action so it only replays when something was paused:
+     * if (self.isHaltedRequest()) { return self.resumeRequest(); }
      */
     this.isHaltedRequest = function(session) {
         // trying to retrieve session since it is optional
@@ -5302,6 +5306,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * @param {object} data               - Current action data to preserve
      * @param {object} [requestStorage]   - Storage target; defaults to `req.session`
      * @returns {object} requestStorage   - The updated storage object
+     *
+     * @example
+     * // In an auth-gate middleware, before bouncing an unauthenticated user to login:
+     * if (!req.session.user) {
+     *     self.pauseRequest(req.get);        // snapshot into req.session.haltedRequest
+     *     return self.redirect('/login', true);
+     * }
      */
     this.pauseRequest = function(data, requestStorage) {
 
@@ -5358,17 +5369,24 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
 
     /**
-     * resumeRequest
-     * Used to resume an halted request
-     * Requirements :
-     *  - a middleware attached `haltedRequest` to userSession
-     * OR
-     * - a persistant object where `haltedRequest` is attached
+     * Replay a previously paused request (see `pauseRequest()`). Reads the `haltedRequest`
+     * snapshot from `requestStorage` (defaulting to `req.session`), restores the original
+     * url / method / data / params onto the live request, then re-dispatches it: a GET is
+     * replayed by redirecting to the resolved url; a non-GET is re-dispatched in-process to
+     * the original controller action (crossing namespaces via `requireController()` when
+     * needed). The snapshot is cleared from storage once consumed.
      *
-     * @param {object} req
-     * @param {object} res
-     * @param {callback|null} next
-     * @param {object} [requestStorage] - Will try to use sessionStorage if not passed
+     * Requires a `haltedRequest` to have been attached to the session (or to the passed
+     * `requestStorage`) beforehand — typically by `pauseRequest()`.
+     *
+     * @param {object} [requestStorage] - Object holding `haltedRequest`; defaults to `req.session`
+     * @returns {void}
+     *
+     * @example
+     * // In a post-login action/middleware, replay whatever the user was reaching for:
+     * if (self.isHaltedRequest()) {
+     *     return self.resumeRequest();       // reads req.session.haltedRequest and replays it
+     * }
      */
     this.resumeRequest = function(requestStorage) {
 

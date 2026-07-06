@@ -4046,3 +4046,79 @@ describe('35 - redirect XHR/popin JSON exits inherit the no-store hardening (#B7
     });
 
 });
+
+
+// 36 — behavioral: pauseRequest snapshots the live request into requestStorage.
+// This is the one runtime (require + createTestInstance) test in this otherwise
+// source-pin-only file. controller.js cannot be required cold — it needs the framework
+// globals bootstrap (NODE_PATH + Module._initPaths + helpers + setPath('gina', ...)),
+// mirroring the standalone repro harness in class.controller.md §14. Requiring it also
+// installs JSON.clone (lib/merge) + Object.prototype.count (utils/prototypes) transitively.
+describe('36 - pauseRequest snapshots the live request into requestStorage (behavioral)', function() {
+
+    var FW = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW;
+    require('module').Module._initPaths();
+    require(path.join(FW, 'helpers'));              // injects _/getPath/requireJSON/setPath globals
+    setPath('gina', { core: path.join(FW, 'core') });
+    var SuperController = require(SOURCE);
+
+    function makeInstance(reqOverrides) {
+        var req = Object.assign({
+            url     : '/orders/42',
+            method  : 'POST',
+            routing : { rule: 'orders', namespace: 'default' },
+            params  : {},
+            get     : {},
+            post    : {}
+        }, reqOverrides || {});
+        return SuperController.createTestInstance({
+            req     : req,
+            res     : { setHeader: function () {}, end: function () {} },
+            options : { conf: { bundle: 'b', content: { routing: { orders: {} } } }, rule: 'orders', control: 'index' }
+        });
+    }
+
+    it('populates requestStorage.haltedRequest with the {url, routing, method, data} snapshot', function() {
+        var inst    = makeInstance();
+        var storage = {};
+        var out     = inst.pauseRequest({ qty: 2 }, storage);
+        assert.strictEqual(out, storage, 'returns the same storage object it was given');
+        assert.deepStrictEqual(storage.haltedRequest, {
+            url     : '/orders/42',
+            routing : { rule: 'orders', namespace: 'default' },
+            method  : 'post',        // lowercased
+            data    : { qty: 2 }     // JSON.clone of the passed data
+        });
+    });
+
+    it('lowercases the method and deep-clones the data (not the same reference)', function() {
+        var inst    = makeInstance({ method: 'PUT' });
+        var storage = {};
+        var payload = { nested: { a: 1 } };
+        inst.pauseRequest(payload, storage);
+        assert.equal(storage.haltedRequest.method, 'put');
+        assert.deepStrictEqual(storage.haltedRequest.data, { nested: { a: 1 } });
+        assert.notStrictEqual(storage.haltedRequest.data, payload, 'data is JSON.clone-d, not aliased');
+        assert.notStrictEqual(storage.haltedRequest.data.nested, payload.nested, 'deep clone reaches nested objects');
+    });
+
+    it('captures positional url params beyond index 0 into haltedRequest.params', function() {
+        // pauseRequest copies req.params but skips the first key (index 0 = the matched
+        // path, set by the engine at request.params[0]); see controller.js ~5343.
+        var inst    = makeInstance({ params: { 0: '/orders/42', id: '42', tab: 'items' } });
+        var storage = {};
+        inst.pauseRequest({}, storage);
+        assert.deepStrictEqual(storage.haltedRequest.params, { id: '42', tab: 'items' });
+    });
+
+    it('defaults storage to req.session when requestStorage is omitted', function() {
+        var session = {};
+        var inst    = makeInstance({ session: session });
+        var out     = inst.pauseRequest({ hello: 'world' });   // no explicit storage
+        assert.strictEqual(out, session, 'returns req.session as the storage');
+        assert.equal(session.haltedRequest.url, '/orders/42');
+        assert.deepStrictEqual(session.haltedRequest.data, { hello: 'world' });
+    });
+
+});
