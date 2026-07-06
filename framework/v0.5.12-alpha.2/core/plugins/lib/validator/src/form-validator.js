@@ -1128,7 +1128,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var isValid     = rgx.test(this['value']) ? true : false;
             var errors      = self[this['name']]['errors'] || {};
 
-            if ( !errors['isRequired'] && this.value == '' ) {
+            // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
+            // required+empty field records only isRequired, not a second 'invalid' message.
+            if ( this.value == '' ) {
                 isValid = true;
             }
 
@@ -1141,7 +1143,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 //delete errors['stack'];
             }
 
-            this.valid = isValid;
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
 
             if ( errors.count() > 0 )
                 this['errors'] = errors;
@@ -1167,7 +1170,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var isValid     = rgx.test(this['value']) ? true : false;
             var errors      = self[this['name']]['errors'] || {};
 
-            if ( !errors['isRequired'] && this.value == '' ) {
+            // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
+            // required+empty field records only isRequired, not a second 'invalid' message.
+            if ( this.value == '' ) {
                 isValid = true;
             }
 
@@ -1180,7 +1185,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 //delete errors['stack'];
             }
 
-            this.valid = isValid;
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
 
             if ( errors.count() > 0 )
                 this['errors'] = errors;
@@ -1526,7 +1532,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 isValid = false
             }
 
-            if ( !errors['isRequired'] && this.value == '' ) {
+            // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
+            // required+empty field records only isRequired, not a second 'invalid' message.
+            if ( this.value == '' ) {
                 isValid = true
             }
 
@@ -1534,7 +1542,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 errors['isFloat'] = replace(this.error || local.errorLabels['isFloat'], this)
             }
 
-            this.valid = isValid;
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
             if ( errors.count() > 0 )
                 this['errors'] = errors;
 
@@ -1670,7 +1679,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
 
                 if (!isValid && errors['isRequired'] && val == '') {
                     isValid = false;
-                    errors['isString'] = replace(this['error'] || local.errorLabels['isString'], this);
+                    // #B78 - required+empty is adjudicated by isRequired alone; keep the field
+                    // invalid (isValid stays false) but do NOT pile on a second 'must be a string' message.
                 } else if (!isValid && !errors['isRequired']) {
                     isValid = true;
                 }
@@ -1860,7 +1870,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
             var val     = local.data[this.name] = this.value;
             var isValid = false;
 
-            if ( !errors['isRequired'] && (val === '' || val == null) ) {
+            // #B78 - an empty/null value is adjudicated by isRequired alone.
+            if ( (val === '' || val == null) ) {
                 isValid = true;
             } else if ( allowedValues.indexOf(val) > -1 ) {
                 isValid = true;
@@ -1873,7 +1884,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                 delete errors['isInList'];
             }
 
-            this.valid = isValid;
+            // #B78 - keep .valid consistent with a surviving isRequired error.
+            this.valid = isValid && !errors['isRequired'];
             if ( errors.count() > 0 ) {
                 this['errors'] = errors;
             }
