@@ -6714,12 +6714,28 @@ function ValidatorPlugin(rules, data, formId) {
 
     var getCastedValue = function(ruleObj, fields, fieldName, isOnDynamisedRulesMode) {
 
+        var isOnDynamisedRules = (
+            typeof(isOnDynamisedRulesMode) != 'undefined'
+            && /^true$/i.test(isOnDynamisedRulesMode)
+        );
+
         if (
             // do not cast if no rule linked to the field
             typeof(ruleObj[fieldName]) == 'undefined'
             // do not cast if not defined or on error
             || /^(null|NaN|undefined|\s*)$/i.test(fields[fieldName])
         ) {
+            // In dynamised-rules mode this value is spliced verbatim into a stringified
+            // condition (e.g. `$a === $b`). An empty/whitespace value MUST become a quoted
+            // empty string ("") so the condition stays a parseable binary comparison —
+            // returning the raw empty value leaves a DANGLING operator (`"x" === `) that
+            // `is()` then rejects, and the resulting throw aborts the whole-form validity
+            // pass so the submit trigger never gets gated. Mirrors the sibling substitution
+            // default in getDynamisedRules (`... : '\\"\\"'`). `null`/`undefined` stay raw:
+            // they are already valid grammar operands, so only empty/whitespace needs quoting.
+            if ( isOnDynamisedRules && /^\s*$/.test(fields[fieldName]) ) {
+                return '\\"\\"';
+            }
             return fields[fieldName]
         }
 
@@ -6744,10 +6760,7 @@ function ValidatorPlugin(rules, data, formId) {
             return (/^true$/i.test(fields[fieldName])) ? true : false;
         }
 
-        return (
-            typeof(isOnDynamisedRulesMode) != 'undefined'
-            && /^true$/i.test(isOnDynamisedRulesMode)
-        ) ? '\\"'+ fields[fieldName] +'\\"' : fields[fieldName];
+        return isOnDynamisedRules ? '\\"'+ fields[fieldName] +'\\"' : fields[fieldName];
     }
 
     /**

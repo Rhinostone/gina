@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'FormValidator: a cross-field `is` rule (e.g. `"is": "$a === $b"`) no longer throws when the referenced field is empty. The uncaught error had aborted the whole-form validity pass, leaving the submit trigger ungated on an invalid form — which broke the documented value-confirmation pattern (`is` paired with `isRequired`) the entire time the confirm field was still blank. An empty referenced operand is now rendered as a parseable empty string (a normal mismatch), and an unparseable condition fails the field instead of throwing so a per-keystroke live check can never abort the gate.'
+time: 2026-07-07T01:16:08+01:00

@@ -1047,31 +1047,42 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
                                 var _SCS_BINARY_RE = /^\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*(===|!==|<=|>=|==|!=|<|>)\s*(null|undefined|true|false|"[^"]*"|-?\d+(?:\.\d+)?)\s*$/;
                                 var _scsBinMatch = (typeof(compiledCondition) == 'string') ? compiledCondition.match(_SCS_BINARY_RE) : null;
                                 if (!_scsBinMatch) {
-                                    throw new Error('Could not evaluate condition `' + compiledCondition + '`.\n(grammar: <operand><op><operand>; operand ∈ number | "string" | true | false | null | undefined; op ∈ === !== == != < > <= >=)');
-                                }
-                                var _scsParseOperand = function(s) {
-                                    var _t = s.replace(/^\s+|\s+$/g, '');
-                                    if (_t === 'null')      return null;
-                                    if (_t === 'undefined') return undefined;
-                                    if (_t === 'true')      return true;
-                                    if (_t === 'false')     return false;
-                                    if (/^"[^"]*"$/.test(_t)) return _t.slice(1, -1);
-                                    var _n = Number(_t);
-                                    if (!isNaN(_n) && _t !== '') return _n;
-                                    throw new Error('Invalid operand: `' + s + '`');
-                                };
-                                var _scsLeft  = _scsParseOperand(_scsBinMatch[1]);
-                                var _scsOp    = _scsBinMatch[2];
-                                var _scsRight = _scsParseOperand(_scsBinMatch[3]);
-                                switch (_scsOp) {
-                                    case '===': isValid = _scsLeft === _scsRight; break;
-                                    case '!==': isValid = _scsLeft !== _scsRight; break;
-                                    case '==':  isValid = _scsLeft ==  _scsRight; break;
-                                    case '!=':  isValid = _scsLeft !=  _scsRight; break;
-                                    case '<':   isValid = _scsLeft <   _scsRight; break;
-                                    case '>':   isValid = _scsLeft >   _scsRight; break;
-                                    case '<=':  isValid = _scsLeft <=  _scsRight; break;
-                                    case '>=':  isValid = _scsLeft >=  _scsRight; break;
+                                    // A condition that doesn't fit the grammar (e.g. a dangling
+                                    // operator left by an empty cross-field reference) must FAIL
+                                    // THE FIELD, not throw: is() runs on every keystroke during
+                                    // live-check, and an uncaught throw propagates out of the
+                                    // whole-form validity pass (main.js checkFieldAgainstRules
+                                    // re-wraps + re-throws it), leaving the submit trigger ungated.
+                                    // A genuine authoring typo stays visible via the warning
+                                    // without killing live validation. Fail-closed: the field is
+                                    // treated as invalid on both the client and the server.
+                                    console.warn('[FormValidator] Could not evaluate condition `' + compiledCondition + '` - treating field as invalid.\n(grammar: <operand><op><operand>; operand ∈ number | "string" | true | false | null | undefined; op ∈ === !== == != < > <= >=)');
+                                    isValid = false;
+                                } else {
+                                    var _scsParseOperand = function(s) {
+                                        var _t = s.replace(/^\s+|\s+$/g, '');
+                                        if (_t === 'null')      return null;
+                                        if (_t === 'undefined') return undefined;
+                                        if (_t === 'true')      return true;
+                                        if (_t === 'false')     return false;
+                                        if (/^"[^"]*"$/.test(_t)) return _t.slice(1, -1);
+                                        var _n = Number(_t);
+                                        if (!isNaN(_n) && _t !== '') return _n;
+                                        throw new Error('Invalid operand: `' + s + '`');
+                                    };
+                                    var _scsLeft  = _scsParseOperand(_scsBinMatch[1]);
+                                    var _scsOp    = _scsBinMatch[2];
+                                    var _scsRight = _scsParseOperand(_scsBinMatch[3]);
+                                    switch (_scsOp) {
+                                        case '===': isValid = _scsLeft === _scsRight; break;
+                                        case '!==': isValid = _scsLeft !== _scsRight; break;
+                                        case '==':  isValid = _scsLeft ==  _scsRight; break;
+                                        case '!=':  isValid = _scsLeft !=  _scsRight; break;
+                                        case '<':   isValid = _scsLeft <   _scsRight; break;
+                                        case '>':   isValid = _scsLeft >   _scsRight; break;
+                                        case '<=':  isValid = _scsLeft <=  _scsRight; break;
+                                        case '>=':  isValid = _scsLeft >=  _scsRight; break;
+                                    }
                                 }
                             }
 
