@@ -23,6 +23,7 @@ var console         = lib.logger;
 var Collection      = lib.Collection;
 var modelUtil       = new lib.Model();
 var secrets         = lib.secrets;
+var i18n            = lib.i18n;
 
 
 /**
@@ -2819,6 +2820,25 @@ function Config(opt, contextResetNeeded) {
                 + '` in `'+ bundle +'/'+ env +':'+ scope +'` configuration'
             );
             return callback(secretErr);
+        }
+
+        // #I18N — eager-load this bundle's message catalogs
+        // (bundle/locales/<culture>.json) once per bundle at boot, mirroring the
+        // secrets.resolve seam above. Opt-in: a bundle with no locales/ dir is
+        // skipped. A malformed/unreadable catalog is warned, never fatal, so it
+        // cannot block a bundle that booted fine before i18n activation. Populates
+        // process.gina._i18nCatalogs[bundle], read by the per-request culture
+        // negotiator (core/server.js) and by t() / the swig + nunjucks `t` filter.
+        try {
+            var _localesDir = _(appPath + '/locales', true).toString();
+            if ( fs.existsSync(_localesDir) ) {
+                i18n.loadCatalogs(bundle, _localesDir);
+            }
+        } catch (i18nErr) {
+            console.warn(
+                '[CONFIG][loadBundleConfig] i18n catalog load skipped for `'
+                + bundle +'/'+ env +'`: '+ i18nErr.message
+            );
         }
 
         ++b;

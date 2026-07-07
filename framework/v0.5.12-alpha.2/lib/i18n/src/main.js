@@ -972,7 +972,7 @@ function readCookie(header, name) {
  *   3. `Accept-Language` — parsed and best-matched against `availableCultures`
  *      with q-value ordering respected.
  *   4. `opts.defaultCulture` — bundle's `settings.region.culture`.
- *   5. `process.env.GINA_CULTURE` — process default.
+ *   5. `GINA_CULTURE` (read via the getEnvVar accessor) — process default.
  *   6. `'en'` — hardcoded last resort.
  *
  * Returned in underscore form (`en_US`, `fr`, etc.). When `availableCultures`
@@ -1030,9 +1030,16 @@ function negotiateCulture(req, opts) {
         return opts.defaultCulture.replace(/-/g, '_');
     }
 
-    // 5. GINA_CULTURE
-    if ( process.env.GINA_CULTURE ) {
-        return String(process.env.GINA_CULTURE).replace(/-/g, '_');
+    // 5. GINA_CULTURE — the framework moves GINA_* off process.env into
+    // process.gina at init, so read it through the getEnvVar accessor. This
+    // module is strict-mode and otherwise global-free; typeof-guard the bare
+    // framework global so an isolated unit-require (no boot) never
+    // ReferenceErrors here.
+    if ( typeof getEnvVar === 'function' ) {
+        var _envCulture = getEnvVar('GINA_CULTURE');
+        if ( _envCulture ) {
+            return String(_envCulture).replace(/-/g, '_');
+        }
     }
 
     // 6. Last resort

@@ -243,14 +243,18 @@ describe('04 - negotiateCulture (full chain)', function() {
     });
 
     it('priority 5 — GINA_CULTURE env wins when no defaultCulture', function() {
-        var savedEnv = process.env.GINA_CULTURE;
-        process.env.GINA_CULTURE = 'fr_FR';
+        // The framework moves GINA_* off process.env into process.gina at init,
+        // so negotiateCulture step 5 reads the live getEnvVar accessor (not the
+        // deleted process.env.GINA_CULTURE). This file requires lib/i18n in
+        // isolation with no framework globals booted, so stub getEnvVar.
+        var savedGetEnvVar = global.getEnvVar;
+        global.getEnvVar = function(k) { return (k === 'GINA_CULTURE') ? 'fr_FR' : undefined; };
         try {
             var req = { routing: {}, headers: {} };
             assert.equal(i18n.negotiateCulture(req, {}), 'fr_FR');
         } finally {
-            if (typeof savedEnv !== 'undefined') process.env.GINA_CULTURE = savedEnv;
-            else delete process.env.GINA_CULTURE;
+            if (typeof savedGetEnvVar === 'undefined') delete global.getEnvVar;
+            else global.getEnvVar = savedGetEnvVar;
         }
     });
 
@@ -310,7 +314,26 @@ describe('05 - Framework wiring guards', function() {
 
     it('core/server.js wraps i18n negotiation in try/catch (defensive)', function() {
         // Ensure the hook can never block routing.
-        assert.match(SERVER_SRC, /try\s*\{[\s\S]{1,500}lib\.i18n\.negotiateCulture[\s\S]{1,500}\}\s*catch/);
+        assert.match(SERVER_SRC, /try\s*\{[\s\S]{1,2000}lib\.i18n\.negotiateCulture[\s\S]{1,500}\}\s*catch/);
+    });
+
+    it('core/server.js supplies the bundle settings.region.culture as defaultCulture (#I18N Slice 1)', function() {
+        // Step-4 bundle-level default: reads the matched bundle's
+        // content.settings.region.culture (format-guarded) and threads it in.
+        assert.match(SERVER_SRC, /content\.settings\.region\.culture/);
+        assert.match(SERVER_SRC, /defaultCulture\s*:\s*_i18nDefault/);
+    });
+
+    it('core/server.js negotiation catch reads GINA_CULTURE via getEnvVar, not the deleted process.env (#I18N Slice 1)', function() {
+        assert.match(SERVER_SRC, /catch\s*\(\s*_i18nErr\s*\)\s*\{[\s\S]{1,200}getEnvVar\(\s*['"]GINA_CULTURE['"]\s*\)/);
+        assert.doesNotMatch(SERVER_SRC, /process\.env\.GINA_CULTURE/);
+    });
+
+    it('lib/i18n negotiateCulture step 5 reads GINA_CULTURE via typeof-guarded getEnvVar (#I18N Slice 1)', function() {
+        var I18N_SRC = fs.readFileSync(path.join(FW, 'lib/i18n/src/main.js'), 'utf8');
+        assert.match(I18N_SRC, /typeof\s+getEnvVar\s*===\s*['"]function['"]/);
+        assert.match(I18N_SRC, /getEnvVar\(\s*['"]GINA_CULTURE['"]\s*\)/);
+        assert.doesNotMatch(I18N_SRC, /process\.env\.GINA_CULTURE/);
     });
 
     it('core/server.js reads availableCultures from process.gina._i18nCatalogs[bundleName]', function() {

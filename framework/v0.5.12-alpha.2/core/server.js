@@ -5072,13 +5072,31 @@ function Server(options) {
                             && process.gina._i18nCatalogs[_i18nBundle] )
                             ? Object.keys(process.gina._i18nCatalogs[_i18nBundle])
                             : [];
+                        // #I18N — bundle-level default culture: settings.region.culture
+                        // (full underscore culture, e.g. `fr_FR`, resolved at bundle:add).
+                        // Ranks below URL/cookie/Accept-Language (which need loaded
+                        // catalogs to match) and above the GINA_CULTURE env fallback
+                        // (negotiateCulture step 5). Format-guarded so an unresolved
+                        // `${culture}` placeholder never leaks through as the culture.
+                        var _i18nDefault = null;
+                        if ( _i18nBundle
+                            && self.conf[_i18nBundle]
+                            && self.conf[_i18nBundle][self.env]
+                            && self.conf[_i18nBundle][self.env].content
+                            && self.conf[_i18nBundle][self.env].content.settings
+                            && self.conf[_i18nBundle][self.env].content.settings.region
+                            && typeof(self.conf[_i18nBundle][self.env].content.settings.region.culture) == 'string'
+                            && /^[a-z]{2,3}([_-][A-Za-z]{2,4})?$/.test(self.conf[_i18nBundle][self.env].content.settings.region.culture)
+                        ) {
+                            _i18nDefault = self.conf[_i18nBundle][self.env].content.settings.region.culture;
+                        }
                         req.culture = lib.i18n.negotiateCulture(req, {
                             availableCultures : _i18nAvail,
                             cookieName        : 'gina_culture',
-                            defaultCulture    : null
+                            defaultCulture    : _i18nDefault
                         });
                     } catch (_i18nErr) {
-                        req.culture = (process.env.GINA_CULTURE || 'en').replace(/-/g, '_');
+                        req.culture = (getEnvVar('GINA_CULTURE') || 'en').replace(/-/g, '_');
                     }
 
                     // Comparing routing method VS request.url method

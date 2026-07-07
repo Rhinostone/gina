@@ -207,8 +207,8 @@ function Add(opt, cmd) {
         if (settings && settings.region && settings.region.culture) {
             return String(settings.region.culture);
         }
-        if (process.env.GINA_CULTURE) {
-            return String(process.env.GINA_CULTURE);
+        if (typeof getEnvVar === 'function' && getEnvVar('GINA_CULTURE')) {
+            return String(getEnvVar('GINA_CULTURE'));
         }
         return DEFAULT_FALLBACK_CULTURE;
     };

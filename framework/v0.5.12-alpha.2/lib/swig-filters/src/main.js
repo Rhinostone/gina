@@ -463,7 +463,7 @@ function SwigFilters(conf) {
         var ctx        = getRenderCtx();
         var culture    = (ctx && ctx.req && ctx.req.culture)
             ? ctx.req.culture
-            : (process.env.GINA_CULTURE || null);
+            : ((typeof getEnvVar === 'function' && getEnvVar('GINA_CULTURE')) || null);
         var bundleName = (ctx && ctx.options && ctx.options.conf && ctx.options.conf.bundle)
             ? ctx.options.conf.bundle
             : null;
@@ -496,7 +496,7 @@ function SwigFilters(conf) {
         var ctx        = getRenderCtx();
         var culture    = (ctx && ctx.req && ctx.req.culture)
             ? ctx.req.culture
-            : (process.env.GINA_CULTURE || null);
+            : ((typeof getEnvVar === 'function' && getEnvVar('GINA_CULTURE')) || null);
         var bundleName = (ctx && ctx.options && ctx.options.conf && ctx.options.conf.bundle)
             ? ctx.options.conf.bundle
             : null;
