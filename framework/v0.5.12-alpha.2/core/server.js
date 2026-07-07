@@ -4916,12 +4916,61 @@ function Server(options) {
         }
         var isMethodAllowed = null, hostname = null, _methodMismatch405msg = null;
 
+        // #B84 — per-request culture negotiation, shared by the cold (loop-match)
+        // and warm (cached-route fast-path) paths. The cached fast-path breaks the
+        // routing loop before the cold-path negotiation site below, so without
+        // calling this on the warm path `req.culture` stayed unset on every cached
+        // request (→ `gina.config.culture` empty → the i18n overlays are inert on
+        // warm reloads). Re-negotiate per-request (never cache the resolved culture:
+        // it varies per request via cookie / Accept-Language, so caching it with the
+        // shared route entry would cross-request-bleed).
+        var _negotiateReqCulture = function(req, routeBundle) {
+            try {
+                var _i18nBundle = routeBundle || null;
+                var _i18nAvail  = ( _i18nBundle
+                    && process.gina._i18nCatalogs
+                    && process.gina._i18nCatalogs[_i18nBundle] )
+                    ? Object.keys(process.gina._i18nCatalogs[_i18nBundle])
+                    : [];
+                // #I18N — bundle-level default culture: settings.region.culture
+                // (full underscore culture, e.g. `xx_XX`, resolved at bundle:add).
+                // Ranks below URL/cookie/Accept-Language (which need loaded catalogs
+                // to match) and above the GINA_CULTURE env fallback (negotiateCulture
+                // step 5). Format-guarded so an unresolved `${culture}` placeholder
+                // never leaks through as the culture.
+                var _i18nDefault = null;
+                if ( _i18nBundle
+                    && self.conf[_i18nBundle]
+                    && self.conf[_i18nBundle][self.env]
+                    && self.conf[_i18nBundle][self.env].content
+                    && self.conf[_i18nBundle][self.env].content.settings
+                    && self.conf[_i18nBundle][self.env].content.settings.region
+                    && typeof(self.conf[_i18nBundle][self.env].content.settings.region.culture) == 'string'
+                    && /^[a-z]{2,3}([_-][A-Za-z]{2,4})?$/.test(self.conf[_i18nBundle][self.env].content.settings.region.culture)
+                ) {
+                    _i18nDefault = self.conf[_i18nBundle][self.env].content.settings.region.culture;
+                }
+                req.culture = lib.i18n.negotiateCulture(req, {
+                    availableCultures : _i18nAvail,
+                    cookieName        : 'gina_culture',
+                    defaultCulture    : _i18nDefault
+                });
+            } catch (_i18nErr) {
+                req.culture = (getEnvVar('GINA_CULTURE') || 'en').replace(/-/g, '_');
+            }
+        };
+
         // Checking cached route
         var hasCachedRoute = await routingLib.getCached(req.method +':'+ pathname, req) || null;
         if ( hasCachedRoute ) {
             // Supposed to have everything we need to route
             isRoute = hasCachedRoute;
             // req = isRoute.request;
+            // #B84 — the cached fast-path breaks out of the routing loop below
+            // before the cold-path negotiation site, so negotiate here. getCached()
+            // ran compareUrls(), which has already populated req.routing (incl.
+            // culturePrefix + bundle), so the URL-prefix negotiation step still works.
+            _negotiateReqCulture(req, ( req.routing && req.routing.bundle ) || bundle);
         } else {
             isRoute = {}
         }
@@ -5057,47 +5106,13 @@ function Server(options) {
 
                     _routing = req.routing;
 
-                    // #I18N1 slice 3 — formalise req.culture as a per-request
-                    // first-class field. Negotiation order: URL prefix
-                    // (req.routing.culturePrefix === true) → cookie
-                    // (settings.i18n.cookieName, default `gina_culture`) →
-                    // Accept-Language (q-value ordering, matched against the
-                    // bundle's loaded catalogs) → settings.region.culture →
-                    // GINA_CULTURE env → 'en'. Kept inside a try/catch so a
-                    // negotiation failure never blocks routing.
-                    try {
-                        var _i18nBundle = routing[name].bundle || null;
-                        var _i18nAvail  = ( _i18nBundle
-                            && process.gina._i18nCatalogs
-                            && process.gina._i18nCatalogs[_i18nBundle] )
-                            ? Object.keys(process.gina._i18nCatalogs[_i18nBundle])
-                            : [];
-                        // #I18N — bundle-level default culture: settings.region.culture
-                        // (full underscore culture, e.g. `fr_FR`, resolved at bundle:add).
-                        // Ranks below URL/cookie/Accept-Language (which need loaded
-                        // catalogs to match) and above the GINA_CULTURE env fallback
-                        // (negotiateCulture step 5). Format-guarded so an unresolved
-                        // `${culture}` placeholder never leaks through as the culture.
-                        var _i18nDefault = null;
-                        if ( _i18nBundle
-                            && self.conf[_i18nBundle]
-                            && self.conf[_i18nBundle][self.env]
-                            && self.conf[_i18nBundle][self.env].content
-                            && self.conf[_i18nBundle][self.env].content.settings
-                            && self.conf[_i18nBundle][self.env].content.settings.region
-                            && typeof(self.conf[_i18nBundle][self.env].content.settings.region.culture) == 'string'
-                            && /^[a-z]{2,3}([_-][A-Za-z]{2,4})?$/.test(self.conf[_i18nBundle][self.env].content.settings.region.culture)
-                        ) {
-                            _i18nDefault = self.conf[_i18nBundle][self.env].content.settings.region.culture;
-                        }
-                        req.culture = lib.i18n.negotiateCulture(req, {
-                            availableCultures : _i18nAvail,
-                            cookieName        : 'gina_culture',
-                            defaultCulture    : _i18nDefault
-                        });
-                    } catch (_i18nErr) {
-                        req.culture = (getEnvVar('GINA_CULTURE') || 'en').replace(/-/g, '_');
-                    }
+                    // #B84 — negotiate req.culture on the cold (loop-match) path.
+                    // The warm (cached-route) path negotiates earlier via the same
+                    // `_negotiateReqCulture` helper, so the two paths cannot drift.
+                    // (#I18N1 slice 3 — negotiation order: URL prefix
+                    // req.routing.culturePrefix → cookie `gina_culture` →
+                    // Accept-Language → settings.region.culture → GINA_CULTURE → 'en'.)
+                    _negotiateReqCulture(req, routing[name].bundle);
 
                     // Comparing routing method VS request.url method
                     isMethodAllowed = reMethod.test(_routing.method);
