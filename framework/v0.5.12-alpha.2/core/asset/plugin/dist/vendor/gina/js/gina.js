@@ -2854,8 +2854,12 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * @param {object} [ $fields ] - isGFFCtx only
  * @param {object} [ xhrOptions ] - isGFFCtx only
  * @param {object} [ fieldsSet ] - isGFFCtx only; required for when ginaFormLiveCheckEnabled
+ * @param {string} [ culture ] - !isGFFCtx (server) only; per-request culture (e.g. "fr_FR").
+ *      When a string, built-in rule labels resolve from the bundle catalog's
+ *      `_validator.<rule>` namespace (catalog wins per key, English defaults fill).
+ *      A non-string (e.g. the routing-mode rule object) is ignored by the overlay guard.
  * */
-function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
+function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
     var isGFFCtx        = ( ( typeof(module) !== 'undefined' ) && module.exports ) ? false : true;
 
@@ -2866,6 +2870,8 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
     var helpers         = (isGFFCtx) ? {} : require('../../../../../helpers');
     var dateFormat      = (isGFFCtx) ? require('helpers/dateFormat') : helpers.dateFormat;
     var routing         = (isGFFCtx) ? require('lib/routing') : require('../../../../../lib/routing');
+    // #i18n (server only) - bundle catalog access for built-in-label localization.
+    var i18n            = (isGFFCtx) ? null : require('../../../../../lib/i18n');
 
     /**
      * #CSRF2 follow-up — read the gina-csrf-token cookie set by the Csrf plugin.
@@ -2994,6 +3000,26 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet) {
         'isInList': 'Must be one of: %s'
     };
     local.errorLabels = _defaultErrorLabels;
+    // #i18n (server) — resolve built-in rule labels from the bundle catalog's
+    // `_validator.<rule>` namespace for the negotiated `culture`. Mirrors the client
+    // overlay below (catalog wins per key, English defaults fill gaps — target-wins
+    // merge). Existence-guarded via i18n.resolveKey (undefined on miss, never `t()`
+    // which echoes the raw key). A per-field/rule `error` still wins (see
+    // `this.error || local.errorLabels[...]` at each rule).
+    if ( !isGFFCtx && i18n && typeof(culture) === 'string' && culture ) {
+        var _vBundle = getContext('bundle');
+        if (_vBundle) {
+            var _vChain = i18n.walkFallback(culture), _vNode = null;
+            for (var _vi = 0; _vi < _vChain.length; _vi++) {
+                var _vCat = i18n.getCatalog(_vBundle, _vChain[_vi]);
+                if (_vCat) {
+                    var _vFound = i18n.resolveKey(_vCat, '_validator');
+                    if (_vFound && typeof(_vFound) === 'object') { _vNode = _vFound; break; }
+                }
+            }
+            if (_vNode) { local.errorLabels = merge(JSON.clone(_vNode), _defaultErrorLabels); }
+        }
+    }
     if (
         isGFFCtx
         && typeof(gina) != 'undefined'
@@ -9776,8 +9802,15 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
  * @param {object} rule
  * @param {object} [ data ] // from request
  * @param {string} [ formId ]
+ * @param {string} [ culture ] // #i18n — per-request culture (e.g. "fr_FR"). On the
+ *      server (`!isGFFCtx`) form-body path it is threaded to FormValidator so built-in
+ *      rule labels resolve from the bundle catalog's `_validator.<rule>` namespace.
+ *      The routing-mode call (`new Validator('routing', _data, null, _rule)`) lands its
+ *      inert rule object in this slot; the overlay's `typeof culture === 'string'` guard
+ *      ignores non-strings, and route-matching runs before culture negotiation, so
+ *      routing-requirement labels stay English by design.
  * */
-function ValidatorPlugin(rules, data, formId) {
+function ValidatorPlugin(rules, data, formId, culture) {
 
     this.plugin = 'validator';
 
@@ -10023,7 +10056,7 @@ function ValidatorPlugin(rules, data, formId) {
      * @param {object} rules
      * @param {object} [customRule]
      * */
-    var backendInit = function (rules, data, formId) {
+    var backendInit = function (rules, data, formId, culture) {
 
         var $form = ( typeof(formId) != 'undefined' ) ? { 'id': formId } : null;
         var fields = {};
@@ -10045,11 +10078,11 @@ function ValidatorPlugin(rules, data, formId) {
 
             backendProto.rules = instance.rules;
 
-            return validate($form, fields, null, instance.rules)
+            return validate($form, fields, null, instance.rules, null, culture)
 
         } else {
             // without rules - by hand
-            return new FormValidator(fields)
+            return new FormValidator(fields, undefined, undefined, undefined, culture)
         }
     }
 
@@ -16615,8 +16648,9 @@ function ValidatorPlugin(rules, data, formId) {
      * @param {object} $fields
      * @param {object} rules
      * @param {callback} cb
+     * @param {string} [culture] // #i18n — server form-body path only; forwarded to FormValidator
      */
-    var validate = function($formOrElement, fields, $fields, rules, cb) {
+    var validate = function($formOrElement, fields, $fields, rules, cb, culture) {
 
         delete fields['_length']; //cleaning
 
@@ -16905,7 +16939,7 @@ function ValidatorPlugin(rules, data, formId) {
                 d = new FormValidator(fields, $fields, xhrOptions, instance.$forms[id].fieldsSet);
             }
         } else {
-            d = new FormValidator(fields, null, xhrOptions);
+            d = new FormValidator(fields, null, xhrOptions, undefined, culture);
         }
 
 
@@ -17602,7 +17636,7 @@ function ValidatorPlugin(rules, data, formId) {
     if (isGFFCtx) {
         return init(rules)
     } else {
-        return backendInit(rules, data, formId)
+        return backendInit(rules, data, formId, culture)
     }
 
 };
