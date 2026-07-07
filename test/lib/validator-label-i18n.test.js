@@ -90,11 +90,14 @@ describe('01 - engine seed source pins', function () {
     });
 
     it('overlays a per-culture registry ONLY in the browser (isGFFCtx-gated)', function () {
-        var overlayIdx = ENGINE_SRC.indexOf('gina.validator._errorLabelsByCulture');
-        assert.ok(overlayIdx >= 0, 'expected the registry read in the engine');
-        var gffIdx = ENGINE_SRC.lastIndexOf('isGFFCtx', overlayIdx);
-        assert.ok(gffIdx >= 0 && (overlayIdx - gffIdx) < 300,
-            'expected the overlay to be gated on isGFFCtx');
+        assert.ok(ENGINE_SRC.indexOf('gina.validator._errorLabelsByCulture') >= 0,
+            'expected the registry read in the engine');
+        // structural anchor, not a char-distance (jsdoc.md — char-distance pins are
+        // brittle): the overlay's isGFFCtx gate precedes the registry lookup. The
+        // Slice-3 catalog layer now sits between the gate and the lookup, so the old
+        // (overlayIdx - gffIdx) < 300 proximity no longer holds.
+        assert.match(ENGINE_SRC, /if \(\s*isGFFCtx[\s\S]{0,700}?gina\.validator\._errorLabelsByCulture\[_culture\]/,
+            'expected the overlay gated on isGFFCtx, then the registry lookup');
         assert.ok(ENGINE_SRC.indexOf('gina.config.culture') >= 0,
             'expected the culture read from gina.config');
     });
@@ -106,8 +109,10 @@ describe('01 - engine seed source pins', function () {
             'expected the exact-culture lookup');
         assert.ok(ENGINE_SRC.indexOf('gina.validator._errorLabelsByCulture[_baseLang]') >= 0,
             'expected the base-language fallback');
-        assert.ok(ENGINE_SRC.indexOf('merge(JSON.clone(_cultureLabels), _defaultErrorLabels)') >= 0,
-            'expected app-labels-win merge direction (culture clone as target, English as source)');
+        assert.ok(ENGINE_SRC.indexOf('merge(JSON.clone(_cultureLabels), local.errorLabels)') >= 0,
+            'expected app-labels-win merge direction (registry clone as target; source is ' +
+            'the running local.errorLabels — catalog-over-English or English — since the ' +
+            'Slice-3 catalog layer is applied below the setErrorLabels layer)');
     });
 });
 
@@ -160,7 +165,10 @@ describe('03 - culture whisper + client read source pins', function () {
 // 04 — seed overlay behaviour (pure-logic replica, REAL merge + JSON.clone)
 describe('04 - seed overlay behaviour (replica)', function () {
 
-    // faithful mirror of the form-validator.js overlay
+    // faithful mirror of the setErrorLabels/registry LAYER of the overlay (no-catalog
+    // path). Slice 3 added a lower catalog layer below this one; the full 3-layer
+    // precedence (setErrorLabels > catalog > English) is covered in
+    // validator-label-i18n-client-catalog.test.js.
     function seed(culture, registry) {
         var english = {
             isRequired: 'Cannot be left empty',

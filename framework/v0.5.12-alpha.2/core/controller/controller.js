@@ -691,6 +691,29 @@ function SuperController(options) {
             // so the client validator can select app-registered per-culture built-in
             // rule labels. Empty string when i18n is inactive / no culture negotiated.
             set('page.environment.culture', (req && req.culture) ? req.culture : '');
+            // #i18n (client whisper) — resolve the negotiated culture's built-in rule
+            // label subset from the bundle catalog (`_validator.<rule>`) and whisper it
+            // as `gina.config.validatorLabels`, so the client validator overlays the
+            // localized labels even without an app `setErrorLabels()` call. Only the
+            // present (app-defined) keys are emitted — English defaults are filled
+            // client-side (keeps the payload small). `{}` when i18n is inactive or no
+            // `_validator` node exists for the culture. The resolver chain mirrors the
+            // server FormValidator overlay (form-validator.js): walkFallback ->
+            // getCatalog -> resolveKey('_validator') — keep the two in sync.
+            var _validatorLabels = {};
+            if ( req && typeof(req.culture) === 'string' && req.culture && lib.i18n ) {
+                try {
+                    var _vlChain = lib.i18n.walkFallback(req.culture);
+                    for (var _vli = 0; _vli < _vlChain.length; _vli++) {
+                        var _vlCat = lib.i18n.getCatalog(options.conf.bundle, _vlChain[_vli]);
+                        if (_vlCat) {
+                            var _vlNode = lib.i18n.resolveKey(_vlCat, '_validator');
+                            if (_vlNode && typeof(_vlNode) === 'object') { _validatorLabels = _vlNode; break; }
+                        }
+                    }
+                } catch (_vlErr) { _validatorLabels = {}; }
+            }
+            set('page.environment.validatorLabels', encodeRFC5987ValueChars(JSON.stringify(_validatorLabels)));
 
             // #CSRF2 — expose CSRF token + pre-formatted hidden input to swig templates.
             // The Csrf plugin (core/plugins/lib/csrf/src/main.js) attaches `req.csrfToken`

@@ -177,21 +177,40 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             if (_vNode) { local.errorLabels = merge(JSON.clone(_vNode), _defaultErrorLabels); }
         }
     }
+    // #i18n (client) — overlay built-in rule labels for the negotiated culture.
+    // Precedence (highest first): app `setErrorLabels()` overrides
+    // (`gina.validator._errorLabelsByCulture[<culture>]`) > server-whispered bundle
+    // catalog subset (`gina.config.validatorLabels`, resolved server-side for
+    // `gina.config.culture`) > English defaults. Each layer is applied by a
+    // target-wins/source-fills merge over the running `local.errorLabels`, so a
+    // higher layer wins per key and lower layers fill gaps. Client only (isGFFCtx);
+    // a per-field/rule `error` still wins over all of this.
     if (
         isGFFCtx
         && typeof(gina) != 'undefined'
-        && typeof(gina.validator) != 'undefined'
-        && gina.validator._errorLabelsByCulture
         && typeof(gina.config) != 'undefined'
-        && gina.config.culture
     ) {
         var _culture       = gina.config.culture;
-        var _baseLang      = ( _culture.indexOf('_') > 0 ) ? _culture.substr(0, _culture.indexOf('_')) : _culture;
-        var _cultureLabels = gina.validator._errorLabelsByCulture[_culture]
-            || ( _baseLang ? gina.validator._errorLabelsByCulture[_baseLang] : null )
-            || null;
+        var _baseLang      = ( _culture && _culture.indexOf('_') > 0 ) ? _culture.substr(0, _culture.indexOf('_')) : _culture;
+        // layer 3 (highest) — app-registered per-culture overrides (setErrorLabels)
+        var _cultureLabels = ( typeof(gina.validator) != 'undefined' && gina.validator._errorLabelsByCulture && _culture )
+            ? ( gina.validator._errorLabelsByCulture[_culture]
+                || ( _baseLang ? gina.validator._errorLabelsByCulture[_baseLang] : null )
+                || null )
+            : null;
+        // layer 2 — server-whispered bundle catalog subset (culture-resolved server-side)
+        var _catalogLabels = null;
+        if ( gina.config.validatorLabels && typeof(gina.config.validatorLabels) == 'object' ) {
+            for (var _clk in gina.config.validatorLabels) {
+                if ( gina.config.validatorLabels.hasOwnProperty(_clk) ) { _catalogLabels = gina.config.validatorLabels; break; }
+            }
+        }
+        // apply lowest-precedence layer first, then let each higher layer win per key
+        if (_catalogLabels) {
+            local.errorLabels = merge(JSON.clone(_catalogLabels), local.errorLabels);
+        }
         if (_cultureLabels) {
-            local.errorLabels = merge(JSON.clone(_cultureLabels), _defaultErrorLabels);
+            local.errorLabels = merge(JSON.clone(_cultureLabels), local.errorLabels);
         }
     }
     var self  = null;

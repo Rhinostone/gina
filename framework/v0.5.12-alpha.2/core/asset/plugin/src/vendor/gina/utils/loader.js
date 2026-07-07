@@ -71,7 +71,13 @@ window['onGinaLoaded']      = function(gina) {
         /**@js_externs protocol*/
         'protocol' : '{{ page.environment.protocol }}',
         /**@js_externs culture*/
-        'culture' : '{{ page.environment.culture }}'
+        'culture' : '{{ page.environment.culture }}',
+        // #i18n — server-whispered built-in validator rule labels for the negotiated
+        // culture (`_validator.<rule>` subset). Read into `gina.config.validatorLabels`
+        // for the client validator overlay. Guarded parse so an empty/absent whisper
+        // degrades to `{}` (controller emits `{}` when i18n is inactive).
+        /**@js_externs validatorLabels*/
+        'validatorLabels': (function () { try { return JSON.parse(decodeURIComponent('{{ page.environment.validatorLabels }}')); } catch (e) { return {}; } })()
     };
 
     if (
