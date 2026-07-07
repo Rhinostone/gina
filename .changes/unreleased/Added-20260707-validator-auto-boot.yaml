@@ -1,0 +1,3 @@
+kind: Added
+body: 'Forms declaring `data-gina-form-rule` with a matching rule set now validate in the browser automatically at page load — the client bundle boots the form validator itself, so no per-page boot code is required (the same batteries-included behaviour the built-in `data-gina-dialog` popin already has). Bundle code constructs the validator explicitly only to attach submit/lifecycle handlers; that still works and is idempotent with the auto-boot.'
+time: 2026-07-07T15:59:07+01:00

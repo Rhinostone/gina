@@ -270,6 +270,50 @@ require([
         }
     };
     bootPopinHandler();
+
+    // Boot the validator at page load so the declarative `data-gina-form-rule` API is
+    // active WITHOUT bundle code calling `new gina.validator()` — the sibling of the
+    // popin boot above. Constructing the validator scans every `<form>`, binds the ones
+    // matching a `gina.forms.rules` entry (live-checking + always-XHR submit), and the
+    // `.on('ready')` registration triggers the validator `init` self-fire so
+    // `gina.validator` / `gina.hasValidator` are set. Idempotent: a later explicit
+    // `new gina.validator()` (a bundle's `handlers/*.js`) takes the `gina.hasValidator`
+    // merge path and its own `.on('ready', …)` handler still fires — the same
+    // re-construction path bundle code already relies on when it constructs the
+    // validator more than once (a bundle `main.js` PLUS a per-page handler). Gated on a
+    // NON-EMPTY `gina.forms.rules` so pages with no rules stay byte-identical (no form
+    // scan, no `gina.validator` publish). `gina.forms` is whispered by `onGinaLoaded`,
+    // which sets `isFrameworkLoaded` (synchronously) BEFORE `gina.forms`, so a truthy
+    // `isFrameworkLoaded` observed from the bounded poll guarantees `gina.forms` is
+    // already populated (run-to-completion — no yield splits the whisper).
+    var _validatorBootTries = 0;
+    var bootValidator = function () {
+        try {
+            if ( !window['gina'] || !window['gina']['isFrameworkLoaded'] ) {
+                if ( _validatorBootTries++ < 100 ) {
+                    (window['setTimeout'] || function (fn) { fn(); })(bootValidator, 50);
+                }
+                return;
+            }
+            if ( window['gina']['hasValidator'] ) {
+                return;
+            }
+            var _forms = window['gina']['forms'];
+            var _rules = ( _forms && _forms['rules'] ) ? _forms['rules'] : null;
+            if ( !_rules || !Object.keys(_rules).length ) {
+                return;
+            }
+            var Validator = require('gina/validator');
+            if ( typeof(Validator) == 'function' ) {
+                new Validator(_rules).on('ready', function () {});
+            }
+        } catch (validatorBootErr) {
+            if ( typeof(console) != 'undefined' && console.error ) {
+                console.error('[gina] validator boot failed', validatorBootErr.stack || validatorBootErr);
+            }
+        }
+    };
+    bootValidator();
 });
 
 function getDependencies(gina, cb) {
