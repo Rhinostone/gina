@@ -922,9 +922,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         //     }
                         // }
                         for (var e in errors[name]) {
-                            $msg = document.createElement('p');
-                            $msg.appendChild( document.createTextNode(errors[name][e]) );
-                            $err.appendChild($msg);
+                            if (e != 'stack') { // ignore stack for display (parity with the first-error branch, #B89)
+                                $msg = document.createElement('p');
+                                $msg.appendChild( document.createTextNode(errors[name][e]) );
+                                $err.appendChild($msg);
+                            }
 
                             if ( envIsDev ) {
                                 if (!formsErrors) formsErrors = {};
@@ -946,6 +948,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 // #A11Y1 — the committed error persists on refresh; keep aria-invalid asserted.
                 if ( !isWarning && $el.type != 'hidden' ) {
                     $el.setAttribute('aria-invalid', 'true');
+                }
+
+                // #B89 — re-announce the REFRESHED message through the live region. The
+                // first-error branch announces, but this refresh branch rebuilt $err with a
+                // NEW message (the value now fails a different rule, or a late setErrorLabels
+                // overlay changed the label) and, without this, assistive tech kept announcing
+                // the first message. Same guard as the first-error announce: committed (not
+                // soft-warning) errors, per-field/blur path, once focus has left the field.
+                // aria-live=polite + textContent-replace re-announces because the string changed.
+                if (
+                    !isWarning
+                    && typeof(fieldName) != 'undefined'
+                    && $err
+                    && $el !== document.activeElement
+                ) {
+                    announceA11yError($form, $err.textContent);
                 }
             }
 
