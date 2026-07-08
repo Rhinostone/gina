@@ -13,7 +13,7 @@
  *       for `lib/merge` and `lib/routing`.
  *   (b) Both factories declare `self.t = function(key, params)`.
  *   (c) Both `t` filters resolve culture via `(ctx.req && ctx.req.culture)`
- *       with a fallback to `process.env.GINA_CULTURE`.
+ *       with a fallback to `getEnvVar('GINA_CULTURE')`.
  *   (d) Both `t` filters resolve bundleName via `ctx.options.conf.bundle`.
  *   (e) Both `t` filters forward to `i18n.t(key, params, culture, {bundleName})`.
  *   (f) Surface parity — every assertion that holds for swig also holds for
@@ -84,12 +84,12 @@ describe('03 - culture resolution', function() {
         assert.match(NF_SRC, /ctx\.req\s*&&\s*ctx\.req\.culture/);
     });
 
-    it('swig-filters falls back to process.env.GINA_CULTURE', function() {
-        assert.match(SF_SRC, /process\.env\.GINA_CULTURE/);
+    it('swig-filters falls back to getEnvVar(\'GINA_CULTURE\')', function() {
+        assert.match(SF_SRC, /getEnvVar\(\s*['"]GINA_CULTURE['"]\s*\)/);
     });
 
-    it('nunjucks-filters falls back to process.env.GINA_CULTURE', function() {
-        assert.match(NF_SRC, /process\.env\.GINA_CULTURE/);
+    it('nunjucks-filters falls back to getEnvVar(\'GINA_CULTURE\')', function() {
+        assert.match(NF_SRC, /getEnvVar\(\s*['"]GINA_CULTURE['"]\s*\)/);
     });
 
 });

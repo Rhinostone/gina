@@ -181,3 +181,29 @@ describe('07 - schema/locales.json — published JSON Schema', function() {
     });
 
 });
+
+
+describe('08 - core/config.js — i18n catalog activation (#I18N Slice 1)', function() {
+
+    var CONFIG_SRC = fs.readFileSync(path.join(FW, 'core/config.js'), 'utf8');
+
+    it('binds lib.i18n like lib.secrets', function() {
+        assert.match(CONFIG_SRC, /var i18n\s*=\s*lib\.i18n/);
+    });
+
+    it('eager-loads the bundle catalogs at loadBundleConfig time', function() {
+        // loadCatalogs(bundle, <bundleRoot>/locales), keyed by the same bundle
+        // name core/server.js negotiates availableCultures against.
+        assert.match(CONFIG_SRC, /i18n\.loadCatalogs\(\s*bundle\s*,/);
+        assert.match(CONFIG_SRC, /appPath\s*\+\s*['"]\/locales['"]/);
+    });
+
+    it('guards a missing locales/ dir (opt-in) and never fails boot on a bad catalog', function() {
+        // existsSync skips non-i18n bundles (avoids the empty _i18nCatalogs entry
+        // + the background ICU loader); the try/catch turns a malformed catalog
+        // (loadCatalogs throws) into a console.warn rather than a boot abort.
+        assert.match(CONFIG_SRC, /fs\.existsSync\(\s*_localesDir\s*\)/);
+        assert.match(CONFIG_SRC, /catch\s*\(\s*i18nErr\s*\)[\s\S]{1,200}console\.warn/);
+    });
+
+});

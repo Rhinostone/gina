@@ -55,7 +55,8 @@ function makeField(initialValue) {
         var val     = local.data[this.name] = this.value;
         var isValid = false;
 
-        if ( !errors['isRequired'] && (val === '' || val == null) ) {
+        // #B78 mirror: empty/null adjudicated by isRequired alone (bypass unconditionally on empty)
+        if ( (val === '' || val == null) ) {
             isValid = true;
         } else if ( allowedValues.indexOf(val) > -1 ) {
             isValid = true;
@@ -68,7 +69,8 @@ function makeField(initialValue) {
             delete errors['isInList'];
         }
 
-        this.valid = isValid;
+        // #B78 mirror: keep .valid consistent with a surviving isRequired error
+        this.valid = isValid && !errors['isRequired'];
         if ( Object.keys(errors).length > 0 ) {
             this['errors'] = errors;
         }
@@ -267,10 +269,14 @@ describe('08 — production source shape', function () {
         assert.match(head, /allowedValues\.indexOf\(val\)\s*>\s*-1/);
     });
 
-    it('body bypasses when value is empty and not required', function () {
+    it('body bypasses on empty/null regardless of required (#B78)', function () {
         var section = FORM_VAL_SRC.split(/self\[el\]\['isInList'\]\s*=\s*function\s*\(\s*\)\s*\{/)[1];
         var head = section.split(/\n\s{8}\}\s*\n/)[0];
-        assert.match(head, /!errors\['isRequired'\]\s*&&\s*\(val === ''\s*\|\|\s*val == null\)/);
+        // #B78 — empty is adjudicated by isRequired alone: the guard no longer carries the prefix.
+        assert.match(head, /if\s*\(\s*\(val === ''\s*\|\|\s*val == null\)\s*\)/);
+        assert.doesNotMatch(head, /!errors\['isRequired'\]\s*&&\s*\(val === ''/);
+        // #B78 — .valid stays consistent with a surviving isRequired error.
+        assert.match(head, /this\.valid\s*=\s*isValid\s*&&\s*!errors\['isRequired'\]/);
     });
 
     it('body joins allowedValues with ", " for the error message', function () {

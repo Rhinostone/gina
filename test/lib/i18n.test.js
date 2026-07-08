@@ -477,6 +477,17 @@ describe('09 - loadCatalogs (filesystem)', function() {
         assert.deepEqual(loaded, []);
     });
 
+    it('throws on a malformed catalog (why core/config.js wraps loadCatalogs in try/catch)', function() {
+        var dir = mkTempDir();
+        try {
+            fs.writeFileSync(path.join(dir, 'en.json'), '{ not valid json ');
+            var b = isolatedBundle('malformed');
+            assert.throws(function() { i18n.loadCatalogs(b, dir); }, /malformed catalog/);
+        } finally {
+            rmDir(dir);
+        }
+    });
+
     it('returns [] for empty dir', function() {
         var dir = mkTempDir();
         try {

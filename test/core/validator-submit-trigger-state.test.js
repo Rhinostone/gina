@@ -1,0 +1,283 @@
+'use strict';
+/**
+ * FormValidator — submit-trigger state uses aria-disabled, not native `disabled`
+ *
+ * When a live-check-enabled form is invalid, `updateSubmitTriggerState` marks the submit trigger
+ * with `aria-disabled="true"` + the class `gina-form-submit-disabled` INSTEAD of the native
+ * `disabled` property. A natively-disabled <button> emits no click event, so the form-level
+ * click -> validate -> show-all-errors -> focus-first guard (the `validate.<id>` listener) never
+ * fires and the button is a dead no-op with zero feedback. `aria-disabled` keeps the trigger
+ * operable: the click runs validation (revealing every invalid field + focusing the first) while
+ * `isValid()` (the real gate in the `validate.<id>` guard) still blocks the send.
+ *
+ * The SHOW branch (form valid, or live-check off) KEEPS clearing native `disabled` so a trigger
+ * rendered `<button disabled>` in markup still enables. The change is tag-agnostic — it works for
+ * both <button> and <a> submit triggers (an <a>'s `.disabled` is a harmless expando).
+ *
+ * Strategy (same convention as validator-aria-invalid / validator-livecheck-message-blur):
+ *  - test-local replicas of `updateSubmitTriggerState`'s SHOW/HIDE branches and the `validate.<id>`
+ *    guard body, driven against a real jsdom DOM (`updateSubmitTriggerState` is a closure-private
+ *    fn inside `ValidatorPlugin` and cannot be instantiated in node:test — see architecture doc §9);
+ *  - a subtract test reproducing the pre-fix native-disable so the suite distinguishes fix from bug;
+ *  - a source-inspection block pinning the shipped branch shape so the replicas cannot drift.
+ *
+ * Note on the subtract: jsdom does NOT model a real browser's "a disabled control emits no click"
+ * activation behaviour (it dispatches click on disabled buttons), so the bug is asserted via the
+ * disabled STATE the pre-fix left behind — that native-disabled state is exactly what suppresses
+ * the click in a real browser. Verified live in a browser-rendered form.
+ */
+
+var { describe, it, before } = require('node:test');
+var assert = require('node:assert/strict');
+var path   = require('path');
+var fs     = require('fs');
+
+var { JSDOM } = require('jsdom');
+
+var FW   = require('../fw');
+var MAIN = path.join(FW, 'core/plugins/lib/validator/src/main.js');
+
+var mainSrc;
+before(function () { mainSrc = fs.readFileSync(MAIN, 'utf8'); });
+
+
+// --- Replica of updateSubmitTriggerState's branch (main.js `updateSubmitTriggerState`) ---
+// `$form` is the <form> node; `$form.dataset.ginaFormLiveCheckEnabled` mirrors the production
+// read `$formInstance.target.dataset.ginaFormLiveCheckEnabled`. Source pins (§06) keep this honest.
+function applySubmitTriggerState($form, $trigger, isFormValid) {
+    if ( /^true$/i.test(isFormValid) || !/^(true)$/i.test($form.dataset.ginaFormLiveCheckEnabled) ) { // show
+        $trigger.disabled = false;
+        $trigger.removeAttribute('aria-disabled');
+        $trigger.classList.remove('gina-form-submit-disabled');
+    } else { // hide — perceivable but not operable, NOT native-disabled
+        $trigger.setAttribute('aria-disabled', 'true');
+        $trigger.classList.add('gina-form-submit-disabled');
+    }
+}
+
+// Pre-fix replica: the invalid path natively disabled the trigger (which kills the click).
+function applySubmitTriggerState_preFix($form, $trigger, isFormValid) {
+    if ( /^true$/i.test(isFormValid) || !/^(true)$/i.test($form.dataset.ginaFormLiveCheckEnabled) ) {
+        $trigger.disabled = false;
+    } else {
+        $trigger.disabled = true; // OLD: native disable -> no click event -> no feedback
+    }
+}
+
+// Replica of the validate.<id> guard body (main.js): render errors unconditionally, send only when
+// result.isValid(), else focus the first invalid field in DOM order (skip hidden/unfocusable).
+function runSubmitGuard($formNode, result, sendSpy) {
+    var errs = result['fields'] || result['error'];
+    displayFieldErrors($formNode, errs); // mirrors handleErrorsDisplay marking the invalid fields
+    if ( typeof(result['isValid']) != 'undefined' && result['isValid']() ) { // send if valid
+        sendSpy(result['data']);
+    } else { // failed submit: focus the first invalid field
+        if (errs) {
+            for (var i = 0, len = $formNode.length; i < len; ++i) {
+                var f = $formNode[i], n = f.getAttribute('name');
+                if ( n && typeof(errs[n]) != 'undefined'
+                     && ( typeof(errs[n].count) != 'function' || errs[n].count() > 0 )
+                     && f.type != 'hidden' && typeof(f.focus) == 'function' ) {
+                    f.focus();
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// minimal error-marker (the full handleErrorsDisplay renderer is locked by validator-aria-invalid)
+function displayFieldErrors($formNode, errs) {
+    if (!errs) return;
+    for (var i = 0, len = $formNode.length; i < len; ++i) {
+        var f = $formNode[i], n = f.getAttribute('name');
+        if ( n && typeof(errs[n]) != 'undefined' && f.parentNode ) {
+            f.parentNode.classList.add('form-item-error');
+        }
+    }
+}
+
+
+// --- Fixtures (framework-generic markup) ---
+function makeForm(liveCheck, triggerHtml) {
+    var dom = new JSDOM('<!doctype html><html><body>' +
+        '<form id="parent" data-gina-form-live-check-enabled="' + liveCheck + '">' +
+            '<div class="form-item"><input name="myField" id="myField" type="text"></div>' +
+            triggerHtml +
+        '</form></body></html>');
+    var doc = dom.window.document;
+    return {
+        window  : dom.window,
+        document: doc,
+        form    : doc.getElementById('parent'),
+        field   : doc.getElementById('myField'),
+        trigger : doc.getElementById('parentSubmit')
+    };
+}
+var BUTTON          = '<button id="parentSubmit" type="submit">Send</button>';
+var BUTTON_DISABLED = '<button id="parentSubmit" type="submit" disabled>Send</button>';
+var ANCHOR          = '<a id="parentSubmit" data-gina-form-submit="true" href="#">Send</a>';
+
+
+// 01 - HIDE branch: invalid + live-on -> aria-disabled + class, native .disabled stays false
+describe('01 - invalid + live-check on: aria-disabled marker, native .disabled stays false', function () {
+    it('sets aria-disabled="true" + the class and does NOT natively disable', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false); // invalid
+        assert.equal(ctx.trigger.getAttribute('aria-disabled'), 'true');
+        assert.ok(ctx.trigger.classList.contains('gina-form-submit-disabled'));
+        assert.equal(ctx.trigger.disabled, false, 'the button stays operable (no native disable)');
+    });
+});
+
+
+// 02 - operable invalid button: the click flows, the guard shows errors + focuses first invalid, no send
+describe('02 - operable invalid button runs the guard: errors shown, focus first invalid, NO send', function () {
+    it('an aria-disabled (not native-disabled) button still emits a click', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false);
+        var clicks = 0;
+        ctx.trigger.addEventListener('click', function (e) { e.preventDefault(); clicks++; });
+        ctx.trigger.dispatchEvent(new ctx.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+        assert.ok(clicks >= 1, 'an operable trigger fires the click that lets the form-level guard run');
+    });
+
+    it('the guard displays field errors, focuses the first invalid field, and does NOT send', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false);
+        var sent = [];
+        var result = {
+            fields : { myField: { isRequired: 'Cannot be left empty' } },
+            data   : { myField: '' },
+            isValid: function () { return false; }
+        };
+        runSubmitGuard(ctx.form, result, function (d) { sent.push(d); });
+        assert.equal(sent.length, 0, 'an invalid form must not send');
+        assert.ok(ctx.field.parentNode.classList.contains('form-item-error'), 'the field error is displayed');
+        assert.equal(ctx.document.activeElement, ctx.field, 'focus moved to the first invalid field');
+    });
+
+    it('a valid form DOES send once the guard runs (control for the no-send assertion)', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, true);
+        var sent = [];
+        var result = { fields: null, data: { myField: 'ok' }, isValid: function () { return true; } };
+        runSubmitGuard(ctx.form, result, function (d) { sent.push(d); });
+        assert.equal(sent.length, 1, 'a valid form sends');
+    });
+
+    it('the DOMParser submit-proxy no longer sees a native-disabled trigger (its cancelEvent gate is not tripped)', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false);
+        // main.js submit proxy: new DOMParser().parseFromString(form.innerHTML,...).getElementById(id).disabled
+        var parsed = new ctx.window.DOMParser()
+            .parseFromString(ctx.form.innerHTML, 'text/html')
+            .getElementById('parentSubmit');
+        assert.equal(parsed.disabled, false, 'no `disabled` attribute serialized -> the submit-proxy gate does not cancel');
+        assert.equal(parsed.getAttribute('aria-disabled'), 'true', 'the aria marker IS serialized (attribute, not native disable)');
+    });
+});
+
+
+// 03 - SHOW branch: valid -> marker cleared, .disabled false
+describe('03 - valid: aria-disabled + class removed, .disabled false', function () {
+    it('clears aria-disabled + the class and keeps .disabled false', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false); // invalid -> marker on
+        applySubmitTriggerState(ctx.form, ctx.trigger, true);  // valid   -> marker off
+        assert.equal(ctx.trigger.getAttribute('aria-disabled'), null);
+        assert.equal(ctx.trigger.classList.contains('gina-form-submit-disabled'), false);
+        assert.equal(ctx.trigger.disabled, false);
+    });
+});
+
+
+// 04 - regression: markup <button disabled> enables on valid AND when live-check off; subtract-the-fix
+describe('04 - markup-disabled button: SHOW branch clears native disabled (both paths) + subtract', function () {
+    it('a <button disabled> in markup becomes operable once the form is valid (live-check on)', function () {
+        var ctx = makeForm('true', BUTTON_DISABLED);
+        assert.equal(ctx.trigger.disabled, true, 'starts natively disabled from markup');
+        applySubmitTriggerState(ctx.form, ctx.trigger, true); // valid -> SHOW
+        assert.equal(ctx.trigger.disabled, false, 'SHOW branch cleared the native disable');
+    });
+
+    it('a <button disabled> becomes operable when live-check is off (even while "invalid")', function () {
+        var ctx = makeForm('false', BUTTON_DISABLED);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false); // isFormValid false, but live-check off -> SHOW
+        assert.equal(ctx.trigger.disabled, false, 'live-check off takes the SHOW branch, clearing disabled');
+    });
+
+    it('subtract-the-fix: the pre-fix invalid path left the button natively disabled (the dead-button bug)', function () {
+        var ctx = makeForm('true', BUTTON);
+        applySubmitTriggerState_preFix(ctx.form, ctx.trigger, false); // pre-fix invalid
+        assert.equal(ctx.trigger.disabled, true, 'pre-fix: native disable (this state suppresses the click in a real browser)');
+        assert.equal(ctx.trigger.getAttribute('aria-disabled'), null, 'pre-fix: no aria marker, no operable state');
+        // post-fix on the same case keeps it operable + marked:
+        var ctx2 = makeForm('true', BUTTON);
+        applySubmitTriggerState(ctx2.form, ctx2.trigger, false);
+        assert.equal(ctx2.trigger.disabled, false, 'post-fix: operable');
+        assert.equal(ctx2.trigger.getAttribute('aria-disabled'), 'true', 'post-fix: aria-disabled marker');
+    });
+});
+
+
+// 05 - anchor <a> submit trigger: tag-agnostic marker, no throw
+describe('05 - anchor <a> submit trigger: tag-agnostic marker, no throw', function () {
+    it('marks an <a> trigger with aria-disabled + class without error on invalid', function () {
+        var ctx = makeForm('true', ANCHOR);
+        assert.doesNotThrow(function () { applySubmitTriggerState(ctx.form, ctx.trigger, false); });
+        assert.equal(ctx.trigger.getAttribute('aria-disabled'), 'true');
+        assert.ok(ctx.trigger.classList.contains('gina-form-submit-disabled'));
+    });
+
+    it('clears the marker on an <a> trigger when valid, and .disabled=false is a harmless expando', function () {
+        var ctx = makeForm('true', ANCHOR);
+        applySubmitTriggerState(ctx.form, ctx.trigger, false);
+        assert.doesNotThrow(function () { applySubmitTriggerState(ctx.form, ctx.trigger, true); });
+        assert.equal(ctx.trigger.getAttribute('aria-disabled'), null);
+        assert.equal(ctx.trigger.classList.contains('gina-form-submit-disabled'), false);
+    });
+});
+
+
+// 06 - source pins: lock the shipped updateSubmitTriggerState shape + the isValid() send gate
+describe('06 - source pins: updateSubmitTriggerState show/hide shape', function () {
+    it('SHOW branch clears native disabled + removes aria-disabled + removes the class', function () {
+        assert.match(
+            mainSrc,
+            /\{ \/\/ show submitTrigger\s+\$submitTrigger\.disabled = false;\s+\$submitTrigger\.removeAttribute\('aria-disabled'\);\s+\$submitTrigger\.classList\.remove\('gina-form-submit-disabled'\);/
+        );
+    });
+
+    it('HIDE branch sets aria-disabled + adds the class (and does NOT natively disable)', function () {
+        assert.match(
+            mainSrc,
+            /\} else \{ \/\/ hide submitTrigger[^\n]*\s+\$submitTrigger\.setAttribute\('aria-disabled', 'true'\);\s+\$submitTrigger\.classList\.add\('gina-form-submit-disabled'\);/
+        );
+    });
+
+    it('the pre-fix native-disable HIDE assignment is gone', function () {
+        assert.doesNotMatch(mainSrc, /getElementById\(\$formInstance\.submitTrigger\)\.disabled\s*=\s*true/);
+        assert.doesNotMatch(mainSrc, /\$submitTrigger\.disabled\s*=\s*true/);
+    });
+
+    it('$submitTrigger.disabled is assigned exactly once, and only to false (the SHOW clear)', function () {
+        assert.deepEqual(mainSrc.match(/\$submitTrigger\.disabled\s*=\s*\w+/g) || [], ['$submitTrigger.disabled = false']);
+    });
+
+    it('the marker class is used at exactly two code sites (classList.remove in show, classList.add in hide)', function () {
+        // NB: a bare `gina-form-submit-disabled` count would be 3 — the consumer-styling comment names
+        // the class too. Pin the code form so the comment mention cannot inflate the count.
+        assert.equal((mainSrc.match(/classList\.(?:add|remove)\('gina-form-submit-disabled'\)/g) || []).length, 2);
+    });
+
+    it('the rationale comment is pinned so the branch is not silently reverted to native disable', function () {
+        assert.match(mainSrc, /aria-disabled keeps the trigger operable/);
+        assert.match(mainSrc, /Tag-agnostic: setAttribute\/classList work for both/);
+    });
+
+    it('the real send gate stays isValid() in the validate.<id> guard', function () {
+        assert.match(mainSrc, /result\['isValid'\]\(\) \) \{ \/\/ send if valid/);
+        assert.match(mainSrc, /instance\.\$forms\[_id\]\.send\(result\['data'\]\)/);
+    });
+});

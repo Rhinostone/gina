@@ -420,3 +420,125 @@ describe('08 - static-asset template.assets stays an object (never the string fr
     });
 
 });
+
+
+// ─── 09 — directory→index redirect sends 301 on BOTH protocols, dev or not ───
+//
+// The dir→index normalizer (a static request whose resolved filename is a
+// directory containing an index.html) always answered :status 301 on HTTP/2,
+// but the HTTP/1.x branch issued its writeHead(301) only inside the
+// isCacheless gate — a NON-dev HTTP/1.x directory hit answered 200 with a
+// Location header browsers ignore (a blank page instead of the index).
+// Reproduced live on a default-configured bundle (http/1.1 + http, non-dev):
+// GET /sub/ → HTTP/1.1 200 + location: /sub/index.html + empty body.
+
+describe('09 - dir→index normalizer: unconditional 301, dev-gated no-cache set', function() {
+
+    var src, region, h2Half, h1Half;
+
+    // Strips /* */ blocks and // line comments so negative pins don't trip on
+    // the explanatory comments kept next to the code.
+    function stripComments(s) {
+        return s
+            .replace(/\/\*[\s\S]*?\*\//g, '')
+            .split('\n')
+            .map(function(line) { return line.replace(/\/\/.*$/, ''); })
+            .join('\n');
+    }
+
+    before(function() {
+        src = fs.readFileSync(SOURCE, 'utf8');
+
+        // The dir→index region: from the index.html rewrite to the
+        // require-cache eviction that follows the protocol split.
+        var dirIdx = src.indexOf("filename += 'index.html'");
+        var endIdx = src.indexOf('delete require.cache', dirIdx);
+        region = (dirIdx > -1 && endIdx > dirIdx) ? src.slice(dirIdx, endIdx) : '';
+
+        // Split the region at the HTTP/1.x branch entry.
+        var h1Idx = region.indexOf("response.setHeader('location', request.url)");
+        h2Half = (h1Idx > -1) ? region.slice(0, h1Idx) : '';
+        h1Half = (h1Idx > -1) ? region.slice(h1Idx) : '';
+    });
+
+    it('isolates the dir→index region and both protocol halves', function() {
+        assert.ok(region.length > 0, 'dir→index region not found');
+        assert.ok(h2Half.length > 0 && h1Half.length > 0, 'protocol split anchor not found');
+    });
+
+    it('HTTP/2 half: the 301 status is set outside the isCacheless gate', function() {
+        var statusIdx = h2Half.indexOf("':status': 301");
+        var gateIdx   = h2Half.indexOf('if (isCacheless)');
+        assert.ok(statusIdx > -1, 'expected the hardcoded :status 301');
+        assert.ok(gateIdx > statusIdx, 'the :status must be assigned before (outside) the dev gate');
+    });
+
+    it('HTTP/1.x half: the header set starts with an unconditional content-type', function() {
+        var declIdx = h1Half.indexOf('var _dirHeaders');
+        var ctIdx   = h1Half.indexOf("'content-type': bundleConf.server.coreConfiguration.mime[ext]");
+        var gateIdx = h1Half.indexOf('if (isCacheless)');
+        assert.ok(declIdx > -1, 'expected the _dirHeaders literal');
+        assert.ok(ctIdx > declIdx && ctIdx < gateIdx, 'content-type must sit in the literal, before the dev gate');
+    });
+
+    it('HTTP/1.x half: the no-cache set stays dev-gated', function() {
+        var gateIdx = h1Half.indexOf('if (isCacheless)');
+        assert.ok(gateIdx > -1);
+        ['cache-control', 'pragma', 'expires'].forEach(function(k) {
+            var idx = h1Half.indexOf("_dirHeaders['" + k + "']");
+            assert.ok(idx > gateIdx, k + ' must be assigned inside the dev gate only');
+        });
+    });
+
+    it('HTTP/1.x half: writeHead(301, _dirHeaders) is unconditional — after the gate closes', function() {
+        var whIdx  = h1Half.indexOf('response.writeHead(301, _dirHeaders)');
+        var expIdx = h1Half.indexOf("_dirHeaders['expires']");
+        var endIdx = h1Half.indexOf('response.end()');
+        assert.ok(whIdx > -1, 'expected the unconditional writeHead(301, _dirHeaders)');
+        assert.ok(whIdx > expIdx, 'the writeHead must follow the gated assignments (i.e. sit outside the gate)');
+        assert.ok(endIdx > whIdx, 'the response must end after the status is written');
+    });
+
+    it('HTTP/1.x half: the pre-fix gated inline writeHead shape is gone', function() {
+        assert.ok(
+            stripComments(h1Half).indexOf('writeHead(301, {') < 0,
+            'the inline-object writeHead inside the dev gate must not come back'
+        );
+    });
+
+    // Mirrors the fixed header construction.
+    function buildDirHeaders(isCacheless, mimeType) {
+        var _dirHeaders = { 'content-type': mimeType };
+        if (isCacheless) {
+            _dirHeaders['cache-control'] = 'no-cache, no-store, must-revalidate';
+            _dirHeaders['pragma'] = 'no-cache';
+            _dirHeaders['expires'] = '0';
+        }
+        return { status: 301, headers: _dirHeaders };
+    }
+
+    it('replica: non-dev sends 301 with content-type only', function() {
+        var r = buildDirHeaders(false, 'text/html');
+        assert.equal(r.status, 301);
+        assert.deepEqual(Object.keys(r.headers), ['content-type']);
+    });
+
+    it('replica: dev sends 301 with the no-cache set on top', function() {
+        var r = buildDirHeaders(true, 'text/html');
+        assert.equal(r.status, 301);
+        assert.equal(r.headers['cache-control'], 'no-cache, no-store, must-revalidate');
+        assert.equal(r.headers['pragma'], 'no-cache');
+        assert.equal(r.headers['expires'], '0');
+    });
+
+    it('subtract: the pre-fix shape leaves the status unwritten outside dev (default 200 + Location)', function() {
+        function preFixStatus(isCacheless) {
+            var statusWritten = null;
+            if (isCacheless) { statusWritten = 301; }
+            return statusWritten; // null → the response goes out with the default 200
+        }
+        assert.equal(preFixStatus(false), null, 'non-dev: no writeHead — the defect (200 with a Location header)');
+        assert.equal(preFixStatus(true), 301);
+    });
+
+});

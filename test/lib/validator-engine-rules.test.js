@@ -304,17 +304,65 @@ describe('09 - isDate', function () {
 // 10 — chaining / error accumulation
 describe('10 - chaining', function () {
 
-    it('isRequired().isEmail() on "" records BOTH errors', function () {
+    it('isRequired().isEmail() on "" records ONLY isRequired (#B78 — empty adjudicated by isRequired)', function () {
         var f = vf('email', '');
         f.isRequired().isEmail();
-        assert.equal(f.valid, false);
+        assert.equal(f.valid, false); // #B78 keeps .valid consistent with the surviving isRequired error
         assert.ok(f.errors && typeof f.errors.isRequired === 'string', 'expected isRequired error');
-        assert.ok(f.errors && typeof f.errors.isEmail === 'string', 'expected isEmail error');
+        assert.equal(typeof f.errors.isEmail, 'undefined', '#B78 — isEmail must NOT pile on an empty required field');
     });
 
     it('isRequired().isEmail() on a valid address passes with no errors', function () {
         var f = vf('email', 'a@b.com');
         f.isRequired().isEmail();
         ok(f);
+    });
+});
+
+
+// 11 — #B78: an empty REQUIRED field records ONLY isRequired (no double-message pile-on).
+//   A rule chained after isRequired on '' used to also validate the empty string and record
+//   its own error (isRequired disabled the empty-bypass). Now empty is adjudicated by
+//   isRequired alone; the field stays invalid via the surviving isRequired key, and `.valid`
+//   stays false (kept consistent). Custom `is` is deliberately OUT of scope (condition rule).
+describe('11 - #B78 required+empty records only isRequired', function () {
+
+    function onlyIsRequired(f, siblingKey) {
+        assert.equal(f.valid, false, 'field stays invalid via isRequired');
+        assert.ok(f.errors && typeof f.errors.isRequired === 'string', 'isRequired recorded');
+        assert.equal(typeof f.errors[siblingKey], 'undefined',
+            '#B78 — ' + siblingKey + ' must NOT pile on an empty required field; got ' + JSON.stringify(f.errors));
+    }
+
+    it('isRequired().isEmail() on "" → only isRequired', function () {
+        onlyIsRequired(vf('e', '').isRequired().isEmail(), 'isEmail');
+    });
+    it('isRequired().isJsonWebToken() on "" → only isRequired', function () {
+        onlyIsRequired(vf('t', '').isRequired().isJsonWebToken(), 'isJsonWebToken');
+    });
+    it('isRequired().isFloat() on "" → only isRequired', function () {
+        onlyIsRequired(vf('n', '').isRequired().isFloat(), 'isFloat');
+    });
+    it('isRequired().isInList() on "" → only isRequired', function () {
+        onlyIsRequired(vf('s', '').isRequired().isInList('a', 'b'), 'isInList');
+    });
+    it('isRequired().isString() on "" → only isRequired', function () {
+        onlyIsRequired(vf('s', '').isRequired().isString(), 'isString');
+    });
+
+    // Invariant preserved: an OPTIONAL empty field still bypasses (valid, no error).
+    it('optional empty still passes (bypass preserved) — isFloat', function () {
+        ok(vf('n', '').isFloat());
+    });
+    it('optional empty still passes (bypass preserved) — isInList', function () {
+        ok(vf('s', '').isInList('a', 'b'));
+    });
+
+    // The fix is empty-only: a required + NON-empty invalid value still records the rule error.
+    it('required + non-empty invalid still records the rule error — isEmail', function () {
+        ko(vf('e', 'nope').isRequired().isEmail(), 'isEmail');
+    });
+    it('required + non-empty not-in-list still records the rule error — isInList', function () {
+        ko(vf('s', 'x').isRequired().isInList('a', 'b'), 'isInList');
     });
 });

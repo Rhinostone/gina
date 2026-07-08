@@ -6440,7 +6440,7 @@ describe('54 - toggleReveal resolves /_gina/reveal via the shared resolveBundleB
     // resolveBundleBase()'s own 3-fallback internals (?target= -> opener ->
     // strip) + cross-origin try/catch are pinned in §79; §54 now pins only that
     // toggleReveal routes through that shared resolver (the inline copy was
-    // folded in — see llms.txt #190 follow-up).
+    // folded in — see llms.txt #176 (formerly #190) follow-up).
 
     it('toggleReveal resolves its base via the shared resolveBundleBase()', function() {
         var src = getInspSrc54();

@@ -22,6 +22,20 @@
  * never returns an Error) — now a self-resolved CLI invocation wrapped in
  * try/catch routing failures through end().
  *
+ * §08/§09 lock the follow-up hardening: the CLI bootstrap sweeps GINA_* out of
+ * process.env, so linkGina re-exports GINA_HOMEDIR to the spawned child (a home
+ * override otherwise never reaches it — the child resolves the default home,
+ * misses the just-registered project, and the link fails after registration
+ * landed), and the tail of the child's captured output is appended to the
+ * postcondition error instead of being discarded with the Shell temp logs.
+ *
+ * §10 locks the same two defect classes in the --scope/--env child blocks
+ * (`scope:add` / `env:add` children): self-resolved CLI instead of a
+ * PATH-resolved `gina`, GINA_HOMEDIR re-exported past the bootstrap sweep, and
+ * the inherited-stdio execSync return no longer dereferenced (it is null under
+ * inherited stdio, so reading it misreported every successful child as a
+ * failure and exited 1).
+ *
  * Run standalone:
  *   node --test test/lib/project-add-link.test.js
  */
@@ -307,6 +321,295 @@ describe('07 - framework start/restart invoke the self-resolved bin/gina wrapper
         // absolute-path invocation to stay PATH-independent end-to-end
         var ginaSrc = fs.readFileSync(resolved, 'utf8');
         assert.ok(ginaSrc.indexOf("__dirname + '/cli'") > -1);
+    });
+
+});
+
+
+// ── 08 — env re-export: the spawned CLI child must see the parent's home ─────
+//
+// The CLI bootstrap sweeps every GINA_*/VENDOR_*/USER_* key out of process.env
+// into the framework context (read back via getEnvVar), so a spawned child
+// inherits none of them. linkGina must re-export the home explicitly or, under
+// a home override, the child resolves the default home, misses the
+// just-registered project, and the link fails after registration landed —
+// project:add then exits 1 on an otherwise-successful registration.
+
+describe('08 - linkGina re-exports the framework home to the spawned CLI child', function() {
+
+    var SHELL_PATH = path.join(FW, 'lib/shell.js');
+    var SHELL_SRC = fs.readFileSync(SHELL_PATH, 'utf8');
+
+    it('Shell supports an `env` option (declared in the options map)', function() {
+        assert.match(
+            SHELL_SRC,
+            /var local = \{\s*chdir : undefined,\s*console: undefined,\s*env : undefined\s*\}/,
+            'expected the Shell options map to carry an `env` slot (setOptions rejects unknown keys)'
+        );
+    });
+
+    it('the local spawn passes the configured env through', function() {
+        assert.ok(
+            SHELL_SRC.indexOf("{ cwd: root, stdio: [ 'ignore', out, err ], env: local.env }") > -1,
+            'expected the runLocal spawn to receive `env: local.env` (undefined = inherit, existing callers unchanged)'
+        );
+    });
+
+    it('linkGina composes the child env from process.env plus an explicit GINA_HOMEDIR', function() {
+        assert.match(
+            LG,
+            /env\s*:\s*Object\.assign\(\{\},\s*process\.env,\s*\{\s*GINA_HOMEDIR\s*:\s*GINA_HOMEDIR\s*\}\s*\)/,
+            'expected linkGina to re-export the home to the spawned child'
+        );
+    });
+
+    it('the env rides the same setOptions call as chdir, ahead of the run', function() {
+        var soIdx  = LG.indexOf('npm.setOptions({');
+        var envIdx = LG.indexOf('env', soIdx);
+        var runIdx = LG.indexOf('.run([ process.execPath,');
+        assert.ok(soIdx > -1 && envIdx > soIdx && envIdx < runIdx);
+    });
+
+    // Mirrors the composed-env shape, driven with a post-sweep process.env
+    // (the sweep leaves NO GINA_* behind).
+    function composeEnv(sweptEnv, home) {
+        return Object.assign({}, sweptEnv, { GINA_HOMEDIR: home });
+    }
+
+    it('replica: a post-sweep env gains GINA_HOMEDIR without losing other keys', function() {
+        var swept = { PATH: '/usr/bin', HOME: '/home/someone' }; // no GINA_* — the sweep removed them
+        var env = composeEnv(swept, '/tmp/custom-home/.gina');
+        assert.equal(env.GINA_HOMEDIR, '/tmp/custom-home/.gina');
+        assert.equal(env.PATH, '/usr/bin');
+        assert.equal(env.HOME, '/home/someone');
+        assert.ok(!('GINA_HOMEDIR' in swept), 'the source env object must not be mutated');
+    });
+
+    it('subtract: plain post-sweep inheritance carries NO home for the child (the defect condition)', function() {
+        var swept = { PATH: '/usr/bin', HOME: '/home/someone' };
+        var inherited = Object.assign({}, swept); // pre-fix shape: bare inheritance of the swept env
+        assert.ok(
+            !('GINA_HOMEDIR' in inherited),
+            'post-sweep inheritance loses the home override — the child would resolve the default home'
+        );
+    });
+
+});
+
+
+// ── 09 — failure observability: the child's captured output is surfaced ──────
+
+describe('09 - linkGina appends the child output tail to the postcondition error', function() {
+
+    it('builds a bounded childOutput from the Shell data argument', function() {
+        assert.ok(
+            LG.indexOf("'\\n[ link output ] '+ String(data).trim().slice(-800)") > -1,
+            'expected a bounded tail of the child output (its stdio otherwise vanishes with the Shell temp logs)'
+        );
+    });
+
+    it('appends childOutput to the postcondition error message', function() {
+        var errIdx = LG.indexOf("err = new Error('Could not create the gina symlink");
+        assert.ok(errIdx > -1);
+        var stmt = LG.slice(errIdx, LG.indexOf(';', errIdx));
+        assert.ok(stmt.indexOf('+ childOutput') > -1, 'the error must carry the child output tail');
+    });
+
+    // Mirrors the childOutput construction line-for-line.
+    function buildChildOutput(data) {
+        return ( data && String(data).trim().length > 0 ) ? '\n[ link output ] '+ String(data).trim().slice(-800) : '';
+    }
+
+    it('replica: child output present → tail appended', function() {
+        var out = buildChildOutput('project [ x ] not found\n');
+        assert.equal(out, '\n[ link output ] project [ x ] not found');
+    });
+
+    it('replica: output longer than 800 chars is tail-bounded and keeps the trailing text', function() {
+        var noise = new Array(900).join('a') + 'THE-ERROR';
+        var out = buildChildOutput(noise);
+        assert.ok(out.length <= '\n[ link output ] '.length + 800);
+        assert.ok(out.indexOf('THE-ERROR') > -1, 'the tail must keep the trailing error text');
+    });
+
+    it('replica: empty / whitespace-only / absent output → no suffix', function() {
+        assert.equal(buildChildOutput(''), '');
+        assert.equal(buildChildOutput('   \n'), '');
+        assert.equal(buildChildOutput(null), '');
+        assert.equal(buildChildOutput(undefined), '');
+    });
+
+});
+
+
+// ── 10 — the --scope/--env child blocks: self-resolved CLI + home re-export ──
+
+describe('10 - project:add --scope/--env children run the self-resolved CLI with the home re-exported', function() {
+
+    // Structural end-anchored slices: scope block runs up to the env block's
+    // guard; env block runs up to the manifest-creation comment.
+    var scopeIdx = SRC.indexOf("if ( self.scope && !isDefined('scope', self.scope) )");
+    var envIdx   = SRC.indexOf("if ( self.env && !isDefined('env', self.env) )");
+    var manIdx   = SRC.indexOf('// creating project manifest');
+    var SCOPE_BLK = (scopeIdx > -1 && envIdx > scopeIdx) ? SRC.slice(scopeIdx, envIdx) : '';
+    var ENV_BLK   = (envIdx > -1 && manIdx > envIdx) ? SRC.slice(envIdx, manIdx) : '';
+
+    it('both blocks were found by their structural anchors', function() {
+        assert.ok(SCOPE_BLK.length > 0, 'scope block anchor missing');
+        assert.ok(ENV_BLK.length > 0, 'env block anchor missing');
+    });
+
+    [ ['scope', function() { return SCOPE_BLK; }, "'gina scope:add '", 'scope:add' ],
+      ['env',   function() { return ENV_BLK;   }, "'gina env:add '",   'env:add'   ]
+    ].forEach(function(spec) {
+        var name = spec[0], blkFn = spec[1], oldLiteral = spec[2], task = spec[3];
+
+        it('['+ name +'] re-exports GINA_HOMEDIR onto the child env after the process.env spread', function() {
+            var blk = blkFn();
+            var spreadIdx = blk.indexOf('{ ...process.env }');
+            var homeIdx = blk.indexOf("currentEnv['GINA_HOMEDIR'] = GINA_HOMEDIR");
+            assert.ok(spreadIdx > -1, 'expected the process.env spread');
+            assert.ok(homeIdx > spreadIdx, 'expected the GINA_HOMEDIR re-export after the spread (the sweep strips it from process.env)');
+        });
+
+        it('['+ name +'] invokes the running install\'s own CLI (process.execPath + resolved bin/cli)', function() {
+            var blk = blkFn();
+            assert.ok(blk.indexOf('process.execPath') > -1, 'expected process.execPath');
+            assert.ok(
+                blk.indexOf("resolve(__dirname, '../../../../..', 'bin/cli')") > -1,
+                'expected the 5-up self-resolved bin/cli (the linkGina idiom)'
+            );
+            assert.ok(blk.indexOf("'\" "+ task +" '+") > -1, 'expected the '+ task +' task on the self-resolved CLI');
+        });
+
+        it('['+ name +'] no longer shells out to a PATH-resolved `gina`', function() {
+            assert.ok(
+                stripComments(blkFn()).indexOf(oldLiteral) < 0,
+                'the PATH-resolved '+ oldLiteral +' literal must be gone (repo checkouts / second installs resolve wrong)'
+            );
+        });
+
+        it('['+ name +'] does not dereference the inherited-stdio execSync return', function() {
+            var blk = stripComments(blkFn());
+            assert.ok(blk.indexOf('.toString()') < 0, 'the null-return dereference must be gone');
+            assert.ok(blk.indexOf('execSync( cmd , execOptions);') > -1, 'expected the bare execSync call');
+        });
+
+        it('['+ name +'] the catch surfaces the child error instead of a bare mislabel', function() {
+            assert.ok(blkFn().indexOf('could not be set: ') > -1, 'expected the real error appended to the message');
+        });
+    });
+
+    it('the undefined `self.stask` log token is gone from live code file-wide', function() {
+        // comment-stripped: the dead commented-out import blocks legitimately
+        // keep the old token in `//` lines.
+        assert.ok(stripComments(SRC).indexOf('self.stask') < 0, 'the warn prefix must use the real self.task');
+    });
+
+    // Mirrors the child-env composition line-for-line.
+    function composeChildEnv(sweptEnv, nodeParams, home) {
+        var currentEnv = Object.assign({}, sweptEnv);
+        currentEnv['NODE_OPTIONS'] = nodeParams.join(' ');
+        currentEnv['GINA_HOMEDIR'] = home;
+        return currentEnv;
+    }
+
+    it('replica: a post-sweep env gains GINA_HOMEDIR and keeps the NODE_OPTIONS forward', function() {
+        var swept = { PATH: '/usr/bin', HOME: '/home/someone' }; // no GINA_* — the sweep removed them
+        var env = composeChildEnv(swept, ['--inspect=1234'], '/tmp/custom-home/.gina');
+        assert.equal(env.GINA_HOMEDIR, '/tmp/custom-home/.gina');
+        assert.equal(env.NODE_OPTIONS, '--inspect=1234');
+        assert.equal(env.PATH, '/usr/bin');
+        assert.ok(!('GINA_HOMEDIR' in swept), 'the source env object must not be mutated');
+    });
+
+    it('subtract: the pre-fix return dereference throws on the inherited-stdio null return', function() {
+        // Old shape: console.log(execSync(cmd, {stdio:'inherit'}).toString().trim())
+        // — execSync returns null when stdout is not piped, so a SUCCESSFUL child
+        // still threw here and was misreported as "could not be set" + exit 1.
+        function oldShape(execSyncReturn) {
+            return execSyncReturn.toString().trim();
+        }
+        assert.throws(function() { oldShape(null); }, TypeError);
+    });
+
+    it('subtract: the fixed shape ignores the return and cannot throw on it', function() {
+        function fixedShape(execSyncReturn) {
+            // bare call — the return value is deliberately unread
+            return true;
+        }
+        assert.equal(fixedShape(null), true);
+    });
+
+});
+
+
+// ── 11 — home re-export at the remaining CLI child spawn sites ───────────────
+//
+// The CmdHelper auto-link execSyncs and the project:start/stop/restart bundle
+// delegations spawn children with the post-sweep process.env — under a
+// GINA_HOMEDIR override they resolved the DEFAULT home and silently created
+// links / scaffold artifacts there (measured: link-node-modules "fixed" a
+// manifest and linked node_modules under the wrong home, exit 0).
+
+describe('11 - CmdHelper auto-link children receive the re-exported home', function() {
+
+    var HELPER_PATH = path.join(FW, 'lib/cmd/helper.js');
+    var HELPER_SRC = fs.readFileSync(HELPER_PATH, 'utf8');
+    var blockIdx = HELPER_SRC.indexOf('// linking node-modules & gina');
+    var endIdx = HELPER_SRC.indexOf('cmd.protocols.sort()', blockIdx);
+    var BLOCK = (blockIdx > -1 && endIdx > blockIdx) ? HELPER_SRC.slice(blockIdx, endIdx) : '';
+
+    it('the block composes the child env from process.env plus an explicit GINA_HOMEDIR', function() {
+        assert.match(
+            BLOCK,
+            /var _linkEnv = Object\.assign\(\{\},\s*process\.env,\s*\{\s*GINA_HOMEDIR\s*:\s*GINA_HOMEDIR\s*\}\s*\)/,
+            'expected the _linkEnv composition (the sweep strips GINA_* from process.env)'
+        );
+    });
+
+    it('both auto-link execSyncs carry the composed env', function() {
+        var count = (BLOCK.match(/\{ env: _linkEnv \}/g) || []).length;
+        assert.equal(count, 2, 'expected both the link-node-modules and link children to receive _linkEnv');
+    });
+
+    it('the env is composed before the first child runs', function() {
+        // comment-stripped: the historical `// was: err = execSync(...)` line
+        // sits above the composition and would otherwise match first.
+        var live = stripComments(BLOCK);
+        var envIdx  = live.indexOf('var _linkEnv');
+        var execIdx = live.indexOf('execSync(');
+        assert.ok(envIdx > -1 && execIdx > envIdx);
+    });
+
+});
+
+describe('11b - project start/stop/restart delegations receive the re-exported home', function() {
+
+    ['start', 'stop', 'restart'].forEach(function(name) {
+        var FILE_PATH = path.join(FW, 'lib/cmd/project/' + name + '.js');
+        var FILE_SRC = fs.readFileSync(FILE_PATH, 'utf8');
+
+        it('[' + name + '] the exec options carry maxBuffer plus the composed env', function() {
+            assert.ok(
+                FILE_SRC.indexOf('exec(_cmd, { maxBuffer: 1024 * 500, env: Object.assign({}, process.env, { GINA_HOMEDIR: GINA_HOMEDIR }) }') > -1,
+                'expected the delegated bundle:' + name + ' child to receive the re-exported home'
+            );
+        });
+
+        it('[' + name + '] the bare pre-fix options shape is gone', function() {
+            assert.ok(
+                stripComments(FILE_SRC).indexOf('exec(_cmd, { maxBuffer: 1024 * 500 },') < 0,
+                'the env-less exec options must not come back (post-sweep inheritance loses the home)'
+            );
+        });
+    });
+
+    it('subtract: the pre-fix options object carries no home for the child', function() {
+        var preFix = { maxBuffer: 1024 * 500 };
+        assert.ok(!('env' in preFix), 'pre-fix shape: the child inherits the post-sweep env — no home override reaches it');
+        var fixed = { maxBuffer: 1024 * 500, env: Object.assign({}, { PATH: '/usr/bin' }, { GINA_HOMEDIR: '/tmp/ovr/.gina' }) };
+        assert.equal(fixed.env.GINA_HOMEDIR, '/tmp/ovr/.gina');
     });
 
 });

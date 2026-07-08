@@ -130,6 +130,13 @@ const server = http.createServer(function (req, res) {
         if (url === '/_gina/assets/routing.json') {
             return send(res, 200, 'application/json; charset=utf-8', '{}');
         }
+        // #B80 — a legacy popin trigger whose GET returns an XHR redirect (application/json),
+        // not an HTML fragment. A hover/focus preload must NOT cache + inject this JSON as
+        // popin content; the click-time popinLoad's _self tunnel must load `location` instead.
+        if (url === '/redirect-frag') {
+            return send(res, 200, 'application/json; charset=utf-8',
+                JSON.stringify({ isXhrRedirect: true, location: '/frag/ajax.html' }));
+        }
         var frag = url.match(/^\/frag\/([\w-]+)\.html$/);
         if (frag && FRAGMENTS.hasOwnProperty(frag[1])) {
             return send(res, 200, 'text/html; charset=utf-8', FRAGMENTS[frag[1]]);

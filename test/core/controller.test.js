@@ -3942,3 +3942,183 @@ describe('34 - redirect cache hardening: no-store folded into headInfos for dev 
     });
 
 });
+
+describe('35 - redirect XHR/popin JSON exits inherit the no-store hardening (#B75) + session-less guard', function() {
+
+    var src  = fs.readFileSync(SOURCE, 'utf8');
+    // Full-line comments stripped so negative pins never trip on the file's own comments.
+    var code = src.replace(/^\s*\/\/.*$/gm, '');
+
+    // End-anchored slice of the redirect body (same structural anchors as §34).
+    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var endIdx   = src.indexOf('Move files to assets dir', startIdx);
+    var body     = src.substring(startIdx, endIdx);
+
+    // ── (a) source structure ─────────────────────────────────────────────────────
+
+    it('a no-store helper for the JSON redirect exits exists, gated on dev OR proxied', function() {
+        var hIdx = body.indexOf('var _applyNoStoreToRedirectJSON = function()');
+        assert.ok(hIdx > -1, 'expected the _applyNoStoreToRedirectJSON helper');
+        var gIdx = body.indexOf('var _noStoreNeeded = ( self.isCacheless() || isProxyHost );', hIdx);
+        assert.ok(gIdx > hIdx, 'the helper must gate on ( self.isCacheless() || isProxyHost )');
+        // the trio, set on local.res (so render-json's HTTP/2 getHeaders() fold + HTTP/1.1 both carry it)
+        assert.ok(body.indexOf("local.res.setHeader('cache-control', 'no-cache, no-store, must-revalidate')", gIdx) > gIdx, 'cache-control no-store');
+        assert.ok(body.indexOf("local.res.setHeader('pragma', 'no-cache')", gIdx) > gIdx, 'pragma');
+        assert.ok(body.indexOf("local.res.setHeader('expires', '0')", gIdx) > gIdx, 'expires');
+    });
+
+    it('the helper is invoked before BOTH renderJSON redirect exits', function() {
+        // exit 1: the isXMLRequest()+params branch -> renderJSON(redirectObj)
+        var callA = body.indexOf('_applyNoStoreToRedirectJSON();');
+        var jsonA = body.indexOf('self.renderJSON(redirectObj);');
+        assert.ok(callA > -1 && jsonA > callA, 'helper call must precede renderJSON(redirectObj)');
+        // exit 2: the popin branch -> renderJSON({ isXhrRedirect ... popin })
+        var popIdx = body.indexOf('// Popin redirect');
+        var callB  = body.indexOf('_applyNoStoreToRedirectJSON();', popIdx);
+        var jsonB  = body.indexOf('return self.renderJSON({', popIdx);
+        assert.ok(callB > popIdx && jsonB > callB, 'helper call must precede the popin renderJSON');
+    });
+
+    it('exactly two JSON-exit invocations of the helper', function() {
+        var calls = body.match(/_applyNoStoreToRedirectJSON\(\);/g) || [];
+        assert.equal(calls.length, 2, 'expected exactly two helper call sites (the two renderJSON redirect exits)');
+    });
+
+    it('the #B68 writeHead gate literal stays unique (helper did not reuse it)', function() {
+        var writeHeadGate = body.match(/if \(self\.isCacheless\(\) \|\| isProxyHost\) \{/g) || [];
+        assert.equal(writeHeadGate.length, 1, 'the writeHead gate literal must remain unique to #B68 (§34 depends on it)');
+    });
+
+    it('the session-less guard replaces the unguarded req.session.user deref', function() {
+        assert.ok(
+            body.indexOf("var userSession = ( typeof(req.session) != 'undefined' && req.session )") > -1,
+            'expected the guarded userSession form'
+        );
+        assert.ok(code.indexOf('var userSession = req.session.user || req.session;') < 0, 'the unguarded deref must be gone');
+    });
+
+    // ── (b) pure logic ───────────────────────────────────────────────────────────
+
+    // mirrors the helper's setHeader trio under the gate
+    function applyNoStore(isCacheless, isProxyHost) {
+        var headers = {};
+        if (isCacheless || isProxyHost) {
+            headers['cache-control'] = 'no-cache, no-store, must-revalidate';
+            headers['pragma'] = 'no-cache';
+            headers['expires'] = '0';
+        }
+        return headers;
+    }
+
+    it('proxied prod: the JSON redirect gets no-store (the gap #B75 closes)', function() {
+        var h = applyNoStore(false, true);
+        assert.equal(h['cache-control'], 'no-cache, no-store, must-revalidate');
+        assert.equal(h.pragma, 'no-cache');
+        assert.equal(h.expires, '0');
+    });
+
+    it('direct prod: the JSON redirect stays header-free (byte-identical to pre-#B75)', function() {
+        assert.deepEqual(applyNoStore(false, false), {});
+    });
+
+    it('dev keeps the set with or without a proxy', function() {
+        assert.equal(applyNoStore(true, false)['cache-control'], 'no-cache, no-store, must-revalidate');
+        assert.equal(applyNoStore(true, true)['cache-control'], 'no-cache, no-store, must-revalidate');
+    });
+
+    // mirrors the session-less guard
+    function resolveUserSession(session) {
+        return ( typeof(session) != 'undefined' && session ) ? (session.user || session) : null;
+    }
+
+    it('session-less guard: resolves to null instead of throwing', function() {
+        assert.equal(resolveUserSession(undefined), null);
+        assert.equal(resolveUserSession(null), null);
+        var s = { user: { id: 1 } };
+        assert.equal(resolveUserSession(s), s.user);
+        var s2 = { id: 2 }; // a session with no .user
+        assert.equal(resolveUserSession(s2), s2);
+    });
+
+    it('SUBTRACT — the pre-fix unguarded deref throws when no session is mounted', function() {
+        function preFix(session) { return session.user || session; } // the old line
+        assert.throws(function() { preFix(undefined); }, /Cannot read propert/);
+    });
+
+});
+
+
+// 36 — behavioral: pauseRequest snapshots the live request into requestStorage.
+// This is the one runtime (require + createTestInstance) test in this otherwise
+// source-pin-only file. controller.js cannot be required cold — it needs the framework
+// globals bootstrap (NODE_PATH + Module._initPaths + helpers + setPath('gina', ...)),
+// mirroring the standalone repro harness in class.controller.md §14. Requiring it also
+// installs JSON.clone (lib/merge) + Object.prototype.count (utils/prototypes) transitively.
+describe('36 - pauseRequest snapshots the live request into requestStorage (behavioral)', function() {
+
+    var FW = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW;
+    require('module').Module._initPaths();
+    require(path.join(FW, 'helpers'));              // injects _/getPath/requireJSON/setPath globals
+    setPath('gina', { core: path.join(FW, 'core') });
+    var SuperController = require(SOURCE);
+
+    function makeInstance(reqOverrides) {
+        var req = Object.assign({
+            url     : '/orders/42',
+            method  : 'POST',
+            routing : { rule: 'orders', namespace: 'default' },
+            params  : {},
+            get     : {},
+            post    : {}
+        }, reqOverrides || {});
+        return SuperController.createTestInstance({
+            req     : req,
+            res     : { setHeader: function () {}, end: function () {} },
+            options : { conf: { bundle: 'b', content: { routing: { orders: {} } } }, rule: 'orders', control: 'index' }
+        });
+    }
+
+    it('populates requestStorage.haltedRequest with the {url, routing, method, data} snapshot', function() {
+        var inst    = makeInstance();
+        var storage = {};
+        var out     = inst.pauseRequest({ qty: 2 }, storage);
+        assert.strictEqual(out, storage, 'returns the same storage object it was given');
+        assert.deepStrictEqual(storage.haltedRequest, {
+            url     : '/orders/42',
+            routing : { rule: 'orders', namespace: 'default' },
+            method  : 'post',        // lowercased
+            data    : { qty: 2 }     // JSON.clone of the passed data
+        });
+    });
+
+    it('lowercases the method and deep-clones the data (not the same reference)', function() {
+        var inst    = makeInstance({ method: 'PUT' });
+        var storage = {};
+        var payload = { nested: { a: 1 } };
+        inst.pauseRequest(payload, storage);
+        assert.equal(storage.haltedRequest.method, 'put');
+        assert.deepStrictEqual(storage.haltedRequest.data, { nested: { a: 1 } });
+        assert.notStrictEqual(storage.haltedRequest.data, payload, 'data is JSON.clone-d, not aliased');
+        assert.notStrictEqual(storage.haltedRequest.data.nested, payload.nested, 'deep clone reaches nested objects');
+    });
+
+    it('captures positional url params beyond index 0 into haltedRequest.params', function() {
+        // pauseRequest copies req.params but skips the first key (index 0 = the matched
+        // path, set by the engine at request.params[0]); see controller.js ~5343.
+        var inst    = makeInstance({ params: { 0: '/orders/42', id: '42', tab: 'items' } });
+        var storage = {};
+        inst.pauseRequest({}, storage);
+        assert.deepStrictEqual(storage.haltedRequest.params, { id: '42', tab: 'items' });
+    });
+
+    it('defaults storage to req.session when requestStorage is omitted', function() {
+        var session = {};
+        var inst    = makeInstance({ session: session });
+        var out     = inst.pauseRequest({ hello: 'world' });   // no explicit storage
+        assert.strictEqual(out, session, 'returns req.session as the storage');
+        assert.equal(session.haltedRequest.url, '/orders/42');
+        assert.deepStrictEqual(session.haltedRequest.data, { hello: 'world' });
+    });
+
+});

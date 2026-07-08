@@ -1228,3 +1228,84 @@ describe('20 - corrupt projects.json registration is skipped/clean-exited, not f
         });
     });
 });
+
+describe('21 - malformed @project token rejected loudly, not silently dropped (#B69)', function () {
+
+    var SRC = fs.readFileSync(HELPER_CMD_SOURCE, 'utf8');
+
+    it('source: a catch-all `else if ( /^\\@/.test(argv[i]) )` reject sits between the detection if and the bundles else-if', function () {
+        var detectIdx  = SRC.indexOf('if ( /^\\@[a-z0-9_.]/.test(argv[i]) ) {');
+        var rejectIdx  = SRC.indexOf('} else if ( /^\\@/.test(argv[i]) ) {');
+        var bundlesIdx = SRC.indexOf('} else if (mightBeASomeBundle && !/^\\@/.test(argv[i]) && isValidName(argv[i]) ) {');
+        assert.ok(detectIdx > -1, 'the first-char detection if must exist');
+        assert.ok(rejectIdx > detectIdx, 'the #B69 catch-all @ reject must follow the detection if');
+        assert.ok(bundlesIdx > rejectIdx, 'the bundles else-if must follow the reject (reject wins for @ tokens)');
+    });
+
+    it('source: the reject branch errors + exits + returns false (no silent skip)', function () {
+        var rejectIdx  = SRC.indexOf('} else if ( /^\\@/.test(argv[i]) ) {');
+        var bundlesIdx = SRC.indexOf('} else if (mightBeASomeBundle', rejectIdx);
+        assert.ok(rejectIdx > -1 && bundlesIdx > rejectIdx, 'both branches must exist, reject first');
+        var body = SRC.slice(rejectIdx, bundlesIdx);
+        assert.match(body, /is not a valid project name/, 'the reject reuses the canonical message');
+        assert.match(body, /console\.error\(errMsg\)/, 'the reject prints the message');
+        assert.match(body, /exit\(errMsg\)/, 'the reject exits non-zero (exit(truthy) -> process.exit(1))');
+        assert.match(body, /return false;/, 'the reject returns false');
+        assert.doesNotMatch(body, /continue\s*;/, 'no silent skip in the reject branch');
+    });
+
+    // Pure-logic replica of the argv-loop token classification. `fixed` toggles
+    // the #B69 catch-all reject so the MEASUREMENT test can prove the old shape.
+    function classify(tokens, fixed) {
+        var projectName = null, bundles = [], rejected = null;
+        var mightBeASomeBundle = true;
+        for (var i = 0; i < tokens.length; i++) {
+            var t = tokens[i];
+            if (/^\@[a-z0-9_.]/.test(t)) {
+                mightBeASomeBundle = false;
+                if (projectName === null) projectName = t.replace('@', '');
+            } else if (fixed && /^\@/.test(t)) {
+                rejected = t;   // #B69: loud reject; exit(errMsg) aborts the process
+                break;
+            } else if (mightBeASomeBundle && !/^\@/.test(t) && /^[a-z0-9_.]/.test(t.replace('@', ''))) {
+                bundles.push(t);
+            }
+            // pre-#B69: an out-of-class @ token falls through ALL branches (silently dropped)
+        }
+        return { projectName: projectName, bundles: bundles, rejected: rejected };
+    }
+
+    it('MEASUREMENT: the old loop silently drops an out-of-class @ token (projectName stays null)', function () {
+        var out = classify(['demo', '@Myproject'], false);
+        assert.equal(out.rejected, null);
+        assert.equal(out.projectName, null, 'the malformed token leaves projectName null -> cwd/all-projects fallback');
+        assert.deepEqual(out.bundles, ['demo'], 'the command would proceed against the wrong scope with exit 0');
+    });
+
+    it('fixed: an uppercase-first @ token is rejected loudly', function () {
+        var out = classify(['demo', '@Myproject'], true);
+        assert.equal(out.rejected, '@Myproject');
+    });
+
+    it('fixed: a bare `@` and a symbol-first @ token are rejected loudly', function () {
+        assert.equal(classify(['@'], true).rejected, '@');
+        assert.equal(classify(['@-x'], true).rejected, '@-x');
+    });
+
+    it('fixed: a malformed SECOND @ token is rejected too (multi-project argv lists)', function () {
+        var out = classify(['@myproject', '@Other'], true);
+        assert.equal(out.projectName, 'myproject');
+        assert.equal(out.rejected, '@Other');
+    });
+
+    it('fixed: in-class tokens untouched — lowercase project, digit-first version shape, bundles, flags', function () {
+        var out = classify(['demo', '@myproject'], true);
+        assert.equal(out.rejected, null);
+        assert.equal(out.projectName, 'myproject');
+        assert.deepEqual(out.bundles, ['demo']);
+        assert.equal(classify(['@0.5.11'], true).projectName, '0.5.11', 'digit-first (version-shaped) tokens still detected in-class');
+        var flags = classify(['--format=json'], true);
+        assert.equal(flags.rejected, null, 'flags never hit the reject');
+        assert.deepEqual(flags.bundles, [], 'flags are not bundles either');
+    });
+});
