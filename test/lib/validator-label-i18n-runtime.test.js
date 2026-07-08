@@ -161,15 +161,27 @@ describe('02 - unknown %-tokens in a catalog label render the literal "undefined
         assert.equal(msg, 'Champ  requis');
     });
 
-    it('a non-string catalog label makes the engine throw (hence the boot lint)', async function () {
+    it('a non-string catalog label degrades to the English default (it used to throw)', async function () {
+        // Until 0.5.14 this threw `TypeError: target.match is not a function` out of
+        // replace(), which escapes validate() and takes the whole validation pass with it.
+        // The engine now discards the bad label and renders the rule's English default,
+        // warning once. The boot lint still fires — it just no longer guards a crash.
         process.gina._i18nCatalogs.i18nrtbad = {
             fr_FR: { _validator: { isRequired: { message: 'Requis' } } }
         };
-        var err = await thrownBy(function () {
-            return render('i18nrtbad', 'isRequired', '', 'fr_FR');
-        });
-        assert.ok(err instanceof TypeError, 'expected a TypeError, got ' + err);
-        assert.match(err.message, /match is not a function/);
+        var warns = [];
+        var original = console.warn;
+        console.warn = function () { warns.push(Array.prototype.join.call(arguments, ' ')); };
+        var msg = undefined, err = null;
+        try { msg = await render('i18nrtbad', 'isRequired', '', 'fr_FR'); }
+        catch (e) { err = e; }
+        finally { console.warn = original; }
+
+        assert.equal(err, null, 'expected no throw, got ' + err);
+        assert.equal(msg, 'Cannot be left empty');
+        assert.equal(warns.length, 1, 'expected exactly one degrade warning');
+        assert.match(warns[0], /isRequired/);
+        assert.match(warns[0], /must be a string/);
     });
 
     it('the engine scans tokens with /%[a-z]+/gi and looks them up verbatim in local.keys', function () {

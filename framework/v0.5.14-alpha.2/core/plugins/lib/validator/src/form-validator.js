@@ -156,6 +156,16 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         'isApiError': 'Condition not satisfied',
         'isInList': 'Must be one of: %s'
     };
+    /**
+     * Rules already warned about by `replace()`'s fail-soft guard, so one mistyped label
+     * emits one warning and not one per debounced keystroke. Scoped to this engine
+     * instance on purpose: `validate()` builds a fresh engine per pass, but a
+     * module-scoped cache would suppress a second bundle's warning on the server, where
+     * the module is shared across bundles and requests.
+     * @inner
+     * @type {Object.<string, boolean>}
+     */
+    var _labelWarnings = {};
     local.errorLabels = _defaultErrorLabels;
     // #i18n (server) — resolve built-in rule labels from the bundle catalog's
     // `_validator.<rule>` namespace for the negotiated `culture`. Mirrors the client
@@ -284,6 +294,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
     var compileError = function(error, data) {
         var varArr = error.match(/\{\{([^{{}}]+)\}\}/g );
+        // `String.match` with a /g regex yields `null` — not [] — when nothing matches, so a
+        // backend field error carrying no `{{placeholder}}` (the common shape, e.g. "Already
+        // taken") used to die on `varArr.length` before it could be rendered. Nothing along
+        // the only call path catches it, and the throw kills the whole validation pass.
+        if (!varArr) {
+            return error;
+        }
         for (let v=0, vLen=varArr.length; v<vLen; v++) {
             let localValue = varArr[v]
                                 .replace(/\[/g, '["')
@@ -390,7 +407,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 this.error = errorMessage = cachedErrors[this.name].query[this.value].slice(0);
                 hasCachedErrors = true;
             }
-            errors['query'] = replace( this.error || errorMessage || local.errorLabels['query'], this);
+            errors['query'] = replace( this.error || errorMessage || local.errorLabels['query'], this, 'query');
             console.debug('[2] potential cached error detected !! ', hasCachedErrors, cachedErrors, ' vs ', errors['query']);
 
             if (hasCachedErrors) {
@@ -554,7 +571,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     if ( typeof(errorFields[_this.name]) != 'undefined') {
 
                         // compiling against rules[field].query.data
-                        local.errorLabels['query'] = compileError(errorFields[_this.name], options.data);
+                        // Only a string can be compiled — `compileError` runs `error.match()`.
+                        // A non-string field error from the backend leaves the resolved
+                        // `query` label in place (localized, else the English default)
+                        // rather than taking the pass down.
+                        if ( typeof(errorFields[_this.name]) === 'string' ) {
+                            local.errorLabels['query'] = compileError(errorFields[_this.name], options.data);
+                        }
 
 
                     } else if ( typeof(result.error) != 'undefined' && /^5/.test(result.status) ) {
@@ -564,7 +587,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     // Fixed added on 2023-01-10
                     // We want `local.errorLabels['query']` before the generic|user defined `rule` error
                     var optionError = ( typeof(options['error']) != 'undefined' ) ? options['error'] : null;
-                    errors['query'] = replace(systemError || _this['error'] || optionError || local.errorLabels['query'],  _this);
+                    errors['query'] = replace(systemError || _this['error'] || optionError || local.errorLabels['query'], _this, 'query');
 
                     console.debug('[1] query error detected !! ', result, errorFields, errors['query']);
                 }
@@ -1164,7 +1187,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
 
             if (!isValid) {
-                errors[alias] = replace(this.error || errorMessage || local.errorLabels[alias], this);
+                errors[alias] = replace(this.error || errorMessage || local.errorLabels[alias], this, alias);
                 if ( typeof(errorStack) != 'undefined' )
                     errors['stack'] = errorStack;
             }
@@ -1217,7 +1240,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
 
             if (!isValid) {
-                errors['isEmail'] = replace(this['error'] || local.errorLabels['isEmail'], this)
+                errors['isEmail'] = replace(this['error'] || local.errorLabels['isEmail'], this, 'isEmail')
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors['isEmail']) != 'undefined' ) {
@@ -1259,7 +1282,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
 
             if (!isValid) {
-                errors['isJsonWebToken'] = replace(this['error'] || local.errorLabels['isJsonWebToken'], this)
+                errors['isJsonWebToken'] = replace(this['error'] || local.errorLabels['isJsonWebToken'], this, 'isJsonWebToken')
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors['isJsonWebToken']) != 'undefined' ) {
@@ -1307,7 +1330,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             var isValid = (val !== null) ? true : false;
 
             if (!isValid) {
-                errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this)
+                errors['isBoolean'] = replace(this.error || local.errorLabels['isBoolean'], this, 'isBoolean')
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid && typeof(errors['isBoolean']) != 'undefined' ) {
@@ -1352,7 +1375,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 }
 
             } catch (err) {
-                errors['isNumber'] = replace(this.error || local.errorLabels['isNumber'], this);
+                errors['isNumber'] = replace(this.error || local.errorLabels['isNumber'], this, 'isNumber');
                 this.valid = false;
                 if ( errors.count() > 0 )
                     this['errors'] = errors;
@@ -1378,14 +1401,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             if ( !isValid || !isMinLength || !isMaxLength ) {
 
                 if ( !isValid )
-                    errors['isNumber'] = replace(this.error || local.errorLabels['isNumber'], this);
+                    errors['isNumber'] = replace(this.error || local.errorLabels['isNumber'], this, 'isNumber');
                 if ( !isMinLength || !isMaxLength ) {
                     if ( !isMinLength )
-                        errors['isNumberLength'] = replace(this.error || local.errorLabels['isNumberMinLength'], this);
+                        errors['isNumberLength'] = replace(this.error || local.errorLabels['isNumberMinLength'], this, 'isNumberMinLength');
                     if ( !isMaxLength )
-                        errors['isNumberLength'] = replace(this.error || local.errorLabels['isNumberMaxLength'], this);
+                        errors['isNumberLength'] = replace(this.error || local.errorLabels['isNumberMaxLength'], this, 'isNumberMaxLength');
                     if ( minLength === maxLength )
-                        errors['isNumberLength'] = replace(this.error || local.errorLabels['isNumberLength'], this);
+                        errors['isNumberLength'] = replace(this.error || local.errorLabels['isNumberLength'], this, 'isNumberLength');
                 }
 
                 isValid = false;
@@ -1416,7 +1439,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     val = this.value = local.data[this.name] = Math.round(val);
                 } catch (err) {
 
-                    errors['toInteger'] = replace(this.error || local.errorLabels['toInteger'], this);
+                    errors['toInteger'] = replace(this.error || local.errorLabels['toInteger'], this, 'toInteger');
                     this.valid = false;
                     if ( errors.count() > 0 )
                         this['errors'] = errors;
@@ -1454,22 +1477,22 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             if ( !isValid || !isMinLength || !isMaxLength ) {
 
                 if ( !isValid )
-                    errors['isInteger'] = replace(this.error || local.errorLabels['isInteger'], this);
+                    errors['isInteger'] = replace(this.error || local.errorLabels['isInteger'], this, 'isInteger');
 
                 if ( !isMinLength || !isMaxLength ) {
 
                     if ( !isMinLength ) {
-                        errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerMinLength'], this);
+                        errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerMinLength'], this, 'isIntegerMinLength');
                         isValid = false;
                     }
 
                     if ( !isMaxLength ) {
-                        errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerMaxLength'], this);
+                        errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerMaxLength'], this, 'isIntegerMaxLength');
                         isValid = false;
                     }
 
                     if ( minLength === maxLength ) {
-                        errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerLength'], this);
+                        errors['isIntegerLength'] = replace(this.error || local.errorLabels['isIntegerLength'], this, 'isIntegerLength');
                         isValid = false;
                     }
                 }
@@ -1526,14 +1549,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                         }
                     } catch(err) {
                         isValid = false;
-                        errors['toFloat'] = replace(this.error || local.errorLabels['toFloat'], this);
+                        errors['toFloat'] = replace(this.error || local.errorLabels['toFloat'], this, 'toFloat');
                         this.valid = false;
                         if ( errors.count() > 0 )
                             this['errors'] = errors;
                     }
                 } else {
                     isValid = false;
-                    errors['toFloat'] = replace(this.error || local.errorLabels['toFloatNAN'], this)
+                    errors['toFloat'] = replace(this.error || local.errorLabels['toFloatNAN'], this, 'toFloatNAN')
                 }
             }
 
@@ -1621,7 +1644,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
 
             if (!isValid) {
-                errors['isFloat'] = replace(this.error || local.errorLabels['isFloat'], this)
+                errors['isFloat'] = replace(this.error || local.errorLabels['isFloat'], this, 'isFloat')
             }
 
             // #B78 - keep .valid consistent with a surviving isRequired error.
@@ -1687,7 +1710,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
 
             if (!isValid) {
-                errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this)
+                errors['isRequired'] = replace(this.error || local.errorLabels['isRequired'], this, 'isRequired')
             }
             // if error tagged by a previous vlaidation, remove it when isValid == true
             else if ( isValid ) {
@@ -1771,11 +1794,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     isValid = false;
 
                     if ( !isMinLength )
-                        errors['isStringLength'] = replace(this['error'] || local.errorLabels['isStringMinLength'], this);
+                        errors['isStringLength'] = replace(this['error'] || local.errorLabels['isStringMinLength'], this, 'isStringMinLength');
                     if ( !isMaxLength )
-                        errors['isStringLength'] = replace(this['error'] || local.errorLabels['isStringMaxLength'], this);
+                        errors['isStringLength'] = replace(this['error'] || local.errorLabels['isStringMaxLength'], this, 'isStringMaxLength');
                     if (minLength === maxLength)
-                        errors['isStringLength'] = replace(this['error'] || local.errorLabels['isStringLength'], this);
+                        errors['isStringLength'] = replace(this['error'] || local.errorLabels['isStringLength'], this, 'isStringLength');
                 }
 
             }
@@ -1806,7 +1829,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             if (!val || val == '' || /NaN|Invalid Date/i.test(val) ) {
                 if ( /NaN|Invalid Date/i.test(val) ) {
                     console.warn('[FormValidator::isDate] Provided value for field `'+ this.name +'` is not allowed: `'+ val +'`');
-                    errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                    errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this, 'isDate');
 
                 }
                 this.valid = isValid;
@@ -1893,7 +1916,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     if ( !errors['isRequired'] && this.value == '' ) {
                         isValid = true
                     } else {
-                        errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this);
+                        errors['isDate'] = replace(this.error || local.errorLabels['isDate'], this, 'isDate');
                     }
 
                     this.valid = isValid;
@@ -1961,7 +1984,7 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
             if (!isValid) {
                 this['size'] = allowedValues.join(', ');
-                errors['isInList'] = replace(this.error || local.errorLabels['isInList'], this);
+                errors['isInList'] = replace(this.error || local.errorLabels['isInList'], this, 'isInList');
             } else if ( typeof(errors['isInList']) != 'undefined' ) {
                 delete errors['isInList'];
             }
@@ -2244,8 +2267,55 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         return local.data
     }
 
+    /**
+     * Interpolate the `%l`/`%n`/`%s` tokens of an error label against a field object.
+     *
+     * `target` reaches here from four independent sources, none of which the framework
+     * controls: a bundle catalog's `_validator.<rule>` label, a runtime
+     * `gina.validator.setErrorLabels()` override, a rule's `errorMessage` argument
+     * (`is: ["$a === $b", <errorMessage>]`), and a per-field `error` (plus the `query`
+     * rule's `systemError`/`optionError`). Only the first is linted at boot.
+     *
+     * A non-string `target` used to throw here, and the throw is unrecoverable: it
+     * escapes `validate()`, so the submit-validation callback never runs and the form
+     * silently refuses to submit, and a boot-time pass aborts the whole form-binding
+     * loop. So degrade instead of dying — an authoring mistake must never cost a form.
+     *
+     * @inner
+     * @param   {*}      target     - The unresolved label. Fail-soft when not a string.
+     * @param   {object} fieldObj   - Field the label is rendered for; supplies the tokens.
+     * @param   {string} [rule]     - Rule the label belongs to. OPTIONAL: `replace` is
+     *      re-exported to app-defined validators through `getValidationContext()`, which
+     *      call it with two arguments. Absent, a non-string label degrades to an empty
+     *      message rather than to the rule's English default.
+     * @returns {string} The interpolated label; never throws.
+     *
+     * @example
+     *   replace('Should be at least %s characters', { size: 5 })  // -> 'Should be at least 5 characters'
+     *   replace({ message: 'oops' }, field, 'isRequired')         // -> 'Cannot be left empty' (+ one warn)
+     */
     /**@js_externs replace*/
-    var replace = function(target, fieldObj) {
+    var replace = function(target, fieldObj, rule) {
+        if ( typeof(target) !== 'string' ) {
+            // Prefer the rule's resolved label (it may be localised) over the English
+            // default — the resolved label is only unusable when it IS the bad value,
+            // in which case the `typeof` test below skips it and English wins.
+            var _fallback = ( rule && typeof(local.errorLabels[rule]) === 'string' )
+                ? local.errorLabels[rule]
+                : ( rule && typeof(_defaultErrorLabels[rule]) === 'string' )
+                    ? _defaultErrorLabels[rule]
+                    : '';
+            var _warnKey = rule || '(unknown rule)';
+            if ( !_labelWarnings[_warnKey] ) {
+                _labelWarnings[_warnKey] = true;
+                console.warn('[FormValidator] error label for rule `' + _warnKey + '` must be a string'
+                    + ' — got ' + ( target === null ? 'null' : typeof(target) ) + '.'
+                    + ' Falling back to ' + ( _fallback ? '`' + _fallback + '`' : 'an empty message' ) + '.'
+                    + ' Check the bundle catalog\'s `_validator` node, `setErrorLabels()`, the rule\'s'
+                    + ' `errorMessage` argument, and the field\'s `error`.');
+            }
+            target = _fallback;
+        }
         var keys = target.match(/%[a-z]+/gi);
         if (keys) {
             for (var k = 0, len = keys.length; k < len; ++k) {
