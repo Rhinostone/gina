@@ -70,6 +70,41 @@ var DEFAULT_FALLBACK_LANG = 'en';
 var CULTURE_FILENAME = /^([a-z]{2,3})(_([A-Z]{2,3}))?\.json$/;
 
 /**
+ * Reserved catalog namespace holding gina's built-in FormValidator rule labels.
+ * Both label overlays resolve this node — the server engine
+ * (`core/plugins/lib/validator/src/form-validator.js`) and the client whisper
+ * (`core/controller/controller.js`, which ships the subset to the browser).
+ *
+ * @memberof module:gina/lib/i18n
+ * @constant
+ * @type {string}
+ */
+var VALIDATOR_NAMESPACE = '_validator';
+
+/**
+ * Placeholder tokens the validator engine substitutes inside a rule label.
+ * MUST mirror `local.keys` in `core/plugins/lib/validator/src/form-validator.js`
+ * (`%l` -> label, `%n` -> name, `%s` -> size). Case-sensitive on purpose: the
+ * engine looks each matched token up verbatim, so `%L` resolves to `undefined`
+ * exactly as `%d` does.
+ *
+ * @memberof module:gina/lib/i18n
+ * @constant
+ * @type {string[]}
+ */
+var VALIDATOR_LABEL_TOKENS = ['%l', '%n', '%s'];
+
+/**
+ * Token shape the validator engine's `replace()` scans for. Kept identical to
+ * the engine's own regex so this lint sees exactly what will be substituted.
+ *
+ * @memberof module:gina/lib/i18n
+ * @constant
+ * @type {RegExp}
+ */
+var VALIDATOR_TOKEN_RE = /%[a-z]+/gi;
+
+/**
  * Track bundles for which a missing-catalog warn has already fired
  * (one warn per bundle per process lifetime, regardless of how many
  * lookups miss).
@@ -200,6 +235,72 @@ function splitCulture(culture) {
 }
 
 /**
+ * Warn on `_validator` labels the FormValidator engine cannot render correctly.
+ *
+ * The engine substitutes every token matching {@link VALIDATOR_TOKEN_RE} it finds
+ * in a label, looking each one up verbatim in its `local.keys` map. An unknown
+ * token — `%d`, `%L`, or a bare percent glued to letters as in `20%sur le prix` —
+ * resolves to `undefined` and is spliced into user-facing copy; a non-string label
+ * makes the engine's `replace()` throw (`target.match is not a function`). Both are
+ * catalog-authoring mistakes, and the catalog is parsed only here, so this is the
+ * one place to surface them before a request renders them.
+ *
+ * Warns once per offending label at boot and never throws — a translation typo
+ * must not take a bundle down. This covers the client too: the browser's
+ * `gina.config.validatorLabels` is a subset of this same boot-loaded catalog.
+ * It does NOT cover labels supplied at runtime via `gina.validator.setErrorLabels()`.
+ *
+ * @memberof module:gina/lib/i18n
+ * @inner
+ * @param   {object} catalog  - Parsed catalog root.
+ * @param   {string} filePath - Absolute path to the catalog, for the operator message.
+ * @returns {number} Number of warnings emitted; `0` when the catalog is clean.
+ *
+ * @example
+ *   // locales/fr.json -> { "_validator": { "isRequired": "Remise 100%sur le prix" } }
+ *   warnOnSuspectValidatorLabels(catalog, '/srv/app/dashboard/locales/fr.json');
+ *   // -> [i18n] `_validator.isRequired` in ... contains unknown placeholder `%sur` ...
+ */
+function warnOnSuspectValidatorLabels(catalog, filePath) {
+    var node = catalog[VALIDATOR_NAMESPACE];
+    if ( typeof node === 'undefined' || node === null ) {
+        return 0; // absent: the normal case for a bundle that translates nothing else
+    }
+    if ( typeof node !== 'object' || Array.isArray(node) ) {
+        console.warn('[i18n] `' + VALIDATOR_NAMESPACE + '` in ' + filePath
+            + ' must be an object mapping rule names to labels — ignoring it');
+        return 1;
+    }
+    var count = 0;
+    for (var rule in node) {
+        if ( !Object.prototype.hasOwnProperty.call(node, rule) ) {
+            continue;
+        }
+        var label = node[rule];
+        if ( typeof label !== 'string' ) {
+            console.warn('[i18n] `' + VALIDATOR_NAMESPACE + '.' + rule + '` in ' + filePath
+                + ' must be a string — the validator throws when it renders a non-string label');
+            count++;
+            continue;
+        }
+        var tokens = label.match(VALIDATOR_TOKEN_RE);
+        if ( !tokens ) {
+            continue;
+        }
+        for (var t = 0; t < tokens.length; t++) {
+            if ( VALIDATOR_LABEL_TOKENS.indexOf(tokens[t]) < 0 ) {
+                console.warn('[i18n] `' + VALIDATOR_NAMESPACE + '.' + rule + '` in ' + filePath
+                    + ' contains unknown placeholder `' + tokens[t] + '` — it renders as "undefined".'
+                    + ' Known tokens: ' + VALIDATOR_LABEL_TOKENS.join(', ')
+                    + ' (a literal percent must not be followed by letters)');
+                count++;
+            }
+        }
+    }
+    return count;
+}
+
+/**
  * Eager-load every culture catalog under `<dir>/locales/`. Called once per
  * bundle at boot. Files must match {@link CULTURE_FILENAME}; non-matching
  * files are skipped with a `console.warn`. Malformed JSON throws.
@@ -263,6 +364,8 @@ function loadCatalogs(bundleName, dir) {
         if ( parsed === null || typeof parsed !== 'object' || Array.isArray(parsed) ) {
             throw new Error('[i18n] catalog root must be an object: ' + filePath);
         }
+        // Surface unrenderable built-in validator labels while the catalog is in hand.
+        warnOnSuspectValidatorLabels(parsed, filePath);
         store[bundleName][culture] = parsed;
         loaded.push(culture);
     }

@@ -1,0 +1,3 @@
+kind: Added
+body: 'Gina now warns at bundle boot when a `_validator` label in a locale catalog cannot be rendered. Built-in rule labels accept only the placeholders `%l` (field label), `%n` (field name) and `%s` (size); any other `%`-token — including a literal percent glued to letters, as in `20%sur le prix` — is substituted with the string "undefined" in the message shown to the user, and a non-string label makes the validator throw. The catalog still loads, and the warning names the offending rule and the catalog file, so a translation typo surfaces in the boot log instead of in production copy.'
+time: 2026-07-08T10:19:59+01:00
