@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A validation error returned for a specific form field no longer exposes a raw server stack trace to the browser. When an ApiError is built for a client field (`new gina.ApiError(err, ''fieldName'')`) and the underlying error has no message — so the framework falls back to its stack — or an application passes a stack string directly, the field message is now replaced with a neutral one (`An error occurred`) outside local scope; the full stack is kept in local scope for debugging. This mirrors how Gina already strips the stack from the JSON error body outside local scope, and closes the one channel that strip could not reach: the per-field message map, which the form validator renders verbatim.'
+time: 2026-07-08T21:33:00+01:00
