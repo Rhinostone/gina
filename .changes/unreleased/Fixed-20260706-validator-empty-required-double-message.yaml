@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A required form field left empty no longer shows two validation messages at once (e.g. "is required" AND "is not valid"). An empty value is now decided by the `isRequired` rule alone, so `isEmail` / `isJsonWebToken` / `isFloat` / `isInList` / `isString` no longer add a second "invalid" message on top of "is required". Optional empty fields still pass, and a filled-but-invalid value still reports its own rule error.'
-time: 2026-07-06T18:00:00+01:00

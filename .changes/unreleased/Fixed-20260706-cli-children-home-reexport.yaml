@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed home-override blindness in the remaining CLI child invocations: the auto-link commands run on project/bundle start/stop/restart and the project:start/stop/restart bundle delegations now re-export GINA_HOMEDIR to their children — under a home override they no longer act on the default home (previously they silently created node_modules links and scaffold artifacts there and exited 0).'
-time: 2026-07-06T01:59:31+01:00

@@ -1,3 +1,0 @@
-kind: Added
-body: 'Server-side FormValidator built-in rule error labels now localise from the bundle catalog, mirroring the client side. Pass the negotiated culture to the validator and the built-in labels (isEmail, isRequired, and the rest) resolve from `bundle/locales/<culture>.json` under the `_validator.<rule>` namespace, with the English defaults filling any gaps and a culture -> base-language -> English fallback. A per-field or per-rule error message still takes precedence.'
-time: 2026-07-08T00:13:40+01:00

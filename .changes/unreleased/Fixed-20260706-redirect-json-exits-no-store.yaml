@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Proxied XHR and popin (`isXhrRedirect`) redirect responses now carry the same `no-store` cache directives as plain redirects, so a browser or intermediary cache cannot serve a stale proxy-derived target host. Also guards a session-less bundle against a 500 when an XHR redirect carries request parameters.'
-time: 2026-07-06T12:17:25+01:00

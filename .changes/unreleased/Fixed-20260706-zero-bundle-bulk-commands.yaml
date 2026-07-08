@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed bulk bundle:start/stop/restart (the no-name form and the project:start/stop/restart delegations) on a project that has no bundles yet: the commands indexed an undefined bundle — stop reported a phantom undefined@<project> bundle, restart crashed with a TypeError, and start''s crash inside the framework daemon took the daemon down for every project on the host. All three now answer with a clear message (stop exits 0; start/restart point at gina bundle:add and use the error path), and bundle:restart with an unregistered bundle name now gets the clean "is not registered" message instead of the same crash.'
-time: 2026-07-06T03:53:59+01:00

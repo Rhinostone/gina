@@ -1,3 +1,0 @@
-kind: Added
-body: 'Client-side FormValidator built-in rule error labels now localise from the bundle catalog automatically, without an app calling `gina.validator.setErrorLabels()`. The negotiated culture''s `_validator.<rule>` subset from `bundle/locales/<culture>.json` is whispered to the browser and overlaid over the English defaults (catalog wins per key, English fills gaps). An explicit `setErrorLabels()` override still takes precedence, so the order is setErrorLabels > bundle catalog > English. A per-field or per-rule error message still wins over all of this.'
-time: 2026-07-08T00:49:14+01:00

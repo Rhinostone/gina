@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed project:add --scope/--env: the scope:add/env:add child commands now invoke the running install''s own CLI with the framework home re-exported — a GINA_HOMEDIR override no longer writes the scope or environment into the default home, a host without gina on PATH no longer fails the scaffold, and a successful child is no longer misreported as "could not be set" with exit code 1.'
-time: 2026-07-06T01:52:53+01:00

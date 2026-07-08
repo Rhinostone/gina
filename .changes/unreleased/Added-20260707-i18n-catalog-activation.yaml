@@ -1,3 +1,0 @@
-kind: Added
-body: 'Per-bundle i18n message catalogs (`bundle/locales/<culture>.json`) are now loaded at bundle boot, activating URL-prefix, cookie, and Accept-Language culture negotiation and `t()` / the `t` template filter for any bundle that ships a `locales/` directory. Loading is opt-in and non-fatal: a bundle with no `locales/` directory is unaffected, and a malformed catalog is warned rather than blocking boot.'
-time: 2026-07-07T09:58:25+01:00
