@@ -346,3 +346,176 @@ describe('05 - check', function () {
         assert.equal(result.reason, 'readme-untouched-since-v0.3.9');
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 06 — extractWhatsInHeadings (pure)
+// ---------------------------------------------------------------------------
+
+describe('06 - extractWhatsInHeadings', function () {
+
+    it('returns [] for empty / null content', function () {
+        assert.deepEqual(CHECK.extractWhatsInHeadings(''), []);
+        assert.deepEqual(CHECK.extractWhatsInHeadings(null), []);
+    });
+
+    it('returns the single heading of a well-formed README', function () {
+        assert.deepEqual(
+            CHECK.extractWhatsInHeadings("# Gina\n\n## What's in 0.5.13\n\n- x\n\n## Documentation\n"),
+            ["## What's in 0.5.13"]
+        );
+    });
+
+    it('returns every heading, in document order, when several are present', function () {
+        assert.deepEqual(
+            CHECK.extractWhatsInHeadings("## What's in 0.5.13\n- a\n## What's in 0.5.12\n- b\n"),
+            ["## What's in 0.5.13", "## What's in 0.5.12"]
+        );
+    });
+
+    it('ignores unrelated h2 headings', function () {
+        assert.deepEqual(CHECK.extractWhatsInHeadings('## Documentation\n## Features\n'), []);
+    });
+
+    it('does not match a deeper heading level', function () {
+        assert.deepEqual(CHECK.extractWhatsInHeadings("### What's in 0.5.13\n"), []);
+    });
+
+    it('tolerates CRLF line endings', function () {
+        assert.deepEqual(
+            CHECK.extractWhatsInHeadings("## What's in 0.5.13\r\n- x\r\n"),
+            ["## What's in 0.5.13"]
+        );
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 07 — isStableVersion (pure)
+// ---------------------------------------------------------------------------
+
+describe('07 - isStableVersion', function () {
+
+    it('accepts a plain X.Y.Z', function () {
+        assert.equal(CHECK.isStableVersion('0.5.13'), true);
+        assert.equal(CHECK.isStableVersion('10.20.30'), true);
+    });
+
+    it('rejects prereleases — the pre-bump false-positive guard', function () {
+        assert.equal(CHECK.isStableVersion('0.5.13-alpha.2'), false);
+        assert.equal(CHECK.isStableVersion('0.5.13-beta.1'), false);
+        assert.equal(CHECK.isStableVersion('0.5.13-rc.1'), false);
+    });
+
+    it('rejects empty / null / garbage', function () {
+        assert.equal(CHECK.isStableVersion(''), false);
+        assert.equal(CHECK.isStableVersion(null), false);
+        assert.equal(CHECK.isStableVersion(undefined), false);
+        assert.equal(CHECK.isStableVersion('v0.5.13'), false);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 08 — check(): single-section + version-match assertions
+// ---------------------------------------------------------------------------
+
+describe('08 - check single-section and version-match assertions', function () {
+
+    // A git driver where README is always "fresh" (touched since the tag),
+    // so only the README-content assertions can decide the outcome.
+    function freshGit() {
+        return function (cmd) {
+            if (/^git tag/.test(cmd)) return 'v0.5.11\nv0.5.10\n';
+            return 'abc1234 Updating README\n';
+        };
+    }
+
+    function run(readmeContent, targetedVersion) {
+        return CHECK.check({
+            gitExec: freshGit(),
+            readmeContent: readmeContent,
+            targetedVersion: targetedVersion
+        });
+    }
+
+    var ONE = "# Gina\n\n## What's in 0.5.13\n\n- Added — x.\n\nSee the full Changelog.\n";
+    var TWO = "# Gina\n\n## What's in 0.5.13\n\n- a\n\n## What's in 0.5.12\n\n- b\n";
+    var THREE = TWO + "\n## What's in 0.5.11\n\n- c\n";
+
+    it('passes a single correctly-named section on a stable target', function () {
+        var r = run(ONE, '0.5.13');
+        assert.equal(r.ok, true);
+        assert.equal(r.reason, 'readme-fresh');
+        assert.deepEqual(r.headings, ["## What's in 0.5.13"]);
+    });
+
+    it('ABORTS on two sections — the shape that shipped in v0.5.12', function () {
+        var r = run(TWO, '0.5.12');
+        assert.equal(r.ok, false);
+        assert.equal(r.reason, 'multiple-whats-in-sections');
+        assert.equal(r.headings.length, 2);
+    });
+
+    it('ABORTS on three sections — the shape that shipped in v0.5.13', function () {
+        var r = run(THREE, '0.5.13');
+        assert.equal(r.ok, false);
+        assert.equal(r.reason, 'multiple-whats-in-sections');
+        assert.equal(r.headings.length, 3);
+    });
+
+    it('ABORTS when no section exists at all', function () {
+        var r = run('# Gina\n\n## Documentation\n', '0.5.13');
+        assert.equal(r.ok, false);
+        assert.equal(r.reason, 'no-whats-in-section');
+    });
+
+    it('ABORTS when the single section names the wrong version', function () {
+        var r = run(ONE, '0.5.14');
+        assert.equal(r.ok, false);
+        assert.equal(r.reason, 'whats-in-version-mismatch');
+        assert.equal(r.expectedHeading, "## What's in 0.5.14");
+        assert.deepEqual(r.headings, ["## What's in 0.5.13"]);
+    });
+
+    it('SKIPS the version-match on a prerelease target (pre-bump tree, no false positive)', function () {
+        var r = run(ONE, '0.5.14-alpha.2');
+        assert.equal(r.ok, true, 'a pre-bump tree drafts the stable heading ahead of the bump');
+        assert.equal(r.reason, 'readme-fresh');
+    });
+
+    it('still enforces the single-section rule on a prerelease target', function () {
+        var r = run(TWO, '0.5.14-alpha.2');
+        assert.equal(r.ok, false, 'assertion 2 is version-agnostic');
+        assert.equal(r.reason, 'multiple-whats-in-sections');
+    });
+
+    it('SKIPS the version-match when the targeted version is unresolvable', function () {
+        var r = run(ONE, null);
+        assert.equal(r.ok, true);
+    });
+
+    it('freshness still short-circuits before the content assertions', function () {
+        var r = CHECK.check({
+            gitExec: function (cmd) {
+                if (/^git tag/.test(cmd)) return 'v0.5.11\n';
+                return '';                       // untouched
+            },
+            readmeContent: THREE,                // would also fail assertion 2
+            targetedVersion: '0.5.13'
+        });
+        assert.equal(r.ok, false);
+        assert.equal(r.reason, 'readme-untouched-since-v0.5.11',
+            'assertion 1 is evaluated first and reports its own reason');
+    });
+
+    it('fails closed when README.md cannot be read', function () {
+        var r = CHECK.check({
+            cwd: nodePath.join(__dirname, '__does_not_exist__'),
+            gitExec: freshGit(),
+            targetedVersion: '0.5.13'
+        });
+        assert.equal(r.ok, false);
+        assert.match(r.reason, /^readme-read-failed/);
+    });
+});
