@@ -42,6 +42,10 @@ open https://localhost:3100
 
 > **npm 12+** blocks install scripts by default, and gina's post-install bootstraps `~/.gina` and the framework dependencies. Install with `npm install -g gina@latest --allow-scripts=gina`, or allow it once for all global installs with `npm config set allow-scripts=gina --location=user`. (Not needed on npm ≤ 11.)
 
+## What's in 0.5.13
+
+- **Added — unrenderable `_validator` catalog labels are caught at bundle boot.** Gina now warns when a `_validator` label in a locale catalog cannot be rendered. Built-in rule labels accept only the placeholders `%l` (field label), `%n` (field name) and `%s` (size); any other `%`-token — including a literal percent glued to letters, as in `20%sur le prix` — is substituted with the string `undefined` in the message shown to the user, and a non-string label makes the validator throw. The catalog still loads, and the warning names the offending rule and the catalog file, so a translation typo surfaces in the boot log instead of in production copy.
+
 ## What's in 0.5.12
 
 - **Added — FormValidator built-in rule labels localise from the i18n catalog, client and server.** The built-in rule messages (`isEmail`, `isRequired`, and the rest) now resolve per culture from `bundle/locales/<culture>.json` under the `_validator.<rule>` namespace, on both the server-rendered and client-side validation paths — English defaults fill any gaps, with a culture → base-language → English fallback. An app can still override per key with `gina.validator.setErrorLabels(labels[, culture])` (precedence: `setErrorLabels` > bundle catalog > English), and a per-field or per-rule message still wins over all of it.
