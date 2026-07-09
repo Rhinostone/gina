@@ -2,6 +2,18 @@
 var merge = require('./../../../lib/merge');
 var statusCodes = requireJSON(__dirname + '/../../../core/status.codes');
 //var statusCodes = requireJSON( _( getPath('gina').core + '/status.codes') );
+
+// #B88 — a raw stack trace has the shape `<message>\n    at <frame>`; this matches it.
+var STACK_SHAPE_RE = /\n\s+at\s/;
+// Neutral field message rendered outside local scope in place of a leaked stack trace
+// (see formatClientError). Apps that want their own copy pass a real (non-stack) message.
+var GENERIC_FIELD_ERROR = 'An error occurred';
+// Read at call time (NOT module-load) so it honours NODE_SCOPE_IS_LOCAL regardless of
+// whether this helper was required before gna.js set it. Fail-closed: unset/false → not
+// local → strip (production-safe). Mirrors controller.js's `_isLocalScope`.
+function _scopeIsLocal() {
+    return !!process.env.NODE_SCOPE_IS_LOCAL && process.env.NODE_SCOPE_IS_LOCAL.toLowerCase() === 'true';
+}
 /**
  *
  * Usage:
@@ -102,6 +114,15 @@ function ApiError(errorMessage, fieldName, errorStatus) {
 
     var formatClientError = function(ctx, error, errorMessage, fieldName) {
         error.fields[fieldName] = errorMessage;
+        // #B88 — `fields[fieldName]` is the sole channel carrying a value to the browser
+        // (both validator render paths read it), and the controller.js root-`stack` wire
+        // strip cannot reach it. A message-less Error makes ApiError fall back to `e.stack`
+        // above (`e.message || e.stack`), and an app may pass a stack string directly — so
+        // outside local scope, replace a stack-shaped field message with a neutral one. Kept
+        // in local scope for debugging, mirroring controller.js's fail-closed wire strip.
+        if ( !_scopeIsLocal() && typeof(error.fields[fieldName]) == 'string' && STACK_SHAPE_RE.test(error.fields[fieldName]) ) {
+            error.fields[fieldName] = GENERIC_FIELD_ERROR;
+        }
         var bundleName      = ctx.bundle
             , stackObj      = __stack[2]
         ;
@@ -131,7 +152,11 @@ function ApiError(errorMessage, fieldName, errorStatus) {
                 //error.fields[fieldName][funcName] = errorMessage;
             } catch (err) {
                 error.tag   = 'N/A';
-                error.stack = err.stack;
+                // #B88 — this stack (the introspection failure) serialises to the wire via
+                // renderJSON, which does no stripping; only expose it in local scope.
+                if ( _scopeIsLocal() ) {
+                    error.stack = err.stack;
+                }
             }
         } else {
             //error.fields[fieldName]['isApiError'] = errorMessage;

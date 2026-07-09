@@ -240,15 +240,17 @@ function splitCulture(culture) {
  * The engine substitutes every token matching {@link VALIDATOR_TOKEN_RE} it finds
  * in a label, looking each one up verbatim in its `local.keys` map. An unknown
  * token — `%d`, `%L`, or a bare percent glued to letters as in `20%sur le prix` —
- * resolves to `undefined` and is spliced into user-facing copy; a non-string label
- * makes the engine's `replace()` throw (`target.match is not a function`). Both are
+ * resolves to `undefined` and is spliced into user-facing copy; a non-string label is
+ * discarded by the engine, which renders the rule's English default instead. Both are
  * catalog-authoring mistakes, and the catalog is parsed only here, so this is the
  * one place to surface them before a request renders them.
  *
  * Warns once per offending label at boot and never throws — a translation typo
  * must not take a bundle down. This covers the client too: the browser's
  * `gina.config.validatorLabels` is a subset of this same boot-loaded catalog.
- * It does NOT cover labels supplied at runtime via `gina.validator.setErrorLabels()`.
+ * It does NOT cover labels supplied at runtime via `gina.validator.setErrorLabels()`,
+ * nor a rule's `errorMessage` argument — for those, the engine's own fail-soft guard
+ * warns at the point of degradation.
  *
  * @memberof module:gina/lib/i18n
  * @inner
@@ -279,7 +281,7 @@ function warnOnSuspectValidatorLabels(catalog, filePath) {
         var label = node[rule];
         if ( typeof label !== 'string' ) {
             console.warn('[i18n] `' + VALIDATOR_NAMESPACE + '.' + rule + '` in ' + filePath
-                + ' must be a string — the validator throws when it renders a non-string label');
+                + ' must be a string — the validator discards it and renders the English default');
             count++;
             continue;
         }
