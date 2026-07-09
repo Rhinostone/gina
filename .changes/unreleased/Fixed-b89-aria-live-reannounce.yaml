@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A validator field that stays in error while its message changes — because the value now fails a different rule, the message is value-dependent, or a late `setErrorLabels()` overlay changed the label — now re-announces the new message through the form''s ARIA live region, so assistive technology no longer keeps announcing the first message. The visible message already refreshed on such updates; this fixes the screen-reader announcement to match.'
-time: 2026-07-08T23:46:00+01:00
