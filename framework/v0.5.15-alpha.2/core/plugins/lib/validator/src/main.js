@@ -7204,7 +7204,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                 for (var field in fields) {
 
-                    localFieldType = $fields[field].getAttribute('type');
+                    // `$fields` is null on the server auto path (backendInit), and a rule
+                    // field can be absent from the client collection: guard the DOM read.
+                    localFieldType = ( $fields && typeof($fields[field]) != 'undefined' )
+                        ? $fields[field].getAttribute('type')
+                        : null;
 
                     if ( isGFFCtx && typeof($fields[field]) == 'undefined' ) {
                         //throw new Error('field `'+ field +'` found for your form rule ('+ $formOrElement.id +'), but not found in $field collection.\nPlease, check your HTML or remove `'+ field +'` declaration from your rule.')

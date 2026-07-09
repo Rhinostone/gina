@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Server-side auto-validation now works: gina.plugins.Validator(<rules>, data, formId[, culture]) used to crash on its first field with a null-$fields TypeError, so validating a data object against a rules object had never worked server-side. Plain rules now validate and return { isValid(), error, data }, and the trailing culture localises the error labels from the bundle catalog. The same guard lets a rule field that is missing from the client form collection reach the intended console warning instead of throwing. Conditional (_case_) rules remain client-only.'
+time: 2026-07-09T22:35:51+01:00
