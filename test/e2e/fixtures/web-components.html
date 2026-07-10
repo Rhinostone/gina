@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>client components fixture — SSR hydration + raw-HTML equivalence</title>
+    <!--
+        Framework-free fixture for web-components.spec.js. The markup below
+        mirrors the reference component's server-rendered output (the view
+        scaffold's templates/html/includes/x-checklist.html partial — keep the
+        two in sync by hand). The behavior class is the REAL boilerplate file,
+        served by runtime-server.js from the framework tree.
+
+        The statusText here ("completed") deliberately differs from the class
+        default ("done") so the hydration assertion proves the JSON data-*
+        payload was actually parsed.
+    -->
+    <script defer src="/js/components/x-checklist.js"></script>
+</head>
+<body>
+    <h1>Client components fixture</h1>
+    <x-checklist data-x-checklist='{ "statusText": "%s of %s completed" }'>
+        <h2>Getting started checklist</h2>
+        <p data-role="status" hidden></p>
+        <ul>
+            <li><label><input type="checkbox" checked> Scaffold your project and start the bundle</label></li>
+            <li><label><input type="checkbox"> Add a route in <code>config/routing.json</code></label></li>
+            <li><label><input type="checkbox"> Point it at a controller action</label></li>
+            <li><label><input type="checkbox"> Read the <a href="https://gina.io/docs/">documentation</a></label></li>
+        </ul>
+        <template data-role="item">
+            <li><label><input type="checkbox"> <span data-role="item-label"></span></label></li>
+        </template>
+        <form data-role="add" action="#" method="get">
+            <input type="text" name="label" placeholder="Add a step" aria-label="New checklist item">
+            <button type="submit">Add</button>
+        </form>
+    </x-checklist>
+</body>
+</html>

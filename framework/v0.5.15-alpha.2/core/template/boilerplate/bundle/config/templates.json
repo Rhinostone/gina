@@ -20,7 +20,9 @@
         "javascripts": [
             // "/js/vendor/jquery/jquery-3.1.0.min.js",
             // "/js/vendor/modernizr-2.8.3.min.js",
-            "/handlers/main.js"
+            "/handlers/main.js",
+            // reference client-side component (markup: templates/html/includes/x-checklist.html)
+            "/js/components/x-checklist.js"
         ]
     },
 

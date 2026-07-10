@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>client components fixture — strict nonce'd CSP</title>
+    <!--
+        Served ONLY via runtime-server.js /components-csp, which substitutes
+        the {{ nonce }} tokens with a per-request value and attaches a REAL
+        Content-Security-Policy response header:
+            default-src 'none'; script-src 'nonce-<N>'; style-src 'self'; ...
+        No 'unsafe-inline' anywhere — the component is styled by the external
+        stylesheet and its class needs nothing the policy forbids.
+
+        The inline <style> below is a deliberate CANARY: style-src 'self' must
+        block it (the spec asserts exactly that one violation), which proves
+        the policy is enforced rather than silently absent.
+    -->
+    <link rel="stylesheet" href="/css/web-components.css">
+    <style id="csp-canary">x-checklist { border-left-width: 99px; }</style>
+    <script defer src="/js/components/x-checklist.js" nonce="{{ nonce }}"></script>
+</head>
+<body>
+    <h1>Client components under a strict CSP</h1>
+    <x-checklist data-x-checklist='{ "statusText": "%s of %s completed" }'>
+        <h2>Getting started checklist</h2>
+        <p data-role="status" hidden></p>
+        <ul>
+            <li><label><input type="checkbox" checked> Scaffold your project and start the bundle</label></li>
+            <li><label><input type="checkbox"> Add a route in <code>config/routing.json</code></label></li>
+            <li><label><input type="checkbox"> Point it at a controller action</label></li>
+            <li><label><input type="checkbox"> Read the <a href="https://gina.io/docs/">documentation</a></label></li>
+        </ul>
+        <template data-role="item">
+            <li><label><input type="checkbox"> <span data-role="item-label"></span></label></li>
+        </template>
+        <form data-role="add" action="#" method="get">
+            <input type="text" name="label" placeholder="Add a step" aria-label="New checklist item">
+            <button type="submit">Add</button>
+        </form>
+    </x-checklist>
+</body>
+</html>
