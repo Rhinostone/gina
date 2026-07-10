@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the published `gina.popin` accessors being bound to the first Popin instance''s registry: `getPopinByName`/`getPopinById` resolved only the boot popin and `gina.popin.activePopinId` never updated, so a form submit redirecting into a different popin always failed with a 422 `Popin not found` error. The popin registry is now module-shared across every `new Popin()` (with `gina.popin` published once as a live object and the active-popin id written through from every instance), so the published accessors resolve every registered popin, click-time in-page dialog registrations are visible to `getActivePopin()`, and cross-popin form redirects work end-to-end.'
+time: 2026-07-10T03:55:51+01:00

@@ -29,14 +29,16 @@
  * never scheduled there.
  *
  * Reachability note (measured in a real browser against the built bundle): the
- * cross-popin branch currently throws at its own pre-existing `getPopinByName`
- * guard before reaching the load, because the published `gina.popin` is assembled
- * with a target-wins `merge()` whose accessors stay bound to the first Popin
- * instance's registry. So the timer could not actually fire there, and the
- * content-first arm cannot be driven end-to-end until that separate popin-registry
- * defect is fixed. What IS live and browser-verified is the reset-then-close: the
- * original popin now closes (pre-fix it stayed open behind the new one). The
- * replicas below therefore model the popin contract, not a reproducible browser flow.
+ * cross-popin branch used to throw at its own pre-existing `getPopinByName`
+ * guard before reaching the load, because the published `gina.popin` was
+ * re-assembled with a target-wins `merge()` whose accessors stayed bound to the
+ * first Popin instance's registry — so the blind timer could not actually fire
+ * there either. That registry defect is fixed (#B90: module-shared registry +
+ * publish-once + activePopinId write-through — see popin-registry.test.js), and
+ * the content-first arm IS now browser-verified end-to-end: a form submit
+ * redirecting into a different popin closes the original and opens the target
+ * with the tunneled body injected first. The replicas below still model the
+ * popin contract in isolation.
  *
  * Usage: node --test test/core/validator-popin-redirect.test.js
  */

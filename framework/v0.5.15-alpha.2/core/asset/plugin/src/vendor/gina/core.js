@@ -242,8 +242,9 @@ require([
     // active WITHOUT bundle code calling `new gina.popin()`. Constructing the handler
     // installs the delegated open listener + the `gina-popins` container; the
     // `.on('ready')` registration triggers the popin `init` self-fire so `gina.popin` /
-    // `gina.hasPopinHandler` are set (a later explicit `new gina.popin()` then merges
-    // into this instance instead of creating a second container). Idempotent — guarded
+    // `gina.hasPopinHandler` are set (a later explicit `new Popin()` reuses this
+    // container and registers into the module-shared popin registry — the published
+    // `gina.popin` stays this boot instance, #B90). Idempotent — guarded
     // on `hasPopinHandler`; a no-op on pages with no dialog/popin elements. The popin
     // module mutates the framework instance (`window.gina`), so defer until the
     // `ginaloaded` lifecycle has wired it (bounded poll on `isFrameworkLoaded`).

@@ -17807,6 +17807,19 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
     // click reuses the prefetch instead of issuing a second identical GET (#B54).
     var preloadWaiters = {};
 
+    /**
+     * Module-level popin registry shared by EVERY Popin instance (#B90). Each
+     * instance's `$popins` aliases this object, so the published accessors
+     * (`gina.popin.getPopinByName` / `getPopinById` / `getActivePopin`) and
+     * click-time registrations (in-page dialogs) resolve popins no matter
+     * which `new Popin()` registered them. Entry ids stay unique across
+     * instances (they embed `instance.id`).
+     *
+     * @inner
+     * @type {object}
+     */
+    var _sharedPopins = {};
+
     /** @inner @type {object} warn-once registry, keyed by deprecated attribute name */
     var _deprecationWarned = {};
 
@@ -17903,7 +17916,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             on              : on,
             eventData       : {},
 
-            '$popins'       : {},
+            '$popins'       : _sharedPopins, // #B90 — module-shared registry (one object for all instances)
             activePopinId   : null,
             getActivePopin  : null, // returns the active $popin
             target          : document, // by default
@@ -17993,6 +18006,26 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
                 triggerEvent(gina, $el, evt);
             });
+        }
+
+        /**
+         * setActivePopinId
+         *
+         * Single write path for the active-popin id (#B90): keeps the instance
+         * mirror and the PUBLISHED `gina.popin.activePopinId` in sync, so
+         * getActivePopin()'s id-fallback works no matter which Popin instance
+         * opened (or closed) the popin. Pre-publish (no `gina.popin` yet), the
+         * instance value alone is enough — the first publish exposes it.
+         *
+         * @inner
+         * @param {string|null} id - the active popin id, or null to clear
+         * @returns {void}
+         */
+        var setActivePopinId = function(id) {
+            instance.activePopinId = id;
+            if ( typeof(gina.popin) != 'undefined' && gina.popin ) {
+                gina.popin.activePopinId = id;
+            }
         }
 
         var getPopinById = function(id) {
@@ -18530,7 +18563,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 }
             }
             $dialogPopin.isOpen     = true;
-            instance.activePopinId  = $dialogPopin.id;
+            setActivePopinId($dialogPopin.id);
             focusInitial($el);
             triggerEvent(gina, instance.target, 'open.' + id, $dialogPopin);
         }
@@ -18732,7 +18765,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                                     if (!fired) {
                                         fired = true;
                                         console.debug('active popin should be ', $popin.id);
-                                        gina.popin.activePopinId = $popin.id;
+                                        setActivePopinId($popin.id);
                                         popinBind(e, $popin);
                                         if (!$popin.isOpen) {
                                             popinOpen($popin.name);
@@ -19222,7 +19255,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             // update toolbar
 
             try {
-                $popin = getPopinById(instance.activePopinId);
+                $popin = getPopinById( (typeof(gina.popin) != 'undefined' && gina.popin) ? gina.popin.activePopinId : instance.activePopinId );
                 $el = $popin.target;
             } catch (err) {
                 if ($popin) {
@@ -19415,7 +19448,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             // set as active if none is active
             if ( !gina.popin.activePopinId ) {
-                gina.popin.activePopinId = id;
+                setActivePopinId(id);
             }
 
             // popin element
@@ -19833,7 +19866,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                             if (!fired) {
                                 fired = true;
 
-                                instance.activePopinId = $popin.id;
+                                setActivePopinId($popin.id);
                                 popinBind(e, $popin);
                                 popinOpen($popin.name);
                             }
@@ -20104,7 +20137,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             // so it can be forwarded to the handler who is listening
             $popin.target = $el;
 
-            instance.activePopinId = $popin.id;
+            setActivePopinId($popin.id);
 
             // update toolbar
             if ( gina && typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar /**&& GINA_ENV_IS_DEV*/) {
@@ -20247,7 +20280,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     if ( GINA_ENV_IS_DEV && gina &&  typeof(window.ginaToolbar) != 'undefined' && window.ginaToolbar )
                         ginaToolbar.restore();
 
-                    instance.activePopinId  = null;
+                    setActivePopinId(null);
                     if ( $popin.$headers.length > 0) {
                         var s = 0
                             , sLen = $popin.$headers.length
@@ -20331,9 +20364,11 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 registeredPopins.splice(regIdx, 1);
             }
 
-            // Reset active if this was the active popin
-            if ( instance.activePopinId === id ) {
-                instance.activePopinId = null;
+            // Reset active if this was the active popin (#B90 — the published
+            // value is the source of truth: another instance may have set it)
+            var _activePopinId = ( typeof(gina.popin) != 'undefined' && gina.popin ) ? gina.popin.activePopinId : instance.activePopinId;
+            if ( _activePopinId === id ) {
+                setActivePopinId(null);
             }
 
             triggerEvent(gina, instance.target, 'destroy.' + id, { name: name, id: id });
@@ -20437,7 +20472,19 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
                 instance.isReady = true;
                 gina.hasPopinHandler = true;
-                gina.popin = merge(gina.popin, instance);
+                // #B90 — publish ONCE: `gina.popin` IS the first instance (a LIVE
+                // object). Re-publishing per construction (a target-wins deep copy
+                // of each new instance) froze the first instance's accessors and
+                // scalar state on the published object — `getPopinByName` /
+                // `getPopinById` resolved only the boot registry and
+                // `activePopinId` never moved. The registry is module-shared now
+                // (`$popins` aliases `_sharedPopins` in every instance), so later
+                // constructions have nothing to publish — and re-merging would
+                // self-merge the shared registry (a deep recursion into every
+                // registered $popin).
+                if ( typeof(gina.popin) == 'undefined' || !gina.popin ) {
+                    gina.popin = instance;
+                }
                 // trigger popin ready event
                 triggerEvent(gina, instance.target, 'ready.' + instance.id, $newPopin);
             });
@@ -22968,8 +23015,9 @@ require([
     // active WITHOUT bundle code calling `new gina.popin()`. Constructing the handler
     // installs the delegated open listener + the `gina-popins` container; the
     // `.on('ready')` registration triggers the popin `init` self-fire so `gina.popin` /
-    // `gina.hasPopinHandler` are set (a later explicit `new gina.popin()` then merges
-    // into this instance instead of creating a second container). Idempotent — guarded
+    // `gina.hasPopinHandler` are set (a later explicit `new Popin()` reuses this
+    // container and registers into the module-shared popin registry — the published
+    // `gina.popin` stays this boot instance, #B90). Idempotent — guarded
     // on `hasPopinHandler`; a no-op on pages with no dialog/popin elements. The popin
     // module mutates the framework instance (`window.gina`), so defer until the
     // `ginaloaded` lifecycle has wired it (bounded poll on `isFrameworkLoaded`).
