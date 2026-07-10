@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A form submit whose response redirected into a popin could open that popin before its content arrived. The validator now opens the popin through the load handle, so the response body is injected first, and a failed load no longer opens an empty popin. A redirect that targets a different popin than the one currently open also closes the original popin, as intended.'
+time: 2026-07-10T01:21:43+01:00

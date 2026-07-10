@@ -1581,13 +1581,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                                     //var popinUrl = (typeof(result.popin) != 'undefined') ? result.popin.location : result.location;
                                     var popinUrl = result.location || result.popin.location || result.popin.url;
+                                    var _popinLoadHandle = null;
                                     if (
                                         typeof(result.popin) != 'undefined'
                                         && typeof(result.popin.name) != 'undefined'
                                         && popinName != result.popin.name
                                     ) {
-                                        if ($popin && $popin.isOpen)
+                                        if ($popin && $popin.isOpen) {
+                                            // Let the close actually run: `isRedirecting` was set just
+                                            // above and popinClose() ignores a redirecting popin — same
+                                            // reset-then-close idiom as the `result.popin.close` branch.
+                                            $popin.isRedirecting = false;
                                             $popin.close();
+                                        }
 
                                         popinName = result.popin.name;
                                         $popin = gina.popin.getPopinByName(popinName);
@@ -1595,20 +1601,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                             throw new Error('Popin with name `'+ popinName+'` not found !');
                                         }
                                         console.debug('Validator::Popin now redirecting [1-c]');
-                                        $popin.load($popin.name, popinUrl, $popin.options);
+                                        _popinLoadHandle = $popin.load($popin.name, popinUrl, $popin.options);
                                     } else if ($popin) {
                                         console.debug('Validator::Popin now redirecting [1-d]');
                                         if ($popin && $popin.isOpen)
                                             $popin.close();
-                                        $popin.load($popin.name, popinUrl, $popin.options);
+                                        _popinLoadHandle = $popin.load($popin.name, popinUrl, $popin.options);
                                     }
                                     if ($popin && !$popin.isOpen) {
-                                        return setTimeout( function onPopinredirect($popin){
-                                            if (!$popin.isOpen) {
-                                                $popin.open();
-                                                return;
-                                            }
-                                        }, 50, $popin);
+                                        // Content-first: arm the popin's `loaded.<id>` listener through
+                                        // the load handle so the response body is injected before the
+                                        // popin opens. Replaces a blind 50 ms open that raced the load —
+                                        // a faster XHR fired the popin's `loaded` event with no listener
+                                        // armed (body lost, popin opened empty), a slower one opened an
+                                        // empty popin first. No handle means the load could not start
+                                        // (e.g. CORS unsupported): the popin stays closed and the load's
+                                        // own `error.<id>` event is the only signal.
+                                        if ( _popinLoadHandle && typeof(_popinLoadHandle.open) != 'undefined' ) {
+                                            _popinLoadHandle.open();
+                                        }
+                                        return;
                                     }
                                 }
                             }

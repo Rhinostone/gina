@@ -1716,13 +1716,15 @@ describe('27 - Popin: native <dialog> UA-close routes through popinClose', funct
 // returns. The `return;` also preserves the pre-existing window.open() fall-through guard —
 // non-_self targets (blank/parent/top) still reach window.open, _self never does.
 //
-// NOTE: this fix is scoped to the popin plugin's OWN _self redirect. A structurally
-// identical blind timer lives in a sibling path — the validator plugin's
-// `Validator::Popin now redirecting` handler (core/plugins/lib/validator/src/main.js) —
-// which is a SEPARATE code path with a different safety profile (it can $popin.load() a
-// DIFFERENT popin whose loaded.<id> listener may not be armed, so its timer may be
-// load-bearing). That sibling is deliberately NOT touched here; the served gina.min.js
-// therefore still carries exactly one blind timer (the validator one) by design.
+// NOTE: this fix is scoped to the popin plugin's OWN _self redirect. The structurally
+// similar blind timer that lived in the sibling validator path
+// (`Validator::Popin now redirecting`, core/plugins/lib/validator/src/main.js) had a
+// DIFFERENT safety profile — it could $popin.load() a DIFFERENT popin whose loaded.<id>
+// listener was never armed, so a bare delete would have broken that flow. It was
+// resolved separately (#B79): the validator now captures popinLoad's returned handle
+// and arms its content-first `loaded.<id>` listener when the popin is not open. The
+// served gina.min.js carries no blind popin-open timer anymore.
+// Coverage: test/core/validator-popin-redirect.test.js.
 
 describe('28 - Popin: #B77 _self redirect-tunnel loads-then-returns (blind-open timer removed)', function () {
 
