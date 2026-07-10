@@ -18472,7 +18472,9 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
          * installPreload — one-time delegated `mouseover` + `focusin` listeners that warm
          * preloadCache for AJAX triggers (`data-gina-dialog-src` / legacy
          * `data-gina-popin-url`). GET + same-origin only; disabled triggers skipped;
-         * repeated hover over descendants is a no-op (URL-cache dedup).
+         * repeated hover over descendants is a no-op (URL-cache dedup). A trigger whose
+         * GET is not safe to fire on hover/focus (server-side effects) opts out with
+         * `data-gina-dialog-preload="false"` — honored on legacy triggers too (#B91).
          *
          * @inner
          */
@@ -18493,6 +18495,13 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
                     || $trigger.getAttribute('aria-disabled') == 'true'
                 ) {
+                    return;
+                }
+                // #B91 — per-trigger preload opt-out: a trigger whose GET has server-side
+                // effects declares itself. Case-insensitive on purpose (a templated "False"
+                // must not silently fail open and fire the GET anyway); its click still
+                // loads normally, at click time (consumePreload -> false).
+                if ( /^false$/i.test($trigger.getAttribute('data-gina-dialog-preload')) ) {
                     return;
                 }
                 var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
