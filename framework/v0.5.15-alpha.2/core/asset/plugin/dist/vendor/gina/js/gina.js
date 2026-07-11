@@ -12169,7 +12169,50 @@ function ValidatorPlugin(rules, data, formId, culture) {
     }
 
     /**
+     * restoreUploadAffordance
+     *
+     * Restores the upload input's add-affordance visibility once files were
+     * removed: removes the optional `data-gina-form-upload-hidden-class` class
+     * from the input and its parent (a class-hidden affordance could otherwise
+     * never come back), then falls back to the historical inline-display
+     * restore (parent first when the parent was inline-hidden, else the input).
+     *
+     * @inner
+     * @private
+     * @param {object} $uploadTrigger - HTMLInputElement (file input)
+     * @param {string|null} hiddenClass - class name to remove, or null
+     * @returns {void}
+     */
+    var restoreUploadAffordance = function($uploadTrigger, hiddenClass) {
+        if (hiddenClass) {
+            try {
+                $uploadTrigger.classList.remove(hiddenClass);
+                if ($uploadTrigger.parentElement) {
+                    $uploadTrigger.parentElement.classList.remove(hiddenClass);
+                }
+            } catch (restoreErr) {}
+        }
+        if ( /none/i.test(window.getComputedStyle($uploadTrigger).display) ) {
+            // eg.: visibility could be delegated to a parent element such as label or a div
+            if ( /none/i.test($uploadTrigger.parentElement.style.display) ) {
+                $uploadTrigger.parentElement.style.display = 'block';
+            } else {
+                $uploadTrigger.style.display = 'block';
+            }
+        }
+    }
+
+    /**
      * onUploadResetOrDelete
+     *
+     * Removes the previewed file(s): notifies the server first (the removal
+     * XHR is sent BEFORE any DOM removal — the preview DOM feeds the payload),
+     * then removes the preview image and its reset/delete link from the DOM,
+     * restores the upload input's add-affordance (see restoreUploadAffordance)
+     * and, when defined, invokes the `data-gina-form-upload-on-reset` /
+     * `data-gina-form-upload-on-delete` callback — a bare identifier
+     * registered on `window` — once per action with
+     * `{ $upload, bindingType, files }`.
      *
      * @param {object} $uploadTrigger
      * @param {string} bindingType - `reset` or `delete`
@@ -12183,10 +12226,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         var childNodeFile           = null
             , childNodeFilePreview  = null
-            , childNodes            = $uploadPreview.childNodes
+            // static snapshot of the preview images: nodes are removed from
+            // the DOM mid-loop, so a live NodeList would shift under the
+            // iteration (out-of-range reads on multi-file passes)
+            , childNodes            = Array.prototype.filter.call($uploadPreview.childNodes, function (node) {
+                return /img/i.test(node.tagName);
+            })
             , $resetLink            = null
             , files                 = $uploadTrigger.customFiles
             , filesToBeRemoved      = []
+            , onRemoveCbName        = $uploadTrigger.getAttribute('data-gina-form-upload-on-' + bindingType)
+            , uploadHiddenClass     = $uploadTrigger.getAttribute('data-gina-form-upload-hidden-class')
+            , removedCount          = 0
         ;
 
         for (let i = 0, len = childNodes.length; i < len; i++) {
@@ -12221,6 +12272,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                         // remove file from input.files
                         files.splice(f, 1);
+                        removedCount++;
                         // Since `$uploadTrigger.files` isFrozen & isSealed
                         $uploadTrigger.customFiles  = files;
                         if (isOnResetMode) {
@@ -12300,26 +12352,33 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                         // when there is no more files to preview, restore input file visibility
                         // display upload input
-                        if ( /none/i.test(window.getComputedStyle($uploadTrigger).display) ) {
-                            // eg.: visibility could be delegated to a parent element such as label or a div
-                            if ( /none/i.test($uploadTrigger.parentElement.style.display) ) {
-                                $uploadTrigger.parentElement.style.display = 'block';
-                                return;
-                            }
-                            $uploadTrigger.style.display = 'block';
-                        }
+                        restoreUploadAffordance($uploadTrigger, uploadHiddenClass);
 
-                        // remove reset link event
-                        removeListener(gina, $uploadResetTrigger, 'click', function onUploadResetTriggerEventRemoved() {
-                            // remove link & image - must be done last
-                            $resetLink.remove();
-                            childNodes[i].remove();
-                        });
-                        len--;
-                        i--;
+                        // remove link & image - must be done last
+                        // (the reset/delete link's own click listener dies with the node)
+                        $resetLink.remove();
+                        childNodes[i].remove();
                         break;
                     }
                 } // EO for
+            }
+        }
+
+        // removal-path callback: dispatched ONCE per reset/delete action,
+        // AFTER the removal XHR(s) went out and the preview DOM was cleaned
+        // up. Same convention as `data-gina-form-upload-on-success`: a bare
+        // identifier registered on `window` (function-call shapes unsupported).
+        if (removedCount > 0 && onRemoveCbName) {
+            if ( /\((.*)\)/.test(onRemoveCbName) ) {
+                try { console.warn('[FormValidator][upload] function-call shape not supported on `data-gina-form-upload-on-'+ bindingType +'` — use a bare identifier and register the handler on window: '+ onRemoveCbName); } catch (warnErr) {}
+            } else if ( typeof(window[onRemoveCbName]) === 'function' ) {
+                try {
+                    window[onRemoveCbName]({ $upload: $uploadTrigger, bindingType: bindingType, files: filesToBeRemoved });
+                } catch (cbErr) {
+                    console.error('[FormValidator][upload] `data-gina-form-upload-on-'+ bindingType +'` callback (`'+ onRemoveCbName +'`) threw: ', cbErr);
+                }
+            } else {
+                console.warn('[FormValidator][upload] `data-gina-form-upload-on-'+ bindingType +'` callback `'+ onRemoveCbName +'` was not found on `window`.');
             }
         }
     }
@@ -14009,8 +14068,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var uploadResetOrDeleteTriggerId = $uploadTrigger.id + '-' +index+ '-'+bindingType+'-trigger';
         var $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);
         if (!$uploadResetOrDeleteTrigger) {
-            uploadResetOrDeleteTriggerId = $uploadTrigger.getAttribute('data-gina-form-upload-'+ '-' +index+ +bindingType+'-trigger');
-            $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);
+            var customTriggerId = $uploadTrigger.getAttribute('data-gina-form-upload-'+ bindingType +'-trigger');
+            if (customTriggerId) {
+                uploadResetOrDeleteTriggerId = customTriggerId;
+                $uploadResetOrDeleteTrigger = document.getElementById(uploadResetOrDeleteTriggerId);
+            }
         }
 
         if (
@@ -14028,7 +14090,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
             });
             $uploadResetOrDeleteTrigger.isBinded = true;
         } else {
-            console.warn('[FormValidator::bindForm][upload]['+$uploadTrigger.id+'] : did not find `upload '+bindingType+' trigger`.\nPlease, make sure that your delete element ID is `'+ uploadResetOrDeleteTriggerId +'-'+bindingType+'-trigger`, or add to your file input ('+ $uploadTrigger.id +') -> `data-gina-form-upload-'+bindingType+'-trigger="your-custom-id"` definition.');
+            console.warn('[FormValidator::bindForm][upload]['+$uploadTrigger.id+'] : did not find `upload '+bindingType+' trigger`.\nPlease, make sure that your '+bindingType+' element ID is `'+ uploadResetOrDeleteTriggerId +'`, or add to your file input ('+ $uploadTrigger.id +') -> `data-gina-form-upload-'+bindingType+'-trigger="your-custom-id"` definition.');
         }
     }
 
@@ -15788,6 +15850,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
         };
         var clickProxyHandler = function(event) {
             var $el = event.target;
+
+            // a click target removed from the DOM during its own dispatch
+            // (e.g. an upload preview's reset/delete link) has no parent by
+            // the time the event bubbles up to the form — nothing left to
+            // proxy, and every parentNode read below would throw
+            if ( !$el || !$el.parentNode ) {
+                return;
+            }
 
             var isCustomSubmit = false, isCaseIgnored = false;
 
