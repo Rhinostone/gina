@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A multipart/form-data POST carrying only text fields (no file parts) no longer hangs until a front-proxy timeout. The request-lifecycle continuation previously resumed only from inside the per-file write-stream finish loop, so a body with zero file parts ran that loop zero times and never resumed; it now resumes directly when there are no file parts. Non-file fields remain dropped from req.post (the documented multipart limitation) — only the hang is fixed. The parse runs before routing, so any path was affected, unauthenticated.'
+time: 2026-07-11T13:43:18+01:00

@@ -3947,8 +3947,54 @@ function Server(options) {
                         });
                     });
 
+                    // #B93 — resume the request lifecycle once the multipart body is fully
+                    // parsed. Shared by the has-files path (after every write stream closes)
+                    // and the fields-only path below, which produces no write streams and
+                    // otherwise never reached this continuation.
+                    var resumeAfterMultipart = function resumeAfterMultipart() {
+                        loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
+                            if (!req.handled) {
+                                req.handled = true;
+                                if (err) {
+                                    if (!res.headersSent)
+                                        throwError(response, 500, 'Internal server error\n' + err.stack, next);
+                                        return;
+                                } else {
+                                    handle(req, res, next, bundle, pathname, config)
+                                }
+                            }
+                        })
+                    };
+
+                    // #B97 — a malformed / empty / non-multipart body sent with a
+                    // multipart/form-data content-type makes busboy emit 'error' (never
+                    // 'finish'). With no listener this surfaced as an uncaughtException,
+                    // which proc.js answers with SIGTERM — so a single unauthenticated
+                    // request could kill the bundle (and the client got no response at all).
+                    // Answer 400 instead; guard against a double-response in case a file
+                    // write stream already failed and responded.
+                    busboy.on('error', function onBusboyError(err) {
+                        console.error('[ busboy ] [ onParseError ]', (err && err.message) ? err.message : err);
+                        if (!response.headersSent && !request.handled) {
+                            request.handled = true;
+                            throwError(response, 400, 'Malformed multipart/form-data request', next);
+                        }
+                    });
+
                     busboy.on('finish', function() {
                         var total = writeStreams.length;
+
+                        // #B93 — a fields-only multipart body (zero file parts) creates no
+                        // write streams, so the loop below runs zero times and the lifecycle
+                        // continuation never fired: the request hung until a front-proxy
+                        // timeout severed it. Resume directly. Non-file fields stay dropped
+                        // (the documented multipart limitation); populating req.post from
+                        // them is a separate contract change, not coupled here.
+                        if (total === 0) {
+                            resumeAfterMultipart();
+                            return;
+                        }
+
                         for (var ws = 0, wsLen = writeStreams.length; ws < wsLen; ++ws ) {
 
                             writeStreams[ws].on('error', function(err) {
@@ -3964,18 +4010,7 @@ function Server(options) {
                                     console.debug('closing writestreams : ' + total);
 
                                     if (total == 0) {
-                                        loadBundleConfiguration(request, response, next, function onBundleConfigurationLoaded(err, bundle, pathname, config, req, res, next) {
-                                            if (!req.handled) {
-                                                req.handled = true;
-                                                if (err) {
-                                                    if (!res.headersSent)
-                                                        throwError(response, 500, 'Internal server error\n' + err.stack, next);
-                                                        return;
-                                                } else {
-                                                    handle(req, res, next, bundle, pathname, config)
-                                                }
-                                            }
-                                        })
+                                        resumeAfterMultipart();
                                     }
                                 })
                             });

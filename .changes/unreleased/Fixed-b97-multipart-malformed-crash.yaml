@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A malformed, empty, or non-multipart request body sent with a multipart/form-data content-type no longer takes the bundle down. The parser error (previously unhandled — it surfaced as an uncaughtException that triggered a SIGTERM shutdown, so a single unauthenticated request could kill a worker) is now caught and answered with HTTP 400. Server-side path shared by both engines.'
+time: 2026-07-11T13:43:18+01:00
