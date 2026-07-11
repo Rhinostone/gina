@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Removing an uploaded file now restores a class-hidden add-affordance (new optional data-gina-form-upload-hidden-class attribute names the class to lift from the input and its parent) and dispatches the new data-gina-form-upload-on-reset / data-gina-form-upload-on-delete callbacks — a bare identifier registered on window, like data-gina-form-upload-on-success — once per removal action, after the removal request goes out, with { $upload, bindingType, files }; the restore no longer aborts the removal pass when the parent was inline-hidden.'
-time: 2026-07-11T09:52:11+01:00

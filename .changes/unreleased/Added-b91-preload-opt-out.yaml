@@ -1,3 +1,0 @@
-kind: Added
-body: 'A popin/dialog trigger can now opt out of the hover/focus preload with `data-gina-dialog-preload="false"` (honored on legacy `data-gina-popin-url` triggers too; the value is matched case-insensitively so a templated "False" cannot fail open): the warm-up GET no longer fires on hover or focus for that trigger, and its click loads normally, at click time. Declare it on any trigger whose GET has server-side effects — the preload otherwise assumes GET is safe to fire early, per HTTP semantics.'
-time: 2026-07-10T11:33:00+01:00

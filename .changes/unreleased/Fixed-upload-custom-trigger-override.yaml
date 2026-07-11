@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The documented data-gina-form-upload-<reset|delete>-trigger id override now resolves — the attribute name was built incorrectly so the override could never match — and the trigger-not-found warning suggests the correct element id.'
-time: 2026-07-11T09:52:11+01:00

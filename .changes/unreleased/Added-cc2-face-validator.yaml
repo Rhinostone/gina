@@ -1,3 +1,0 @@
-kind: Added
-body: 'FormValidator now recognises form-associated custom elements (FACEs). A custom element declaring `static formAssociated = true` with a `name` attribute and a `.value` getter now participates in a bound form like a native control: it is picked up by the bind layer (auto-id, dirty tracking, live-check on its composed bubbling `change`), validated against a rule keyed to its name at both live-check and submit, has its errors rendered, and its value rides the XHR payload. Native controls are unaffected.'
-time: 2026-07-11T14:56:53+01:00

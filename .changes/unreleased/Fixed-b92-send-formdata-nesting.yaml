@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The programmatic `$form.send(FormData)` submit path now nests bracket-notation field names (e.g. `item[0][id]`) into objects/arrays before posting, matching the declarative submit path — previously they were transmitted as literal JSON keys, so the server exposed `item[0][id]` as an un-nested key. File uploads and plain-object `send()` payloads are unchanged.'
-time: 2026-07-11T13:17:07+01:00

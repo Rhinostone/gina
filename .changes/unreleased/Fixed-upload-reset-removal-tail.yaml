@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Upload preview reset/delete now actually removes the preview image and its trigger link — the cleanup tail was dead code behind an undefined identifier, so every reset/delete click threw a ReferenceError, previews were only inline-hidden, and re-uploads accumulated duplicate trigger ids (a second cycle surfaced a removeListener TypeError). Multi-file removal passes iterate a static snapshot so they no longer crash mid-iteration, and the form click proxy tolerates a click target removed during its own dispatch.'
-time: 2026-07-11T09:52:11+01:00
