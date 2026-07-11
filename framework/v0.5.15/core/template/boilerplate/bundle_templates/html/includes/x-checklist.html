@@ -1,0 +1,30 @@
+{#
+    <x-checklist> — reference client-side component (designer surface).
+
+    This partial IS the component's markup: server-rendered light DOM, so its
+    content ships in the initial HTML — search engines and AI crawlers read it
+    without executing JavaScript. The matching behavior class lives in
+    public/js/components/x-checklist.js (developer surface): it binds this
+    subtree and never generates markup itself — repeatable markup is cloned
+    from the <template data-role="item"> below.
+
+    Remove this include (and the entry in config/templates.json) when you no
+    longer need the example.
+#}
+<x-checklist data-x-checklist='{ "statusText": "%s of %s done" }'>
+    <h2>Getting started checklist</h2>
+    <p data-role="status" hidden></p>
+    <ul>
+        <li><label><input type="checkbox" checked> Scaffold your project and start the bundle</label></li>
+        <li><label><input type="checkbox"> Add a route in <code>config/routing.json</code></label></li>
+        <li><label><input type="checkbox"> Point it at a controller action</label></li>
+        <li><label><input type="checkbox"> Read the <a href="https://gina.io/docs/">documentation</a></label></li>
+    </ul>
+    <template data-role="item">
+        <li><label><input type="checkbox"> <span data-role="item-label"></span></label></li>
+    </template>
+    <form data-role="add" action="#" method="get">
+        <input type="text" name="label" placeholder="Add a step" aria-label="New checklist item">
+        <button type="submit">Add</button>
+    </form>
+</x-checklist>

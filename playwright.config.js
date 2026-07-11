@@ -17,7 +17,12 @@ module.exports = defineConfig({
     fullyParallel: true,
     reporter: 'list',
     use: {
-        trace: 'on-first-retry'
+        trace: 'on-first-retry',
+        // Local override: point at an already-installed chromium build so a maintainer
+        // whose cache lags the @playwright/test version doesn't have to download the
+        // exact bundled build (`npx playwright install`, ~150 MB). CI leaves PW_CHROME
+        // unset and uses the bundled build it installs, so this never affects CI.
+        ...(process.env.PW_CHROME ? { launchOptions: { executablePath: process.env.PW_CHROME } } : {})
     },
     // Starts the runtime harness (test/e2e/runtime-server.js) that serves the REAL
     // built gina bundle for popin-dialog.runtime.spec.js, plus the framework-free

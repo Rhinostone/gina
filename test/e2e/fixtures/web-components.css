@@ -1,0 +1,12 @@
+/*
+ * External stylesheet for the client-components CSP fixture — stands in for
+ * the bundle's normal stylesheet pipeline (light-DOM components ride it; no
+ * inline styles needed). The 4px border-left is the computed-style assertion
+ * target: it must win because the inline canary (99px) is blocked by
+ * style-src 'self'.
+ */
+x-checklist {
+    display: block;
+    border-left: 4px solid rgb(43, 43, 43);
+    padding-left: 12px;
+}

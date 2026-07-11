@@ -1716,13 +1716,15 @@ describe('27 - Popin: native <dialog> UA-close routes through popinClose', funct
 // returns. The `return;` also preserves the pre-existing window.open() fall-through guard —
 // non-_self targets (blank/parent/top) still reach window.open, _self never does.
 //
-// NOTE: this fix is scoped to the popin plugin's OWN _self redirect. A structurally
-// identical blind timer lives in a sibling path — the validator plugin's
-// `Validator::Popin now redirecting` handler (core/plugins/lib/validator/src/main.js) —
-// which is a SEPARATE code path with a different safety profile (it can $popin.load() a
-// DIFFERENT popin whose loaded.<id> listener may not be armed, so its timer may be
-// load-bearing). That sibling is deliberately NOT touched here; the served gina.min.js
-// therefore still carries exactly one blind timer (the validator one) by design.
+// NOTE: this fix is scoped to the popin plugin's OWN _self redirect. The structurally
+// similar blind timer that lived in the sibling validator path
+// (`Validator::Popin now redirecting`, core/plugins/lib/validator/src/main.js) had a
+// DIFFERENT safety profile — it could $popin.load() a DIFFERENT popin whose loaded.<id>
+// listener was never armed, so a bare delete would have broken that flow. It was
+// resolved separately (#B79): the validator now captures popinLoad's returned handle
+// and arms its content-first `loaded.<id>` listener when the popin is not open. The
+// served gina.min.js carries no blind popin-open timer anymore.
+// Coverage: test/core/validator-popin-redirect.test.js.
 
 describe('28 - Popin: #B77 _self redirect-tunnel loads-then-returns (blind-open timer removed)', function () {
 
@@ -1829,5 +1831,136 @@ describe('28 - Popin: #B77 _self redirect-tunnel loads-then-returns (blind-open 
         assert.ok(/\.load\(/.test(branch), 'the _self branch still issues the popin load in the served bundle');
         assert.equal(branch.indexOf('setTimeout'), -1,
             'the popin _self branch must carry no setTimeout blind-open in the served bundle (rebuild if this fails)');
+    });
+});
+
+
+// ── 29 — #B91: per-trigger preload opt-out (data-gina-dialog-preload="false") ──────
+
+// Replica of onIntent's #B91 gate + cache semantics: an opted-out trigger never
+// warms, its cache slot stays undefined, so the click-time consume finds nothing
+// and the caller's click-time load runs (the ordering is source-pinned below).
+function makeGatedPreload(netLog) {
+    var preloadCache = {};
+    function preloadFetch(url) { netLog.push(url); preloadCache[url] = 'BODY:' + url; }
+    function onMouseover(target) {
+        var $trigger = target.closest ? target.closest('[data-gina-dialog-src],[data-gina-popin-url]') : null;
+        if (!$trigger) { return; }
+        // #B91 gate — same parse as popin/main.js onIntent (case-insensitive).
+        if (/^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'))) { return; }
+        var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
+        if (!url || typeof preloadCache[url] != 'undefined') { return; }
+        preloadCache[url] = null;
+        preloadFetch(url);
+    }
+    function consumePreload(url) {
+        if (typeof preloadCache[url] == 'undefined') { return false; } // -> caller runs its click-time load
+        var body = preloadCache[url];
+        delete preloadCache[url];
+        return body;
+    }
+    return { onMouseover: onMouseover, consumePreload: consumePreload, cache: preloadCache };
+}
+
+describe('29 - Popin: #B91 preload opt-out (data-gina-dialog-preload="false")', function () {
+
+    // --- behavioral (replica) ---
+
+    it('an opted-out trigger never warms: no GET on hover, no cache slot', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeGatedPreload(net);
+        var $t = mkTrigger(doc, 'button', {
+            'data-gina-dialog': 'd', 'data-gina-dialog-src': '/aj', 'data-gina-dialog-preload': 'false'
+        });
+        pl.onMouseover($t);
+        assert.equal(net.length, 0, 'no network call on hover');
+        assert.equal(typeof pl.cache['/aj'], 'undefined', 'no cache slot reserved');
+    });
+
+    it('the parse is case-insensitive — a templated "False"/"FALSE" still opts out (fail-safe)', function () {
+        ['False', 'FALSE', 'fAlSe'].forEach(function (v) {
+            var doc = makeDoc();
+            var net = [];
+            var pl = makeGatedPreload(net);
+            var $t = mkTrigger(doc, 'button', {
+                'data-gina-dialog': 'd', 'data-gina-dialog-src': '/aj', 'data-gina-dialog-preload': v
+            });
+            pl.onMouseover($t);
+            assert.equal(net.length, 0, 'no GET for value "' + v + '"');
+        });
+    });
+
+    it('absent / "true" / empty / other values leave the default preload ON', function () {
+        [null, 'true', '', 'yes'].forEach(function (v) {
+            var doc = makeDoc();
+            var net = [];
+            var pl = makeGatedPreload(net);
+            var attrs = { 'data-gina-dialog': 'd', 'data-gina-dialog-src': '/aj' };
+            if (v !== null) { attrs['data-gina-dialog-preload'] = v; }
+            var $t = mkTrigger(doc, 'button', attrs);
+            pl.onMouseover($t);
+            assert.equal(net.length, 1, 'preload fires for value ' + JSON.stringify(v));
+        });
+    });
+
+    it('an opted-out trigger click-consume returns false — the caller runs its click-time load', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeGatedPreload(net);
+        var $t = mkTrigger(doc, 'button', {
+            'data-gina-dialog': 'd', 'data-gina-dialog-src': '/aj', 'data-gina-dialog-preload': 'false'
+        });
+        pl.onMouseover($t);
+        assert.equal(pl.consumePreload('/aj'), false, 'undefined slot -> false (caller click-time load path)');
+    });
+
+    it('legacy data-gina-popin-url triggers honor the same attribute', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeGatedPreload(net);
+        var $t = mkTrigger(doc, 'button', {
+            'data-gina-popin-name': 'p', 'data-gina-popin-url': '/lg', 'data-gina-dialog-preload': 'false'
+        });
+        pl.onMouseover($t);
+        assert.equal(net.length, 0, 'legacy trigger opted out — no hover GET');
+    });
+
+    // --- source pins (structural anchors) ---
+
+    it('source: the gate sits inside onIntent — after the disabled skip, before the fetch', function () {
+        var src = getPopinSrc();
+        var fnIdx = src.indexOf('function installPreload');
+        assert.ok(fnIdx > -1, 'installPreload present');
+        var endIdx = src.indexOf("addEventListener('mouseover'", fnIdx);
+        assert.ok(endIdx > fnIdx, 'end anchor (mouseover registration) present');
+        var blk = src.substring(fnIdx, endIdx);   // end-anchored slice: the onIntent body
+        var gateIdx = blk.indexOf("/^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'))");
+        assert.ok(gateIdx > -1, 'expected the case-insensitive opt-out gate in onIntent');
+        var ariaIdx = blk.indexOf('aria-disabled');
+        var fetchIdx = blk.indexOf('preloadFetch(url)');
+        assert.ok(ariaIdx > -1 && fetchIdx > -1, 'ordering anchors present');
+        assert.ok(gateIdx > ariaIdx, 'gate sits after the disabled/aria-disabled skip');
+        assert.ok(gateIdx < fetchIdx, 'gate sits before the preload GET');
+    });
+
+    // --- dist fidelity (these two are RED on a stale dist — rebuild if they fail) ---
+
+    it('dist gina.js carries the opt-out gate (code token, not just the comment)', function () {
+        var dist = getDistSrc();
+        assert.ok(
+            dist.indexOf("/^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'))") > -1,
+            'dist gina.js must carry the #B91 gate — rebuild the plugin bundle'
+        );
+    });
+
+    it('served gina.min.js carries the opt-out gate (minify-surviving tokens)', function () {
+        var min = getDistMinSrc();
+        assert.ok(min.indexOf('data-gina-dialog-preload') > -1,
+            'attribute literal must survive minification — rebuild the plugin bundle');
+        assert.ok(
+            /\/\^false\$\/i\.test\([$\w.]+\.getAttribute\((?:"|')data-gina-dialog-preload(?:"|')\)\)/.test(min),
+            'the case-insensitive gate must survive minification (regex literal + getAttribute + attr string)'
+        );
     });
 });

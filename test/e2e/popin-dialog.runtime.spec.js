@@ -287,4 +287,55 @@ test.describe('data-gina-dialog runtime (real bundle)', () => {
         // The pre-#B80 regression injected the JSON body verbatim; assert it never appears.
         await expect(page.locator('dialog').filter({ hasText: 'isXhrRedirect' })).toHaveCount(0);
     });
+
+    // --- #B91: per-trigger preload opt-out (data-gina-dialog-preload="false") --------
+
+    test('#B91 an opted-out new-API trigger fires no hover GET; the click fires exactly one', async ({ page }) => {
+        await page.evaluate(() => {
+            const a = document.createElement('a');
+            a.id = 'b91-newapi';
+            a.setAttribute('data-gina-dialog', '');
+            a.setAttribute('data-gina-dialog-src', '/frag/ajax.html');
+            a.setAttribute('data-gina-dialog-preload', 'false');
+            a.setAttribute('href', '#');
+            a.textContent = 'Open without preload';
+            document.body.appendChild(a);
+        });
+        let requests = 0;
+        page.on('request', (r) => { if (r.url().endsWith('/frag/ajax.html')) { requests++; } });
+
+        // Hover: the opt-out gate must swallow the intent — no GET fires.
+        await page.hover('#b91-newapi');
+        await page.waitForTimeout(400);
+        expect(requests).toBe(0);
+
+        // Click: consumePreload finds nothing (undefined slot) -> the click-time load
+        // fires exactly one GET and the dialog opens with the fragment. The 0 -> 1
+        // transition also validates the request counter (the absence above is real).
+        await page.click('#b91-newapi');
+        await expect(page.locator('dialog').filter({ hasText: 'AJAX loaded' })).toBeVisible();
+        await page.waitForTimeout(300);
+        expect(requests).toBe(1);
+    });
+
+    test('#B91 an opted-out legacy trigger fires no hover GET; the click fires exactly one', async ({ page }) => {
+        const reg = await registerLegacyPopin(page, 'b91legacy', '/frag/legacy.html', false);
+        expect(reg).toBe('READY');
+        // The attribute is honored on legacy triggers too (read off the intent target).
+        await page.evaluate(() => {
+            document.querySelector('[data-gina-popin-name="b91legacy"]')
+                .setAttribute('data-gina-dialog-preload', 'false');
+        });
+        let requests = 0;
+        page.on('request', (r) => { if (r.url().endsWith('/frag/legacy.html')) { requests++; } });
+
+        await page.hover('[data-gina-popin-name="b91legacy"]');
+        await page.waitForTimeout(400);
+        expect(requests).toBe(0);
+
+        await page.click('[data-gina-popin-name="b91legacy"]');
+        await expect(page.locator('dialog').filter({ hasText: 'Legacy body' })).toBeVisible();
+        await page.waitForTimeout(300);
+        expect(requests).toBe(1);
+    });
 });

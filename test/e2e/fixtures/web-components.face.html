@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>gina FACE participation e2e harness</title>
+    <!-- Empty data-URI icon: suppress the favicon.ico request for a clean console. -->
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="/css/vendor/gina/gina.min.css">
+
+    <!--
+        RUNTIME harness for #CC2 (form-associated custom element participation in
+        FormValidator). Boots the REAL built gina bundle. Unlike the other runtime
+        fixtures, this one loads a NON-EMPTY forms whisper (/js/gina.onload.face.js)
+        so core.js actually scans + binds forms (it stays inert on an empty
+        gina.forms.rules). The FACE definition (x-agree) is loaded as a plain
+        external script — the conventions' default authoring path.
+
+        Load order matches a real gina render: the onload defines onGinaLoaded +
+        __ginaWebroot, THEN the gina bundle boots, THEN the FACE definition.
+    -->
+    <script src="/js/gina.onload.face.js"></script>
+    <script src="/js/gina.min.js"></script>
+    <script src="/js/x-agree.js"></script>
+    <script>
+        // Minimal page: the framework's own `ginaloaded` listener loses the attach
+        // race, so invoke onGinaLoaded manually to flip isFrameworkLoaded (the
+        // loader's guard makes a duplicate call a no-op). core.js then scans forms
+        // (gina.forms.rules is non-empty here) and publishes gina.validator.
+        (function () {
+            var tries = 0;
+            function kick() {
+                try {
+                    if (
+                        window.gina
+                        && window.gina.config
+                        && typeof window.onGinaLoaded === 'function'
+                        && !window.gina.isFrameworkLoaded
+                    ) {
+                        window.onGinaLoaded(window.gina);
+                    }
+                } catch (e) {
+                    if (window.console && console.error) {
+                        console.error('[harness] onGinaLoaded threw', e && e.stack || e);
+                    }
+                }
+                if ((!window.gina || !window.gina.isFrameworkLoaded) && tries++ < 100) {
+                    setTimeout(kick, 50);
+                }
+            }
+            kick();
+        }());
+    </script>
+    <style>
+        body { margin: 0; padding: 1rem; font-family: system-ui, sans-serif; }
+    </style>
+</head>
+<body>
+    <h1>gina FACE participation harness</h1>
+
+    <!--
+        A form-associated custom element (<x-agree name="agree">) lives IN-TREE on
+        #parent, which carries a rule set (faceform) whose `agree` field isRequired.
+        A native <input form="parent" name="note"> lives OUTSIDE #parent's subtree
+        (reassociated) to prove the FACE participates alongside reassociated controls.
+    -->
+    <form id="parent" data-gina-form-rule="faceform" data-gina-form-live-check-enabled="true" action="/face-sink" method="post">
+        <label>Agree <x-agree name="agree"></x-agree></label>
+        <button id="parent-submit" type="submit">Submit</button>
+    </form>
+
+    <!-- reassociated control (out of #parent's DOM subtree, points back via form) -->
+    <p><label>Note <input id="note" type="text" name="note" form="parent"></label></p>
+</body>
+</html>
