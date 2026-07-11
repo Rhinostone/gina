@@ -14089,16 +14089,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
     }
 
     var registerForLiveChecking = function($form, $el) {
+        // A form-associated custom element (FACE) is the only hyphenated tagName that
+        // reaches this point (collected via getOwnedFaces). It exposes its own `.value`
+        // accessor and commits via a composed bubbling `change`, so it must NOT go through
+        // the HTMLInputElement value-setter interception (setObserver) — that would clobber
+        // the element's own accessor. Its live-check rides the existing form-level /
+        // reassociated `change` proxy; no `input`-event wiring is added (a FACE commits via
+        // `change` per the author contract, and gina has no `input` proxy for native inputs).
+        var isCustomEl = ( $el.tagName.indexOf('-') > -1 );
         // Filter supported elements
         if (
-            !/^(input|textarea)$/i.test($el.tagName)
+            !isCustomEl && !/^(input|textarea)$/i.test($el.tagName)
             ||
             typeof(gina.events['registered.' + $el.id]) != 'undefined'
         ) {
             return
         }
-        // Mutation obeserver - all but type == files
-        if ( !/^file$/i.test($el.type) ) {
+        // Mutation obeserver - all but type == files, and custom elements (hazard a)
+        if ( !isCustomEl && !/^file$/i.test($el.type) ) {
             setObserver($el);
         }
         var liveCheckTimer = null
@@ -14108,15 +14116,21 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 addLiveForInput($form, $el, liveCheckTimer, true);
                 break;
             default:
-                addLiveForInput($form, $el, liveCheckTimer);
-                // Bypass Safari autocomplete
-                var isAutoCompleteField = $el.getAttribute('autocomplete');
-                if (
-                    /safari/i.test(navigator.userAgent)
-                    && isAutoCompleteField
-                    && /^(off|false)/i.test(isAutoCompleteField)
-                ) {
-                    handleAutoComplete($el, liveCheckTimer)
+                // For a FACE, pass isOtherTagAllowed=true so addLiveForInput enters its
+                // body (a custom element has no input `type` to match its own gate) and
+                // registers `change.<id>` — re-dispatched by the form-level / reassociated
+                // change proxy when the FACE fires its composed bubbling `change`.
+                addLiveForInput($form, $el, liveCheckTimer, isCustomEl);
+                if ( !isCustomEl ) {
+                    // Bypass Safari autocomplete (native inputs only)
+                    var isAutoCompleteField = $el.getAttribute('autocomplete');
+                    if (
+                        /safari/i.test(navigator.userAgent)
+                        && isAutoCompleteField
+                        && /^(off|false)/i.test(isAutoCompleteField)
+                    ) {
+                        handleAutoComplete($el, liveCheckTimer)
+                    }
                 }
                 break;
         }
@@ -14628,6 +14642,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
             return arr;
         };
 
+        // Form-associated custom elements (FACEs). `form.elements` only contains
+        // form-ASSOCIATED members, so the only hyphenated tagName it can hold is a
+        // form-associated custom element (an unregistered / non-form-associated custom
+        // element is an HTMLUnknownElement and never joins the collection). Widening the
+        // bind coverage here — rather than in getOwnedElements' single-tag matcher — keeps
+        // that helper unchanged for the native input/textarea/select/button paths.
+        var getOwnedFaces = function($form) {
+            var arr = [];
+            for (let i = 0, len = $form.elements.length; i < len; i++) {
+                let $el = $form.elements[i];
+                if ( $el.tagName.indexOf('-') > -1 ) {
+                    arr.push($el);
+                }
+            }
+            return arr;
+        };
+
         // binding form elements
         var type            = null
             , id            = null
@@ -14641,6 +14672,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
             , $textareas    = getOwnedElements($target, 'textarea')
             // select
             , $select       = getOwnedElements($target, 'select')
+            // form-associated custom elements (FACE)
+            , $faces        = getOwnedFaces($target)
             , allFormGroupedElements = {}
             , allFormGroupNames = []
             , formElementGroup = {}
@@ -14704,6 +14737,50 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         }
         // EO Binding textarea
+
+        // BO Binding form-associated custom elements (FACE)
+        // A FACE already participates in the form's control collection, so value
+        // harvest, validation, serialization and error render (all name-keyed and
+        // tag-agnostic) already cover it at submit. This loop adds the bind-layer
+        // parity a native control gets: auto-id, dirty tracking (fieldsSet) and
+        // live-check. The value-setter interception (setObserver) is deliberately
+        // skipped for custom tags inside registerForLiveChecking — a FACE exposes its
+        // own `.value` accessor and commits via a composed bubbling `change`.
+        for (let f = 0, len = $faces.length; f < len; ++f) {
+            // A FACE exposes its owning form + name via ElementInternals / the `name`
+            // attribute — NOT the element-level `.form` / `.name` properties that native
+            // controls reflect. The validator's live-check path reads `$el.form`,
+            // `$el.name` and `event.target.form`, so surface them on the element for that
+            // path (a FACE that already exposes them — e.g. via its own getters — is left
+            // untouched). Without this, addLiveForInput/setObserver dereference an
+            // undefined `$el.form` and the whole form scan throws.
+            if ( typeof($faces[f].form) == 'undefined' || $faces[f].form == null ) {
+                try { Object.defineProperty($faces[f], 'form', { value: $form.target, configurable: true, writable: true }); } catch (e) {}
+            }
+            if ( (typeof($faces[f].name) == 'undefined' || !$faces[f].name) && $faces[f].getAttribute('name') ) {
+                try { Object.defineProperty($faces[f], 'name', { value: $faces[f].getAttribute('name'), configurable: true, writable: true }); } catch (e) {}
+            }
+            checkForRuleAlias($form.rules, $faces[f]);
+            elId = $faces[f].getAttribute('id');
+            if (!elId || elId == '') {
+                elId = 'face.' + uuid();
+                $faces[f].setAttribute('id', elId)
+            }
+            if (!$form.fieldsSet[ elId ]) {
+                let defaultValue = $faces[f].value || '';
+                $form.fieldsSet[elId] = {
+                    id: elId,
+                    name: $faces[f].getAttribute('name') || null,
+                    value: $faces[f].value || '',
+                    defaultValue: defaultValue
+                }
+            }
+            // Adding live check
+            if (/^true$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) ) {
+                registerForLiveChecking($form, $faces[f]);
+            }
+        }
+        // EO Binding form-associated custom elements (FACE)
 
         // BO Binding input
         for (let f = 0, len = $inputs.length; f < len; ++f) {

@@ -118,17 +118,31 @@ const FRAGMENTS = {
         '<script src="/js/components/x-checklist.js"></script></div>'
 };
 
+// #CC2 — a non-empty forms whisper for the FACE-participation fixture. core.js only
+// scans + binds forms when gina.forms.rules is non-empty (it stays byte-identical /
+// inert otherwise), so the validator needs a rule set to activate. The `agree` field
+// is a form-associated custom element (<x-agree>); the reassociated `note` input is
+// intentionally rule-less (it rides the payload untrusted — the hazard-b posture).
+const FACE_FORMS_JSON = JSON.stringify({ rules: { faceform: { agree: { isRequired: true } } } });
+
 /**
  * renderOnload — read the built onload and substitute its `{{ token }}` whispers
- * with the harness stub values above.
+ * with the harness stub values above. An optional raw forms-JSON string overrides
+ * the (empty) `page.environment.forms` whisper so a fixture can activate the
+ * validator; it is URI-encoded here because the onload does
+ * JSON.parse(decodeURIComponent(token)).
+ * @param {string} [formsJson] raw JSON for the forms whisper (defaults to '{}').
  * @returns {string}
  */
-function renderOnload() {
+function renderOnload(formsJson) {
     var src = fs.readFileSync(path.join(PLUGIN_DIST, 'js', 'gina.onload.min.js'), 'utf8');
-    Object.keys(ONLOAD_TOKENS).forEach(function (key) {
+    var tokens = formsJson
+        ? Object.assign({}, ONLOAD_TOKENS, { 'page.environment.forms': encodeURIComponent(formsJson) })
+        : ONLOAD_TOKENS;
+    Object.keys(tokens).forEach(function (key) {
         var escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         var re = new RegExp('\\{\\{\\s*' + escaped + '\\s*\\}\\}', 'g');
-        src = src.replace(re, ONLOAD_TOKENS[key]);
+        src = src.replace(re, tokens[key]);
     });
     return src;
 }
@@ -173,6 +187,11 @@ const server = http.createServer(function (req, res) {
         if (url === '/js/gina.onload.js') {
             return send(res, 200, 'application/javascript; charset=utf-8', renderOnload());
         }
+        // #CC2 — same onload, but with a non-empty forms whisper so the validator binds
+        // (the FACE-participation fixture, /face, references this).
+        if (url === '/js/gina.onload.face.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8', renderOnload(FACE_FORMS_JSON));
+        }
         if (url === '/js/gina.min.js') {
             return send(res, 200, 'application/javascript; charset=utf-8',
                 fs.readFileSync(path.join(PLUGIN_DIST, 'js', 'gina.min.js')));
@@ -206,6 +225,20 @@ const server = http.createServer(function (req, res) {
         if (url === '/js/components/x-checklist.js') {
             return send(res, 200, 'application/javascript; charset=utf-8',
                 fs.readFileSync(path.join(BOILERPLATE_PUBLIC, 'js', 'components', 'x-checklist.js')));
+        }
+        // #CC2 — the FACE-participation harness: fixture page + its FACE definition +
+        // the always-XHR submit sink (the validator posts application/json; the sink just
+        // acknowledges so the submit path completes and the spec can read the request body).
+        if (url === '/face' || url === '/face.html') {
+            return send(res, 200, 'text/html; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'web-components.face.html')));
+        }
+        if (url === '/js/x-agree.js') {
+            return send(res, 200, 'application/javascript; charset=utf-8',
+                fs.readFileSync(path.join(FIXTURES, 'x-agree.js')));
+        }
+        if (url === '/face-sink') {
+            return send(res, 200, 'application/json; charset=utf-8', '{}');
         }
         // #B80 — a legacy popin trigger whose GET returns an XHR redirect (application/json),
         // not an HTML fragment. A hover/focus preload must NOT cache + inject this JSON as
