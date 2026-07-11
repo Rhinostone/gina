@@ -1228,6 +1228,18 @@ body {
   border-top: none;
 }
 
+/* #CC6 — component census (View tab) */
+.bm-comp-undefined {
+  margin: 2px 0 4px;
+  font-weight: 600;
+  color: var(--err);
+}
+
+.bm-comp-defined {
+  margin: 2px 0 4px;
+  color: var(--text-dim);
+}
+
 /* Forms tab — accordion card for each form ──────────────────────────────── */
 .bm-form-card {
   background: var(--bg2);

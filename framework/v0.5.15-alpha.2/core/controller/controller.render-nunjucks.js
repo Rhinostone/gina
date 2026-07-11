@@ -426,6 +426,11 @@ function injectInspectorScripts(html, data, self, local, displayInspector) {
         }
     } catch (e) { /* leave null */ }
     __gdGina.inspectorUrl = _inspUrlConf;
+    // #CC6 — mirror the events capture gate to the browser: the statusbar's
+    // component-event capture honours the same knob
+    // (settings > inspector.events.captureArgs); metadata always, detail
+    // values only when opted in.
+    __gdGina.inspectorEventsCaptureArgs = !!(process.gina && process.gina._inspectorEventsCaptureArgs);
 
     var __gdPayload = { gina: __gdGina, user: __gdUser };
     // Snapshot BEFORE redaction, gated on local scope only.

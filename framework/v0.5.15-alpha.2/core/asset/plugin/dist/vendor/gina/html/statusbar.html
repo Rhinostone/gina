@@ -158,6 +158,109 @@
         return _rdcWalk(value, 0, [], domHits);
     }
 
+    // ── Component observability (#CC6) ────────────────────────────────────
+    // Census: instances per custom-element tag, split defined/awaiting-upgrade.
+    // An undefined custom tag (typo'd name, missing or failed definition
+    // script) is otherwise a perfectly silent failure — an inert inline
+    // element. Collected in-page because the Inspector SPA has no DOM access
+    // in bound/COOP mode; rides additively as user.view.components.
+    function _ginaComponentCensus() {
+        var census = { defined: {}, undefined: {}, undefinedCount: 0 };
+        try {
+            var totals = {};
+            var all = document.querySelectorAll('*');
+            for (var ci = 0; ci < all.length; ci++) {
+                var tag = all[ci].tagName ? all[ci].tagName.toLowerCase() : '';
+                if (tag.indexOf('-') === -1) continue;
+                totals[tag] = (totals[tag] || 0) + 1;
+            }
+            // the platform's own awaiting-upgrade selector
+            var pending = document.querySelectorAll(':not(:defined)');
+            for (var cp = 0; cp < pending.length; cp++) {
+                var ptag = pending[cp].tagName ? pending[cp].tagName.toLowerCase() : '';
+                if (ptag.indexOf('-') === -1) continue;
+                census.undefined[ptag] = (census.undefined[ptag] || 0) + 1;
+                census.undefinedCount++;
+            }
+            for (var ct in totals) {
+                var pendingCount = census.undefined[ct] || 0;
+                if (totals[ct] > pendingCount) census.defined[ct] = totals[ct] - pendingCount;
+            }
+        } catch (e) { /* best-effort — never break the page */ }
+        return census;
+    }
+    function _ginaAttachCensus() {
+        try {
+            var u = window.__ginaData && window.__ginaData.user;
+            if (u && u.view && typeof u.view === 'object') {
+                u.view.components = _ginaComponentCensus();
+            }
+        } catch (e) {}
+    }
+    var _ginaCensusTimer = null;
+    // XHR/popin updates publish BEFORE the fragment lands in the DOM — refresh
+    // the census (and republish) once, shortly after, so injected components
+    // and their upgrade state are reflected.
+    function _ginaScheduleCensusRefresh() {
+        if (_ginaCensusTimer) return;
+        _ginaCensusTimer = setTimeout(function () {
+            _ginaCensusTimer = null;
+            _ginaAttachCensus();
+            _ginaPublish();
+        }, 150);
+    }
+
+    // ── Component protocol events (#CC6) ──────────────────────────────────
+    // Dev-only visibility of composed, bubbling CustomEvents following the
+    // component convention `<tag>:<verb>` (dashed tag prefix — the framework's
+    // own dot-namespaced internal events never match). Event name + target +
+    // timestamp always ride; the event `detail` VALUES ride only when the
+    // events capture gate is opted in server-side (whispered as
+    // gina.inspectorEventsCaptureArgs) — arbitrary detail cannot be
+    // auto-redacted, so values stay off by default, and captured values still
+    // pass the redaction walk above.
+    var _ginaEvtBuf = [];
+    var _ginaEvtMax = 200;
+    var _ginaEvtCaptureDetail = !!(d.gina && d.gina.inspectorEventsCaptureArgs === true);
+    var _ginaEvtName = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)+:./;
+    var _ginaEvtTimer = null;
+    function _ginaEvtPublish() {
+        if (_ginaEvtTimer) return;
+        _ginaEvtTimer = setTimeout(function () {
+            _ginaEvtTimer = null;
+            try {
+                var u = window.__ginaData && window.__ginaData.user;
+                if (u) u.clientEvents = _ginaEvtBuf;
+                _ginaPublish();
+            } catch (e) {}
+        }, 250);
+    }
+    try {
+        var _ginaNativeDispatch = EventTarget.prototype.dispatchEvent;
+        EventTarget.prototype.dispatchEvent = function (ev) {
+            try {
+                if (ev && ev.bubbles && ev.composed && typeof ev.type === 'string'
+                    && _ginaEvtName.test(ev.type)) {
+                    var _evEntry = {
+                        name   : ev.type,
+                        t      : Date.now(),
+                        target : (this && this.tagName)
+                            ? String(this.tagName).toLowerCase() + (this.id ? '#' + this.id : '')
+                            : 'non-element'
+                    };
+                    if (_ginaEvtCaptureDetail && typeof ev.detail !== 'undefined') {
+                        try { _evEntry.meta = _rdc_redact(ev.detail, null); }
+                        catch (x) { _evEntry.meta = '[uncapturable]'; }
+                    }
+                    _ginaEvtBuf.push(_evEntry);
+                    if (_ginaEvtBuf.length > _ginaEvtMax) _ginaEvtBuf.shift();
+                    _ginaEvtPublish();
+                }
+            } catch (e) { /* observability must never break dispatch */ }
+            return _ginaNativeDispatch.apply(this, arguments);
+        };
+    } catch (e) { /* prototype not writable — skip the wrap */ }
+
     // ── ginaToolbar shim ──────────────────────────────────────────────────
     // gina.min.js is a stale build that creates its own window.ginaToolbar
     // with a loadData function that accesses removed DOM elements
@@ -200,6 +303,11 @@
                     }
                 }
             }
+
+            // #CC6 — refresh the component census with the update, and again
+            // shortly after (an XHR fragment lands in the DOM after this publish)
+            _ginaAttachCensus();
+            _ginaScheduleCensusRefresh();
 
             // Sync localStorage for the Inspector's fallback channel
             try { localStorage.setItem('__ginaData', JSON.stringify(window.__ginaData)); } catch (e) {}
@@ -249,6 +357,8 @@
         window.ginaToolbar = _shim;
     }
 
+    // #CC6 — the initial component census rides the first publish
+    _ginaAttachCensus();
     // Publish data for Inspector via localStorage (works regardless of opener)
     try { localStorage.setItem('__ginaData', JSON.stringify(d)); } catch (e) {}
     _ginaPublish();

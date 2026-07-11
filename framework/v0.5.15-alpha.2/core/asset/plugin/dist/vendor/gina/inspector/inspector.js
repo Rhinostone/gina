@@ -138,8 +138,8 @@
     /** @constant {RegExp} Matches HTTP/HTTPS URLs */
     var RE_URL  = /^https?:\/\//i;
 
-    /** @constant {Object} Keys to skip when rendering the View tab */
-    var VIEW_SKIP = { scripts: 1, stylesheets: 1 };
+    /** @constant {Object} Keys to skip when rendering the View tab (components renders bespoke — #CC6) */
+    var VIEW_SKIP = { scripts: 1, stylesheets: 1, components: 1 };
     /** @constant {Object} Keys whose children are recursively flattened into PROPERTIES */
     var VIEW_FLATTEN = { html: 1, properties: 1 };
 
@@ -631,6 +631,47 @@
             + '<h2 class="bm-section-title">' + escHtml(name) + '</h2>'
             + renderTree(data, 0, null, null, ginaData)
             + '</div>';
+    }
+
+    /**
+     * #CC6 — render the component census as a View-tab section. The census is
+     * collected in-page by the statusbar (the SPA has no DOM access in bound
+     * or COOP mode) and rides `user.view.components` additively. Undefined
+     * custom elements — a typo'd tag name, a missing or failed definition
+     * script — are otherwise a perfectly silent failure (an inert inline
+     * element), so they surface first, in red.
+     * @inner
+     * @param {Object} census - { defined: {tag: count}, undefined: {tag: count}, undefinedCount: number }
+     * @returns {string} HTML string (empty when the page has no custom elements)
+     */
+    function renderComponentsSection(census) {
+        var defined = (census && census.defined) || {};
+        var pending = (census && census.undefined) || {};
+        var defKeys = Object.keys(defined);
+        var undKeys = Object.keys(pending);
+        if (!defKeys.length && !undKeys.length) { return ''; }
+        var h = '<div class="bm-section">'
+            + '<h2 class="bm-section-title">components</h2>';
+        if (undKeys.length) {
+            var total = (census && typeof census.undefinedCount === 'number')
+                ? census.undefinedCount : undKeys.length;
+            var undParts = [];
+            for (var ui = 0; ui < undKeys.length; ui++) {
+                undParts.push(escHtml('<' + undKeys[ui] + '> ×' + pending[undKeys[ui]]));
+            }
+            h += '<div class="bm-comp-undefined">'
+                + escHtml(String(total)) + ' undefined component' + (total === 1 ? '' : 's')
+                + ' — not upgraded: ' + undParts.join(', ')
+                + '</div>';
+        }
+        if (defKeys.length) {
+            var defParts = [];
+            for (var di = 0; di < defKeys.length; di++) {
+                defParts.push(escHtml('<' + defKeys[di] + '> ×' + defined[defKeys[di]]));
+            }
+            h += '<div class="bm-comp-defined">' + defParts.join(', ') + '</div>';
+        }
+        return h + '</div>';
     }
 
     // ── Data weight badge ──────────────────────────────────────────────────
@@ -1223,6 +1264,11 @@
         // Other object sections (locale, assets, etc.)
         for (var s = 0; s < objectSections.length; s++) {
             h += renderSection(objectSections[s].name, objectSections[s].data, objectSections[s].gina);
+        }
+
+        // #CC6 — component census (statusbar-collected; bespoke red indicator)
+        if (view.components && typeof view.components === 'object') {
+            h += renderComponentsSection(view.components);
         }
 
         return h;
@@ -1868,6 +1914,7 @@
                 // via textContent; return before the innerHTML/fold path. Event
                 // names + metadata are app-controlled but treated as untrusted.
                 renderAppEvents(treeEl, u.events);
+                appendClientEvents(treeEl, u.clientEvents); // #CC6 — component protocol events
                 return;
         }
 
@@ -2045,6 +2092,44 @@
         } else {
             el.textContent = 'No events captured.';
         }
+    }
+
+    /**
+     * #CC6 — format the client-side component-event buffer (the statusbar's
+     * dispatchEvent capture: composed bubbling CustomEvents named
+     * `<tag>:<verb>`). One line per event: time, name, emitting element and —
+     * only when the server-side capture gate is opted in — the redacted
+     * `detail` payload.
+     * @inner
+     * @param {?Object[]} arr - `user.clientEvents`, or null.
+     * @returns {string}
+     */
+    function formatClientEventBuffer(arr) {
+        return arr.map(function (e) {
+            var ts = '';
+            try { ts = new Date(e.t).toISOString().substr(11, 12); } catch (x) { ts = ''; }
+            var line = (ts ? ts + '  ' : '') + (e.name || '?') + (e.target ? '  ' + e.target : '');
+            if (typeof e.meta !== 'undefined') {
+                var s;
+                try { s = JSON.stringify(e.meta); } catch (x) { s = '[unserialisable]'; }
+                line += '  ' + s;
+            }
+            return line;
+        }).join('\n');
+    }
+
+    /**
+     * #CC6 — append the client component-event block to the Events pane,
+     * below the server events. Always textContent — event names, targets and
+     * detail payloads are page-controlled and treated as untrusted.
+     * @inner
+     * @param {Element} el - The `#tree-events` pane.
+     * @param {?Object[]} clientEvents - `user.clientEvents`, or null.
+     */
+    function appendClientEvents(el, clientEvents) {
+        if (!el || !clientEvents || !clientEvents.length) { return; }
+        el.textContent += '\n\n── Client component events ──\n'
+            + formatClientEventBuffer(clientEvents);
     }
 
     /**
