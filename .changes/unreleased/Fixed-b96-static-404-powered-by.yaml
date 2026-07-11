@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Static-asset 404s and framework error responses no longer bypass X-Powered-By suppression: settings.json server.hidePoweredBy now gates the per-request emission on both engines (previously it covered only the Isaac /_gina/* sites), and env.json server.response.header overrides now reach HTTP/1.1 error responses (the flush previously ran before the override loop, so the loop was skipped)'
+time: 2026-07-11T09:53:45+01:00

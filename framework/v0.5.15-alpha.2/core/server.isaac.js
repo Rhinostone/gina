@@ -1001,9 +1001,12 @@ function ServerEngineClass(options) {
         // #HDR8 Phase 2 — gate the framework's X-Powered-By emission based on
         // settings.json > server.hidePoweredBy (default false). Phase 1's
         // gina.plugins.HidePoweredBy() middleware can intercept setHeader /
-        // removeHeader on the Express engine but NOT the 15 direct writeHead
+        // removeHeader in the express chain but NOT the 15 direct writeHead
         // emissions below — writeHead bypasses the setHeader interface. This
-        // helper closes that Isaac-engine gap. Default false preserves shipped
+        // helper closes that Isaac-engine gap. The engine-agnostic per-request
+        // emission in core/server.js honors the SAME flag via its own inline
+        // gate, so the flag suppresses the header framework-wide (routed,
+        // statics, error pages, /_gina). Default false preserves shipped
         // behaviour; opt-in by setting server.hidePoweredBy = true.
         var _setPoweredByHeader = function(headers) {
             if (!options.hidePoweredBy) {

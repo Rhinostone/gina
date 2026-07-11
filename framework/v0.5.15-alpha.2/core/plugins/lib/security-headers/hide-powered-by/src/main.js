@@ -28,38 +28,37 @@
  * reconnaissance surface (one byte of useful intel — what server stack
  * to target). helmet ships `hidePoweredBy` for the same reason.
  *
- * **Two engine-specific emit paths — full coverage requires both
- * mechanisms**:
+ * **Two emit paths — and where each suppression mechanism reaches**:
  *
- *  1. **Express engine** (`server.js:2425`) — `response.setHeader(
- *     'X-Powered-By', 'Gina/'+GINA_VERSION)` fires once in the early
- *     request pipeline, before any user `app.use()` mount. This
+ *  1. **Engine-agnostic per-request emission** (`core/server.js`, the
+ *     `onInstance` request-entry catch-all, BOTH engines) —
+ *     `response.setHeader('X-Powered-By', 'Gina/'+GINA_VERSION)` fires
+ *     before any user `app.use()` mount, gated on
+ *     `settings.json > server.hidePoweredBy` (default `false`). This
  *     middleware's `res.removeHeader('x-powered-by')` runs later in
- *     the chain and removes the header cleanly before the response
- *     is written.
+ *     the chain and removes it cleanly on ROUTED responses —
+ *     but static-asset serves, static/traversal 404s and framework
+ *     error pages never traverse the middleware chain, so the
+ *     settings gate is the mechanism that reaches those.
  *
- *  2. **Isaac engine** (`server.isaac.js`) — the framework emits
- *     `X-Powered-By: Gina/<version>` via the `_setPoweredByHeader(
- *     headers)` helper at `server.isaac.js:572-577`, which writes
- *     the header into the headers object passed to `writeHead(...)`
- *     at every `/_gina/*` built-in endpoint (~15 sites: health,
- *     metrics, info, cache stats, inspector SSE, agent, indexes,
- *     reveal, etc.), plus one direct `setHeader` site at L1188 for
- *     the routing.json asset endpoint. ALL of these emit sites are
- *     gated on `options.hidePoweredBy` — set
- *     `settings.json > server.hidePoweredBy: true` (default `false`)
- *     to make the helper skip the X-Powered-By write across every
- *     site at once. This middleware is a no-op on Isaac (the header
- *     never lands in the response object at middleware time);
- *     registering it is harmless but does not suppress the header
- *     on Isaac. Use the `server.hidePoweredBy: true` settings gate
- *     for Isaac-engine bundles.
+ *  2. **Isaac engine `/_gina/*` endpoints** (`server.isaac.js`) — the
+ *     framework writes `X-Powered-By: Gina/<version>` via the
+ *     `_setPoweredByHeader(headers)` helper into the headers object
+ *     passed to `writeHead(...)` at every `/_gina/*` built-in endpoint
+ *     (health, metrics, info, cache stats, inspector SSE, agent,
+ *     indexes, reveal, etc.), plus one direct `setHeader` site for
+ *     the routing.json asset endpoint. All gated on the SAME
+ *     `server.hidePoweredBy` flag. `writeHead` commits headers the
+ *     middleware cannot reach, so this middleware never suppresses
+ *     the `/_gina/*` emissions — use the settings gate.
  *
- * **No third path** — the env.json template's `response.header` block
- * intentionally does NOT carry an `X-Powered-By` default (a previous
- * `"Gina I/O - v${version}"` entry was structurally dead — overwritten
- * by L2425's `setHeader` on Express, and Isaac never reads
- * `server.response.header` — dropped 2026-05-17).
+ * **The env.json `server.response.header` block is an OVERRIDE, not a
+ * default** — the template intentionally does NOT carry an `X-Powered-By`
+ * entry (a previous `"Gina I/O - v${version}"` default was dropped
+ * 2026-05-17). An explicit entry there REPLACES the framework value on
+ * every response `completeHeaders` reaches (routed responses, and —
+ * since the throwError ordering fix — HTTP/1.1 error responses and
+ * static 404s too).
  *
  * Takes no options — registering the plugin opts in; not registering
  * opts out. Mirrors helmet's no-opts shape (helmet warns + falls back if

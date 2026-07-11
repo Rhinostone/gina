@@ -3035,7 +3035,14 @@ function Server(options) {
 
             local.request = request;
 
-            response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
+            // #HDR8 — engine-agnostic gate: `settings.json > server.hidePoweredBy`
+            // must also cover responses that never traverse the express middleware
+            // chain (static-asset serves, static/traversal 404s, framework error
+            // pages) — the HidePoweredBy middleware's removeHeader and the env.json
+            // `server.response.header` override only reach routed responses.
+            if ( !self.conf[self.appName][self.env].server.hidePoweredBy ) {
+                response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
+            }
 
             // ── /_gina/metrics — Prometheus exposition (always-on, opt-in via app.json) ──
             // (#OBS1 slice 2) Engine-agnostic mirror of the Isaac handler. Method gate
@@ -5285,6 +5292,7 @@ function Server(options) {
         var header          = ( /http\/2/.test(protocol) && res.stream ) ? {} : null;
         var err             = null;
         var bundleConf      = self.conf[self.appName][self.env];
+        var _h1ContentType  = null;
 
         if ( typeof(msg) != 'object' ) {
             err = {
@@ -5316,7 +5324,7 @@ function Server(options) {
                             //'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
                         };
                     } else {
-                        res.writeHead(code, 'content-type', 'text/plain; charset='+ bundleConf.encoding)
+                        _h1ContentType = 'text/plain; charset='+ bundleConf.encoding;
                     }
 
                 } else {
@@ -5326,12 +5334,18 @@ function Server(options) {
                             'content-type': 'application/json; charset='+ bundleConf.encoding
                         };
                     } else {
-                        res.writeHead(code, { 'content-type': 'application/json; charset='+ bundleConf.encoding } )
+                        _h1ContentType = 'application/json; charset='+ bundleConf.encoding;
                     }
                 }
 
                 console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
 
+                // The HTTP/1.1 flush must come AFTER completeHeaders: writeHead marks
+                // headers as sent and completeHeaders' header loop is
+                // `!response.headersSent`-guarded, so a writeHead-first order turns the
+                // env.json `server.response.header` overrides into a no-op on error
+                // responses (the HTTP/2 branch already merges them into the headers
+                // object passed to stream.respond).
                 header = completeHeaders(header, local.request, res);
                 if ( /http\/2/.test(protocol) && stream) {
                     stream.respond(header);
@@ -5341,6 +5355,7 @@ function Server(options) {
                     }));
 
                 } else {
+                    res.writeHead(code, { 'content-type': _h1ContentType } );
                     res.end(JSON.stringify({
                         status  : code,
                         error   : msg
@@ -5464,7 +5479,9 @@ function Server(options) {
                         'content-type'  : bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding
                     };
                 } else {
-                    res.writeHead(code, { 'content-type': bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding });
+                    // flushed by the writeHead AFTER completeHeaders below — same
+                    // ordering constraint as the sibling XHR/JSON branch above
+                    _h1ContentType = bundleConf.server.coreConfiguration.mime[ext]+'; charset='+ bundleConf.encoding;
                 }
 
                 header = completeHeaders(header, local.request, res);
@@ -5481,6 +5498,7 @@ function Server(options) {
                         }));
                     }
                 } else {
+                    res.writeHead(code, { 'content-type': _h1ContentType } );
                     if ( isHtmlContent && !hasCustomErrorFile ) {
                         res.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body><html>');
                     } else {

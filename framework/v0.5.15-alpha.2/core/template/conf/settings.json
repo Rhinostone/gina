@@ -1,16 +1,17 @@
 {
   "server": {
     "engine": "isaac",
-    // #HDR8 Phase 2 — engine-level X-Powered-By suppression on the Isaac
-    // engine. When `true`, the `_setPoweredByHeader(headers)` helper at
-    // `server.isaac.js:572-577` skips the X-Powered-By write across every
-    // emit site at once (~15 `writeHead({...})` headers objects at
-    // `/_gina/*` built-in endpoints, plus the `setHeader` site at L1188
-    // for the routing.json asset endpoint). Express-engine bundles use
-    // gina.plugins.HidePoweredBy() instead — the middleware intercepts
-    // server.js:2425's setHeader cleanly. This flag is a no-op on the
-    // Express engine; the middleware is a no-op on Isaac. Belt-and-
-    // suspenders bundles can mount both.
+    // #HDR8 Phase 2 — framework-wide X-Powered-By suppression, BOTH engines. When
+    // `true`, the framework skips its X-Powered-By emission everywhere it
+    // originates: the engine-agnostic per-request `setHeader` in
+    // `core/server.js` (routed responses, static-asset serves,
+    // static/traversal 404s and framework error pages — none of the static
+    // and error paths ever traverse the express middleware chain, so this
+    // flag is the one mechanism that reaches them) AND the Isaac
+    // `_setPoweredByHeader(headers)` helper backing every `/_gina/*`
+    // writeHead emit site (plus the routing.json asset `setHeader` site).
+    // gina.plugins.HidePoweredBy() remains available as a middleware-shaped
+    // remover for routed responses.
     // Default `false` preserves shipped behaviour; opt-in by setting to `true`.
     "hidePoweredBy": false,
     // #H11 — opt-in Alt-Svc HTTP/3-advertisement header. When `true`, every
@@ -340,11 +341,14 @@
   // response header. Different SHAPE from the other HDR plugins: REMOVE
   // (res.removeHeader) not SET. No tunable options today; the block is
   // reserved for future fields.
-  // Express engine: middleware intercepts setHeader cleanly.
-  // Isaac engine: the middleware is a no-op (writeHead commits headers
-  // before middleware runs); use `server.hidePoweredBy: true` above to
-  // gate the `_setPoweredByHeader()` helper that backs every Isaac
-  // emit site (~15 writeHead + 1 setHeader). README documents this split.
+  // The middleware removes the header on responses that traverse the
+  // express middleware chain (routed responses). Static-asset serves,
+  // static/traversal 404s and framework error pages never run the chain,
+  // and Isaac's `/_gina/*` writeHead sites commit headers the middleware
+  // cannot reach — use `server.hidePoweredBy: true` above to gate the
+  // emission itself across ALL of those (engine-agnostic, incl. the
+  // `_setPoweredByHeader()` helper backing every Isaac `/_gina/*` emit
+  // site). README documents this split.
   "hidePoweredBy": {},
   // #HDR9 — X-DNS-Prefetch-Control response header applied by
   // gina.plugins.XDnsPrefetchControl(). Phase 1.5 (helmet-parity).
