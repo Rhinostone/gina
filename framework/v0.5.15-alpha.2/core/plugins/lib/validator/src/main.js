@@ -1163,6 +1163,75 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
 
     /**
+     * nestBracketNotationKey — expand a single bracket-notation field name into a
+     * nested object/array tree, in place. Byte-faithful port of the data helper's
+     * `parseLocalObj` (`helpers/data/src/main.js`) so the programmatic `send(FormData)`
+     * path nests exactly like the declarative `formatDataFromString` path (#B92).
+     *
+     * Values are placed VERBATIM — no url-decode, no `"true"`/`"false"`/`"null"`
+     * coercion — because the non-binary body is posted as `application/json` and the
+     * server keeps JSON keys/values as sent (#B28). A numeric next segment makes the
+     * current level an array.
+     *
+     * @inner
+     * @param {(object|Array)} obj - accumulator, mutated in place (may be replaced when the head segment is numeric — assign the return value)
+     * @param {Array<string>} key - the split key path, e.g. `item[0][id]` -> `['item','0','id']`
+     * @param {number} k - current recursion depth into `key`
+     * @param {*} value - the field value to assign at the leaf
+     * @returns {(object|Array)} the (possibly replaced) accumulator
+     *
+     * @example
+     * // 'item[0][id]' -> ['item','0','id']
+     * nestBracketNotationKey({}, ['item','0','id'], 0, 'x'); // { item: [ { id: 'x' } ] }
+     */
+    var nestBracketNotationKey = function(obj, key, k, value) {
+
+        for (let i = 0, len = key.length; i < len; i++) {
+            // by default
+            let _key = key[k];
+            if (i == k) {
+                // Array or Object ?
+                if ( typeof(obj[ key[k] ]) == 'undefined' || typeof(obj[ key[k] ]) == 'string' ) {
+                    if ( Array.isArray(obj) ) {
+                        // index
+                        _key = ~~key[k];
+                        obj[ _key ] = ( /^\d+$/.test(key[k+1]) ) ? [] : {};
+                    } else {
+                        obj[ key[k] ] = ( /^\d+$/.test(key[k+1]) ) ? [] : {};
+                    }
+                }
+
+                // Assigning value
+                if (k == key.length-1) {
+                    let _value = ( typeof(value) != 'undefined' ) ? value : '';
+                    if ( Array.isArray( obj[key[k]] ) ) {
+                        obj[key[k]].push(_value);
+                    }
+                    else {
+                        obj[ key[k] ] = _value;
+                    }
+                    break;
+                }
+                // Assigning index or key
+                else {
+                    if ( /^\d+$/.test(key[k]) && !Array.isArray(obj) ) {
+                        obj = [];
+                    }
+                    // Init array or object
+                    if ( typeof(obj[ _key ]) == 'undefined' ) {
+                        obj[ _key ] = null;
+                    }
+
+                    nestBracketNotationKey(obj[ _key ], key, k+1, value);
+                }
+            }
+        }
+
+        return obj;
+    }
+
+
+    /**
      * send
      * N.B.: no validation here; if you want to validate against rules, use `.submit()` or `.validateFormById(formId)` before
      *
@@ -1942,6 +2011,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     };
 
                                     ++b;
+                                } else if ( /^(.*)\[(.*)\]/.test(key) ) {
+                                    // #B92 — nest bracket-notation names per entry, mirroring the
+                                    // declarative formatDataFromString/parseObject expansion so
+                                    // `item[0][id]` arrives as `item: [ { id } ]` (not a literal
+                                    // JSON key). Values stay VERBATIM (no decode/coerce) — #B28.
+                                    newData = nestBracketNotationKey(newData, key.replace(/\]/g, '').split(/\[/g), 0, value);
                                 } else {
                                     newData[key] = value
                                 }
