@@ -341,39 +341,22 @@ function SuperController(options) {
         // }
 
         if ( typeof(options.conf.content.routing[options.rule].param) !=  'undefined' ) {
-            // replaced: var str = 'page.' — use Array.push()+join() for V8 optimization (#P26)
-            var strParts = ['page']
-                , p = options.conf.content.routing[options.rule].param
-            ;
-
-            for (let key in p) {
-                if ( p.hasOwnProperty(key) && !/^(control)$/.test(key) ) {
-                    strParts.push(key); // replaced: str += key + '.'
-                    let obj = p[key];
-                    let valueParts = []; // replaced: value = ''
-                    for (let prop in obj) {
-                        if (obj.hasOwnProperty(prop)) {
-                            valueParts.push(obj[prop]); // replaced: value += obj[prop]
-                            continue;
-                        }
-
-                        let value = valueParts.join(''); // replaced: accumulated value string
-                        if ( /^:/.test(value) ) {
-                            strParts = ['page', 'view', 'params', key]; // replaced: str = 'page.view.params.' + key + '.'
-                            set(strParts.join('.'), req.params[value.substring(1)]); // replaced: set(str.substring(0, str.length-1), ...)
-                        } else if (/^(file|title)$/.test(key)) {
-                            strParts = ['page', 'view', key]; // replaced: str = 'page.view.' + key + '.'
-                            set(strParts.join('.'), value); // replaced: set(str.substring(0, str.length-1), ...)
-                        } else {
-                            set(strParts.join('.'), value) // replaced: set(str.substring(0, str.length-1), value)
-                        }
-
-                        strParts = ['page'] // replaced: str = 'page.'
-
-                    }
-                }
+            var p = options.conf.content.routing[options.rule].param;
+            // #B98 — promote the rule-declared title to `page.view.title`.
+            // The generic promotion loop that lived here had been inert since
+            // its introduction (its dispatch sat after a `continue` that always
+            // fired), and every other `param` key already reaches templates
+            // through live paths further down:
+            //   `:bindings` + static keys -> `page.view.params.<key>`
+            //   section                   -> `page.section` (bespoke setter)
+            //   file                      -> `page.view.file`
+            // `title` was the one promotion with no live equivalent (it is
+            // deliberately excluded from `page.view.params`). The route-name
+            // write below stays the FALLBACK: `set()` merges target-wins, so
+            // this earlier write survives it.
+            if ( typeof(p.title) == 'string' && p.title !== '' ) {
+                set('page.view.title', p.title);
             }
-
         }
 
         local.req = req;
@@ -435,6 +418,9 @@ function SuperController(options) {
 
                 set('page.view.file', local.options.file);
                 // replaced: new RegExp('@' + bundle) — use split/join instead (#P1)
+                // #B98 — fallback only: a rule-declared `param.title` promoted
+                // earlier in setOptions wins (set() merges target-wins), so this
+                // route-name write fills the title only when the rule declares none.
                 set('page.view.title', rule.split('@' + options.conf.bundle).join(''));
                 set('page.view.namespace', namespace);
                 // Auto-promote `route.param.section` to `page.section` so templates
