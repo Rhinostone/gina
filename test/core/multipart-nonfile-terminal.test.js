@@ -15,8 +15,8 @@
  *
  * Fix: extract the continuation into resumeAfterMultipart(), call it from a
  * zero-writeStreams branch in busboy.on('finish') (#B93), and add busboy.on('error')
- * → HTTP 400 with a double-response guard (#B97). Non-file fields stay dropped (the
- * documented multipart limitation); reinstating them is a separate contract change.
+ * → HTTP 400 with a double-response guard (#B97). Non-file fields stayed dropped when
+ * these shipped; #B92-adjacent has since added the field capture (its own test file).
  *
  * Strategy: source inspection (mirrors upload-config.test.js) + a REAL vendored-busboy
  * behavioural test (the load-bearing finish-vs-error discrimination the fix shape
@@ -105,8 +105,9 @@ describe('02 - malformed multipart crash: server.js source pins (#B97)', functio
 // ─── 03 — behavioural: REAL vendored busboy event discrimination ──────────────
 // The fix shape depends on busboy emitting 'finish' for a well-formed fields-only
 // body (→ zero-writeStreams branch) but 'error' for a malformed one (→ error
-// handler). No 'field' listener is attached, mirroring gina's commented-out field
-// handler.
+// handler). No 'field' listener is attached here — the finish-vs-error
+// discrimination is listener-independent (gina itself attaches one since the
+// #B92-adjacent field capture).
 describe('03 - vendored busboy event discrimination (behavioural)', function() {
     var CT = 'multipart/form-data; boundary=----t';
     var B  = '----t';
@@ -115,7 +116,7 @@ describe('03 - vendored busboy event discrimination (behavioural)', function() {
         var seen = { file: 0, finish: false, error: null };
         var bb = Busboy({ headers: { 'content-type': CT }, defParamCharset: 'utf8' });
         bb.on('file', function(n, s) { seen.file++; s.resume(); });
-        // deliberately NO field listener (mirrors gina)
+        // deliberately NO field listener (the discrimination is listener-independent)
         bb.on('finish', function() { seen.finish = true; });
         bb.on('error', function(e) { seen.error = (e && e.message) || String(e); });
         Readable.from([Buffer.from(body)]).pipe(bb);

@@ -647,7 +647,9 @@ describe('08 - help + arguments + dispatchers', function () {
     });
 
     it('help.txt notes the auto-detect behaviour from --output extension', function () {
-        assert.match(helpTxt, /auto-detected from the\n\s+output\s+extension/);
+        // Wrap-agnostic: pins the CONTENT, not the line-break position — the
+        // bdca2432 help.txt reflow broke the old literal-newline form.
+        assert.match(helpTxt, /auto-detected from\s+the\s+output\s+extension/);
     });
 
     it('arguments.json includes --format and --output (already present from slice 4)', function () {

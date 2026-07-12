@@ -66,7 +66,10 @@ describe('01 - upload filename charset: server.js constructs Busboy with utf8', 
     before(function () { src = fs.readFileSync(SERVER_SRC, 'utf8'); });
 
     it('passes defParamCharset:\'utf8\' to the Busboy constructor', function () {
-        assert.match(src, /Busboy\(\{\s*headers:\s*request\.headers,\s*defParamCharset:\s*'utf8'\s*\}\)/);
+        // #B92-adjacent loosened the tail (was `'utf8'\s*\}\)`): the constructor now
+        // also carries the text-field `limits` — the pin's intent (defParamCharset:'utf8'
+        // is passed) is unchanged.
+        assert.match(src, /Busboy\(\{\s*headers:\s*request\.headers,\s*defParamCharset:\s*'utf8',/);
     });
 
     it('no longer constructs Busboy with headers alone (the latin1-default form)', function () {

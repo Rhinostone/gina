@@ -1,0 +1,94 @@
+
+  Usage: gina i18n:<action> [options]
+
+  Actions:
+
+    scan @<project>              Walk every bundle in <project>; report
+                                 translation coverage per culture against
+                                 the keys used in each bundle's source.
+    scan <bundle> @<project>     Coverage report scoped to one bundle.
+    scan @<project> --format=json
+                                 Machine-readable JSON output (CI / tooling).
+
+    add <culture> @<project>     Seed `bundle/locales/<culture>.json` for
+                                 every bundle in <project>, copying keys
+                                 from the bundle's default culture and
+                                 prefixing values with `[TODO]`.
+    add <culture> <bundle> @<project>
+                                 Seed only one bundle.
+    add <culture> @<project> --from=<src>
+                                 Copy keys from `<src>` instead of the
+                                 bundle default culture.
+    add <culture> @<project> --force
+                                 Overwrite an existing target catalog.
+
+    export <culture> @<project>  Export every bundle's <culture> catalog as
+                                 a single JSON wrapper to stdout.
+    export <culture> <bundle> @<project>
+                                 Export one bundle's catalog. Single-bundle
+                                 JSON matches the on-disk shape verbatim.
+    export <culture> @<project> --format=po --output=<path>
+                                 Translator-friendly PO file (msgctxt for
+                                 multi-bundle, msgid_plural / msgstr[N] for
+                                 plural forms with `#. cldr-keys` round-trip
+                                 markers).
+    export <culture> @<project> --format=csv --output=<path>
+                                 Flat CSV (RFC 4180 quoting). Plural forms
+                                 flatten to dotted-suffix rows.
+
+    import <culture> @<project> --file=<path>
+                                 Import a translator-edited file back into
+                                 the project's catalogs. Format auto-detected
+                                 from the file extension (`.po`, `.csv`,
+                                 `.json`).
+    import <culture> <bundle> @<project> --file=<path>
+                                 Import into a single bundle.
+    import <culture> @<project> --file=<path> --merge=union
+                                 Default: deep-merge — imported keys win;
+                                 existing translations absent from the
+                                 import are preserved.
+    import <culture> @<project> --file=<path> --merge=replace
+                                 Imported catalog wins entirely; existing
+                                 keys absent from the import are dropped.
+
+    help                         Show this help.
+
+  Options:
+
+    --format=<text|json>         Output format for `scan`. Default `text`.
+    --from=<culture>             Source culture for `add`. Defaults to the
+                                 bundle's `settings.region.culture`.
+    --output=<path>              Optional output file (write instead of
+                                 stdout). For `export`. When `--format` is
+                                 omitted, the format is auto-detected from
+                                 the output extension (`.po`, `.csv`,
+                                 `.json`).
+    --file=<path>                Input file path for `import`. Required.
+    --merge=<union|replace>      Merge strategy for `import`.
+                                 `union` (default) preserves existing
+                                 translations not in the import; `replace`
+                                 drops them.
+    --dry-run                    Show what would be written without
+                                 touching the disk.
+    --force                      Overwrite existing target catalogs (`add`)
+                                 or skip dry-run guards.
+
+  Examples:
+
+    $ gina i18n:scan @myproject
+    $ gina i18n:scan dashboard @myproject --format=json
+    $ gina i18n:add fr @myproject
+    $ gina i18n:add fr dashboard @myproject --from=en
+    $ gina i18n:add ja_JP @myproject --force
+    $ gina i18n:export fr @myproject --format=po --output=/tmp/fr.po
+    $ gina i18n:export en dashboard @myproject --output=/tmp/en.csv
+    $ gina i18n:export fr_CA @myproject       # JSON wrapper to stdout
+    $ gina i18n:import fr @myproject --file=/tmp/fr.po
+    $ gina i18n:import fr dashboard @myproject --file=/tmp/fr.csv
+    $ gina i18n:import fr @myproject --file=fr.json --merge=replace --dry-run
+
+  Catalogs live at `<bundle>/locales/<culture>.json`. Filenames must match
+  `<lang>(_<REGION>)?.json` — e.g. `en.json`, `en_US.json`, `pt_BR.json`.
+
+  Schema: https://gina.io/schema/locales.json
+  Reference: https://gina.io/docs/guides/i18n

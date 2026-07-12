@@ -6,148 +6,273 @@ var path = require('path');
 var SOURCE = path.join(require('../fw'), 'core/controller/controller.js');
 
 
-// 01 — strParts path building (Array.push + join replaces str += key + '.' in setOptions loop)
-describe('01 - setOptions routing param: strParts path building (Array.push + join)', function() {
+// 01 — #B98 pure-logic replica: the routing-param `title` promotion + the
+// route-name fallback, run against the REAL lib/merge. set()/parseDataObject
+// are lifted verbatim from controller.js; §03 source-pins the shipped block so
+// this replica cannot silently drift from the source. The historical generic
+// promotion loop (removed by #B98) is kept as a SUBTRACT control proving the
+// defect: its dispatch sat after a `continue` that always fired, so it never
+// called set() at all.
+describe('01 - #B98 routing param.title promotion + route-name fallback (pure-logic replica, real lib/merge)', function() {
 
-    it('push key onto [page] yields page.key via join', function() {
-        var strParts = ['page'];
-        strParts.push('title');
-        assert.equal(strParts.join('.'), 'page.title');
+    var FW_B98 = require('../fw');
+    var mergeB98 = require(path.join(FW_B98, 'lib/merge'));
+
+    // Verbatim replicas of controller.js parseDataObject + set — fresh closure
+    // state per call via makeSetter, mirroring the per-request `local` closure.
+    function makeSetter() {
+        var local = { userData: {} };
+        var parseDataObject = function(o, obj, override) {
+            var keys = Object.keys(o);
+            for (var ki = 0; ki < keys.length; ++ki) {
+                var i = keys[ki];
+                if ( o[i] !== null && typeof(o[i]) == 'object' || override && o[i] !== null && typeof(o[i]) == 'object' ) {
+                    parseDataObject(o[i], obj);
+                } else if (o[i] == '_content_'){
+                    o[i] = obj
+                }
+            }
+            return o
+        };
+        var set = function(name, value, override) {
+            var _override = ( typeof(override) != 'undefined' ) ? override : false;
+            if ( typeof(name) == 'string' && /\./.test(name) ) {
+                var keys        = name.split(/\./g)
+                    , newObj    = {}
+                    , str       = '{'
+                    , _count    = 0;
+                for (let k = 0, len = keys.length; k<len; ++k) {
+                    str +=  "\""+ keys.splice(0,1)[0] + "\":{";
+                    ++_count;
+                    if (k == len-1) {
+                        str = str.substring(0, str.length-1);
+                        str += "\"_content_\"";
+                        for (let c = 0; c<_count; ++c) {
+                            str += "}"
+                        }
+                    }
+                }
+                newObj = parseDataObject(JSON.parse(str), value, _override);
+                local.userData = mergeB98(local.userData, newObj);
+            } else if ( typeof(local.userData[name]) == 'undefined' ) {
+                local.userData[name] = value.replace(/\\/g, '');
+            }
+        };
+        return { local: local, set: set };
+    }
+
+    // Replica of the shipped #B98 sequence inside setOptions():
+    // (1) the guarded param.title promotion (runs first),
+    // (2) the route-name fallback write (runs later, inside the hasViews block).
+    function runTitleSequence(param, rule, bundle, setter) {
+        if ( typeof(param) != 'undefined' ) {
+            var p = param;
+            if ( typeof(p.title) == 'string' && p.title !== '' ) {
+                setter.set('page.view.title', p.title);
+            }
+        }
+        setter.set('page.view.title', rule.split('@' + bundle).join(''));
+    }
+
+    it('param.title lands on page.view.title and SURVIVES the route-name fallback (merge is target-wins)', function() {
+        var s = makeSetter();
+        runTitleSequence({ control: 'home', title: 'My Title' }, 'home@b', 'b', s);
+        assert.equal(s.local.userData.page.view.title, 'My Title');
     });
 
-    it(':value branch — strParts = [page, view, params, key] yields page.view.params.key', function() {
-        var key = 'id';
-        var strParts = ['page', 'view', 'params', key];
-        assert.equal(strParts.join('.'), 'page.view.params.id');
+    it('title-less rule → the route-name fallback fills page.view.title (back-compat preserved)', function() {
+        var s = makeSetter();
+        runTitleSequence({ control: 'home' }, 'home@b', 'b', s);
+        assert.equal(s.local.userData.page.view.title, 'home');
     });
 
-    it('file/title branch — strParts = [page, view, key] yields page.view.key', function() {
-        var key = 'title';
-        var strParts = ['page', 'view', key];
-        assert.equal(strParts.join('.'), 'page.view.title');
+    it('the fallback strips the @bundle qualifier from the rule name', function() {
+        var s = makeSetter();
+        runTitleSequence(undefined, 'orders-list@shop', 'shop', s);
+        assert.equal(s.local.userData.page.view.title, 'orders-list');
     });
 
-    it('reset to [page] yields page and length 1', function() {
-        var strParts = ['page', 'title'];
-        strParts = ['page'];
-        assert.equal(strParts.join('.'), 'page');
-        assert.equal(strParts.length, 1);
+    it('empty-string param.title is skipped → route-name fallback applies', function() {
+        var s = makeSetter();
+        runTitleSequence({ control: 'home', title: '' }, 'home@b', 'b', s);
+        assert.equal(s.local.userData.page.view.title, 'home');
     });
 
-    it('multiple outer iterations accumulate when inner branch does not reset', function() {
-        // mirrors original str += behaviour: str starts 'page.', += 'key1.' → 'page.key1.'
-        // then without reset: += 'key2.' → 'page.key1.key2.'
-        var strParts = ['page'];
-        strParts.push('key1');
-        assert.equal(strParts.join('.'), 'page.key1');
-        strParts.push('key2');
-        assert.equal(strParts.join('.'), 'page.key1.key2');
+    it('non-string param.title is skipped → route-name fallback applies', function() {
+        var s = makeSetter();
+        runTitleSequence({ control: 'home', title: 123 }, 'home@b', 'b', s);
+        assert.equal(s.local.userData.page.view.title, 'home');
     });
 
-    it('join result matches str.substring(0, str.length-1) equivalence', function() {
-        // original: str = 'page.' + key + '.' → str.substring(0, str.length-1) = 'page.' + key
-        var key = 'file';
-        var str = 'page.' + key + '.';
-        var strParts = ['page', key];
-        assert.equal(strParts.join('.'), str.substring(0, str.length - 1));
+    it('sibling page.view fills (file/namespace) gap-fill next to the promoted title', function() {
+        var s = makeSetter();
+        runTitleSequence({ control: 'home', title: 'My Title' }, 'home@b', 'b', s);
+        s.set('page.view.file', 'index');
+        s.set('page.view.namespace', 'default');
+        assert.equal(s.local.userData.page.view.title, 'My Title');
+        assert.equal(s.local.userData.page.view.file, 'index');
+        assert.equal(s.local.userData.page.view.namespace, 'default');
+    });
+
+    it('controller data.page.view.title wins the render two-step merge over the rule title', function() {
+        // render-swig: data = merge(userDataFromController, data) — target wins.
+        var s = makeSetter();
+        runTitleSequence({ control: 'home', title: 'From Rule' }, 'home@b', 'b', s);
+        var controllerData = { page: { view: { title: 'From Controller' } } };
+        var merged = mergeB98(controllerData, JSON.parse(JSON.stringify(s.local.userData)));
+        assert.equal(merged.page.view.title, 'From Controller');
+    });
+
+    it('SUBTRACT — the historical promotion loop never called set() (the #B98 defect repro)', function() {
+        // The pre-#B98 loop, verbatim: the dispatch sits INSIDE the inner
+        // for..in AFTER a `continue` that fires for every own enumerable
+        // property, so it is unreachable for any plain value.
+        var setCalls = 0;
+        var countingSet = function() { setCalls++; };
+        (function deadLoop(p, req, set) {
+            var strParts = ['page'];
+            for (let key in p) {
+                if ( p.hasOwnProperty(key) && !/^(control)$/.test(key) ) {
+                    strParts.push(key);
+                    let obj = p[key];
+                    let valueParts = [];
+                    for (let prop in obj) {
+                        if (obj.hasOwnProperty(prop)) {
+                            valueParts.push(obj[prop]);
+                            continue;
+                        }
+                        let value = valueParts.join('');
+                        if ( /^:/.test(value) ) {
+                            strParts = ['page', 'view', 'params', key];
+                            set(strParts.join('.'), req.params[value.substring(1)]);
+                        } else if (/^(file|title)$/.test(key)) {
+                            strParts = ['page', 'view', key];
+                            set(strParts.join('.'), value);
+                        } else {
+                            set(strParts.join('.'), value)
+                        }
+                        strParts = ['page']
+                    }
+                }
+            }
+        })({ control: 'home', title: 'My Title', section: 'situation', id: ':id' }, { params: { id: '123' } }, countingSet);
+        assert.equal(setCalls, 0, 'the historical loop was dead code — zero set() calls expected');
     });
 
 });
 
 
-// 02 — valueParts accumulation (Array.push + join replaces value += obj[prop] in inner loop)
-describe('02 - setOptions routing param: valueParts accumulation (Array.push + join)', function() {
+// 02 — #B98 behavioral smoke: the title promotion executes inside the REAL
+// setOptions() via createTestInstance. Positive evidence comes from a getter
+// instrument on the rule's `param.title` (read-count > 0 ⟺ the promotion block
+// ran — nothing else on the bare-instance path reads that property; the
+// instrument can fail, so it is a real control). `local.userData` has no
+// public read accessor, so value-level behaviour is locked by §01 (real
+// lib/merge replica) + §03 (source pins), and end-to-end by the daemonless
+// boot proof recorded in the #B98 close-out.
+// Runtime test — needs the framework-globals bootstrap (see §36's note).
+describe('02 - #B98 behavioral smoke: setOptions runs the title promotion (createTestInstance)', function() {
 
-    it('single push joins to itself', function() {
-        var valueParts = [];
-        valueParts.push('hello');
-        assert.equal(valueParts.join(''), 'hello');
+    var FW = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW;
+    require('module').Module._initPaths();
+    require(path.join(FW, 'helpers'));              // injects _/getPath/requireJSON/setPath globals
+    setPath('gina', { core: path.join(FW, 'core') });
+    var SuperController = require(SOURCE);
+
+    function makeInstance(param) {
+        var routingEntry = ( typeof(param) != 'undefined' ) ? { param: param } : {};
+        return SuperController.createTestInstance({
+            // req.routing.param stays a SEPARATE plain object so the getter
+            // instrument on the conf-side param is read by setOptions alone.
+            req     : { url: '/', method: 'GET', routing: { rule: 'home@b', param: {} }, params: {}, get: {}, headers: {} },
+            res     : { setHeader: function () {}, end: function () {} },
+            options : { conf: { bundle: 'b', content: { routing: { home: routingEntry } } }, rule: 'home', control: 'home' }
+        });
+    }
+
+    it('param.title is READ by the real setOptions (the promotion block executes)', function() {
+        var titleReads = 0;
+        var param = { control: 'home' };
+        Object.defineProperty(param, 'title', {
+            enumerable: true,
+            get: function() { titleReads++; return 'My Title'; }
+        });
+        assert.equal(titleReads, 0, 'instrument baseline must start at zero');
+        makeInstance(param);
+        assert.ok(titleReads > 0, 'setOptions never read param.title — the #B98 promotion block did not execute');
     });
 
-    it('multiple pushes join without separator', function() {
-        var valueParts = [];
-        valueParts.push('hello');
-        valueParts.push(' world');
-        assert.equal(valueParts.join(''), 'hello world');
+    it('title-less param → setOptions completes (fallback-only path, no crash)', function() {
+        var inst = makeInstance({ control: 'home' });
+        assert.ok(inst._isTestInstance);
     });
 
-    it('empty parts join to empty string', function() {
-        var valueParts = [];
-        assert.equal(valueParts.join(''), '');
+    it('non-string param.title → the guard skips it, setOptions completes', function() {
+        var inst = makeInstance({ control: 'home', title: 123 });
+        assert.ok(inst._isTestInstance);
     });
 
-    it('join result matches sequential += for same inputs', function() {
-        var value = '';
-        value += 'foo';
-        value += 'bar';
-        var valueParts = [];
-        valueParts.push('foo');
-        valueParts.push('bar');
-        assert.equal(valueParts.join(''), value);
+    it('rule without param → the promotion gate skips, setOptions completes', function() {
+        var inst = makeInstance(undefined);
+        assert.ok(inst._isTestInstance);
     });
 
 });
 
 
-// 03 — source structure: string += replaced with Array.push/join in setOptions (#P26)
-describe('03 - source structure: string += replaced with Array.push/join in setOptions (#P26)', function() {
+// 03 — #B98 source structure: the dead promotion loop is gone; the guarded
+// param.title promotion and its ordering ahead of the route-name FALLBACK
+// write are pinned (set() merges target-wins, so the earlier write survives).
+describe('03 - #B98 source structure: title promotion + route-name fallback ordering', function() {
 
-    it('strParts.push(key) is present in source', function() {
+    it('the guarded param.title promotion is present', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            src.indexOf('strParts.push(key)') > -1,
-            'expected `strParts.push(key)` — #P26 not applied'
+            src.indexOf("set('page.view.title', p.title)") > -1,
+            "expected `set('page.view.title', p.title)` — the #B98 promotion is missing"
         );
     });
 
-    it('valueParts.push(obj[prop]) is present in source', function() {
+    it('the promotion is gated on a non-empty string title', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            src.indexOf('valueParts.push(obj[prop])') > -1,
-            'expected `valueParts.push(obj[prop])` — #P26 not applied'
+            src.indexOf("typeof(p.title) == 'string' && p.title !== ''") > -1,
+            'expected the non-empty-string guard on the title promotion'
         );
     });
 
-    it("strParts.join('.') is present in source", function() {
+    it('source carries the #B98 marker', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.ok(src.indexOf('#B98') > -1, 'expected #B98 marker in source');
+    });
+
+    it('ORDERING — the promotion precedes the route-name fallback write', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        var promoIdx    = src.indexOf("set('page.view.title', p.title)");
+        var fallbackIdx = src.indexOf("set('page.view.title', rule.split(");
+        assert.ok(promoIdx > -1, 'promotion write not found');
+        assert.ok(fallbackIdx > -1, 'route-name fallback write not found');
+        assert.ok(promoIdx < fallbackIdx, 'the param.title promotion must run BEFORE the route-name fallback (target-wins merge makes the earlier write survive)');
+    });
+
+    it('the route-name fallback write is still present (title-less rules keep the route-name title)', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            src.indexOf("strParts.join('.')") > -1,
-            "expected `strParts.join('.')` — #P26 not applied"
+            src.indexOf("set('page.view.title', rule.split('@' + options.conf.bundle).join(''))") > -1,
+            'expected the route-name fallback write'
         );
     });
 
-    it("valueParts.join('') is present in source", function() {
+    it('NEGATIVE — the dead loop tokens are gone file-wide (strParts / valueParts)', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
-        assert.ok(
-            src.indexOf("valueParts.join('')") > -1,
-            "expected `valueParts.join('')` — #P26 not applied"
-        );
+        assert.ok(src.indexOf('strParts') < 0, 'strParts must be gone — the dead promotion loop was removed by #B98');
+        assert.ok(src.indexOf('valueParts') < 0, 'valueParts must be gone — the dead promotion loop was removed by #B98');
     });
 
-    it('str += key pattern is gone from setOptions loop (outside comments)', function() {
+    it('NEGATIVE — the dead inner dispatch shape is gone (for (let prop in obj))', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
-        var stripped = src.replace(/\/\/[^\n]*/g, '');
-        assert.ok(
-            !/str\s*\+=\s*key/.test(stripped),
-            'old `str += key` still present outside comments — #P26 not applied'
-        );
-    });
-
-    it('value += obj[prop] pattern is gone from setOptions loop (outside comments)', function() {
-        var src = fs.readFileSync(SOURCE, 'utf8');
-        var stripped = src.replace(/\/\/[^\n]*/g, '');
-        assert.ok(
-            !/value\s*\+=\s*obj\[/.test(stripped),
-            'old `value += obj[` still present outside comments — #P26 not applied'
-        );
-    });
-
-    it('source contains #P26 replaced comment', function() {
-        var src = fs.readFileSync(SOURCE, 'utf8');
-        assert.ok(
-            src.indexOf('#P26') > -1,
-            'expected #P26 marker — comment convention not applied'
-        );
+        assert.ok(src.indexOf('for (let prop in obj)') < 0, 'the dead inner for..in dispatch must not return');
     });
 
 });
@@ -4049,7 +4174,7 @@ describe('35 - redirect XHR/popin JSON exits inherit the no-store hardening (#B7
 
 
 // 36 — behavioral: pauseRequest snapshots the live request into requestStorage.
-// This is the one runtime (require + createTestInstance) test in this otherwise
+// Runtime (require + createTestInstance) test — like §02, in this otherwise
 // source-pin-only file. controller.js cannot be required cold — it needs the framework
 // globals bootstrap (NODE_PATH + Module._initPaths + helpers + setPath('gina', ...)),
 // mirroring the standalone repro harness in class.controller.md §14. Requiring it also
