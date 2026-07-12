@@ -1,0 +1,3 @@
+kind: Added
+body: 'Multipart text fields are now captured into the request body: `request.body` (and `request.post`/`request.put`/`request.patch`) carries the non-file fields of a `multipart/form-data` request — bracket-notation names arrive nested and values verbatim (no url-decode, no boolean/null coercion), capped by the new `upload.maxTextFields` (default 1000) and `upload.maxTextFieldSize` (default 1MB) settings with a 400 on breach. Previously every text field of a multipart request was silently dropped.'
+time: 2026-07-12T13:40:28+01:00

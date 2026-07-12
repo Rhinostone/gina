@@ -3775,16 +3775,80 @@ function Server(options) {
                         'method': 'POST',
                         'bundle' : self.appName
                     };
+                    // #B92-adjacent (2026-07-12) — multipart TEXT-field caps. The 'field'
+                    // listener below makes busboy buffer non-file parts in memory, so both
+                    // busboy limits are wired: `fields` (count — the excess emits
+                    // 'fieldsLimit' once and is then silently skipped, answered 400 below)
+                    // and `fieldSize` (bytes per field — busboy truncates at the cap and
+                    // flags `valueTruncated`, answered 400 below). Absent / invalid settings
+                    // fall back to safe defaults; an explicit 0 means "no limit", as for
+                    // maxFields above.
+                    var maxTextFields = ( typeof(opt.maxTextFields) != 'undefined' && opt.maxTextFields !== '' )
+                        ? parseInt(opt.maxTextFields, 10)
+                        : 1000;
+                    if ( isNaN(maxTextFields) ) {
+                        maxTextFields = 1000;
+                    } else if ( maxTextFields <= 0 ) {
+                        maxTextFields = Infinity;
+                    }
+                    var maxTextFieldSize = parseSize(opt.maxTextFieldSize); // bytes; bare number = MB
+                    if ( isNaN(maxTextFieldSize) ) {
+                        maxTextFieldSize = 1024 * 1024; // 1MB — busboy's own fieldSize default
+                    } else if ( maxTextFieldSize <= 0 ) {
+                        maxTextFieldSize = Infinity;
+                    }
                     // defParamCharset:'utf8' — decode the Content-Disposition `filename=`
                     // param as UTF-8 rather than busboy's latin1 default; otherwise a UTF-8
                     // filename ("Accusé de réception.pdf") is mojibaked ("AccusÃ© de rÃ©ception.pdf").
                     // The RFC 5987 `filename*` form is self-describing and unaffected; the
                     // field `name` param is ASCII, so this only corrects the plain filename path.
-                    var busboy = Busboy({ headers: request.headers, defParamCharset: 'utf8' });
+                    var busboy = Busboy({
+                        headers: request.headers,
+                        defParamCharset: 'utf8',
+                        limits: { fields: maxTextFields, fieldSize: maxTextFieldSize }
+                    });
 
-                    // busboy.on('field', function(fieldname, val, fieldnameTruncated, valTruncated) {
-                    //     console.log('Field [' + fieldname + ']: value: ' + inspect(val));
-                    // });
+                    // #B92-adjacent (2026-07-12) — capture multipart TEXT fields into the
+                    // request body. The framework historically attached NO 'field' listener,
+                    // and the vendored busboy SKIPS every non-file part when no listener is
+                    // registered — so text fields sent alongside files (or alone, #B93)
+                    // silently vanished: request.post / request.body stayed {}. Captured
+                    // fields follow the application/json body contract (#B28/#B92): values
+                    // VERBATIM (a multipart part body is not url-encoded — no decode, no
+                    // "true"/"false"/"on"/"null" coercion) and bracket-notation names are
+                    // nested through the data helper's own nesting layer
+                    // (nestBracketNotationKey, the parseLocalObj alias), so `item[0][id]`
+                    // arrives as `item: [ { id } ]` exactly as from a JSON body. Duplicate
+                    // plain names: last one wins.
+                    var multipartFields = null;
+                    busboy.on('field', function onMultipartField(name, value, info) {
+                        // A truncated value hit the fieldSize cap — busboy truncates
+                        // silently, which would hand the app corrupted data; reject instead.
+                        if ( info && info.valueTruncated ) {
+                            if ( !response.headersSent && !request.handled ) {
+                                request.handled = true;
+                                throwError(response, 400, 'multipart text field `'+ name +'` exceeds the allowed size. See the `upload.maxTextFieldSize` definition in settings.json.', next);
+                            }
+                            return;
+                        }
+                        if ( multipartFields == null ) {
+                            multipartFields = {};
+                        }
+                        if ( /^(.*)\[(.*)\]/.test(name) ) {
+                            multipartFields = nestBracketNotationKey(multipartFields, name.replace(/\]/g, '').split(/\[/g), 0, value);
+                        } else {
+                            multipartFields[name] = value;
+                        }
+                    });
+                    // Text fields past the `fields` limit are silently skipped by busboy
+                    // after a single 'fieldsLimit' emit; skipping means silent data loss,
+                    // so answer 400 (the maxFields file-count cap's shape).
+                    busboy.on('fieldsLimit', function onFieldsLimit() {
+                        if ( !response.headersSent && !request.handled ) {
+                            request.handled = true;
+                            throwError(response, 400, 'too many multipart text fields (max '+ maxTextFields +'). See the `upload.maxTextFields` definition in settings.json.', next);
+                        }
+                    });
 
                     // Attention: on busboy upgrade, we needs to adapt `busboy/lib/types/multipart.js`
                     // For this, check the emit method
@@ -3982,14 +4046,28 @@ function Server(options) {
                     });
 
                     busboy.on('finish', function() {
+                        // #B92-adjacent — expose the captured text fields on the request
+                        // BEFORE either dispatch path below runs, mirroring
+                        // processRequestData's `request.body = request.post = obj` parity
+                        // shape (the multipart branch never runs processRequestData). Only
+                        // the body-carrying methods get the method slot — request.get /
+                        // request.delete also feed URL params in the routing loop and are
+                        // left alone; the fields stay readable on request.body regardless.
+                        if ( multipartFields != null ) {
+                            request.body = multipartFields;
+                            var _fieldsMethod = ( request.method || '' ).toLowerCase();
+                            if ( /^(post|put|patch)$/.test(_fieldsMethod) ) {
+                                request[_fieldsMethod] = multipartFields;
+                            }
+                        }
                         var total = writeStreams.length;
 
                         // #B93 — a fields-only multipart body (zero file parts) creates no
                         // write streams, so the loop below runs zero times and the lifecycle
                         // continuation never fired: the request hung until a front-proxy
-                        // timeout severed it. Resume directly. Non-file fields stay dropped
-                        // (the documented multipart limitation); populating req.post from
-                        // them is a separate contract change, not coupled here.
+                        // timeout severed it. Resume directly. (Text fields, dropped when
+                        // #B93 shipped, are captured since #B92-adjacent — see the 'field'
+                        // handler and the assignment above.)
                         if (total === 0) {
                             resumeAfterMultipart();
                             return;

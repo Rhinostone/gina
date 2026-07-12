@@ -2029,8 +2029,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             // We need a separator to define each part of the request
                             var boundary = '--ginaWKBoundary' + uuid();
 
-
-                            return processFiles(binaries, boundary, '', 0, function onComplete(err, data, done) {
+                            // #B92-adjacent — non-file fields ride the multipart body as
+                            // standard text parts. They were silently dropped on this branch:
+                            // processFiles() assembles file parts only, and newData was never
+                            // consumed once the FormData carried a File.
+                            return processFiles(binaries, boundary, buildMultipartFieldParts(data, boundary), 0, function onComplete(err, data, done) {
 
                                 if (err) {
                                     //throw err
@@ -2635,6 +2638,43 @@ function ValidatorPlugin(rules, data, formId, culture) {
         return str;
     }
 
+
+    /**
+     * buildMultipartFieldParts
+     *
+     * #B92-adjacent — serializes a FormData's NON-file entries into standard
+     * multipart text parts so they ride the hand-assembled upload body
+     * (`processFiles()` builds file parts only; before this helper every
+     * non-file field was silently dropped whenever the FormData carried a
+     * File). Part names keep the caller's ORIGINAL bracket notation
+     * (`item[0][id]`) — the server nests them on capture, so the fields arrive
+     * shaped exactly as on the JSON (fileless) path. Values are appended
+     * verbatim; FormData guarantees non-file values are strings (a Blob append
+     * becomes a File).
+     *
+     * @param {FormData} data - the form data being sent
+     * @param {string} boundary - the multipart boundary (as used by processFiles)
+     *
+     * @returns {string} zero or more `--<boundary>` text parts; '' when the
+     *  FormData carries no non-file entry
+     */
+    var buildMultipartFieldParts = function(data, boundary) {
+        var parts = '';
+        for (var [fieldKey, fieldValue] of data.entries()) {
+            if (fieldValue instanceof File) {
+                continue;
+            }
+            // RFC 7578 §5.1.1 name escaping (the browser convention): percent-encode
+            // CR / LF / double-quote; anything else — bracket notation included — is
+            // legal inside the quoted-string as-is.
+            var safeName = String(fieldKey).replace(/\r/g, '%0D').replace(/\n/g, '%0A').replace(/"/g, '%22');
+            parts += '--' + boundary + '\r\n'
+                + 'Content-Disposition: form-data; name="' + safeName + '"\r\n'
+                + '\r\n'
+                + fieldValue + '\r\n';
+        }
+        return parts;
+    };
 
     var processFiles = function(binaries, boundary, data, f, onComplete) {
 

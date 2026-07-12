@@ -339,6 +339,24 @@ function DataHelper(){
         return obj;
     }
 
+    /**
+     * Framework-global alias of parseLocalObj (#B92-adjacent) — nests ONE
+     * bracket-notation key path into an accumulator, leaf value assigned
+     * verbatim. Exposed like formatDataFromString above so the server's
+     * multipart text-field capture (core/server.js) reuses the SAME nesting
+     * layer as the urlencoded path instead of a second copy. The client-side
+     * form-validator carries a byte-faithful port under the same name (the
+     * browser bundle cannot reach server helpers).
+     *
+     * @global
+     * @param {object|array} obj - accumulator (mutated and returned)
+     * @param {array} key - bracket-split key path, e.g. `item[0][id]` -> ['item','0','id']
+     * @param {number} k - current depth (callers pass 0)
+     * @param {*} value - leaf value, assigned verbatim
+     * @returns {object|array} the accumulator
+     */
+    nestBracketNotationKey = parseLocalObj;
+
 } //EO DataHelper
 
 if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
