@@ -813,9 +813,14 @@ function SuperController(options) {
             try {
                 userLocales = locales.findOne({ lang: userLangCode }).content;
             } catch (err) {
-                //var defaultRegion = (local.options.conf.content.settings.region) ? local.options.conf.content.settings.region.shortCode
-                console.warn('language code `'+ userLangCode +'` not handled by current locales setup: replacing by default: `'+ local.options.conf.content.settings.region.shortCode +'`');
-                userLocales = locales.findOne({ lang: local.options.conf.content.settings.region.shortCode }).content // by default
+                // #B100 — guarded fallback: the old blind `region.shortCode` deref
+                // threw here when the `region` block was absent, and the unguarded
+                // fallback `findOne().content` threw when the resolved language
+                // was not in the loaded region set.
+                var _fallbackLang    = getLocaleFallbackLang(local.options.conf);
+                console.warn('language code `'+ userLangCode +'` not handled by current locales setup: replacing by default: `'+ _fallbackLang +'`');
+                var _fallbackLocales = locales.findOne({ lang: _fallbackLang }) || locales.findOne({ lang: 'en' });
+                userLocales = ( _fallbackLocales && _fallbackLocales.content ) ? _fallbackLocales.content : [];
             }
 
             // user locales list
@@ -5063,6 +5068,30 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     }
 
     /**
+     * Resolve the locale-DB fallback language (#B100), shared by the setOptions
+     * locale bridge and `getLocales()`. `region.isoShort` (the schema key,
+     * ISO 639-1) wins; the legacy schema-invalid `region.shortCode` is still
+     * honoured for hand-authored configs; `en` is the final default. Never
+     * throws — every level is existence-guarded.
+     *
+     * @inner
+     * @param {object} conf - resolved bundle conf (`local.options.conf`)
+     * @returns {string} fallback language code, lowercase
+     */
+    var getLocaleFallbackLang = function(conf) {
+        var _region = ( conf && conf.content && conf.content.settings && conf.content.settings.region ) ? conf.content.settings.region : null;
+        if ( _region ) {
+            if ( typeof(_region.isoShort) == 'string' && _region.isoShort.length > 0 ) {
+                return _region.isoShort.toLowerCase();
+            }
+            if ( typeof(_region.shortCode) == 'string' && _region.shortCode.length > 0 ) {
+                return _region.shortCode.toLowerCase();
+            }
+        }
+        return 'en';
+    };
+
+    /**
      * Get locales
      * Will take only supported lang
      *
@@ -5081,8 +5110,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             try {
                 userLocales = locales.findOne({ lang: shortCountryCode }).content
             } catch (err) {
-                console.warn('language code `'+ shortCountryCode +'` not handled to setup locales: replacing by `'+ local.options.conf.content.settings.region.shortCode +'`');
-                userLocales = locales.findOne({ lang: local.options.conf.content.settings.region.shortCode }).content // by default
+                // #B100 — same guarded fallback as the setOptions locale bridge.
+                var _fallbackLang    = getLocaleFallbackLang(local.options.conf);
+                console.warn('language code `'+ shortCountryCode +'` not handled to setup locales: replacing by `'+ _fallbackLang +'`');
+                var _fallbackLocales = locales.findOne({ lang: _fallbackLang }) || locales.findOne({ lang: 'en' });
+                userLocales = ( _fallbackLocales && _fallbackLocales.content ) ? _fallbackLocales.content : [];
             }
         }
 
