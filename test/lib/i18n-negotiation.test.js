@@ -313,8 +313,21 @@ describe('05 - Framework wiring guards', function() {
     });
 
     it('core/server.js wraps i18n negotiation in try/catch (defensive)', function() {
-        // Ensure the hook can never block routing.
-        assert.match(SERVER_SRC, /try\s*\{[\s\S]{1,2000}lib\.i18n\.negotiateCulture[\s\S]{1,500}\}\s*catch/);
+        // Ensure the hook can never block routing. Structural ordering pin —
+        // the former {1,2000} char window broke when #B99's guarded
+        // settings.i18n.cookieName read landed (deliberately) inside the try;
+        // ordering has no byte window to re-tune on future insertions.
+        var hStart   = SERVER_SRC.indexOf('var _negotiateReqCulture');
+        assert.ok(hStart > -1, 'helper definition must exist');
+        var hEnd     = SERVER_SRC.indexOf('// Checking cached route', hStart);
+        assert.ok(hEnd > hStart, 'stable end anchor must follow the helper');
+        var block    = SERVER_SRC.slice(hStart, hEnd);
+        var tryIdx   = block.indexOf('try {');
+        var callIdx  = block.indexOf('lib.i18n.negotiateCulture');
+        var catchIdx = block.indexOf('} catch');
+        assert.ok(tryIdx > -1, 'helper opens a try block');
+        assert.ok(callIdx > tryIdx, 'negotiation runs inside the try');
+        assert.ok(catchIdx > callIdx, 'the catch closes after the call');
     });
 
     it('core/server.js supplies the bundle settings.region.culture as defaultCulture (#I18N Slice 1)', function() {

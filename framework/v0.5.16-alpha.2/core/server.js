@@ -5070,9 +5070,29 @@ function Server(options) {
                 ) {
                     _i18nDefault = self.conf[_i18nBundle][self.env].content.settings.region.culture;
                 }
+                // #B99 — `settings.i18n.cookieName`, honoured since 0.5.16: a
+                // bundle may rename the locale-persistence cookie; an explicit
+                // `null` disables cookie-based negotiation (negotiateCulture
+                // skips its cookie step on a falsy name). Absent, empty or
+                // non-string values keep the historical `gina_culture` default.
+                var _i18nCookieName = 'gina_culture';
+                if ( _i18nBundle
+                    && self.conf[_i18nBundle]
+                    && self.conf[_i18nBundle][self.env]
+                    && self.conf[_i18nBundle][self.env].content
+                    && self.conf[_i18nBundle][self.env].content.settings
+                    && self.conf[_i18nBundle][self.env].content.settings.i18n
+                ) {
+                    var _i18nCookieConf = self.conf[_i18nBundle][self.env].content.settings.i18n.cookieName;
+                    if ( _i18nCookieConf === null ) {
+                        _i18nCookieName = null;
+                    } else if ( typeof(_i18nCookieConf) == 'string' && _i18nCookieConf.length > 0 ) {
+                        _i18nCookieName = _i18nCookieConf;
+                    }
+                }
                 req.culture = lib.i18n.negotiateCulture(req, {
                     availableCultures : _i18nAvail,
-                    cookieName        : 'gina_culture',
+                    cookieName        : _i18nCookieName,
                     defaultCulture    : _i18nDefault
                 });
             } catch (_i18nErr) {

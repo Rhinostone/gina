@@ -167,3 +167,106 @@ describe('02 - two-path structure — behavioural replica + subtract (#B84)', fu
     });
 
 });
+
+
+describe('03 - settings.i18n.cookieName wiring source pins (#B99)', function() {
+
+    // End-anchor slice of the helper (definition → the stable following
+    // comment), no fixed byte window.
+    var hStart      = SERVER_SRC.indexOf('var _negotiateReqCulture');
+    var hEnd        = SERVER_SRC.indexOf('// Checking cached route', hStart);
+    var helperBlock = SERVER_SRC.slice(hStart, hEnd);
+
+    it('slices the helper block', function() {
+        assert.ok(hStart > -1, 'helper definition must exist');
+        assert.ok(hEnd > hStart, 'end anchor must follow the definition');
+    });
+
+    it('resolves the cookie name from the bundle settings i18n block', function() {
+        assert.match(helperBlock, /content\.settings\.i18n\b/);
+    });
+
+    it('keeps the historical default as the init value', function() {
+        assert.match(helperBlock, /var\s+_i18nCookieName\s*=\s*'gina_culture'/);
+    });
+
+    it('honours the documented null-disables contract', function() {
+        assert.match(helperBlock, /_i18nCookieConf\s*===\s*null/);
+    });
+
+    it('accepts only a non-empty string as a custom name', function() {
+        assert.match(helperBlock, /typeof\s*\(\s*_i18nCookieConf\s*\)\s*==\s*'string'\s*&&\s*_i18nCookieConf\.length\s*>\s*0/);
+    });
+
+    it('passes the resolved variable to negotiateCulture — never the opts literal', function() {
+        assert.match(helperBlock, /cookieName\s*:\s*_i18nCookieName/);
+        assert.doesNotMatch(helperBlock, /cookieName\s*:\s*'gina_culture'/);
+    });
+
+});
+
+
+describe('04 - cookie-name resolution + negotiation behaviour (#B99)', function() {
+
+    // Verbatim-lifted resolution logic — locked to the shipped block by the
+    // §03 pins. Models the settings-level tail of the guard chain (the
+    // conf-existence levels above it are the same idiom as _i18nDefault).
+    function resolveCookieName(settings) {
+        var _i18nCookieName = 'gina_culture';
+        if ( settings && settings.i18n ) {
+            var _i18nCookieConf = settings.i18n.cookieName;
+            if ( _i18nCookieConf === null ) {
+                _i18nCookieName = null;
+            } else if ( typeof(_i18nCookieConf) == 'string' && _i18nCookieConf.length > 0 ) {
+                _i18nCookieName = _i18nCookieConf;
+            }
+        }
+        return _i18nCookieName;
+    }
+
+    it('absent i18n block → historical default', function() {
+        assert.equal(resolveCookieName({}), 'gina_culture');
+        assert.equal(resolveCookieName(undefined), 'gina_culture');
+    });
+
+    it('explicit null → null (cookie negotiation disabled)', function() {
+        assert.strictEqual(resolveCookieName({ i18n: { cookieName: null } }), null);
+    });
+
+    it('custom string honoured', function() {
+        assert.equal(resolveCookieName({ i18n: { cookieName: 'my_lang' } }), 'my_lang');
+    });
+
+    it('empty string / non-string junk → historical default', function() {
+        assert.equal(resolveCookieName({ i18n: { cookieName: '' } }), 'gina_culture');
+        assert.equal(resolveCookieName({ i18n: { cookieName: 42 } }), 'gina_culture');
+        assert.equal(resolveCookieName({ i18n: {} }), 'gina_culture');
+    });
+
+    // REAL negotiateCulture driven with the resolved names.
+
+    it('a custom cookie name resolves the culture end-to-end', function() {
+        var req = { headers: { cookie: 'my_lang=fr' } };
+        var c = i18n.negotiateCulture(req, { availableCultures: ['fr'], cookieName: 'my_lang', defaultCulture: 'en' });
+        assert.equal(c, 'fr');
+    });
+
+    it('null cookie name skips the cookie step (the documented disable)', function() {
+        var req = { headers: { cookie: 'gina_culture=fr' } };
+        var c = i18n.negotiateCulture(req, { availableCultures: ['fr'], cookieName: null, defaultCulture: 'en' });
+        assert.equal(c, 'en', 'cookie present but cookie-based negotiation disabled → default culture');
+    });
+
+    it('the historical default name still works end-to-end', function() {
+        var req = { headers: { cookie: 'gina_culture=fr' } };
+        var c = i18n.negotiateCulture(req, { availableCultures: ['fr'], cookieName: 'gina_culture', defaultCulture: 'en' });
+        assert.equal(c, 'fr');
+    });
+
+    it('SUBTRACT — under the pre-fix hardcoded name a custom-named cookie is invisible', function() {
+        var req = { headers: { cookie: 'my_lang=fr' } };
+        var c = i18n.negotiateCulture(req, { availableCultures: ['fr'], cookieName: 'gina_culture', defaultCulture: 'en' });
+        assert.equal(c, 'en', 'the pre-fix opts always carried gina_culture, so my_lang could never match');
+    });
+
+});

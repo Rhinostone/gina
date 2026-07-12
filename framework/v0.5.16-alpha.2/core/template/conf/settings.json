@@ -480,16 +480,16 @@
   // catalogs live at `bundle/locales/<culture>.json` (e.g. en.json,
   // en_US.json, fr.json) and are eager-loaded into
   // `process.gina._i18nCatalogs[bundleName]` at bundle start.
-  //   cookieName    — locale-persistence cookie name (read by slice 3 negotiation).
-  //                   `null` disables cookie-based negotiation.
+  //   cookieName    — locale-persistence cookie name read by the request-pipeline
+  //                   locale negotiation. `null` disables cookie-based negotiation.
   //   devMissingKey — dev-mode prefix for missing keys. `null` = no marker;
   //                   only fires when `NODE_ENV_IS_DEV === "true"`.
   //   fallbackChain — optional override of the default chain
   //                   (specific → base → settings.region.culture →
   //                   GINA_CULTURE → "en"). `null` = use the default.
   //                   Example: ["en", "fr"] forces a fixed fallback.
-  //   cultures      — explicit URL-prefix allowlist for slice 3. `null` =
-  //                   derive from `process.gina._i18nCatalogs[bundleName]`.
+  //   cultures      — RESERVED: explicit URL-prefix allowlist. Not currently
+  //                   consumed — cultures derive from the loaded catalogs.
   "i18n": {
     "cookieName": "gina_culture",
     "devMissingKey": "[MISSING]",
