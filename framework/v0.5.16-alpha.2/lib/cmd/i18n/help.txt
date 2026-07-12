@@ -59,10 +59,10 @@
     --from=<culture>             Source culture for `add`. Defaults to the
                                  bundle's `settings.region.culture`.
     --output=<path>              Optional output file (write instead of
-                                 stdout). For `scan --format=json` and
-                                 `export`. When `--format` is omitted,
-                                 the format is auto-detected from the
-                                 output extension (`.po`, `.csv`, `.json`).
+                                 stdout). For `export`. When `--format` is
+                                 omitted, the format is auto-detected from
+                                 the output extension (`.po`, `.csv`,
+                                 `.json`).
     --file=<path>                Input file path for `import`. Required.
     --merge=<union|replace>      Merge strategy for `import`.
                                  `union` (default) preserves existing
