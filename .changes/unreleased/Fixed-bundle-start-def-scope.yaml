@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`gina bundle:start` now honours a bundle''s configured default scope. A typo in the scope-resolution expression returned an undefined property, so a bundle that declared a default scope in its manifest started with an undefined scope instead of the configured one (bundles with no configured default scope were unaffected — they already fell back to the framework default scope). The command now reads the correct property.'
-time: 2026-07-13T12:00:00+01:00

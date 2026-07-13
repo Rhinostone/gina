@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Installing gina with the npm 12 `--allow-scripts=gina` remedy (or `npm config set allow-scripts=gina --location=user`) no longer fails with `EALLOWSCRIPTS`. npm exports the allowance to install-script children as `npm_config_allow_scripts`, and npm rejects it in project-scoped installs — which killed the nested framework-dependency install inside post-install, and with it the whole `npm install -g gina`. The nested install now drops the inherited allowance for its duration (the framework dependencies carry no install scripts, so nothing is lost). This unblocks the npm 12 install path, where install scripts are blocked by default and the flag is required.'
-time: 2026-07-13T11:10:00+01:00
