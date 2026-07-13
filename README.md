@@ -71,6 +71,17 @@ Full installation guide, tutorials, configuration reference, and API docs at **[
 
 Gina is co-authored by **Martin Luther ETOUMAN NDAMBWE** ([Rhinostone](https://rhinostone.com)) and **Fabrice DELANEAU** ([fdelaneau.com](https://fdelaneau.com)). Final decisions on direction, API design, and releases rest with Martin Luther. Community contributions and RFCs are welcome and taken seriously. See [GOVERNANCE.md](./GOVERNANCE.md) for details.
 
+## Supply-chain scanners
+
+Gina is an MVC framework with a process-management CLI, so it uses Node's
+`child_process` by design — to start and supervise application bundle processes
+and the framework daemon, run local/SSH commands (`lib/shell`), launch the
+inspector, and perform setup in the npm install scripts. Supply-chain scanners
+therefore report a **Shell access** capability for `child_process`. This is
+expected and intrinsic to a CLI framework, not a vulnerability: the install-time
+commands are built only from local values (npm prefix, install path) and take no
+network input.
+
 ## License (MIT)
 
 Copyright © 2009-2026 [Rhinostone](https://rhinostone.com)

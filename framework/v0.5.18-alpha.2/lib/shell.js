@@ -1,7 +1,6 @@
 var fs              = require('fs');
 var EventEmitter    = require('events').EventEmitter;
 var spawn           = require('child_process').spawn;
-var execSync        = require('child_process').execSync;
 var inherits        = require(require.resolve('./inherits'));
 var helpers         = require('./../helpers');
 var console         = require('./logger');
