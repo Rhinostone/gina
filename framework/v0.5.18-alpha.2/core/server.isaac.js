@@ -33,6 +33,7 @@ const merge             = lib.merge;
 const console           = lib.logger;
 const Collection        = lib.Collection;
 const cache             = new lib.Cache();
+const renderCache       = new lib.RenderCache();
 
 
 const env               = process.env.NODE_ENV
@@ -1831,8 +1832,8 @@ function ServerEngineClass(options) {
                         cacheStatus = 'gina-cache';
                     }
 
-                    // Importing cache handler
-                    cache.from(server._cached);
+                    // Importing cache handler (render/output cache goes through the strategy dispatcher)
+                    renderCache.from(server._cached);
                     var cacheKey        = null
                         , hasCachedKey  = false
                         // before: ['data:', 'static:']  (#C3 — bundle namespace prevents silent cache collisions)
@@ -1840,7 +1841,7 @@ function ServerEngineClass(options) {
                     ;
                     for (let p=0, pLen=keyPrefixes.length; p<pLen; p++ ) {
                         cacheKey = keyPrefixes[p] + request.url;
-                        if ( cache.has(cacheKey) ) {
+                        if ( renderCache.has(cacheKey) ) {
                             hasCachedKey = true;
                             break;
                         }
@@ -1850,7 +1851,7 @@ function ServerEngineClass(options) {
                         // Getting cache from key.
                         // get() may return undefined when a sliding window expires between
                         // has() and get() — treat that as a miss and fall through.
-                        cachedContentObj = cache.get(cacheKey);
+                        cachedContentObj = renderCache.get(cacheKey);
                         if ( !cachedContentObj ) {
                             hasCachedKey = false;
                         }

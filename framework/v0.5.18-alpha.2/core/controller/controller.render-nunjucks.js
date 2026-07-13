@@ -137,14 +137,13 @@ var emitInspectorWindowData = require('./inspector-window-emit');
 var libRef          = require('../../lib') || require.cache[require.resolve('../../lib')];
 var Collection      = libRef.Collection;
 var merge           = libRef.merge;
-// #NJ3 — static HTML cache writes. Module-scoped `cache` instance mirrors
-// `render-swig.js:6` and `render-json.js:5`. Per-request, the main render
+// #NJ3 — static HTML cache writes. Module-scoped render-cache dispatcher
+// mirrors `render-swig.js` and `render-json.js`. Per-request, the main render
 // function re-points it at the server's shared in-memory store (key:
-// `static:<bundle>:<url>`). The server-layer read path
-// (`server.isaac.js:1012-1067`) is engine-agnostic, so writes from this
-// delegate are served back on subsequent hits without going through the
-// controller at all.
-var cache           = new (libRef.Cache)();
+// `static:<bundle>:<url>`). The server-layer read path (server.isaac.js) is
+// engine-agnostic, so writes from this delegate are served back on subsequent
+// hits without going through the controller at all.
+var renderCache     = new (libRef.RenderCache)();
 
 /**
  * Caches a `nunjucks.Environment` per bundle template root so we don't
@@ -886,11 +885,17 @@ async function writeCache(local, self, bundle, opt, htmlContent, req, res) {
     // same URL path — matches render-swig.js:47 and render-json.js:40 (#C3).
     var cacheKey = "static:" + bundle + ":" + req.originalUrl;
     var responseHeaders = res.getHeaders() || {};
-    if ( !cache.has(cacheKey) ) {
+    if ( !renderCache.has(cacheKey) ) {
         // Caching kinds are: `memory` & `fs`
         var cachingOption = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : JSON.clone(req.routing.cache);
         if ( typeof(cachingOption.ttl) == 'undefined' ) {
             cachingOption.ttl = opt.ttl
+        }
+        // Inherit the bundle-wide default strategy (server.cache.type) when the
+        // route omits `type` — mirrors the ttl fallback above. Stays undefined
+        // (→ not cached, unchanged) when neither the route nor server.cache sets it.
+        if ( typeof(cachingOption.type) == 'undefined' ) {
+            cachingOption.type = opt.type;
         }
         // Inherit bundle-wide sliding / maxAge defaults from server.cache when
         // the route omits them (mirrors the ttl fallback above). Per-route values
@@ -921,37 +926,16 @@ async function writeCache(local, self, bundle, opt, htmlContent, req, res) {
         if ( cacheObject.sliding && typeof(cachingOption.maxAge) != 'undefined' && cachingOption.maxAge > 0 ) {
             cacheObject.maxAge = cachingOption.maxAge;
         }
-        // Caching to `memory`
-        if ( /^memory$/i.test(cachingOption.type) ) {
-            cacheObject.fromMemory = true;
-            cacheObject.content = htmlContent;
-
-            cache.set(cacheKey, cacheObject);
-        }
-
-        // Caching to `fs` (file system)
-        if ( /^fs$/i.test(cachingOption.type) ) {
-            var url = req.originalUrl;
-            if ( url.endsWith('/') ) {
-                url += 'index'
-            }
-            var htmlFilename = _(opt.path +'/'+ bundle +'/html'+ url + '.html', true);
-            var htmlDir = htmlFilename.split(/\//g).slice(0, -1).join('/');
-            var htmlDirObj = new _(htmlDir);
-            if ( !htmlDirObj.existsSync() ) {
-                htmlDirObj.mkdirSync()
-            }
-            htmlDirObj = null;
-
-            await fs.promises.writeFile(htmlFilename, htmlContent);
-
-            cacheObject.filename = htmlFilename;
-
-            // cleanupFn: delete the cached file from disk when the entry is evicted
-            cache.set(cacheKey, cacheObject, function() {
-                try { fs.rmSync(cacheObject.filename); } catch(e) {}
-            });
-        }
+        // Store via the render-cache strategy dispatcher (memory | fs). The
+        // memory/fs storage detail lives in lib/render-cache so all three
+        // render delegates + the server read path share one backend seam.
+        await renderCache.set(cachingOption.type, cacheKey, cacheObject, {
+            content : htmlContent,
+            path    : opt.path,
+            bundle  : bundle,
+            url     : req.originalUrl,
+            kind    : 'html'
+        });
 
         // Invalidation
         if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
@@ -959,7 +943,7 @@ async function writeCache(local, self, bundle, opt, htmlContent, req, res) {
                 return self.throwError(res, 500, new Error('cache.invalidateOn must be an array'));
             }
             // Placing event listeners
-            cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
+            renderCache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
         }
     }
 }
@@ -1014,11 +998,11 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
     var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
     local._cspNonce = _cspNonce;
 
-    // #NJ3 — point the module-level `cache` at the server's shared in-memory
-    // store for this request. Same pattern as render-swig.js:171 and
-    // render-json.js:149. A guard is unnecessary: `self.serverInstance._cached`
+    // #NJ3 — point the module-level render-cache dispatcher at the server's
+    // shared in-memory store for this request. Same pattern as render-swig.js
+    // and render-json.js. A guard is unnecessary: `self.serverInstance._cached`
     // is always present by the time a controller action runs.
-    cache.from(self.serverInstance._cached);
+    renderCache.from(self.serverInstance._cached);
 
     // Fetch the nunjucks module from the process-cache. `get()` throws if
     // the bundle-startup load did not succeed — we surface that cleanly

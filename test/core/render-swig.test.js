@@ -90,11 +90,15 @@ describe('03 - async fs.promises calls are present', function() {
         );
     });
 
-    it('uses fs.promises.writeFile for cache write (#P30)', function() {
+    it('dispatches the output-cache write through renderCache.set (#P30 moved to lib/render-cache)', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
+        // Slice 0: #P30's async fs write moved into lib/render-cache. The
+        // delegate now hands (type, key, entry, payload) to the strategy
+        // dispatcher; the async fs.promises.writeFile is covered by
+        // test/lib/render-cache.test.js.
         assert.ok(
-            /await\s+fs\.promises\.writeFile\(htmlFilename/.test(src),
-            'expected `await fs.promises.writeFile(htmlFilename` for cache write (#P30)'
+            /await\s+renderCache\.set\(\s*cachingOption\.type\s*,\s*cacheKey\s*,\s*cacheObject\s*,\s*\{[\s\S]{0,200}content\s*:\s*htmlContent[\s\S]{0,200}kind\s*:\s*['"]html['"]/.test(src),
+            'expected the output-cache write to go through renderCache.set(cachingOption.type, cacheKey, cacheObject, { content: htmlContent, …, kind: "html" })'
         );
     });
 

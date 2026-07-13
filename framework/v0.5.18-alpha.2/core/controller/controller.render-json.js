@@ -2,7 +2,7 @@ const fs = require('fs');
 
 const lib               = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 const Collection        = lib.Collection;
-const cache             = new lib.Cache();
+const renderCache       = new lib.RenderCache();
 var statusCodes         = requireJSON( _( getPath('gina').core + '/status.codes') );
 // Inspector secret redaction (dev-mode only — never touches the actual response body)
 var inspectorRedact     = require('lib/inspector-redact');
@@ -59,6 +59,12 @@ async function writeCache(bundle, opt, jsonContent, req, res, cacheIsEnabled, th
     if ( typeof(cachingOption.ttl) == 'undefined' ) {
         cachingOption.ttl = opt.ttl
     }
+    // Inherit the bundle-wide default strategy (server.cache.type) when the
+    // route omits `type` — mirrors the ttl fallback above. Stays undefined
+    // (→ not cached, unchanged) when neither the route nor server.cache sets it.
+    if ( typeof(cachingOption.type) == 'undefined' ) {
+        cachingOption.type = opt.type;
+    }
     // Inherit bundle-wide sliding / maxAge defaults from server.cache when
     // the route omits them (mirrors the ttl fallback above). Per-route values
     // always win — an explicit `sliding: false` overrides a bundle-wide `true`.
@@ -88,60 +94,28 @@ async function writeCache(bundle, opt, jsonContent, req, res, cacheIsEnabled, th
     if ( cacheObject.sliding && typeof(cachingOption.maxAge) != 'undefined' && cachingOption.maxAge > 0 ) {
         cacheObject.maxAge = cachingOption.maxAge;
     }
-    // Caching to `memory`
-    // Use this method carefully since it can lead to memory overflow:
-    // - only for most visited static content
-    // - avoid content linked to sessions
-    // - default ttl is 3600 sec
-    if ( /^memory$/i.test(cachingOption.type) ) {
-        cacheObject.fromMemory = true;
-        // content is mandatory here
-        cacheObject.content = jsonContent;
-
-        cache.set(cacheKey, cacheObject);
-    }
-
-    // Caching to `fs` (file system)
-    // Use this method for most of your needs:
-    // - prioritize content linked to sessions
-    // - default ttl is 3600 sec
-    if ( /^fs$/i.test(cachingOption.type) ) {
-        var url = req.originalUrl;
-        if ( /\/$/.test(url) ) {
-            url += 'index'
-        }
-        var jsonFilename = _(opt.path +'/'+ bundle +'/data'+ url + '.json', true);
-        var jsonDir = jsonFilename.split(/\//g).slice(0, -1).join('/');
-        var jsonDirObj = new _(jsonDir);
-        if ( !jsonDirObj.existsSync() ) {
-            jsonDirObj.mkdirSync()
-        }
-        jsonDirObj = null;
-
-        // console.debug("Writting cache to: ", jsonFilename);
-        // replaced: sync fs.openSync/writeSync/closeSync — blocks event loop
-        await fs.promises.writeFile(jsonFilename, jsonContent);
-
-        // filename is mandatory here
-        cacheObject.filename = jsonFilename;
-
-        // cleanupFn: delete the cached file from disk when the entry is evicted
-        cache.set(cacheKey, cacheObject, function() {
-            try { fs.rmSync(cacheObject.filename); } catch(e) {}
-        });
-    }
+    // Store via the render-cache strategy dispatcher (memory | fs). The
+    // memory/fs storage detail lives in lib/render-cache so all three
+    // render delegates + the server read path share one backend seam.
+    await renderCache.set(cachingOption.type, cacheKey, cacheObject, {
+        content : jsonContent,
+        path    : opt.path,
+        bundle  : bundle,
+        url     : req.originalUrl,
+        kind    : 'data'
+    });
 
     // Invalidation
     if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
         if ( !Array.isArray(cachingOption.invalidateOnEvents) ) {
-            // #M1/#B63 — this resume point sits after the writeFile await:
+            // #M1/#B63 — this resume point sits after the render-cache write await:
             // both the response AND the reporting controller come from the
             // threaded parameters (renderJSON's captures), never from the
             // module scope a concurrent request may have moved on from.
             return throwError(res, 500, new Error('cache.invalidateOn must be an array'));
         }
         // Placing event listeners
-        cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
+        renderCache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
     }
 }
 
@@ -183,8 +157,8 @@ module.exports = function renderJSON(jsonObj, deps) {
         return;
     }
 
-    // Using server cache to cache compiledTemplates
-    cache.from(self.serverInstance._cached);
+    // Point the render-cache dispatcher at the server's shared in-memory store.
+    renderCache.from(self.serverInstance._cached);
 
     var request     = local.req;
     var response    = local.res;

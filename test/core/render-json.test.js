@@ -89,8 +89,9 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
         var fnStart = src.indexOf('async function writeCache');
         assert.ok(fnStart > -1, 'writeCache not found');
         var fnBodyStart = src.indexOf('{', fnStart);
-        // Find first await within writeCache (the writeFile await)
-        var awaitIdx = src.indexOf('await fs.promises.writeFile', fnBodyStart);
+        // Find first await within writeCache (the render-cache dispatch await —
+        // #P30's inline fs.promises.writeFile moved into lib/render-cache in Slice 0).
+        var awaitIdx = src.indexOf('await renderCache.set', fnBodyStart);
         assert.ok(awaitIdx > -1, 'first await in writeCache not found');
         // Find the end of writeCache (matching closing brace) — approximate
         // by scanning forward to the next module-scope function declaration.
@@ -168,11 +169,11 @@ describe('03 - released-response guard (#B36)', function() {
         var s = src();
         var guardIdx  = s.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
         var errIdx    = s.indexOf('if ( self.isProcessingError )');
-        var cacheIdx  = s.indexOf('cache.from(self.serverInstance._cached)');
+        var cacheIdx  = s.indexOf('renderCache.from(self.serverInstance._cached)');
         var streamIdx = s.indexOf('typeof(local.res.stream)');
         assert.ok(guardIdx > -1, 'expected an `if ( local.res == null ) return;` guard in renderJSON()');
         assert.ok(errIdx > -1 && errIdx < guardIdx, 'guard must follow the isProcessingError early-return');
-        assert.ok(cacheIdx > guardIdx, 'guard must precede cache.from(self.serverInstance._cached)');
+        assert.ok(cacheIdx > guardIdx, 'guard must precede renderCache.from(self.serverInstance._cached)');
         assert.ok(streamIdx > guardIdx, 'guard must precede the local.res.stream read (the crash site)');
     });
 

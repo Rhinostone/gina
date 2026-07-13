@@ -90,6 +90,7 @@ function Lib() {
         JobStore        : _require('./job-store'),
         SwigFilters     : _require('./swig-filters'),
         Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
+        RenderCache     : require('./render-cache'), // #B32-residual — plain require (server-only render-cache strategy dispatcher; wraps lib/cache and is held at gen-0 in server.isaac.js + the render delegates). See Cache above.
         uuid            : require('./uuid'),      // #B32-residual — plain require (pushed as a child of the gen-0 collection module per `new Collection()`). See Collection note above.
         // #R1 — WatcherService: fs.watch-based file-change registry. Class is hot-reloadable;
         // instantiated once per bundle in gna.js:onStarted and stored as gna.watcher.

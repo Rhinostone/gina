@@ -4,6 +4,7 @@ const nodePath = require('path'); // CVE-2023-25345: used for template path boun
 const lib             = require('./../../lib') || require.cache[require.resolve('./../../lib')];
 const Collection      = lib.Collection;
 const cache           = new lib.Cache();
+const renderCache     = new lib.RenderCache();
 var statusCodes       = requireJSON( _( getPath('gina').core + '/status.codes') );
 // Inspector secret redaction (dev-mode only — never touches the actual response body)
 var inspectorRedact   = require('lib/inspector-redact');
@@ -52,11 +53,17 @@ async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, th
     // before: "static:" + req.originalUrl  (#C3 — added bundle namespace to prevent silent collisions when two bundles serve the same URL path)
     var cacheKey = "static:" + bundle + ":" + req.originalUrl;
     var responseHeaders = res.getHeaders() || {};
-    if ( !cache.has(cacheKey) ) {
+    if ( !renderCache.has(cacheKey) ) {
         // Caching kinds are: `memory` & `fs`
         var cachingOption = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : JSON.clone(req.routing.cache);
         if ( typeof(cachingOption.ttl) == 'undefined' ) {
             cachingOption.ttl = opt.ttl
+        }
+        // Inherit the bundle-wide default strategy (server.cache.type) when the
+        // route omits `type` — mirrors the ttl fallback above. Stays undefined
+        // (→ not cached, unchanged) when neither the route nor server.cache sets it.
+        if ( typeof(cachingOption.type) == 'undefined' ) {
+            cachingOption.type = opt.type;
         }
         // Inherit bundle-wide sliding / maxAge defaults from server.cache when
         // the route omits them (mirrors the ttl fallback above). Per-route values
@@ -87,49 +94,16 @@ async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, th
         if ( cacheObject.sliding && typeof(cachingOption.maxAge) != 'undefined' && cachingOption.maxAge > 0 ) {
             cacheObject.maxAge = cachingOption.maxAge;
         }
-        // Caching to `memory`
-        // Use this method carefully since it can lead to memory overflow:
-        // - only for most visited static content
-        // - avoid content linked to sessions
-        // - default ttl is 3600 sec
-        if ( /^memory$/i.test(cachingOption.type) ) {
-            cacheObject.fromMemory = true;
-            // content is mandatory here
-            cacheObject.content = htmlContent;
-
-            cache.set(cacheKey, cacheObject);
-        }
-
-        // Caching to `fs` (file system)
-        // Use this method for most of your needs:
-        // - prioritize content linked to sessions
-        // - default ttl is 3600 sec
-        if ( /^fs$/i.test(cachingOption.type) ) {
-            var url = req.originalUrl;
-            // replaced: /\/$/.test(url) (#P7)
-            if ( url.endsWith('/') ) {
-                url += 'index'
-            }
-            var htmlFilename = _(opt.path +'/'+ bundle +'/html'+ url + '.html', true);
-            var htmlDir = htmlFilename.split(/\//g).slice(0, -1).join('/');
-            var htmlDirObj = new _(htmlDir);
-            if ( !htmlDirObj.existsSync() ) {
-                htmlDirObj.mkdirSync()
-            }
-            htmlDirObj = null;
-
-            // console.debug("Writting cache to: ", htmlFilename);
-            // replaced: openSync/writeSync/closeSync — async write (#P30)
-            await fs.promises.writeFile(htmlFilename, htmlContent);
-
-            // filename is mandatory here
-            cacheObject.filename = htmlFilename;
-
-            // cleanupFn: delete the cached file from disk when the entry is evicted
-            cache.set(cacheKey, cacheObject, function() {
-                try { fs.rmSync(cacheObject.filename); } catch(e) {}
-            });
-        }
+        // Store via the render-cache strategy dispatcher (memory | fs). The
+        // memory/fs storage detail lives in lib/render-cache so all three
+        // render delegates + the server read path share one backend seam.
+        await renderCache.set(cachingOption.type, cacheKey, cacheObject, {
+            content : htmlContent,
+            path    : opt.path,
+            bundle  : bundle,
+            url     : req.originalUrl,
+            kind    : 'html'
+        });
 
         // Invalidation
         if ( typeof(cachingOption.invalidateOnEvents) != 'undefined' ) {
@@ -137,7 +111,7 @@ async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, th
                 return throwError(res, 500, new Error('cache.invalidateOn must be an array'));
             }
             // Placing event listeners
-            cache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
+            renderCache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
         }
 
     }
@@ -247,6 +221,8 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
+    // Output/render cache goes through the strategy dispatcher (same shared store).
+    renderCache.from(self.serverInstance._cached);
 
     // #TPL2 — cachePath (the layout-cache root) is derived IN-ROOT below, once
     // localOptions is resolved; see the assignment before the layout-cache prime.

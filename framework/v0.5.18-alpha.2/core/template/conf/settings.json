@@ -95,7 +95,13 @@
       }
     }
   },
-  "cache": {},
+  "cache": {
+    // Bundle-wide default render/output-cache strategy: "memory" | "fs" | "redis".
+    // A per-route `cache.type` overrides this; a route with `cache` set but no
+    // `type` inherits it (mirrors the `ttl` fallback). "memory" = in-process,
+    // volatile (cleared on restart), fastest per-serve.
+    "type": "memory"
+  },
   // #CSRF1 — session-cookie defaults applied by gina.plugins.Session(expressSession).
   // Bundle cookie options passed to session({ cookie: ... }) always override these.
   //   sameSite: "lax" | "strict" | "none"   (default "lax")

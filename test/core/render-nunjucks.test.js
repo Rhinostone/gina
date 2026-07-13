@@ -799,14 +799,14 @@ describe('08 - released-response guard (#B45)', function() {
     // (#B36). (render-nunjucks's own res.stream read is already (res && ...)-safe, so the
     // crash surfaces at the setResources -> local.req.headers path.)
 
-    it('renderNunjucks guards a released response after the #M1 captures, before cache.from', function() {
+    it('renderNunjucks guards a released response after the #M1 captures, before renderCache.from', function() {
         var s = src();
         var guardIdx   = s.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
         var captureIdx = s.search(/var\s+_next\s*=\s*local\.next;/);
-        var cacheIdx   = s.indexOf('cache.from(self.serverInstance._cached)');
+        var cacheIdx   = s.indexOf('renderCache.from(self.serverInstance._cached)');
         assert.ok(guardIdx > -1, 'expected an `if ( local.res == null ) return;` guard in renderNunjucks()');
         assert.ok(captureIdx > -1 && captureIdx < guardIdx, 'guard must follow the #M1 req/res/next captures');
-        assert.ok(cacheIdx > guardIdx, 'guard must precede cache.from / the first per-request work');
+        assert.ok(cacheIdx > guardIdx, 'guard must precede renderCache.from / the first per-request work');
     });
 
     // ---- pure-logic replica of the guard + render-nunjucks's released-response crash site ----
