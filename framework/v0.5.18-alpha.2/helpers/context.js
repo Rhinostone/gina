@@ -281,46 +281,54 @@ function ContextHelper(contexts) {
 
 
     var throwError = function(code, err, isFatal) {
-        var router      = getContext('router');
-        if (router) {
-            var res                 = router.response
-                , next              = router.next
-                , hasViews          = router.hasViews
-                , isUsingTemplate   = isUsingTemplate
+
+        if (arguments.length < 2) {
+            err     = code;
+            code    = 500
+        }
+
+        var router  = getContext('router')
+            , res   = ( router ) ? router.response : null
+            , next  = ( router ) ? router.next : null
+        ;
+
+        // Live HTTP request we can still write an error response to.
+        if ( res && !res.headersSent ) {
+            var hasViews          = router.hasViews
+                , isUsingTemplate = isUsingTemplate // pre-existing: resolves to `undefined` -> JSON branch
             ;
 
-
-            if (arguments.length < 2) {
-                err = code;
-                code = 500
-            }
-
             if ( !hasViews || !isUsingTemplate ) {
-                if (!res.headersSent) {
-                    res.writeHead(code, { 'Content-Type': 'application/json'} );
-                    res.end(JSON.stringify({
-                        status: code,
-                        error: 'Error '+ code +'. '+ err.stack
-                    }))
-                } else {
-                    next()
-                }
-
+                res.writeHead(code, { 'Content-Type': 'application/json'} );
+                res.end(JSON.stringify({
+                    status: code,
+                    error: 'Error '+ code +'. '+ err.stack
+                }))
             } else {
-                if (!res.headersSent) {
-                    res.writeHead(code, { 'Content-Type': 'text/html'} );
-                    res.end('<h1>Error '+ code +'.</h1><pre>'+ err.stack + '</pre>')
-                } else {
-                    next()
-                }
+                res.writeHead(code, { 'Content-Type': 'text/html'} );
+                res.end('<h1>Error '+ code +'.</h1><pre>'+ err.stack + '</pre>')
             }
-        } else {
-            if (isFatal && /^true$/.test(isFatal) ) {
-                console.emerg(err.stack||err.message||err);
-                return;
-            }
-            throw err
+            return;
         }
+
+        // Live request whose response was already flushed: hand back to the
+        // middleware chain (only when `next` is genuinely callable).
+        if ( res && res.headersSent && typeof next == 'function' ) {
+            next();
+            return;
+        }
+
+        // No live request to respond to. The per-request `router` context
+        // (core/router.js) is stored globally and never cleared, so a detached
+        // caller (cron / timer / worker / bootstrap-time getLib) can observe a
+        // stale routerObj whose `next` is no longer callable. Surface the error
+        // instead of crashing on a dead response / `next`.
+        if ( isFatal && /^true$/.test(isFatal) ) {
+            console.emerg(err.stack||err.message||err);
+            return;
+        }
+
+        throw err
     }
 
     /**
