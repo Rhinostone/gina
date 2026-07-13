@@ -297,7 +297,7 @@ function Start(opt, cmd) {
         }
 
         var env = ( typeof(self.bundlesByProject[self.projectName][bundle].def_env) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_env : self.defaultEnv;
-        var scope = ( typeof(self.bundlesByProject[self.projectName][bundle].def_scope) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_scpoe : self.defaultScope;
+        var scope = ( typeof(self.bundlesByProject[self.projectName][bundle].def_scope) != 'undefined') ? self.bundlesByProject[self.projectName][bundle].def_scope : self.defaultScope;
         // terminal.debug('env -> ', env);
         var protocol = self.bundlesByProject[self.projectName][bundle].def_protocol;
         // terminal.debug('protocol -> ', protocol);

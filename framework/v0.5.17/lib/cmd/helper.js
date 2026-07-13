@@ -541,7 +541,9 @@ function CmdHelper(cmd, client, debug) {
                 // valid name but not in projects and task != :add, :remove, :import or :restore
                 // (project:restore registers a brand-new on-disk tree from an archive,
                 //  so its @<name> is legitimately not-yet-registered — like :add/:import)
-                if ( typeof(cmd.projects[cmd.projectName]) == 'undefined' && !/\:(add|import|remove|restore)$/.test(cmd.task) ) {
+                // #B104 — `rm` co-listed with `remove` so the `project:rm` alias follows the
+                // same not-yet-registered exemption as `project:remove` (consistent alias).
+                if ( typeof(cmd.projects[cmd.projectName]) == 'undefined' && !/\:(add|import|remove|rm|restore)$/.test(cmd.task) ) {
                     errMsg = 'Project ['+ cmd.projectName +'] not found in your projects list';
                     console.error(errMsg);
                     exit(errMsg);
@@ -690,9 +692,40 @@ function CmdHelper(cmd, client, debug) {
                 // (homedir / bundles / releases / ports) reads `projectData`
                 // only via guarded `typeof != 'undefined'` checks, so a stub
                 // satisfies every downstream consumer for the removal path.
-                if ( /\:remove$/.test(cmd.task) && cmd.params['force'] ) {
+                if ( /\:(remove|rm)$/.test(cmd.task) && cmd.params['force'] ) {
+                    // #B104 — accept BOTH `project:remove` and the `project:rm` alias:
+                    // `cmd.task` is the raw argv token (`:292`), and `:rm` resolves to
+                    // `remove.js` purely via the `rm.js` file redirect, leaving the token
+                    // literal. The bare `/\:remove$/` failed the alias, so `project:rm
+                    // @<stale> --force` fell through to the #B59 gone-dir error below and
+                    // removed nothing. (`:544`'s sibling exemption set is broadened to match.)
                     console.warn('Project manifest.json not found at '+ cmd.projectManifestPath +' — proceeding with registry-only removal (--force).');
                     cmd.projectData = { project: cmd.projectName, version: '0.0.0', bundles: {} };
+                    // #B105 — for a stale-entry removal, SKIP every asset-recreation block
+                    // below (the homedir / bundles / releases / logs / tmp / cache mkdirSync
+                    // blocks + the env.json write): there is nothing to (re)build for a project
+                    // being deleted, and for an UNCREATABLE path (a top-level `/app`, or any
+                    // path under a non-writable parent) the env.json write ENOENT-throws — the
+                    // outer catch turns it into an emerg + exit(1) BEFORE `remove.js` runs.
+                    // Skipping also drops the wasteful resurrect-then-delete for a merely-gone
+                    // (creatable) path. Populate exactly what `remove.js` reads — projectLocation
+                    // (its init) + the port maps (its end()'s cleanup) — then return.
+                    // The ports load is LOAD-BEARING here: the gone-path early-return further
+                    // down sits BEFORE the canonical ports load, and `remove.js` end() rewrites
+                    // ports.json / ports.reverse.json unconditionally — so without loading them
+                    // the maps would be the empty `{}` defaults and EVERY project's ports would
+                    // be wiped. Mirror the canonical load (see the `cmd.portsData = requireJSON`
+                    // site later in this function); the port paths are already set at `:563-564`.
+                    cmd.projectLocation = _(cmd.projects[cmd.projectName].path, true);
+                    if ( typeof(require.cache[cmd.portsPath]) != 'undefined') {
+                        delete require.cache[require.resolve(cmd.portsPath)]
+                    }
+                    cmd.portsData          = requireJSON(cmd.portsPath) || {};
+                    if ( typeof(require.cache[cmd.portsReversePath]) != 'undefined') {
+                        delete require.cache[require.resolve(cmd.portsReversePath)]
+                    }
+                    cmd.portsReverseData   = requireJSON(cmd.portsReversePath) || {};
+                    return;
                 } else if ( ! fs.existsSync(cmd.projects[cmd.projectName].path) ) {
                     // #B59 — the project DIRECTORY itself is gone (a valid-length path pointing
                     // at a deleted dir, or an empty/invalid `.path`). The recreate `else` below

@@ -255,7 +255,9 @@ describe('09 - archive-arg finder replica', function () {
 
 describe('10 - bootstrap exemption', function () {
 
-    it('helper.js exempts project:restore from the "not registered" guard (with add/import/remove)', function () {
-        assert.match(helperSrc, /!\/\\:\(add\|import\|remove\|restore\)\$\/\.test\(cmd\.task\)/);
+    it('helper.js exempts project:restore from the "not registered" guard (with add/import/remove/rm)', function () {
+        // #B104 — `rm` added to the exemption set so the `project:rm` alias follows
+        // the same not-yet-registered exemption as `project:remove`.
+        assert.match(helperSrc, /!\/\\:\(add\|import\|remove\|rm\|restore\)\$\/\.test\(cmd\.task\)/);
     });
 });
