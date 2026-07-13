@@ -1,0 +1,3 @@
+kind: Added
+body: 'Bundle-wide `sliding` and `maxAge` cache defaults: `server.cache` now supplies `sliding` and `maxAge` fallbacks that a route inherits when it omits them, mirroring the existing `ttl` fallback — so sliding-window caching can be enabled for a whole bundle from one place. Per-route values still win (an explicit `sliding: false` overrides a bundle-wide `true`), and behaviour is unchanged for bundles that do not set these keys. Applies to cached HTML (swig, nunjucks) and JSON responses.'
+time: 2026-07-13T19:05:13+01:00

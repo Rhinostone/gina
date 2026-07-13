@@ -2111,3 +2111,29 @@ describe('21 - per-request deps are function-scoped in render() (#B61 module-sco
             'function-scope shape must call each render\'s own closure exactly twice');
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 22 - bundle-wide sliding / maxAge cache defaults (server.cache)
+// ---------------------------------------------------------------------------
+describe('22 - bundle-wide sliding / maxAge cache defaults (server.cache)', function() {
+    // writeCache inherits sliding/maxAge from opt (= conf.server.cache) when the
+    // route omits them, mirroring the existing ttl fallback. Kept in lockstep
+    // with render-nunjucks.js and render-json.js; the behavioural proof lives in
+    // test/lib/render-engine-dispatch.test.js §05e (a-d).
+    it('falls back to opt.sliding / opt.maxAge next to the ttl fallback', function() {
+        var src  = fs.readFileSync(SOURCE, 'utf8');
+        var idx  = src.indexOf('async function writeCache');
+        assert.ok(idx > 0, 'writeCache found');
+        var body = src.slice(idx, idx + 2600);
+        // ttl fallback still present (regression)
+        assert.match(body, /typeof\(\s*cachingOption\.ttl\s*\)\s*==\s*['"]undefined['"][\s\S]{0,120}cachingOption\.ttl\s*=\s*opt\.ttl/);
+        // new sliding + maxAge fallbacks (route value wins; opt only fills an omitted field)
+        assert.match(body, /typeof\(\s*cachingOption\.sliding\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.sliding\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.sliding\s*=\s*opt\.sliding/);
+        assert.match(body, /typeof\(\s*cachingOption\.maxAge\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.maxAge\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.maxAge\s*=\s*opt\.maxAge/);
+    });
+    it('documents opt.sliding / opt.maxAge in the writeCache @param opt JSDoc', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        assert.match(src, /@param\s+\{object\}\s+opt[\s\S]{0,120}opt\.sliding[\s\S]{0,40}opt\.maxAge/);
+    });
+});

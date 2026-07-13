@@ -297,3 +297,26 @@ describe('04 - per-request deps are function-scoped; writeCache reads only its p
             'threaded-parameter shape must route each error through its own controller');
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 05 - bundle-wide sliding / maxAge cache defaults (server.cache)
+// ---------------------------------------------------------------------------
+describe('05 - bundle-wide sliding / maxAge cache defaults (server.cache)', function() {
+    // JSON-response writeCache inherits sliding/maxAge from opt (= conf.server.cache)
+    // when the route omits them, mirroring the ttl fallback and staying in lockstep
+    // with render-swig.js and render-nunjucks.js.
+    function getSrc() { return fs.readFileSync(SOURCE, 'utf8'); }
+    it('falls back to opt.sliding / opt.maxAge next to the ttl fallback', function() {
+        var s   = getSrc();
+        var idx = s.indexOf('async function writeCache');
+        assert.ok(idx > 0, 'writeCache found');
+        var body = s.slice(idx, idx + 2600);
+        assert.match(body, /typeof\(\s*cachingOption\.ttl\s*\)\s*==\s*['"]undefined['"][\s\S]{0,120}cachingOption\.ttl\s*=\s*opt\.ttl/);
+        assert.match(body, /typeof\(\s*cachingOption\.sliding\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.sliding\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.sliding\s*=\s*opt\.sliding/);
+        assert.match(body, /typeof\(\s*cachingOption\.maxAge\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.maxAge\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.maxAge\s*=\s*opt\.maxAge/);
+    });
+    it('documents opt.sliding / opt.maxAge in the writeCache @param opt JSDoc', function() {
+        assert.match(getSrc(), /@param\s+\{object\}\s+opt[\s\S]{0,120}opt\.sliding[\s\S]{0,40}opt\.maxAge/);
+    });
+});

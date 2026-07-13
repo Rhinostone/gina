@@ -27,7 +27,7 @@ var blacklistRe       = /[<>]/g;
  *
  * @inner
  * @param {string} bundle      - Bundle name (used as cache-key namespace)
- * @param {object} opt         - Server cache configuration (`opt.path`, `opt.ttl`)
+ * @param {object} opt         - Server cache configuration (`opt.path`, `opt.ttl`, `opt.sliding`, `opt.maxAge`)
  * @param {string} htmlContent - Compiled HTML string to cache
  * @param {object} req         - Per-request request captured by render() (function-scoped, race-safe)
  * @param {object} res         - Per-request response captured by render() (function-scoped, race-safe)
@@ -57,6 +57,15 @@ async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, th
         var cachingOption = ( typeof(req.routing.cache) == 'string' ) ? { type: req.routing.cache } : JSON.clone(req.routing.cache);
         if ( typeof(cachingOption.ttl) == 'undefined' ) {
             cachingOption.ttl = opt.ttl
+        }
+        // Inherit bundle-wide sliding / maxAge defaults from server.cache when
+        // the route omits them (mirrors the ttl fallback above). Per-route values
+        // always win — an explicit `sliding: false` overrides a bundle-wide `true`.
+        if ( typeof(cachingOption.sliding) == 'undefined' && typeof(opt.sliding) != 'undefined' ) {
+            cachingOption.sliding = opt.sliding;
+        }
+        if ( typeof(cachingOption.maxAge) == 'undefined' && typeof(opt.maxAge) != 'undefined' ) {
+            cachingOption.maxAge = opt.maxAge;
         }
         var cacheObject = {
             responseHeaders : responseHeaders

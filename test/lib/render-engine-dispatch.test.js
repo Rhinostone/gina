@@ -2182,6 +2182,22 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         );
     });
 
+    it('falls back to opt.sliding / opt.maxAge when the route omits them (bundle-wide server.cache defaults)', function () {
+        // Mirrors the ttl fallback above: the route value always wins; the
+        // opt (server.cache) value only fills an omitted field. Kept in
+        // lockstep across render-swig / render-nunjucks / render-json.
+        var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
+        var body = RENDER_NJ_SRC.slice(idx, idx + 2600);
+        assert.match(
+            body,
+            /typeof\(\s*cachingOption\.sliding\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.sliding\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.sliding\s*=\s*opt\.sliding/
+        );
+        assert.match(
+            body,
+            /typeof\(\s*cachingOption\.maxAge\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.maxAge\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.maxAge\s*=\s*opt\.maxAge/
+        );
+    });
+
     it('defaults visibility to "private" (opt-in to "public")', function () {
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
         var body = RENDER_NJ_SRC.slice(idx, idx + 2500);
@@ -2450,6 +2466,69 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             var self = { serverInstance: { _cacheIsEnabled: 'true' } };
             await fn(local, self, 'demo', { path: '/tmp', ttl: 60 }, '<p>x</p>', local.req, local.res);
             assert.equal(captured.visibility, 'public');
+        });
+
+        // ---- bundle-wide sliding / maxAge defaults inherited from server.cache ----
+        // Drives the REAL nunjucks writeCache. Cases (a) and (c) are the
+        // load-bearing subtract: drop the `cachingOption.sliding = opt.sliding`
+        // / `cachingOption.maxAge = opt.maxAge` fallback and captured.value.sliding
+        // / .maxAge go undefined.
+        function makeCaptureFn() {
+            var captured = {};
+            /* eslint-disable no-new-func */
+            var fn = new Function('cache', 'fs', 'JSON', '_',
+                helperSrc + '\nreturn writeCache;'
+            )({
+                has: function () { return false; },
+                set: function (k, v) { captured.key = k; captured.value = v; },
+                setEvents: function () {}
+            }, { promises: { writeFile: function () { return Promise.resolve(); } }, rmSync: function () {} }, JSON_WITH_CLONE, function () { return ''; });
+            /* eslint-enable no-new-func */
+            return { fn: fn, captured: captured };
+        }
+
+        it('(a) a route omitting sliding inherits the bundle-wide server.cache.sliding:true', async function () {
+            var h = makeCaptureFn();
+            var local = { req: { routing: { cache: { type: 'memory' } }, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
+            var self = { serverInstance: { _cacheIsEnabled: 'true' } };
+            await h.fn(local, self, 'demo', { path: '/tmp', ttl: 60, sliding: true }, '<p>x</p>', local.req, local.res);
+            assert.equal(h.captured.value.sliding, true, 'route inherits the bundle-wide sliding default');
+        });
+
+        it('(b) an explicit route sliding:false overrides the bundle-wide sliding:true', async function () {
+            var h = makeCaptureFn();
+            var local = { req: { routing: { cache: { type: 'memory', sliding: false } }, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
+            var self = { serverInstance: { _cacheIsEnabled: 'true' } };
+            await h.fn(local, self, 'demo', { path: '/tmp', ttl: 60, sliding: true }, '<p>x</p>', local.req, local.res);
+            assert.equal(h.captured.value.sliding, undefined, 'route sliding:false wins; cacheObject.sliding never set');
+        });
+
+        it('(c) bundle-wide maxAge is inherited when sliding is effectively true', async function () {
+            var h = makeCaptureFn();
+            var local = { req: { routing: { cache: { type: 'memory' } }, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
+            var self = { serverInstance: { _cacheIsEnabled: 'true' } };
+            await h.fn(local, self, 'demo', { path: '/tmp', ttl: 60, sliding: true, maxAge: 3600 }, '<p>x</p>', local.req, local.res);
+            assert.equal(h.captured.value.sliding, true);
+            assert.equal(h.captured.value.maxAge, 3600, 'route inherits the bundle-wide maxAge ceiling');
+        });
+
+        it('(c2) bundle-wide maxAge is NOT applied when sliding is not effectively true', async function () {
+            var h = makeCaptureFn();
+            var local = { req: { routing: { cache: { type: 'memory' } }, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
+            var self = { serverInstance: { _cacheIsEnabled: 'true' } };
+            await h.fn(local, self, 'demo', { path: '/tmp', ttl: 60, sliding: false, maxAge: 3600 }, '<p>x</p>', local.req, local.res);
+            assert.equal(h.captured.value.sliding, undefined);
+            assert.equal(h.captured.value.maxAge, undefined, 'maxAge only meaningful when sliding is effectively true');
+        });
+
+        it('(d) the ttl fallback is unchanged alongside the new sliding/maxAge fallbacks', async function () {
+            var h = makeCaptureFn();
+            var local = { req: { routing: { cache: { type: 'memory' } }, originalUrl: '/x' }, res: { getHeaders: function () { return {}; } } };
+            var self = { serverInstance: { _cacheIsEnabled: 'true' } };
+            await h.fn(local, self, 'demo', { path: '/tmp', ttl: 90 }, '<p>x</p>', local.req, local.res);
+            assert.equal(h.captured.value.ttl, 90, 'route still inherits opt.ttl');
+            assert.equal(h.captured.value.sliding, undefined, 'no sliding when the bundle default is absent');
+            assert.equal(h.captured.value.maxAge, undefined, 'no maxAge when the bundle default is absent');
         });
     })();
 
