@@ -499,6 +499,23 @@ function PostInstall() {
     }
 
 
+    /**
+     * Installs the framework directory's own nested dependencies — a
+     * project-scoped `npm install` (`bun install` under Bun) run from
+     * `self.versionPath`.
+     *
+     * Sanitizes inherited `npm_config_*` lifecycle exports around the child:
+     * `npm_config_global` is forced to `false` (this is a project install even
+     * when gina itself is installed globally), and the allow-scripts export is
+     * dropped for the child's duration (#B106) — npm rejects `allow-scripts`
+     * in project-scoped installs (EALLOWSCRIPTS), so an inherited value from
+     * the documented `--allow-scripts=gina` remedy would kill the nested
+     * install and with it the whole global install.
+     *
+     * @inner
+     * @param {function} done - continuation callback
+     * @returns {void}
+     */
     var npmInstall = function(done) {
 
         console.info('Now installing modules. Please, wait ...');
@@ -519,11 +536,21 @@ function PostInstall() {
         console.info('Running: `'+ cmd +'` from '+ process.cwd() );
         console.info('Running using TMPDIR: '+  _(getTmpDir(), true) );
         var oldConfigGlobal = process.env.npm_config_global;
+        var oldAllowScripts = process.env.npm_config_allow_scripts;
         process.env.npm_config_global = false;
+        // #B106 — npm exports explicitly-set config to lifecycle children as
+        // `npm_config_*`, and `allow-scripts` is rejected in project-scoped
+        // installs (EALLOWSCRIPTS): an inherited `--allow-scripts=gina` (or the
+        // user-level config) would kill this nested install. Drop it — the
+        // framework deps carry no install scripts.
+        delete process.env.npm_config_allow_scripts;
         console.info('Running using TMPDIR: '+ cmd);
         console.info(execSync(cmd).toString());
         process.chdir(initialDir);
         process.env.npm_config_global = oldConfigGlobal;
+        if ( typeof(oldAllowScripts) != 'undefined' ) {
+            process.env.npm_config_allow_scripts = oldAllowScripts;
+        }
 
         done()
     }
