@@ -48,31 +48,39 @@ var Cache = require('../../cache/src/main');
  * shared by `set('fs')` (write) and the read-back (`has`/`get`), so the write
  * filename and the read-back filename can never drift.
  *
- * Mirrors the historical inline build: `<root>/<bundle>/<html|data><url>.<ext>`,
- * trailing-slash url → `.../index.<ext>`, resolved through the `_` PathObject
- * global exactly as the pre-strategy code did.
+ * Layout: `<root>/<bundle>[/<token>]/<html|data><url>.<ext>`, trailing-slash
+ * url → `.../index.<ext>`, resolved through the `_` PathObject global exactly
+ * as the pre-strategy code did. The release-namespace `token` (empty by
+ * default) is a path segment under the bundle so a namespace change lands NEW
+ * files in a fresh dir — old-namespace files are orphaned and, on read-back,
+ * never matched (correct cross-namespace invalidation).
  *
  * @inner
  * @param {string} root   - Cache root (`server.cache.path`).
+ * @param {string} token  - Release namespace (`buildKey`'s token) or '' for the flat layout.
  * @param {string} bundle - Bundle name.
  * @param {string} kind   - 'data' (JSON, `/data`+`.json`) | anything else (HTML, `/html`+`.html`).
  * @param {string} url    - Request URL (`req.originalUrl`).
  * @returns {{ body: string, meta: string }} Absolute body path + its `.meta` sidecar path.
  */
-function fsPaths(root, bundle, kind, url) {
+function fsPaths(root, token, bundle, kind, url) {
     var sub = ( kind === 'data' ) ? '/data' : '/html';
     var ext = ( kind === 'data' ) ? '.json' : '.html';
     if ( url.endsWith('/') ) {
         url += 'index';
     }
-    var body = _(root + '/' + bundle + sub + url + ext, true);
+    var ns   = token ? ('/' + token) : '';
+    var body = _(root + '/' + bundle + ns + sub + url + ext, true);
     return { body: body, meta: body + '.meta' };
 }
 
 /**
  * Parse an `fs`-eligible cache key into the pieces needed to reconstruct its
- * on-disk path. Keys are `<static|data>:<bundle>:<url>` — the url may itself
- * contain colons (querystrings), so only the FIRST two colons are structural.
+ * on-disk path. Key shape: `[<token>:]<static|data>:<bundle>:<url>` (the
+ * optional leading segment is the release namespace `buildKey` prepends). The
+ * url may itself contain colons (querystrings), so it is the rejoined
+ * remainder; `buildKey` sanitizes the token to `[A-Za-z0-9._-]` (no colon), so
+ * the leading segments split unambiguously.
  *
  * `static:` → HTML kind, `data:` → JSON kind (mirrors the delegate write:
  * swig/nunjucks write `static:`+kind `html`, json writes `data:`+kind `data`).
@@ -81,30 +89,50 @@ function fsPaths(root, bundle, kind, url) {
  *
  * @inner
  * @param {string} key
- * @returns {{ kind: string, bundle: string, url: string }|null}
+ * @returns {{ token: string, kind: string, bundle: string, url: string }|null}
  */
 function parseFsKey(key) {
     if ( typeof(key) != 'string' ) {
         return null;
     }
-    var i1 = key.indexOf(':');
-    if ( i1 < 0 ) {
-        return null;
+    var parts = key.split(':');
+    var idx   = 0;
+    var token = '';
+    // A leading segment that is not the kind prefix is the release namespace.
+    if ( parts[0] !== 'static' && parts[0] !== 'data' ) {
+        token = parts[0];
+        idx   = 1;
     }
-    var prefix = key.slice(0, i1);
+    var prefix = parts[idx];
     if ( prefix !== 'static' && prefix !== 'data' ) {
         return null;
     }
-    var i2 = key.indexOf(':', i1 + 1);
-    if ( i2 < 0 ) {
-        return null;
-    }
-    var bundle = key.slice(i1 + 1, i2);
-    var url    = key.slice(i2 + 1);
+    var bundle = parts[idx + 1];
+    var url    = parts.slice(idx + 2).join(':');
     if ( !bundle || !url ) {
         return null;
     }
-    return { kind: ( prefix === 'data' ) ? 'data' : 'html', bundle: bundle, url: url };
+    return { token: token, kind: ( prefix === 'data' ) ? 'data' : 'html', bundle: bundle, url: url };
+}
+
+/**
+ * Resolve the release-namespace token that scopes output-cache keys +
+ * fs paths: `GINA_CACHE_NAMESPACE` (an operator-set per-deploy id — a git SHA
+ * / build number) wins; else `GINA_VERSION` (set at runtime, so the cache
+ * auto-invalidates on a framework upgrade); else '' (the flat, pre-namespace
+ * layout). Sanitized to a safe identifier so it is usable as BOTH a
+ * colon-delimited key segment and an fs path segment. Read fresh each call —
+ * process env is stable, and this keeps it test-controllable.
+ *
+ * @inner
+ * @returns {string}
+ */
+function resolveReleaseToken() {
+    var ns = '';
+    if ( typeof(getEnvVar) === 'function' ) {
+        ns = getEnvVar('GINA_CACHE_NAMESPACE') || getEnvVar('GINA_VERSION') || '';
+    }
+    return String(ns).replace(/[^A-Za-z0-9._-]/g, '_');
 }
 
 /**
@@ -166,7 +194,7 @@ function RenderCache(options) {
         if ( !p ) {
             return null;
         }
-        return fsPaths(_cachePath, p.bundle, p.kind, p.url).body;
+        return fsPaths(_cachePath, p.token, p.bundle, p.kind, p.url).body;
     }
 
     /**
@@ -273,6 +301,29 @@ function RenderCache(options) {
     };
 
     /**
+     * Build a fully-namespaced output-cache key: `[<token>:]<kind>:<bundle>:<url>`,
+     * where `<token>` is the resolved release namespace
+     * (`GINA_CACHE_NAMESPACE || GINA_VERSION || ''`). Empty token → the flat,
+     * pre-namespace format (`<kind>:<bundle>:<url>`, unchanged).
+     *
+     * The SINGLE source of the key format — the 3 render delegates (write) and
+     * the server read path all call this, so the writer/reader key can never
+     * drift (the #C3 bundle-namespace bug was exactly such a drift). Only scope
+     * the two output namespaces through here: `static:` (HTML) and `data:`
+     * (JSON) — never `swig:` (compiled templates) or `http2session:`.
+     *
+     * @memberof RenderCache
+     * @param {string} kind   - 'static' (HTML) | 'data' (JSON).
+     * @param {string} bundle - Bundle name.
+     * @param {string} url    - Request URL (`req.originalUrl` on write, `request.url` on read).
+     * @returns {string} The namespaced cache key.
+     */
+    instance.buildKey = function(kind, bundle, url) {
+        var token = resolveReleaseToken();
+        return ( token ? token + ':' : '' ) + kind + ':' + bundle + ':' + url;
+    };
+
+    /**
      * Store a rendered entry under `key`, dispatching on strategy `type`.
      *
      * Behaviour-identical extraction of the memory/fs branch previously inlined
@@ -312,7 +363,13 @@ function RenderCache(options) {
         }
 
         if ( /^fs$/i.test(type) ) {
-            var p        = fsPaths(payload.path, payload.bundle, payload.kind, payload.url);
+            // The release namespace comes from the key (buildKey embedded it);
+            // bundle/kind/url come from the payload (== the key's, by the
+            // delegate's own buildKey call), so the write filename and the
+            // read-back filename (fsBodyFor, also key-derived) cannot drift.
+            var _pk      = parseFsKey(key);
+            var _token   = _pk ? _pk.token : '';
+            var p        = fsPaths(payload.path, _token, payload.bundle, payload.kind, payload.url);
             var filename = p.body;
             var dir      = filename.split(/\//g).slice(0, -1).join('/');
             var dirObj   = new _(dir);

@@ -50,8 +50,10 @@ async function writeCache(bundle, opt, jsonContent, req, res, cacheIsEnabled, th
     ) {
         return;
     }
-    // before: "data:" + originalUrl only  (#C3 — added bundle namespace to prevent silent collisions when two bundles serve the same URL path)
-    var cacheKey = "data:" + bundle + ":" + req.originalUrl;
+    // Fully-namespaced key via the single builder (#C3 bundle namespace +
+    // the release namespace both live in renderCache.buildKey — writer/reader
+    // share ONE format so they can't drift).
+    var cacheKey = renderCache.buildKey('data', bundle, req.originalUrl);
     var responseHeaders = res.getHeaders() || {};
 
     // Caching kinds are: `memory` & `fs`

@@ -1840,11 +1840,14 @@ function ServerEngineClass(options) {
                     renderCache.from(server._cached, options.cachePath);
                     var cacheKey        = null
                         , hasCachedKey  = false
-                        // before: ['data:', 'static:']  (#C3 — bundle namespace prevents silent cache collisions)
-                        , keyPrefixes   = ['data:' + options.bundle + ':', 'static:' + options.bundle + ':']
+                        // Output-cache kinds, in check order (data first, then static).
+                        // buildKey prepends the release namespace + bundle — the SAME
+                        // format the render delegates write with, so a hit never misses
+                        // on writer/reader key drift (#C3).
+                        , cacheKinds     = ['data', 'static']
                     ;
-                    for (let p=0, pLen=keyPrefixes.length; p<pLen; p++ ) {
-                        cacheKey = keyPrefixes[p] + request.url;
+                    for (let p=0, pLen=cacheKinds.length; p<pLen; p++ ) {
+                        cacheKey = renderCache.buildKey(cacheKinds[p], options.bundle, request.url);
                         if ( renderCache.has(cacheKey) ) {
                             hasCachedKey = true;
                             break;
@@ -1948,7 +1951,7 @@ function ServerEngineClass(options) {
 
                     cacheKey        = null;
                     hasCachedKey    = null;
-                    keyPrefixes     = null;
+                    cacheKinds      = null;
                 } // EO if ( request.method.toUpperCase() === 'GET' )
             } // EO if (!isCacheless)
 

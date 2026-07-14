@@ -2142,13 +2142,14 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         );
     });
 
-    it('namespaces the cache key as "static:<bundle>:<originalUrl>" (#C3)', function () {
-        // Matches render-swig.js:47 and render-json.js:40. The bundle
-        // namespace prevents two bundles serving the same URL path from
-        // silently reading each other's cached bytes.
+    it('builds the cache key via renderCache.buildKey("static", bundle, req.originalUrl) (#C3)', function () {
+        // Centralized in renderCache.buildKey — the single key-format source
+        // shared by the 3 render delegates + the server read path. It prepends
+        // the release namespace (GINA_CACHE_NAMESPACE || GINA_VERSION) and the
+        // #C3 bundle namespace, so the writer/reader key can never drift.
         assert.match(
             RENDER_NJ_SRC,
-            /var\s+cacheKey\s*=\s*"static:"\s*\+\s*bundle\s*\+\s*":"\s*\+\s*\breq\.originalUrl/
+            /var\s+cacheKey\s*=\s*renderCache\.buildKey\(\s*['"]static['"]\s*,\s*bundle\s*,\s*\breq\.originalUrl\s*\)/
         );
     });
 
@@ -2370,6 +2371,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         function makeFn() {
             stubCalls = { cacheHas: 0, cacheSet: 0, writeFile: 0 };
             var renderCacheStub = {
+                buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { stubCalls.cacheHas++; return false; },
                 set: function () { stubCalls.cacheSet++; return Promise.resolve(); },
                 setEvents: function () {}
@@ -2408,6 +2410,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             var fn = new Function('cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
             )({ has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
+                buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { return false; },
                 set: function (type, k, v, payload) { captured = { type: type, key: k, value: v, payload: payload }; return Promise.resolve(); },
                 setEvents: function () {}
@@ -2440,6 +2443,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             var fn = new Function('cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
             )({ has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
+                buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { return false; },
                 set: function (type, k, v) { captured = v; return Promise.resolve(); },
                 setEvents: function () {}
@@ -2465,6 +2469,7 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             var fn = new Function('cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
             )({ has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
+                buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { return false; },
                 set: function (type, k, v) { captured.type = type; captured.key = k; captured.value = v; return Promise.resolve(); },
                 setEvents: function () {}

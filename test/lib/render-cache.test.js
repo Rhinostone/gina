@@ -480,3 +480,103 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 08 — release-namespaced keys: buildKey + fs cross-namespace invalidation (Slice 2)
+//
+// buildKey prepends GINA_CACHE_NAMESPACE || GINA_VERSION (sanitized) so a
+// redeploy / framework upgrade auto-invalidates the cache; the token is also an
+// fs path segment (<bundle>/<token>/…) so a namespace change lands NEW files in
+// a fresh dir and the read-back never serves cross-namespace stale content.
+// getEnvVar/setEnvVar are injected by require(FW+'/helpers'); in this harness
+// both env keys start unset → the flat, pre-namespace format (back-compat).
+// ---------------------------------------------------------------------------
+describe('08 - release-namespaced keys (buildKey + fs invalidation)', function () {
+    var rc;
+    beforeEach(function () { rc = freshRc(); });
+    afterEach(function () {
+        try { rc.clear(); } catch (e) {}
+        // Reset the env so a namespace never leaks into the next test.
+        if (process.gina) { delete process.gina.GINA_CACHE_NAMESPACE; delete process.gina.GINA_VERSION; }
+    });
+
+    it('buildKey with no namespace env → flat kind:bundle:url (back-compat)', function () {
+        assert.equal(rc.buildKey('static', 'demo', '/page'), 'static:demo:/page');
+        assert.equal(rc.buildKey('data', 'demo', '/api'), 'data:demo:/api');
+    });
+
+    it('buildKey prepends GINA_CACHE_NAMESPACE', function () {
+        setEnvVar('GINA_CACHE_NAMESPACE', 'rel1');
+        assert.equal(rc.buildKey('static', 'demo', '/page'), 'rel1:static:demo:/page');
+    });
+
+    it('buildKey falls back to GINA_VERSION when the namespace is unset', function () {
+        setEnvVar('GINA_VERSION', '0.5.18-alpha.2');
+        assert.equal(rc.buildKey('static', 'demo', '/'), '0.5.18-alpha.2:static:demo:/');
+    });
+
+    it('GINA_CACHE_NAMESPACE wins over GINA_VERSION', function () {
+        setEnvVar('GINA_VERSION', '0.5.18-alpha.2');
+        setEnvVar('GINA_CACHE_NAMESPACE', 'deploy-42');
+        assert.equal(rc.buildKey('data', 'demo', '/x'), 'deploy-42:data:demo:/x');
+    });
+
+    it('sanitizes an unsafe namespace to a path/key-safe identifier', function () {
+        setEnvVar('GINA_CACHE_NAMESPACE', 'a/b:c d');            // slash, colon, space → _
+        assert.equal(rc.buildKey('static', 'demo', '/p'), 'a_b_c_d:static:demo:/p');
+    });
+
+    it('fs write + read-back under a namespace: file lives in the <token> dir', async function () {
+        setEnvVar('GINA_CACHE_NAMESPACE', 'relA');
+        var key = rc.buildKey('static', 'nsbundle', '/page');   // relA:static:nsbundle:/page
+        await rc.set('fs', key, { ttl: 300 }, { content: '<h1>ns</h1>', path: tmpRoot, bundle: 'nsbundle', url: '/page', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        assert.ok(file.endsWith('/nsbundle/relA/html/page.html'), 'token is a path segment: ' + file);
+        assert.equal(fs.existsSync(file), true);
+
+        // Post-restart read-back under the SAME namespace recovers it.
+        rc.from(new Map(), tmpRoot);
+        assert.equal(rc.has(key), true);
+        assert.ok(rc.get(key), 'read-back reconstructs the namespaced entry');
+        rc.clear();
+    });
+
+    it('a namespace change INVALIDATES the fs read-back (different <token> dir)', async function () {
+        // Write under relA.
+        setEnvVar('GINA_CACHE_NAMESPACE', 'relA');
+        var keyA = rc.buildKey('static', 'inv', '/page');       // relA:static:inv:/page
+        await rc.set('fs', keyA, { ttl: 300 }, { content: 'OLD', path: tmpRoot, bundle: 'inv', url: '/page', kind: 'html' });
+        var fileA = String(rc.get(keyA).filename);
+        assert.ok(fileA.endsWith('/inv/relA/html/page.html'));
+
+        // Redeploy: namespace → relB. setEnvVar refuses to overwrite an existing
+        // value (a real redeploy is a fresh process), so clear it first.
+        delete process.gina.GINA_CACHE_NAMESPACE;
+        setEnvVar('GINA_CACHE_NAMESPACE', 'relB');
+        rc.from(new Map(), tmpRoot);
+        var keyB = rc.buildKey('static', 'inv', '/page');       // relB:static:inv:/page
+        assert.notEqual(keyB, keyA, 'the key changed with the namespace');
+        assert.equal(rc.has(keyB), false, 'no relB file → read-back misses (invalidated)');
+        assert.equal(rc.get(keyB), undefined, 'the old relA content is NOT served under relB');
+        // The relA file is untouched on disk (orphaned; Slice 3 flush cleans it).
+        assert.equal(fs.existsSync(fileA), true, 'old-namespace file orphaned, not overwritten');
+        rc.clear();
+    });
+
+    it('write path == read-back path under a namespace (parseFsKey round-trip)', async function () {
+        // The whole feature hinges on the write filename (set, token from the key)
+        // and the read-back filename (get→fsBodyFor, token from the key) agreeing.
+        setEnvVar('GINA_CACHE_NAMESPACE', 'rt');
+        var key = rc.buildKey('data', 'rtb', '/api/users');     // rt:data:rtb:/api/users
+        await rc.set('fs', key, { ttl: 300 }, { content: '{"ok":1}', path: tmpRoot, bundle: 'rtb', url: '/api/users', kind: 'data' });
+        var written = String(rc.get(key).filename);
+        assert.ok(written.endsWith('/rtb/rt/data/api/users.json'), 'namespaced data path: ' + written);
+
+        rc.from(new Map(), tmpRoot);                            // restart
+        var back = rc.get(key);
+        assert.ok(back, 'read-back finds the same namespaced file');
+        assert.equal(String(back.filename), written, 'write path == read-back path');
+        rc.clear();
+    });
+});

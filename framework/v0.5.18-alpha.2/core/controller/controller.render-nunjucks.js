@@ -881,9 +881,10 @@ async function writeCache(local, self, bundle, opt, htmlContent, req, res) {
     ) {
         return;
     }
-    // Bundle namespace prevents silent collisions when two bundles serve the
-    // same URL path — matches render-swig.js:47 and render-json.js:40 (#C3).
-    var cacheKey = "static:" + bundle + ":" + req.originalUrl;
+    // Fully-namespaced key via the single builder (#C3 bundle namespace +
+    // the release namespace both live in renderCache.buildKey — writer/reader
+    // share ONE format so they can't drift).
+    var cacheKey = renderCache.buildKey('static', bundle, req.originalUrl);
     var responseHeaders = res.getHeaders() || {};
     if ( !renderCache.has(cacheKey) ) {
         // Caching kinds are: `memory` & `fs`
