@@ -481,14 +481,115 @@ function RenderCache(options) {
     };
 
     /**
-     * Clear the whole store. Per-bundle / namespace-scoped clearing arrives
-     * with the flush slice.
+     * Flush the output/render cache — the `static:` (HTML) and `data:` (JSON)
+     * namespaces only. Never touches `swig:` (compiled templates) or
+     * `http2session:` entries, which have their own lifecycle. Optionally scoped
+     * to a single `bundle` (matches the key's bundle segment across ALL release
+     * tokens present in the Map).
+     *
+     * Each matched key is routed through the underlying `delete`, so its expiry
+     * timer is cleared AND its cleanup fn runs — for an `fs` entry that removes
+     * the CURRENT-namespace body + `.meta` from disk. Old-namespace fs orphans (a
+     * prior release token's dir) are NOT touched here — an in-process flush
+     * leaves them (already token-invalidated on read-back, so never served);
+     * `clearFsBundle()` reclaims them from the offline CLI path.
+     *
+     * Synchronous: pair a `from(store)` + `clear()` in one tick so the shared Map
+     * cannot be re-pointed between them.
      *
      * @memberof RenderCache
-     * @returns {void}
+     * @param {string} [bundle] - Restrict the flush to this bundle's output entries.
+     * @returns {number} The number of entries removed.
      */
-    instance.clear = function() {
-        return mem.clear();
+    instance.clear = function(bundle) {
+        var removed = 0;
+        var keys    = mem.keys();
+        for (var i = 0; i < keys.length; i++) {
+            var p = parseFsKey(keys[i]);
+            // parseFsKey is null for any non-output namespace (swig: /
+            // http2session: / anything else) — those are never flushed here.
+            if ( !p ) {
+                continue;
+            }
+            if ( bundle && p.bundle !== bundle ) {
+                continue;
+            }
+            try {
+                if ( mem.delete(keys[i]) ) {
+                    removed++;
+                }
+            } catch (e) {
+                // Mirror lib/cache clear()'s per-entry isolation: a throwing
+                // cleanup fn must not abort the sweep.
+            }
+        }
+        return removed;
+    };
+
+    /**
+     * Reclaim a bundle's `fs`-strategy render output from disk — the OFFLINE
+     * counterpart to `clear()`. Where `clear()` removes the CURRENT-namespace
+     * files via the in-Map entries' cleanup fns, this removes ALL of a bundle's
+     * render-output dirs directly, including orphaned prior-release token dirs
+     * that survive a namespace change (`buildKey`'s token is an fs path segment,
+     * so a redeploy lands new files in a fresh dir and abandons the old one).
+     *
+     * Under `<root>/<bundle>/` the render output lives in the `html`/`data`
+     * subtrees — either directly (the flat, empty-token layout) or nested one
+     * level under a release token (`<token>/html`, `<token>/data`). The two
+     * SIBLING dirs `config` (the boot-time routing-asset cache) and `swig` (the
+     * compiled-layout cache) are NOT render output and are preserved.
+     *
+     * Consequently `config` and `swig` are RESERVED names: a release namespace
+     * (`GINA_CACHE_NAMESPACE`) must not be either, or its token dir would be
+     * mistaken for the infra cache and skipped.
+     *
+     * Best-effort: a missing bundle dir (nothing cached yet) or an un-removable
+     * child is not an error.
+     *
+     * @memberof RenderCache
+     * @param {string}  root              - Cache root (`server.cache.path` / the top-level `cachePath`).
+     * @param {string}  bundle            - Bundle name.
+     * @param {object}  [options]
+     * @param {boolean} [options.dryRun]  - Report what WOULD be removed without removing it
+     *                                      (so a `--dry-run` preview and a real run resolve
+     *                                      the same set from the same code — the CLI never
+     *                                      re-implements the layout).
+     * @returns {string[]} Absolute paths of the dirs removed (or, on a dry run, that would be).
+     */
+    instance.clearFsBundle = function(root, bundle, options) {
+        options = options || {};
+        var dryRun  = ( options.dryRun === true );
+        var removed = [];
+        if ( !root || !bundle ) {
+            return removed;
+        }
+        var bundleDir = root + '/' + bundle;
+        // Siblings of the render-output dirs that are NOT render output.
+        var preserve  = { config: true, swig: true };
+        var children;
+        try {
+            children = fs.readdirSync(bundleDir, { withFileTypes: true });
+        } catch (e) {
+            // No cache dir for this bundle → nothing to reclaim.
+            return removed;
+        }
+        for (var i = 0; i < children.length; i++) {
+            var name = children[i].name;
+            if ( preserve[name] || !children[i].isDirectory() ) {
+                continue;
+            }
+            var target = bundleDir + '/' + name;
+            if ( dryRun ) {
+                removed.push(target);
+                continue;
+            }
+            try {
+                fs.rmSync(target, { recursive: true, force: true });
+                removed.push(target);
+            } catch (e) { /* best-effort */ }
+        }
+        return removed;
     };
 
     /**

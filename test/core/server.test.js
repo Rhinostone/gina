@@ -744,6 +744,32 @@ describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function
         assert.ok(blk.indexOf('.stats()') > -1, 'must serialise cache.stats()');
     });
 
+    // ── /_gina/cache/clear (#RC — Slice 3 cross-strategy flush) ─────────────
+    it('/_gina/cache/clear handler is POST-gated + admin-gated (403 on deny)', function () {
+        var clearAt = src.indexOf('/_gina/cache/clear');
+        var jobsAt  = src.indexOf('_gina\\/jobs\\/', clearAt);
+        assert.ok(clearAt > -1, '/_gina/cache/clear regex anchor not found in server.js');
+        assert.ok(jobsAt > clearAt, '/_gina/jobs anchor must follow /_gina/cache/clear');
+        var blk = src.slice(clearAt, jobsAt);
+        assert.ok(/method\.toUpperCase\(\) === 'POST'/.test(blk),
+            '/_gina/cache/clear must gate on POST (a flush is a mutation, not a safe GET)');
+        assert.ok(blk.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/cache/clear handler must invoke lib.admin.isClientAllowed(request) before flushing');
+        assert.ok(blk.indexOf('statusCode = 403') > -1,
+            '/_gina/cache/clear handler must return 403 on deny');
+    });
+
+    it('/_gina/cache/clear flushes via lib.RenderCache scoped clear(bundle) — not lib.Cache whole-store', function () {
+        var clearAt = src.indexOf('/_gina/cache/clear');
+        var jobsAt  = src.indexOf('_gina\\/jobs\\/', clearAt);
+        var blk     = src.slice(clearAt, jobsAt);
+        assert.ok(blk.indexOf('new lib.RenderCache()') > -1,
+            'must use the render-cache dispatcher (scoped to static:/data:), never lib.Cache().clear() which wipes swig:/http2session:');
+        assert.ok(blk.indexOf('.from(self.instance._cached)') > -1, 'must adopt the shared self.instance._cached Map');
+        assert.ok(/\.clear\(_cacheClearBundle\)/.test(blk), 'must call the scoped clear(bundle)');
+        assert.ok(blk.indexOf("get('bundle')") > -1, 'must honour the optional ?bundle= filter');
+    });
+
     // ── pure-logic replica (mirrors server.isaac.test.js §08b) ──────────────
     // Inline replica of isAdminClientAllowed; takes the allowlist as a param
     // so every branch is exercised without touching process.gina state. The

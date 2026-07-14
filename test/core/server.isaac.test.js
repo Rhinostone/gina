@@ -1101,6 +1101,32 @@ describe('08 - #S7 admin /_gina/* IP allowlist source structure', function() {
             '/_gina/cache/stats handler must return 403 on deny');
     });
 
+    // ── /_gina/cache/clear (#RC — Slice 3 cross-strategy flush) ─────────────
+    it('/_gina/cache/clear handler is POST-gated + admin-gated (403 on deny)', function() {
+        var clearMatch = src.indexOf('/_gina/cache/clear');
+        var jobsMatch  = src.indexOf('/_gina\\/jobs', clearMatch);
+        assert.ok(clearMatch > -1, '/_gina/cache/clear regex anchor not found');
+        var blk = src.slice(clearMatch, jobsMatch > clearMatch ? jobsMatch : clearMatch + 2000);
+        assert.ok(/method\.toUpperCase\(\) === 'POST'/.test(blk),
+            '/_gina/cache/clear must gate on POST (a flush is a mutation, not a safe GET)');
+        assert.ok(blk.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/cache/clear handler must invoke lib.admin.isClientAllowed(request) before flushing');
+        assert.ok(blk.indexOf("':status': 403") > -1 || blk.indexOf(', 403') > -1,
+            '/_gina/cache/clear handler must return 403 on deny');
+    });
+
+    it('/_gina/cache/clear flushes via renderCache scoped clear(bundle) + keeps the dual HTTP/2 + HTTP/1.1 write', function() {
+        var clearMatch = src.indexOf('/_gina/cache/clear');
+        var jobsMatch  = src.indexOf('/_gina\\/jobs', clearMatch);
+        var blk = src.slice(clearMatch, jobsMatch > clearMatch ? jobsMatch : clearMatch + 2000);
+        assert.ok(blk.indexOf('renderCache.from(server._cached)') > -1, 'must adopt the shared server._cached Map');
+        assert.ok(/renderCache\.clear\(cacheClearBundle\)/.test(blk),
+            'must call the scoped clear(bundle) on the render-cache dispatcher (never lib.Cache whole-store)');
+        assert.ok(blk.indexOf("get('bundle')") > -1, 'must honour the optional ?bundle= filter');
+        assert.ok(blk.indexOf('response.stream.respond') > -1 && blk.indexOf('response.writeHead(200') > -1,
+            'must keep the isaac dual HTTP/2 (stream.respond) + HTTP/1.1 (writeHead) response');
+    });
+
     it('gna.js wires the admin allowlist init alongside the metrics init block', function() {
         var gnaSrc = fs.readFileSync(path.join(require('../fw'), 'core/gna.js'), 'utf8');
         assert.ok(
@@ -1267,13 +1293,18 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
     });
 
-    it('exactly 17 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+    it('exactly 19 object-literal sites wrap headers via _setPoweredByHeader({', function() {
         // 16 sites through #INS9b; #INS10 added the 17th — the GET/POST
         // /_gina/instrument control handler wraps its reply headers via the
         // helper so the deny/status responses honour server.hidePoweredBy.
+        // #RC (Slice 3 — cross-strategy flush) added the 18th + 19th: the POST
+        // /_gina/cache/clear handler wraps BOTH its 403-deny and its 200-ok
+        // reply headers via the helper, mirroring the sibling
+        // /_gina/cache/stats handler, so the flush response honours
+        // server.hidePoweredBy too.
         var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
-        assert.equal(matches && matches.length, 17,
-            'expected 17 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+        assert.equal(matches && matches.length, 19,
+            'expected 19 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
     });
 
     it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {

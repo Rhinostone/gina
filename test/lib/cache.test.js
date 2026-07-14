@@ -285,3 +285,42 @@ describe('05 - event invalidation', function () {
         assert.equal(cache._events.length, 2);
     });
 });
+
+
+describe('06 - keys()', function () {
+    it('returns every key held — object- AND string-valued (unlike stats(), which drops strings)', function () {
+        var cache = new Cache();
+        cache.from(new Map());
+        cache.set('static:demo:/a', { v: 1 });
+        cache.set('data:demo:/b',   { v: 2 });
+        cache.set('plain-string',   'a raw string value');   // stats() would omit this
+        var keys = cache.keys();
+        assert.ok(Array.isArray(keys), 'returns an array');
+        assert.equal(keys.length, 3);
+        assert.ok(keys.indexOf('static:demo:/a') > -1);
+        assert.ok(keys.indexOf('data:demo:/b') > -1);
+        assert.ok(keys.indexOf('plain-string') > -1, 'includes string-valued entries');
+    });
+
+    it('returns [] for an empty cache and yields a snapshot (not a live view)', function () {
+        var cache = new Cache();
+        cache.from(new Map());
+        assert.deepEqual(cache.keys(), []);
+        cache.set('k', { v: 1 });
+        var snap = cache.keys();
+        assert.equal(snap.length, 1);
+        cache.delete('k');
+        assert.equal(snap.length, 1, 'the earlier snapshot is unaffected by a later delete');
+        assert.equal(cache.keys().length, 0, 'a fresh keys() reflects the delete');
+    });
+
+    it('keys() is complete where stats() is lossy', function () {
+        var cache = new Cache();
+        cache.from(new Map());
+        cache.set('obj', { v: 1 });
+        cache.set('str', 'raw');
+        var statsKeys = cache.stats().entries.map(function (e) { return e.key; });
+        assert.ok(statsKeys.indexOf('str') < 0, 'stats() drops the string entry');
+        assert.ok(cache.keys().indexOf('str') > -1, 'keys() keeps it');
+    });
+});

@@ -1245,6 +1245,56 @@ function ServerEngineClass(options) {
                 return response.end(cacheStatsData);
             }
 
+            // ── /_gina/cache/clear — flush the render/output cache (always-on, admin-gated) ──
+            // (#RC) POST only — a cache flush is a mutation, never a safe/idempotent
+            // GET. Same admin IP allowlist as /_gina/cache/stats. Scoped to the
+            // static:/data: output namespaces via renderCache.clear() — never wipes
+            // swig: compiled templates or http2session: entries. Optional
+            // ?bundle=<name> restricts the flush to one bundle. Current-namespace fs
+            // bodies are removed via the entries' cleanup fns; old-namespace fs
+            // orphans are reclaimed by the CLI (gina cache:clear), not in-process.
+            if ( request.method.toUpperCase() === 'POST' && /\/_gina\/cache\/clear(\?.*)?$/i.test(request.url) ) {
+
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    var cacheClearForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/cache/clear: client IP not in app.json admin.allowFrom' });
+                    var cacheClearForbiddenHeaders = _setPoweredByHeader({
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'pragma':        'no-cache',
+                        'expires':       '0',
+                        'content-type':  'application/json; charset=utf8'
+                    });
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ...cacheClearForbiddenHeaders });
+                        return response.stream.end(cacheClearForbiddenBody);
+                    }
+                    response.writeHead(403, cacheClearForbiddenHeaders);
+                    return response.end(cacheClearForbiddenBody);
+                }
+
+                var cacheClearBundle = null;
+                var cacheClearQi     = request.url.indexOf('?');
+                if ( cacheClearQi > -1 ) {
+                    cacheClearBundle = new URLSearchParams(request.url.slice(cacheClearQi + 1)).get('bundle') || null;
+                }
+                renderCache.from(server._cached);
+                var cacheClearedCount   = renderCache.clear(cacheClearBundle);
+                const cacheClearData    = JSON.stringify({ ok: true, bundle: cacheClearBundle, cleared: cacheClearedCount });
+                const cacheClearHeaders = _setPoweredByHeader({
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    'pragma': 'no-cache',
+                    'expires': '0',
+                    'content-type': 'application/json; charset=utf8'
+                });
+                // HTTP/2 (Multiplexing)
+                if (response.stream) {
+                    response.stream.respond({ ':status': 200, ...cacheClearHeaders });
+                    return response.stream.end(cacheClearData);
+                }
+                // Fallback HTTP/1.1
+                response.writeHead(200, cacheClearHeaders);
+                return response.end(cacheClearData);
+            }
+
             // ── /_gina/jobs/:id — async-job status (#AI6 slice 3) ────────────────
             // Always-on, state-only: returns lib.job.toStatusView (id + state +
             // timestamps), never result / error. Engine-agnostic handler lives in

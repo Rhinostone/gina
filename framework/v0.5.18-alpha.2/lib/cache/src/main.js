@@ -317,6 +317,27 @@ function Cache(options) {
     }
 
     /**
+     * Returns every key currently held, as a plain array snapshot. Complete —
+     * unlike `stats()`, which classifies entries and drops non-object values,
+     * this lists ALL keys (object- and string-valued alike). Cheap: a shallow
+     * copy of the backing Map's key iterator, no per-entry work.
+     *
+     * The intended consumer is a scoped/namespaced sweep (e.g. `lib/render-cache`
+     * flushing only the `static:`/`data:` output namespaces): enumerate `keys()`,
+     * filter, then route each match through `delete(key)` (which clears the timer
+     * and runs the cleanup fn).
+     *
+     * @memberof Cache
+     * @returns {string[]} A snapshot of the current cache keys.
+     * @example
+     * cache.from(serverInstance._cached);
+     * cache.keys().filter(function (k) { return /^static:/.test(k); });
+     */
+    instance['keys'] = function() {
+        return Array.from(cache.keys());
+    }
+
+    /**
      * Returns a snapshot of the current cache state.
      *
      * Entry type is inferred from the key prefix and value properties:

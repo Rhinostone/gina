@@ -580,3 +580,180 @@ describe('08 - release-namespaced keys (buildKey + fs invalidation)', function (
         rc.clear();
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 09 — cross-strategy flush: scoped clear(bundle?) + clearFsBundle (Slice 3)
+//
+// clear() is re-scoped to the output namespaces (static:/data:, across every
+// release token in the Map) and optionally filtered by bundle — it NEVER touches
+// swig: (compiled templates) or http2session: entries. Each match routes through
+// delete() so its timer is cleared AND its cleanup fn runs (fs body + .meta).
+// clearFsBundle() is the OFFLINE disk-reclamation counterpart: it removes a
+// bundle's render-output dirs (html/data + token dirs) directly — reclaiming
+// old-namespace orphans a Map-scoped clear() cannot reach — while preserving the
+// config/ (routing) + swig/ (layout) infra caches.
+// ---------------------------------------------------------------------------
+describe('09 - cross-strategy flush (scoped clear + clearFsBundle)', function () {
+    var Cache = require(path.join(FW, 'lib/cache/src/main'));
+
+    afterEach(function () {
+        if (process.gina) { delete process.gina.GINA_CACHE_NAMESPACE; delete process.gina.GINA_VERSION; }
+    });
+
+    it('clear() removes ALL output-namespace entries and returns the count', async function () {
+        var rc = freshRc();
+        await rc.set('memory', 'static:demo:/a', {}, { content: 'a' });
+        await rc.set('memory', 'data:demo:/b',   {}, { content: 'b' });
+        var n = rc.clear();
+        assert.equal(n, 2, 'returns the number removed');
+        assert.equal(rc.has('static:demo:/a'), false);
+        assert.equal(rc.has('data:demo:/b'), false);
+        assert.equal(rc.stats().size, 0);
+    });
+
+    it('clear() NEVER evicts swig: / http2session: entries', async function () {
+        var shared = new Map();
+        var rc  = new RenderCache({ store: shared });
+        var raw = new Cache(); raw.from(shared);            // same module-singleton Map
+        raw.set('swig:layouts/main',          { compiled: true });
+        raw.set('http2session:host.example',  { session: true });
+        await rc.set('memory', 'static:demo:/x', {}, { content: 'x' });
+
+        var n = rc.clear();
+        assert.equal(n, 1, 'only the one output entry was removed');
+        assert.equal(shared.has('swig:layouts/main'), true, 'compiled template survives');
+        assert.equal(shared.has('http2session:host.example'), true, 'http2 session survives');
+        assert.equal(shared.has('static:demo:/x'), false, 'output entry flushed');
+        rc.clear();
+    });
+
+    it('clear(bundle) flushes only that bundle; other bundles survive', async function () {
+        var rc = freshRc();
+        await rc.set('memory', 'static:alpha:/1', {}, { content: '1' });
+        await rc.set('memory', 'data:alpha:/2',   {}, { content: '2' });
+        await rc.set('memory', 'static:beta:/3',  {}, { content: '3' });
+
+        var n = rc.clear('alpha');
+        assert.equal(n, 2, 'both alpha entries removed');
+        assert.equal(rc.has('static:alpha:/1'), false);
+        assert.equal(rc.has('data:alpha:/2'), false);
+        assert.equal(rc.has('static:beta:/3'), true, 'beta untouched');
+        rc.clear();
+    });
+
+    it('clear(bundle) matches the bundle segment across release tokens', async function () {
+        var rc = freshRc();
+        await rc.set('memory', 'static:demo:/flat',       {}, { content: 'f' });   // empty-token
+        await rc.set('memory', 'relX:static:demo:/nsd',   {}, { content: 'n' });   // namespaced
+        await rc.set('memory', 'relX:static:other:/keep', {}, { content: 'k' });
+
+        var n = rc.clear('demo');
+        assert.equal(n, 2, 'both demo tokens removed');
+        assert.equal(rc.has('static:demo:/flat'), false);
+        assert.equal(rc.has('relX:static:demo:/nsd'), false);
+        assert.equal(rc.has('relX:static:other:/keep'), true, 'other bundle untouched');
+        rc.clear();
+    });
+
+    it('clear() runs the fs cleanup fn (current-namespace body + .meta removed)', async function () {
+        var rc  = freshRc();
+        var key = 'static:fsc:/page';
+        await rc.set('fs', key, { ttl: 300 }, { content: 'x', path: tmpRoot, bundle: 'fsc', url: '/page', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        assert.equal(fs.existsSync(file), true);
+        assert.equal(fs.existsSync(file + '.meta'), true);
+
+        var n = rc.clear('fsc');
+        assert.equal(n, 1);
+        assert.equal(fs.existsSync(file), false, 'body removed by cleanup fn');
+        assert.equal(fs.existsSync(file + '.meta'), false, '.meta removed by cleanup fn');
+    });
+
+    it('clear() returns 0 on an empty store / an unmatched bundle', function () {
+        var rc = freshRc();
+        assert.equal(rc.clear(), 0);
+        assert.equal(rc.clear('nope'), 0);
+    });
+
+    // --- clearFsBundle (offline disk reclamation) --------------------------
+    function seedBundleTree(root, bundle) {
+        // render output: empty-token html/data + a namespaced (orphaned) token dir
+        fs.mkdirSync(path.join(root, bundle, 'html'), { recursive: true });
+        fs.writeFileSync(path.join(root, bundle, 'html', 'page.html'), 'H');
+        fs.mkdirSync(path.join(root, bundle, 'data'), { recursive: true });
+        fs.writeFileSync(path.join(root, bundle, 'data', 'api.json'), '{}');
+        fs.mkdirSync(path.join(root, bundle, 'relOLD', 'html'), { recursive: true });
+        fs.writeFileSync(path.join(root, bundle, 'relOLD', 'html', 'old.html'), 'OLD');
+        // infra caches — must survive
+        fs.mkdirSync(path.join(root, bundle, 'config'), { recursive: true });
+        fs.writeFileSync(path.join(root, bundle, 'config', 'routing.json'), '{}');
+        fs.mkdirSync(path.join(root, bundle, 'swig', 'layouts'), { recursive: true });
+        fs.writeFileSync(path.join(root, bundle, 'swig', 'layouts', 'main.html'), 'L');
+    }
+
+    it('clearFsBundle removes render-output dirs (html/data + token) and preserves config/swig', function () {
+        var rc   = freshRc();
+        var root = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-fsb-'));
+        seedBundleTree(root, 'b1');
+
+        var removed = rc.clearFsBundle(root, 'b1');
+        assert.equal(fs.existsSync(path.join(root, 'b1', 'html')),   false, 'html render dir removed');
+        assert.equal(fs.existsSync(path.join(root, 'b1', 'data')),   false, 'data render dir removed');
+        assert.equal(fs.existsSync(path.join(root, 'b1', 'relOLD')), false, 'orphaned token dir removed');
+        assert.equal(fs.existsSync(path.join(root, 'b1', 'config', 'routing.json')),      true, 'routing cache preserved');
+        assert.equal(fs.existsSync(path.join(root, 'b1', 'swig', 'layouts', 'main.html')), true, 'swig layout cache preserved');
+        assert.equal(removed.length, 3, 'reports the three removed dirs');
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('clearFsBundle on a missing bundle dir / empty args is a no-op (returns [])', function () {
+        var rc = freshRc();
+        assert.deepEqual(rc.clearFsBundle(tmpRoot, 'does-not-exist'), []);
+        assert.deepEqual(rc.clearFsBundle('', 'x'), []);
+        assert.deepEqual(rc.clearFsBundle(tmpRoot, ''), []);
+    });
+
+    it('clearFsBundle({dryRun}) reports the SAME set it would remove, but removes nothing', function () {
+        var rc   = freshRc();
+        var root = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-dry-'));
+        seedBundleTree(root, 'b2');
+
+        var preview = rc.clearFsBundle(root, 'b2', { dryRun: true });
+        assert.equal(preview.length, 3, 'previews the three render dirs');
+        assert.equal(fs.existsSync(path.join(root, 'b2', 'html')),   true, 'dry run removed nothing');
+        assert.equal(fs.existsSync(path.join(root, 'b2', 'data')),   true);
+        assert.equal(fs.existsSync(path.join(root, 'b2', 'relOLD')), true);
+
+        // The preview and the real run resolve the same set from the same code —
+        // so a --dry-run can never disagree with what a real run does.
+        var removed = rc.clearFsBundle(root, 'b2');
+        assert.deepEqual(removed.sort(), preview.sort(), 'dry-run preview == real removal set');
+        assert.equal(fs.existsSync(path.join(root, 'b2', 'html')), false, 'real run removed them');
+        assert.equal(fs.existsSync(path.join(root, 'b2', 'config', 'routing.json')), true, 'config still preserved');
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+
+    it('SUBTRACT — a Map-scoped clear() leaves the old-namespace orphan that clearFsBundle reclaims', async function () {
+        var rc   = freshRc();
+        var root = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-orphan-'));
+        setEnvVar('GINA_CACHE_NAMESPACE', 'relOLD');
+        var keyOld  = rc.buildKey('static', 'orph', '/p');          // relOLD:static:orph:/p
+        await rc.set('fs', keyOld, { ttl: 300 }, { content: 'OLD', path: root, bundle: 'orph', url: '/p', kind: 'html' });
+        var oldFile = String(rc.get(keyOld).filename);
+        var oldDir  = path.join(root, 'orph', 'relOLD');
+        assert.equal(fs.existsSync(oldDir), true, 'relOLD dir written');
+
+        // Redeploy: fresh process → fresh (empty) Map + a new namespace. The old
+        // entry is no longer in the Map, so a Map-scoped clear() cannot reach it.
+        delete process.gina.GINA_CACHE_NAMESPACE;
+        setEnvVar('GINA_CACHE_NAMESPACE', 'relNEW');
+        rc.from(new Map(), root);
+        assert.equal(rc.clear('orph'), 0, 'Map-scoped clear removes nothing (fresh Map)');
+        assert.equal(fs.existsSync(oldFile), true, 'the orphaned old-namespace file survives the Map clear');
+
+        rc.clearFsBundle(root, 'orph');
+        assert.equal(fs.existsSync(oldDir), false, 'clearFsBundle reclaims the orphaned token dir');
+        fs.rmSync(root, { recursive: true, force: true });
+    });
+});

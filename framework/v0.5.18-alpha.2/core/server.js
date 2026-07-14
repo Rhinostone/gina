@@ -3134,6 +3134,39 @@ function Server(options) {
                 return response.end(JSON.stringify(_cacheStatsView.stats()));
             }
 
+            // ── /_gina/cache/clear — flush the render/output cache (always-on, admin-gated) ──
+            // (#RC) Engine-agnostic mirror of the Isaac handler. POST only — a
+            // cache flush is a mutation, never a safe/idempotent GET (a GET could
+            // be fired by a prefetch/crawler). Same admin IP allowlist as
+            // /_gina/cache/stats. Scoped to the static:/data: output namespaces
+            // via lib.RenderCache.clear() — never wipes swig: compiled templates
+            // or http2session: entries. Optional ?bundle=<name> restricts the
+            // flush to one bundle. Current-namespace fs bodies are removed via the
+            // entries' cleanup fns; old-namespace fs orphans are reclaimed by the
+            // CLI (gina cache:clear), not in-process.
+            if (
+                request.method.toUpperCase() === 'POST'
+                && /\/_gina\/cache\/clear(\?.*)?$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',  'no-cache');
+                response.setHeader('expires', '0');
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/cache/clear: client IP not in app.json admin.allowFrom' }));
+                }
+                var _cacheClearBundle = null;
+                var _cacheClearQi     = request.url.indexOf('?');
+                if ( _cacheClearQi > -1 ) {
+                    _cacheClearBundle = new URLSearchParams(request.url.slice(_cacheClearQi + 1)).get('bundle') || null;
+                }
+                var _cacheClearView = new lib.RenderCache();
+                _cacheClearView.from(self.instance._cached);
+                var _cacheCleared = _cacheClearView.clear(_cacheClearBundle);
+                return response.end(JSON.stringify({ ok: true, bundle: _cacheClearBundle, cleared: _cacheCleared }));
+            }
+
             // ── /_gina/jobs/:id — async-job status (always-on, state-only) ──────────
             // (#AI6 slice 3) Engine-agnostic mirror of the Isaac handler. GET only.
             // Returns lib.job.toStatusView (id + state + timestamps) — never the

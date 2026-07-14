@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added a POST /_gina/cache/clear admin endpoint (both server engines, loopback-gated like /_gina/cache/stats) that flushes the rendered-output cache — the static: (HTML) and data: (JSON) namespaces, with an optional ?bundle=<name> filter — without ever touching compiled templates or HTTP/2 sessions. It is backed by a namespace-scoped renderCache.clear(bundle) (which runs each entry cleanup so fs bodies + their .meta sidecars are removed) and a new keys() accessor on the in-process cache primitive.'
+time: 2026-07-14T17:33:26+01:00
