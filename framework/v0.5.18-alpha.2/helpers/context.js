@@ -332,6 +332,31 @@ function ContextHelper(contexts) {
     }
 
     /**
+     * resolveBundlesConf
+     *
+     * Resolve the per-bundle/per-env configuration container. `bundlesConfiguration.conf`
+     * is an alias of `envConf` (core/config.js builds it via `getInstance()` — see
+     * `config.js` where `bundlesConfiguration.conf = self.getInstance()`); during a
+     * module-load-time / daemon-spawned bootstrap the async Config build can populate
+     * `envConf` BEFORE `bundlesConfiguration`, so the config resolvers (`getConfig`,
+     * `getLib`) must accept either. Shared by both so the two siblings cannot drift.
+     *
+     * @inner
+     * @private
+     * @param {object} conf - A Config instance (or a `getInstance()` result)
+     * @returns {object|null} The `[bundle][env]` config container (=== envConf), or null
+     * */
+    var resolveBundlesConf = function(conf) {
+        if ( conf && conf.bundlesConfiguration && conf.bundlesConfiguration.conf ) {
+            return conf.bundlesConfiguration.conf;
+        }
+        if ( conf && conf.envConf ) {
+            return conf.envConf;
+        }
+        return null;
+    };
+
+    /**
      * getConfig
      *
      * Get bundle JSON configuration
@@ -440,19 +465,27 @@ function ContextHelper(contexts) {
         if ( typeof(confName) != 'undefined') {
 
             try {
-                return conf.bundlesConfiguration.conf[bundle][env].content[confName]
+                // bundlesConfiguration may not be built yet at module-load time; fall
+                // back to the equivalent envConf slice (resolveBundlesConf).
+                return resolveBundlesConf(conf)[bundle][env].content[confName]
             } catch (err) {
-                throwError(500, err)
+                // Fail clean (isFatal -> emerg-log + return): a bootstrap / detached
+                // caller must not be crashed by a bare throw escalating to uncaughtException.
+                throwError(500, err, true)
             }
 
         } else {
 
             try {
-                conf.bundlesConfiguration.conf.bundle       = bundle;
-                conf.bundlesConfiguration.conf.env          = env;
-                conf.bundlesConfiguration.conf.scope        = scope;
-                conf.bundlesConfiguration.conf.projectName  = getContext('projectName');
-                conf.bundlesConfiguration.conf.bundles      = getContext('bundles');
+                // bundlesConfiguration may not be built yet at module-load time; fall back
+                // to the equivalent envConf container (resolveBundlesConf) — the same object
+                // bundlesConfiguration.conf aliases when it IS built.
+                var confConf = resolveBundlesConf(conf);
+                confConf.bundle       = bundle;
+                confConf.env          = env;
+                confConf.scope        = scope;
+                confConf.projectName  = getContext('projectName');
+                confConf.bundles      = getContext('bundles');
 
                 if ( typeof(ctxFilename) != 'undefined' ) {
                     //process.stdout.write('TYPEOF ' + typeof( conf.getRouting ) )
@@ -460,9 +493,10 @@ function ContextHelper(contexts) {
                     //process.stdout.write('TYPEOF ' + typeof( getContext('gina').config.getRouting ) )
                 }
 
-                return conf.bundlesConfiguration.conf
+                return confConf
             } catch (err) {
-                throwError(500, err)
+                // Fail clean (isFatal) — see the with-confName branch above.
+                throwError(500, err, true)
             }
         }
     }
@@ -470,10 +504,29 @@ function ContextHelper(contexts) {
     /**
      * Get bundle library
      *
-     * TODO - cleanup
+     * Resolves the bundle's `libPath` from the active Config and returns a new
+     * instance of the requested library. Robust to a PARTIAL Config: a detached
+     * or daemon-spawned caller (cron / timer / worker / bootstrap) can observe a
+     * Config whose async build populated `envConf` but not yet
+     * `bundlesConfiguration`; `libPath` is then resolved from the equivalent
+     * `envConf[bundle][env]` slice. When no usable configuration is available in
+     * the calling context, the error is surfaced (emerg-log) and `undefined` is
+     * returned rather than thrown — the process is never crashed.
      *
-     * @param {string} [ bundle ] - Bundle name
+     * @param {string} [ bundle ] - Bundle name (auto-resolved from the caller
+     *   stack when omitted)
      * @param {string} lib  - Library name (module or file)
+     * @returns {object|undefined} A new instance of the library, or `undefined`
+     *   when the library or its configuration cannot be resolved.
+     *
+     * @example
+     * // one-arg form (bundle auto-resolved from the caller stack)
+     * var reporting = getLib('reporting');
+     * reporting.run();
+     *
+     * @example
+     * // explicit bundle + lib
+     * var reporting = getLib('backoffice', 'reporting');
      *
      * */
     getLib = function(bundle, lib) {
@@ -547,8 +600,26 @@ function ContextHelper(contexts) {
 
             try {
 
-                if (!libPath)
-                    libPath = conf.bundlesConfiguration.conf[bundle][env].libPath;
+                if (!libPath) {
+                    // bundlesConfiguration may not be built yet at module-load time;
+                    // resolveBundlesConf falls back to the equivalent envConf container —
+                    // the same per-bundle/env slice getConfig reads (and this lib's own
+                    // getConfig() below).
+                    var confConf = resolveBundlesConf(conf);
+                    var bundleEnvConf = ( confConf && confConf[bundle] && confConf[bundle][env] )
+                        ? confConf[bundle][env]
+                        : null;
+
+                    if ( bundleEnvConf && typeof(bundleEnvConf.libPath) != 'undefined' ) {
+                        libPath = bundleEnvConf.libPath;
+                    } else {
+                        // No usable configuration in this context: surface the reason and
+                        // fail clean (isFatal -> emerg-log + return), never a detached throw
+                        // that escalates to uncaughtException -> proc.js SIGKILL.
+                        throwError(500, new Error("getLib(`"+ lib +"`): unable to resolve `libPath` for bundle `"+ bundle +"` in env `"+ env +"` — bundle configuration is unavailable in this context"), true);
+                        return undefined;
+                    }
+                }
 
                 var libToLoad = _(libPath +'/'+ lib, true);
 
@@ -588,7 +659,9 @@ function ContextHelper(contexts) {
 
             } catch (err) {
                 console.error(err.stack||err.message||err);
-                throwError(500, err);
+                // Fail clean (isFatal -> emerg-log + return): a detached / daemon-spawned
+                // caller must not be crashed by a bare throw escalating to uncaughtException.
+                throwError(500, err, true);
                 return undefined
             }
         } else {
