@@ -137,6 +137,12 @@ function Lib() {
         // connection on every HTTP request, racing with in-flight writes. Use plain
         // require() so the singleton survives refreshCore() evictions. (#CN2v3)
         State           : require('./state'),
+        // Native schema/DTO builder (#DTO). require() — NOT _require — so the
+        // DtoObject / DtoField constructors keep a stable identity across
+        // refreshCore() hot-reload (a bundle registers named DTOs at boot on
+        // process.gina._dtos; per-request `instanceof` / registry lookups must
+        // still recognise them). The builder itself is stateless.
+        dto             : require('./dto'),
         // Shared semantic extractor for routing.json. Consumed by bundle:openapi
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.

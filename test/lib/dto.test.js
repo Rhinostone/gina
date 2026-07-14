@@ -1,0 +1,320 @@
+'use strict';
+/**
+ * lib/dto — the native Gina schema/DTO builder (#DTO1).
+ *
+ * A DTO is JSON-Schema-canonical internally and exposes three projections:
+ *   .toJsonSchema(dialect) — draft-07 | 2020-12 (identity / canonical)
+ *   .toRules()             — the LIVE form-validator rules-object (server + client)
+ *   .name                  — stable id for the type generator + routing param.dto
+ *
+ * Shape of this suite:
+ *   §01 source pins — the module's structural contract (registry on process.gina._dtos,
+ *       DIALECTS, module.exports namespace) + the behavioural guarantee that the emit
+ *       NEVER produces `toFloat` / `query` (asserted behaviourally, not by a source-word
+ *       negative pin, because the module JSDoc names them to document the exclusion —
+ *       the own-comment trap, jsdoc.md).
+ *   §02 toJsonSchema — both dialects, standalone $schema/$id, required[],
+ *       additionalProperties, VALUE bounds carried in the schema.
+ *   §03 toRules — the exact derived rule shape for each vocabulary field.
+ *   §04 behavioural — drive the derived rules through the REAL ValidatorPlugin
+ *       (valid/invalid/coercion/exclude/enum error) — the measured contract #DTO2 uses.
+ *   §05 value-range — schema holds minimum/maximum, but the runtime does NOT enforce it
+ *       in this cut (documented deviation) + a subtract proving the omission is real.
+ *   §06 build-time guards (throw-on-invalid config).
+ *   §07 registry.
+ */
+var { describe, it } = require('node:test');
+var assert = require('node:assert/strict');
+var path   = require('path');
+var fs     = require('fs');
+
+var FW = require('../fw');
+
+process.env.NODE_ENV_IS_DEV = process.env.NODE_ENV_IS_DEV || 'false';
+process.setMaxListeners(0);
+require(path.join(FW, '../../utils/prototypes')); // Object.prototype.count() — backendInit needs it
+require(path.join(FW, 'helpers'));                // getContext/setContext/_/requireJSON
+/* global getContext, setContext */
+if (typeof getContext('gina') === 'undefined') { setContext('gina', { forms: null }); }
+setContext('bundle', 'dtoTestBundle');
+
+var DTO_PATH  = path.join(FW, 'lib/dto/src/main.js');
+var DTO_SRC   = fs.readFileSync(DTO_PATH, 'utf8');
+var dto       = require(DTO_PATH);
+var Validator = require(path.join(FW, 'core/plugins/lib/validator/src/main.js')); // gina.plugins.Validator
+
+/** Drive a DTO's derived rules through the REAL engine; fresh rules per call (parseRules mutates). */
+function validate(d, data) {
+    return Validator(JSON.parse(JSON.stringify(d.toRules())), data, 'dto-test');
+}
+function isValid(res) { return (typeof res.isValid === 'function') ? res.isValid() : res.isValid; }
+
+
+describe('lib/dto §01 — source pins (structural contract)', function () {
+
+    it('01.1 - the named-DTO registry lives on process.gina._dtos (survives refreshCore hot-reload)', function () {
+        assert.match(DTO_SRC, /process\.gina\._dtos/,
+            'the registry must persist on process.gina, not module scope');
+    });
+
+    it('01.2 - both JSON Schema dialects are declared', function () {
+        assert.match(DTO_SRC, /'draft-07'\s*:/);
+        assert.match(DTO_SRC, /'2020-12'\s*:/);
+    });
+
+    it('01.3 - module.exports is the dto namespace with the vocabulary factories', function () {
+        assert.equal(typeof dto.object, 'function');
+        ['string', 'integer', 'number', 'boolean', 'date', 'register', 'get', 'names', 'isDto']
+            .forEach(function (k) { assert.equal(typeof dto[k], 'function', k + ' factory present'); });
+        assert.equal(typeof dto['enum'], 'function', 'enum factory present');
+        assert.ok(dto.DIALECTS && dto.DIALECTS['draft-07'] && dto.DIALECTS['2020-12']);
+    });
+
+    it('01.4 - BEHAVIOURAL: the emit NEVER produces `toFloat` or `query` (curated vocabulary)', function () {
+        // Build one field of every kind + every chained option, and assert no emitted
+        // rule key is a forbidden rule. (A source-word negative pin would trip on the
+        // module JSDoc, which names toFloat/query to document their exclusion.)
+        var everything = dto.object({
+            s:  dto.string().email().required().trim().exclude(),
+            s2: dto.string().minLength(1).maxLength(9),
+            i:  dto.integer().min(0).max(9),
+            n:  dto.number().min(0).max(9),
+            b:  dto.boolean(),
+            e:  dto['enum'](['a', 'b']),
+            d:  dto.date()
+        });
+        var rules = everything.toRules();
+        var forbidden = { toFloat: 1, query: 1, isFloat: 1 };
+        Object.keys(rules).forEach(function (field) {
+            Object.keys(rules[field]).forEach(function (rule) {
+                assert.equal(forbidden[rule], undefined,
+                    'field ' + field + ' emitted forbidden rule ' + rule);
+            });
+        });
+    });
+});
+
+
+describe('lib/dto §02 — toJsonSchema (canonical / identity projection)', function () {
+
+    var D = dto.object({
+        email: dto.string().email().required().description('User email'),
+        name:  dto.string().minLength(2).maxLength(40),
+        age:   dto.integer().min(0).max(120),
+        role:  dto['enum'](['admin', 'user']).required()
+    }).as('S02User').title('User');
+
+    it('02.1 - draft-07: type/properties/required, value bounds carried, strict by default', function () {
+        var s = D.toJsonSchema('draft-07');
+        assert.equal(s.type, 'object');
+        assert.equal(s.properties.email.type, 'string');
+        assert.equal(s.properties.email.format, 'email');
+        assert.equal(s.properties.email.description, 'User email');
+        assert.equal(s.properties.name.minLength, 2);
+        assert.equal(s.properties.name.maxLength, 40);
+        assert.equal(s.properties.age.minimum, 0,   'VALUE bound minimum carried in the schema');
+        assert.equal(s.properties.age.maximum, 120, 'VALUE bound maximum carried in the schema');
+        assert.deepEqual(s.properties.role.enum, ['admin', 'user']);
+        assert.equal(s.properties.role.type, 'string', 'homogeneous enum infers type');
+        assert.deepEqual(s.required.sort(), ['email', 'role']);
+        assert.equal(s.additionalProperties, false, 'strict by default');
+        assert.equal(s.title, 'User');
+    });
+
+    it('02.2 - 2020-12 standalone adds $schema + $id', function () {
+        var s = D.toJsonSchema('2020-12', { standalone: true });
+        assert.equal(s.$schema, 'https://json-schema.org/draft/2020-12/schema');
+        assert.equal(s.$id, 'https://gina.io/schema/dto/S02User.json');
+        assert.equal(s.type, 'object');
+    });
+
+    it('02.3 - default dialect is draft-07; unknown dialect throws', function () {
+        assert.equal(dto.object({ x: dto.string() }).toJsonSchema().$schema, undefined, 'non-standalone has no $schema');
+        assert.throws(function () { D.toJsonSchema('draft-04'); }, /unknown JSON Schema dialect/);
+    });
+
+    it('02.4 - .passthrough() flips additionalProperties to true', function () {
+        assert.equal(dto.object({ x: dto.string() }).passthrough().toJsonSchema().additionalProperties, true);
+    });
+
+    it('02.5 - toJsonSchema returns a fresh object (no shared-reference leak)', function () {
+        var a = D.toJsonSchema('draft-07');
+        a.properties.email.type = 'MUTATED';
+        assert.equal(D.toJsonSchema('draft-07').properties.email.type, 'string', 'internal schema not mutated');
+    });
+});
+
+
+describe('lib/dto §03 — toRules (derived form-validator projection)', function () {
+
+    it('03.1 - each vocabulary field derives the measured rule shape', function () {
+        var rules = dto.object({
+            email:    dto.string().email().required(),
+            name:     dto.string().minLength(2).maxLength(40).trim(),
+            plain:    dto.string(),
+            age:      dto.integer().min(0).max(120),
+            price:    dto.number(),
+            active:   dto.boolean(),
+            role:     dto['enum'](['admin', 'user']).required(),
+            dob:      dto.date(),
+            honeypot: dto.string().exclude()
+        }).toRules();
+
+        assert.deepEqual(rules.email,  { isRequired: true, isEmail: true });
+        assert.deepEqual(rules.name,   { isString: [2, 40], trim: true });
+        assert.deepEqual(rules.plain,  { isString: true });
+        assert.deepEqual(rules.age,    { isInteger: true }, 'value bounds are schema-only (not in rules)');
+        assert.deepEqual(rules.price,  { isNumber: true });
+        assert.deepEqual(rules.active, { isBoolean: true });
+        assert.deepEqual(rules.role,   { isRequired: true, isInList: ['admin', 'user'] });
+        assert.deepEqual(rules.dob,    { isDate: ['yyyy-mm-dd'] });
+        assert.deepEqual(rules.honeypot, { isString: true, exclude: true });
+    });
+
+    it('03.2 - length bounds: min-only and max-only emit positional nulls', function () {
+        assert.deepEqual(dto.object({ s: dto.string().minLength(3) }).toRules().s, { isString: [3, null] });
+        assert.deepEqual(dto.object({ s: dto.string().maxLength(9) }).toRules().s, { isString: [null, 9] });
+    });
+
+    it('03.3 - email with length carries BOTH isEmail and isString', function () {
+        assert.deepEqual(dto.object({ e: dto.string().email().minLength(7) }).toRules().e,
+            { isEmail: true, isString: [7, null] });
+    });
+
+    it('03.4 - custom date mask threads through', function () {
+        assert.deepEqual(dto.object({ d: dto.date().mask('dd/mm/yyyy') }).toRules().d, { isDate: ['dd/mm/yyyy'] });
+    });
+});
+
+
+describe('lib/dto §04 — behavioural: derived rules through the REAL engine', function () {
+
+    var D = dto.object({
+        email:    dto.string().email().required(),
+        name:     dto.string().minLength(2).maxLength(40).trim(),
+        age:      dto.integer(),
+        active:   dto.boolean(),
+        role:     dto['enum'](['admin', 'user']).required(),
+        honeypot: dto.string().exclude()
+    });
+
+    it('04.1 - valid input -> isValid() true, empty errors, values coerced, excluded stripped', function () {
+        var res = validate(D, { email: 'a@b.com', name: '  Alice', age: '30', active: 'true', role: 'admin', honeypot: 'zzz' });
+        assert.equal(isValid(res), true);
+        assert.deepEqual(res.error, {});
+        assert.equal(res.data.age, 30, 'integer coerced');
+        assert.equal(res.data.active, true, 'boolean coerced');
+        assert.ok(/^\S/.test(res.data.name), 'leading whitespace trimmed');
+        assert.equal(res.data.honeypot, undefined, 'excluded field stripped from output');
+        assert.equal(Object.prototype.hasOwnProperty.call(res.data, 'honeypot'), false);
+    });
+
+    it('04.2 - invalid input -> field->rule->message errors (the ready 422 body)', function () {
+        var res = validate(D, { email: 'nope', name: 'a', age: '30', active: 'true', role: 'root', honeypot: 'z' });
+        assert.equal(isValid(res), false);
+        assert.equal(res.error.email.isEmail, 'A valid email is required');
+        assert.equal(res.error.name.isStringLength, 'Should be at least 2 characters');
+        assert.equal(res.error.role.isInList, 'Must be one of: admin, user');
+    });
+
+    it('04.3 - a PRESENT-but-empty required field fails isRequired', function () {
+        var res = validate(D, { email: '', name: 'Bob', age: '1', active: 'false', role: 'user' });
+        assert.equal(isValid(res), false);
+        assert.equal(typeof res.error.email.isRequired, 'string');
+    });
+
+    it('04.3b - CHARACTERIZATION: an ENTIRELY-ABSENT required key is NOT caught by the engine', function () {
+        // The engine validates fields PRESENT in the data; isRequired only fires on a
+        // present-but-empty value, not a missing key. This is a #DTO2-pipe concern:
+        // the pipe must ensure every DTO-declared field is present (inject empty
+        // placeholders) before validating so isRequired can fire on an omitted field.
+        var res = validate(D, { name: 'Bob', age: '1', active: 'false', role: 'user' });
+        assert.equal(isValid(res), true, 'a missing required key currently passes — the pipe must normalise absent fields');
+    });
+
+    it('04.4 - enum is type-strict + membership', function () {
+        var num = dto.object({ n: dto['enum']([1, 2, 3]) });
+        assert.equal(isValid(validate(num, { n: 2 })), true, 'numeric member valid');
+        assert.equal(isValid(validate(num, { n: 4 })), false, 'non-member invalid');
+    });
+});
+
+
+describe('lib/dto §05 — value-range is schema-only in this cut (measured deviation)', function () {
+
+    var Age = dto.object({ age: dto.integer().min(0).max(120) });
+
+    it('05.1 - the schema carries minimum/maximum (OpenAPI/MCP fidelity)', function () {
+        var s = Age.toJsonSchema('2020-12');
+        assert.equal(s.properties.age.minimum, 0);
+        assert.equal(s.properties.age.maximum, 120);
+    });
+
+    it('05.2 - toRules() emits NO value-range rule (only the type check) and never a `$`', function () {
+        var rules = Age.toRules();
+        assert.deepEqual(rules.age, { isInteger: true });
+        assert.equal(JSON.stringify(rules).indexOf('$'), -1,
+            'toRules() must never emit a `$` (would trip the server-side $fields crash)');
+    });
+
+    it('05.3 - SUBTRACT: the runtime does NOT enforce the value bound (out-of-range passes the type check)', function () {
+        var res = validate(Age, { age: '999' });
+        assert.equal(isValid(res), true, 'age=999 passes: value bound is documented-in-schema, not runtime-enforced (cut 1)');
+        assert.equal(res.data.age, 999);
+    });
+});
+
+
+describe('lib/dto §06 — build-time guards (throw-on-invalid config)', function () {
+
+    it('06.1 - .min()/.max() only on integer/number', function () {
+        assert.throws(function () { dto.string().min(0); }, /not valid on a string/);
+        assert.throws(function () { dto.boolean().max(9); }, /not valid on a boolean/);
+    });
+    it('06.2 - .email()/.minLength()/.trim() only on string', function () {
+        assert.throws(function () { dto.integer().email(); }, /not valid on a integer/);
+        assert.throws(function () { dto.number().minLength(2); }, /not valid on a number/);
+        assert.throws(function () { dto.date().trim(); }, /not valid on a date/);
+    });
+    it('06.3 - dto.enum requires a non-empty array', function () {
+        assert.throws(function () { dto['enum']([]); }, /non-empty array/);
+        assert.throws(function () { dto['enum']('admin'); }, /non-empty array/);
+    });
+    it('06.4 - dto.object rejects a non-field in the shape', function () {
+        assert.throws(function () { dto.object({ x: 'nope' }); }, /must be a dto field/);
+    });
+    it('06.5 - dto.register requires a dto.object', function () {
+        assert.throws(function () { dto.register('X', dto.string()); }, /must be a dto\.object/);
+    });
+});
+
+
+describe('lib/dto §07 — named registry (process.gina._dtos)', function () {
+
+    it('07.1 - .as(name) registers; dto.get resolves the same instance', function () {
+        var D = dto.object({ x: dto.string() }).as('S07A');
+        assert.equal(D.name, 'S07A');
+        assert.equal(dto.get('S07A'), D);
+        assert.ok(dto.names().indexOf('S07A') > -1);
+    });
+
+    it('07.2 - dto.register(name, d) registers and stamps the name', function () {
+        var D = dto.object({ y: dto.integer() });
+        dto.register('S07B', D);
+        assert.equal(D.name, 'S07B');
+        assert.equal(dto.get('S07B'), D);
+    });
+
+    it('07.3 - dto.get returns null for an unknown name; isDto discriminates', function () {
+        assert.equal(dto.get('nope-not-registered'), null);
+        assert.equal(dto.isDto(dto.object({ z: dto.string() })), true);
+        assert.equal(dto.isDto(dto.string()), false);
+        assert.equal(dto.isDto({}), false);
+    });
+
+    it('07.4 - the registry is the process.gina._dtos object (persistence surface)', function () {
+        dto.object({ q: dto.string() }).as('S07C');
+        assert.ok(process.gina && process.gina._dtos && process.gina._dtos.S07C,
+            'registered DTO is reachable on process.gina._dtos');
+    });
+});

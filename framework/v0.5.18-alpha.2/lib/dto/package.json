@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-dto",
+  "version": "1.0.0",
+  "description": "Native Gina schema/DTO builder. Zero runtime deps, CJS. JSON-Schema-canonical internally; projects to dialect-aware JSON Schema (draft-07 / 2020-12), the live form-validator rules-object, and a stable name for the type generator. Shared by the request/response validation pipe, bundle:openapi and bundle:mcp.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

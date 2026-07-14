@@ -97,6 +97,7 @@ gna.initialized = process.initialized = false;
 gna.routed      = process.routed = false;
 
 gna.lib         = lib;
+gna.dto         = lib.dto;      // #DTO — native schema/DTO builder: `var dto = require('gina').dto`
 gna.locales     = locales;
 gna.plugins     = plugins;
 

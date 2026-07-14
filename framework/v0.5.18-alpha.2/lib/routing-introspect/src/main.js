@@ -175,6 +175,111 @@ var requirementToPattern = function(raw) {
 };
 
 /**
+ * Maps a single-field form-validator rules-object to a JSON Schema fragment
+ * (the inverse of the DTO builder's toRules, for the curated vocabulary). Pure
+ * and inline — routing-introspect does not require lib.dto (its purity contract).
+ *
+ * @memberof module:gina/lib/routing-introspect
+ * @param   {object} rules - e.g. `{ isEmail: true, isString: [7] }`
+ * @returns {object} a JSON Schema fragment (always includes `type`)
+ *
+ * @example
+ * rulesToSchemaFragment({ isEmail: true, isString: [7] });
+ * // { type: 'string', format: 'email', minLength: 7 }
+ */
+var rulesToSchemaFragment = function(rules) {
+    var s = {};
+    if ( !rules || typeof(rules) !== 'object' ) return { type: 'string' };
+
+    for (var rule in rules) {
+        if ( !rules.hasOwnProperty(rule) ) continue;
+        var v = rules[rule];
+        switch (rule) {
+            case 'isEmail':   s.type = 'string';  s.format = 'email'; break;
+            case 'isString':
+                s.type = 'string';
+                if ( Array.isArray(v) ) {
+                    if ( typeof(v[0]) === 'number' ) s.minLength = v[0];
+                    if ( typeof(v[1]) === 'number' ) s.maxLength = v[1];
+                }
+                break;
+            case 'isInteger': s.type = 'integer'; break;
+            case 'isNumber':  s.type = 'number';  break;
+            case 'isBoolean': s.type = 'boolean'; break;
+            case 'isDate':    s.type = 'string';  s.format = 'date'; break;
+            case 'isInList':  if ( Array.isArray(v) ) s.enum = v.slice(); break;
+            // isRequired -> object/param level; is / toFloat / query / exclude / trim: not schema-expressible here.
+        }
+    }
+
+    if ( !s.type ) {
+        if ( Array.isArray(s.enum) && s.enum.length ) {
+            var t = typeof(s.enum[0]), homo = true;
+            for (var i = 1; i < s.enum.length; i++) {
+                if ( typeof(s.enum[i]) !== t ) { homo = false; break; }
+            }
+            s.type = (homo && (t === 'string' || t === 'number' || t === 'boolean')) ? t : 'string';
+        } else {
+            s.type = 'string';
+        }
+    }
+    return s;
+};
+
+/**
+ * Converts a routing.json `requirements` value into a JSON Schema fragment,
+ * UN-COLLAPSING an inline `validator::{...}` rule object into the schema keywords
+ * it implies (isEmail -> format:email, isString:[min,max] -> minLength/maxLength,
+ * isInList:[...] -> enum, isInteger -> integer, ...). Richer than
+ * {@link requirementToPattern}: instead of collapsing a validator requirement to
+ * `.*`, bundle:openapi / bundle:mcp now emit a real parameter schema.
+ *
+ * The inline validator:: object is parsed with the same split + JSON.parse the
+ * router uses (lib/routing keys are quoted before the parse). A bare NAMED
+ * validator (`validator::email`, no inline object) can't be resolved without the
+ * Validator registry (which would break this module's purity), so it degrades to
+ * `{ type: 'string' }`. Regex and pipe-enum requirements defer to
+ * {@link requirementToPattern}.
+ *
+ * @memberof module:gina/lib/routing-introspect
+ * @param   {string} raw
+ * @returns {object} a JSON Schema fragment (always includes `type`)
+ *
+ * @example
+ * requirementToSchema('validator::{ isEmail: true, isString: [7] }');
+ * // { type: 'string', format: 'email', minLength: 7 }
+ * requirementToSchema('admin|user');       // { type: 'string', enum: ['admin', 'user'] }
+ * requirementToSchema('/^[0-9]+$/');        // { type: 'string', pattern: '^[0-9]+$' }
+ * requirementToSchema('validator::email');  // { type: 'string' }  (named — unresolvable purely)
+ */
+var requirementToSchema = function(raw) {
+    if ( typeof(raw) !== 'string' ) return { type: 'string' };
+
+    if ( raw.indexOf('validator::') === 0 ) {
+        var body = raw.split('::').splice(1).join('::');
+        if ( body.indexOf('{') < 0 ) {
+            return { type: 'string' };   // bare named validator — unresolvable purely
+        }
+        var rules = null;
+        try {
+            // same key-quoting + JSON.parse the router uses (lib/routing/src/main.js)
+            rules = JSON.parse(
+                body
+                    .replace(/([^\:\"\s+](\w+))\:/g, '"$1":')
+                    .replace(/([^\:\"\s+](\w+))\s+\:/g, '"$1":')
+            );
+        } catch (e) {
+            return { type: 'string' };   // malformed inline object — safe fallback
+        }
+        return rulesToSchemaFragment(rules);
+    }
+
+    var p = requirementToPattern(raw);
+    if ( p.type === 'enum' ) return { type: 'string', enum: p.value };
+    return { type: 'string', pattern: p.value };
+};
+
+/**
  * Converts a hyphenated / snake_case / camelCase route name to a
  * human-readable title. Used as a fallback when `route.param.title` is absent.
  *
@@ -293,6 +398,8 @@ module.exports = {
     parseUrls           : parseUrls,
     parseMethods        : parseMethods,
     requirementToPattern: requirementToPattern,
+    requirementToSchema : requirementToSchema,
+    rulesToSchemaFragment: rulesToSchemaFragment,
     humanise            : humanise,
     toolName            : toolName,
     buildCacheHeader    : buildCacheHeader,
