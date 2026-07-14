@@ -1833,7 +1833,11 @@ function ServerEngineClass(options) {
                     }
 
                     // Importing cache handler (render/output cache goes through the strategy dispatcher)
-                    renderCache.from(server._cached);
+                    // Pass options.cachePath so an `fs`-strategy entry can be read back from disk
+                    // after a restart (the Map is empty on boot): has()/get() fall back to the disk
+                    // body + its `.meta` sidecar. == server.cache.path (the writer's opt.path) by
+                    // default — both resolve to the top-level `${cachePath}` (${projectPath}/cache).
+                    renderCache.from(server._cached, options.cachePath);
                     var cacheKey        = null
                         , hasCachedKey  = false
                         // before: ['data:', 'static:']  (#C3 — bundle namespace prevents silent cache collisions)

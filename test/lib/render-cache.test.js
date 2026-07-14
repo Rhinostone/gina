@@ -288,3 +288,195 @@ describe('06 - clear + stats', function () {
         assert.equal(byKey['static:demo:/f'], 'fs');
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 07 — fs restart-hardening: disk read-back on a Map miss (Slice 1)
+//
+// After a restart the backing Map is empty, so every fs-cached file on disk was
+// previously orphaned (has() was Map-only). With a cache root configured via
+// from(store, cachePath), has()/get() fall back to the disk body + its .meta
+// sidecar, preserving the ORIGINAL absolute expiry (a restart never extends a
+// TTL). The lib/cache Map is a process singleton, so a fresh Map == post-restart.
+// ---------------------------------------------------------------------------
+describe('07 - fs restart-hardening (disk read-back)', function () {
+    // Raw lib/cache for the subtract (proves the disk-aware layer is load-bearing).
+    var Cache = require(path.join(FW, 'lib/cache/src/main'));
+
+    // Simulate elapsed wall-clock between write and restart by backdating the
+    // on-disk .meta createdAt — deterministic, no sleeping.
+    function backdateMeta(bodyFile, secondsAgo) {
+        var meta = JSON.parse(fs.readFileSync(bodyFile + '.meta', 'utf8'));
+        meta.createdAt = new Date(Date.now() - secondsAgo * 1000).toISOString();
+        fs.writeFileSync(bodyFile + '.meta', JSON.stringify(meta));
+    }
+
+    it('set(fs) writes a .meta sidecar carrying the replay metadata', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/meta';
+        await rc.set('fs', key, { ttl: 30, visibility: 'public', responseHeaders: { 'content-type': 'text/html' } },
+            { content: '<b>m</b>', path: tmpRoot, bundle: 'rh', url: '/meta', kind: 'html' });
+
+        var file = String(rc.get(key).filename);
+        assert.equal(fs.existsSync(file + '.meta'), true, 'the .meta sidecar exists next to the body');
+        var meta = JSON.parse(fs.readFileSync(file + '.meta', 'utf8'));
+        assert.equal(meta.ttl, 30);
+        assert.equal(meta.sliding, false);
+        assert.equal(meta.visibility, 'public');
+        assert.equal(meta.responseHeaders['content-type'], 'text/html', 'responseHeaders replayed');
+        assert.ok(!isNaN(new Date(meta.createdAt).getTime()), 'createdAt is a parseable ISO stamp');
+        rc.clear();
+    });
+
+    it('recovers an orphaned disk entry: fresh Map + cachePath → has()/get() read back', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/page';
+        await rc.set('fs', key, { ttl: 300, visibility: 'public' },
+            { content: '<h1>page</h1>', path: tmpRoot, bundle: 'rh', url: '/page', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        assert.equal(fs.existsSync(file), true);
+
+        // Post-restart: a fresh empty Map (the process singleton), cache root configured.
+        rc.from(new Map(), tmpRoot);
+
+        assert.equal(rc.has(key), true, 'has() sees the disk body after a restart');
+        var entry = rc.get(key);
+        assert.ok(entry, 'get() reconstructs the entry from disk');
+        assert.equal(String(entry.filename), file, 'filename preserved');
+        assert.equal(entry.visibility, 'public', 'visibility replayed from .meta');
+        assert.equal(entry.sliding, undefined, 'non-sliding stays non-sliding');
+        assert.ok(entry.createdAt instanceof Date, 're-stamped createdAt (repopulated into the Map)');
+
+        // Now a Map hit — a subsequent get() no longer touches disk.
+        assert.equal(rc.stats().size, 1, 'the read-back repopulated the Map');
+        rc.clear();
+    });
+
+    it('SUBTRACT — without the disk-aware layer a fresh Map orphans the entry', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/orphan';
+        await rc.set('fs', key, { ttl: 300 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/orphan', kind: 'html' });
+
+        var freshMap = new Map();
+        rc.from(freshMap, tmpRoot);            // dispatcher: disk-aware
+        var raw = new Cache();
+        raw.from(freshMap);                     // raw lib/cache: Map-only (the pre-fix behaviour)
+
+        assert.equal(raw.has(key), false, 'raw Map-only has() → orphaned after restart');
+        assert.equal(raw.get(key), undefined, 'raw Map-only get() → orphaned after restart');
+        assert.equal(rc.has(key), true, 'the dispatcher recovers it from disk');
+        assert.ok(rc.get(key), 'the dispatcher reconstructs it from disk');
+        rc.clear();
+    });
+
+    it('read-back is INERT without a configured cache root (delegate semantics)', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/nopath';
+        await rc.set('fs', key, { ttl: 300 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/nopath', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        assert.equal(fs.existsSync(file), true, 'the disk file exists');
+
+        rc.from(new Map());                     // fresh Map, NO cachePath (how the delegates call from())
+        assert.equal(rc.has(key), false, 'Map-only has() — no disk fallback without a root');
+        assert.equal(rc.get(key), undefined, 'Map-only get() — no disk fallback without a root');
+        rc.clear();
+    });
+
+    it('preserves ABSOLUTE expiry on read-back (non-sliding: ttl → remaining)', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/ttl';
+        await rc.set('fs', key, { ttl: 30 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/ttl', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        backdateMeta(file, 20);                 // written 20 s ago; ttl 30 → ~10 s left
+
+        rc.from(new Map(), tmpRoot);
+        var entry = rc.get(key);
+        assert.ok(entry, 'still valid (10 s remaining)');
+        // Restart must NOT reset the 30 s window: remaining ≈ 10 (not 30).
+        assert.ok(entry.ttl > 7 && entry.ttl < 13, 'ttl reduced to the remaining window, got ' + entry.ttl);
+        rc.clear();
+    });
+
+    it('drops an already-expired non-sliding entry on read-back (miss + files removed)', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/expired';
+        await rc.set('fs', key, { ttl: 30 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/expired', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        backdateMeta(file, 40);                 // written 40 s ago; ttl 30 → expired
+
+        rc.from(new Map(), tmpRoot);
+        assert.equal(rc.get(key), undefined, 'expired entry is a miss');
+        assert.equal(fs.existsSync(file), false, 'stale body removed on read-back');
+        assert.equal(fs.existsSync(file + '.meta'), false, 'stale .meta removed on read-back');
+        rc.clear();
+    });
+
+    it('preserves the absolute CEILING on read-back (sliding + maxAge)', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/sliding';
+        await rc.set('fs', key, { ttl: 30, sliding: true, maxAge: 300 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/sliding', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        backdateMeta(file, 20);                 // 20 s into the 300 s ceiling
+
+        rc.from(new Map(), tmpRoot);
+        var entry = rc.get(key);
+        assert.ok(entry, 'still within the ceiling');
+        assert.equal(entry.sliding, true);
+        assert.equal(entry.ttl, 30, 'the idle window restarts on the read-back access (ttl unchanged)');
+        // ceiling remaining ≈ 280 (not reset to 300); lib/cache computed expiresAt from it.
+        assert.ok(entry.maxAge > 277 && entry.maxAge < 283, 'maxAge reduced to the remaining ceiling, got ' + entry.maxAge);
+        assert.ok(entry.expiresAt instanceof Date, 'the ceiling timer was honoured by lib/cache');
+        rc.clear();
+    });
+
+    it('drops a sliding entry past its absolute ceiling on read-back', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/ceiling';
+        await rc.set('fs', key, { ttl: 30, sliding: true, maxAge: 300 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/ceiling', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        backdateMeta(file, 320);                // past the 300 s ceiling
+
+        rc.from(new Map(), tmpRoot);
+        assert.equal(rc.get(key), undefined, 'past-ceiling entry is a miss');
+        assert.equal(fs.existsSync(file), false, 'stale body removed');
+        rc.clear();
+    });
+
+    it('pure sliding (no maxAge) read-back is treated as a fresh access', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/pure';
+        await rc.set('fs', key, { ttl: 30, sliding: true },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/pure', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        backdateMeta(file, 999);                // long idle — but no persisted lastAccess to judge it
+
+        rc.from(new Map(), tmpRoot);
+        var entry = rc.get(key);
+        assert.ok(entry, 'pure-sliding recovers (documented restart imprecision)');
+        assert.equal(entry.sliding, true);
+        assert.equal(entry.ttl, 30, 'idle window restarts');
+        assert.equal(entry.maxAge, undefined, 'no ceiling');
+        assert.equal(entry.expiresAt, undefined, 'no absolute ceiling stamped');
+        rc.clear();
+    });
+
+    it('missing .meta sidecar → get() miss (self-heals on the next render)', async function () {
+        var rc  = freshRc();
+        var key = 'static:rh:/nometa';
+        await rc.set('fs', key, { ttl: 300 },
+            { content: 'x', path: tmpRoot, bundle: 'rh', url: '/nometa', kind: 'html' });
+        var file = String(rc.get(key).filename);
+        fs.rmSync(file + '.meta');              // body present, sidecar gone
+
+        rc.from(new Map(), tmpRoot);
+        assert.equal(rc.has(key), true, 'has() is lenient (body exists)');
+        assert.equal(rc.get(key), undefined, 'get() cannot replay expiry without the sidecar → miss');
+        rc.clear();
+    });
+});

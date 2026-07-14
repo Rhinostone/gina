@@ -10,8 +10,11 @@
  * Strategies:
  * - `memory` — in-process Map (via `lib/cache`); volatile, fastest per-serve.
  * - `fs`     — disk-backed under `server.cache.path`; entry metadata lives in
- *              the Map, the rendered body on disk. (Cross-restart read-back is
- *              added in a later slice.)
+ *              the Map, the rendered body on disk. Survives a restart: on a
+ *              Map miss `get()`/`has()` read the body back from disk, replaying
+ *              the entry from a sibling `<file>.meta` JSON sidecar and
+ *              preserving the ORIGINAL absolute expiry (a restart never extends
+ *              a TTL). See `from(store, cachePath)`.
  * - `redis`  — shared L1+L2 across replicas (connector-homed; a later slice).
  *
  * Server-only: this module is never part of the browser AMD bundle (unlike
@@ -28,10 +31,95 @@
  * var renderCache = new RenderCache({ store: serverInstance._cached });
  * await renderCache.set('memory', 'static:demo:/', { ttl: 60 }, { content: html });
  * renderCache.get('static:demo:/');   // -> the cached entry, or undefined
+ *
+ * @example
+ * // fs restart-hardening: the server read path configures the cache root so a
+ * // Map miss falls back to disk.
+ * renderCache.from(serverInstance._cached, options.cachePath);
+ * renderCache.has('static:demo:/page');  // true when the disk file exists
+ * renderCache.get('static:demo:/page');  // reconstructs the entry from disk + .meta
  */
 
 var fs    = require('fs');
 var Cache = require('../../cache/src/main');
+
+/**
+ * Build the on-disk paths for an `fs`-strategy entry. Single source of truth
+ * shared by `set('fs')` (write) and the read-back (`has`/`get`), so the write
+ * filename and the read-back filename can never drift.
+ *
+ * Mirrors the historical inline build: `<root>/<bundle>/<html|data><url>.<ext>`,
+ * trailing-slash url → `.../index.<ext>`, resolved through the `_` PathObject
+ * global exactly as the pre-strategy code did.
+ *
+ * @inner
+ * @param {string} root   - Cache root (`server.cache.path`).
+ * @param {string} bundle - Bundle name.
+ * @param {string} kind   - 'data' (JSON, `/data`+`.json`) | anything else (HTML, `/html`+`.html`).
+ * @param {string} url    - Request URL (`req.originalUrl`).
+ * @returns {{ body: string, meta: string }} Absolute body path + its `.meta` sidecar path.
+ */
+function fsPaths(root, bundle, kind, url) {
+    var sub = ( kind === 'data' ) ? '/data' : '/html';
+    var ext = ( kind === 'data' ) ? '.json' : '.html';
+    if ( url.endsWith('/') ) {
+        url += 'index';
+    }
+    var body = _(root + '/' + bundle + sub + url + ext, true);
+    return { body: body, meta: body + '.meta' };
+}
+
+/**
+ * Parse an `fs`-eligible cache key into the pieces needed to reconstruct its
+ * on-disk path. Keys are `<static|data>:<bundle>:<url>` — the url may itself
+ * contain colons (querystrings), so only the FIRST two colons are structural.
+ *
+ * `static:` → HTML kind, `data:` → JSON kind (mirrors the delegate write:
+ * swig/nunjucks write `static:`+kind `html`, json writes `data:`+kind `data`).
+ * Returns `null` for any key that is not one of the two output namespaces (a
+ * `swig:` / `http2session:` key has no disk file).
+ *
+ * @inner
+ * @param {string} key
+ * @returns {{ kind: string, bundle: string, url: string }|null}
+ */
+function parseFsKey(key) {
+    if ( typeof(key) != 'string' ) {
+        return null;
+    }
+    var i1 = key.indexOf(':');
+    if ( i1 < 0 ) {
+        return null;
+    }
+    var prefix = key.slice(0, i1);
+    if ( prefix !== 'static' && prefix !== 'data' ) {
+        return null;
+    }
+    var i2 = key.indexOf(':', i1 + 1);
+    if ( i2 < 0 ) {
+        return null;
+    }
+    var bundle = key.slice(i1 + 1, i2);
+    var url    = key.slice(i2 + 1);
+    if ( !bundle || !url ) {
+        return null;
+    }
+    return { kind: ( prefix === 'data' ) ? 'data' : 'html', bundle: bundle, url: url };
+}
+
+/**
+ * Remove an `fs` entry's body file and its `.meta` sidecar (best-effort — a
+ * missing file is not an error). Used as the eviction cleanup and on read-back
+ * of an already-expired disk entry.
+ *
+ * @inner
+ * @param {string} body - Absolute body path (the `.meta` sibling is derived).
+ * @returns {void}
+ */
+function rmFsFiles(body) {
+    try { fs.rmSync(body); } catch (e) {}
+    try { fs.rmSync(body + '.meta'); } catch (e) {}
+}
 
 /**
  * Render-cache dispatcher factory. Returns an `instance` object (not `this`) —
@@ -41,6 +129,7 @@ var Cache = require('../../cache/src/main');
  * @constructor
  * @param {object} [options]
  * @param {Map}    [options.store] - Shared cache Map to adopt (e.g. `serverInstance._cached`).
+ * @param {string} [options.path]  - Cache root (`server.cache.path`) for fs read-back.
  */
 function RenderCache(options) {
     options = options || {};
@@ -53,18 +142,133 @@ function RenderCache(options) {
         mem.from(options.store);
     }
 
+    // Cache root for the fs read-back. Per-INSTANCE (the backing Map is shared;
+    // the path is not). Only the server read path configures it (via `from()`),
+    // so on the render delegates' instances it stays null and the disk-aware
+    // has()/get() below fall back to the Map-only behaviour — byte-identical.
+    var _cachePath = ( typeof(options.path) != 'undefined' && options.path ) ? options.path : null;
+
     var instance = {};
 
     /**
+     * Reconstruct the on-disk body path for `key`, or `null` when read-back is
+     * not applicable (no cache root configured, or a non-output-namespace key).
+     *
+     * @inner
+     * @param {string} key
+     * @returns {string|null}
+     */
+    function fsBodyFor(key) {
+        if ( !_cachePath ) {
+            return null;
+        }
+        var p = parseFsKey(key);
+        if ( !p ) {
+            return null;
+        }
+        return fsPaths(_cachePath, p.bundle, p.kind, p.url).body;
+    }
+
+    /**
+     * Read an `fs` entry back from disk after a restart (Map miss). Reads the
+     * `.meta` sidecar, drops an already-expired entry (preserving the ORIGINAL
+     * absolute expiry — a restart must never extend a TTL), repopulates the Map
+     * and returns the reconstructed entry. `undefined` on any miss.
+     *
+     * Expiry preservation (the entry's `createdAt` is re-stamped to `now` by
+     * `mem.set`, so the adjusted `ttl`/`maxAge` below make it expire at the
+     * ORIGINAL absolute time):
+     * - non-sliding: `ttl` := remaining seconds to the original `createdAt+ttl`.
+     * - sliding + maxAge: `maxAge` := remaining seconds to the original ceiling;
+     *   the idle `ttl` window restarts (a read-back IS an access).
+     * - pure sliding (no maxAge): the idle window cannot be evaluated from disk
+     *   (lastAccess is not persisted), so a read-back is treated as a fresh
+     *   access — an accepted restart-recovery imprecision.
+     *
+     * @inner
+     * @param {string} key
+     * @returns {object|undefined}
+     */
+    function readBack(key) {
+        var body = fsBodyFor(key);
+        if ( !body || !fs.existsSync(body) ) {
+            return undefined;
+        }
+        var meta;
+        try {
+            meta = JSON.parse(fs.readFileSync(body + '.meta', 'utf8'));
+        } catch (e) {
+            // No / unreadable sidecar: cannot replay expiry safely — treat as a
+            // miss. The next render re-writes both body + sidecar (self-heals).
+            return undefined;
+        }
+        var now       = Date.now();
+        var createdMs = new Date(meta.createdAt).getTime();
+        if ( isNaN(createdMs) ) {
+            return undefined;
+        }
+
+        var entry = {
+            filename        : body,
+            responseHeaders : meta.responseHeaders,
+            visibility      : meta.visibility
+        };
+        var hasTtl = ( typeof(meta.ttl) != 'undefined' && meta.ttl > 0 );
+
+        if ( meta.sliding === true ) {
+            entry.sliding = true;
+            if ( hasTtl ) {
+                // Idle window restarts on this access — ttl unchanged.
+                entry.ttl = meta.ttl;
+            }
+            if ( typeof(meta.maxAge) != 'undefined' && meta.maxAge > 0 ) {
+                var ceilRemainingMs = createdMs + Math.round(meta.maxAge * 1000) - now;
+                if ( ceilRemainingMs <= 0 ) {
+                    rmFsFiles(body);
+                    return undefined;
+                }
+                // Preserve the absolute ceiling: mem.set stamps
+                // expiresAt = now + maxAge*1000 = original createdAt + maxAge*1000.
+                entry.maxAge = ceilRemainingMs / 1000;
+            }
+            // pure sliding (no maxAge): fresh access, documented imprecision.
+        } else {
+            if ( hasTtl ) {
+                var remainingMs = createdMs + Math.round(meta.ttl * 1000) - now;
+                if ( remainingMs <= 0 ) {
+                    rmFsFiles(body);
+                    return undefined;
+                }
+                // Preserve absolute expiry: mem.set stamps createdAt = now, so
+                // now + remainingMs = original createdAt + ttl*1000.
+                entry.ttl = remainingMs / 1000;
+            }
+            // no ttl → non-expiring entry (rare) — reconstruct as-is.
+        }
+
+        // Repopulate the Map: installs the timer + the same disk-cleanup fn as a
+        // fresh write, and stamps createdAt/lastAccessedAt/expiresAt.
+        mem.set(key, entry, function () { rmFsFiles(entry.filename); });
+        return mem.get(key);
+    }
+
+    /**
      * Point the memory strategy at a shared cache Map. Idempotent — the server
-     * hands the same store on every request.
+     * hands the same store on every request. Optionally configures the fs cache
+     * root used by the disk read-back (only the server read path passes it).
      *
      * @memberof RenderCache
-     * @param {Map} store
+     * @param {Map}    store
+     * @param {string} [cachePath] - Cache root (`server.cache.path` / the top-level
+     *                               `cachePath` alias) enabling fs restart read-back.
      * @returns {RenderCache} this instance (chainable)
      */
-    instance.from = function(store) {
+    instance.from = function(store, cachePath) {
         mem.from(store);
+        // Only update when provided — never clear a previously-set path.
+        if ( typeof(cachePath) != 'undefined' && cachePath ) {
+            _cachePath = cachePath;
+        }
         return instance;
     };
 
@@ -75,8 +279,11 @@ function RenderCache(options) {
      * in each render delegate's `writeCache()`:
      * - `memory` — stamps `fromMemory: true` + the inline `content`, `set()`s it.
      * - `fs`     — writes the body to `<path>/<bundle>/<html|data><url>.<html|json>`
-     *              (creating the dir), stamps `filename`, and `set()`s the entry
-     *              with a cleanup fn that removes the file on eviction.
+     *              (creating the dir), stamps `filename`, `set()`s the entry with
+     *              a cleanup fn that removes the file (+ its `.meta`) on eviction,
+     *              and writes a `<file>.meta` JSON sidecar carrying everything the
+     *              server read path replays after a restart
+     *              (`createdAt`/`ttl`/`sliding`/`maxAge`/`visibility`/`responseHeaders`).
      * - anything else (incl. `undefined`) — no-op (matches the pre-strategy
      *              behaviour: neither `/^memory$/` nor `/^fs$/` matched, so
      *              nothing was stored).
@@ -105,13 +312,8 @@ function RenderCache(options) {
         }
 
         if ( /^fs$/i.test(type) ) {
-            var sub = ( payload.kind === 'data' ) ? '/data' : '/html';
-            var ext = ( payload.kind === 'data' ) ? '.json' : '.html';
-            var url = payload.url;
-            if ( url.endsWith('/') ) {
-                url += 'index';
-            }
-            var filename = _(payload.path + '/' + payload.bundle + sub + url + ext, true);
+            var p        = fsPaths(payload.path, payload.bundle, payload.kind, payload.url);
+            var filename = p.body;
             var dir      = filename.split(/\//g).slice(0, -1).join('/');
             var dirObj   = new _(dir);
             if ( !dirObj.existsSync() ) {
@@ -123,31 +325,67 @@ function RenderCache(options) {
 
             // filename is mandatory for the fs strategy
             entry.filename = filename;
-            // cleanupFn: delete the cached file from disk when the entry is evicted
+            // cleanupFn: delete the cached file (+ .meta) from disk on eviction.
             mem.set(key, entry, function() {
-                try { fs.rmSync(entry.filename); } catch (e) {}
+                rmFsFiles(entry.filename);
             });
+
+            // .meta sidecar — written AFTER mem.set so meta.createdAt is exactly
+            // the in-Map entry.createdAt lib/cache just stamped. Carries what the
+            // server read path replays on a restart read-back.
+            var meta = {
+                createdAt       : entry.createdAt.toISOString(),
+                ttl             : entry.ttl,
+                sliding         : entry.sliding === true,
+                maxAge          : entry.maxAge,
+                visibility      : entry.visibility,
+                responseHeaders : entry.responseHeaders
+            };
+            await fs.promises.writeFile(p.meta, JSON.stringify(meta));
             return;
         }
         // Unknown / undefined type → not cached.
     };
 
     /**
+     * Lenient presence check: true when the entry is in the memory index OR
+     * (fs restart-hardening) a body file exists on disk for `key`. The disk
+     * check is inert unless a cache root was configured via `from()`, so the
+     * render delegates (which never pass a path) keep Map-only semantics.
+     *
+     * The disk arm is deliberately lenient (existence, not expiry): the server
+     * read path calls `get()` right after, which is authoritative and treats an
+     * expired/absent entry as a miss.
+     *
      * @memberof RenderCache
      * @param {string} key
-     * @returns {boolean} true when the entry is present (in the memory index today).
+     * @returns {boolean}
      */
     instance.has = function(key) {
-        return mem.has(key);
+        if ( mem.has(key) ) {
+            return true;
+        }
+        var body = fsBodyFor(key);
+        return ( body ) ? fs.existsSync(body) : false;
     };
 
     /**
+     * Authoritative get: the memory entry when present, else (fs
+     * restart-hardening) a disk read-back reconstructing the entry from its
+     * body + `.meta` sidecar with the original absolute expiry preserved.
+     * Returns `undefined` on miss / expiry. The disk arm is inert unless a
+     * cache root was configured via `from()`.
+     *
      * @memberof RenderCache
      * @param {string} key
      * @returns {object|string|undefined} The stored entry, or `undefined` on miss / expiry.
      */
     instance.get = function(key) {
-        return mem.get(key);
+        var hit = mem.get(key);
+        if ( typeof(hit) != 'undefined' ) {
+            return hit;
+        }
+        return readBack(key);
     };
 
     /**
