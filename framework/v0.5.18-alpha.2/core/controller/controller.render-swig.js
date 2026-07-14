@@ -971,7 +971,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                     && typeof(req.routing.cache) != 'undefined'
                     && req.method.toUpperCase() === 'GET'
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
+                    try {
+                        await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
+                    } catch (cacheErr) {
+                        // A cache-write failure must never break a render that already succeeded:
+                        // unguarded, the rejection unwinds to render()'s function-level catch, which
+                        // discards a good page and answers 500. Siblings already degrade this way
+                        // (render-nunjucks.js try/catch, render-json.js .catch()).
+                        try { console.error('[render-swig] writeCache failed: ' + (cacheErr.message || cacheErr)); } catch (e) {}
+                    }
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)
@@ -1741,7 +1749,15 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                         && req.method.toUpperCase() === 'GET'
                     )
                 ) {
-                    await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
+                    try {
+                        await writeCache(localOptions.bundle, localOptions.conf.server.cache, htmlContent, req, res, self.serverInstance._cacheIsEnabled, self.throwError);
+                    } catch (cacheErr) {
+                        // A cache-write failure must never break a render that already succeeded:
+                        // unguarded, the rejection unwinds to render()'s function-level catch, which
+                        // discards a good page and answers 500. Siblings already degrade this way
+                        // (render-nunjucks.js try/catch, render-json.js .catch()).
+                        try { console.error('[render-swig] writeCache failed: ' + (cacheErr.message || cacheErr)); } catch (e) {}
+                    }
                 }
 
                 // Cache-Control: miss path — inform browsers/CDNs of the response lifetime (#C6)

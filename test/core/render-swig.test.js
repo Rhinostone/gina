@@ -346,7 +346,14 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
     it('cache-hit: HEAD branch calls res.end() without body', function() {
         var src = getSrc();
         var cacheGetIdx = src.indexOf('cache.get(cacheKey)');
-        var block = src.substring(cacheGetIdx, cacheGetIdx + 10000);
+        // End-anchor, not a char window (same idiom as the sibling test below, and as
+        // the comment above prescribes). The HEAD branch always precedes the body
+        // res.end() on the cache-hit path, so slice TO it instead of guessing a
+        // distance: the old +10000 window was down to 164 bytes of headroom once the
+        // writeCache try/catch landed. Per jsdoc.md § fixed-window block slicers.
+        var endIdx = src.indexOf('res.end( htmlContent )', cacheGetIdx);
+        assert.ok(endIdx > -1, 'res.end( htmlContent ) not found after cache.get(cacheKey)');
+        var block = src.substring(cacheGetIdx, endIdx);
         // HEAD check pattern: /^HEAD$/i.test(req.method)
         assert.ok(
             /HEAD.*\.test\(req\.method\)/.test(block),
@@ -410,10 +417,14 @@ describe('07 - normal render exit paths: response.end() sites and guards', funct
         var src = getSrc();
         var first = src.indexOf('res.end( htmlContent )');
         var second = src.indexOf('res.end( htmlContent )', first + 1);
-        // Look for HEAD check before the second .end(htmlContent).
-        // Window widened 3000 -> 3400 for #H10 (trailer wiring added ~7 lines in the
-        // cache-miss HTTP/2 body branch; the HEAD check now sits ~3205 chars back).
-        var before = src.substring(second - 3400, second);
+        // Start-anchor on swig.compile( — the defining token of the fresh-compile path,
+        // already used as an anchor below — instead of a lookback window. The old
+        // `second - 3400` had 195 bytes of slack: invariant to upstream edits, but any
+        // future line added BETWEEN the HEAD check and the body res.end() would break
+        // it. Per jsdoc.md § fixed-window block slicers.
+        var compileIdx = src.indexOf('swig.compile(');
+        assert.ok(compileIdx > -1 && compileIdx < second, 'swig.compile( not found before the cache-miss res.end()');
+        var before = src.substring(compileIdx, second);
         assert.ok(
             /HEAD.*\.test\(req\.method\)/.test(before),
             'expected HEAD method check on cache-miss path'
@@ -2139,5 +2150,71 @@ describe('22 - bundle-wide sliding / maxAge cache defaults (server.cache)', func
     it('documents opt.sliding / opt.maxAge in the writeCache @param opt JSDoc', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
         assert.match(src, /@param\s+\{object\}\s+opt[\s\S]{0,120}opt\.sliding[\s\S]{0,40}opt\.maxAge/);
+    });
+});
+
+// ── 23 — a cache-write failure must not destroy a good render ────────────────
+//
+// Both `await writeCache(...)` sites sit inside render()'s FUNCTION-LEVEL try,
+// whose catch answers 500. So an unguarded cache-write rejection discarded a page
+// that had already rendered perfectly and served a 500 instead. (It did NOT hang
+// the request — the outer catch always sent a response.) The two sibling delegates
+// already degraded correctly: render-nunjucks.js try/catch, render-json.js .catch().
+describe('23 - writeCache failures degrade, they do not 500 the render', function() {
+
+    it('both writeCache call sites are wrapped in try/catch (cacheErr)', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        var guarded = src.match(/try \{[\s\S]{0,30}?await\s+writeCache\([\s\S]{0,260}?\}\s*catch\s*\(cacheErr\)\s*\{/g);
+        assert.ok(guarded, 'no guarded writeCache call site found');
+        assert.strictEqual(guarded.length, 2,
+            'expected both writeCache call sites (cache-write + post-asset-injection) wrapped in try/catch');
+    });
+
+    it('the guard logs and never rethrows', function() {
+        var src = fs.readFileSync(SOURCE, 'utf8');
+        var logs = src.match(/\[render-swig\] writeCache failed/g);
+        assert.ok(logs && logs.length === 2, 'expected both guards to log with the [render-swig] tag');
+        assert.doesNotMatch(src, /catch\s*\(cacheErr\)\s*\{[\s\S]{0,400}?throw/,
+            'a cacheErr guard must never rethrow — that would re-enter the function-level catch and 500');
+    });
+
+    // Pure-logic replica of render()'s cache-write step, including the outer
+    // function-level try whose catch answers 500.
+    function renderStep(writeCacheFn, guarded) {
+        return (async function () {
+            try {
+                var htmlContent = '<html>rendered fine</html>';   // the render already succeeded
+                if ( guarded ) {
+                    try { await writeCacheFn(); } catch (cacheErr) { /* log only */ }
+                } else {
+                    await writeCacheFn();
+                }
+                return { status: 200, body: htmlContent };        // res.end( htmlContent )
+            } catch (err) {
+                return { status: 500, body: 'throwError' };       // render()'s function-level catch
+            }
+        })();
+    }
+
+    var rejects = function() { return Promise.reject(new Error('cache write blew up')); };
+    var resolves = function() { return Promise.resolve(); };
+
+    it('guarded: a failing cache write still serves the rendered page', async function() {
+        var res = await renderStep(rejects, true);
+        assert.strictEqual(res.status, 200);
+        assert.strictEqual(res.body, '<html>rendered fine</html>');
+    });
+
+    it('guarded: a successful cache write is unchanged', async function() {
+        var res = await renderStep(resolves, true);
+        assert.strictEqual(res.status, 200);
+    });
+
+    // SUBTRACT — proves the guard is load-bearing, and pins the real pre-fix
+    // symptom: a 500 on an otherwise-perfect page (not a hang).
+    it('SUBTRACT — without the guard, a failing cache write 500s a good page', async function() {
+        var res = await renderStep(rejects, false);
+        assert.strictEqual(res.status, 500, 'unguarded, the rejection reaches the function-level catch');
+        assert.notStrictEqual(res.body, '<html>rendered fine</html>', 'the rendered page is discarded');
     });
 });
