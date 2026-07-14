@@ -1114,10 +1114,6 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                     defaultValue = $form.fieldsSet[f].defaultValue;
 
-                    if (/$(on|true|false)$/i.test(defaultValue)) {
-                        defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
-                    }
-
                     if ( /^(checkbox|radio)$/i.test($element.type) ) {
                         $element.checked = $form.fieldsSet[f].defaultChecked;
                     } else if ( !/^(checkbox|radio)$/i.test($element.type) ) {
@@ -4682,6 +4678,47 @@ function ValidatorPlugin(rules, data, formId, culture) {
      *
      * @return {object} bindedForm
      * */
+    /**
+     * Tells whether a checkbox posts a boolean derived from its live `.checked`
+     * state (#49). A checkbox is boolean-classified when it carries no `value`
+     * attribute (the DOM then defaults `.value` to `on`), when its value reads
+     * `true` or `false` (the framework's change-time mirror maintains those), or
+     * when a validation rule declares `isBoolean` for the field. A checkbox that
+     * is NOT boolean-classified is value-carrying: its `value` is the submitted
+     * payload and must never be coerced to a boolean.
+     *
+     * @inner
+     * @param {object} $el - Checkbox element
+     * @param {object} [rule] - Validation rule object declared for the field
+     *
+     * @returns {boolean} isBooleanCheckbox
+     */
+    var isBooleanCheckbox = function($el, rule) {
+        return (
+            $el.getAttribute('value') === null
+            || /^(true|false)$/.test($el.value)
+            || typeof(rule) != 'undefined' && rule && typeof(rule.isBoolean) != 'undefined'
+        ) ? true : false;
+    }
+
+    /**
+     * Legacy opt-in (#49 — deprecated, transitional): when the form carries
+     * `data-gina-form-checkbox-value-as-state="true"`, a checkbox's `value`
+     * attribute keeps deciding its initial checked state like it did before
+     * the fix. Default is the HTML-spec behavior: only the `checked`
+     * attribute decides the initial state.
+     *
+     * @inner
+     * @param {object} $form - Form object (`instance.$forms[id]` shape)
+     *
+     * @returns {boolean} isCheckboxValueAsState
+     */
+    var isCheckboxValueAsState = function($form) {
+        return /^true$/i.test($form.target.dataset.ginaFormCheckboxValueAsState) ? true : false;
+    }
+    // one warn per field id per page load (migration aid, #49)
+    var checkboxValueStateWarned = {};
+
     var bindForm = function($target, customRule) {
 
         var $form   = null
@@ -4959,9 +4996,6 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             if (!$form.fieldsSet[ elId ]) {
                 let defaultValue = $inputs[f].value;
-                if (/$(on|true|false)$/i.test(defaultValue)) {
-                    defaultValue = (/$(on|true)$/i.test(defaultValue)) ? true : false;
-                }
                 // just in case
                 // if (
                 //     typeof($form.fieldsSet[elId]) != 'undefined'
@@ -4986,16 +5020,34 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     // reads FALSE at bind time despite the attribute being present, so
                     // caching from `.checked` would hold the wrong default and a subsequent
                     // form-reset would clear the originally-checked option.
+                    // #49: the value-derived clause (a checkbox whose `value` reads
+                    // true/on used to be treated as checked-by-default) is legacy
+                    // behavior, now gated on the form's explicit opt-in.
                     $form.fieldsSet[elId].defaultChecked = (
                                                             $inputs[f].defaultChecked
                                                             ||
-                                                            /^(true|on)$/.test(defaultValue)
+                                                            isCheckboxValueAsState($form)
+                                                            && /^(true|on)$/.test(defaultValue)
                                                             && /^(checkbox)$/i.test($inputs[f].type)
                                                         ) ? true : false;
 
                     if (/^radio$/i.test($inputs[f].type) ) {
                         $form.fieldsSet[elId].value = $inputs[f].value;
                         $form.fieldsSet[elId].defaultValue = $inputs[f].value;
+                    }
+
+                    // Migration aid (#49): this markup used to be auto-ticked by its
+                    // `value` — surface it once so the author adds `checked` or the
+                    // legacy form opt-in.
+                    if (
+                        /^(checkbox)$/i.test($inputs[f].type)
+                        && !isCheckboxValueAsState($form)
+                        && !$inputs[f].hasAttribute('checked')
+                        && /^(true|on)$/i.test($inputs[f].getAttribute('value'))
+                        && !checkboxValueStateWarned[elId]
+                    ) {
+                        checkboxValueStateWarned[elId] = true;
+                        console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer implies the checked state; add the `checked` attribute if it must render ticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior');
                     }
                 }
             }
@@ -5743,7 +5795,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 localValue = false
             }
             var isLocalBoleanValue = ( /^(true|on|false)$/i.test(localValue) ) ? true : false;
-            if (isInit && isLocalBoleanValue) { // on checkbox init
+            // #49: value-driven initial ticking is legacy behavior — the HTML `checked`
+            // attribute decides the initial state unless the form explicitly opts in.
+            if (isInit && isLocalBoleanValue && isCheckboxValueAsState($form)) { // on checkbox init (legacy value-as-state mode)
                 // update checkbox initial state
                 // Value defines checked state by default
                 if ( /^true$/i.test(localValue) && !$el.checked) {
@@ -6685,7 +6739,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 if (isDisabled) continue;
 
                 // checkbox or radio
-                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
+                if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' && isBooleanCheckbox($target[i], (rules) ? rules[name] : null) ) {
+                    // #49: boolean checkbox — the live `.checked` state IS the posted value
+                    fields[name] = $target[i].checked;
+                } else if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio' || typeof($target[i].type) != 'undefined' && $target[i].type == 'checkbox' ) {
 
                     if ( $target[i].checked ) {
                         // if is boolean
@@ -6941,7 +6998,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 && $form[i].type == 'checkbox' )
              {
 
-                if (
+                if ( $form[i].type == 'checkbox' && isBooleanCheckbox($form[i], (rules) ? rules[name] : null) ) {
+                    // #49: boolean checkbox — the live `.checked` state IS the posted
+                    // value; self-inject the isBoolean rule like the legacy path did
+                    if (rules) {
+                        if ( typeof(rules[name]) == 'undefined' ) {
+                            rules[name] = { isBoolean: true };
+                        } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
+                            rules[name].isBoolean = true;
+                            // forces it when field found in validation rules
+                            rules[name].isRequired = true;
+                        }
+                    }
+                    fields[name] = $form[i].checked;
+                } else if (
                     $form[i].checked
                     || typeof (rules[name]) == 'undefined'
                         && $form[i].value != 'undefined'

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A checkbox''s `value` attribute no longer decides its `checked` state: the HTML `checked` attribute alone drives the initial rendering, and the posted boolean is derived from the live checked state instead of the value string — so a consent-style checkbox rendered with `value="true"` is no longer silently pre-ticked, `value="false"` no longer un-ticks a server-checked box, a checkbox unticked from consumer script no longer posts `true` off its stale value, and a neutral-valued checkbox with an `isBoolean` rule posts real booleans instead of going dead (#49)'
+time: 2026-07-14T23:17:33+01:00
