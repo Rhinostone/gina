@@ -116,8 +116,9 @@ async function writeCache(bundle, opt, jsonContent, req, res, cacheIsEnabled, th
             // module scope a concurrent request may have moved on from.
             return throwError(res, 500, new Error('cache.invalidateOn must be an array'));
         }
-        // Placing event listeners
-        renderCache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
+        // Placing event listeners. Awaited: setEvents also persists the events into
+        // the `fs` sidecar, so a restart's disk read-back can restore them.
+        await renderCache.setEvents(cacheKey, cachingOption.invalidateOnEvents);
     }
 }
 

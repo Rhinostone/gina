@@ -1,0 +1,3 @@
+kind: Added
+body: 'Evict by event from outside the bundle: `POST /_gina/cache/clear?event=<name>` (both engines) and `gina cache:clear --event=<name>`. A controller''s `self.cache.invalidateByEvent()` only reaches its own process, so this is how one bundle''s write invalidates another bundle''s cached pages. Both report the number of entries evicted. Note `?event=` previously went unread, so passing it flushed EVERY bundle''s output cache instead of evicting that event''s entries; it is now honoured and takes precedence over `?bundle=`.'
+time: 2026-07-14T21:19:26+01:00

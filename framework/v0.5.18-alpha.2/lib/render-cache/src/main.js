@@ -277,6 +277,16 @@ function RenderCache(options) {
         // Repopulate the Map: installs the timer + the same disk-cleanup fn as a
         // fresh write, and stamps createdAt/lastAccessedAt/expiresAt.
         mem.set(key, entry, function () { rmFsFiles(entry.filename); });
+
+        // Restore the event registrations the sidecar carried. Without this the entry
+        // comes back off disk with NO registration, so firing its event would not
+        // evict it and it would serve stale until TTL — the fs half of the
+        // invalidation contract, silently broken across a restart. Registration is
+        // in-heap only, so this must not re-write the sidecar (it already holds them).
+        if ( Array.isArray(meta.events) && meta.events.length ) {
+            mem.setEvents(key, meta.events);
+        }
+
         return mem.get(key);
     }
 
@@ -455,26 +465,63 @@ function RenderCache(options) {
     };
 
     /**
-     * Register cache-invalidation rules for `key` (delegates to `lib/cache`).
+     * Register cache-invalidation rules for `key`.
+     *
+     * The in-heap registration is done SYNCHRONOUSLY (before the first `await`), so a
+     * caller that does not await still gets correct in-process behaviour. For an `fs`
+     * entry the events are then persisted into the `.meta` sidecar, so a restart's
+     * disk read-back can restore them — without this the entry comes back serving from
+     * disk with NO registration, and firing the event would silently not evict it.
+     *
+     * Best-effort on the disk half: a sidecar that cannot be read/written leaves the
+     * in-heap registration intact and self-heals on the next miss-render.
      *
      * @memberof RenderCache
      * @param {string}   key
      * @param {string[]} events
      * @param {function} [cb]
-     * @returns {void}
+     * @returns {Promise<void>}
+     *
+     * @example
+     * await renderCache.set('fs', key, entry, payload);
+     * await renderCache.setEvents(key, ['post#saved']);
      */
-    instance.setEvents = function(key, events, cb) {
-        return mem.setEvents(key, events, cb);
+    instance.setEvents = async function(key, events, cb) {
+        mem.setEvents(key, events, cb);
+
+        if ( !Array.isArray(events) || !events.length ) {
+            return;
+        }
+        // `fs` entries carry the body path stamped by set('fs'); memory entries do not.
+        var entry = mem.get(key);
+        if ( !entry || !entry.filename ) {
+            return;
+        }
+        var metaPath = entry.filename + '.meta';
+        try {
+            var meta = JSON.parse(await fs.promises.readFile(metaPath, 'utf8'));
+            meta.events = events.slice();
+            await fs.promises.writeFile(metaPath, JSON.stringify(meta));
+        } catch (e) {
+            // Sidecar unreadable/unwritable: the in-heap registration above still
+            // stands for this process; only the restart-survival half is lost.
+        }
     };
 
     /**
      * Fire event-based invalidation for every key registered to `event`
      * (delegates to `lib/cache`).
      *
+     * Each evicted entry runs its cleanup fn, so an `fs` body + sidecar is removed
+     * from disk too.
+     *
      * @memberof RenderCache
      * @param {string} event
      * @param {*}      [data]
-     * @returns {void}
+     * @returns {number} entries evicted
+     *
+     * @example
+     * var evicted = renderCache.from(serverInstance._cached).invalidateByEvent('post#saved');
      */
     instance.invalidateByEvent = function(event, data) {
         return mem.invalidateByEvent(event, data);

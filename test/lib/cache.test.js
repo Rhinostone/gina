@@ -275,14 +275,83 @@ describe('05 - event invalidation', function () {
         assert.equal(cleaned, true);
     });
 
-    it('repeated setEvents creates duplicate registrations', function () {
+    it('repeated setEvents is idempotent (no duplicate rows)', function () {
         cache.set('key', { v: 1 });
         cache.setEvents('key', ['evt']);
         cache.setEvents('key', ['evt']);
 
-        // Known quirk: findOne dedup check inside setEvents does not
-        // prevent duplicates — two entries are inserted.
-        assert.equal(cache._events.length, 2);
+        // Load-bearing: a route re-registers its events on EVERY cache-miss
+        // re-render, so a non-idempotent setEvents grows the registry without
+        // bound for the life of the process.
+        assert.equal(cache._events.length, 1);
+    });
+
+    // ---- the registry must never hand a cache key to a query evaluator ----
+    // A cache key is `<token>:<kind>:<bundle>:<url>` and the url carries the
+    // querystring, so keys routinely hold `?` and `=`. Registering twice against
+    // such a key used to THROW ('Could not evaluate condition `"<key>""<key>"`'),
+    // because the dedup lookup ran the key through lib/collection's condition
+    // parser, which reads those chars as operator tokens.
+    it('setEvents accepts a key holding a querystring (no evaluator)', function () {
+        var key = 'static:demo:/invoice/9?v=2&sort=asc';
+        cache.set(key, { v: 1 });
+
+        assert.doesNotThrow(function () {
+            cache.setEvents(key, ['invoice#saved']);
+            cache.setEvents(key, ['invoice#saved']);   // the re-registration that threw
+        });
+        assert.equal(cache._events.length, 1);
+        assert.equal(cache.invalidateByEvent('invoice#saved'), 1);
+        assert.equal(cache.has(key), false);
+    });
+
+    it('a TTL-expired key does not strand its registration', function () {
+        // The sliding/TTL timers installed by set() delete straight off the Map and
+        // never route through delete(), so a timed-out key could strand its rows —
+        // and the next miss-render's setEvents would then hit the stale row. The
+        // reclaim in delete() (which runs even on a miss) is what closes that.
+        var key = 'static:demo:/a?x=1';
+        cache.set(key, { v: 1 });
+        cache.setEvents(key, ['e#x']);
+        assert.equal(cache._events.length, 1);
+
+        cache.delete(key);
+        assert.equal(cache._events.length, 0, 'the row must go with the entry');
+
+        // …and the next cache-miss re-render re-registers cleanly.
+        assert.doesNotThrow(function () {
+            cache.set(key, { v: 2 });
+            cache.setEvents(key, ['e#x']);
+        });
+        assert.equal(cache._events.length, 1);
+    });
+
+    it('invalidateByEvent returns the number of entries evicted', function () {
+        cache.set('a', { v: 1 });
+        cache.set('b', { v: 2 });
+        cache.setEvents('a', ['bulk']);
+        cache.setEvents('b', ['bulk']);
+
+        assert.equal(cache.invalidateByEvent('bulk'), 2);
+        // Rows were reclaimed with the entries, so a re-fire evicts nothing.
+        assert.equal(cache.invalidateByEvent('bulk'), 0);
+        assert.equal(cache.invalidateByEvent('never-registered'), 0);
+    });
+
+    it('invalidateByEvent counts each key once, not each registration', function () {
+        cache.set('a', { v: 1 });
+        cache.setEvents('a', ['e1', 'e2']);   // one key, two rows
+        // Only e1's key is evicted — and it is ONE entry, not two rows' worth.
+        assert.equal(cache.invalidateByEvent('e1'), 1);
+    });
+
+    it('clear() drops every registration', function () {
+        cache.set('a', { v: 1 });
+        cache.setEvents('a', ['e1']);
+
+        cache.clear();
+        assert.equal(cache._events.length, 0);
+        assert.equal(cache.invalidateByEvent('e1'), 0);
     });
 });
 

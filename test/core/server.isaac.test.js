@@ -1127,6 +1127,28 @@ describe('08 - #S7 admin /_gina/* IP allowlist source structure', function() {
             'must keep the isaac dual HTTP/2 (stream.respond) + HTTP/1.1 (writeHead) response');
     });
 
+    it('/_gina/cache/clear honours ?event= and lets it WIN over ?bundle= (engine parity)', function() {
+        // Mirrors the express-engine pin in server.test.js — /_gina/* handlers must
+        // stay in step across engines. Load-bearing: `event` used to be an unparsed
+        // param, so ?event=<name> fell through with bundle === null and flushed EVERY
+        // bundle's output cache instead of evicting that event's entries.
+        var clearMatch = src.indexOf('/_gina/cache/clear');
+        var jobsMatch  = src.indexOf('/_gina\\/jobs', clearMatch);
+        var blk = src.slice(clearMatch, jobsMatch > clearMatch ? jobsMatch : clearMatch + 2000);
+
+        assert.ok(blk.indexOf("get('event')") > -1, 'must parse the ?event= selector');
+        assert.ok(/renderCache\.invalidateByEvent\(cacheClearEvent\)/.test(blk),
+            'an ?event= run must evict by event, not flush');
+
+        // The selection must be gated on cacheClearEvent, so ?event= can never reach
+        // the bundle flush.
+        assert.match(blk, /\(\s*cacheClearEvent\s*\)\s*\?[\s\S]{0,160}?invalidateByEvent\(cacheClearEvent\)[\s\S]{0,160}?:[\s\S]{0,160}?renderCache\.clear\(cacheClearBundle\)/,
+            'invalidateByEvent must be selected over clear() whenever cacheClearEvent is set');
+        // …and the reported envelope must name the event, not a null bundle.
+        assert.ok(blk.indexOf('event: cacheClearEvent') > -1,
+            'the ?event= response must echo the event (never bundle: null)');
+    });
+
     it('gna.js wires the admin allowlist init alongside the metrics init block', function() {
         var gnaSrc = fs.readFileSync(path.join(require('../fw'), 'core/gna.js'), 'utf8');
         assert.ok(

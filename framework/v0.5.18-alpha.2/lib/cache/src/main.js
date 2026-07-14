@@ -51,11 +51,17 @@ function Cache(options) {
     var maxEntries      = (options && options.maxEntries > 0) ? ~~(options.maxEntries) : 0;
     var merge           = (isGFFCtx) ? require('lib/merge') : require('../../../lib/merge');
     var uuid            = (isGFFCtx) ? require('lib/uuid') : require('../../../lib/uuid');
-    var Collection      = (isGFFCtx) ? require('lib/collection') : require('../../../lib/collection');
     // var EventEmitter    = (isGFFCtx) ? EventTarget : require('events').EventEmitter;
 
+    // `_events` is a PLAIN ARRAY of `{ id, cacheKey, event }` rows, matched in plain
+    // JS. It was a `lib/collection`, whose condition-evaluating query engine cannot
+    // handle a cache key: `findOne({cacheKey, event})` THREW on any key holding a
+    // querystring (the `?`/`=` chars parse as operator tokens — the condition came out
+    // as `"<key>""<key>"`, two operands and no operator), and `delete({...})` silently
+    // matched nothing, so rows were never reclaimed. A cache key is opaque data, not a
+    // query expression — it must never be handed to an evaluator.
     var instance = {
-        _events              : new Collection() //,
+        _events              : [] //,
         // eventHadlerInstance  : new EventEmitter()
     };
     var importedMapInstance = null;
@@ -261,6 +267,40 @@ function Cache(options) {
     }
 
     /**
+     * Drop every event registration held for `cacheKey`.
+     *
+     * An event registration's lifetime IS the entry's lifetime — a deleted entry can
+     * never be invalidated again, and the next render re-registers it. Keeping the two
+     * in step is what bounds `_events`.
+     *
+     * @inner
+     * @param {string} cacheKey
+     * @returns {number} rows dropped
+     */
+    function dropEvents(cacheKey) {
+        if ( !cache._events || !cache._events.length ) {
+            return 0;
+        }
+        var kept = [], dropped = 0;
+        for (let i = 0, len = cache._events.length; i < len; i++) {
+            if ( cache._events[i].cacheKey === cacheKey ) {
+                dropped++;
+            } else {
+                kept.push(cache._events[i]);
+            }
+        }
+        if ( dropped > 0 ) {
+            // Truncate + refill in place: `_events` is stamped on the shared Map, and
+            // other Cache instances hold that same array reference.
+            cache._events.length = 0;
+            for (let i = 0, len = kept.length; i < len; i++) {
+                cache._events.push(kept[i]);
+            }
+        }
+        return dropped;
+    }
+
+    /**
      * Delete entry by key
      *
      * @param {string} key
@@ -269,6 +309,11 @@ function Cache(options) {
      */
     instance['delete'] = function(key) {
         const entry = cache.get(key);
+        // Reclaim the key's event registrations. Runs even on a MISS, on purpose: the
+        // sliding/TTL timers installed by set() delete straight off the Map (they never
+        // route through here), so a timed-out key can strand its rows — this reclaims
+        // them the next time anything deletes that key (e.g. an event invalidation).
+        dropEvents(key);
         if (entry?.timeout) clearTimeout(entry.timeout);
         if (entry) {
             if (entry.cleanup) {
@@ -301,6 +346,11 @@ function Cache(options) {
             }
         }
         cache.clear();
+        // No entries left → no registrations left. Truncated in place (other Cache
+        // instances hold this same array reference off the shared Map).
+        if ( cache._events ) {
+            cache._events.length = 0;
+        }
         if (importedMapInstance) {
             importedMapInstance = cache;
         }
@@ -417,26 +467,45 @@ function Cache(options) {
         };
     }
 
+    /**
+     * Evict every entry registered to `event` and reclaim its registrations.
+     *
+     * @inner
+     * @param {string} event
+     * @param {*}      [data] - Accepted for signature compatibility; unused.
+     * @returns {number} entries evicted (each key counted once, even when several
+     *                   registrations point at it)
+     */
     function onInvalidateEvent(event, data) {
-        console.debug('[cache::onInvalidateEvent] ', event, data);
-
-        if (!cache._events) {
-            return;
+        if ( !cache._events || !cache._events.length ) {
+            return 0;
         }
 
-        var found = cache._events
-            .setSearchOption('cacheKey', 'skipEval', true)
-            .find({ event: event});
-        for (let i=0, len=found.length; i<len; i++) {
-            instance['delete'](found[i].cacheKey);
-            cache._events
-                .setSearchOption('cacheKey', 'skipEval', true)
-                .delete({cacheKey: found[i].cacheKey, event: event });
+        // Snapshot the target keys BEFORE deleting: instance.delete() mutates
+        // `_events` (via dropEvents), so iterating it live would skip rows.
+        var keys = [];
+        for (let i = 0, len = cache._events.length; i < len; i++) {
+            if ( cache._events[i].event === event && keys.indexOf(cache._events[i].cacheKey) < 0 ) {
+                keys.push(cache._events[i].cacheKey);
+            }
+        }
+
+        var removed = 0;
+        for (let i = 0, len = keys.length; i < len; i++) {
+            // delete() runs the entry's cleanup fn (removing an `fs` body + its
+            // sidecar) and drops the key's registrations. It returns false when the
+            // entry is already gone (e.g. a TTL timer beat us to it) — that is NOT an
+            // eviction, so it is not counted, and counting successful deletes means a
+            // key registered to the event more than once still counts once.
+            if ( instance['delete'](keys[i]) ) {
+                removed++;
+            }
         }
 
         if (importedMapInstance) {
             importedMapInstance = cache;
         }
+        return removed;
     }
 
 
@@ -452,7 +521,6 @@ function Cache(options) {
      */
     instance['setEvents'] = function(cacheKey, cacheEvents, cb) {
         if ( typeof(cache._events) == 'undefined' ) {
-            // collection
             cache._events = instance['_events'];
         }
         // if ( typeof(cache.eventHadlerInstance) == 'undefined' ) {
@@ -460,17 +528,23 @@ function Cache(options) {
         //     cache.eventHadlerInstance = instance['eventHadlerInstance'];
         // }
 
-        // Placing listeners
         for (let i=0, len=cacheEvents.length; i<len; i++ ) {
-            // Only place if not already defiend
-            // let trigger = 'cache#invalidate::'+ cacheEvents[i];
-            // if ( typeof(cache.eventHadlerInstance._events[trigger]) == 'undefined' ) {
-            //     console.debug('[cache][set listener] ',trigger);
-            //     cache.eventHadlerInstance.on(trigger, onInvalidateEvent);
-            // }
-
-            if ( !cache._events.setSearchOption('cacheKey', 'skipEval', true).findOne({cacheKey: cacheKey, event: cacheEvents[i]}) ) {
-                cache._events.insert({
+            // Idempotent: a route re-registers on EVERY cache-miss re-render, so
+            // without this the registry would grow one row per render, forever.
+            // The match is a plain `===` on both fields — never a query expression
+            // (see the `_events` note at the top: a cache key is opaque data).
+            var already = false;
+            for (let j=0, jLen=cache._events.length; j<jLen; j++ ) {
+                if (
+                    cache._events[j].cacheKey === cacheKey
+                    && cache._events[j].event === cacheEvents[i]
+                ) {
+                    already = true;
+                    break;
+                }
+            }
+            if ( !already ) {
+                cache._events.push({
                     id: uuid(),
                     cacheKey: cacheKey,
                     event: cacheEvents[i]
@@ -486,15 +560,21 @@ function Cache(options) {
     /**
      * Manually trigger invalidation for all cache keys registered to `event`.
      *
+     * Each evicted entry has its cleanup fn run (an `fs` body + sidecar is removed
+     * from disk) and its registrations reclaimed.
+     *
      * @memberof Cache
-     * @param {string} event - Event name
-     * @param {*}      [data] - Arbitrary event payload (passed to the handler)
-     * @returns {void}
+     * @param {string} event  - Event name
+     * @param {*}      [data] - Accepted for signature compatibility; unused.
+     * @returns {number} entries evicted (0 when nothing is registered to `event`)
+     *
+     * @example
+     * cache.setEvents('static:blog:/posts', ['post#saved']);
+     * cache.invalidateByEvent('post#saved'); // => 1
      */
     instance['invalidateByEvent'] = function(event, data) {
-        // console.debug('[cache][invalidateByEvent] ',event, data);
         // cache.eventHadlerInstance.emit('cache#invalidate::'+event, event, data);
-        onInvalidateEvent(event, data)
+        return onInvalidateEvent(event, data);
     }
 
     return instance;

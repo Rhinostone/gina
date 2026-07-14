@@ -3203,9 +3203,11 @@ function Server(options) {
             // /_gina/cache/stats. Scoped to the static:/data: output namespaces
             // via lib.RenderCache.clear() — never wipes swig: compiled templates
             // or http2session: entries. Optional ?bundle=<name> restricts the
-            // flush to one bundle. Current-namespace fs bodies are removed via the
-            // entries' cleanup fns; old-namespace fs orphans are reclaimed by the
-            // CLI (gina cache:clear), not in-process.
+            // flush to one bundle; optional ?event=<name> evicts only the entries
+            // registered to that event (the route's cache.invalidateOnEvents) and
+            // takes precedence over ?bundle. Current-namespace fs bodies are removed
+            // via the entries' cleanup fns; old-namespace fs orphans are reclaimed by
+            // the CLI (gina cache:clear), not in-process.
             if (
                 request.method.toUpperCase() === 'POST'
                 && /\/_gina\/cache\/clear(\?.*)?$/i.test(request.url)
@@ -3219,12 +3221,23 @@ function Server(options) {
                     return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/cache/clear: client IP not in app.json admin.allowFrom' }));
                 }
                 var _cacheClearBundle = null;
+                var _cacheClearEvent  = null;
                 var _cacheClearQi     = request.url.indexOf('?');
                 if ( _cacheClearQi > -1 ) {
-                    _cacheClearBundle = new URLSearchParams(request.url.slice(_cacheClearQi + 1)).get('bundle') || null;
+                    var _cacheClearQs = new URLSearchParams(request.url.slice(_cacheClearQi + 1));
+                    _cacheClearBundle = _cacheClearQs.get('bundle') || null;
+                    _cacheClearEvent  = _cacheClearQs.get('event')  || null;
                 }
                 var _cacheClearView = new lib.RenderCache();
                 _cacheClearView.from(self.instance._cached);
+                // `event` wins over `bundle`. Load-bearing: `event` used to be an
+                // unread param, so ?event=<name> fell through with bundle === null and
+                // silently flushed EVERY bundle's output cache — the opposite of the
+                // narrow eviction the caller asked for.
+                if ( _cacheClearEvent ) {
+                    var _cacheEvicted = _cacheClearView.invalidateByEvent(_cacheClearEvent);
+                    return response.end(JSON.stringify({ ok: true, event: _cacheClearEvent, cleared: _cacheEvicted }));
+                }
                 var _cacheCleared = _cacheClearView.clear(_cacheClearBundle);
                 return response.end(JSON.stringify({ ok: true, bundle: _cacheClearBundle, cleared: _cacheCleared }));
             }

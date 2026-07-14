@@ -51,8 +51,8 @@ describe('01 - module shape', function () {
         assert.match(src, /function\s+Clear\s*\(\s*opt\s*,\s*cmd\s*\)\s*\{/);
     });
 
-    it('initialises self with null format, dryRun false, and an empty results array', function () {
-        assert.match(src, /var self\s*=\s*\{\s*format\s*:\s*null\s*,\s*dryRun\s*:\s*false\s*,\s*results\s*:\s*\[\]\s*\}/);
+    it('initialises self with null format, dryRun false, null event, and an empty results array', function () {
+        assert.match(src, /var self\s*=\s*\{\s*format\s*:\s*null\s*,\s*dryRun\s*:\s*false\s*,\s*event\s*:\s*null\s*,\s*results\s*:\s*\[\]\s*\}/);
     });
 
     it('reaches RenderCache via the lib registry (require(../../index).RenderCache)', function () {
@@ -87,6 +87,11 @@ describe('02 - argv parsing', function () {
     it('captures the --dry-run boolean flag', function () {
         assert.match(src, /\/\^\\-\\-dry-run\$\/\.test\(process\.argv\[i\]\)/);
         assert.match(src, /self\.dryRun = true;/);
+    });
+
+    it('captures --event=<name>', function () {
+        assert.match(src, /\/\^\\-\\-event\\=\/\.test\(process\.argv\[i\]\)/);
+        assert.match(src, /self\.event\s*=\s*process\.argv\[i\]\.split\(\/\\=\/\)\[1\]/);
     });
 });
 
@@ -129,6 +134,13 @@ describe('04 - offline fs reclaim', function () {
         // JSDoc's bare `clearFsBundle` mention (the indexOf-on-a-JSDoc trap).
         assert.match(src, /try \{[\s\S]{0,220}?new RenderCache\(\)\.clearFsBundle\(self\.projectCachePath[\s\S]{0,140}?\} catch/);
     });
+
+    it('SKIPS the offline fs reclaim under --event', function () {
+        // clearFsBundle is a bundle-wide directory reclaim that knows nothing about
+        // events — running it on an --event run would wipe the bundle's ENTIRE on-disk
+        // cache while the caller asked for one event's entries.
+        assert.match(src, /if \(\s*!self\.event\s*\)\s*\{[\s\S]{0,400}?clearFsBundle\(/);
+    });
 });
 
 
@@ -145,8 +157,16 @@ describe('05 - in-heap flush / probe', function () {
 
     it('POSTs /_gina/cache/clear on a real run, GETs /_gina/cache/stats on a dry-run', function () {
         assert.match(src, /var method\s*=\s*self\.dryRun\s*\?\s*'GET'\s*:\s*'POST'/);
-        assert.ok(src.indexOf("'/_gina/cache/clear?bundle=' + encodeURIComponent(bundle)") > -1);
+        assert.ok(src.indexOf("'/_gina/cache/clear' + clearQuery") > -1);
         assert.ok(src.indexOf("'/_gina/cache/stats'") > -1);
+    });
+
+    it('selects ?event= over ?bundle= when --event is given', function () {
+        // The registry has no bundle dimension, so an --event run sends the event
+        // INSTEAD of the bundle (server-side, `event` also wins over `bundle`).
+        assert.ok(src.indexOf("'?event='  + encodeURIComponent(self.event)") > -1);
+        assert.ok(src.indexOf("'?bundle=' + encodeURIComponent(bundle)") > -1);
+        assert.match(src, /var clearQuery\s*=\s*self\.event\s*\?/);
     });
 
     it('tries each candidate port, advancing on ECONNREFUSED', function () {
@@ -191,7 +211,7 @@ describe('06 - output', function () {
     });
 
     it('emits text via opt.client.write(formatText(...))', function () {
-        assert.match(src, /opt\.client\.write\(formatText\(self\.results, self\.projectName, self\.dryRun\)\)/);
+        assert.match(src, /opt\.client\.write\(formatText\(self\.results, self\.projectName, self\.dryRun, self\.event\)\)/);
     });
 
     it('terminates via opt.client end + process.exit', function () {
@@ -222,6 +242,15 @@ describe('07 - help + arguments', function () {
         assert.ok(Array.isArray(argsArr));
         assert.ok(argsArr.indexOf('--dry-run') > -1);
         assert.ok(argsArr.indexOf('--format') > -1);
+    });
+
+    it('arguments.json whitelists --event (else CmdHelper reads it as a bundle name)', function () {
+        assert.ok(argsArr.indexOf('--event') > -1);
+    });
+
+    it('help.txt documents the --event form and that it is the in-heap pass only', function () {
+        assert.match(helpTxt, /--event\=<event_name>/);
+        assert.match(helpTxt, /IN-HEAP pass only/);
     });
 });
 

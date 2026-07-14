@@ -146,8 +146,25 @@ automatically.
 }
 ```
 
-Call `cache.invalidateByEvent(eventName)` from any controller or model to
-immediately evict all entries registered to that event.
+Fire it from a controller with `self.cache.invalidateByEvent(eventName)`. Every
+entry registered to that event is evicted immediately, whatever its remaining
+TTL, and the call returns how many were evicted. For an `fs` entry the cached
+body and its `.meta` sidecar are removed from disk too.
+
+```js
+self.cache.invalidateByEvent('invoice#saved'); // => 2
+```
+
+Scope is the **calling process**. The `memory` store lives in the bundle's own
+heap, so a controller can only invalidate its own bundle. To invalidate across
+bundles — bundle A's write must evict bundle B's cached pages — use the external
+trigger instead:
+
+```tty
+$ gina cache:clear @<project_name> --event=invoice#saved
+```
+
+or `POST /_gina/cache/clear?event=invoice#saved` (admin-gated, both engines).
 
 ---
 

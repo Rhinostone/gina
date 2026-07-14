@@ -1811,6 +1811,84 @@ function SuperController(options) {
 
 
     /**
+     * Render/output-cache handle for controller (and model) code — the firing half of
+     * the per-route `cache.invalidateOnEvents` contract.
+     *
+     * A route declares WHICH events evict it:
+     * ```json
+     * "invoice-get": {
+     *     "url": "/invoice/:id",
+     *     "cache": { "type": "memory", "ttl": 3600, "invalidateOnEvents": ["invoice#saved"] }
+     * }
+     * ```
+     * …and this fires them. Every entry registered to the event is evicted immediately,
+     * whatever its remaining TTL; for an `fs`-cached entry the body + its `.meta`
+     * sidecar are removed from disk too.
+     *
+     * Scope is the CALLING PROCESS's cache. The `memory` store lives in the bundle's own
+     * heap, so a cross-bundle invalidation (bundle A's write must evict bundle B's cached
+     * pages) needs the external trigger instead — `POST /_gina/cache/clear?event=<name>`
+     * or `gina cache:clear --event=<name>`.
+     *
+     * Deliberately NARROW: it exposes invalidation only. The underlying store is a
+     * process-wide singleton whose `from()` re-points the shared Map — handing bundle
+     * code the raw cache would let one route silently re-point every other route's store.
+     *
+     * @namespace SuperController#cache
+     *
+     * @example <caption>Evict on a domain write</caption>
+     *   this.save = function(req, res, next) {
+     *       invoice.onComplete(function(err) {
+     *           if (err) { return self.throwError(err); }
+     *           self.cache.invalidateByEvent('invoice#saved'); // => 3 (entries evicted)
+     *           self.renderJSON({ ok: true });
+     *       });
+     *       invoice.save();
+     *   };
+     */
+    this.cache = {
+        /**
+         * Evict every cached entry registered to `event`.
+         *
+         * @memberof SuperController#cache
+         * @param {string} event - Event name, exactly as spelled in the route's
+         *                         `cache.invalidateOnEvents` array.
+         * @returns {number} entries evicted (0 when nothing is registered to `event`,
+         *                   or when the server's store is not reachable).
+         */
+        invalidateByEvent: function(event) {
+            if ( !self.serverInstance || !self.serverInstance._cached ) {
+                return 0;
+            }
+            // from() + the call in ONE tick: from() re-points the process-wide backing
+            // Map, so nothing may run between adopting the store and reading it.
+            return new lib.RenderCache()
+                .from(self.serverInstance._cached)
+                .invalidateByEvent(event);
+        },
+
+        /**
+         * Flush the output cache — the `static:` (HTML) and `data:` (JSON) namespaces
+         * only; compiled templates and HTTP/2 sessions share the Map and are never
+         * touched.
+         *
+         * @memberof SuperController#cache
+         * @param {string} [bundle] - Restrict to one bundle; omit to flush every bundle
+         *                            in this process.
+         * @returns {number} entries removed.
+         */
+        clear: function(bundle) {
+            if ( !self.serverInstance || !self.serverInstance._cached ) {
+                return 0;
+            }
+            return new lib.RenderCache()
+                .from(self.serverInstance._cached)
+                .clear(bundle);
+        }
+    };
+
+
+    /**
      * #I18N1 — Translate a key using the bundle's loaded i18n catalogs.
      * Auto-binds the request's culture from `req.culture` (formalised by
      * slice 3) and the bundle name from `local.options.conf.bundle`.

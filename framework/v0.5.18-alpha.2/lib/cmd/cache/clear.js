@@ -63,7 +63,7 @@ var console     = lib.logger;
  *  $ gina cache:clear api @myproject --dry-run
  */
 function Clear(opt, cmd) {
-    var self = { format: null, dryRun: false, results: [] };
+    var self = { format: null, dryRun: false, event: null, results: [] };
 
     var init = function(opt, cmd) {
         // import CMD helpers
@@ -71,14 +71,16 @@ function Clear(opt, cmd) {
         // check CMD configuration
         if (!isCmdConfigured()) return false;
 
-        // Full pre-scan of argv for --format and --dry-run. `cache/arguments.json`
-        // whitelists both so CmdHelper does not treat them as positional (bundle)
+        // Full pre-scan of argv for --format, --dry-run and --event. `cache/arguments.json`
+        // whitelists all three so CmdHelper does not treat them as positional (bundle)
         // args (mirrors minion:kill).
         for (let i = 3, len = process.argv.length; i < len; i++) {
             if ( /^\-\-format\=/.test(process.argv[i]) ) {
                 self.format = process.argv[i].split(/\=/)[1];
             } else if ( /^\-\-dry-run$/.test(process.argv[i]) ) {
                 self.dryRun = true;
+            } else if ( /^\-\-event\=/.test(process.argv[i]) ) {
+                self.event = process.argv[i].split(/\=/)[1];
             }
         }
 
@@ -111,13 +113,21 @@ function Clear(opt, cmd) {
      */
     var clearOne = function(bundle, opt, cmd, isBulk, next) {
         // --- pass 1: offline fs reclaim (always runs, even if the bundle is down) ---
+        // SKIPPED under --event: clearFsBundle is a bundle-wide directory reclaim that
+        // knows nothing about events, so running it here would wipe the bundle's ENTIRE
+        // on-disk cache while the caller asked for one event's entries. Event
+        // registrations live in the bundle's heap, so --event is the in-heap pass only —
+        // and that pass still removes each evicted fs entry's body + sidecar via its
+        // cleanup fn.
         var fsRemoved = [];
-        try {
-            // new RenderCache() (no store/path) is safe for the offline fs path —
-            // clearFsBundle uses only `fs` + the passed root/bundle.
-            fsRemoved = new RenderCache().clearFsBundle(self.projectCachePath, bundle, { dryRun: self.dryRun });
-        } catch (e) {
-            // best-effort — a broken cache dir must not abort the whole run.
+        if ( !self.event ) {
+            try {
+                // new RenderCache() (no store/path) is safe for the offline fs path —
+                // clearFsBundle uses only `fs` + the passed root/bundle.
+                fsRemoved = new RenderCache().clearFsBundle(self.projectCachePath, bundle, { dryRun: self.dryRun });
+            } catch (e) {
+                // best-effort — a broken cache dir must not abort the whole run.
+            }
         }
 
         // --- pass 2: in-heap flush (real: POST /clear; dry-run: GET /stats probe) ---
@@ -166,9 +176,14 @@ function Clear(opt, cmd) {
         }
 
         var method = self.dryRun ? 'GET' : 'POST';
+        // --event evicts by event name (server-side `event` wins over `bundle`), so it
+        // is sent INSTEAD of ?bundle= — the registry has no bundle dimension.
+        var clearQuery = self.event
+            ? '?event='  + encodeURIComponent(self.event)
+            : '?bundle=' + encodeURIComponent(bundle);
         var path   = self.dryRun
             ? '/_gina/cache/stats'
-            : '/_gina/cache/clear?bundle=' + encodeURIComponent(bundle);
+            : '/_gina/cache/clear' + clearQuery;
 
         // Try each candidate in order; advance on ECONNREFUSED, stop on first response.
         var tryNext = function(index) {
@@ -242,8 +257,12 @@ function Clear(opt, cmd) {
      * @param {string|null}    singleBundle - The bundle name for a single-bundle run, else null.
      * @returns {object}
      */
-    var buildEnvelope = function(project, dryRun, results, singleBundle) {
+    var buildEnvelope = function(project, dryRun, results, singleBundle, event) {
         var base = { project: project, dryRun: dryRun };
+        // Only present on an --event run, so the flat-flush envelope stays unchanged.
+        if (event) {
+            base.event = event;
+        }
         if (singleBundle && results.length === 1) {
             base.bundle        = results[0].bundle;
             base.fsRemoved     = results[0].fsRemoved;
@@ -271,10 +290,14 @@ function Clear(opt, cmd) {
      * @param {boolean}       dryRun
      * @returns {string}
      */
-    var formatText = function(results, project, dryRun) {
+    var formatText = function(results, project, dryRun, event) {
         var SEP = '------------------------------------------------------------\n\r';
         var str = '\n\r' + SEP;
-        str += (dryRun ? '[ dry-run ] ' : '') + 'cache:clear @' + project + '\n\r';
+        str += (dryRun ? '[ dry-run ] ' : '') + 'cache:clear @' + project;
+        if (event) {
+            str += '  --event=' + event;
+        }
+        str += '\n\r';
         str += SEP;
 
         if (!results.length) {
@@ -286,8 +309,12 @@ function Clear(opt, cmd) {
             var r = results[i];
             str += '\n\r  [ ' + r.bundle + '@' + project + ' ]\n\r';
 
-            // fs pass
-            if (r.fsRemoved.length === 0) {
+            // fs pass — skipped entirely on an --event run (it is bundle-wide, and would
+            // wipe far more than the event's entries). Say so rather than printing a
+            // "nothing reclaimed" that reads like an empty cache dir.
+            if (event) {
+                str += '    fs      : skipped (--event evicts in-heap; each evicted fs entry is removed with it)\n\r';
+            } else if (r.fsRemoved.length === 0) {
                 str += '    fs      : ' + (dryRun ? 'nothing to reclaim' : 'nothing reclaimed') + '\n\r';
             } else {
                 str += '    fs      : ' + (dryRun ? 'would remove ' : 'removed ') + r.fsRemoved.length + ' dir(s)\n\r';
@@ -298,11 +325,13 @@ function Clear(opt, cmd) {
 
             // in-heap pass
             if (!r.reachable) {
-                str += '    in-heap : not running (fs ' + (dryRun ? 'preview only' : 'reclaimed offline') + ', in-heap skipped)\n\r';
+                str += '    in-heap : not running (' + (event ? 'nothing to evict — event registrations live in the bundle heap' : 'fs ' + (dryRun ? 'preview only' : 'reclaimed offline') + ', in-heap skipped') + ')\n\r';
             } else if (dryRun) {
-                str += '    in-heap : reachable (would flush the live static:/data: cache)\n\r';
+                str += '    in-heap : reachable (would ' + (event ? 'evict the entries registered to ' + event : 'flush the live static:/data: cache') + ')\n\r';
             } else if (r.inHeapCleared === null) {
                 str += '    in-heap : reachable (no count returned — admin.allowFrom?)\n\r';
+            } else if (event) {
+                str += '    in-heap : evicted ' + r.inHeapCleared + ' entr' + (r.inHeapCleared === 1 ? 'y' : 'ies') + ' registered to ' + event + '\n\r';
             } else {
                 str += '    in-heap : cleared ' + r.inHeapCleared + ' entr' + (r.inHeapCleared === 1 ? 'y' : 'ies') + '\n\r';
             }
@@ -322,7 +351,7 @@ function Clear(opt, cmd) {
         var single = (self.results.length === 1 && !!self.name) ? self.name : null;
 
         if ( /^json/i.test(String(self.format || '')) ) {
-            var envelope = buildEnvelope(self.projectName, self.dryRun, self.results, single);
+            var envelope = buildEnvelope(self.projectName, self.dryRun, self.results, single, self.event);
             // fs.writeSync (not process.stdout.write): process.stdout is async on a
             // pipe, and end() calls process.exit right after — a plain write would
             // truncate a large envelope under `| jq` / `$(…)` (llms.txt #180).
@@ -330,7 +359,7 @@ function Clear(opt, cmd) {
             return end(opt, cmd);
         }
 
-        opt.client.write(formatText(self.results, self.projectName, self.dryRun));
+        opt.client.write(formatText(self.results, self.projectName, self.dryRun, self.event));
         end(opt, cmd);
     }
 

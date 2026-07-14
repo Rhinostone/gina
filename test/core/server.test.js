@@ -770,6 +770,28 @@ describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function
         assert.ok(blk.indexOf("get('bundle')") > -1, 'must honour the optional ?bundle= filter');
     });
 
+    it('/_gina/cache/clear honours ?event= and lets it WIN over ?bundle=', function () {
+        // Load-bearing, not cosmetic: `event` used to be an unparsed param, so
+        // ?event=<name> fell through with bundle === null and clear(null) flushed
+        // EVERY bundle's output cache — the opposite of the narrow eviction asked for.
+        var clearAt = src.indexOf('/_gina/cache/clear');
+        var jobsAt  = src.indexOf('_gina\\/jobs\\/', clearAt);
+        var blk     = src.slice(clearAt, jobsAt);
+
+        assert.ok(blk.indexOf("get('event')") > -1, 'must parse the ?event= selector');
+        assert.ok(/\.invalidateByEvent\(_cacheClearEvent\)/.test(blk),
+            'an ?event= run must evict by event, not flush');
+
+        // The event branch must SHORT-CIRCUIT before the flush can run.
+        var eventBranchAt = blk.search(/if \(\s*_cacheClearEvent\s*\)/);
+        var flushAt       = blk.search(/\.clear\(_cacheClearBundle\)/);
+        assert.ok(eventBranchAt > -1, 'must branch on _cacheClearEvent');
+        assert.ok(eventBranchAt < flushAt,
+            'the ?event= branch must precede (and return before) the bundle flush');
+        assert.match(blk.slice(eventBranchAt), /^if \(\s*_cacheClearEvent\s*\)\s*\{[\s\S]{0,320}?return response\.end\(/,
+            'the ?event= branch must return its own response, never fall through to clear()');
+    });
+
     // ── pure-logic replica (mirrors server.isaac.test.js §08b) ──────────────
     // Inline replica of isAdminClientAllowed; takes the allowlist as a param
     // so every branch is exercised without touching process.gina state. The

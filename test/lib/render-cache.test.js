@@ -757,3 +757,146 @@ describe('09 - cross-strategy flush (scoped clear + clearFsBundle)', function ()
         fs.rmSync(root, { recursive: true, force: true });
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 10 — event invalidation: the firing half + restart survival
+//
+// Registration (setEvents) always worked; nothing ever FIRED it, so a route's
+// `cache.invalidateOnEvents` was inert end-to-end. This section covers the
+// firing contract, the count the flush endpoint reports, and the `fs` half —
+// an entry read back from disk after a restart must come back WITH its
+// registrations, or firing the event silently fails to evict it.
+// ---------------------------------------------------------------------------
+describe('10 - event invalidation (firing + restart survival)', function () {
+
+    var root, stores;
+    beforeEach(function () {
+        root   = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-events-'));
+        stores = [];
+    });
+    afterEach(function () {
+        // Drain every entry (and the setTimeout(ttl) lib/cache armed for it) — an
+        // un-evicted entry would otherwise hold the event loop open for its whole TTL
+        // and hang the file, since node --test waits for the loop to drain.
+        stores.forEach(function (st) { try { new RenderCache().from(st).clear(); } catch (e) {} });
+        try { fs.rmSync(root, { recursive: true, force: true }); } catch (e) {}
+    });
+
+    // A dispatcher whose backing Map is registered for teardown.
+    function rcOn(cachePath) {
+        var store = new Map();
+        stores.push(store);
+        return new RenderCache().from(store, cachePath);
+    }
+
+    it('invalidateByEvent returns the number of entries evicted', async function () {
+        var rc = rcOn();
+        var keys = ['/a', '/b', '/c'].map(function (u) {
+            var k = rc.buildKey('static', 'demo', u);
+            rc.set('memory', k, { ttl: 60 }, { content: u });
+            rc.setEvents(k, ['bulk#evt']);
+            return k;
+        });
+
+        assert.equal(rc.invalidateByEvent('bulk#evt'), 3);
+        keys.forEach(function (k) { assert.equal(rc.has(k), false); });
+
+        // Registrations are reclaimed with their entries → a re-fire evicts nothing.
+        assert.equal(rc.invalidateByEvent('bulk#evt'), 0);
+        assert.equal(rc.invalidateByEvent('never#registered'), 0);
+    });
+
+    it('an unrelated event evicts nothing', function () {
+        var rc = rcOn();
+        var k  = rc.buildKey('static', 'demo', '/keep');
+        rc.set('memory', k, { ttl: 60 }, { content: 'keep' });
+        rc.setEvents(k, ['mine#evt']);
+
+        assert.equal(rc.invalidateByEvent('other#evt'), 0);
+        assert.ok(rc.get(k), 'the entry must survive an event it is not registered to');
+    });
+
+    // A cached URL carries its querystring into the key, so keys routinely hold
+    // `?`/`=`. Re-registering against such a key used to THROW inside the dedup
+    // lookup — and in render-swig that throw rejects `await writeCache(...)`,
+    // which sits BEFORE res.end(), so the request would hang. This is the exact
+    // production sequence: miss → TTL expiry → miss.
+    it('a querystring key survives the miss → expiry → miss cycle', function () {
+        var rc  = rcOn();
+        var key = rc.buildKey('static', 'demo', '/invoice/9?v=2&sort=asc');
+
+        rc.set('memory', key, { ttl: 60 }, { content: 'v1' });
+        rc.setEvents(key, ['invoice#saved']);
+
+        rc.delete(key);                       // TTL expiry
+
+        assert.doesNotThrow(function () {     // the re-render that used to hang the request
+            rc.set('memory', key, { ttl: 60 }, { content: 'v2' });
+            rc.setEvents(key, ['invoice#saved']);
+        });
+        assert.equal(rc.invalidateByEvent('invoice#saved'), 1);
+    });
+
+    it('fs: setEvents persists the events into the .meta sidecar', async function () {
+        var rc  = rcOn(root);
+        var key = rc.buildKey('static', 'demo', '/inv?v=2');
+        await rc.set('fs', key, { ttl: 600, visibility: 'public', responseHeaders: {} },
+                     { content: '<h1>inv</h1>', path: root, bundle: 'demo', url: '/inv?v=2', kind: 'html' });
+        await rc.setEvents(key, ['invoice#saved']);
+
+        var meta = JSON.parse(fs.readFileSync(rc.get(key).filename + '.meta', 'utf8'));
+        assert.deepEqual(meta.events, ['invoice#saved']);
+    });
+
+    it('fs: a restart read-back restores the registration, and evicting removes the files', async function () {
+        var rc  = rcOn(root);
+        var key = rc.buildKey('static', 'demo', '/inv?v=2');
+        await rc.set('fs', key, { ttl: 600, visibility: 'public', responseHeaders: {} },
+                     { content: '<h1>inv</h1>', path: root, bundle: 'demo', url: '/inv?v=2', kind: 'html' });
+        await rc.setEvents(key, ['invoice#saved']);
+        var body = String(rc.get(key).filename);
+
+        // Restart: a fresh (empty) Map, same disk.
+        var restarted = rcOn(root);
+        assert.equal(restarted.has(key), true, 'served from disk after the restart');
+        assert.ok(restarted.get(key), 'read-back repopulates the Map');
+
+        assert.equal(restarted.invalidateByEvent('invoice#saved'), 1,
+            'the registration must survive the restart');
+        assert.equal(restarted.get(key), undefined, 'entry evicted from the heap');
+        assert.equal(fs.existsSync(body), false, 'fs body removed');
+        assert.equal(fs.existsSync(body + '.meta'), false, 'sidecar removed');
+    });
+
+    // SUBTRACT: strip `events` from the sidecar (a pre-fix sidecar) and the
+    // restored entry comes back with NO registration — proving meta.events is
+    // what carries the contract across a restart.
+    it('fs: a sidecar without events restores nothing (subtract)', async function () {
+        var rc  = rcOn(root);
+        var key = rc.buildKey('static', 'demo', '/sub');
+        await rc.set('fs', key, { ttl: 600, visibility: 'public', responseHeaders: {} },
+                     { content: 'x', path: root, bundle: 'demo', url: '/sub', kind: 'html' });
+        await rc.setEvents(key, ['e#x']);
+
+        var metaPath = rc.get(key).filename + '.meta';
+        var meta     = JSON.parse(fs.readFileSync(metaPath, 'utf8'));
+        delete meta.events;
+        fs.writeFileSync(metaPath, JSON.stringify(meta));
+
+        var restarted = rcOn(root);
+        restarted.get(key);                                    // read back
+        assert.equal(restarted.invalidateByEvent('e#x'), 0,
+            'without meta.events the restored entry is not registered');
+    });
+
+    it('memory entries never touch the sidecar path', async function () {
+        var rc  = rcOn(root);
+        var key = rc.buildKey('static', 'demo', '/mem');
+        await rc.set('memory', key, { ttl: 60 }, { content: 'm' });
+        await rc.setEvents(key, ['m#evt']);         // must not throw, must write no file
+
+        assert.equal(fs.existsSync(path.join(root, 'demo')), false);
+        assert.equal(rc.invalidateByEvent('m#evt'), 1);
+    });
+});

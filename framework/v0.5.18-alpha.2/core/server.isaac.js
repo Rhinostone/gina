@@ -1250,9 +1250,11 @@ function ServerEngineClass(options) {
             // GET. Same admin IP allowlist as /_gina/cache/stats. Scoped to the
             // static:/data: output namespaces via renderCache.clear() — never wipes
             // swig: compiled templates or http2session: entries. Optional
-            // ?bundle=<name> restricts the flush to one bundle. Current-namespace fs
-            // bodies are removed via the entries' cleanup fns; old-namespace fs
-            // orphans are reclaimed by the CLI (gina cache:clear), not in-process.
+            // ?bundle=<name> restricts the flush to one bundle; optional ?event=<name>
+            // evicts only the entries registered to that event (the route's
+            // cache.invalidateOnEvents) and takes precedence over ?bundle.
+            // Current-namespace fs bodies are removed via the entries' cleanup fns;
+            // old-namespace fs orphans are reclaimed by the CLI (gina cache:clear).
             if ( request.method.toUpperCase() === 'POST' && /\/_gina\/cache\/clear(\?.*)?$/i.test(request.url) ) {
 
                 if ( !lib.admin.isClientAllowed(request) ) {
@@ -1272,13 +1274,24 @@ function ServerEngineClass(options) {
                 }
 
                 var cacheClearBundle = null;
+                var cacheClearEvent  = null;
                 var cacheClearQi     = request.url.indexOf('?');
                 if ( cacheClearQi > -1 ) {
-                    cacheClearBundle = new URLSearchParams(request.url.slice(cacheClearQi + 1)).get('bundle') || null;
+                    var cacheClearQs = new URLSearchParams(request.url.slice(cacheClearQi + 1));
+                    cacheClearBundle = cacheClearQs.get('bundle') || null;
+                    cacheClearEvent  = cacheClearQs.get('event')  || null;
                 }
                 renderCache.from(server._cached);
-                var cacheClearedCount   = renderCache.clear(cacheClearBundle);
-                const cacheClearData    = JSON.stringify({ ok: true, bundle: cacheClearBundle, cleared: cacheClearedCount });
+                // `event` wins over `bundle`. Load-bearing: `event` used to be an unread
+                // param, so ?event=<name> fell through with bundle === null and silently
+                // flushed EVERY bundle's output cache — the opposite of the narrow
+                // eviction the caller asked for.
+                var cacheClearedCount   = ( cacheClearEvent )
+                                            ? renderCache.invalidateByEvent(cacheClearEvent)
+                                            : renderCache.clear(cacheClearBundle);
+                const cacheClearData    = ( cacheClearEvent )
+                                            ? JSON.stringify({ ok: true, event: cacheClearEvent, cleared: cacheClearedCount })
+                                            : JSON.stringify({ ok: true, bundle: cacheClearBundle, cleared: cacheClearedCount });
                 const cacheClearHeaders = _setPoweredByHeader({
                     'cache-control': 'no-cache, no-store, must-revalidate',
                     'pragma': 'no-cache',
