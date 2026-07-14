@@ -1,6 +1,7 @@
 var fs          = require('fs');
 var CmdHelper   = require('./../helper');
 var introspect  = lib.routingIntrospect;
+var dto         = lib.dto;
 var console     = lib.logger;
 
 /**
@@ -104,7 +105,7 @@ function MCP(opt, cmd) {
 
             var portInfo = resolvePortInfo(bundle);
 
-            var tools = buildTools(bundle, routing, bundleNames);
+            var tools = buildTools(bundle, routing, bundleNames, srcPath);
 
             var doc = {
                 '$schema': 'https://modelcontextprotocol.io/specification/' + MCP_PROTOCOL_VERSION + '/schema/',
@@ -190,9 +191,10 @@ function MCP(opt, cmd) {
      * @param   {string} bundle
      * @param   {object} routing
      * @param   {object} bundleNames - Set of bundle names in the current emission
+     * @param   {string} srcPath - Bundle source dir (resolves `param.dto` files)
      * @returns {object[]}
      */
-    var buildTools = function(bundle, routing, bundleNames) {
+    var buildTools = function(bundle, routing, bundleNames, srcPath) {
 
         var tools = [];
         var seenNames = {};
@@ -242,7 +244,7 @@ function MCP(opt, cmd) {
                     }
                     seenNames[finalId] = true;
 
-                    tools.push(buildTool(finalId, routeName, route, urlInfo, method));
+                    tools.push(buildTool(finalId, routeName, route, urlInfo, method, srcPath));
                 }
             }
         });
@@ -260,9 +262,10 @@ function MCP(opt, cmd) {
      * @param   {object} route
      * @param   {{ openApiPath: string, mcpPath: string, params: string[] }} urlInfo
      * @param   {string} method - Lowercase HTTP method
+     * @param   {string} srcPath - Bundle source dir (resolves `param.dto` files)
      * @returns {object} MCP Tool (2025-06-18 shape)
      */
-    var buildTool = function(toolId, routeName, route, urlInfo, method) {
+    var buildTool = function(toolId, routeName, route, urlInfo, method, srcPath) {
 
         var param = route.param || {};
         var reqs  = route.requirements || {};
@@ -271,10 +274,24 @@ function MCP(opt, cmd) {
             name: toolId,
             title: param.title || introspect.humanise(routeName),
             description: buildDescription(routeName, route, urlInfo, method),
-            inputSchema: buildInputSchema(urlInfo.params, reqs, method),
+            inputSchema: buildInputSchema(urlInfo.params, reqs, method, param, srcPath),
             annotations: buildAnnotations(route, method),
             _meta: buildMeta(routeName, route, urlInfo, method)
         };
+
+        // Output schema from a declared response DTO (`param.responseDto`). The
+        // runtime MCP server passes `outputSchema` through to tools/list unchanged.
+        if ( param.responseDto ) {
+            var respDto = null;
+            try {
+                respDto = dto.load(srcPath, param.responseDto);
+            } catch (respErr) {
+                console.warn('[ '+ routeName +' ] response DTO `'+ param.responseDto +'` failed to load — omitting outputSchema: '+ respErr.message);
+            }
+            if ( respDto ) {
+                tool.outputSchema = respDto.toJsonSchema('draft-07');
+            }
+        }
 
         return tool;
     };
@@ -303,16 +320,19 @@ function MCP(opt, cmd) {
     /**
      * Builds the `inputSchema` for a tool. Always a Draft-07 JSON Schema with
      * `type: "object"`. URL path params are required strings constrained by
-     * the route's `requirements`. For non-GET methods a lenient `body` object
-     * is added — the body shape is not statically known.
+     * the route's `requirements` (an inline `validator::` requirement is un-collapsed
+     * into a real schema fragment). For non-GET methods the `body` property is the
+     * declared `param.dto`'s schema when present, else a lenient `object` placeholder.
      *
      * @private
      * @param   {string[]} urlParams
      * @param   {object}   reqs - route.requirements
      * @param   {string}   method
+     * @param   {object}   [param] - route.param (reads `param.dto` for the body)
+     * @param   {string}   [srcPath] - Bundle source dir (resolves the DTO file)
      * @returns {object}
      */
-    var buildInputSchema = function(urlParams, reqs, method) {
+    var buildInputSchema = function(urlParams, reqs, method, param, srcPath) {
 
         var schema = {
             type: 'object',
@@ -326,11 +346,19 @@ function MCP(opt, cmd) {
             var prop = { type: 'string' };
 
             if ( typeof(reqs[name]) !== 'undefined' ) {
-                var p = introspect.requirementToPattern(reqs[name]);
-                if (p.type === 'pattern') {
-                    prop.pattern = p.value;
-                } else if (p.type === 'enum') {
-                    prop.enum = p.value;
+                var rawReq = reqs[name];
+                if ( typeof(rawReq) === 'string' && rawReq.indexOf('validator::') === 0 ) {
+                    var frag = introspect.requirementToSchema(rawReq);
+                    for (var fk in frag) {
+                        if ( frag.hasOwnProperty(fk) ) { prop[fk] = frag[fk]; }
+                    }
+                } else {
+                    var p = introspect.requirementToPattern(rawReq);
+                    if (p.type === 'pattern') {
+                        prop.pattern = p.value;
+                    } else if (p.type === 'enum') {
+                        prop.enum = p.value;
+                    }
                 }
             }
 
@@ -339,11 +367,21 @@ function MCP(opt, cmd) {
         }
 
         if ( method !== 'get' ) {
-            schema.properties.body = {
-                type: 'object',
-                description: 'Request body. Shape is controller-defined and not described in routing.json.',
-                additionalProperties: true
-            };
+            var bodyDto = null;
+            if ( param && param.dto ) {
+                try {
+                    bodyDto = dto.load(srcPath, param.dto);
+                } catch (dtoErr) {
+                    console.warn('request DTO `'+ param.dto +'` failed to load — using a lenient body: '+ dtoErr.message);
+                }
+            }
+            schema.properties.body = bodyDto
+                ? bodyDto.toJsonSchema('draft-07')
+                : {
+                    type: 'object',
+                    description: 'Request body. Shape is controller-defined and not described in routing.json.',
+                    additionalProperties: true
+                };
         }
 
         if ( !schema.required.length ) {

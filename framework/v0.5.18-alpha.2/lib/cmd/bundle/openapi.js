@@ -1,6 +1,7 @@
 var fs          = require('fs');
 var CmdHelper   = require('./../helper');
 var introspect  = lib.routingIntrospect;
+var dto         = lib.dto;
 var console     = lib.logger;
 
 /**
@@ -104,7 +105,7 @@ function OpenAPI(opt, cmd) {
             // Resolve port info for the server URL
             var portInfo = resolvePortInfo(bundle);
 
-            var spec = buildSpec(bundle, routing, settings, portInfo);
+            var spec = buildSpec(bundle, routing, settings, portInfo, srcPath);
 
             var outputPath = outputArg
                 ? _(outputArg, true)
@@ -153,9 +154,10 @@ function OpenAPI(opt, cmd) {
      * @param {object} routing - Parsed routing.json
      * @param {object|null} settings - Parsed settings.json (may be null)
      * @param {{ port: number|null, scheme: string, protocol: string }} portInfo
+     * @param {string} srcPath - Bundle source dir (resolves `param.dto` files)
      * @returns {object} OpenAPI spec
      */
-    var buildSpec = function(bundle, routing, settings, portInfo) {
+    var buildSpec = function(bundle, routing, settings, portInfo, srcPath) {
 
         var spec = {
             openapi: '3.1.0',
@@ -210,7 +212,7 @@ function OpenAPI(opt, cmd) {
                     // Avoid overwriting if the same path+method already exists
                     if ( typeof(spec.paths[oaPath][method]) != 'undefined' ) continue;
 
-                    var operation = buildOperation(routeName, route, urlInfo.params, namespace, methods.length > 1);
+                    var operation = buildOperation(routeName, route, urlInfo.params, namespace, methods.length > 1, method, srcPath);
 
                     spec.paths[oaPath][method] = operation;
                 }
@@ -235,9 +237,11 @@ function OpenAPI(opt, cmd) {
      * @param {string[]} urlParams - Parameter names extracted from the URL pattern
      * @param {string|null} namespace - Controller namespace (used as tag)
      * @param {boolean} multiMethod - True when the route has multiple HTTP methods
+     * @param {string} method - Lowercase HTTP method (gates `requestBody`)
+     * @param {string} srcPath - Bundle source dir (resolves `param.dto` files)
      * @returns {object} OpenAPI operation object
      */
-    var buildOperation = function(routeName, route, urlParams, namespace, multiMethod) {
+    var buildOperation = function(routeName, route, urlParams, namespace, multiMethod, method, srcPath) {
         var param   = route.param || {};
         var reqs    = route.requirements || {};
 
@@ -281,17 +285,47 @@ function OpenAPI(opt, cmd) {
                     schema: { type: 'string' }
                 };
 
-                // Apply requirement as pattern
+                // Apply requirement to the param schema. Un-collapse an inline
+                // `validator::{...}` rule into a real schema fragment (format/enum/
+                // bounds); keep pattern/enum handling for regex + pipe requirements.
                 if ( typeof(reqs[pName]) !== 'undefined' ) {
-                    var pattern = introspect.requirementToPattern(reqs[pName]);
-                    if (pattern.type === 'pattern') {
-                        paramObj.schema.pattern = pattern.value;
-                    } else if (pattern.type === 'enum') {
-                        paramObj.schema.enum = pattern.value;
+                    var rawReq = reqs[pName];
+                    if ( typeof(rawReq) === 'string' && rawReq.indexOf('validator::') === 0 ) {
+                        var frag = introspect.requirementToSchema(rawReq);
+                        for (var fk in frag) {
+                            if ( frag.hasOwnProperty(fk) ) { paramObj.schema[fk] = frag[fk]; }
+                        }
+                    } else {
+                        var pattern = introspect.requirementToPattern(rawReq);
+                        if (pattern.type === 'pattern') {
+                            paramObj.schema.pattern = pattern.value;
+                        } else if (pattern.type === 'enum') {
+                            paramObj.schema.enum = pattern.value;
+                        }
                     }
                 }
 
                 operation.parameters.push(paramObj);
+            }
+        }
+
+        // Request body from a declared DTO (`param.dto`) on a mutating method. The
+        // DTO file resolves to a real JSON Schema (OpenAPI 3.1 == JSON Schema 2020-12),
+        // closing the historical "requestBody never generated" gap.
+        var reqDto = null;
+        if ( param.dto && /^(post|put|patch)$/i.test(method) ) {
+            try {
+                reqDto = dto.load(srcPath, param.dto);
+            } catch (dtoErr) {
+                console.warn('[ '+ routeName +' ] request DTO `'+ param.dto +'` failed to load — omitting requestBody: '+ dtoErr.message);
+            }
+            if ( reqDto ) {
+                operation.requestBody = {
+                    required: true,
+                    content: {
+                        'application/json': { schema: reqDto.toJsonSchema('2020-12') }
+                    }
+                };
             }
         }
 
@@ -328,6 +362,26 @@ function OpenAPI(opt, cmd) {
             operation.responses['200'] = {
                 description: 'Successful response'
             };
+
+            // Response body schema from a declared response DTO (`param.responseDto`)
+            if ( param.responseDto ) {
+                var respDto = null;
+                try {
+                    respDto = dto.load(srcPath, param.responseDto);
+                } catch (respErr) {
+                    console.warn('[ '+ routeName +' ] response DTO `'+ param.responseDto +'` failed to load — omitting 200 schema: '+ respErr.message);
+                }
+                if ( respDto ) {
+                    operation.responses['200'].content = {
+                        'application/json': { schema: respDto.toJsonSchema('2020-12') }
+                    };
+                }
+            }
+
+            // A request DTO implies default-on input validation -> a 422 is possible
+            if ( reqDto ) {
+                operation.responses['422'] = { description: 'Validation failed' };
+            }
 
             // Add Cache-Control header hint when cache is configured
             if (route.cache) {

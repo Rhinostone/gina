@@ -493,6 +493,57 @@ var dto = {
     },
 
     /**
+     * Resolve a route's `param.dto` / `param.responseDto` reference to a DtoObject,
+     * loading a bundle DTO module from `<bundleSrcPath>/dtos/<name>.js` when present.
+     * This is the resolver shared by the OFFLINE `bundle:openapi` / `bundle:mcp` CLIs
+     * (which load no other bundle code) and the request-time validation pipe.
+     *
+     * A bundle DTO file MUST be context-free so the offline CLI can load it: that CLI
+     * process bootstraps via the lib registry (`bin/cli`), NOT via `core/gna.js`, so a
+     * file that did `require('gina')` would cold-load gna.js with no bundle context and
+     * throw. The supported shape is therefore a FACTORY that receives the builder:
+     *
+     *   // <bundle>/dtos/CreateUser.js
+     *   module.exports = function (dto) { return dto.object({ ... }, 'CreateUser'); };
+     *
+     * A module that already exports a DtoObject (authored for runtime-only use, where
+     * `require('gina').dto` works) is also accepted. Resolution order: the bundle file
+     * (factory or DtoObject) then the named registry. Returns null when unresolved.
+     * A broken file/factory THROWS (the caller decides: the CLI warns + skips, the
+     * pipe fails fast). No `require.cache` eviction — one-shot in the CLI, register-once
+     * in a booted bundle (avoids the dev-mode `module.children` leak class #B32).
+     *
+     * @memberof dto
+     * @param {string} bundleSrcPath - absolute path to the bundle source dir.
+     * @param {string} name          - the reference (also the file base name).
+     * @returns {DtoObject|null}
+     *
+     * @example
+     * var CreateUser = dto.load('/path/to/bundle', 'CreateUser');
+     * if (CreateUser) {
+     *     op.requestBody = { content: { 'application/json': { schema: CreateUser.toJsonSchema('2020-12') } } };
+     * }
+     */
+    load: function (bundleSrcPath, name) {
+        if (typeof name !== 'string' || !name) { return null; }
+        var reg = _registry();
+        if (typeof bundleSrcPath === 'string' && bundleSrcPath) {
+            var file = require('path').join(bundleSrcPath, 'dtos', name + '.js');
+            if (require('fs').existsSync(file)) {
+                var mod = require(file);                          // may throw -> caller handles
+                if (typeof mod === 'function') { mod = mod(dto); } // factory -> inject the builder (may throw)
+                if (mod instanceof DtoObject) {
+                    mod.name = name;                              // the reference name is canonical
+                    reg[name] = mod;                             // register for subsequent get()
+                    return mod;
+                }
+                // file present but not a DtoObject / factory-of-DtoObject -> unresolved
+            }
+        }
+        return (typeof reg[name] !== 'undefined') ? reg[name] : null;
+    },
+
+    /**
      * All registered DTO names.
      * @memberof dto
      * @returns {string[]}

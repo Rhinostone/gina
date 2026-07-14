@@ -318,3 +318,71 @@ describe('lib/dto §07 — named registry (process.gina._dtos)', function () {
             'registered DTO is reachable on process.gina._dtos');
     });
 });
+
+
+describe('lib/dto §08 — dto.load resolution (the offline-CLI + pipe resolver, #DTO1c)', function () {
+    var os  = require('os');
+    var TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'dto-load-'));
+    var DTOS = path.join(TMP, 'dtos');
+    fs.mkdirSync(DTOS, { recursive: true });
+
+    // The offline-CLI-safe FACTORY shape — receives the builder, no require('gina').
+    fs.writeFileSync(path.join(DTOS, 'L_Create.js'),
+        'module.exports = function (dto) { return dto.object({ ' +
+        'email: dto.string().email().required(), age: dto.integer().min(0).max(9) }, "L_Create"); };');
+    // A module exporting a DtoObject directly (the runtime-only authoring shape; a real
+    // bundle would use require("gina").dto, which throws offline — here we reach the
+    // builder by absolute path purely to exercise dto.load's DtoObject branch).
+    fs.writeFileSync(path.join(DTOS, 'L_Direct.js'),
+        'var dto = require(' + JSON.stringify(DTO_PATH) + ');\n' +
+        'module.exports = dto.object({ id: dto.string().required() }, "L_Direct");\n');
+    // A file that exports neither a factory nor a DtoObject.
+    fs.writeFileSync(path.join(DTOS, 'L_Bad.js'), 'module.exports = { not: "a dto" };');
+    // A factory that throws.
+    fs.writeFileSync(path.join(DTOS, 'L_Throws.js'),
+        'module.exports = function (dto) { throw new Error("boom in factory"); };');
+
+    it('08.1 - a FACTORY file resolves to a DtoObject; the reference name is stamped + registered', function () {
+        var d = dto.load(TMP, 'L_Create');
+        assert.ok(dto.isDto(d), 'returns a DtoObject');
+        assert.equal(d.name, 'L_Create');
+        assert.equal(dto.get('L_Create'), d, 'registered for subsequent get()');
+        var s = d.toJsonSchema('2020-12');
+        assert.equal(s.properties.email.format, 'email');
+        assert.equal(s.properties.age.minimum, 0);
+        assert.equal(s.properties.age.maximum, 9);
+        assert.deepEqual(s.required, ['email']);
+    });
+
+    it('08.2 - a module exporting a DtoObject directly is used as-is', function () {
+        var d = dto.load(TMP, 'L_Direct');
+        assert.ok(dto.isDto(d));
+        assert.equal(d.name, 'L_Direct'); // stamped to the reference name
+    });
+
+    it('08.3 - registry fallback: no bundle path (or no file) returns a pre-registered DTO', function () {
+        var D = dto.object({ x: dto.string() });
+        dto.register('L_Reg', D);
+        assert.equal(dto.load(null, 'L_Reg'), D, 'null bundlePath -> registry');
+        assert.equal(dto.load(TMP, 'L_Reg'), D, 'no dtos/L_Reg.js file -> registry');
+    });
+
+    it('08.4 - unresolved (no file, not registered) returns null', function () {
+        assert.equal(dto.load(TMP, 'L_Missing'), null);
+        assert.equal(dto.load(null, 'L_Missing'), null);
+    });
+
+    it('08.5 - a broken factory THROWS (the caller decides: CLI warns+skips, pipe fails fast)', function () {
+        assert.throws(function () { dto.load(TMP, 'L_Throws'); }, /boom in factory/);
+    });
+
+    it('08.6 - a file that is neither a factory nor a DtoObject is unresolved (null)', function () {
+        assert.equal(dto.load(TMP, 'L_Bad'), null);
+    });
+
+    it('08.7 - a non-string / empty name returns null (never throws)', function () {
+        assert.equal(dto.load(TMP, ''), null);
+        assert.equal(dto.load(TMP, null), null);
+        assert.equal(dto.load(TMP, 42), null);
+    });
+});
