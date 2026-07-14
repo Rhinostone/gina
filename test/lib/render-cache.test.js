@@ -25,6 +25,18 @@
  * handoff is the behavioural template). Real fs + a temp dir; the shared
  * `lib/cache` backing Map is a process singleton, so every test resets it via
  * `from(new Map())` for isolation, mirroring test/lib/cache.test.js.
+ *
+ * ⚠️ ANY test that calls set() with a `ttl` MUST enable node's mock timers first
+ * (`function (t) { t.mock.timers.enable(['setTimeout']); ... }`, the idiom in
+ * test/lib/cache.test.js). lib/cache.set() arms a REAL setTimeout(ttl * 1000) per
+ * entry and stores the handle ON the entry, so only a delete()/clear() of THAT
+ * entry can clearTimeout it. But `cache` is a module-scope var that `from()`
+ * REASSIGNS process-wide — so a `from(new Map())` restart-swap (which most of the
+ * fs tests below do, by design) strands the handle on the discarded Map, where
+ * clear() can never reach it. The timer then holds the event loop open for its
+ * whole TTL and `node --test` never exits this FILE. An afterEach drain does NOT
+ * fix it; --test-force-exit only MASKS it. Mock timers make the strand impossible:
+ * the real loop never sees a timer at all, and every ttl assertion still holds.
  */
 
 'use strict';
@@ -311,7 +323,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         fs.writeFileSync(bodyFile + '.meta', JSON.stringify(meta));
     }
 
-    it('set(fs) writes a .meta sidecar carrying the replay metadata', async function () {
+    it('set(fs) writes a .meta sidecar carrying the replay metadata', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/meta';
         await rc.set('fs', key, { ttl: 30, visibility: 'public', responseHeaders: { 'content-type': 'text/html' } },
@@ -328,7 +341,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('recovers an orphaned disk entry: fresh Map + cachePath → has()/get() read back', async function () {
+    it('recovers an orphaned disk entry: fresh Map + cachePath → has()/get() read back', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/page';
         await rc.set('fs', key, { ttl: 300, visibility: 'public' },
@@ -352,7 +366,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('SUBTRACT — without the disk-aware layer a fresh Map orphans the entry', async function () {
+    it('SUBTRACT — without the disk-aware layer a fresh Map orphans the entry', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/orphan';
         await rc.set('fs', key, { ttl: 300 },
@@ -370,7 +385,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('read-back is INERT without a configured cache root (delegate semantics)', async function () {
+    it('read-back is INERT without a configured cache root (delegate semantics)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/nopath';
         await rc.set('fs', key, { ttl: 300 },
@@ -384,7 +400,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('preserves ABSOLUTE expiry on read-back (non-sliding: ttl → remaining)', async function () {
+    it('preserves ABSOLUTE expiry on read-back (non-sliding: ttl → remaining)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/ttl';
         await rc.set('fs', key, { ttl: 30 },
@@ -400,7 +417,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('drops an already-expired non-sliding entry on read-back (miss + files removed)', async function () {
+    it('drops an already-expired non-sliding entry on read-back (miss + files removed)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/expired';
         await rc.set('fs', key, { ttl: 30 },
@@ -415,7 +433,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('preserves the absolute CEILING on read-back (sliding + maxAge)', async function () {
+    it('preserves the absolute CEILING on read-back (sliding + maxAge)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/sliding';
         await rc.set('fs', key, { ttl: 30, sliding: true, maxAge: 300 },
@@ -434,7 +453,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('drops a sliding entry past its absolute ceiling on read-back', async function () {
+    it('drops a sliding entry past its absolute ceiling on read-back', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/ceiling';
         await rc.set('fs', key, { ttl: 30, sliding: true, maxAge: 300 },
@@ -448,7 +468,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('pure sliding (no maxAge) read-back is treated as a fresh access', async function () {
+    it('pure sliding (no maxAge) read-back is treated as a fresh access', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/pure';
         await rc.set('fs', key, { ttl: 30, sliding: true },
@@ -466,7 +487,8 @@ describe('07 - fs restart-hardening (disk read-back)', function () {
         rc.clear();
     });
 
-    it('missing .meta sidecar → get() miss (self-heals on the next render)', async function () {
+    it('missing .meta sidecar → get() miss (self-heals on the next render)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:rh:/nometa';
         await rc.set('fs', key, { ttl: 300 },
@@ -527,7 +549,8 @@ describe('08 - release-namespaced keys (buildKey + fs invalidation)', function (
         assert.equal(rc.buildKey('static', 'demo', '/p'), 'a_b_c_d:static:demo:/p');
     });
 
-    it('fs write + read-back under a namespace: file lives in the <token> dir', async function () {
+    it('fs write + read-back under a namespace: file lives in the <token> dir', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         setEnvVar('GINA_CACHE_NAMESPACE', 'relA');
         var key = rc.buildKey('static', 'nsbundle', '/page');   // relA:static:nsbundle:/page
         await rc.set('fs', key, { ttl: 300 }, { content: '<h1>ns</h1>', path: tmpRoot, bundle: 'nsbundle', url: '/page', kind: 'html' });
@@ -542,7 +565,8 @@ describe('08 - release-namespaced keys (buildKey + fs invalidation)', function (
         rc.clear();
     });
 
-    it('a namespace change INVALIDATES the fs read-back (different <token> dir)', async function () {
+    it('a namespace change INVALIDATES the fs read-back (different <token> dir)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         // Write under relA.
         setEnvVar('GINA_CACHE_NAMESPACE', 'relA');
         var keyA = rc.buildKey('static', 'inv', '/page');       // relA:static:inv:/page
@@ -564,7 +588,8 @@ describe('08 - release-namespaced keys (buildKey + fs invalidation)', function (
         rc.clear();
     });
 
-    it('write path == read-back path under a namespace (parseFsKey round-trip)', async function () {
+    it('write path == read-back path under a namespace (parseFsKey round-trip)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         // The whole feature hinges on the write filename (set, token from the key)
         // and the read-back filename (get→fsBodyFor, token from the key) agreeing.
         setEnvVar('GINA_CACHE_NAMESPACE', 'rt');
@@ -656,7 +681,8 @@ describe('09 - cross-strategy flush (scoped clear + clearFsBundle)', function ()
         rc.clear();
     });
 
-    it('clear() runs the fs cleanup fn (current-namespace body + .meta removed)', async function () {
+    it('clear() runs the fs cleanup fn (current-namespace body + .meta removed)', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc  = freshRc();
         var key = 'static:fsc:/page';
         await rc.set('fs', key, { ttl: 300 }, { content: 'x', path: tmpRoot, bundle: 'fsc', url: '/page', kind: 'html' });
@@ -734,7 +760,8 @@ describe('09 - cross-strategy flush (scoped clear + clearFsBundle)', function ()
         fs.rmSync(root, { recursive: true, force: true });
     });
 
-    it('SUBTRACT — a Map-scoped clear() leaves the old-namespace orphan that clearFsBundle reclaims', async function () {
+    it('SUBTRACT — a Map-scoped clear() leaves the old-namespace orphan that clearFsBundle reclaims', async function (t) {
+        t.mock.timers.enable(['setTimeout']);
         var rc   = freshRc();
         var root = fs.mkdtempSync(path.join(os.tmpdir(), 'rc-orphan-'));
         setEnvVar('GINA_CACHE_NAMESPACE', 'relOLD');
