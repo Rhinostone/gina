@@ -196,6 +196,30 @@
 
 
 
+[ Generating DTO TypeScript declarations ]
+
+    Emit TypeScript types from a bundle's DTOs (dtos/<Name>.js) — the fourth
+    projection of a DTO, alongside runtime validation and the OpenAPI / MCP
+    schemas. Written to <bundle>/dtos/index.d.ts by default.
+
+    Each DTO emits TWO types, because its declared shape and the shape the
+    server holds are not the same: <Name> is what the client sends (and what
+    the OpenAPI schema documents), while <Name>Projected is what the action
+    reads on req.dto and what a param.responseDto puts on the wire — with the
+    .exclude()d fields dropped.
+
+    $ gina bundle:types <bundle_name> @<project_name>
+
+    Emit types for all bundles in a project
+    ----------
+    $ gina bundle:types @<project_name>
+
+    Write to a custom output path
+    ----------
+    $ gina bundle:types <bundle_name> @<project_name> --output=/path/to/dtos.d.ts
+
+
+
 [ Generating MCP tool manifest ]
 
     Generate a Model Context Protocol (MCP) tool manifest from routing.json

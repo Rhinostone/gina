@@ -149,6 +149,10 @@ function Lib() {
         // (a load-once module performing no per-request require() can never grow a
         // dead-`children` tail; #B32-residual).
         dtoPipe         : require('./dto-pipe'),
+        // #DTO3 — the DTO -> TypeScript declaration emitter. Pure and CLI-only
+        // (consumed by the offline `bundle:types`), so the dev-mode-hot-reloadable
+        // _require is safe — same shape as routingIntrospect below.
+        dtoTypes        : _require('./dto-types'),
         // Shared semantic extractor for routing.json. Consumed by bundle:openapi
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.
