@@ -1,0 +1,47 @@
+****************************
+* Cache command lines e.g. *
+****************************
+
+
+[ Inspecting a bundle's in-memory cache ]
+
+    $ gina cache:stats <bundle> @<project_name>
+
+    or for every bundle in the project
+
+    $ gina cache:stats @<project_name>
+
+
+
+[ Flushing a bundle's render/output cache ]
+
+    $ gina cache:clear <bundle> @<project_name>
+
+    or preview without removing anything (nothing is touched)
+
+    $ gina cache:clear <bundle> @<project_name> --dry-run
+
+
+
+[ Flushing every bundle in a project ]
+
+    $ gina cache:clear @<project_name>
+
+
+
+[ JSON output (for scripting) ]
+
+    $ gina cache:clear <bundle> @<project_name> --format=json
+
+
+Notes:
+  - cache:clear flushes ONLY the rendered-output cache (static: HTML +
+    data: JSON). Compiled templates and HTTP/2 sessions are never touched.
+  - It runs two passes: an OFFLINE reclaim of the bundle's on-disk cache
+    dirs (including orphaned prior-release dirs a redeploy left behind), plus
+    an IN-HEAP flush of the running bundle via its admin endpoint. A bundle
+    that is not running still gets its on-disk cache reclaimed offline.
+  - The offline reclaim assumes the default cache root (<project_path>/cache).
+    A bundle that overrides server.cache.path to a custom absolute path is
+    flushed in-heap (via the running bundle) but its on-disk orphans are not
+    auto-reclaimed.
