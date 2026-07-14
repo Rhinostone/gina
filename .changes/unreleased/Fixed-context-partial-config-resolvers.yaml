@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'getLib() and getConfig() no longer crash with an opaque "Cannot read properties of undefined (reading ''conf'')" when the framework configuration build aborts partway (for example a fail-closed secret resolution on an unset ${secret:KEY}) and bundle code, a cron, a worker, or module-load-time bootstrap reads configuration before the build has finished. The resolvers now fall back to the equivalent per-bundle/env configuration when the fully-built container is not yet available, or fail cleanly, so the real underlying boot error surfaces instead of a masking crash.'
+time: 2026-07-14T18:39:58+01:00
