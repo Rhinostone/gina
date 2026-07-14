@@ -66,12 +66,12 @@ This roadmap covers planned features, architectural improvements, new connectors
 
 ## Type-Safe DTOs & Validation
 
-A unified data-shape layer — define a DTO/schema once and reuse it for request validation, response serialization, static types, and OpenAPI, then layer a default-on validation pipe and DTO-derived typing on top. Today these are four separate systems.
+A unified data-shape layer — define a DTO/schema once and reuse it for request validation, response serialization, static types, and OpenAPI, then layer a default-on validation pipe and DTO-derived typing on top.
 
 | Status | Feature | Version | Target |
 | --- | --- | --- | --- |
-| 📋 | **Unified DTO / schema primitive** — Define a data shape once and reuse it for runtime validation, static types, JSON-Schema/OpenAPI, and response serialization. Foundation for the validation pipe and DTO-derived types. | `0.6.x` | Q4 2026 |
-| 📋 | **Global validation pipe** — Framework-level, default-on validation + coercion of the request payload against the route's DTO before the controller action runs, handing a typed, validated object to the handler. | `0.6.x` | Q4 2026 |
+| ✅ | **Unified DTO / schema primitive** — Define a data shape once and reuse it for runtime validation, static types, JSON-Schema/OpenAPI, and response serialization. Foundation for the validation pipe and DTO-derived types. | `0.5.18-alpha.2` | shipped |
+| ✅ | **Global validation pipe** — Framework-level, default-on validation + coercion of the request payload against the route's DTO before the controller action runs, handing a typed, validated object to the handler. Declaring `param.dto` on a route also answers a clean 422 on failure; `param.responseDto` shapes the outgoing JSON. | `0.5.18-alpha.2` | shipped |
 | 📋 | **Type safety from the DTO** — Types derived from DTO definitions plus a `tsc` gate that verifies the shipped declarations against the runtime; keeps the existing JS runtime, no rewrite. | `0.6.x` | Q4 2026 |
 | 📋 | **Documentation & guides** — DTO authoring, the validation pipe, and typed controllers on the docs site (to follow implementation). | `0.6.x` | Q4 2026 |
 
