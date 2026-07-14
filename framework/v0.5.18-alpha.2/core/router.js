@@ -14,6 +14,9 @@ var fs                  = require('fs')
     , console           = lib.logger
     , inherits          = lib.inherits
     , merge             = lib.merge
+    // #DTO2 — the default-on request-payload validation pipe (plain-required in
+    // lib/index.js, so this gen-0 binding IS the live module).
+    , dtoPipe           = lib.dtoPipe
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -804,6 +807,16 @@ function Router(env, scope) {
                             request._devTimeline._actionStart = Date.now();
                         }
 
+                        // #DTO2 — default-on request-payload validation. A strict NO-OP
+                        // unless the route declares `param.dto`. Placed BEFORE the
+                        // reservedActions loop so a 422 short-circuits the whole controller
+                        // invocation (`onReady` never runs for a rejected request). Route
+                        // middleware has already drained here, so auth (401) still precedes
+                        // validation (422).
+                        if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
+                            return;
+                        }
+
                         // handle superController events
                         for (let e=0; e<reservedActions.length; ++e) {
                             if ( typeof(controller[reservedActions[e]]) == 'function' ) {
@@ -835,6 +848,12 @@ function Router(env, scope) {
                 // #FI — action start (no middleware path)
                 if (request._devTimeline) {
                     request._devTimeline._actionStart = Date.now();
+                }
+
+                // #DTO2 — default-on request-payload validation (see the with-middleware
+                // site above). A strict NO-OP unless the route declares `param.dto`.
+                if ( !dtoPipe.validateRequestPayload(controller, request, response) ) {
+                    return;
                 }
 
                 // handle superController events

@@ -143,6 +143,12 @@ function Lib() {
         // process.gina._dtos; per-request `instanceof` / registry lookups must
         // still recognise them). The builder itself is stateless.
         dto             : require('./dto'),
+        // #DTO2 — the default-on request-payload validation pipe, run by core/router.js
+        // before the controller action. require() — NOT _require — so the module never
+        // re-evaluates its module-scope capture of the validator plugin per request
+        // (a load-once module performing no per-request require() can never grow a
+        // dead-`children` tail; #B32-residual).
+        dtoPipe         : require('./dto-pipe'),
         // Shared semantic extractor for routing.json. Consumed by bundle:openapi
         // and bundle:mcp to parse URL patterns, methods, requirements, and derive
         // stable tool / operation identifiers.

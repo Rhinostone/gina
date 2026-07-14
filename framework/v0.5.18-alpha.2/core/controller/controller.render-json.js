@@ -355,6 +355,47 @@ module.exports = function renderJSON(jsonObj, deps) {
             jsonObj.__ginaFlow = local._timeline.entries;
         }
 
+        // #DTO2 — response DTO. A route shapes its JSON with `param.responseDto`, naming
+        // the same `dtos/<name>.js` module `bundle:openapi` embeds as the 200 schema and
+        // `bundle:mcp` as the tool `outputSchema` — so the wire, the spec and the manifest
+        // cannot drift. The DTO was resolved + registered at boot (core/server.js), so this
+        // is an O(1) registry read.
+        //
+        // This is the ONE transform point: it sits above the single `JSON.stringify` below,
+        // which feeds every body-write branch (http/2, http/1.1, xhr, HEAD content-length)
+        // AND the cache write — so the cached body is DTO-shaped for free.
+        //
+        // Strip-only, and only on a 2xx: `response.statusCode` is already resolved above
+        // (from jsonObj.errno / jsonObj.status), so an error payload is never mangled by a
+        // success DTO. `DtoObject.apply()` keeps the `__gina*` sidecars attached just above.
+        if (
+            typeof(jsonObj) == 'object' && jsonObj !== null
+            && response.statusCode >= 200 && response.statusCode < 300
+            && local.req && local.req.routing && local.req.routing.param
+            && typeof(local.req.routing.param.responseDto) == 'string'
+            && local.req.routing.param.responseDto !== ''
+        ) {
+            var _respDto = lib.dto.get(local.req.routing.param.responseDto);
+            if (_respDto) {
+                if ( self.isCacheless() ) {
+                    // Dev only: a declared-but-missing required field is a server bug the
+                    // DTO would otherwise silently hide by projecting it away.
+                    var _respSchema  = _respDto.toJsonSchema();
+                    var _respMissing = (_respSchema.required || []).filter(function (f) {
+                        return ( typeof(jsonObj[f]) == 'undefined' );
+                    });
+                    if (_respMissing.length > 0) {
+                        console.warn('[render-json] responseDto `'+ local.req.routing.param.responseDto +
+                            '` declares required field(s) the payload does not carry: '+ _respMissing.join(', '));
+                    }
+                }
+                jsonObj = _respDto.apply(jsonObj);
+            } else {
+                console.warn('[render-json] responseDto `'+ local.req.routing.param.responseDto +
+                    '` is not registered — the payload is sent unshaped.');
+            }
+        }
+
         var data = JSON.stringify(jsonObj);
 
         // HEAD: send all response headers (including content-length reflecting what the body

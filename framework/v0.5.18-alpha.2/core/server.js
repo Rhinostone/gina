@@ -774,6 +774,68 @@ function Server(options) {
                 }
             }
 
+            // #DTO2 — resolve + register every routing.json-declared DTO at BOOT.
+            // A route opts its payload into default-on validation with `param.dto`, and
+            // shapes its JSON response with `param.responseDto`; both name a
+            // `<bundle>/dtos/<name>.js` FACTORY module
+            // (`module.exports = function (dto) { return dto.object({...}, 'X'); };`) —
+            // the same convention `bundle:openapi` / `bundle:mcp` already read offline.
+            //
+            // Resolving HERE rather than lazily on the first request buys three things:
+            //   * `dto.load()` re-runs the factory on EVERY call, so a per-request resolve
+            //     would rebuild the DTO each time; registering once makes the request path
+            //     an O(1) `dto.get()` off `process.gina._dtos` (no fs, no factory re-run).
+            //   * a missing / broken DTO refuses to BOOT instead of silently disabling
+            //     validation on that route in production (the #B57 "a failure must
+            //     surface, never be swallowed into a success path" rule).
+            //   * the `.toRules()` dry-run compiles a request DTO through the guard that
+            //     rejects a `$` (server-fatal in the validator engine) — so it fails at
+            //     deploy, not on a live request.
+            // A DTO file edit therefore needs a bundle restart, exactly like routing.json,
+            // forms and connectors.json.
+            var _dtoRouting = serverOpt.routing || {};
+            var _dtoSrcPath = self.conf[self.appName][self.env].bundlesPath + '/' + self.appName;
+            var _dtoCount   = 0;
+            for (var _dtoRule in _dtoRouting) {
+                var _dtoRoute = _dtoRouting[_dtoRule];
+                if ( typeof(_dtoRoute) != 'object' || _dtoRoute === null || !_dtoRoute.param ) {
+                    continue;
+                }
+                var _dtoRefs = [
+                    { key: 'dto',         name: _dtoRoute.param.dto,         isRequestDto: true  },
+                    { key: 'responseDto', name: _dtoRoute.param.responseDto, isRequestDto: false }
+                ];
+                for (var _dtoI = 0; _dtoI < _dtoRefs.length; ++_dtoI) {
+                    var _dtoRef = _dtoRefs[_dtoI];
+                    if ( typeof(_dtoRef.name) == 'undefined' || _dtoRef.name === null || _dtoRef.name === '' ) {
+                        continue;
+                    }
+                    if ( typeof(_dtoRef.name) != 'string' ) {
+                        throw new Error('[ SERVER ] Route `'+ _dtoRule +'`: `param.'+ _dtoRef.key +'` must be a string (the `dtos/<name>.js` module to load).');
+                    }
+                    var _dtoObj = null;
+                    try {
+                        _dtoObj = lib.dto.load(_dtoSrcPath, _dtoRef.name);
+                    } catch (_dtoErr) {
+                        throw new Error('[ SERVER ] Route `'+ _dtoRule +'`: DTO module `dtos/'+ _dtoRef.name +'.js` could not be loaded from `'+ _dtoSrcPath +'`:\n'+ _dtoErr.message);
+                    }
+                    if ( !_dtoObj ) {
+                        throw new Error('[ SERVER ] Route `'+ _dtoRule +'` declares `param.'+ _dtoRef.key +'` `'+ _dtoRef.name +'` but `'+ _dtoSrcPath +'/dtos/'+ _dtoRef.name +'.js` is missing (or exports neither a `dto.object(...)` nor a factory returning one).');
+                    }
+                    if ( _dtoRef.isRequestDto ) {
+                        try {
+                            _dtoObj.toRules();
+                        } catch (_dtoRulesErr) {
+                            throw new Error('[ SERVER ] Route `'+ _dtoRule +'`: `param.dto` `'+ _dtoRef.name +'` cannot drive the validator — '+ _dtoRulesErr.message);
+                        }
+                    }
+                    ++_dtoCount;
+                }
+            }
+            if ( _dtoCount > 0 ) {
+                console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _dtoCount +' route DTO reference(s) for [ '+ self.appName +' ]');
+            }
+
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {

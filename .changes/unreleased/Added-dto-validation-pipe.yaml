@@ -1,0 +1,3 @@
+kind: Added
+body: 'Default-on request validation from a route DTO: a routing.json rule declaring `param.dto` now has its payload validated against that DTO before the controller action runs, answering a clean 422 (field -> rule -> message, localised) on failure and handing the action a type-coerced payload on success. `param.responseDto` now also shapes the outgoing JSON, so a field marked `.exclude()` never reaches the wire. DTOs are resolved and registered at bundle boot, so a missing or un-evaluable DTO fails the boot instead of silently disabling validation. Routes that declare no DTO are unaffected.'
+time: 2026-07-14T20:14:04+01:00

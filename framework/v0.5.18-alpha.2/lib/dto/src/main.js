@@ -47,8 +47,20 @@
  * as `minimum`/`maximum` (perfect OpenAPI/MCP fidelity) and is NOT enforced at runtime
  * by `toRules()` in this cut — runtime value-bound enforcement is a labelled follow-on
  * (a first-class engine rule, which is browser-bundled and needs a dist rebuild).
- * `toRules()` therefore never emits a `$` (so it can never trip the crash). The runtime
- * pipe still enforces TYPE (isInteger/isNumber) + enum + length + format + required.
+ * The runtime pipe still enforces TYPE (isInteger/isNumber) + enum + length + format
+ * + required.
+ *
+ * ## The `$` guard (#DTO2 — measured)
+ * `toRules()` compiles no `$` of its own (see above), but a `$` can still reach the
+ * emitted rules through AUTHORED content — an enum value (`dto.enum(['$100'])`), a
+ * field NAME, or a date mask. The engine stringifies the whole rules object and, on
+ * ANY `$` in it, takes a client-only branch that dereferences the null server-side
+ * `$fields` (`validate()` -> `$fields.count()`), throwing a raw TypeError from ABOVE
+ * its own try/catch. So `toRules()` REJECTS a `$` anywhere in its output rather than
+ * hand the engine a rules object that cannot be evaluated server-side.
+ * `toJsonSchema()` is deliberately NOT guarded — a `$` is perfectly valid in a JSON
+ * Schema enum, so a currency-style DTO still documents (and still serves as a
+ * `param.responseDto`); only the runtime-validation projection is constrained.
  */
 
 /** @constant {Object.<string,string>} JSON Schema dialect -> `$schema` URI. */
@@ -395,7 +407,11 @@ DtoObject.prototype.toJsonSchema = function (dialect, opts) {
 /**
  * The live form-validator rules-object for this DTO (field -> { ruleName: value }).
  * Feeds `new (gina.plugins.Validator)(rules, data, formId, culture)` on the server
- * (and the same engine client-side). Never emits `$`, `toFloat`, or `query`.
+ * (and the same engine client-side). Never emits `toFloat` or `query`, and THROWS
+ * rather than emit a `$` (see the `$` guard in the module header).
+ *
+ * @throws {Error} when an authored enum value / field name / date mask puts a `$` in
+ *                 the emitted rules — server-fatal in the validator engine.
  * @returns {object}
  */
 DtoObject.prototype.toRules = function () {
@@ -403,7 +419,67 @@ DtoObject.prototype.toRules = function () {
     for (var f in this._shape) {
         rules[f] = this._shape[f].toFieldRules();
     }
+    // #DTO2 — a `$` ANYWHERE in the stringified rules sends the engine down its
+    // client-only dynamic-rules branch, which derefs the null server-side `$fields`
+    // and throws from above its own try/catch. Fail at build/boot with a message that
+    // names the culprit, never at request time with a raw TypeError.
+    if ( /\$/.test(JSON.stringify(rules)) ) {
+        // NOTE: every `$` below is followed by a SPACE, deliberately. A message carrying
+        // the sequence `$` + backtick/quote/digit is a String.replace() dollar-pattern
+        // (prematch / postmatch / capture-group), and any consumer that splices this text
+        // into a template with `template.replace(re, msg)` would expand it — mangling the
+        // very boot error an operator needs to read. Keep it that way.
+        throw new Error('[dto] `' + (this.name || 'anonymous') + '` emits a $ character in its validation ' +
+            'rules (check enum values, field names and date masks). The validator engine cannot evaluate ' +
+            'a $ server-side: rename the field, or drop the $ from the value. toJsonSchema() is unaffected.');
+    }
     return rules;
+};
+
+/**
+ * Project an object onto this DTO — the RESPONSE-side transform (#DTO2).
+ *
+ * Keeps only the declared fields, drops every `.exclude()`d one (so `.exclude()`
+ * finally means "never serialise this" — e.g. a password hash), and passes keys
+ * matching `/^__gina/` through untouched so the dev-Inspector sidecars
+ * (`__ginaQueries` / `__ginaFlow`) survive a strict projection.
+ *
+ * A `.passthrough()` DTO keeps undeclared keys (it declares
+ * `additionalProperties: true`), so the projection only drops the excluded fields.
+ *
+ * Pure: returns a NEW object, never mutates the input.
+ *
+ * @param {object} obj - the outgoing payload.
+ * @returns {object} the projected payload (the input verbatim when it is not a plain object).
+ *
+ * @example
+ * // responseDto: id, email, passwordHash.exclude()
+ * User.apply({ id: 7, email: 'a@b.co', passwordHash: 'x', extra: 1 });
+ * // -> { id: 7, email: 'a@b.co' }
+ */
+DtoObject.prototype.apply = function (obj) {
+    // Arrays and non-objects have no declared shape to project onto — pass verbatim.
+    if ( obj === null || typeof obj !== 'object' || Array.isArray(obj) ) {
+        return obj;
+    }
+    var out = {};
+    var k;
+    if (this._passthrough) {
+        for (k in obj) { out[k] = obj[k]; }
+    } else {
+        for (k in obj) {
+            // The dev-Inspector sidecars are attached by the render delegate AFTER the
+            // action returns; a strict projection must not eat them.
+            if ( /^__gina/.test(k) ) { out[k] = obj[k]; }
+        }
+        for (k in this._shape) {
+            if ( typeof obj[k] !== 'undefined' ) { out[k] = obj[k]; }
+        }
+    }
+    for (k in this._shape) {
+        if ( this._shape[k]._excluded ) { delete out[k]; }
+    }
+    return out;
 };
 
 /**

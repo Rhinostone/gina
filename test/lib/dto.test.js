@@ -386,3 +386,106 @@ describe('lib/dto §08 — dto.load resolution (the offline-CLI + pipe resolver,
         assert.equal(dto.load(TMP, 42), null);
     });
 });
+
+
+describe('lib/dto §09 — the `$` guard on toRules (#DTO2, measured server-fatal)', function () {
+
+    // MEASURED: the engine stringifies the whole rules object and, on ANY `$` in it,
+    // takes a client-only dynamic-rules branch that derefs the null server-side
+    // `$fields` (validate() -> `$fields.count()`) and throws a raw TypeError from ABOVE
+    // its own try/catch. toRules() compiles no `$` of its own, but an AUTHORED `$` can
+    // still reach it via an enum value, a field name or a date mask.
+
+    it('09.1 - toRules() THROWS when an enum VALUE carries a `$`', function () {
+        var D = dto.object({ amount: dto.enum(['$100', '$200']).required() }, 'GuardEnum');
+        assert.throws(function () { D.toRules(); }, /\[dto\][\s\S]*\$/,
+            'a `$` in an enum value must be rejected at build/boot, not at request time');
+    });
+
+    it('09.2 - toRules() THROWS when a FIELD NAME carries a `$`', function () {
+        var D = dto.object({ 'a$b': dto.string() }, 'GuardField');
+        assert.throws(function () { D.toRules(); }, /\[dto\]/);
+    });
+
+    it('09.3 - the error names the DTO so the boot failure is actionable', function () {
+        var D = dto.object({ amount: dto.enum(['$1']) }, 'GuardNamed');
+        assert.throws(function () { D.toRules(); }, /GuardNamed/);
+    });
+
+    it('09.4 - toJsonSchema() is deliberately NOT guarded (a `$` is valid in a JSON Schema enum)', function () {
+        var D = dto.object({ amount: dto.enum(['$100', '$200']) }, 'GuardSchemaOk');
+        var s = D.toJsonSchema('2020-12');
+        assert.deepEqual(s.properties.amount.enum, ['$100', '$200'],
+            'a currency-style DTO must still document + serve as a param.responseDto');
+    });
+
+    it('09.5 - a `$`-free DTO still compiles (the guard is not a blanket refusal)', function () {
+        var D = dto.object({ amount: dto.enum(['100', '200']).required() }, 'GuardClean');
+        assert.deepEqual(D.toRules(), { amount: { isRequired: true, isInList: ['100', '200'] } });
+    });
+
+    it('09.6 - SUBTRACT: the pre-guard rules object really does kill the engine', function () {
+        // Hand the engine the exact rules the guard now refuses. If this ever stops
+        // throwing, the engine was fixed and the guard can be revisited.
+        var poisoned = { amount: { isRequired: true, isInList: ['$100', '$200'] } };
+        assert.throws(
+            function () { Validator(poisoned, { amount: '$100' }, 'dto-test'); },
+            /count/,
+            'the guard exists because THIS throws — a null `$fields` deref inside the engine'
+        );
+        // control: the same shape without `$` validates cleanly, so the subtract can fail
+        var clean = { amount: { isRequired: true, isInList: ['100', '200'] } };
+        assert.equal(isValid(Validator(clean, { amount: '100' }, 'dto-test')), true);
+    });
+});
+
+
+describe('lib/dto §10 — DtoObject.apply (the response-side projection, #DTO2)', function () {
+
+    var User = dto.object({
+        id           : dto.integer().required(),
+        email        : dto.string().email().required(),
+        passwordHash : dto.string().exclude()
+    }, 'ApplyUser');
+
+    it('10.1 - keeps declared fields and DROPS undeclared ones (strict is the default)', function () {
+        var out = User.apply({ id: 7, email: 'a@b.co', internalNote: 'secret-ish' });
+        assert.deepEqual(out, { id: 7, email: 'a@b.co' });
+    });
+
+    it('10.2 - .exclude() finally means "never serialise this"', function () {
+        var out = User.apply({ id: 7, email: 'a@b.co', passwordHash: 'argon2id$...' });
+        assert.equal(typeof out.passwordHash, 'undefined');
+    });
+
+    it('10.3 - the dev-Inspector sidecars survive a strict projection', function () {
+        var out = User.apply({ id: 7, email: 'a@b.co', __ginaQueries: [1], __ginaFlow: [2] });
+        assert.deepEqual(out.__ginaQueries, [1]);
+        assert.deepEqual(out.__ginaFlow, [2]);
+    });
+
+    it('10.4 - a declared field absent from the payload is simply absent (no `undefined` key)', function () {
+        var out = User.apply({ id: 7 });
+        assert.deepEqual(Object.keys(out), ['id']);
+    });
+
+    it('10.5 - .passthrough() keeps undeclared keys (but still drops excluded ones)', function () {
+        var P = dto.object({ id: dto.integer(), secret: dto.string().exclude() }, 'ApplyPass').passthrough();
+        var out = P.apply({ id: 1, extra: 'kept', secret: 'dropped' });
+        assert.deepEqual(out, { id: 1, extra: 'kept' });
+    });
+
+    it('10.6 - it is PURE — the input object is never mutated', function () {
+        var input = { id: 7, email: 'a@b.co', passwordHash: 'x', extra: 1 };
+        var out   = User.apply(input);
+        assert.equal(input.passwordHash, 'x', 'the caller keeps its object intact');
+        assert.equal(input.extra, 1);
+        assert.notEqual(out, input, 'a NEW object is returned');
+    });
+
+    it('10.7 - a non-object / array payload passes through verbatim (nothing to project onto)', function () {
+        assert.deepEqual(User.apply([1, 2]), [1, 2]);
+        assert.equal(User.apply(null), null);
+        assert.equal(User.apply('text'), 'text');
+    });
+});
