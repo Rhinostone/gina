@@ -281,6 +281,8 @@ function MCP(opt, cmd) {
 
         // Output schema from a declared response DTO (`param.responseDto`). The
         // runtime MCP server passes `outputSchema` through to tools/list unchanged.
+        // `dropExcluded` — `.exclude()`d fields never reach the wire, so the tool
+        // must not advertise them (#B110); the request-side inputSchema keeps them.
         if ( param.responseDto ) {
             var respDto = null;
             try {
@@ -289,7 +291,7 @@ function MCP(opt, cmd) {
                 console.warn('[ '+ routeName +' ] response DTO `'+ param.responseDto +'` failed to load — omitting outputSchema: '+ respErr.message);
             }
             if ( respDto ) {
-                tool.outputSchema = respDto.toJsonSchema('draft-07');
+                tool.outputSchema = respDto.toJsonSchema('draft-07', { dropExcluded: true });
             }
         }
 

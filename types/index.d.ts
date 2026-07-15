@@ -188,7 +188,7 @@ declare namespace gina {
          */
         strict(): this;
         /** The canonical JSON Schema (throws on an unknown dialect). */
-        toJsonSchema(dialect?: 'draft-07' | '2020-12', opts?: { standalone?: boolean }): object;
+        toJsonSchema(dialect?: 'draft-07' | '2020-12', opts?: { standalone?: boolean; dropExcluded?: boolean }): object;
         /**
          * The form-validator rules projection. THROWS if any `$` appears in
          * the compiled rules (an authored `$` in an enum value, field name

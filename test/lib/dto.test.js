@@ -489,3 +489,65 @@ describe('lib/dto §10 — DtoObject.apply (the response-side projection, #DTO2)
         assert.equal(User.apply('text'), 'text');
     });
 });
+
+
+describe('lib/dto §11 — toJsonSchema({ dropExcluded }) — the response-side emit (#B110)', function () {
+
+    var RespUser = dto.object({
+        id           : dto.integer().required(),
+        email        : dto.string().email().required(),
+        token        : dto.string().required().exclude(),
+        passwordHash : dto.string().exclude()
+    }, 'RespUser');
+
+    it('11.1 - dropExcluded omits `.exclude()`d fields from properties AND required[]', function () {
+        var s = RespUser.toJsonSchema('2020-12', { dropExcluded: true });
+        assert.deepEqual(Object.keys(s.properties), ['id', 'email']);
+        assert.deepEqual(s.required, ['id', 'email'], 'the required+excluded field left required[] too');
+    });
+
+    it('11.2 - the DEFAULT emit still carries them (the declared / request-side contract)', function () {
+        var s = RespUser.toJsonSchema('2020-12');
+        assert.deepEqual(Object.keys(s.properties), ['id', 'email', 'token', 'passwordHash']);
+        assert.deepEqual(s.required, ['id', 'email', 'token']);
+    });
+
+    it('11.3 - SUBTRACT: an opts bag WITHOUT the flag changes nothing (the flag is load-bearing)', function () {
+        var s = RespUser.toJsonSchema('2020-12', {});
+        assert.equal(typeof s.properties.token, 'object');
+        assert.ok(s.required.indexOf('token') > -1);
+    });
+
+    it('11.4 - required[] emptied by the drop is deleted, not left as []', function () {
+        var OnlyExcl = dto.object({
+            secret : dto.string().required().exclude(),
+            note   : dto.string()
+        }, 'RespOnlyExcl');
+        var s = OnlyExcl.toJsonSchema('draft-07', { dropExcluded: true });
+        assert.equal(s.required, undefined);
+        assert.deepEqual(Object.keys(s.properties), ['note']);
+    });
+
+    it('11.5 - shape-based: emits for a DTO whose toRules() throws on an authored `$` (stays total)', function () {
+        var Price = dto.object({
+            tier   : dto.enum(['$ 10', '$ 20']).required(),
+            secret : dto.string().exclude()
+        }, 'RespPrice');
+        assert.throws(function () { Price.toRules(); }, /emits a \$ character/);
+        var s = Price.toJsonSchema('2020-12', { dropExcluded: true });
+        assert.deepEqual(Object.keys(s.properties), ['tier']);
+    });
+
+    it('11.6 - composes with standalone ($schema kept, excluded dropped)', function () {
+        var s = RespUser.toJsonSchema('2020-12', { standalone: true, dropExcluded: true });
+        assert.ok(/2020-12/.test(s.$schema));
+        assert.equal(s.properties.passwordHash, undefined);
+    });
+
+    it('11.7 - passthrough survives: additionalProperties stays true, excluded still dropped', function () {
+        var P = dto.object({ id: dto.integer(), secret: dto.string().exclude() }, 'RespPass').passthrough();
+        var s = P.toJsonSchema('draft-07', { dropExcluded: true });
+        assert.equal(s.additionalProperties, true);
+        assert.deepEqual(Object.keys(s.properties), ['id']);
+    });
+});

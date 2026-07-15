@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed bundle:openapi and bundle:mcp advertising .exclude()d DTO fields in response schemas — the 200 content schema and the MCP tool outputSchema now emit the response projection (toJsonSchema with dropExcluded), dropping fields the wire can never carry from properties and required[]; request-side requestBody / inputSchema.body keep the declared shape (#B110)'
+time: 2026-07-15T03:55:09+01:00

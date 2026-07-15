@@ -321,3 +321,23 @@ describe('05 - bundle-wide sliding / maxAge cache defaults (server.cache)', func
         assert.match(getSrc(), /@param\s+\{object\}\s+opt[\s\S]{0,120}opt\.sliding[\s\S]{0,40}opt\.maxAge/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 06 - responseDto dev warn checks the SERVED contract (#B110)
+// ---------------------------------------------------------------------------
+describe('06 - responseDto dev warn checks the SERVED contract (#B110)', function() {
+    // The dev-only missing-required warn reads required[] off the schema. A field
+    // that is `.required()` AND `.exclude()`d can never reach the wire (apply()
+    // deletes it before the single JSON.stringify feeding every body branch AND
+    // the cache write), so the warn must check the response projection — not the
+    // declared shape — or an action legitimately omitting such a field would warn
+    // on every dev render.
+    function getSrc() { return fs.readFileSync(SOURCE, 'utf8'); }
+    it('the missing-required warn reads the response projection (dropExcluded)', function() {
+        assert.match(getSrc(), /_respDto\.toJsonSchema\(null, \{ dropExcluded: true \}\)/);
+    });
+    it('the wire transform itself remains apply() — the strip is not schema-driven', function() {
+        assert.match(getSrc(), /jsonObj = _respDto\.apply\(jsonObj\)/);
+    });
+});

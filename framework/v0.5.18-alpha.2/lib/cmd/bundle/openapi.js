@@ -363,7 +363,10 @@ function OpenAPI(opt, cmd) {
                 description: 'Successful response'
             };
 
-            // Response body schema from a declared response DTO (`param.responseDto`)
+            // Response body schema from a declared response DTO (`param.responseDto`).
+            // `dropExcluded` — the framework strips `.exclude()`d fields from every JSON
+            // response before it reaches the wire, so the 200 schema must not advertise
+            // them (#B110). Request-side emission above keeps them: the client sends them.
             if ( param.responseDto ) {
                 var respDto = null;
                 try {
@@ -373,7 +376,7 @@ function OpenAPI(opt, cmd) {
                 }
                 if ( respDto ) {
                     operation.responses['200'].content = {
-                        'application/json': { schema: respDto.toJsonSchema('2020-12') }
+                        'application/json': { schema: respDto.toJsonSchema('2020-12', { dropExcluded: true }) }
                     };
                 }
             }

@@ -20,8 +20,10 @@
  *       role:  dto.enum(['admin', 'user']).required()
  *   }).as('CreateUser');
  *
- *   CreateUser.toJsonSchema('2020-12');  // OpenAPI 3.1 requestBody / responses (identity — canonical)
+ *   CreateUser.toJsonSchema('2020-12');  // OpenAPI 3.1 requestBody (identity — canonical)
  *   CreateUser.toJsonSchema('draft-07'); // MCP inputSchema.body + the house config-schema dialect
+ *   CreateUser.toJsonSchema('2020-12', { dropExcluded: true }); // response-side (200 / outputSchema):
+ *                                        // `.exclude()`d fields omitted — they never reach the wire (#B110)
  *   CreateUser.toRules();                // the live form-validator rules-object (server + client)
  *   CreateUser.name;                     // stable id for the dto:types generator + drift gate + routing param.dto
  *
@@ -368,8 +370,18 @@ DtoObject.prototype.strict = function () { this._passthrough = false; return thi
  * IDENTITY projection (the builder's internal form). Embeddable in an OpenAPI 3.1
  * `requestBody`/`responses` (dialect `2020-12`) or an MCP `inputSchema` (draft-07).
  *
+ * `opts.dropExcluded` emits the RESPONSE projection instead: `.exclude()`d fields
+ * leave `properties` AND `required[]`. `apply()` deletes them before the wire, so a
+ * response schema advertising them would document properties a client can never
+ * receive (#B110). Request-side emission keeps them — the client DOES send them.
+ * The drop reads the SHAPE (`_excluded`), never `toRules()`, so it stays total for
+ * a DTO whose rules would throw on an authored `$` (same rationale as the type
+ * emitter's excluded-set derivation).
+ *
  * @param {string} [dialect='draft-07'] - 'draft-07' | '2020-12'.
- * @param {object} [opts]               - { standalone: boolean } — add `$schema` (+ `$id`/`title` when named).
+ * @param {object} [opts]               - emit options.
+ * @param {boolean} [opts.standalone]   - add `$schema` (+ `$id`/`title` when named).
+ * @param {boolean} [opts.dropExcluded] - omit `.exclude()`d fields (response projection).
  * @returns {object}
  */
 DtoObject.prototype.toJsonSchema = function (dialect, opts) {
@@ -383,6 +395,9 @@ DtoObject.prototype.toJsonSchema = function (dialect, opts) {
     var schema = { type: 'object', properties: {}, required: [] };
     for (var f in this._shape) {
         var field = this._shape[f];
+        // #B110 — response projection: an excluded field can never appear on the
+        // wire, so it must not be advertised (nor required) by a response schema.
+        if (opts.dropExcluded && field._excluded) { continue; }
         schema.properties[f] = field.toSchemaFragment(dialect);
         if (field._required) { schema.required.push(f); }
     }

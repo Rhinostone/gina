@@ -34,6 +34,11 @@ dto.register('OA_View', dto.object({
     id:    dto.string().required(),
     email: dto.string().email()
 }));
+dto.register('OA_ViewExcl', dto.object({
+    id:           dto.string().required(),
+    email:        dto.string().email(),
+    passwordHash: dto.string().required().exclude()
+}));
 
 /**
  * A source-locked replica of openapi.js `buildOperation`'s DTO-emission branches
@@ -82,7 +87,7 @@ function emitOperation(route, method, srcPath) {
         var respDto = dto.load(srcPath, param.responseDto);
         if (respDto) {
             operation.responses['200'].content = {
-                'application/json': { schema: respDto.toJsonSchema('2020-12') }
+                'application/json': { schema: respDto.toJsonSchema('2020-12', { dropExcluded: true }) }
             };
         }
     }
@@ -120,6 +125,10 @@ describe('bundle:openapi §01 — source pins (DTO wiring)', function () {
         assert.match(SRC, /rawReq\.indexOf\('validator::'\) === 0/);
         assert.ok(SRC.indexOf('introspect.requirementToSchema(rawReq)') > -1);
         assert.ok(SRC.indexOf('introspect.requirementToPattern(rawReq)') > -1, 'regex/enum path retained');
+    });
+    it('01.7 - the 200 schema is the RESPONSE projection (dropExcluded); the requestBody keeps the declared shape (#B110)', function () {
+        assert.match(SRC, /schema: respDto\.toJsonSchema\('2020-12', \{ dropExcluded: true \}\)/);
+        assert.match(SRC, /schema: reqDto\.toJsonSchema\('2020-12'\)/, 'request emission unchanged — no drop');
     });
 });
 
@@ -176,5 +185,17 @@ describe('bundle:openapi §02 — replica: DTO emit is real (not inert)', functi
         assert.equal(re.parameters[0].schema.pattern, '^[0-9]+$');
         var en = emitOperation({ _urlParams: ['y'], requirements: { y: 'a|b|c' } }, 'get', null);
         assert.deepEqual(en.parameters[0].schema.enum, ['a', 'b', 'c']);
+    });
+    it('02.9 - #B110: an `.exclude()`d field leaves the 200 schema (properties + required[]) but STAYS in the requestBody', function () {
+        var op  = emitOperation({ param: { dto: 'OA_ViewExcl', responseDto: 'OA_ViewExcl' } }, 'post', null);
+        var req = op.requestBody.content['application/json'].schema;
+        var res = op.responses['200'].content['application/json'].schema;
+        // request side: the client DOES send it — declared shape kept
+        assert.ok(req.properties.passwordHash, 'requestBody keeps the excluded field');
+        assert.ok(req.required.indexOf('passwordHash') > -1);
+        // response side: the wire can never carry it (apply() deletes it)
+        assert.equal(res.properties.passwordHash, undefined);
+        assert.deepEqual(Object.keys(res.properties), ['id', 'email']);
+        assert.deepEqual(res.required, ['id'], 'required+excluded left required[] too');
     });
 });

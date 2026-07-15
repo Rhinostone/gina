@@ -30,6 +30,11 @@ dto.register('MCP_View', dto.object({
     id:    dto.string().required(),
     email: dto.string().email()
 }));
+dto.register('MCP_ViewExcl', dto.object({
+    id:           dto.string().required(),
+    email:        dto.string().email(),
+    passwordHash: dto.string().required().exclude()
+}));
 
 /** Source-locked replica of mcp.js `buildInputSchema` (locked by §01 pins). */
 function emitInputSchema(route, method, srcPath) {
@@ -77,7 +82,7 @@ function emitOutputSchema(route, srcPath) {
     var param = route.param || {};
     if (param.responseDto) {
         var respDto = dto.load(srcPath, param.responseDto);
-        if (respDto) { return respDto.toJsonSchema('draft-07'); }
+        if (respDto) { return respDto.toJsonSchema('draft-07', { dropExcluded: true }); }
     }
     return undefined;
 }
@@ -107,7 +112,7 @@ describe('bundle:mcp §01 — source pins (DTO wiring)', function () {
     it('01.6 - outputSchema comes from a resolved param.responseDto (draft-07)', function () {
         assert.ok(SRC.indexOf('if ( param.responseDto ) {') > -1);
         assert.ok(SRC.indexOf('respDto = dto.load(srcPath, param.responseDto)') > -1);
-        assert.match(SRC, /tool\.outputSchema = respDto\.toJsonSchema\('draft-07'\)/);
+        assert.match(SRC, /tool\.outputSchema = respDto\.toJsonSchema\('draft-07', \{ dropExcluded: true \}\)/);
     });
     it('01.7 - a validator:: requirement is un-collapsed via requirementToSchema; pattern/enum kept', function () {
         assert.match(SRC, /rawReq\.indexOf\('validator::'\) === 0/);
@@ -160,5 +165,14 @@ describe('bundle:mcp §02 — replica: DTO emit is real (not the placeholder)', 
         assert.equal(re.properties.x.pattern, '^[0-9]+$');
         var en = emitInputSchema({ _urlParams: ['y'], requirements: { y: 'a|b' } }, 'get', null);
         assert.deepEqual(en.properties.y.enum, ['a', 'b']);
+    });
+    it('02.9 - #B110: an `.exclude()`d field leaves the outputSchema (properties + required[]) but STAYS in the inputSchema body', function () {
+        var out = emitOutputSchema({ param: { responseDto: 'MCP_ViewExcl' } }, null);
+        assert.equal(out.properties.passwordHash, undefined);
+        assert.deepEqual(Object.keys(out.properties), ['id', 'email']);
+        assert.deepEqual(out.required, ['id'], 'required+excluded left required[] too');
+        var input = emitInputSchema({ param: { dto: 'MCP_ViewExcl' } }, 'post', null);
+        assert.ok(input.properties.body.properties.passwordHash, 'request body keeps the declared field');
+        assert.ok(input.properties.body.required.indexOf('passwordHash') > -1);
     });
 });

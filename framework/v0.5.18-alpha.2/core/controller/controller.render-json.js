@@ -380,8 +380,11 @@ module.exports = function renderJSON(jsonObj, deps) {
             if (_respDto) {
                 if ( self.isCacheless() ) {
                     // Dev only: a declared-but-missing required field is a server bug the
-                    // DTO would otherwise silently hide by projecting it away.
-                    var _respSchema  = _respDto.toJsonSchema();
+                    // DTO would otherwise silently hide by projecting it away. Checked
+                    // against the SERVED contract (`dropExcluded`, #B110): a required
+                    // field that is also `.exclude()`d can never reach the wire, so the
+                    // action omitting it is not a bug and must not warn.
+                    var _respSchema  = _respDto.toJsonSchema(null, { dropExcluded: true });
                     var _respMissing = (_respSchema.required || []).filter(function (f) {
                         return ( typeof(jsonObj[f]) == 'undefined' );
                     });
