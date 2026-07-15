@@ -73,7 +73,7 @@ A unified data-shape layer — define a DTO/schema once and reuse it for request
 | ✅ | **Unified DTO / schema primitive** — Define a data shape once and reuse it for runtime validation, static types, JSON-Schema/OpenAPI, and response serialization. Foundation for the validation pipe and DTO-derived types. | `0.5.18-alpha.2` | shipped |
 | ✅ | **Global validation pipe** — Framework-level, default-on validation + coercion of the request payload against the route's DTO before the controller action runs, handing a typed, validated object to the handler. Declaring `param.dto` on a route also answers a clean 422 on failure; `param.responseDto` shapes the outgoing JSON. | `0.5.18-alpha.2` | shipped |
 | ✅ | **Type safety from the DTO** — Types derived from DTO definitions (`gina bundle:types` emits `.d.ts` from a bundle's DTOs) plus a two-part gate that verifies the shipped declarations against the runtime: a consumer fixture compiled by `tsc` through the package exports map, and a runtime-parity test diffing the declarations against the live framework surface. `GinaRequest<TDto>` and `req.dto` type route-DTO payloads end to end. Keeps the existing JS runtime, no rewrite. | `0.5.18-alpha.2` | shipped |
-| 📋 | **Documentation & guides** — DTO authoring, the validation pipe, and typed controllers on the docs site (to follow implementation). | `0.6.x` | Q4 2026 |
+| ✅ | **Documentation & guides** — DTO authoring, the validation pipe, and typed controllers on the docs site: the Route DTOs guide, `bundle:types` in the CLI reference, the routing `param.dto` / `param.responseDto` schema rows, and migration notes. | `0.5.18-alpha.2` | shipped |
 
 ---
 
