@@ -15,7 +15,19 @@
  *              the entry from a sibling `<file>.meta` JSON sidecar and
  *              preserving the ORIGINAL absolute expiry (a restart never extends
  *              a TTL). See `from(store, cachePath)`.
- * - `redis`  — shared L1+L2 across replicas (connector-homed; a later slice).
+ * - `redis`  — shared L1 (in-process Map) + L2 (redis, connector-homed via
+ *              `lib/render-cache-store`, stashed at `process.gina._renderCacheStore`).
+ *              `set('redis')` writes L1 synchronously + L2 fire-and-forget (the
+ *              response never waits on redis); `warm()` reads L2 on an L1 miss and
+ *              repopulates L1 with the AUTHORITATIVE remaining PTTL. `delete` /
+ *              `clear` / `invalidateByEvent` also DEL the L2 keys so a stale body
+ *              cannot be warmed back (B1). Cross-replica eviction of stale L1
+ *              (pub/sub) is a later slice; note an event invalidation DELs from L2
+ *              only the keys THIS replica has registered — a key rendered and
+ *              registered solely on another replica stays in L2 until its natural
+ *              expiry, so the staleness bound is the entry's own TTL (L1 and L2
+ *              expire it independently). Fail-open throughout: a down/slow redis
+ *              degrades to per-replica caching, never an error on the request path.
  *
  * Server-only: this module is never part of the browser AMD bundle (unlike
  * `lib/cache`, whose `define()` block is dormant — nothing in the browser
@@ -149,6 +161,33 @@ function rmFsFiles(body) {
     try { fs.rmSync(body + '.meta'); } catch (e) {}
 }
 
+// Once-per-process flag for `_warnL2Once` — module scope on purpose: several
+// RenderCache instances exist per process (one per render delegate + the server
+// read path), and the warn's job is ONE signal per deployment, not one per site.
+var _l2ErrorWarned = false;
+
+/**
+ * Once-per-process L2 failure warn. Fail-open must stay silent per-operation
+ * (no log spam during an outage — the store's client `error` listener already
+ * reports connection drops at reconnect cadence), but a PERSISTENT
+ * command-level failure (e.g. a WRONGTYPE from a key/prefix collision with
+ * another application writing the same redis) would otherwise be COMPLETELY
+ * invisible: the deployment silently degrades to per-replica caching forever.
+ * One warn names the failure; everything after it stays silent.
+ *
+ * @inner
+ * @param {string} op  - Operation label ('write' | 'del' | 'read' | 'read (corrupt value)').
+ * @param {*}      err - The rejection reason.
+ * @returns {void}
+ */
+function _warnL2Once(op, err) {
+    if ( _l2ErrorWarned ) {
+        return;
+    }
+    _l2ErrorWarned = true;
+    console.warn('[render-cache] redis L2 ' + op + ' failed — fail-open, degrading to per-replica caching (further L2 errors are not logged): ' + ((err && err.message) || err));
+}
+
 /**
  * Render-cache dispatcher factory. Returns an `instance` object (not `this`) —
  * usage: `var rc = new RenderCache({ store })`.
@@ -175,6 +214,38 @@ function RenderCache(options) {
     // so on the render delegates' instances it stays null and the disk-aware
     // has()/get() below fall back to the Map-only behaviour — byte-identical.
     var _cachePath = ( typeof(options.path) != 'undefined' && options.path ) ? options.path : null;
+
+    /**
+     * The redis L2 store (render-cache Slice 4), resolved LAZILY at each use
+     * site. The render delegates construct their `RenderCache` at module load —
+     * BEFORE `gna.js` boot stashes `process.gina._renderCacheStore` — so reading
+     * it in the constructor would pin `null` forever. `options.l2` is the
+     * test-injection seam (a store exposing `set/warmRead/del`); production reads
+     * the process stash.
+     *
+     * @inner
+     * @returns {object|null}
+     */
+    function _l2() {
+        return options.l2 || (process.gina && process.gina._renderCacheStore) || null;
+    }
+
+    /**
+     * Swallow a fire-and-forget L2 promise rejection (fail-open, B4/B5): a
+     * down/slow redis must never reject into the request path — L1 keeps serving.
+     * The rejection is not fully mute: the FIRST one per process is surfaced via
+     * `_warnL2Once` so a persistent command-level failure stays diagnosable.
+     *
+     * @inner
+     * @param {*}      p    - A promise (or non-promise, ignored).
+     * @param {string} [op] - Operation label for the once-per-process warn.
+     * @returns {void}
+     */
+    function _forget(p, op) {
+        if ( p && typeof(p.catch) === 'function' ) {
+            p.catch(function (e) { _warnL2Once(op || 'operation', e); });
+        }
+    }
 
     var instance = {};
 
@@ -411,7 +482,125 @@ function RenderCache(options) {
             await fs.promises.writeFile(p.meta, JSON.stringify(meta));
             return;
         }
+
+        if ( /^redis$/i.test(type) ) {
+            // L1 (synchronous): same shape as `memory` — this replica serves from
+            // its own Map on the next request without touching redis.
+            entry.fromMemory = true;
+            entry.content    = payload.content;
+            mem.set(key, entry);
+
+            // L2 (fire-and-forget): the shared store other replicas warm from. The
+            // response NEVER waits on redis — L1 already holds the entry, so a
+            // slow/down L2 degrades to per-replica caching (a follow-up on another
+            // replica renders + writes its own L2, self-correcting). B5's
+            // enableOfflineQueue:false makes a disconnected client reject fast;
+            // _forget swallows it (fail-open, B4).
+            var l2 = _l2();
+            if ( l2 ) {
+                // Pass the RAW ms (positive) or null — the store floors + rounds
+                // (Math.max(1, round) → never PSETEX 0). entry.ttl > 0 gates out
+                // negative/zero, so the store only ever sees null or positive.
+                // NOTE a null ttl → a NON-EXPIRING L2 key. Unlike the in-process
+                // Map (dies with the process) it survives in shared redis, and
+                // buildKey's release-token rotation (GINA_CACHE_NAMESPACE /
+                // GINA_VERSION) then orphans it permanently — clear() enumerates
+                // only L1-known keys, and redis has no clearFsBundle analog. A
+                // redis route should always carry a ttl (or invalidateOnEvents).
+                var _ttlMs = ( typeof(entry.ttl) != 'undefined' && entry.ttl > 0 )
+                    ? entry.ttl * 1000
+                    : null;
+                // Store ONLY what the serve path needs — never a `filename` (fs-only)
+                // nor timing fields (PTTL is authoritative on read-back).
+                var _l2Value;
+                try {
+                    _l2Value = JSON.stringify({
+                        content         : payload.content,
+                        responseHeaders : entry.responseHeaders,
+                        visibility      : entry.visibility
+                    });
+                } catch (e) {
+                    return; // unserializable payload → L1-only (fail-open)
+                }
+                _forget(l2.set(key, _l2Value, _ttlMs), 'write');
+            }
+            return;
+        }
         // Unknown / undefined type → not cached.
+    };
+
+    /**
+     * Warm the L1 index from the redis L2 (render-cache Slice 4). Called by the
+     * server read path on an L1 miss for a `redis` route: reads the shared body
+     * back, populates L1 so the NEXT request on THIS replica hits L1 without
+     * touching redis, and returns the (memory-shaped) entry to serve now.
+     *
+     * Fail-open (B5): any L2 error / miss / unparseable value → `undefined`
+     * (render normally). The L1 entry's `ttl` is the AUTHORITATIVE remaining life
+     * from redis `PTTL` (`raw.ttlMs`), never re-derived — so L1 cannot outlive L2,
+     * and a re-warm after L1 expiry reads the SHORTER remaining PTTL (never an
+     * extension). The entry carries NO `filename` (that is fs-only, B3) and no
+     * cleanup fn (a memory entry has no disk body).
+     *
+     * @memberof RenderCache
+     * @param {string}   key      - Fully-namespaced cache key (`buildKey`).
+     * @param {string[]} [events] - The route's `invalidateOnEvents`, re-registered
+     *                              after L1 population. A warmed entry skipped the
+     *                              render, so the delegate's `setEvents` never ran
+     *                              on THIS replica — without this, an event fired
+     *                              here could neither evict it from L1 nor DEL it
+     *                              from L2 (the fs-restart sidecar class, solved
+     *                              there by `readBack()`'s `meta.events` restore).
+     *                              Route config is the source of truth, so the L2
+     *                              value never needs to carry events; the server
+     *                              read path passes the route's list on every warm.
+     * @returns {Promise<object|undefined>} The memory-shaped entry, or `undefined` on miss.
+     */
+    instance.warm = async function(key, events) {
+        var l2 = _l2();
+        if ( !l2 ) {
+            return undefined;
+        }
+        var raw;
+        try {
+            raw = await l2.warmRead(key);
+        } catch (e) {
+            _warnL2Once('read', e);
+            return undefined; // redis down / error → miss (render normally)
+        }
+        if ( !raw || typeof(raw.value) != 'string' ) {
+            return undefined;
+        }
+        var parsed;
+        try {
+            parsed = JSON.parse(raw.value);
+        } catch (e) {
+            // A corrupt value is the same diagnosable family as a WRONGTYPE
+            // (something else writing our keyspace) — worth the one process warn.
+            _warnL2Once('read (corrupt value)', e);
+            return undefined; // corrupt L2 value → miss (self-heals on re-render)
+        }
+        var entry = {
+            fromMemory      : true,
+            content         : parsed.content,
+            responseHeaders : parsed.responseHeaders,
+            visibility      : parsed.visibility
+        };
+        // Remaining life from PTTL (ms → s). null (no expiry) → non-expiring L1
+        // entry, matching a non-ttl memory entry.
+        if ( raw.ttlMs && raw.ttlMs > 0 ) {
+            entry.ttl = raw.ttlMs / 1000;
+        }
+        // Populate L1 (installs the timer for `entry.ttl` s = the remaining L2
+        // life, so L1 expires with L2). mem.set stamps createdAt/lastAccessedAt.
+        mem.set(key, entry);
+        // Restore the entry's event-invalidation registrations from route config
+        // (see the `events` param — the warmed entry skipped the delegate's
+        // setEvents, and an unregistered entry cannot be event-evicted).
+        if ( Array.isArray(events) && events.length ) {
+            mem.setEvents(key, events);
+        }
+        return entry;
     };
 
     /**
@@ -461,7 +650,14 @@ function RenderCache(options) {
      * @returns {boolean} success
      */
     instance.delete = function(key) {
-        return mem.delete(key);
+        var removed = mem.delete(key);
+        // B1: drop from the redis L2 too (fire-and-forget), or the next warm()
+        // re-seeds L1 from the stale body and the delete silently un-does itself.
+        var l2 = _l2();
+        if ( l2 ) {
+            _forget(l2.del(key), 'del');
+        }
+        return removed;
     };
 
     /**
@@ -515,6 +711,11 @@ function RenderCache(options) {
      * Each evicted entry runs its cleanup fn, so an `fs` body + sidecar is removed
      * from disk too.
      *
+     * L2 scope: only the keys THIS replica has registered are DEL'd — a key
+     * rendered and registered solely on another replica stays in L2 until its
+     * natural expiry (`warm()`'s `events` param re-registers on every serving
+     * replica, narrowing this to replicas that never served the key at all).
+     *
      * @memberof RenderCache
      * @param {string} event
      * @param {*}      [data]
@@ -524,7 +725,19 @@ function RenderCache(options) {
      * var evicted = renderCache.from(serverInstance._cached).invalidateByEvent('post#saved');
      */
     instance.invalidateByEvent = function(event, data) {
-        return mem.invalidateByEvent(event, data);
+        // B1: snapshot the L2 keyset BEFORE eviction — invalidateByEvent returns a
+        // count and clears the registrations, so the keys must be read first (both
+        // calls are sync → no race). keysForEvent lists EVERY registered key,
+        // including ones already gone from L1 that may still be live in L2.
+        var l2   = _l2();
+        var keys = l2 ? mem.keysForEvent(event) : null;
+        var removed = mem.invalidateByEvent(event, data);
+        if ( l2 && keys && keys.length ) {
+            for (var i = 0; i < keys.length; i++) {
+                _forget(l2.del(keys[i]), 'del');
+            }
+        }
+        return removed;
     };
 
     /**
@@ -551,6 +764,7 @@ function RenderCache(options) {
     instance.clear = function(bundle) {
         var removed = 0;
         var keys    = mem.keys();
+        var evicted = [];
         for (var i = 0; i < keys.length; i++) {
             var p = parseFsKey(keys[i]);
             // parseFsKey is null for any non-output namespace (swig: /
@@ -561,6 +775,9 @@ function RenderCache(options) {
             if ( bundle && p.bundle !== bundle ) {
                 continue;
             }
+            // Collect for the L2 DEL regardless of the L1 delete outcome — an
+            // entry already gone from L1 (a TTL beat us) may still be live in L2.
+            evicted.push(keys[i]);
             try {
                 if ( mem.delete(keys[i]) ) {
                     removed++;
@@ -568,6 +785,16 @@ function RenderCache(options) {
             } catch (e) {
                 // Mirror lib/cache clear()'s per-entry isolation: a throwing
                 // cleanup fn must not abort the sweep.
+            }
+        }
+        // B1: drop the same keys from the redis L2 (fire-and-forget). NOTE this
+        // covers only the L1-KNOWN keys — an L2 entry never warmed on THIS replica
+        // is not enumerable here (the comprehensive cross-replica flush is pub/sub,
+        // a later slice); each replica's own L1 self-heals at its TTL meanwhile.
+        var l2 = _l2();
+        if ( l2 && evicted.length ) {
+            for (var j = 0; j < evicted.length; j++) {
+                _forget(l2.del(evicted[j]), 'del');
             }
         }
         return removed;

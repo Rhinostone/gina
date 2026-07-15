@@ -1,0 +1,3 @@
+kind: Added
+body: 'Render cache: a redis-backed L2 tier — rendered output is cached in a shared redis so multiple replicas serve the same rendered page. Writes go to the in-process L1 synchronously and to redis fire-and-forget (the response never waits on redis); an L1 miss warms back with the authoritative remaining PTTL and re-registers the route''s invalidateOnEvents; invalidation (delete / clear / invalidateByEvent) propagates to redis; a down or failing redis degrades to per-replica caching (fail-open) with a once-per-process diagnostic warning'
+time: 2026-07-15T03:57:31+01:00

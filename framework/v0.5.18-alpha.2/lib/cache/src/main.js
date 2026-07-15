@@ -558,6 +558,41 @@ function Cache(options) {
     }
 
     /**
+     * Return the UNIQUE cache keys currently registered to `event`, WITHOUT
+     * evicting anything. Read-only companion to `invalidateByEvent`.
+     *
+     * A two-tier render-cache backend (`lib/render-cache`'s redis L2) needs
+     * these keys to DEL them from L2 on an event invalidation — `invalidateByEvent`
+     * returns only a COUNT, and by the time it returns the registrations are gone,
+     * so the L2 keyset must be snapshotted BEFORE the eviction (both are sync, so a
+     * `keysForEvent(event)` then `invalidateByEvent(event)` pair has no race). Unlike
+     * the count (which tallies only successful L1 deletes), this lists EVERY
+     * registered key — an entry already gone from L1 (a TTL beat us to it) may still
+     * be live in L2 and must be DEL'd there too.
+     *
+     * @memberof Cache
+     * @param {string} event
+     * @returns {string[]} Unique cache keys registered to `event` (empty when none).
+     *
+     * @example
+     * var keys = cache.keysForEvent('post#saved'); // snapshot BEFORE invalidating
+     * cache.invalidateByEvent('post#saved');       // evict L1
+     * keys.forEach(function (k) { l2.del(k); });    // and drop the same keys from L2
+     */
+    instance['keysForEvent'] = function(event) {
+        if ( !cache._events || !cache._events.length ) {
+            return [];
+        }
+        var keys = [];
+        for (let i = 0, len = cache._events.length; i < len; i++) {
+            if ( cache._events[i].event === event && keys.indexOf(cache._events[i].cacheKey) < 0 ) {
+                keys.push(cache._events[i].cacheKey);
+            }
+        }
+        return keys;
+    };
+
+    /**
      * Manually trigger invalidation for all cache keys registered to `event`.
      *
      * Each evicted entry has its cleanup fn run (an `fs` body + sidecar is removed

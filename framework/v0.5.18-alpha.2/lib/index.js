@@ -88,6 +88,11 @@ function Lib() {
         // Stateless dispatcher invoked ONCE at boot from gna.js; _require like
         // SessionStore (no instance/singleton state to protect from eviction).
         JobStore        : _require('./job-store'),
+        // render-cache Slice 4 — connector-backed L2 store factory for
+        // lib/render-cache's redis strategy. Stateless dispatcher invoked ONCE
+        // at boot from gna.js (the built store is stashed on
+        // process.gina._renderCacheStore); _require like JobStore/SessionStore.
+        RenderCacheStore : _require('./render-cache-store'),
         SwigFilters     : _require('./swig-filters'),
         Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
         RenderCache     : require('./render-cache'), // #B32-residual — plain require (server-only render-cache strategy dispatcher; wraps lib/cache and is held at gen-0 in server.isaac.js + the render delegates). See Cache above.

@@ -205,7 +205,7 @@ describe('03 - unknown / undefined type is a no-op', function () {
     });
 
     it('an unrecognised type does not cache (e.g. a not-yet-shipped strategy)', async function () {
-        await rc.set('redis', 'static:demo:/r', {}, { content: 'x', path: tmpRoot, bundle: 'demo', url: '/r', kind: 'html' });
+        await rc.set('memcached', 'static:demo:/r', {}, { content: 'x', path: tmpRoot, bundle: 'demo', url: '/r', kind: 'html' });
         assert.equal(rc.has('static:demo:/r'), false);
     });
 });
@@ -925,5 +925,331 @@ describe('10 - event invalidation (firing + restart survival)', function () {
 
         assert.equal(fs.existsSync(path.join(root, 'demo')), false);
         assert.equal(rc.invalidateByEvent('m#evt'), 1);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 11 — redis L2 strategy (render-cache Slice 4)
+// ---------------------------------------------------------------------------
+//
+// Behavioral coverage of the redis integration: set('redis') writes L1
+// synchronously + L2 fire-and-forget; warm() reads L2 back on an L1 miss,
+// repopulates L1 with the authoritative remaining PTTL, and re-registers the
+// route's invalidateOnEvents (the events param — a warmed entry skipped the
+// delegate's setEvents, so without it the entry could not be event-evicted);
+// delete/clear/invalidateByEvent DEL the L2 keys (B1); fail-open throughout (a
+// rejecting L2 never reaches the caller). Drives the REAL RenderCache with an
+// injected fake L2 store (the seam lib/render-cache-store builds:
+// set/warmRead/del), plus the process.gina._renderCacheStore lazy-resolution path.
+//
+// ⚠️ set('redis',…,{ttl}) and warm() with a ttl BOTH arm a real setTimeout via
+// mem.set (the L1 timer) — so every test that seeds a ttl'd entry enables node
+// mock timers first (the file-header idiom), or the strand hangs the file.
+describe('11 - redis L2 strategy', function () {
+
+    // A synchronous fake of the render-cache-store seam. Records every call and
+    // applies state synchronously (like the real store's fake ioredis), so a
+    // fire-and-forget write is observable right after an `await rc.set(...)`.
+    function fakeL2() {
+        var s = {
+            strings: Object.create(null),
+            pttls:   Object.create(null),   // key -> ms (>0) or -1 (no expiry)
+            calls:   { set: [], warmRead: [], del: [] },
+            failSet: null, failWarm: null, failDel: null,
+            set: function (key, value, ttlMs) {
+                s.calls.set.push({ key: key, value: value, ttlMs: ttlMs });
+                if (s.failSet) return Promise.reject(s.failSet);
+                s.strings[key] = value;
+                s.pttls[key]   = (ttlMs && ttlMs > 0) ? ttlMs : -1;
+                return Promise.resolve();
+            },
+            warmRead: function (key) {
+                s.calls.warmRead.push(key);
+                if (s.failWarm) return Promise.reject(s.failWarm);
+                if (!(key in s.strings)) return Promise.resolve(null);
+                return Promise.resolve({
+                    value: s.strings[key],
+                    ttlMs: (s.pttls[key] > 0) ? s.pttls[key] : null
+                });
+            },
+            del: function (key) {
+                s.calls.del.push(key);
+                if (s.failDel) return Promise.reject(s.failDel);
+                var existed = (key in s.strings);
+                delete s.strings[key];
+                delete s.pttls[key];
+                return Promise.resolve(existed ? 1 : 0);
+            }
+        };
+        return s;
+    }
+
+    function rcRedis(l2) {
+        var rc = new RenderCache({ l2: l2 });
+        rc.from(new Map());
+        return rc;
+    }
+
+    // Any test that stashes on process.gina must restore it.
+    var _prevStore;
+    beforeEach(function () {
+        _prevStore = (process.gina && process.gina._renderCacheStore);
+    });
+    afterEach(function () {
+        if (process.gina) {
+            if (typeof _prevStore === 'undefined') { delete process.gina._renderCacheStore; }
+            else { process.gina._renderCacheStore = _prevStore; }
+        }
+    });
+
+    // --- set('redis') ------------------------------------------------------
+
+    it('set(redis) writes L1 (fromMemory + content) AND L2 (JSON body, PSETEX ms)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        var key = rc.buildKey('static', 'demo', '/p');
+        return rc.set('redis', key, { ttl: 60, visibility: 'public', responseHeaders: { 'x': '1' } },
+                      { content: 'HTML' }).then(function () {
+            // L1
+            var hit = rc.get(key);
+            assert.equal(hit.fromMemory, true);
+            assert.equal(hit.content, 'HTML');
+            // L2 (fire-and-forget, but the fake records synchronously)
+            assert.equal(l2.calls.set.length, 1);
+            assert.equal(l2.calls.set[0].key, key);
+            assert.equal(l2.calls.set[0].ttlMs, 60000, 'ttl seconds → PSETEX ms');
+            assert.deepEqual(JSON.parse(l2.calls.set[0].value),
+                { content: 'HTML', responseHeaders: { 'x': '1' }, visibility: 'public' },
+                'L2 stores only content + headers + visibility — never a filename');
+        });
+    });
+
+    it('set(redis) with no ttl → L2 ttlMs null (plain SET, no expiry)', function () {
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        var key = rc.buildKey('static', 'demo', '/noexp');
+        return rc.set('redis', key, { visibility: 'private', responseHeaders: {} },
+                      { content: 'X' }).then(function () {
+            assert.equal(l2.calls.set[0].ttlMs, null);
+        });
+    });
+
+    it('set(redis) is fail-open: a rejecting L2 write never rejects set()', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        l2.failSet = new Error('DOWN');
+        var rc = rcRedis(l2);
+        var key = rc.buildKey('static', 'demo', '/fo');
+        return rc.set('redis', key, { ttl: 30, responseHeaders: {} }, { content: 'Y' })
+            .then(function () {
+                // L1 still holds it — per-replica caching survives an L2 outage.
+                assert.equal(rc.get(key).content, 'Y');
+            });
+    });
+
+    it('set(redis) with no L2 configured → L1-only, no throw', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var rc = rcRedis(null);   // options.l2 null, process stash absent
+        var key = rc.buildKey('static', 'demo', '/l1only');
+        return rc.set('redis', key, { ttl: 10, responseHeaders: {} }, { content: 'Z' })
+            .then(function () {
+                assert.equal(rc.get(key).content, 'Z');
+            });
+    });
+
+    // --- warm() ------------------------------------------------------------
+
+    it('warm() reads L2 → memory-shaped entry, populates L1, ttl from PTTL', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        var key = 'static:demo:/w';
+        // Seed L2 directly (as another replica would have).
+        l2.strings[key] = JSON.stringify({ content: 'FROM_L2', responseHeaders: { 'c': 'x' }, visibility: 'public' });
+        l2.pttls[key]   = 45000;   // 45s remaining
+
+        var rc = rcRedis(l2);      // fresh L1 (empty)
+        assert.equal(rc.has(key), false, 'L1 starts empty');
+
+        return rc.warm(key).then(function (entry) {
+            assert.equal(entry.fromMemory, true);
+            assert.equal(entry.content, 'FROM_L2');
+            assert.deepEqual(entry.responseHeaders, { 'c': 'x' });
+            assert.equal(entry.visibility, 'public');
+            assert.equal(entry.ttl, 45, 'ttl = PTTL ms / 1000 (authoritative remaining life)');
+            assert.equal('filename' in entry, false, 'never an fs filename (B3)');
+            // L1 populated → the NEXT read hits L1 without touching redis.
+            assert.equal(rc.get(key).content, 'FROM_L2');
+        });
+    });
+
+    it('warm() with PTTL null (no expiry) → non-expiring L1 entry (no ttl)', function () {
+        var l2 = fakeL2();
+        var key = 'static:demo:/noexp2';
+        l2.strings[key] = JSON.stringify({ content: 'C', responseHeaders: {}, visibility: 'private' });
+        l2.pttls[key]   = -1;      // → warmRead returns ttlMs null
+
+        var rc = rcRedis(l2);
+        return rc.warm(key).then(function (entry) {
+            assert.equal(entry.content, 'C');
+            assert.equal('ttl' in entry, false, 'no ttl when L2 has no expiry');
+        });
+    });
+
+    it('warm() on an L2 miss → undefined, L1 not populated', function () {
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        return rc.warm('static:demo:/missing').then(function (entry) {
+            assert.equal(entry, undefined);
+            assert.equal(rc.has('static:demo:/missing'), false);
+        });
+    });
+
+    it('warm() is fail-open: an L2 error → undefined (render normally)', function () {
+        var l2 = fakeL2();
+        l2.failWarm = new Error('CONN');
+        var rc = rcRedis(l2);
+        return rc.warm('static:demo:/err').then(function (entry) {
+            assert.equal(entry, undefined);
+        });
+    });
+
+    it('warm() on a corrupt L2 value → undefined (self-heals on re-render)', function () {
+        var l2 = fakeL2();
+        var key = 'static:demo:/corrupt';
+        l2.strings[key] = '{not json';
+        l2.pttls[key]   = 10000;
+        var rc = rcRedis(l2);
+        return rc.warm(key).then(function (entry) {
+            assert.equal(entry, undefined);
+        });
+    });
+
+    it('warm() with no L2 configured → undefined', function () {
+        var rc = rcRedis(null);
+        return rc.warm('static:demo:/x').then(function (entry) {
+            assert.equal(entry, undefined);
+        });
+    });
+
+    it('warm(key, events) re-registers invalidateOnEvents — the warmed entry is event-evictable', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2  = fakeL2();
+        var key = 'static:demo:/we';
+        l2.strings[key] = JSON.stringify({ content: 'W', responseHeaders: {}, visibility: 'public' });
+        l2.pttls[key]   = 30000;
+        var rc = rcRedis(l2);
+        return rc.warm(key, ['post#saved']).then(function (entry) {
+            assert.equal(entry.content, 'W');
+            // The warmed entry skipped the delegate's setEvents — the events
+            // param must have re-registered it, or this event fires into nothing
+            // (stale served until TTL — the fs-restart sidecar class).
+            var evicted = rc.invalidateByEvent('post#saved');
+            assert.equal(evicted, 1, 'the warmed entry must be evictable via its re-registered event');
+            assert.equal(rc.has(key), false, 'L1 gone');
+            assert.equal(l2.calls.del.indexOf(key) > -1, true, 'and DELd from L2 (B1)');
+        });
+    });
+
+    it('warm(key) without events registers nothing (back-compat single-arg call)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2  = fakeL2();
+        var key = 'static:demo:/wne';
+        l2.strings[key] = JSON.stringify({ content: 'X', responseHeaders: {}, visibility: 'public' });
+        l2.pttls[key]   = 30000;
+        var rc = rcRedis(l2);
+        return rc.warm(key).then(function () {
+            var evicted = rc.invalidateByEvent('post#saved');
+            assert.equal(evicted, 0, 'no registration without the events param');
+            assert.equal(rc.has(key), true, 'entry still in L1');
+        });
+    });
+
+    // --- B1: delete / clear / invalidateByEvent DEL from L2 ----------------
+
+    it('delete() drops the key from L2 too (B1)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        var key = rc.buildKey('static', 'demo', '/d');
+        return rc.set('redis', key, { ttl: 60, responseHeaders: {} }, { content: 'D' }).then(function () {
+            assert.ok(key in l2.strings, 'L2 holds it after set');
+            rc.delete(key);
+            assert.equal(l2.calls.del.indexOf(key) > -1, true, 'L2 del was fired');
+            assert.equal(key in l2.strings, false, 'L2 body gone — warm cannot re-seed it');
+        });
+    });
+
+    it('clear(bundle) DELs the matched keys from L2 (B1)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        var mine  = rc.buildKey('static', 'demo',  '/a');
+        var other = rc.buildKey('static', 'other', '/b');
+        return rc.set('redis', mine,  { ttl: 60, responseHeaders: {} }, { content: 'A' })
+            .then(function () { return rc.set('redis', other, { ttl: 60, responseHeaders: {} }, { content: 'B' }); })
+            .then(function () {
+                var removed = rc.clear('demo');
+                assert.equal(removed, 1, 'only demo evicted from L1');
+                assert.equal(l2.calls.del.indexOf(mine) > -1, true, 'demo key DELd from L2');
+                assert.equal(l2.calls.del.indexOf(other) > -1, false, 'other bundle untouched');
+                assert.equal(mine in l2.strings, false);
+                assert.equal(other in l2.strings, true);
+            });
+    });
+
+    it('invalidateByEvent() DELs every registered key from L2 (B1)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        var k1 = rc.buildKey('static', 'demo', '/one');
+        var k2 = rc.buildKey('static', 'demo', '/two');
+        return rc.set('redis', k1, { ttl: 60, responseHeaders: {} }, { content: '1' })
+            .then(function () { return rc.setEvents(k1, ['post#saved']); })
+            .then(function () { return rc.set('redis', k2, { ttl: 60, responseHeaders: {} }, { content: '2' }); })
+            .then(function () { return rc.setEvents(k2, ['post#saved']); })
+            .then(function () {
+                var evicted = rc.invalidateByEvent('post#saved');
+                assert.equal(evicted, 2, 'both L1 entries evicted');
+                assert.equal(l2.calls.del.indexOf(k1) > -1, true, 'k1 DELd from L2');
+                assert.equal(l2.calls.del.indexOf(k2) > -1, true, 'k2 DELd from L2');
+                assert.equal(k1 in l2.strings, false);
+                assert.equal(k2 in l2.strings, false);
+            });
+    });
+
+    it('delete/clear/invalidateByEvent are fail-open when the L2 del rejects', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        var l2 = fakeL2();
+        var rc = rcRedis(l2);
+        var key = rc.buildKey('static', 'demo', '/fo2');
+        return rc.set('redis', key, { ttl: 60, responseHeaders: {} }, { content: 'F' }).then(function () {
+            l2.failDel = new Error('DOWN');
+            assert.doesNotThrow(function () { rc.delete(key); });
+            assert.doesNotThrow(function () { rc.clear('demo'); });
+            assert.doesNotThrow(function () { rc.invalidateByEvent('nope'); });
+        });
+    });
+
+    // --- lazy resolution off process.gina._renderCacheStore ----------------
+
+    it('resolves the L2 lazily from process.gina._renderCacheStore (not the constructor)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        // Construct BEFORE the stash exists (mirrors a render delegate loaded at
+        // module init, before gna.js boot wires the store).
+        var rc  = new RenderCache();
+        rc.from(new Map());
+        var key = rc.buildKey('static', 'demo', '/lazy');
+
+        // No stash yet → L1-only.
+        var l2 = fakeL2();
+        if (!process.gina) { process.gina = {}; }
+        process.gina._renderCacheStore = l2;   // wired AFTER construction
+
+        return rc.set('redis', key, { ttl: 60, responseHeaders: {} }, { content: 'L' }).then(function () {
+            assert.equal(l2.calls.set.length, 1, 'lazy _l2() picked up the process stash post-construction');
+            assert.equal(key in l2.strings, true);
+        });
     });
 });
