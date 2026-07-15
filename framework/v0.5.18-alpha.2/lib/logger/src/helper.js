@@ -96,8 +96,15 @@
 
 
             // formating output
+            // #B108 — the replacement value is a STRING that can carry arbitrary text
+            // (the message itself for the message token): String.replace() dollar-expands
+            // dollar-sequences in a string replacement (dollar+backtick = the prematch,
+            // i.e. the already-rendered prefix; dollar+quote = the postmatch; dollar+amp
+            // = the match), splicing the log prefix into the message. A function replacer
+            // inserts the value verbatim, with no dollar-expansion.
             for (let p=0; p<patt.length; ++p) {
-                content = content.replace(new RegExp(patt[p], 'g'), repl[patt[p]])
+                let val = repl[patt[p]];
+                content = content.replace(new RegExp(patt[p], 'g'), function () { return val; });
             }
 
 
