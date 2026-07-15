@@ -1,0 +1,3 @@
+kind: Added
+body: 'Two-tier render-cache observability: every cache hit''s Cache-Status header now carries an RFC 9211 detail parameter naming the physical tier that served the bytes — detail=memory for the in-process L1, detail=redis for a shared-L2 warm (the cross-replica cold-start visible per request), detail=fs for a disk read-back after a restart — and /_gina/cache/stats gains an additive l2 block on both engines reporting the redis store connection health (status, mode, key prefix, connection-error count and last error), with no network round-trip on the admin path.'
+time: 2026-07-15T15:16:31+01:00

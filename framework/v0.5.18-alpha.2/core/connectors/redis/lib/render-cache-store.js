@@ -98,7 +98,10 @@ function noop() {}
  * @param {string}  bundle               - Bundle name — used in log lines.
  * @param {object}  [injected]           - Test-only DI: `{ driver }` replaces the resolved
  *                                         ioredis module. The dispatcher always calls with two.
- * @returns {object}                     - The L2 store (`set / warmRead / del / close`).
+ * @returns {object}                     - The L2 store (`set / warmRead / del / health / close`
+ *                                         — the seam consumed by lib/render-cache is
+ *                                         `set / warmRead / del`; `health` feeds
+ *                                         /_gina/cache/stats, `close` is teardown).
  * @throws {Error}                       - When ioredis is not installed.
  *
  * @example
@@ -194,11 +197,22 @@ module.exports = function RedisRenderCacheStore(connConf, bundle, injected) {
         client = new Redis(clientConf);
     }
 
+    // #RC5 — connection-level observability for /_gina/cache/stats. The driver's
+    // 'error' events (connection-level: refused / reset / DNS) are tallied here and
+    // surfaced by health(). Per-COMMAND failures (timeouts, rejections) do NOT fire
+    // this event — they fail-open upstream in lib/render-cache and are not counted.
+    var errorCount  = 0;
+    var lastError   = null;
+    var lastErrorAt = null;
+
     // An 'error' event with no listener would crash the process (EventEmitter
     // semantics). Log it and swallow — every seam operation surfaces its own
     // driver error through its rejected promise, which lib/render-cache catches
     // into fail-open (B4).
     client.on('error', function(err) {
+        errorCount++;
+        lastError   = String((err && err.message) || err);
+        lastErrorAt = new Date().toISOString();
         console.error('[RedisRenderCacheStore] ' + ((err && err.message) || err) + ' (bundle: ' + bundle + ')');
     });
 
@@ -294,6 +308,35 @@ module.exports = function RedisRenderCacheStore(connConf, bundle, injected) {
             } catch (e) {
                 return Promise.reject(e);
             }
+        },
+
+        /**
+         * Connection-level L2 health snapshot for `/_gina/cache/stats` (#RC5).
+         * Synchronous — a read of the ioredis client's `status` property
+         * (standalone AND cluster instances expose it), NO network round-trip,
+         * so the admin endpoint can never hang on a dead redis.
+         * `errorCount`/`lastError`/`lastErrorAt` tally the driver's
+         * connection-level `error` events only — per-command failures fail-open
+         * upstream in `lib/render-cache` and are not counted here. Like
+         * `close()`, NOT part of the seam consumed by `lib/render-cache`.
+         *
+         * @returns {object} `{ store, status, mode, prefix, errorCount, lastError, lastErrorAt }`
+         *                   — `status` is the ioredis lifecycle string
+         *                   (`ready` / `connecting` / `reconnecting` / `close` /
+         *                   `end` / …), `'unknown'` when unreadable.
+         */
+        health: function() {
+            var _status = 'unknown';
+            try { _status = String(client.status || 'unknown'); } catch (statusErr) { /* wedged client — keep 'unknown' */ }
+            return {
+                store       : 'redis',
+                status      : _status,
+                mode        : isCluster ? 'cluster' : 'standalone',
+                prefix      : prefix,
+                errorCount  : errorCount,
+                lastError   : lastError,
+                lastErrorAt : lastErrorAt
+            };
         },
 
         /**

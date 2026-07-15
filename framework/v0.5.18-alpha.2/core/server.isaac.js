@@ -1228,7 +1228,15 @@ function ServerEngineClass(options) {
                 }
 
                 cache.from(server._cached);
-                const cacheStatsData = JSON.stringify(cache.stats());
+                const cacheStatsPayload = cache.stats();
+                // #RC5 — L2 (redis) health when a render-cache store was wired at boot:
+                // an ADDITIVE `l2` field, mirroring the engine-agnostic server.js handler
+                // (/_gina/* parity). health() is sync — no network on the admin path.
+                if ( process.gina && process.gina._renderCacheStore
+                        && typeof(process.gina._renderCacheStore.health) === 'function' ) {
+                    cacheStatsPayload.l2 = process.gina._renderCacheStore.health();
+                }
+                const cacheStatsData = JSON.stringify(cacheStatsPayload);
                 const cacheStatsHeaders = _setPoweredByHeader({
                     'cache-control': 'no-cache, no-store, must-revalidate',
                     'pragma': 'no-cache',
@@ -1959,6 +1967,15 @@ function ServerEngineClass(options) {
                         }
                         cacheNow = null;
 
+                        // #RC5 — physical source of the bytes on THIS request, emitted as
+                        // the RFC 9211 §2.8 `detail` parameter: 'memory' = the in-process
+                        // L1 Map, 'fs' = the on-disk body read back after a restart (the
+                        // fs strategy's restart survival, made observable on the wire).
+                        // Same predicate as the memory-vs-fs serve branch below. A redis
+                        // L2 warm never labels here — isaac's pre-routing read is L1/fs
+                        // only; the shared handle() read (server.js) labels detail=redis.
+                        cacheStatus += '; detail=' + ( (typeof(cachedContentObj.fromMemory) != 'undefined') ? 'memory' : 'fs' );
+
                         if ( typeof(cachedContentObj.responseHeaders) != 'undefined' ) {
                             for (let h in cachedContentObj.responseHeaders ) {
                                 response.setHeader(h, cachedContentObj.responseHeaders[h]);
@@ -2007,7 +2024,12 @@ function ServerEngineClass(options) {
                             .pipe(response);
                     } // EO if ( hasCachedKey )
                     if (cacheStatus) {
-                        cacheStatus += '; uri-miss';
+                        // #RC5 — RFC 9211 §2.2 miss form: `uri-miss` is a VALUE of the
+                        // `fwd` parameter, not a standalone parameter (the bare form
+                        // shipped in 0.5.17 read as an unregistered boolean param to
+                        // RFC-aware tooling). Same string as the shared handle() read's
+                        // genuine-miss emission — the engines agree on the wire.
+                        cacheStatus += '; fwd=uri-miss';
                         response.setHeader('Cache-Status', cacheStatus);
                     }
 

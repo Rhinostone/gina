@@ -3206,7 +3206,17 @@ function Server(options) {
                 }
                 var _cacheStatsView = new lib.Cache();
                 _cacheStatsView.from(self.instance._cached);
-                return response.end(JSON.stringify(_cacheStatsView.stats()));
+                var _cacheStatsPayload = _cacheStatsView.stats();
+                // #RC5 — L2 (redis) health when a render-cache store was wired at boot
+                // (gna.js #RC4): an ADDITIVE `l2` field — absent on memory/fs-only
+                // bundles, so existing consumers of { size, entries } are untouched.
+                // health() is sync (an ioredis status-property read, no network), so
+                // the admin endpoint can never hang on a dead redis.
+                if ( process.gina && process.gina._renderCacheStore
+                        && typeof(process.gina._renderCacheStore.health) === 'function' ) {
+                    _cacheStatsPayload.l2 = process.gina._renderCacheStore.health();
+                }
+                return response.end(JSON.stringify(_cacheStatsPayload));
             }
 
             // ── /_gina/cache/clear — flush the render/output cache (always-on, admin-gated) ──
@@ -5062,7 +5072,12 @@ function Server(options) {
     // abandoned — never write to a dead socket, never fall through to a second render — so
     // the dead-response guard returns `true` (served/handled) with the response untouched
     // (L1 was already populated by warm(); harmless). Returns true when handled.
-    var serveRenderCacheHit = function(req, res, hit) {
+    // #RC5 — `source` names the physical tier the bytes came from on THIS request,
+    // emitted as the RFC 9211 §2.8 `detail` parameter (implementation-specific by
+    // design — the RFC's own example is `detail=MEMORY`): 'memory' = the in-process
+    // L1 Map, 'redis' = a shared-L2 warm — the cross-replica cold-start, observable
+    // on the wire.
+    var serveRenderCacheHit = function(req, res, hit, source) {
         var _isH2 = /http\/2/.test(self.conf[self.appName][self.env].server.protocol) && res.stream;
         // B2 (+ F6) — response gone OR already committed: abandon. Covers a client abort
         // during the warm await (destroyed / ended) AND an already-headersSent response
@@ -5085,7 +5100,12 @@ function Server(options) {
         if ( hit.responseHeaders ) {
             for (var h in hit.responseHeaders) { res.setHeader(h, hit.responseHeaders[h]); }
         }
-        res.setHeader('Cache-Status', 'gina-cache; hit' + (_remaining !== null ? '; ttl=' + _remaining : ''));
+        // #RC5 — ONE header string, set AND logged from the same var (the prior dual
+        // construction at setHeader + console.info was a drift hazard).
+        var _cs = 'gina-cache; hit'
+            + (_remaining !== null ? '; ttl=' + _remaining : '')
+            + (source ? '; detail=' + source : '');
+        res.setHeader('Cache-Status', _cs);
         if ( _remaining !== null ) {
             res.setHeader('Cache-Control', _vis + ', max-age=' + _remaining);
         }
@@ -5108,7 +5128,7 @@ function Server(options) {
                 res.end(hit.content);
             }
         }
-        console.info(req.method + ' [200][gina-cache; hit' + (_remaining !== null ? '; ttl=' + _remaining : '') + '] ' + (req.originalUrl || req.url));
+        console.info(req.method + ' [200][' + _cs + '] ' + (req.originalUrl || req.url));
         return true;
     };
 
@@ -5157,13 +5177,13 @@ function Server(options) {
         renderCache.from(self.instance._cached);
 
         var _kinds = ['data', 'static']; // a URL is rendered by ONE action → ONE kind; try both
-        var _hit   = null, i, _k;
+        var _hit   = null, _hitSource = null, i, _k;
         // L1 first (sync, no redis): a warmed entry from a prior request, or the express L1.
         for (i = 0; i < _kinds.length; i++) {
             _k = renderCache.buildKey(_kinds[i], bundle, _url);
             if ( renderCache.has(_k) ) {
                 _hit = renderCache.get(_k);
-                if ( _hit ) { break; }
+                if ( _hit ) { _hitSource = 'memory'; break; }
                 _hit = null;
             }
         }
@@ -5172,12 +5192,25 @@ function Server(options) {
             for (i = 0; i < _kinds.length; i++) {
                 _k = renderCache.buildKey(_kinds[i], bundle, _url);
                 _hit = await renderCache.warm(_k, _events);
-                if ( _hit ) { break; }
+                if ( _hit ) { _hitSource = 'redis'; break; }
                 _hit = null;
             }
         }
-        if ( !_hit ) { return false; } // miss → render normally
-        return serveRenderCacheHit(req, res, _hit);
+        if ( !_hit ) {
+            // #RC5 — both tiers consulted, nothing found: report the RFC 9211 miss form
+            // (`fwd=uri-miss`, §2.2 — "did not contain any responses that matched the
+            // request URI") before falling through to the render. Reached ONLY past every
+            // gate above, so an uncached / non-redis / disabled route still emits nothing.
+            // On isaac this overwrites the pre-routing read's identical miss value; on
+            // express it is the engine's FIRST miss signal (#B111 sibling). `stored` is
+            // deliberately NOT claimed — whether the render's writeCache stores is not
+            // knowable here, and headers are flushed before it settles.
+            if ( !res.headersSent ) {
+                res.setHeader('Cache-Status', 'gina-cache; fwd=uri-miss');
+            }
+            return false; // miss → render normally
+        }
+        return serveRenderCacheHit(req, res, _hit, _hitSource);
     };
 
     // #M12b — wrap the async dispatch in the per-request log context so requestId /

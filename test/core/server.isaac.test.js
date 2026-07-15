@@ -3060,3 +3060,116 @@ describe('16b - #B66 host-stripped routing.json: pure-logic replica', function()
     });
 
 });
+
+
+describe('17 - #RC5 Cache-Status detail + RFC miss form + stats L2 fold — source pins', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('the hit path appends `detail=` from the SAME memory-vs-fs predicate the serve branch uses', function() {
+        var s = getSrc();
+        assert.match(s, /cacheStatus\s*\+=\s*'; detail='\s*\+\s*\(\s*\(typeof\(cachedContentObj\.fromMemory\)\s*!=\s*'undefined'\)\s*\?\s*'memory'\s*:\s*'fs'\s*\)/,
+            'detail token derived from cachedContentObj.fromMemory — memory (Map) vs fs (disk readBack)');
+    });
+
+    it('the detail append precedes the hit setHeader (the header carries it)', function() {
+        var s = getSrc();
+        var detailAt = s.indexOf("cacheStatus += '; detail='");
+        var setAt    = s.indexOf("response.setHeader('Cache-Status', cacheStatus)");
+        assert.ok(detailAt > -1 && setAt > -1 && detailAt < setAt,
+            'append must land in the string BEFORE the first (hit-path) setHeader');
+    });
+
+    it('the miss form is RFC 9211 §2.2 — fwd=uri-miss, never a bare uri-miss parameter', function() {
+        var s = getSrc();
+        assert.match(s, /cacheStatus\s*\+=\s*'; fwd=uri-miss'/);
+        // Window-independent negative: the pre-#RC5 bare-append form is globally gone
+        // (the code shape `+= '; uri-miss'`, not the bare token — comments legitimately
+        // name uri-miss when explaining the RFC form).
+        assert.ok(s.indexOf("+= '; uri-miss'") < 0, 'the bare uri-miss append must not return');
+    });
+
+    it('/_gina/cache/stats folds store.health() as an ADDITIVE l2 field, after the admin gate', function() {
+        var s = getSrc();
+        assert.match(s, /cacheStatsPayload\.l2\s*=\s*process\.gina\._renderCacheStore\.health\(\)/);
+        assert.match(s, /typeof\(process\.gina\._renderCacheStore\.health\)\s*===\s*'function'/,
+            'guarded on health being a function (a future store without it stays un-folded)');
+        var gateAt = s.indexOf('/_gina/cache/stats: client IP not in app.json admin.allowFrom');
+        var foldAt = s.indexOf('cacheStatsPayload.l2 =');
+        assert.ok(gateAt > -1 && foldAt > gateAt, 'the 403 gate precedes the l2 fold');
+        var stringifyAt = s.indexOf('JSON.stringify(cacheStatsPayload)');
+        assert.ok(stringifyAt > foldAt, 'the fold lands before the payload is serialized');
+    });
+});
+
+
+describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function() {
+
+    // Faithful replica of the isaac pre-routing read's cacheStatus construction
+    // (server.isaac.js hit path: '; hit' + ttl/max-age + '; detail=' append) and
+    // the miss form. `now` is injected so the arithmetic is deterministic.
+    function buildHitStatus(cachedContentObj, now) {
+        var cacheStatus = 'gina-cache';
+        cacheStatus += '; hit';
+        var cacheNow = now;
+        if ( cachedContentObj.sliding === true ) {
+            if ( typeof(cachedContentObj.ttl) != 'undefined' && cachedContentObj.ttl > 0 ) {
+                var lastAccess = cachedContentObj.lastAccessedAt
+                    ? cachedContentObj.lastAccessedAt.getTime()
+                    : cachedContentObj.createdAt.getTime();
+                var slidingRemainingSeconds = Math.max(0, Math.floor( (lastAccess + Math.round(cachedContentObj.ttl * 1000) - cacheNow) / 1000 ));
+                cacheStatus += '; ttl=' + slidingRemainingSeconds;
+            }
+            if ( cachedContentObj.expiresAt ) {
+                var absoluteRemainingSeconds = Math.max(0, Math.floor( (cachedContentObj.expiresAt.getTime() - cacheNow) / 1000 ));
+                cacheStatus += '; max-age=' + absoluteRemainingSeconds;
+            }
+        } else {
+            if ( typeof(cachedContentObj.ttl) != 'undefined' && cachedContentObj.ttl > 0) {
+                var createdAt = cachedContentObj.createdAt.getTime() + Math.round(cachedContentObj.ttl * 1000);
+                var remainingSeconds = Math.floor( (createdAt - cacheNow) /1000);
+                cacheStatus += '; ttl='+remainingSeconds;
+            }
+        }
+        cacheStatus += '; detail=' + ( (typeof(cachedContentObj.fromMemory) != 'undefined') ? 'memory' : 'fs' );
+        return cacheStatus;
+    }
+
+    function buildMissStatus() {
+        var cacheStatus = 'gina-cache';
+        cacheStatus += '; fwd=uri-miss';
+        return cacheStatus;
+    }
+
+    it('a memory (Map) entry with an absolute ttl → hit; ttl=N; detail=memory', function() {
+        var now = Date.now();
+        var s = buildHitStatus({ fromMemory: true, ttl: 60, createdAt: new Date(now - 10000) }, now);
+        assert.equal(s, 'gina-cache; hit; ttl=50; detail=memory');
+    });
+
+    it('an fs (disk readBack) entry → detail=fs — restart survival observable on the wire', function() {
+        var now = Date.now();
+        var s = buildHitStatus({ filename: '/cache/x', ttl: 60, createdAt: new Date(now - 10000) }, now);
+        assert.equal(s, 'gina-cache; hit; ttl=50; detail=fs');
+    });
+
+    it('a sliding entry → ttl (idle window) + max-age (absolute ceiling) + detail, in that order', function() {
+        var now = Date.now();
+        var s = buildHitStatus({
+            fromMemory: true, sliding: true, ttl: 30,
+            createdAt:      new Date(now - 60000),
+            lastAccessedAt: new Date(now - 5000),
+            expiresAt:      new Date(now + 100000)
+        }, now);
+        assert.equal(s, 'gina-cache; hit; ttl=25; max-age=100; detail=memory');
+    });
+
+    it('a no-ttl memory entry → hit; detail=memory (no ttl param)', function() {
+        var s = buildHitStatus({ fromMemory: true }, Date.now());
+        assert.equal(s, 'gina-cache; hit; detail=memory');
+    });
+
+    it('the miss form is gina-cache; fwd=uri-miss', function() {
+        assert.equal(buildMissStatus(), 'gina-cache; fwd=uri-miss');
+    });
+});

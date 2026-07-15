@@ -466,3 +466,86 @@ describe('render-cache-store-redis § 07 — synchronous driver throw becomes a 
         assert.match(String(caught), /SYNC/);
     });
 });
+
+
+// ─── 07. health() — connection-level L2 observability (#RC5) ────────────────
+describe('render-cache-store-redis § 07 — health() (#RC5)', function() {
+
+    // Self-contained stub (the shared fake's .on drops the handler): stores the
+    // registered handlers so a test can FIRE the driver's 'error' event, exposes
+    // a settable `status`, and counts every command — health() must issue none.
+    function createHealthStub(status) {
+        var state = { handlers: {}, commands: 0, clusterCalls: 0 };
+        function decorate(client) {
+            ['get', 'set', 'psetex', 'pttl', 'del'].forEach(function(cmd) {
+                client[cmd] = function() { state.commands++; return Promise.resolve(null); };
+            });
+            client.on     = function(event, fn) { state.handlers[event] = fn; return client; };
+            client.quit   = function() { return Promise.resolve('OK'); };
+            client.status = status;
+            return client;
+        }
+        function StubRedis() { decorate(this); }
+        StubRedis.Cluster = function() { state.clusterCalls++; decorate(this); };
+        return { driver: StubRedis, state: state };
+    }
+
+    it('returns the full snapshot — store/status/mode/prefix + zeroed error fields', function() {
+        var stub  = createHealthStub('ready');
+        var store = createStore({}, 'testbundle', { driver: stub.driver });
+        assert.deepEqual(store.health(), {
+            store: 'redis', status: 'ready', mode: 'standalone', prefix: 'cache:',
+            errorCount: 0, lastError: null, lastErrorAt: null
+        });
+    });
+
+    it('is synchronous and issues ZERO driver commands (the admin path can never hang)', function() {
+        var stub  = createHealthStub('ready');
+        var store = createStore({}, 'testbundle', { driver: stub.driver });
+        var h = store.health();
+        assert.equal(typeof h.then, 'undefined', 'a plain object, not a thenable');
+        assert.equal(stub.state.commands, 0, 'no GET/PTTL/anything — a status-property read only');
+    });
+
+    it("tallies the driver's connection-level 'error' events — count + last + ISO stamp", function() {
+        var stub  = createHealthStub('reconnecting');
+        var store = createStore({}, 'testbundle', { driver: stub.driver });
+        // silence the handler's console.error for the two fired events
+        var origErr = console.error; console.error = function() {};
+        try {
+            stub.state.handlers.error(new Error('ECONNREFUSED 127.0.0.1:6379'));
+            stub.state.handlers.error(new Error('ECONNRESET'));
+        } finally { console.error = origErr; }
+        var h = store.health();
+        assert.equal(h.errorCount, 2);
+        assert.equal(h.lastError, 'ECONNRESET', 'last error wins');
+        assert.ok(!Number.isNaN(Date.parse(h.lastErrorAt)), 'lastErrorAt is a parseable ISO stamp');
+        assert.equal(h.status, 'reconnecting', 'the ioredis lifecycle string is passed through');
+    });
+
+    it('cluster mode → mode:"cluster" (Cluster instances expose status too)', function() {
+        var stub  = createHealthStub('ready');
+        var store = createStore({ cluster: [{ host: 'a', port: 6379 }], prefix: '{jobs}:c:' },
+            'testbundle', { driver: stub.driver });
+        var h = store.health();
+        assert.equal(h.mode, 'cluster');
+        assert.equal(h.status, 'ready');
+        assert.equal(h.prefix, '{jobs}:c:', 'the effective prefix is echoed for redis-cli debugging');
+        assert.equal(stub.state.clusterCalls, 1);
+    });
+
+    it('an unreadable / absent status degrades to "unknown" — never a throw', function() {
+        var stub  = createHealthStub(undefined);
+        var store = createStore({}, 'testbundle', { driver: stub.driver });
+        assert.equal(store.health().status, 'unknown');
+    });
+
+    it('source pins: health() reads client.status (no command), errorCount++ lives in the error listener', function() {
+        assert.match(STORE_SRC, /health:\s*function\(\)/);
+        assert.match(STORE_SRC, /String\(client\.status\s*\|\|\s*'unknown'\)/);
+        var listenerAt = STORE_SRC.indexOf("client.on('error'");
+        var tallyAt    = STORE_SRC.indexOf('errorCount++');
+        assert.ok(listenerAt > -1 && tallyAt > listenerAt,
+            'the tally increments inside the error listener (connection-level only)');
+    });
+});

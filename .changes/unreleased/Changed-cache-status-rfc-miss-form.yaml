@@ -1,0 +1,3 @@
+kind: Changed
+body: 'The Cache-Status miss form is now the RFC 9211 grammar gina-cache; fwd=uri-miss (previously the bare gina-cache; uri-miss, which read as an unregistered parameter to RFC-aware tooling), and the engine-agnostic read path now emits it on a genuine both-tier miss — giving Express bundles their first cache-miss signal on the wire.'
+time: 2026-07-15T15:16:31+01:00
