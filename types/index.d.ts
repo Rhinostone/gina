@@ -763,6 +763,8 @@ declare namespace gina {
         Proc: any;
         /** Render/output cache backing `routing.json > cache`. */
         RenderCache: any;
+        /** Connector-backed render-cache L2 store dispatcher (`cache.type=redis`). */
+        RenderCacheStore: any;
         SessionStore: any;
         Shell: any;
         State: any;
