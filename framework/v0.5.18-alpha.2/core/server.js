@@ -881,6 +881,7 @@ function Server(options) {
                         srcRoot             : _rwSrcRoot,
                         manifestPath        : _rwManifestPath,
                         mode                : _rwConf.mode,
+                        restartMode         : _rwConf.restartMode,
                         debounceMs          : _rwConf.debounceMs,
                         reconcileIntervalMs : _rwConf.reconcileIntervalMs,
                         httpServer          : engine.instance,

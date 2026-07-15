@@ -66,11 +66,13 @@
     // Hard-gated on scope `local` + a non-dev env: never active on a real cluster.
     // enabled             : master opt-in (fail-closed default: false).
     // mode                : "notify" surfaces staleness (log + GET /_gina/release/status + SSE events) and waits for the operator; "auto" rebuilds on change — the restart stays idle-gated (in-flight requests + gina.registerBusyProbe application probes).
+    // restartMode         : how a rebuild restarts — "daemon" (default) drains + spawns gina bundle:restart (needs the framework daemon); "supervisor" drains + exit(0) for a container/orchestrator to respawn (the gina-container launch path — needs a restart-on-clean-exit policy: a k8s Deployment or `docker run --restart=always`, NOT `--restart=on-failure`).
     // debounceMs          : watch-event batch debounce window (default: 750).
     // reconcileIntervalMs : slow re-fingerprint sweep for event-lossy mounts; 0 disables the sweep (default).
     "releaseWatch": {
       "enabled": false,
       "mode": "notify",
+      "restartMode": "daemon",
       "debounceMs": 750,
       "reconcileIntervalMs": 0
     },

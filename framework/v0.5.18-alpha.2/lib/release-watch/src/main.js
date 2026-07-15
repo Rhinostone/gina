@@ -1197,11 +1197,61 @@ var defaultSpawnBuild = function(ctx) {
 };
 
 /**
- * Default restart executor: mirror lib/proc.js's SIGTERM drain steps
- * (close SSE closers → closeIdleConnections → server.close with a hard
- * cap), then spawn a detached `gina bundle:restart` — its `bundle:stop`
- * kill -9 lands on an idle, listener-closed process, and its
- * `bundle:start` boots the successor on the rebuilt release.
+ * Drains the engine's HTTP(S) server the way lib/proc.js's SIGTERM handler
+ * does: close registered SSE closers FIRST (an open SSE stream would otherwise
+ * hold `server.close()` to the cap — closeIdleConnections() does not close
+ * active streams), then `closeIdleConnections()`, then `server.close()` under a
+ * hard `GINA_SHUTDOWN_TIMEOUT` cap. Calls `onDrained` exactly once (the close
+ * callback OR the cap, whichever fires first). Shared by both restart executors
+ * so the daemon and supervisor paths drain identically — keep in sync with
+ * lib/proc.js's SIGTERM steps.
+ * @inner
+ * @private
+ * @param {object} httpServer - The engine's HTTP(S) server (may be null/absent)
+ * @param {function} onDrained - Called once when the server is closed or the cap fires
+ * @returns {void}
+ */
+var drainHttpServer = function(httpServer, onDrained) {
+    var drained = false;
+    var finish = function() {
+        if (drained) return;
+        drained = true;
+        onDrained();
+    };
+    if (!httpServer || typeof httpServer.close !== 'function') {
+        return finish();
+    }
+    var capMs = parseInt(process.env.GINA_SHUTDOWN_TIMEOUT) || 10000;
+    var cap = setTimeout(function() {
+        console.warn('[releaseWatch] restart drain timed out (' + capMs + 'ms) — proceeding');
+        finish();
+    }, capMs);
+    if (typeof cap.unref === 'function') cap.unref();
+    if (process.gina && process.gina._sseConnections && process.gina._sseConnections.size > 0) {
+        var closers = Array.from(process.gina._sseConnections);
+        for (var i = 0; i < closers.length; i++) {
+            try { closers[i](); } catch (sseErr) { /* best effort */ }
+        }
+    }
+    if (typeof httpServer.closeIdleConnections === 'function') {
+        try { httpServer.closeIdleConnections(); } catch (idleErr) { /* best effort */ }
+    }
+    try {
+        httpServer.close(function() {
+            clearTimeout(cap);
+            finish();
+        });
+    } catch (closeErr) {
+        clearTimeout(cap);
+        finish();
+    }
+};
+
+/**
+ * DAEMON restart executor (default `restartMode: 'daemon'`): drain, then spawn
+ * a detached `gina bundle:restart` — its `bundle:stop` kill -9 lands on an
+ * idle, listener-closed process, and its `bundle:start` boots the successor on
+ * the rebuilt release via the framework daemon.
  * @inner
  * @private
  * @param {object} ctx - The service state
@@ -1209,10 +1259,7 @@ var defaultSpawnBuild = function(ctx) {
  * @returns {void}
  */
 var defaultExecRestart = function(ctx, done) {
-    var finished = false;
-    var finish = function(err) {
-        if (finished) return;
-        finished = true;
+    drainHttpServer(ctx.httpServer, function afterDrain() {
         try {
             var spawn = require('child_process').spawn;
             var child = spawn('gina', ['bundle:restart', ctx.bundle, '@' + ctx.project], {
@@ -1230,39 +1277,39 @@ var defaultExecRestart = function(ctx, done) {
         } catch (spawnErr) {
             return done(spawnErr);
         }
-        done(err || null);
-    };
-    var httpServer = ctx.httpServer;
-    if (!httpServer || typeof httpServer.close !== 'function') {
-        return finish(null);
-    }
-    var capMs = parseInt(process.env.GINA_SHUTDOWN_TIMEOUT) || 10000;
-    var cap = setTimeout(function() {
-        console.warn('[releaseWatch] restart drain timed out (' + capMs + 'ms) — proceeding');
-        finish(null);
-    }, capMs);
-    if (typeof cap.unref === 'function') cap.unref();
-    // Drain long-lived SSE responses first — closeIdleConnections() does not
-    // close active streams, so open SSE would hold close() to the cap
-    // (same steps as lib/proc.js's SIGTERM handler — keep the two in sync).
-    if (process.gina && process.gina._sseConnections && process.gina._sseConnections.size > 0) {
-        var closers = Array.from(process.gina._sseConnections);
-        for (var i = 0; i < closers.length; i++) {
-            try { closers[i](); } catch (sseErr) { /* best effort */ }
-        }
-    }
-    if (typeof httpServer.closeIdleConnections === 'function') {
-        try { httpServer.closeIdleConnections(); } catch (idleErr) { /* best effort */ }
-    }
-    try {
-        httpServer.close(function() {
-            clearTimeout(cap);
-            finish(null);
-        });
-    } catch (closeErr) {
-        clearTimeout(cap);
-        finish(null);
-    }
+        done(null);
+    });
+};
+
+/**
+ * SUPERVISOR restart executor (`restartMode: 'supervisor'`): drain, then
+ * `process.exit(0)` so an external supervisor (a k8s Deployment, `docker run
+ * --restart=always`, …) respawns the process on the rebuilt release. This is
+ * the daemonless / container launch path (`bin/gina-container`), where there is
+ * NO framework daemon to spawn a `bundle:restart` successor — spawning one
+ * there closes the HTTP server and strands a half-dead process serving nothing
+ * (review O4). Detection is NOT auto-probed: a bundle is `detached:true` and
+ * legitimately outlives its daemon, so a refused-socket probe after a routine
+ * `gina stop` would exit(0) a HEALTHY daemon-spawned bundle — the mode is an
+ * explicit operator opt-in instead. The final line is `fs.writeSync`-flushed
+ * because a container's stdout is a pipe and `process.exit()` truncates async
+ * writes (the boot-exit-flush rule). `exitProcess` is an injectable seam (tests).
+ * @inner
+ * @private
+ * @param {object} ctx - The service state
+ * @param {function} done - `function(err)` — unreached in production (the process exits)
+ * @returns {void}
+ */
+var supervisorExecRestart = function(ctx, done) {
+    drainHttpServer(ctx.httpServer, function afterDrain() {
+        try {
+            fs.writeSync(2, '[releaseWatch] drain complete — exiting(0) for supervisor respawn on the rebuilt release\n');
+        } catch (writeErr) { /* best effort — never block the exit */ }
+        var exitProcess = (typeof ctx.exitProcess === 'function') ? ctx.exitProcess : process.exit;
+        exitProcess(0);
+        // unreached in production (the process is gone); a test's exit spy returns here
+        done(null);
+    });
 };
 
 /**
@@ -1534,6 +1581,8 @@ var runPipeline = function(opts) {
  * @param {function} [options.flushRenderCache] - `function(bundle[, cb])` — injected by the server engine
  * @param {function} [options.spawnBuild] - Seam: replaces the `gina bundle:build` child (tests)
  * @param {function} [options.execRestart] - Seam: replaces the drain+`bundle:restart` executor (tests / daemonless)
+ * @param {string} [options.restartMode='daemon'] - 'daemon' (drain → spawn `gina bundle:restart`; needs the framework daemon) | 'supervisor' (drain → `process.exit(0)` for a container/orchestrator to respawn — the daemonless `bin/gina-container` launch path). Invalid values warn and fall back to 'daemon'.
+ * @param {function} [options.exitProcess] - Seam: replaces `process.exit` in the supervisor executor (tests)
  * @param {number} [options.graceMs=2000] - Idle gate stability window
  * @param {number} [options.gateIntervalMs=250] - Idle gate poll interval
  * @param {number} [options.probeTimeoutMs=1500]
@@ -1567,6 +1616,18 @@ var init = function(options) {
         return false;
     }
 
+    // Restart executor selection — an explicit operator opt-in, NEVER auto-probed:
+    // a bundle is spawned detached and legitimately outlives its daemon, so a
+    // refused-socket probe after a routine `gina stop` would exit(0) a HEALTHY
+    // daemon-spawned bundle (review O4). Invalid ⇒ fail-safe to 'daemon'.
+    var restartMode = 'daemon';
+    if (options.restartMode === 'supervisor') {
+        restartMode = 'supervisor';
+    } else if (options.restartMode != null && options.restartMode !== 'daemon') {
+        console.warn('[releaseWatch] unknown restartMode `' + options.restartMode
+            + '` — using `daemon` (drain → spawn a detached gina bundle:restart)');
+    }
+
     var runningStamp = readReleaseStamp(options.manifestPath, options.bundle, options.scope, options.env);
 
     _svc = {
@@ -1586,7 +1647,10 @@ var init = function(options) {
         httpServer       : options.httpServer || null,
         flushRenderCache : (typeof options.flushRenderCache === 'function') ? options.flushRenderCache : function noopFlush() {},
         spawnBuild       : (typeof options.spawnBuild === 'function') ? options.spawnBuild : defaultSpawnBuild,
-        execRestart      : (typeof options.execRestart === 'function') ? options.execRestart : defaultExecRestart,
+        restartMode      : restartMode,
+        execRestart      : (typeof options.execRestart === 'function') ? options.execRestart
+                         : (restartMode === 'supervisor' ? supervisorExecRestart : defaultExecRestart),
+        exitProcess      : (typeof options.exitProcess === 'function') ? options.exitProcess : process.exit,
         // state
         runningStamp     : runningStamp,           // what THIS process serves (boot snapshot)
         releaseStamp     : runningStamp,           // what the manifest says the release is (refreshed on rebuild)
@@ -1681,6 +1745,7 @@ var getStatus = function() {
     return {
         active           : _svc.active,
         mode             : _svc.mode,
+        restartMode      : _svc.restartMode,
         bundle           : _svc.bundle,
         project          : _svc.project,
         env              : _svc.env,

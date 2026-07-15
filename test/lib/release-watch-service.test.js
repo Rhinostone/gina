@@ -568,11 +568,103 @@ describe('release-watch-service §pins — the default restart executor', functi
 
     it('P.01 — the detached bundle:restart child carries an error listener (async spawn failure must not crash the drained process)', function() {
         var start = SRC.indexOf('var defaultExecRestart');
-        var end   = SRC.indexOf('var runIdleGate');
+        var end   = SRC.indexOf('var supervisorExecRestart');
         assert.ok(start > -1 && end > start, 'defaultExecRestart block anchors expected');
         var blk = SRC.substring(start, end);
         assert.ok(blk.indexOf("child.on('error'") > -1, 'spawn error listener expected before unref()');
         assert.ok(blk.indexOf('child.unref()') > -1);
         assert.ok(blk.indexOf("'bundle:restart'") > -1);
+    });
+
+    // ── #RWATCH S4a — restartMode: the daemonless supervisor executor ──
+    it('P.02 — the drain is factored into a shared drainHttpServer helper both executors call', function() {
+        assert.ok(SRC.indexOf('var drainHttpServer') > -1, 'shared drain helper expected');
+        var defBlk = SRC.substring(SRC.indexOf('var defaultExecRestart'), SRC.indexOf('var supervisorExecRestart'));
+        var supBlk = SRC.substring(SRC.indexOf('var supervisorExecRestart'), SRC.indexOf('var runIdleGate'));
+        assert.ok(defBlk.indexOf('drainHttpServer(ctx.httpServer') > -1, 'default executor drains via the shared helper');
+        assert.ok(supBlk.indexOf('drainHttpServer(ctx.httpServer') > -1, 'supervisor executor drains via the shared helper');
+    });
+
+    it('P.03 — the supervisor executor exit(0)s with an fs.writeSync-flushed final line and NEVER spawns bundle:restart', function() {
+        var supBlk = SRC.substring(SRC.indexOf('var supervisorExecRestart'), SRC.indexOf('var runIdleGate'));
+        assert.ok(/fs\.writeSync\(2,/.test(supBlk), 'the final line must be fs.writeSync(2)-flushed (container stdout is a pipe — boot-exit-flush)');
+        assert.ok(/exitProcess\(0\)/.test(supBlk), 'supervisor must exit(0) for a supervisor respawn');
+        assert.ok(supBlk.indexOf('bundle:restart') < 0, 'the supervisor path must NEVER spawn bundle:restart (no daemon in a container)');
+        assert.ok(supBlk.indexOf('child_process') < 0, 'the supervisor path must not spawn any child');
+    });
+
+    it('P.04 — init selects the executor by restartMode and warns on an invalid value', function() {
+        assert.ok(/restartMode === 'supervisor' \? supervisorExecRestart : defaultExecRestart/.test(SRC),
+            'init must select supervisorExecRestart when restartMode is supervisor');
+        assert.ok(/unknown restartMode/.test(SRC), 'an invalid restartMode must warn (fail-safe to daemon)');
+    });
+});
+
+
+describe('release-watch-service — restartMode wiring + supervisor executor (behavioral)', function() {
+
+    afterEach(function() {
+        rw.deactivate();
+        rw.reset();
+    });
+    after(function() {
+        tmpDirs.forEach(function(d) { fs.rmSync(d, { recursive: true, force: true }); });
+    });
+
+    it('RM.01 — restartMode `supervisor` is selected and surfaced on getStatus()', function() {
+        armService(mkProject(), { restartMode: 'supervisor' });
+        assert.strictEqual(rw.getStatus().restartMode, 'supervisor');
+    });
+
+    it('RM.02 — restartMode defaults to `daemon` when absent (current verified behavior)', function() {
+        armService(mkProject());
+        assert.strictEqual(rw.getStatus().restartMode, 'daemon');
+    });
+
+    it('RM.03 — an explicit `daemon` is honoured', function() {
+        armService(mkProject(), { restartMode: 'daemon' });
+        assert.strictEqual(rw.getStatus().restartMode, 'daemon');
+    });
+
+    it('RM.04 — an invalid restartMode warns and fails safe to `daemon`', function() {
+        var warns = [];
+        var origWarn = console.warn;
+        console.warn = function() { warns.push(Array.prototype.join.call(arguments, ' ')); };
+        try { armService(mkProject(), { restartMode: 'k8s' }); }
+        finally { console.warn = origWarn; }
+        assert.strictEqual(rw.getStatus().restartMode, 'daemon', 'invalid ⇒ fail-safe to daemon');
+        assert.ok(warns.some(function(w) { return /unknown restartMode/.test(w) && /k8s/.test(w); }),
+            'an invalid restartMode must warn');
+    });
+
+    it('RM.05 — the supervisor executor DRAINS then process.exit(0)s (no bundle:restart spawn)', async function() {
+        var proj  = mkProject();
+        var order = [], exited = [], closed = 0;
+        var fakeServer = {
+            close                : function(cb) { order.push('close'); closed++; if (cb) cb(); },
+            closeIdleConnections : function() { order.push('closeIdle'); }
+        };
+        // execRestart:undefined overrides the recorder → the REAL supervisorExecRestart runs
+        var rec = armService(proj, {
+            restartMode : 'supervisor',
+            execRestart : undefined,
+            httpServer  : fakeServer,
+            exitProcess : function(code) { order.push('exit:' + code); exited.push(code); }
+        });
+        assert.strictEqual(rw.getStatus().restartMode, 'supervisor');
+
+        writeFile(proj.root, 'src/web/controllers/controller.js', 'edited-supervisor');
+        await waitFor(function() { return rw.getStatus().severity === 'restart'; });
+        rw.requestRebuild({ restart: 'auto' });   // no in-flight → the idle gate opens on its own
+        completeBuild(proj, rec);
+
+        var didExit = await waitFor(function() { return exited.length === 1; }, 4000);
+        assert.ok(didExit, 'the supervisor executor must process.exit — only it calls exitProcess (default would spawn instead)');
+        assert.deepStrictEqual(exited, [0], 'exit code 0 = a clean supervisor respawn');
+        assert.strictEqual(closed, 1, 'the http server must be drained (closed) exactly once');
+        assert.ok(order.indexOf('close') > -1 && order.indexOf('close') < order.indexOf('exit:0'),
+            'drain (close) must precede exit(0)');
+        assert.strictEqual(ofType(rec.events, 'restarting')[0].data.how, 'idle',
+            'the gate opened idle, not forced');
     });
 });

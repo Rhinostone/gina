@@ -1,0 +1,3 @@
+kind: Added
+body: 'releaseWatch — a `server.releaseWatch.restartMode` option (#RWATCH): `daemon` (default) drains and spawns `gina bundle:restart`; `supervisor` drains and then exits(0) so an external orchestrator respawns the process on the rebuilt release — the daemonless `gina-container` launch path, which has no framework daemon to spawn a restart (requires a restart-on-clean-exit policy, e.g. a k8s Deployment or `docker run --restart=always`). It is an explicit operator opt-in, never auto-detected: a bundle is spawned detached and legitimately outlives its daemon, so probing for a daemon would risk exiting a healthy process after a routine `gina stop`'
+time: 2026-07-16T00:05:47+01:00

@@ -86,6 +86,11 @@
             "reconcileIntervalMs": {
               "type": "number",
               "description": "Optional slow re-fingerprint sweep interval in ms for event-lossy mounts; 0 (the default) disables the sweep."
+            },
+            "restartMode": {
+              "type": "string",
+              "enum": ["daemon", "supervisor"],
+              "description": "How a rebuild restarts the process. daemon (default): drain, then spawn `gina bundle:restart` (needs the framework daemon). supervisor: drain, then exit(0) for a container/orchestrator to respawn — the daemonless `gina-container` launch path; requires a restart-on-clean-exit policy (a k8s Deployment or `docker run --restart=always` qualifies; `--restart=on-failure` does not)."
             }
           }
         }
