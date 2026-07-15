@@ -172,14 +172,29 @@ describe('03 - cleanup functions', function () {
         });
     });
 
-    it('TTL expiry bypasses cleanup (uses Map.delete internally)', function (t) {
+    it('TTL expiry runs the cleanup fn (routed through instance.delete — #B113)', function (t) {
         t.mock.timers.enable(['setTimeout']);
         var called = false;
         cache.set('temp', { data: 'x', ttl: 1 }, function () { called = true; });
 
         t.mock.timers.tick(1000);
         assert.equal(cache.has('temp'), false);
-        assert.equal(called, false);
+        // #B113: expiry now routes through instance.delete, so the cleanup fn runs (an fs
+        // entry's body + .meta are removed on expiry). Was: bypassed via the raw Map.delete.
+        assert.equal(called, true);
+    });
+
+    it('TTL expiry reclaims the key\'s event registrations (#B113)', function (t) {
+        t.mock.timers.enable(['setTimeout']);
+        cache.set('ev', { data: 'x', ttl: 1 });
+        cache.setEvents('ev', ['some#event']);
+        assert.equal(cache._events.length, 1);
+
+        t.mock.timers.tick(1000);
+        assert.equal(cache.has('ev'), false);
+        // #B113: expiry routes through instance.delete → dropEvents reclaims the rows.
+        // Was: the raw Map.delete stranded them until a later delete of the same key.
+        assert.equal(cache._events.length, 0);
     });
 });
 

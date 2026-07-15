@@ -156,14 +156,18 @@ function Cache(options) {
                     // One timer for the hard ceiling only — no per-access churn.
                     // The sliding window is enforced lazily in get().
                     timeout = setTimeout(() => {
-                        cache.delete(key);
+                        // #B113 — route through instance.delete, NOT the raw Map.delete:
+                        // the raw delete skips the entry's cleanup fn (leaving an fs body +
+                        // .meta orphaned on disk) and its event-registration reclaim
+                        // (stranding _events rows) on timer expiry.
+                        instance['delete'](key);
                     }, Math.round(value.maxAge * 1000));
                 } else if ( typeof(value.ttl) != 'undefined' && value.ttl > 0 ) {
                     // Pure sliding (no hard ceiling):
                     // Timer as a GC safety net for entries that are written but never
                     // accessed again. Reset on each get() call.
                     timeout = setTimeout(() => {
-                        cache.delete(key);
+                        instance['delete'](key); // #B113 — cleanup fn + dropEvents run on expiry
                     }, Math.round(value.ttl * 1000));
                 }
                 // No ttl, no maxAge: no timer — entry lives until manually deleted
@@ -171,7 +175,7 @@ function Cache(options) {
                 // Non-sliding (existing behaviour): absolute TTL from creation
                 if ( typeof(value.ttl) != 'undefined' && value.ttl > 0 ) {
                     timeout = setTimeout(() => {
-                        cache.delete(key);
+                        instance['delete'](key); // #B113 — cleanup fn + dropEvents run on expiry
                     }, Math.round(value.ttl * 1000));
                 }
             }
@@ -239,7 +243,7 @@ function Cache(options) {
             if ( !value.expiresAt && entry.timeout ) {
                 clearTimeout(entry.timeout);
                 entry.timeout = setTimeout(() => {
-                    cache.delete(key);
+                    instance['delete'](key); // #B113 — cleanup fn + dropEvents run on expiry
                 }, ttlMs);
             }
         }
@@ -309,10 +313,11 @@ function Cache(options) {
      */
     instance['delete'] = function(key) {
         const entry = cache.get(key);
-        // Reclaim the key's event registrations. Runs even on a MISS, on purpose: the
-        // sliding/TTL timers installed by set() delete straight off the Map (they never
-        // route through here), so a timed-out key can strand its rows — this reclaims
-        // them the next time anything deletes that key (e.g. an event invalidation).
+        // Reclaim the key's event registrations. #B113: the sliding/TTL timers set()
+        // installs now route expiry THROUGH here (was a raw Map.delete that skipped the
+        // cleanup fn + this reclaim, orphaning an fs body + .meta and stranding rows), so
+        // expiry reclaims them directly. Kept unconditional (runs even on a MISS) as a
+        // defensive reclaim for any delete path that finds the entry already gone.
         dropEvents(key);
         if (entry?.timeout) clearTimeout(entry.timeout);
         if (entry) {
