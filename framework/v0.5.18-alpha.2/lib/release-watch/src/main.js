@@ -867,6 +867,857 @@ var reset = function() {
 };
 
 
+// ─────────────────────────────────────────────────────────────────────────
+// Service — the stale-release state machine (#RW1 slice 2)
+//
+// One instance per bundle process (a bundle process serves one bundle).
+// The server engine calls `init()` at boot when every hard gate passes
+// (NODE_SCOPE_IS_LOCAL === 'true', !isDev, server.releaseWatch.enabled).
+// Everything below is inert until init() runs — CLI processes and dev-mode
+// bundles never pay for it.
+//
+// Staleness is a DUAL-AXIS model:
+//   - src vs release  — fingerprint(srcRoot) != the manifest release stamp
+//                       (the operator edited source after the last build)
+//   - release vs process — the manifest stamp != the stamp captured at boot
+//                       (a rebuild happened, but this process still serves
+//                        the release it booted from — restart pending)
+//
+// Watch events are TRIGGERS only: every batch re-runs the fingerprint
+// compare against the (re-read) manifest stamp before any state flips —
+// macOS FSEvents can replay pre-boot writes and streams can be lossy, so
+// the fingerprint is the single source of truth. A reverted edit therefore
+// self-heals on the next batch.
+// ─────────────────────────────────────────────────────────────────────────
+
+var EventEmitter = require('events').EventEmitter;
+
+/**
+ * Maximum changed paths retained on the status payload.
+ * @constant {number}
+ * @private
+ */
+var MAX_TRACKED_CHANGES = 50;
+
+/**
+ * Maximum build progress lines retained on the action record.
+ * @constant {number}
+ * @private
+ */
+var MAX_PROGRESS_LINES = 200;
+
+/**
+ * Service singleton state — null until `init()`.
+ * @type {(object|null)}
+ * @private
+ */
+var _svc = null;
+
+/**
+ * Emits one service event to every subscriber.
+ * @inner
+ * @private
+ * @param {string} type - Event type (status|stale|build|flushed|waiting|restarting|done|error)
+ * @param {object} [data]
+ * @returns {void}
+ */
+var _emitEvent = function(type, data) {
+    if (!_svc) return;
+    try {
+        _svc.emitter.emit('release', { type: type, data: data || {}, at: Date.now() });
+    } catch (emitErr) {
+        console.warn('[releaseWatch] event emit failed: ' + (emitErr.message || emitErr));
+    }
+};
+
+/**
+ * Reads the bundle's release stamp from the project manifest. The manifest
+ * is machine-written JSON, but a full-line `//` comment header is tolerated
+ * (the requireJSON convention) — read fresh on every call so a rebuild's
+ * restamp is always observed.
+ *
+ * @inner
+ * @private
+ * @param {string} manifestPath
+ * @param {string} bundle
+ * @param {string} scope
+ * @param {string} env
+ * @returns {({fingerprint:string, builtAt:string, fpSpec:number, target:string}|null)}
+ */
+var readReleaseStamp = function(manifestPath, bundle, scope, env) {
+    var raw = null;
+    try {
+        raw = fs.readFileSync(manifestPath, 'utf8');
+    } catch (readErr) {
+        return null;
+    }
+    var manifest = null;
+    try {
+        manifest = JSON.parse(raw);
+    } catch (parseErr) {
+        try {
+            manifest = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ''));
+        } catch (parse2Err) {
+            return null;
+        }
+    }
+    var rec = manifest
+        && manifest.bundles
+        && manifest.bundles[bundle]
+        && manifest.bundles[bundle].releases
+        && manifest.bundles[bundle].releases[scope]
+        && manifest.bundles[bundle].releases[scope][env]
+        || null;
+    if (!rec || !rec.target) return null;
+    return {
+        fingerprint : (typeof rec.fingerprint === 'string') ? rec.fingerprint : null,
+        builtAt     : rec.builtAt || null,
+        fpSpec      : (typeof rec.fpSpec === 'number') ? rec.fpSpec : null,
+        target      : rec.target
+    };
+};
+
+/**
+ * Short display form of a fingerprint (the buildId).
+ * @inner
+ * @private
+ * @param {(string|null)} hash
+ * @returns {(string|null)}
+ */
+var shortId = function(hash) {
+    return (hash && typeof hash === 'string') ? hash.substring(0, 12) : null;
+};
+
+/**
+ * Merges a batch of changed paths into the tracked set (capped).
+ * @inner
+ * @private
+ * @param {string[]} paths
+ * @returns {void}
+ */
+var trackChanges = function(paths) {
+    for (var i = 0, len = paths.length; i < len; i++) {
+        if (_svc.changes.indexOf(paths[i]) > -1) continue;
+        if (_svc.changes.length >= MAX_TRACKED_CHANGES) {
+            _svc.changesTruncated = true;
+            break;
+        }
+        _svc.changes.push(paths[i]);
+    }
+};
+
+/**
+ * Flips (or escalates) the stale state and notifies. The loud log line fires
+ * on the fresh → stale transition and on a severity escalation — not on
+ * every batch.
+ *
+ * @inner
+ * @private
+ * @param {string[]} paths - Changed paths (or a sentinel like '(boot-compare)')
+ * @param {string} severity - 'assets' | 'restart'
+ * @returns {void}
+ */
+var markStale = function(paths, severity) {
+    var wasStale     = _svc.srcStale;
+    var prevSeverity = _svc.severity;
+    _svc.srcStale = true;
+    if (severity === 'restart' || _svc.severity === 'restart') {
+        _svc.severity = 'restart';
+    } else {
+        _svc.severity = 'assets';
+    }
+    if (!_svc.staleSince) _svc.staleSince = Date.now();
+    trackChanges(paths);
+    if (!wasStale || (prevSeverity !== 'restart' && _svc.severity === 'restart')) {
+        console.warn(
+            '[releaseWatch] source changed after build — serving a stale release'
+            + ' (severity: ' + _svc.severity + ').'
+            + ' POST /_gina/release/rebuild or run: gina bundle:build '
+            + _svc.bundle + ' @' + _svc.project
+            + ' --env=' + _svc.env + ' --scope=' + _svc.scope
+        );
+    }
+    _emitEvent('stale', {
+        severity : _svc.severity,
+        paths    : paths,
+        changes  : _svc.changes.slice()
+    });
+    if (_svc.mode === 'auto') {
+        scheduleAutoAct();
+    }
+};
+
+/**
+ * Clears the src-vs-release staleness (verified back in sync — e.g. a
+ * reverted edit, or a completed rebuild).
+ * @inner
+ * @private
+ * @returns {void}
+ */
+var markSrcFresh = function() {
+    var was = _svc.srcStale;
+    _svc.srcStale         = false;
+    _svc.severity         = _svc.processBehind ? 'restart' : null;
+    _svc.staleSince       = _svc.processBehind ? _svc.staleSince : null;
+    _svc.changes          = [];
+    _svc.changesTruncated = false;
+    if (was) {
+        _emitEvent('status', getStatus());
+    }
+};
+
+/**
+ * Adopts a (re-)read release stamp and derives the release-vs-process axis.
+ *
+ * `processBehind` means "the release moved past what this process booted
+ * from, in a way a restart is needed for". Our OWN pipeline knows the
+ * accumulated change class (`assetsOnlyKnown` — disk-served statics need no
+ * restart); an EXTERNAL rebuild's delta class is unknowable, so it fails
+ * safe to restart-pending. A stamp equal to the boot stamp always clears
+ * the axis.
+ *
+ * @inner
+ * @private
+ * @param {({fingerprint:string}|null)} newStamp
+ * @param {boolean} assetsOnlyKnown - True when the adopting caller KNOWS the delta was assets-class only
+ * @returns {void}
+ */
+var adoptReleaseStamp = function(newStamp, assetsOnlyKnown) {
+    if (!_svc || !newStamp || !newStamp.fingerprint) return;
+    var changed = !(_svc.releaseStamp && _svc.releaseStamp.fingerprint === newStamp.fingerprint);
+    _svc.releaseStamp = newStamp;
+    var differsFromRunning = (_svc.runningStamp && _svc.runningStamp.fingerprint)
+        ? (newStamp.fingerprint !== _svc.runningStamp.fingerprint)
+        : true; // boot identity unknown + a stamped release ⇒ fail-safe
+    if (!differsFromRunning) {
+        _svc.processBehind = false;
+        return;
+    }
+    if (assetsOnlyKnown) return; // release moved, but only disk-served statics — no restart owed
+    if (changed) _svc.processBehind = true;
+};
+
+/**
+ * Watcher batch handler — verify-by-fingerprint before any state flip.
+ * @inner
+ * @private
+ * @param {{paths:string[], severity:string, hasUnknown:boolean}} batch
+ * @returns {void}
+ */
+var onWatchBatch = function(batch) {
+    if (!_svc || !_svc.active) return;
+    var fp    = fingerprintTree(_svc.srcRoot, { ignore: _svc.ignore });
+    var stamp = readReleaseStamp(_svc.manifestPath, _svc.bundle, _svc.scope, _svc.env);
+    if (!fp) {
+        // src root vanished — definitely stale, and only a restart-class
+        // action can make sense of it
+        markStale(['(src-root-missing)'], 'restart');
+        return;
+    }
+    if (!stamp || !stamp.fingerprint || stamp.fpSpec !== FP_SPEC) {
+        // no comparable stamp (pre-feature build) — the event itself is the
+        // best evidence we have; fail-safe toward stale
+        markStale(batch.paths, batch.severity || 'restart');
+        return;
+    }
+    adoptReleaseStamp(stamp, false); // notice EXTERNAL rebuilds too
+    if (fp.hash === stamp.fingerprint) {
+        // spurious event, replayed pre-boot write, or a reverted edit —
+        // the source matches the release: self-heal
+        markSrcFresh();
+        return;
+    }
+    markStale(batch.paths, batch.severity || 'restart');
+};
+
+/**
+ * Schedules an auto-mode rebuild (debounced by a cooldown so rapid editing
+ * doesn't stack builds; a failed build is NOT auto-retried — the next
+ * source change re-triggers).
+ * @inner
+ * @private
+ * @returns {void}
+ */
+var scheduleAutoAct = function() {
+    if (!_svc || _svc.mode !== 'auto' || _svc.action || _svc.autoTimer) return;
+    var wait = Math.max(0, _svc.autoCooldownMs - (Date.now() - (_svc.lastAutoAt || 0)));
+    _svc.autoTimer = setTimeout(function autoAct() {
+        if (!_svc) return;
+        _svc.autoTimer = null;
+        if (!_svc.srcStale || _svc.action) return;
+        _svc.lastAutoAt = Date.now();
+        requestRebuild({ restart: 'auto', requestedBy: 'auto' });
+    }, wait);
+    if (typeof _svc.autoTimer.unref === 'function') _svc.autoTimer.unref();
+};
+
+/**
+ * Default build spawner — `gina bundle:build <bundle> @<project> --env=… --scope=…`
+ * as a detached-from-stdio child whose stdout/stderr lines feed progress.
+ * @inner
+ * @private
+ * @param {object} ctx - The service state
+ * @returns {object} ChildProcess-like ({stdout, stderr, on})
+ */
+var defaultSpawnBuild = function(ctx) {
+    var spawn = require('child_process').spawn;
+    return spawn('gina', [
+        'bundle:build', ctx.bundle, '@' + ctx.project,
+        '--env=' + ctx.env, '--scope=' + ctx.scope
+    ], { stdio: ['ignore', 'pipe', 'pipe'] });
+};
+
+/**
+ * Default restart executor: mirror lib/proc.js's SIGTERM drain steps
+ * (close SSE closers → closeIdleConnections → server.close with a hard
+ * cap), then spawn a detached `gina bundle:restart` — its `bundle:stop`
+ * kill -9 lands on an idle, listener-closed process, and its
+ * `bundle:start` boots the successor on the rebuilt release.
+ * @inner
+ * @private
+ * @param {object} ctx - The service state
+ * @param {function} done - `function(err)` — best-effort; the process is expected to die
+ * @returns {void}
+ */
+var defaultExecRestart = function(ctx, done) {
+    var finished = false;
+    var finish = function(err) {
+        if (finished) return;
+        finished = true;
+        try {
+            var spawn = require('child_process').spawn;
+            var child = spawn('gina', ['bundle:restart', ctx.bundle, '@' + ctx.project], {
+                detached : true,
+                stdio    : 'ignore'
+            });
+            child.unref();
+        } catch (spawnErr) {
+            return done(spawnErr);
+        }
+        done(err || null);
+    };
+    var httpServer = ctx.httpServer;
+    if (!httpServer || typeof httpServer.close !== 'function') {
+        return finish(null);
+    }
+    var capMs = parseInt(process.env.GINA_SHUTDOWN_TIMEOUT) || 10000;
+    var cap = setTimeout(function() {
+        console.warn('[releaseWatch] restart drain timed out (' + capMs + 'ms) — proceeding');
+        finish(null);
+    }, capMs);
+    if (typeof cap.unref === 'function') cap.unref();
+    // Drain long-lived SSE responses first — closeIdleConnections() does not
+    // close active streams, so open SSE would hold close() to the cap
+    // (same steps as lib/proc.js's SIGTERM handler — keep the two in sync).
+    if (process.gina && process.gina._sseConnections && process.gina._sseConnections.size > 0) {
+        var closers = Array.from(process.gina._sseConnections);
+        for (var i = 0; i < closers.length; i++) {
+            try { closers[i](); } catch (sseErr) { /* best effort */ }
+        }
+    }
+    if (typeof httpServer.closeIdleConnections === 'function') {
+        try { httpServer.closeIdleConnections(); } catch (idleErr) { /* best effort */ }
+    }
+    try {
+        httpServer.close(function() {
+            clearTimeout(cap);
+            finish(null);
+        });
+    } catch (closeErr) {
+        clearTimeout(cap);
+        finish(null);
+    }
+};
+
+/**
+ * The idle gate: waits until the in-flight gauge is 0 AND every busy probe
+ * is idle, continuously for `graceMs` — or until forced. Emits throttled
+ * `waiting` events so the operator sees WHAT the gate waits on.
+ * @inner
+ * @private
+ * @param {function} proceed - Called once when the gate opens
+ * @returns {void}
+ */
+var runIdleGate = function(proceed) {
+    var stableSince = null;
+    var lastEmit    = 0;
+    var ticking     = false;
+    _svc.gateTimer = setInterval(function gateTick() {
+        if (!_svc || !_svc.action) return;
+        if (_svc.action.force) {
+            return openGate('forced');
+        }
+        if (ticking) return; // a probe check is still in flight
+        ticking = true;
+        var inFlight = getInFlightCount();
+        checkBusyProbes({ timeoutMs: _svc.probeTimeoutMs }, function(err, result) {
+            ticking = false;
+            if (!_svc || !_svc.action || _svc.action.state !== 'waiting') return;
+            if (_svc.action.force) {
+                return openGate('forced');
+            }
+            var busy = (inFlight > 0) || result.busy;
+            if (busy) {
+                stableSince = null;
+                if (Date.now() - lastEmit > 1000) {
+                    lastEmit = Date.now();
+                    _emitEvent('waiting', { inFlight: inFlight, probes: result.probes });
+                }
+                return;
+            }
+            if (stableSince === null) stableSince = Date.now();
+            if (Date.now() - stableSince >= _svc.graceMs) {
+                return openGate('idle');
+            }
+        });
+    }, _svc.gateIntervalMs);
+    if (typeof _svc.gateTimer.unref === 'function') _svc.gateTimer.unref();
+
+    /**
+     * @inner
+     * @private
+     * @param {string} how - 'idle' | 'forced'
+     * @returns {void}
+     */
+    function openGate(how) {
+        if (_svc.gateTimer) {
+            clearInterval(_svc.gateTimer);
+            _svc.gateTimer = null;
+        }
+        proceed(how);
+    }
+};
+
+/**
+ * The rebuild pipeline: build child → re-stamp read → render-cache flush →
+ * (restart-class) idle gate → restart executor. Runs in the background;
+ * progress lands on the event stream and `getStatus()`.
+ * @inner
+ * @private
+ * @param {{restart:string, requestedBy:string}} opts
+ * @returns {void}
+ */
+var runPipeline = function(opts) {
+    var action = {
+        state           : 'building',
+        startedAt       : Date.now(),
+        requestedBy     : opts.requestedBy || 'operator',
+        restartPolicy   : opts.restart || 'auto',
+        force           : (opts.restart === 'force'),
+        severityAtStart : _svc.severity, // the accumulated class this build answers
+        progress        : []
+    };
+    _svc.action    = action;
+    _svc.lastError = null;
+    _svc.watcher.pause();
+    _emitEvent('status', getStatus());
+
+    var child = null;
+    try {
+        child = _svc.spawnBuild(_svc);
+    } catch (spawnErr) {
+        return failPipeline('build spawn failed: ' + (spawnErr.message || spawnErr));
+    }
+
+    /**
+     * @inner
+     * @private
+     * @param {Buffer|string} chunk
+     * @returns {void}
+     */
+    var onData = function(chunk) {
+        var lines = String(chunk).split('\n');
+        for (var i = 0; i < lines.length; i++) {
+            var line = lines[i].trim();
+            if (!line.length) continue;
+            if (action.progress.length < MAX_PROGRESS_LINES) {
+                action.progress.push(line);
+            }
+            _emitEvent('build', { line: line });
+        }
+    };
+    if (child.stdout && child.stdout.on) child.stdout.on('data', onData);
+    if (child.stderr && child.stderr.on) child.stderr.on('data', onData);
+    child.on('error', function(childErr) {
+        failPipeline('build child error: ' + (childErr.message || childErr));
+    });
+    child.on('exit', function(code) {
+        if (!_svc || _svc.action !== action) return; // deactivated mid-build
+        if (code !== 0) {
+            return failPipeline('build exited with code ' + code);
+        }
+        afterBuild();
+    });
+
+    /**
+     * Marks the pipeline failed, resumes watching, notifies.
+     * @inner
+     * @private
+     * @param {string} message
+     * @returns {void}
+     */
+    function failPipeline(message) {
+        if (!_svc || _svc.action !== action) return;
+        _svc.lastError = message;
+        _svc.action    = null;
+        try { _svc.watcher.resume(); } catch (resumeErr) { /* closed */ }
+        console.warn('[releaseWatch] rebuild failed: ' + message);
+        _emitEvent('error', { message: message });
+        _emitEvent('status', getStatus());
+    }
+
+    /**
+     * Post-build: restamp read, flush, classify the endgame.
+     * @inner
+     * @private
+     * @returns {void}
+     */
+    function afterBuild() {
+        var newStamp = readReleaseStamp(_svc.manifestPath, _svc.bundle, _svc.scope, _svc.env);
+        // our own pipeline KNOWS the accumulated class — an assets-only build
+        // moves the release without owing a restart
+        adoptReleaseStamp(newStamp, action.severityAtStart === 'assets');
+
+        action.state = 'flushing';
+        _emitEvent('status', getStatus());
+        var flushed = function() {
+            _emitEvent('flushed', {});
+            // src freshness after the build: edits made DURING the build keep
+            // it stale (the resumed watcher + this compare both catch them)
+            var fp = fingerprintTree(_svc.srcRoot, { ignore: _svc.ignore });
+            var srcFresh = !!(fp && _svc.releaseStamp && _svc.releaseStamp.fingerprint
+                && fp.hash === _svc.releaseStamp.fingerprint);
+            var severity = _svc.severity;
+            try { _svc.watcher.resume(); } catch (resumeErr) { /* closed */ }
+            if (srcFresh) {
+                markSrcFresh();
+            }
+            if (severity === 'assets' && action.restartPolicy !== 'force' && !_svc.processBehind) {
+                _svc.action = null;
+                _emitEvent('done', { restarted: false });
+                _emitEvent('status', getStatus());
+                return;
+            }
+            if (action.restartPolicy === 'skip') {
+                _svc.action = null;
+                _emitEvent('done', { restarted: false, restartPending: _svc.processBehind });
+                _emitEvent('status', getStatus());
+                return;
+            }
+            action.state = 'waiting';
+            _emitEvent('status', getStatus());
+            runIdleGate(function(how) {
+                if (!_svc || _svc.action !== action) return;
+                action.state = 'restarting';
+                _emitEvent('restarting', { how: how });
+                _emitEvent('status', getStatus());
+                _svc.execRestart(_svc, function(restartErr) {
+                    if (restartErr) {
+                        return failPipeline('restart failed: ' + (restartErr.message || restartErr));
+                    }
+                    // normally unreachable for long — bundle:restart kill -9s
+                    // this process; kept for the drain-only (daemonless) path
+                    _emitEvent('done', { restarted: true });
+                });
+            });
+        };
+        try {
+            if (_svc.flushRenderCache.length >= 2) {
+                _svc.flushRenderCache(_svc.bundle, function() { flushed(); });
+            } else {
+                _svc.flushRenderCache(_svc.bundle);
+                flushed();
+            }
+        } catch (flushErr) {
+            console.warn('[releaseWatch] render-cache flush failed (continuing): ' + (flushErr.message || flushErr));
+            flushed();
+        }
+    }
+};
+
+/**
+ * Initialises and arms the stale-release watch service for this bundle
+ * process. The CALLER owns the hard gates (`NODE_SCOPE_IS_LOCAL === 'true'`,
+ * `!isDev`, `server.releaseWatch.enabled === true`) — init() assumes they
+ * passed. Inert until called; calling it twice is a warned no-op.
+ *
+ * @function init
+ * @param {object} options
+ * @param {string} options.bundle - Bundle name
+ * @param {string} options.project - Project name
+ * @param {string} options.env - Environment being served
+ * @param {string} options.scope - Scope being served (local)
+ * @param {string} options.srcRoot - Absolute path of the bundle SOURCE tree (from the manifest `src`, NOT the release)
+ * @param {string} options.manifestPath - Absolute path of the project manifest.json
+ * @param {string} [options.mode='notify'] - 'notify' | 'auto'
+ * @param {number} [options.debounceMs=750]
+ * @param {number} [options.reconcileIntervalMs=0]
+ * @param {string[]} [options.ignore]
+ * @param {object} [options.httpServer] - The engine's HTTP(S) server (drained before a restart)
+ * @param {function} [options.flushRenderCache] - `function(bundle[, cb])` — injected by the server engine
+ * @param {function} [options.spawnBuild] - Seam: replaces the `gina bundle:build` child (tests)
+ * @param {function} [options.execRestart] - Seam: replaces the drain+`bundle:restart` executor (tests / daemonless)
+ * @param {number} [options.graceMs=2000] - Idle gate stability window
+ * @param {number} [options.gateIntervalMs=250] - Idle gate poll interval
+ * @param {number} [options.probeTimeoutMs=1500]
+ * @param {number} [options.autoCooldownMs=5000] - Minimum spacing between auto-mode builds
+ * @param {boolean} [options.useFsEvents=true] - Seam: sweep-only watching (tests / lossy mounts)
+ * @returns {boolean} True when the service armed
+ * @example
+ *  lib.releaseWatch.init({
+ *      bundle: 'frontend', project: 'myproject', env: 'prod', scope: 'local',
+ *      srcRoot: '/path/to/project/src/frontend',
+ *      manifestPath: '/path/to/project/manifest.json',
+ *      httpServer: instance,
+ *      flushRenderCache: function(bundle) { renderCache.clear(bundle); }
+ *  });
+ */
+var init = function(options) {
+    options = options || {};
+    if (_svc && _svc.active) {
+        console.warn('[releaseWatch] init() called twice — already active for `' + _svc.bundle + '`');
+        return false;
+    }
+    var required = ['bundle', 'project', 'env', 'scope', 'srcRoot', 'manifestPath'];
+    for (var i = 0; i < required.length; i++) {
+        if (!options[required[i]] || typeof options[required[i]] !== 'string') {
+            console.warn('[releaseWatch] init() missing required option `' + required[i] + '` — service not armed');
+            return false;
+        }
+    }
+    if (!fs.existsSync(options.srcRoot)) {
+        console.warn('[releaseWatch] source root not found (`' + options.srcRoot + '`) — service not armed');
+        return false;
+    }
+
+    var runningStamp = readReleaseStamp(options.manifestPath, options.bundle, options.scope, options.env);
+
+    _svc = {
+        active           : false,
+        bundle           : options.bundle,
+        project          : options.project,
+        env              : options.env,
+        scope            : options.scope,
+        srcRoot          : options.srcRoot,
+        manifestPath     : options.manifestPath,
+        mode             : (options.mode === 'auto') ? 'auto' : 'notify',
+        ignore           : Array.isArray(options.ignore) ? options.ignore : DEFAULT_IGNORE,
+        graceMs          : (typeof options.graceMs === 'number') ? options.graceMs : 2000,
+        gateIntervalMs   : (typeof options.gateIntervalMs === 'number') ? options.gateIntervalMs : 250,
+        probeTimeoutMs   : (typeof options.probeTimeoutMs === 'number') ? options.probeTimeoutMs : DEFAULT_PROBE_TIMEOUT_MS,
+        autoCooldownMs   : (typeof options.autoCooldownMs === 'number') ? options.autoCooldownMs : 5000,
+        httpServer       : options.httpServer || null,
+        flushRenderCache : (typeof options.flushRenderCache === 'function') ? options.flushRenderCache : function noopFlush() {},
+        spawnBuild       : (typeof options.spawnBuild === 'function') ? options.spawnBuild : defaultSpawnBuild,
+        execRestart      : (typeof options.execRestart === 'function') ? options.execRestart : defaultExecRestart,
+        // state
+        runningStamp     : runningStamp,           // what THIS process serves (boot snapshot)
+        releaseStamp     : runningStamp,           // what the manifest says the release is (refreshed on rebuild)
+        srcStale         : false,
+        processBehind    : false,
+        severity         : null,
+        staleSince       : null,
+        changes          : [],
+        changesTruncated : false,
+        stampUnknown     : !(runningStamp && runningStamp.fingerprint && runningStamp.fpSpec === FP_SPEC),
+        action           : null,
+        lastError        : null,
+        autoTimer        : null,
+        gateTimer        : null,
+        emitter          : new EventEmitter(),
+        watcher          : null,
+        startedAt        : Date.now()
+    };
+    _svc.emitter.setMaxListeners(64);
+
+    registerDefaultProbes();
+
+    try {
+        _svc.watcher = createTreeWatcher({
+            root                : _svc.srcRoot,
+            debounceMs          : (typeof options.debounceMs === 'number') ? options.debounceMs : DEFAULT_DEBOUNCE_MS,
+            reconcileIntervalMs : (typeof options.reconcileIntervalMs === 'number') ? options.reconcileIntervalMs : 0,
+            ignore              : _svc.ignore,
+            useFsEvents         : options.useFsEvents,
+            onChange            : onWatchBatch,
+            onError             : function(watchErr) {
+                console.warn('[releaseWatch] watch channel error: ' + (watchErr.message || watchErr));
+            }
+        });
+    } catch (watcherErr) {
+        console.warn('[releaseWatch] could not start the source watcher: ' + (watcherErr.message || watcherErr));
+        _svc = null;
+        return false;
+    }
+
+    _svc.active = true;
+
+    // Boot compare — the env-switch case: source edited (e.g. under dev-env)
+    // after the last build, then relaunched serving the built release. The
+    // boot compare cannot know WHICH paths changed (the stamp holds no
+    // listing), so it fails safe to restart-class.
+    if (_svc.stampUnknown) {
+        console.log('[releaseWatch] no comparable fingerprint stamp for `' + _svc.bundle
+            + '` (' + _svc.scope + '/' + _svc.env + ') — staleness unknown until the next `gina bundle:build`');
+    } else {
+        var bootFp = fingerprintTree(_svc.srcRoot, { ignore: _svc.ignore });
+        if (bootFp && bootFp.hash !== _svc.runningStamp.fingerprint) {
+            markStale(['(boot-compare)'], 'restart');
+        }
+    }
+
+    console.log('[releaseWatch] armed (' + _svc.mode + ') — watching `' + _svc.srcRoot
+        + '` for `' + _svc.bundle + '@' + _svc.project + '` (' + _svc.scope + '/' + _svc.env + ')');
+    _emitEvent('status', getStatus());
+    return true;
+};
+
+/**
+ * Whether the service is armed for this process.
+ * @function isActive
+ * @returns {boolean}
+ * @example
+ *  if (lib.releaseWatch.isActive()) { … }
+ */
+var isActive = function() {
+    return !!(_svc && _svc.active);
+};
+
+/**
+ * The status snapshot — the payload behind `GET /_gina/release/status`.
+ *
+ * @function getStatus
+ * @returns {(object|null)} Null when the service is not armed
+ * @example
+ *  var st = lib.releaseWatch.getStatus();
+ *  // → { stale, severity, buildId, releaseBuildId, action, inFlight, … }
+ */
+var getStatus = function() {
+    if (!_svc) return null;
+    if (_svc.active) {
+        // notice external rebuilds promptly (a status poll is ~2s cadence;
+        // one manifest read per poll is cheap) — adopt() no-ops on an
+        // unchanged stamp
+        var _cur = readReleaseStamp(_svc.manifestPath, _svc.bundle, _svc.scope, _svc.env);
+        if (_cur && _cur.fingerprint) adoptReleaseStamp(_cur, false);
+    }
+    return {
+        active           : _svc.active,
+        mode             : _svc.mode,
+        bundle           : _svc.bundle,
+        project          : _svc.project,
+        env              : _svc.env,
+        scope            : _svc.scope,
+        watching         : !!(_svc.watcher && _svc.watcher.isWatching()),
+        // identity
+        buildId          : shortId(_svc.runningStamp && _svc.runningStamp.fingerprint),
+        releaseBuildId   : shortId(_svc.releaseStamp && _svc.releaseStamp.fingerprint),
+        builtAt          : (_svc.releaseStamp && _svc.releaseStamp.builtAt) || null,
+        stampUnknown     : _svc.stampUnknown,
+        // staleness (dual axis)
+        stale            : !!(_svc.srcStale || _svc.processBehind),
+        srcStale         : _svc.srcStale,
+        processBehind    : _svc.processBehind,
+        severity         : _svc.severity,
+        staleSince       : _svc.staleSince,
+        changes          : _svc.changes.slice(),
+        changesTruncated : _svc.changesTruncated,
+        // action
+        action           : _svc.action ? {
+            state         : _svc.action.state,
+            startedAt     : _svc.action.startedAt,
+            requestedBy   : _svc.action.requestedBy,
+            restartPolicy : _svc.action.restartPolicy,
+            force         : _svc.action.force,
+            progressTail  : _svc.action.progress.slice(-10)
+        } : null,
+        lastError        : _svc.lastError,
+        inFlight         : getInFlightCount(),
+        startedAt        : _svc.startedAt
+    };
+};
+
+/**
+ * Subscribes to the service event stream (the substrate of the
+ * `/_gina/release/events` SSE endpoint).
+ *
+ * @function subscribe
+ * @param {function} fn - `function({type, data, at})`
+ * @returns {(function|null)} Unsubscribe function, or null when not armed
+ * @example
+ *  var off = lib.releaseWatch.subscribe(function(evt) { console.log(evt.type); });
+ *  // … later
+ *  off();
+ */
+var subscribe = function(fn) {
+    if (!_svc || typeof fn !== 'function') return null;
+    _svc.emitter.on('release', fn);
+    return function unsubscribe() {
+        if (_svc) _svc.emitter.removeListener('release', fn);
+    };
+};
+
+/**
+ * Requests the rebuild pipeline (the substrate of
+ * `POST /_gina/release/rebuild`). Runs in the background — follow progress
+ * via `subscribe()` / `getStatus()`.
+ *
+ * @function requestRebuild
+ * @param {object} [opts]
+ * @param {string} [opts.restart='auto'] - 'auto' (idle-gated when restart-class) | 'force' (skip the idle gate) | 'skip' (build+flush only)
+ * @param {string} [opts.requestedBy='operator']
+ * @returns {{accepted:boolean, reason:(string|null)}}
+ * @example
+ *  var r = lib.releaseWatch.requestRebuild({ restart: 'auto' });
+ *  // → { accepted: true, reason: null }
+ */
+var requestRebuild = function(opts) {
+    opts = opts || {};
+    if (!_svc || !_svc.active) {
+        return { accepted: false, reason: 'inactive' };
+    }
+    if (_svc.action) {
+        return { accepted: false, reason: 'busy' };
+    }
+    runPipeline({
+        restart     : opts.restart || 'auto',
+        requestedBy : opts.requestedBy || 'operator'
+    });
+    return { accepted: true, reason: null };
+};
+
+/**
+ * Forces an in-progress idle gate open (the operator's "Force restart").
+ *
+ * @function forceRestartGate
+ * @returns {boolean} True when a waiting gate was forced
+ * @example
+ *  lib.releaseWatch.forceRestartGate();
+ */
+var forceRestartGate = function() {
+    if (!_svc || !_svc.action || _svc.action.state !== 'waiting') return false;
+    _svc.action.force = true;
+    return true;
+};
+
+/**
+ * Disarms the service and releases every handle (tests; process teardown).
+ *
+ * @function deactivate
+ * @returns {void}
+ */
+var deactivate = function() {
+    if (!_svc) return;
+    if (_svc.watcher) {
+        try { _svc.watcher.close(); } catch (closeErr) { /* already gone */ }
+    }
+    if (_svc.autoTimer) clearTimeout(_svc.autoTimer);
+    if (_svc.gateTimer) clearInterval(_svc.gateTimer);
+    try { _svc.emitter.removeAllListeners(); } catch (emErr) { /* noop */ }
+    _svc = null;
+};
+
+
 module.exports = {
     FP_SPEC               : FP_SPEC,
     DEFAULT_IGNORE        : DEFAULT_IGNORE,
@@ -883,5 +1734,13 @@ module.exports = {
     registerDefaultProbes : registerDefaultProbes,
     trackRequest          : trackRequest,
     getInFlightCount      : getInFlightCount,
-    reset                 : reset
+    reset                 : reset,
+    // service (slice 2)
+    init                  : init,
+    isActive              : isActive,
+    getStatus             : getStatus,
+    subscribe             : subscribe,
+    requestRebuild        : requestRebuild,
+    forceRestartGate      : forceRestartGate,
+    deactivate            : deactivate
 };
