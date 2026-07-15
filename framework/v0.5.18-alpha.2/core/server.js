@@ -1077,6 +1077,15 @@ function Server(options) {
                 instance._cacheIsEnabled = self.conf[self.appName][self.env].server.cache.enable;
             }
 
+            // #B115 — publish the engine so the form-validator's server-side `query`
+            // rule can hand its hand-built controller the LIVE instance (one engine
+            // per process). Without this, queryFromBackend mints a second `_cached`
+            // Map on the bundle's config dict, and controller.query()'s
+            // cache.from(serverInstance._cached) leaves the process-wide lib/cache
+            // pointer on that wrong Map after every validator query.
+            if (!process.gina) { process.gina = {}; }
+            process.gina._serverInstance = instance;
+
             router.setServerInstance(instance);
         }
 

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A server-side form-validator query rule no longer re-points the framework''s process-wide cache onto a second Map: the rule''s hand-built controller now reuses the live server instance (published at server start), so concurrent renders keep reading their cached entries and pooled HTTP/2 sessions land in the real server''s cache instead of an orphan store on the bundle''s config dict'
+time: 2026-07-15T02:32:53+01:00

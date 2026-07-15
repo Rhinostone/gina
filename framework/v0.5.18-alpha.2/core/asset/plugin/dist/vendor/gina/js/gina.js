@@ -3769,7 +3769,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         var Controller = require(_(GINA_FRAMEWORK_DIR +'/core/controller/controller.js'), true);
         var controller = new Controller(controllerOptions);
         controller.name = route.param.control;
-        controller.serverInstance = serverInstance;
+        // #B115 — prefer the LIVE engine published by server.js start(): query()
+        // re-points lib/cache's process-wide backing Map to the controller's
+        // `serverInstance._cached`, so handing it the config dict's own minted Map
+        // sends a concurrent render's cache ops (compiled templates, output cache)
+        // to the wrong store and strands the pooled HTTP/2 session + its
+        // `_http2Sessions` tracker where nothing reads them. The config dict above
+        // (+ its minted `_cached`) remains the fallback when no server runs in this
+        // process (offline CLI / test harnesses).
+        controller.serverInstance = ( process.gina && process.gina._serverInstance )
+            ? process.gina._serverInstance
+            : serverInstance;
         controller.setOptions(request, response, next, controllerOptions);
 
         var data = ( typeof(options.data) == 'object' && options.data.count() > 0 )
