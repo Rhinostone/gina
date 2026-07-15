@@ -473,4 +473,106 @@ describe('release-watch-service — state machine (behavioral, injected seams)',
         assert.strictEqual(again, false, 'double init must refuse');
         assert.strictEqual(rw.isActive(), true, 'first arm must survive');
     });
+
+    it('S.17 — a proactive rebuild on a FRESH service builds + flushes but never restarts', async function() {
+        var proj = mkProject();
+        var rec = armService(proj);
+        assert.strictEqual(rw.getStatus().stale, false);
+        assert.strictEqual(rw.requestRebuild({ restart: 'auto' }).accepted, true);
+        completeBuild(proj, rec); // no src change — the restamp hash is unchanged
+        var done = await waitFor(function() { return ofType(rec.events, 'done').length > 0; });
+        assert.ok(done, 'done event expected');
+        assert.strictEqual(ofType(rec.events, 'waiting').length, 0, 'a fresh rebuild must not enter the idle gate');
+        assert.strictEqual(rec.restarts.length, 0, 'a healthy process must not be bounced (an intentional bounce is ?restart=force)');
+        var st = rw.getStatus();
+        assert.strictEqual(st.action, null);
+        assert.strictEqual(st.stale, false);
+        assert.deepStrictEqual(rec.flushes, ['web']);
+    });
+
+    it('S.18 — an edit DURING a build re-classifies restart-class; the next rebuild restarts (no silent stale)', async function() {
+        var proj = mkProject();
+        var rec = armService(proj);
+        // phase 1 — assets-class staleness
+        writeFile(proj.root, 'src/web/public/css/app.css', 'phase1{}');
+        await waitFor(function() { return rw.getStatus().severity === 'assets'; });
+        // phase 2 — rebuild; the real build stamps at BUILD START (pre-edit)…
+        rw.requestRebuild({ restart: 'auto' });
+        proj.stampNow(); // build-start stamp: the css edit only
+        // …then the operator edits SERVER CODE while the build runs — the watcher
+        // is paused, so the event is dropped and the resume re-baseline swallows it
+        writeFile(proj.root, 'src/web/controllers/controller.js', 'edited-during-build');
+        rec.lastChild().emit('exit', 0); // build completes WITHOUT seeing the edit
+        var done1 = await waitFor(function() { return ofType(rec.events, 'done').length > 0; });
+        assert.ok(done1, 'first pipeline must complete (assets endgame)');
+        assert.strictEqual(rec.restarts.length, 0, 'the assets-classified action itself must not restart');
+        var st = rw.getStatus();
+        assert.strictEqual(st.srcStale, true, 'post-build drift must keep the service stale');
+        assert.strictEqual(st.severity, 'restart', 'unclassifiable drift must fail safe to restart-class');
+        assert.ok(st.changes.indexOf('(post-build-drift)') > -1, 'the drift sentinel must surface in changes');
+        assert.strictEqual(st.processBehind, false, 'the assets-only adopt still holds for the delta this build answered');
+        // phase 3 — the next rebuild carries restart-class end to end
+        assert.strictEqual(rw.requestRebuild({ restart: 'auto' }).accepted, true);
+        completeBuild(proj, rec); // restamps WITH the controller edit
+        var restarted = await waitFor(function() { return rec.restarts.length === 1; }, 4000);
+        assert.ok(restarted, 'the second rebuild must idle-gate and restart — the during-build edit is server code');
+        assert.strictEqual(rw.getStatus().processBehind, true);
+    });
+
+    it('S.19 — a batch-discovered external rebuild emits a `behind` event for SSE subscribers', async function() {
+        var proj = mkProject();
+        var rec = armService(proj);
+        // an operator runs `gina bundle:build` in a terminal: src edit + restamp
+        writeFile(proj.root, 'src/web/controllers/controller.js', 'external-edit-2');
+        proj.stampNow();
+        // the predicate reads only the event stream — no getStatus() poll, so the
+        // emit provenance is the sweep→batch→adopt path, not a status poll
+        var seen = await waitFor(function() { return ofType(rec.events, 'behind').length > 0; }, 4000);
+        assert.ok(seen, 'the batch-path adopt must emit `behind` — SSE clients must not need a status poll');
+        var evt = ofType(rec.events, 'behind')[0].data;
+        assert.strictEqual(evt.processBehind, true);
+        assert.match(evt.releaseBuildId, /^[0-9a-f]{12}$/);
+    });
+
+    it('S.20 — a pipeline dying in `waiting` (late child error) cannot strand the NEXT pipeline\'s gate', async function() {
+        var proj = mkProject();
+        var rec = armService(proj);
+        writeFile(proj.root, 'src/web/controllers/controller.js', 'edited-for-s20');
+        await waitFor(function() { return rw.getStatus().severity === 'restart'; });
+        var doneReq = rw.trackRequest('/held'); // hold the gate open
+        rw.requestRebuild({ restart: 'auto' });
+        completeBuild(proj, rec);
+        var waiting = await waitFor(function() { return rw.getStatus().action && rw.getStatus().action.state === 'waiting'; });
+        assert.ok(waiting, 'first pipeline must reach waiting');
+        // the build child errors LATE (after its exit) — the pipeline dies mid-gate
+        rec.lastChild().emit('error', new Error('late boom'));
+        var errored = await waitFor(function() { return ofType(rec.events, 'error').length > 0; });
+        assert.ok(errored, 'late child error must surface');
+        assert.strictEqual(rw.getStatus().action, null, 'the dead pipeline must clear its action');
+        assert.match(rw.getStatus().lastError, /late boom/);
+        doneReq(); // release the held request
+        // the SECOND pipeline must run end to end — a leaked gate interval from the
+        // dead pipeline would clear the new gate and strand it in `waiting` forever
+        assert.strictEqual(rw.requestRebuild({ restart: 'auto' }).accepted, true);
+        completeBuild(proj, rec);
+        var restarted = await waitFor(function() { return rec.restarts.length === 1; }, 4000);
+        assert.ok(restarted, 'the successor pipeline\'s idle gate must still open');
+        assert.strictEqual(ofType(rec.events, 'restarting').length, 1);
+    });
+});
+
+
+describe('release-watch-service §pins — the default restart executor', function() {
+
+    var SRC = fs.readFileSync(FW + '/lib/release-watch/src/main.js', 'utf8');
+
+    it('P.01 — the detached bundle:restart child carries an error listener (async spawn failure must not crash the drained process)', function() {
+        var start = SRC.indexOf('var defaultExecRestart');
+        var end   = SRC.indexOf('var runIdleGate');
+        assert.ok(start > -1 && end > start, 'defaultExecRestart block anchors expected');
+        var blk = SRC.substring(start, end);
+        assert.ok(blk.indexOf("child.on('error'") > -1, 'spawn error listener expected before unref()');
+        assert.ok(blk.indexOf('child.unref()') > -1);
+        assert.ok(blk.indexOf("'bundle:restart'") > -1);
+    });
 });

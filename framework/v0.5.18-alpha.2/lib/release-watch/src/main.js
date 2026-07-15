@@ -623,6 +623,8 @@ var unregisterBusyProbe = function(name) {
  *
  * @function listBusyProbes
  * @returns {string[]} Registered probe names
+ * @example
+ *  lib.releaseWatch.listBusyProbes(); // → [ 'jobs', 'imports' ]
  */
 var listBusyProbes = function() {
     return Object.keys(_probes);
@@ -870,6 +872,8 @@ var getInFlightCount = function() {
  *
  * @function reset
  * @returns {void}
+ * @example
+ *  lib.releaseWatch.reset(); // fresh gauge + empty probe registry (tests)
  */
 var reset = function() {
     _probes   = {};
@@ -927,7 +931,7 @@ var _svc = null;
  * Emits one service event to every subscriber.
  * @inner
  * @private
- * @param {string} type - Event type (status|stale|build|flushed|waiting|restarting|done|error)
+ * @param {string} type - Event type (status|stale|behind|build|flushed|waiting|restarting|done|error)
  * @param {object} [data]
  * @returns {void}
  */
@@ -1086,6 +1090,12 @@ var markSrcFresh = function() {
  * safe to restart-pending. A stamp equal to the boot stamp always clears
  * the axis.
  *
+ * Every `processBehind` TRANSITION (both directions) emits a `behind` event:
+ * an external rebuild is discovered by a status poll or a watch batch, and
+ * without the emit the SSE stream would never learn of it (only pollers
+ * would). The payload is built inline — never via `getStatus()`, whose own
+ * manifest re-read calls back into this function.
+ *
  * @inner
  * @private
  * @param {({fingerprint:string}|null)} newStamp
@@ -1094,17 +1104,26 @@ var markSrcFresh = function() {
  */
 var adoptReleaseStamp = function(newStamp, assetsOnlyKnown) {
     if (!_svc || !newStamp || !newStamp.fingerprint) return;
-    var changed = !(_svc.releaseStamp && _svc.releaseStamp.fingerprint === newStamp.fingerprint);
+    var changed   = !(_svc.releaseStamp && _svc.releaseStamp.fingerprint === newStamp.fingerprint);
+    var wasBehind = _svc.processBehind;
     _svc.releaseStamp = newStamp;
     var differsFromRunning = (_svc.runningStamp && _svc.runningStamp.fingerprint)
         ? (newStamp.fingerprint !== _svc.runningStamp.fingerprint)
         : true; // boot identity unknown + a stamped release ⇒ fail-safe
     if (!differsFromRunning) {
         _svc.processBehind = false;
+        if (wasBehind) {
+            _emitEvent('behind', { processBehind: false, releaseBuildId: shortId(newStamp.fingerprint) });
+        }
         return;
     }
     if (assetsOnlyKnown) return; // release moved, but only disk-served statics — no restart owed
-    if (changed) _svc.processBehind = true;
+    if (changed) {
+        _svc.processBehind = true;
+        if (!wasBehind) {
+            _emitEvent('behind', { processBehind: true, releaseBuildId: shortId(newStamp.fingerprint) });
+        }
+    }
 };
 
 /**
@@ -1199,6 +1218,13 @@ var defaultExecRestart = function(ctx, done) {
             var child = spawn('gina', ['bundle:restart', ctx.bundle, '@' + ctx.project], {
                 detached : true,
                 stdio    : 'ignore'
+            });
+            // a spawn failure (e.g. `gina` not on PATH) surfaces as an ASYNC
+            // 'error' event — listener-less it would become an uncaughtException
+            // that SIGTERMs the just-drained process with no successor started
+            child.on('error', function onRestartSpawnError(restartSpawnErr) {
+                console.warn('[releaseWatch] `gina bundle:restart` spawn failed: '
+                    + (restartSpawnErr.message || restartSpawnErr));
             });
             child.unref();
         } catch (spawnErr) {
@@ -1360,6 +1386,22 @@ var runPipeline = function(opts) {
     });
 
     /**
+     * Post-endgame auto re-kick: when a build finishes with the source STILL
+     * stale (post-build drift), auto mode acts on the discovery — but only
+     * when the finished action was NOT itself auto-requested, so a build that
+     * keeps re-dirtying its own source can never chain auto builds into a
+     * loop (every chain link requires a non-auto trigger).
+     * @inner
+     * @private
+     * @returns {void}
+     */
+    function rekickAuto() {
+        if (_svc && _svc.srcStale && _svc.mode === 'auto' && action.requestedBy !== 'auto') {
+            scheduleAutoAct();
+        }
+    }
+
+    /**
      * Marks the pipeline failed, resumes watching, notifies.
      * @inner
      * @private
@@ -1368,6 +1410,14 @@ var runPipeline = function(opts) {
      */
     function failPipeline(message) {
         if (!_svc || _svc.action !== action) return;
+        // a pipeline can die while its idle gate is polling (e.g. a late build-child
+        // 'error' event) — the gate interval must die with it, or its openGate()
+        // would later clear a SUCCESSOR pipeline's freshly-armed gate and strand
+        // that action in `waiting` forever (with `force` unpollable)
+        if (_svc.gateTimer) {
+            clearInterval(_svc.gateTimer);
+            _svc.gateTimer = null;
+        }
         _svc.lastError = message;
         _svc.action    = null;
         try { _svc.watcher.resume(); } catch (resumeErr) { /* closed */ }
@@ -1393,7 +1443,8 @@ var runPipeline = function(opts) {
         var flushed = function() {
             _emitEvent('flushed', {});
             // src freshness after the build: edits made DURING the build keep
-            // it stale (the resumed watcher + this compare both catch them)
+            // it stale (this compare catches them — their watch events were
+            // dropped by pause() and swallowed by the resume re-baseline)
             var fp = fingerprintTree(_svc.srcRoot, { ignore: _svc.ignore });
             var srcFresh = !!(fp && _svc.releaseStamp && _svc.releaseStamp.fingerprint
                 && fp.hash === _svc.releaseStamp.fingerprint);
@@ -1401,17 +1452,33 @@ var runPipeline = function(opts) {
             try { _svc.watcher.resume(); } catch (resumeErr) { /* closed */ }
             if (srcFresh) {
                 markSrcFresh();
+            } else {
+                // residual drift: an edit landed DURING the build, so its paths —
+                // and its class — are unknowable here. Re-mark via markStale so
+                // severity is RE-DERIVED fail-safe (unknown ⇒ restart): leaving
+                // the pre-build severity in place would understate a during-build
+                // server-code edit as `assets`, and the NEXT rebuild would then
+                // adopt its stamp as assets-only — a silent stale. The escalation
+                // targets the NEXT action; THIS action's endgame deliberately
+                // uses the pre-escalation `severity` capture above (the delta
+                // this build answered).
+                markStale(['(post-build-drift)'], 'restart');
             }
-            if (severity === 'assets' && action.restartPolicy !== 'force' && !_svc.processBehind) {
+            if ( (severity === 'assets' || severity === null) && action.restartPolicy !== 'force' && !_svc.processBehind) {
+                // assets-only delta — or a proactive rebuild on a FRESH service
+                // (severity null): nothing owes a restart; never bounce a healthy
+                // process (an intentional bounce is `?restart=force`)
                 _svc.action = null;
                 _emitEvent('done', { restarted: false });
                 _emitEvent('status', getStatus());
+                rekickAuto();
                 return;
             }
             if (action.restartPolicy === 'skip') {
                 _svc.action = null;
                 _emitEvent('done', { restarted: false, restartPending: _svc.processBehind });
                 _emitEvent('status', getStatus());
+                rekickAuto();
                 return;
             }
             action.state = 'waiting';
@@ -1715,6 +1782,8 @@ var forceRestartGate = function() {
  *
  * @function deactivate
  * @returns {void}
+ * @example
+ *  lib.releaseWatch.deactivate();
  */
 var deactivate = function() {
     if (!_svc) return;
