@@ -1055,7 +1055,12 @@ function ServerEngineClass(options) {
             // server.js hook — keep the two in sync. trackRequest() returns an
             // IDEMPOTENT finisher (finish + close can never double-decrement) and
             // excludes /_gina/* control paths inside the lib.
-            if (lib.releaseWatch.isActive()) {
+            // RW-F8 first-seer claim (request._rwTracked): this engine listener runs
+            // BEFORE it hands off to server.js's onInstance (via cb), and both carry
+            // this gauge — an unguarded hook counts a routed request twice. The engine
+            // listener claims first; onInstance then skips.
+            if (lib.releaseWatch.isActive() && !request._rwTracked) {
+                request._rwTracked = true;
                 var _rwDone = lib.releaseWatch.trackRequest(request.url);
                 response.on('finish', _rwDone);
                 response.on('close',  _rwDone);
@@ -1336,7 +1341,7 @@ function ServerEngineClass(options) {
             if (
                 lib.releaseWatch.isActive()
                 && request.method.toUpperCase() === 'GET'
-                && /\/_gina\/release\/status$/i.test(request.url)
+                && /^\/_gina\/release\/status$/i.test(request.url)
             ) {
                 if ( !lib.admin.isClientAllowed(request) ) {
                     var _rwStatusForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/release/status: client IP not in app.json admin.allowFrom' });
@@ -1370,7 +1375,7 @@ function ServerEngineClass(options) {
             if (
                 lib.releaseWatch.isActive()
                 && request.method.toUpperCase() === 'POST'
-                && /\/_gina\/release\/rebuild(\?.*)?$/i.test(request.url)
+                && /^\/_gina\/release\/rebuild(\?.*)?$/i.test(request.url)
             ) {
                 if ( !lib.admin.isClientAllowed(request) ) {
                     var _rwRebuildForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/release/rebuild: client IP not in app.json admin.allowFrom' });
@@ -1417,7 +1422,7 @@ function ServerEngineClass(options) {
             if (
                 lib.releaseWatch.isActive()
                 && request.method.toUpperCase() === 'GET'
-                && /\/_gina\/release\/events$/i.test(request.url)
+                && /^\/_gina\/release\/events$/i.test(request.url)
             ) {
                 if ( !lib.admin.isClientAllowed(request) ) {
                     var _rwEventsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/release/events: client IP not in app.json admin.allowFrom' });

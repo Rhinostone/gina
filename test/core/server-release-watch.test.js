@@ -277,3 +277,117 @@ describe('server-release-watch §05 — public export + config surfaces', functi
         assert.ok(serverIdx < idx && idx < uploadIdx, 'releaseWatch must live inside the server block');
     });
 });
+
+
+describe('server-release-watch §06 — arc review fixes (RW-F8 gauge double-count, RW-F9 endpoint anchor, riders)', function() {
+
+    // RW-F8 — under the isaac engine a routed request runs BOTH the engine's
+    // single server.on('request') listener AND server.js's onInstance (invoked
+    // as that listener's `cb`), so an unguarded gauge wires trackRequest twice
+    // on one response. Self-balancing (both finishers fire → back to 0) but it
+    // inflates the reported inFlight to 2 while the request is live. A first-seer
+    // `request._rwTracked` claim makes the count exactly-once on either engine.
+    [ ['server.js', SRV], ['server.isaac.js', ISAAC] ].forEach(function(pair) {
+        var name = pair[0], src = pair[1];
+
+        it('06.01 — ' + name + ': the gauge is first-seer guarded via request._rwTracked (exactly-once across the isaac double-dispatch)', function() {
+            var gaugeIdx = src.indexOf('lib.releaseWatch.trackRequest(request.url)');
+            assert.ok(gaugeIdx > -1);
+            var win = src.substring(gaugeIdx - 500, gaugeIdx + 200);
+            assert.ok(win.indexOf('!request._rwTracked') > -1, 'the gauge gate must claim first-seer via && !request._rwTracked');
+            assert.ok(win.indexOf('request._rwTracked = true') > -1, 'the gauge must set the claim flag before counting');
+            // the claim SET must precede the count (so the second hook site skips)
+            assert.ok(src.indexOf('request._rwTracked = true') < gaugeIdx, 'the claim flag is set before trackRequest');
+        });
+    });
+
+    it('06.02 — first-seer claim: a request wired by two hook sites counts exactly once (double-wire replica + subtract)', function() {
+        // verbatim replica of trackRequest's idempotent finisher + the _rwTracked claim
+        var inFlight = 0;
+        function trackRequest() {
+            inFlight++;
+            var done = false;
+            return function() { if (done) return; done = true; if (inFlight > 0) inFlight--; };
+        }
+        function guardedHook(request, dones, active) {
+            if (active && !request._rwTracked) {
+                request._rwTracked = true;
+                dones.push(trackRequest());
+            }
+        }
+        // isaac path: listener hook, then onInstance hook, on the SAME request
+        var req = {}, dones = [];
+        guardedHook(req, dones, true);   // isaac listener claims
+        guardedHook(req, dones, true);   // onInstance — must skip
+        assert.strictEqual(inFlight, 1, 'guarded: counted once despite two hook invocations');
+        assert.strictEqual(dones.length, 1, 'only one finisher wired');
+        dones.forEach(function(d) { d(); });
+        assert.strictEqual(inFlight, 0, 'settles back to zero on finish');
+
+        // subtract: WITHOUT the claim, the two hook sites double-count
+        inFlight = 0;
+        function unguardedHook(dones2, active) {
+            if (active) { dones2.push(trackRequest()); }
+        }
+        var dones2 = [];
+        unguardedHook(dones2, true);
+        unguardedHook(dones2, true);
+        assert.strictEqual(inFlight, 2, 'subtract: unguarded double-count inflates the reported inFlight to 2');
+    });
+
+    // RW-F9 — the release endpoint regexes were UNanchored (/\/_gina\/…$/), so a
+    // crafted /foo/_gina/release/events matched the SSE handler while the
+    // ^-anchored isControlPath gauge-exclusion did NOT exclude it — the SSE
+    // response would be counted and never fire `finish`, deadlocking the idle
+    // gate. Anchoring the endpoint regexes at ^ makes the SSE-match set a strict
+    // SUBSET of the (^-anchored) exclusion set: any URL that opens the stream is
+    // guaranteed excluded.
+    [ ['server.js', releaseBlock(SRV, '/_gina/instrument')], ['server.isaac.js', releaseBlock(ISAAC, '/_gina/jobs/:id')] ].forEach(function(pair) {
+        var name = pair[0], blk = pair[1];
+
+        it('06.03 — ' + name + ': the three release endpoint regexes are ^-anchored (no crafted-prefix SSE deadlock)', function() {
+            assert.ok(blk.indexOf('/^\\/_gina\\/release\\/status$/i') > -1, 'status regex must be ^-anchored');
+            assert.ok(blk.indexOf('/^\\/_gina\\/release\\/rebuild(\\?.*)?$/i') > -1, 'rebuild regex must be ^-anchored');
+            assert.ok(blk.indexOf('/^\\/_gina\\/release\\/events$/i') > -1, 'events regex must be ^-anchored');
+        });
+    });
+
+    it('06.04 — RW-F9 replica: a ^-anchored SSE match is a subset of the ^-anchored exclusion (no gauge-counted SSE)', function() {
+        // isControlPath (lib/release-watch): ^-anchored on the query-stripped path
+        function isControlPath(url) {
+            if (typeof url !== 'string') return false;
+            return /^\/_gina\//.test(url.split('?')[0]);
+        }
+        // the anchored endpoint matcher
+        function matchesEvents(url) { return /^\/_gina\/release\/events$/i.test(url); }
+        // canonical: matches AND is excluded → no deadlock
+        assert.ok(matchesEvents('/_gina/release/events'));
+        assert.ok(isControlPath('/_gina/release/events'), 'canonical SSE excluded from the gauge');
+        // crafted prefix: with the anchor it NO LONGER matches → falls through to
+        // routing (404, fires finish) instead of opening an uncounted SSE
+        assert.ok(!matchesEvents('/foo/_gina/release/events'), 'crafted-prefix URL no longer opens the SSE handler');
+        // subtract: the OLD unanchored matcher WOULD have matched the crafted URL
+        // while isControlPath excluded neither → the deadlock this fix closes
+        function matchesEventsUnanchored(url) { return /\/_gina\/release\/events$/i.test(url); }
+        assert.ok(matchesEventsUnanchored('/foo/_gina/release/events'), 'subtract: the unanchored matcher opened the crafted SSE');
+        assert.ok(!isControlPath('/foo/_gina/release/events'), 'subtract: the crafted URL was NOT gauge-excluded → deadlock');
+    });
+
+    it('06.05 — RW-rider: the boot-init warns on a truthy-but-not-boolean-true `enabled` (string "true" no longer a silent no-op)', function() {
+        var blk = SRV.substring(SRV.indexOf('#RWATCH — stale built-release watch'), SRV.indexOf("self.emit('configured'"));
+        assert.ok(blk.indexOf('else if ( _rwConf.enabled )') > -1, 'a non-strict-true enabled must be caught');
+        assert.ok(/expected the boolean true/.test(blk), 'the warn names the fail-closed expectation');
+        // the strict === true arm (fail-closed default) is preserved
+        assert.ok(blk.indexOf('_rwConf.enabled === true') > -1, 'the strict === true arm is preserved');
+    });
+
+    it('06.06 — RW-rider: server.js release 403s carry cache-control (cross-engine parity with the isaac mirrors)', function() {
+        var blk = releaseBlock(SRV, '/_gina/instrument');
+        ['status', 'rebuild', 'events'].forEach(function(ep) {
+            var denyIdx = blk.indexOf('/_gina/release/' + ep + ': client IP not in app.json admin.allowFrom');
+            assert.ok(denyIdx > -1, ep + ' deny message expected');
+            var back = blk.substring(Math.max(0, denyIdx - 300), denyIdx);
+            assert.ok(back.indexOf("setHeader('cache-control'") > -1, ep + ' 403 must set cache-control');
+        });
+    });
+});

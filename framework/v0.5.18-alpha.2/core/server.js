@@ -854,8 +854,8 @@ function Server(options) {
                     /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)
                     && !/^true$/i.test(process.env.NODE_ENV_IS_DEV)
                     && _rwConf
-                    && _rwConf.enabled === true
                 ) {
+                  if ( _rwConf.enabled === true ) {
                     var _rwProjectRoot  = getContext('gina').project.path;
                     var _rwManifestPath = _(_rwProjectRoot + '/manifest.json', true);
                     var _rwManifest     = requireJSON(_rwManifestPath);
@@ -892,6 +892,16 @@ function Server(options) {
                             _rwFlushView.clear(bundle);
                         }
                     });
+                  } else if ( _rwConf.enabled ) {
+                    // a truthy-but-not-boolean-true `enabled` (e.g. the string
+                    // "true" from a hand-edited settings.json) fails the strict
+                    // gate and would otherwise arm NOTHING silently — surface the
+                    // likely config typo (fail-closed is intentional; a silent
+                    // no-op on a plausible typo is not).
+                    console.warn('[releaseWatch] server.releaseWatch.enabled is `'
+                        + JSON.stringify(_rwConf.enabled) + '` (a ' + typeof _rwConf.enabled
+                        + ') — expected the boolean true; the watch stays DISABLED (fail-closed)');
+                  }
                 }
             } catch (rwInitErr) {
                 console.warn('[releaseWatch] init skipped: '+ (rwInitErr.stack || rwInitErr.message || rwInitErr));
@@ -3106,7 +3116,13 @@ function Server(options) {
             // double-decrement; /_gina/* control paths are excluded inside the lib
             // (an open SSE stream never fires `finish` — counting the release-watch
             // stream itself would deadlock the idle gate).
-            if (lib.releaseWatch.isActive()) {
+            // RW-F8 first-seer claim (request._rwTracked): under the isaac engine a
+            // routed request runs BOTH the engine's server.on('request') listener AND
+            // this onInstance (its cb) — both carry this gauge, so an unguarded hook
+            // counts the request twice (self-balancing but inflating the reported
+            // inFlight). The claim flag makes the count exactly-once on either engine.
+            if (lib.releaseWatch.isActive() && !request._rwTracked) {
+                request._rwTracked = true;
                 var _rwDone = lib.releaseWatch.trackRequest(request.url);
                 response.on('finish', _rwDone);
                 response.on('close',  _rwDone);
@@ -3366,10 +3382,11 @@ function Server(options) {
             if (
                 lib.releaseWatch.isActive()
                 && request.method.toUpperCase() === 'GET'
-                && /\/_gina\/release\/status$/i.test(request.url)
+                && /^\/_gina\/release\/status$/i.test(request.url)
             ) {
                 if ( !lib.admin.isClientAllowed(request) ) {
                     response.statusCode = 403;
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
                     response.setHeader('content-type', 'application/json; charset=utf8');
                     return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/release/status: client IP not in app.json admin.allowFrom' }));
                 }
@@ -3384,10 +3401,11 @@ function Server(options) {
             if (
                 lib.releaseWatch.isActive()
                 && request.method.toUpperCase() === 'POST'
-                && /\/_gina\/release\/rebuild(\?.*)?$/i.test(request.url)
+                && /^\/_gina\/release\/rebuild(\?.*)?$/i.test(request.url)
             ) {
                 if ( !lib.admin.isClientAllowed(request) ) {
                     response.statusCode = 403;
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
                     response.setHeader('content-type', 'application/json; charset=utf8');
                     return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/release/rebuild: client IP not in app.json admin.allowFrom' }));
                 }
@@ -3412,10 +3430,11 @@ function Server(options) {
             if (
                 lib.releaseWatch.isActive()
                 && request.method.toUpperCase() === 'GET'
-                && /\/_gina\/release\/events$/i.test(request.url)
+                && /^\/_gina\/release\/events$/i.test(request.url)
             ) {
                 if ( !lib.admin.isClientAllowed(request) ) {
                     response.statusCode = 403;
+                    response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
                     response.setHeader('content-type', 'application/json; charset=utf8');
                     return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/release/events: client IP not in app.json admin.allowFrom' }));
                 }
