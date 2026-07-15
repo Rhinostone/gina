@@ -14,7 +14,7 @@
  */
 
 import type { UuidFunction } from './globals';
-import type { SuperController, EntitySuper } from './index';
+import type { SuperControllerConstructor, EntitySuperConstructor } from './index';
 
 interface GinaExports {
     // Context helpers
@@ -22,12 +22,8 @@ interface GinaExports {
     setContext: typeof globalThis.setContext;
     /** Read a value from the framework context registry. */
     getContext: typeof globalThis.getContext;
-    /**
-     * Merge an additional contexts object into the current registry.
-     *
-     * @param context - Partial contexts to merge in
-     */
-    joinContext: (context: object) => void;
+    /** Merge an additional contexts object into the current registry. */
+    joinContext: typeof globalThis.joinContext;
     /** Rebuild the context registry from `GINA_*` environment variables and the current project manifest. */
     resetContext: typeof globalThis.resetContext;
     getConfig: typeof globalThis.getConfig;
@@ -72,34 +68,18 @@ interface GinaExports {
     requireJSON: typeof globalThis.requireJSON;
 
     // Data helpers
-    /**
-     * URL-encode a string per RFC 5987 (adds `!` handling and `*` → `%2A`).
-     *
-     * @param str - Raw string
-     * @returns RFC-5987-encoded value
-     */
-    encodeRFC5987ValueChars: (str: string) => string;
-    /**
-     * Parse a form/body string (`application/x-www-form-urlencoded` or JSON) into a nested
-     * object. Recognises PHP-style `foo[bar][0]` keys.
-     *
-     * @param bodyStr - Body string; objects are `JSON.stringify`-ed first
-     * @returns Parsed object
-     */
-    formatDataFromString: (bodyStr: string | object) => object;
+    /** URL-encode a string per RFC 5987 (adds `!` handling and `*` → `%2A`). */
+    encodeRFC5987ValueChars: typeof globalThis.encodeRFC5987ValueChars;
+    /** Parse a form/body string (`application/x-www-form-urlencoded` or JSON) into a nested object. */
+    formatDataFromString: typeof globalThis.formatDataFromString;
 
     // Text helper
     /** Legacy one-arg translation alias. */
     __: typeof globalThis.__;
 
     // Console helper
-    /**
-     * Write arguments to `process.stdout` followed by a newline. Objects are JSON-stringified
-     * with tab indentation.
-     *
-     * @param args - Values to print
-     */
-    log: (...args: any[]) => void;
+    /** Write arguments to `process.stdout` followed by a newline. */
+    log: typeof globalThis.log;
 
     // Task helper
     /**
@@ -117,17 +97,13 @@ interface GinaExports {
     getEnvVars: typeof globalThis.getEnvVars;
     /** Set a `GINA_*` / `VENDOR_*` / `USER_*` env var in `process.gina`. */
     setEnvVar: typeof globalThis.setEnvVar;
-    /**
-     * List keys that were marked protected via `setEnvVar(..., true)`.
-     *
-     * @returns Array of protected env-var names
-     */
-    getProtected: () => string[];
+    /** List keys that were marked protected via `setEnvVar(..., true)`. */
+    getProtected: typeof globalThis.getProtected;
     /**
      * Scan `process.argv` for `--key=value` flags, promote them to `process.gina` env vars, then
-     * strip them from `argv`. Runs once during CLI bootstrap.
+     * strip them from `argv`.
      */
-    filterArgs: () => void;
+    filterArgs: typeof globalThis.filterArgs;
     /**
      * Resolve the log directory — `GINA_LOGDIR` / `LOGDIR` / prefix `var/log` with fallback to
      * `~/.gina/log`.
@@ -140,50 +116,26 @@ interface GinaExports {
     /**
      * Read the saved startup argv for a given bundle@project — used by `gina bundle:restart` to
      * re-issue the exact same start command.
-     *
-     * @param bundle - Bundle name
-     * @param project - Project name
-     * @returns Space-separated argv, or `null` when no file exists
      */
-    getBundleStartingArgv: (bundle: string, project: string) => string | null;
-    /**
-     * Read a vendor config loaded via `setVendorsConfig`.
-     *
-     * @param vendor - Vendor key; omit for the whole map
-     * @returns Vendor config, or full map
-     */
-    getVendorsConfig: (vendor?: string) => object | undefined;
-    /**
-     * Load every `*.json` file in `dir` as a vendor config keyed by filename.
-     *
-     * @param dir - Directory containing vendor config files
-     */
-    setVendorsConfig: (dir: string) => void;
-    /**
-     * Bulk-register an object of env vars as `USER_*` defaults via `define`.
-     *
-     * @param obj - Map of `name → value`
-     */
-    defineDefault: (obj: object) => void;
+    getBundleStartingArgv: typeof globalThis.getBundleStartingArgv;
+    /** Read a vendor config loaded via `setVendorsConfig`. */
+    getVendorsConfig: typeof globalThis.getVendorsConfig;
+    /** Load every `*.json` file in `dir` as a vendor config keyed by filename. */
+    setVendorsConfig: typeof globalThis.setVendorsConfig;
+    /** Bulk-register an object of env vars as `USER_*` defaults via `define`. */
+    defineDefault: typeof globalThis.defineDefault;
     /** Convert a user-facing timeout ("30s", "500ms", "1m", "2h", `number`, `false`) to milliseconds. */
     parseTimeout: typeof globalThis.parseTimeout;
-    /**
-     * Framework's deep-merge helper — loaded via `utils/helper.js` and also available as
-     * `lib.merge`.
-     *
-     * @param target - Destination object (mutated)
-     * @param source - Source object
-     * @param force - Overwrite primitives when both sides define them
-     * @returns The merged target
-     */
-    merge: (target: object, source: object, force?: boolean) => object;
+    /** Framework's deep-merge helper — loaded via `utils/helper.js` and also available as `lib.merge`. */
+    merge: typeof globalThis.merge;
 
     // ApiError
     ApiError: typeof globalThis.ApiError;
 
-    // Classes
-    SuperController: typeof SuperController;
-    EntitySuper: typeof EntitySuper;
+    // Classes — the CONSTRUCTOR VALUES live on this barrel (root gna.js),
+    // not on the main entry, whose declarations are type-only.
+    SuperController: SuperControllerConstructor;
+    EntitySuper: EntitySuperConstructor;
 
     // uuid
     uuid: UuidFunction;

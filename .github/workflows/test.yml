@@ -55,3 +55,11 @@ jobs:
             test/integration/helper.test.js \
             test/integration/container-boot.test.js \
             framework/v*/test/unit/*.test.js
+
+      # Published-types gate (#DTO3b): gna.d.ts drift + a consumer fixture
+      # compiled by tsc THROUGH the exports map (skipLibCheck:false), with a
+      # can-fail control. tsc's behaviour is node-version-independent, so one
+      # matrix leg suffices.
+      - name: Check published types
+        if: matrix.node-version == 24
+        run: npm run types:check

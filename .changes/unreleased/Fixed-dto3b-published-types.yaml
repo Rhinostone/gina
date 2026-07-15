@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The published TypeScript declarations now describe the runtime: the main entry declares a value (previously ''import gina from "gina"; gina.lib'' failed to typecheck for every consumer), the module surface carries all 78 runtime members including ''gina.dto'', ''SuperController'' gains its i18n / jobs / trailers / events / template-override methods plus ''GinaRequest<TDto>'' and ''req.dto'' typing for route DTOs, fictional declarations were removed, and a two-part gate (a consumer fixture compiled by tsc through the package exports map + a runtime-parity test) keeps the declarations and the runtime in sync.'
+time: 2026-07-14T23:36:29+01:00
