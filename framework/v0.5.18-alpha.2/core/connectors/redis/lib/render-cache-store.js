@@ -92,6 +92,9 @@ function noop() {}
  *                                         required in cluster mode (all ops single-key).
  * @param {number}  [connConf.maxRetriesPerRequest] - ioredis per-command retry cap
  *                                         (default 1 — fail fast on the hot path).
+ * @param {number}  [connConf.commandTimeout] - Per-command reply deadline in ms (default
+ *                                         1000). Bounds a blackholed-TCP hang on the read
+ *                                         hot path; a timed-out command rejects → fail-open.
  * @param {string}  bundle               - Bundle name — used in log lines.
  * @param {object}  [injected]           - Test-only DI: `{ driver }` replaces the resolved
  *                                         ioredis module. The dispatcher always calls with two.
@@ -143,6 +146,16 @@ module.exports = function RedisRenderCacheStore(connConf, bundle, injected) {
     var maxRetries = (typeof connConf.maxRetriesPerRequest === 'number')
         ? connConf.maxRetriesPerRequest
         : 1;
+    // F1 — commandTimeout covers the case the two above do NOT: a BLACKHOLED TCP
+    // (network partition / firewall drop), where the socket still looks alive so
+    // enableOfflineQueue never fires and the command hangs until the OS TCP timeout
+    // (minutes). warm() is awaited on the render hot path, so an unbounded command
+    // hangs every redis-route request. A command with no reply within commandTimeout
+    // rejects → lib/render-cache's warm() catch → fail-open (render normally).
+    // Default 1s (a warm slower than that is worse than rendering); overridable.
+    var commandTimeout = (typeof connConf.commandTimeout === 'number' && connConf.commandTimeout > 0)
+        ? connConf.commandTimeout
+        : 1000;
 
     var client;
     if (isCluster) {
@@ -151,7 +164,8 @@ module.exports = function RedisRenderCacheStore(connConf, bundle, injected) {
         // at the CLUSTER level, set below. `maxRetriesPerRequest` is a valid
         // per-node RedisOptions field and stays here.
         var clusterRedisOpts = {
-            maxRetriesPerRequest: maxRetries
+            maxRetriesPerRequest: maxRetries,
+            commandTimeout      : commandTimeout
         };
         if (connConf.password) clusterRedisOpts.password = connConf.password;
         if (connConf.tls) clusterRedisOpts.tls = {};
@@ -172,7 +186,8 @@ module.exports = function RedisRenderCacheStore(connConf, bundle, injected) {
             port                : +(connConf.port || 6379),
             db                  : +(connConf.db   || 0),
             enableOfflineQueue  : false,
-            maxRetriesPerRequest: maxRetries
+            maxRetriesPerRequest: maxRetries,
+            commandTimeout      : commandTimeout
         };
         if (connConf.password) clientConf.password = connConf.password;
         if (connConf.tls) clientConf.tls = {};

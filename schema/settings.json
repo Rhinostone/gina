@@ -67,6 +67,22 @@
         }
       }
     },
+    "cache": {
+      "type": "object",
+      "description": "Bundle-wide render/output-cache defaults. `type` / `store` here are folded into the runtime `server.cache` (which also carries the per-env `enable` / `path` / `ttl` / `maxEntries` from env.json), so they act as the default a route inherits when its own `cache` omits them.",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["memory", "fs", "redis"],
+          "description": "Bundle-wide default cache strategy. A per-route `cache.type` overrides it; a route with `cache` set but no `type` inherits it. `memory` = in-process (volatile); `fs` = disk-backed (restart-surviving); `redis` = shared L2 across replicas + per-replica L1."
+        },
+        "store": {
+          "type": "string",
+          "description": "Required for `redis`: the name of a `connectors.json` entry ({ \"<name>\": { \"connector\": \"redis\", \"host\": …, \"port\": … } }) providing the L2 connection. Ignored for memory / fs."
+        }
+      }
+    },
     "ioServer": {
       "type": "object",
       "description": "Socket.io server configuration.",

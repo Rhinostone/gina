@@ -1126,6 +1126,32 @@ describe('11 - redis L2 strategy', function () {
         });
     });
 
+    it('F5: warm() on a parseable L2 value with NO string content → undefined (never a blank 200)', function () {
+        var l2 = fakeL2();
+        var key = 'static:demo:/nocontent';
+        // Valid JSON but `content` absent (a foreign write to our keyspace, a schema
+        // drift, or a degenerate contentless render) — must be a MISS (render the real
+        // page), never an empty body served as HTTP 200.
+        l2.strings[key] = JSON.stringify({ responseHeaders: {}, visibility: 'public' });
+        l2.pttls[key]   = 10000;
+        var rc = rcRedis(l2);
+        return rc.warm(key).then(function (entry) {
+            assert.equal(entry, undefined, 'contentless value is a miss');
+            assert.equal(rc.has(key), false, 'L1 not populated with a blank entry');
+        });
+    });
+
+    it('F5: warm() on an L2 value with non-string content → undefined', function () {
+        var l2 = fakeL2();
+        var key = 'static:demo:/objcontent';
+        l2.strings[key] = JSON.stringify({ content: { not: 'a string' }, responseHeaders: {}, visibility: 'public' });
+        l2.pttls[key]   = 10000;
+        var rc = rcRedis(l2);
+        return rc.warm(key).then(function (entry) {
+            assert.equal(entry, undefined);
+        });
+    });
+
     it('warm() with no L2 configured → undefined', function () {
         var rc = rcRedis(null);
         return rc.warm('static:demo:/x').then(function (entry) {
@@ -1251,5 +1277,165 @@ describe('11 - redis L2 strategy', function () {
             assert.equal(l2.calls.set.length, 1, 'lazy _l2() picked up the process stash post-construction');
             assert.equal(key in l2.strings, true);
         });
+    });
+});
+
+// #RC4 — boot-time cache-config validation. Pure + static (no L1/L2, no timers):
+// feed a RESOLVED server.cache (post the config.js settings→server fold) + a routing
+// map, assert { fatal, warnings, redisConfigured }. The ttl/sliding/type resolution
+// mirrors the render delegates' writeCache exactly (route value wins; else the
+// bundle-wide server.cache default).
+describe('12 - validateConfig (boot-time redis config validation)', function () {
+    var vc = RenderCache.validateConfig;
+
+    it('memory bundle + memory route → clean (no fatal / warn / redis)', function () {
+        var r = vc({ type: 'memory', ttl: 60 }, { home: { cache: { type: 'memory', ttl: 30 } } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.deepEqual(r.warnings, []);
+        assert.equal(r.redisConfigured, false);
+    });
+
+    it('redis route with store + ttl → ok (redisConfigured, no fatal/warn)', function () {
+        var r = vc({ type: 'memory', store: 'cacheRedis' },
+                   { home: { cache: { type: 'redis', ttl: 60 } } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.deepEqual(r.warnings, []);
+        assert.equal(r.redisConfigured, true);
+    });
+
+    it('redis + effective sliding → FATAL (redis TTL is per-key absolute)', function () {
+        var r = vc({ store: 'cacheRedis' },
+                   { home: { cache: { type: 'redis', ttl: 60, sliding: true } } }, 'demo');
+        assert.match(r.fatal, /sliding.*redis is unsupported/);
+    });
+
+    it('redis inheriting a bundle-wide sliding:true → FATAL (route omits sliding)', function () {
+        var r = vc({ store: 'cacheRedis', sliding: true, ttl: 60 },
+                   { home: { cache: { type: 'redis' } } }, 'demo');
+        assert.match(r.fatal, /sliding.*redis is unsupported/);
+    });
+
+    it('redis + no ttl + no events → FATAL (orphaned non-expiring L2 key)', function () {
+        var r = vc({ store: 'cacheRedis' },
+                   { home: { cache: { type: 'redis' } } }, 'demo');
+        assert.match(r.fatal, /needs a ttl/);
+    });
+
+    it('redis + no ttl + WITH events → WARN (not fatal), redisConfigured', function () {
+        var r = vc({ store: 'cacheRedis' },
+                   { home: { cache: { type: 'redis', invalidateOnEvents: ['post#saved'] } } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, true);
+        assert.equal(r.warnings.length, 1);
+        assert.match(r.warnings[0], /invalidate-only/);
+    });
+
+    it('redis route but no server.cache.store → FATAL', function () {
+        var r = vc({ type: 'memory' },
+                   { home: { cache: { type: 'redis', ttl: 60 } } }, 'demo');
+        assert.match(r.fatal, /server\.cache\.store.*not set/);
+    });
+
+    it('unknown bundle-wide type → WARN (routes inheriting it are not cached)', function () {
+        var r = vc({ type: 'reddis' }, {}, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.warnings.length, 1);
+        assert.match(r.warnings[0], /unknown server\.cache\.type `reddis`/);
+    });
+
+    it('unknown per-route type → WARN (route not cached)', function () {
+        var r = vc({ type: 'memory' },
+                   { home: { cache: { type: 'memroy' } } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.warnings.length, 1);
+        assert.match(r.warnings[0], /route `home`: unknown cache\.type `memroy`/);
+    });
+
+    it('bundle-wide redis default inherited by a type-less opt-in route → redisConfigured (ttl from server.cache)', function () {
+        var r = vc({ type: 'redis', store: 'cacheRedis', ttl: 120 },
+                   { home: { cache: {} } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, true);
+        assert.deepEqual(r.warnings, []);
+    });
+
+    it('a type-less route inheriting redis but NO bundle ttl + no events → FATAL', function () {
+        var r = vc({ type: 'redis', store: 'cacheRedis' },
+                   { home: { cache: {} } }, 'demo');
+        assert.match(r.fatal, /needs a ttl/);
+    });
+
+    it('routes of another bundle are skipped', function () {
+        var r = vc({ store: 'cacheRedis' },
+                   { home: { cache: { type: 'redis' }, bundle: 'other' } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, false);
+    });
+
+    it('cache:"redis" string form is honoured (inherits server.cache.ttl)', function () {
+        var r = vc({ store: 'cacheRedis', ttl: 60 },
+                   { home: { cache: 'redis' } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, true);
+    });
+
+    it('cache:true (inherit bundle default) with a memory bundle → not redis, clean', function () {
+        var r = vc({ type: 'memory', ttl: 60 }, { home: { cache: true } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, false);
+        assert.deepEqual(r.warnings, []);
+    });
+
+    it('$schema / non-object routing annotations are skipped (no crash)', function () {
+        var r = vc({ type: 'memory' }, { '$schema': 'http://x', home: { cache: { type: 'memory' } } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, false);
+    });
+
+    it('a route with no cache is ignored (not opted into caching)', function () {
+        var r = vc({ type: 'redis', store: 'cacheRedis', ttl: 60 }, { home: { } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, false);
+    });
+
+    // --- F2: a blank/non-string route type must NOT falsely inherit the bundle redis ---
+    it('F2: route type:"" with a bundle redis default → NOT redisConfigured, no false-fatal', function () {
+        // Pre-F2 (effType via length>0): "" inherited the bundle redis → redisConfigured
+        // → the no-store / no-ttl checks could ABORT boot for a route writeCache treats
+        // as not-cached (blank type kept → set("") → no strategy match). Post-F2 (effType
+        // via typeof!==undefined): a SET-but-blank route type is kept → not-cached.
+        var r = vc({ type: 'redis', store: 'cacheRedis', ttl: 60 },
+                   { home: { cache: { type: '' } } }, 'demo');
+        assert.equal(r.fatal, null, 'an inert blank-type route must not abort boot');
+        assert.equal(r.redisConfigured, false, 'blank route type is not-cached, not inherited-redis');
+    });
+
+    it('F2: route type:"" with a bundle redis + NO store → still no fatal (blank = not cached)', function () {
+        var r = vc({ type: 'redis' }, { home: { cache: { type: '' } } }, 'demo');
+        assert.equal(r.redisConfigured, false);
+        assert.equal(r.fatal, null, 'no redis route resolves → the no-store check never fires');
+    });
+
+    it('F2: a numeric route type is not-cached (parity with writeCache), no fatal', function () {
+        var r = vc({ type: 'redis', store: 'cacheRedis', ttl: 60 },
+                   { home: { cache: { type: 123 } } }, 'demo');
+        assert.equal(r.redisConfigured, false);
+        assert.equal(r.fatal, null);
+    });
+
+    it('a NON-empty typo route type still WARNS (F2 preserves the #B114 typo signal)', function () {
+        var r = vc({ type: 'memory' }, { home: { cache: { type: 'reddis' } } }, 'demo');
+        assert.equal(r.fatal, null);
+        assert.equal(r.warnings.length, 1);
+        assert.match(r.warnings[0], /unknown cache\.type `reddis`/);
+    });
+
+    // --- first-fatal-wins ordering + null-arg safety ---
+    it('validateConfig never throws on null/empty args', function () {
+        assert.doesNotThrow(function () { vc(null, null, 'demo'); });
+        assert.doesNotThrow(function () { vc(undefined, undefined); });
+        var r = vc(null, null);
+        assert.equal(r.fatal, null);
+        assert.equal(r.redisConfigured, false);
     });
 });

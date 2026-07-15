@@ -99,7 +99,13 @@
     // Bundle-wide default render/output-cache strategy: "memory" | "fs" | "redis".
     // A per-route `cache.type` overrides this; a route with `cache` set but no
     // `type` inherits it (mirrors the `ttl` fallback). "memory" = in-process,
-    // volatile (cleared on restart), fastest per-serve.
+    // volatile (cleared on restart), fastest per-serve; "fs" = disk-backed
+    // (survives a restart); "redis" = a shared L2 across replicas + a per-replica L1.
+    // "redis" also needs a `store` naming a connectors.json redis entry, and each
+    // redis route a ttl (or invalidateOnEvents) — a no-ttl no-events redis route
+    // refuses boot (a non-expiring L2 key is orphaned on a release-namespace change):
+    //   "type": "redis",
+    //   "store": "cacheRedis"   // connectors.json: { "cacheRedis": { "connector": "redis", "host": "127.0.0.1", "port": 6379 } }
     "type": "memory"
   },
   // #CSRF1 — session-cookie defaults applied by gina.plugins.Session(expressSession).

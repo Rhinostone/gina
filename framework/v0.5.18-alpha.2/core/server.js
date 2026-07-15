@@ -89,6 +89,10 @@ var Config          = require('./config');
 var Router          = require('./router');
 var lib             = require('./../lib');
 var routingLib      = lib.routing;
+// #RC4 — the engine-agnostic render/output-cache read path (design f). One gen-0
+// instance (plain-required RenderCache survives refreshCore), pointed at the shared
+// Map per request via `from()`. Mirrors server.isaac.js's module-scope renderCache.
+var renderCache     = new lib.RenderCache();
 var inherits        = lib.inherits;
 var merge           = lib.merge;
 var Proc            = lib.Proc;
@@ -5051,6 +5055,131 @@ function Server(options) {
         return request
     }
 
+    // #RC4 — serve an already-resolved render/output-cache entry (design f). Redis L1/L2
+    // entries are `fromMemory` (never an `fs` filename — redis has no disk body), so this
+    // is the memory-serve shape, mirroring server.isaac.js's cache-hit serve + render-json's
+    // HTTP/2 respond. B2: a warm() that lost the race to a client abort must be FULLY
+    // abandoned — never write to a dead socket, never fall through to a second render — so
+    // the dead-response guard returns `true` (served/handled) with the response untouched
+    // (L1 was already populated by warm(); harmless). Returns true when handled.
+    var serveRenderCacheHit = function(req, res, hit) {
+        var _isH2 = /http\/2/.test(self.conf[self.appName][self.env].server.protocol) && res.stream;
+        // B2 (+ F6) — response gone OR already committed: abandon. Covers a client abort
+        // during the warm await (destroyed / ended) AND an already-headersSent response
+        // (nothing before dispatch sends headers, so this arm is defensive) — either way
+        // the setHeader loop below must not run (it would ERR_HTTP_HEADERS_SENT).
+        if ( _isH2
+                ? ( res.stream.destroyed || res.stream.headersSent )
+                : ( res.writableEnded || res.destroyed || res.headersSent ) ) {
+            return true;
+        }
+        // Remaining absolute ttl (redis entries are never sliding — validateConfig rejects
+        // sliding+redis). createdAt was stamped by mem.set at warm/serve-into-L1 time, so
+        // a re-served L1 entry reports its true shrinking remaining life (#C6 correctness).
+        var _remaining = null;
+        if ( typeof(hit.ttl) === 'number' && hit.ttl > 0 && hit.createdAt ) {
+            _remaining = Math.max(0, Math.floor( (hit.createdAt.getTime() + Math.round(hit.ttl * 1000) - Date.now()) / 1000 ));
+        }
+        var _vis = ( hit.visibility === 'public' ) ? 'public' : 'private';
+        // The page's own headers first, then the cache metadata.
+        if ( hit.responseHeaders ) {
+            for (var h in hit.responseHeaders) { res.setHeader(h, hit.responseHeaders[h]); }
+        }
+        res.setHeader('Cache-Status', 'gina-cache; hit' + (_remaining !== null ? '; ttl=' + _remaining : ''));
+        if ( _remaining !== null ) {
+            res.setHeader('Cache-Control', _vis + ', max-age=' + _remaining);
+        }
+        if ( _isH2 ) {
+            // Fold res.getHeaders() (the cache metadata + page headers set just above)
+            // into the stream.respond() headers — they don't travel on a raw Http2Stream.
+            // NOTE completeHeaders() runs during dispatch, which this hit short-circuits,
+            // so the ORIGINAL render's completeHeaders output is already baked into
+            // hit.responseHeaders (captured at write time) — it is not re-derived here.
+            if ( !res.stream.headersSent && !res.stream.destroyed ) {
+                var _sh = { ':status': 200 };
+                var _pending = res.getHeaders ? res.getHeaders() : {};
+                for (var ph in _pending) { _sh[ph] = _pending[ph]; }
+                res.stream.respond(_sh);
+                res.stream.end(hit.content);
+                res.headersSent = true;
+            }
+        } else {
+            if ( !res.headersSent && !res.writableEnded ) {
+                res.end(hit.content);
+            }
+        }
+        console.info(req.method + ' [200][gina-cache; hit' + (_remaining !== null ? '; ttl=' + _remaining : '') + '] ' + (req.originalUrl || req.url));
+        return true;
+    };
+
+    // #RC4 — the render/output-cache redis L2 read (design f). Engine-agnostic (this
+    // dispatch backs BOTH isaac and express — fixing #B111: express had no read path).
+    // Tightly gated so an uncached GET pays nothing: only a GET on a route that opts into
+    // caching AND resolves to the redis strategy AND with the cache enabled reaches redis.
+    // isaac's pre-routing read already served any L1 hit before this runs (so here L1 is
+    // the EXPRESS fast path); L2 warm() is the cold-replica path both engines share, and
+    // repopulates L1 so the next request hits L1. Returns true when it SERVED (or abandoned
+    // a dead response) → the caller returns; false → fall through to the normal render.
+    var tryServeRenderCacheHit = async function(req, res, bundle) {
+        var _method = ( /http\/2/.test(self.conf[self.appName][self.env].server.protocol) ) ? req.headers[':method'] : req.method;
+        if ( !/^get$/i.test(_method || req.method || '') ) { return false; }
+        if ( !req.routing || !req.routing.cache ) { return false; }
+        if ( String(self.instance._cacheIsEnabled).toLowerCase() !== 'true' ) { return false; }
+        // No L2 store wired (memory/fs bundle, or boot degraded) → nothing to warm here;
+        // isaac already served any L1 hit, and express memory/fs read is a later slice.
+        if ( !(process.gina && process.gina._renderCacheStore) ) { return false; }
+
+        // Effective strategy: route.cache.type wins, else the bundle-wide server.cache.type
+        // (post the config.js fold). Must resolve to redis (delegate/writeCache parity).
+        var _serverCache = self.conf[self.appName][self.env].server.cache;
+        var _rc      = req.routing.cache;
+        // F3 — effective strategy with writeCache parity: a route that sets `type` at
+        // all (even blank/garbage) KEEPS it; only a route that OMITS `type` inherits the
+        // bundle-wide default. (A bare `!_rcType` inherit made a route `type:""` warm L2
+        // for a surface the writer never wrote.) `_rc` is truthy here (the guard above
+        // rejected a falsy req.routing.cache), so it is a non-empty string or an object.
+        var _rcType;
+        if ( typeof(_rc) === 'string' ) {
+            _rcType = _rc;
+        } else if ( _rc && typeof(_rc.type) !== 'undefined' ) {
+            _rcType = _rc.type;
+        } else {
+            _rcType = _serverCache && _serverCache.type;
+        }
+        if ( !/^redis$/i.test(_rcType || '') ) { return false; }
+
+        // F1 — warm() MUST re-register the route's invalidateOnEvents (a warmed entry
+        // skipped the delegate's setEvents; without them an event can neither evict L1 nor
+        // DEL L2). Route config is the source of truth — the L2 value never carries events.
+        var _events = ( _rc && typeof(_rc) === 'object' && Array.isArray(_rc.invalidateOnEvents) ) ? _rc.invalidateOnEvents : [];
+        var _url    = req.originalUrl || req.url; // parity with the delegate write (req.originalUrl)
+        // Point at the shared Map; NO cachePath → pure L1 (redis entries have no fs body).
+        renderCache.from(self.instance._cached);
+
+        var _kinds = ['data', 'static']; // a URL is rendered by ONE action → ONE kind; try both
+        var _hit   = null, i, _k;
+        // L1 first (sync, no redis): a warmed entry from a prior request, or the express L1.
+        for (i = 0; i < _kinds.length; i++) {
+            _k = renderCache.buildKey(_kinds[i], bundle, _url);
+            if ( renderCache.has(_k) ) {
+                _hit = renderCache.get(_k);
+                if ( _hit ) { break; }
+                _hit = null;
+            }
+        }
+        // L2 warm on an L1 miss (reads redis, repopulates L1; fail-open → undefined).
+        if ( !_hit ) {
+            for (i = 0; i < _kinds.length; i++) {
+                _k = renderCache.buildKey(_kinds[i], bundle, _url);
+                _hit = await renderCache.warm(_k, _events);
+                if ( _hit ) { break; }
+                _hit = null;
+            }
+        }
+        if ( !_hit ) { return false; } // miss → render normally
+        return serveRenderCacheHit(req, res, _hit);
+    };
+
     // #M12b — wrap the async dispatch in the per-request log context so requestId /
     // durationMs propagate through the WHOLE await chain (router, controller, render,
     // connectors). Established here — not at onInstance — because the request.on('end')
@@ -5494,6 +5623,17 @@ function Server(options) {
         }
 
         if (matched) {
+            // #RC4 — render/output-cache redis L2 read (design f). Runs AFTER route
+            // matching (so req.routing.cache is materialised → uncached GETs pay nothing)
+            // and BEFORE both dispatch paths. On a hit it serves + returns, skipping the
+            // express-middleware chain AND router.route. `server.isaac.js` SOURCE is
+            // unmodified — this shared handle() read is the L2-warm entry for BOTH
+            // engines (on isaac it is the cold-L1 path; isaac's own pre-routing read
+            // serves the warmed L1 on the next request).
+            if ( await tryServeRenderCacheHit(req, res, bundle) ) {
+                return;
+            }
+
             if ( /^isaac/.test(self.engine) && self.instance._expressMiddlewares.length > 0) {
                 // FRAMEWORK PATCH: Bug I — per-request dispatcher
                 var nextMiddleware = createNextMiddleware();

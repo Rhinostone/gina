@@ -1456,6 +1456,62 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.warn('[lib.job] init skipped: ' + (jobsErr.message || jobsErr));
                                 }
 
+                                // #RC4 — render/output-cache redis L2. Validate the bundle's
+                                // resolved cache config and wire the shared L2 store at boot
+                                // (before the first request), fail-fast (#B57 shape): a route
+                                // asking for redis without a buildable store, or with an
+                                // unsupported shape (sliding+redis, or no-ttl + no-events),
+                                // aborts boot rather than degrading silently. A memory / fs (or
+                                // cacheless) bundle is a no-op — the delegates keep serving L1.
+                                try {
+                                    var _rcServerCache = null;
+                                    try {
+                                        _rcServerCache = config.getInstance()[gna.core.startingApp][env].server.cache;
+                                    } catch (rcConfErr) { _rcServerCache = null; }
+                                    if (_rcServerCache) {
+                                        // F4 — the whole redis path is inert unless the cache is enabled
+                                        // (writeCache + the server read both hard-gate on
+                                        // server.cache.enable === 'true'). So warnings ALWAYS log
+                                        // (advisory), but a fatal ABORTS — and the ioredis client is
+                                        // only built/connected — when the cache is actually enabled. A
+                                        // disabled + would-be-fatal config downgrades to a loud warn
+                                        // (naming the future abort), so the misconfig is visible without
+                                        // refusing boot or opening a redis connection for config that
+                                        // does nothing (e.g. an unreachable dev redis spewing reconnect
+                                        // noise for an inert bundle).
+                                        var _rcEnabled = String(_rcServerCache.enable).toLowerCase() === 'true';
+                                        var _rcRouting = (typeof gna.getConfig === 'function') ? gna.getConfig('routing') : null;
+                                        var _rcCheck = lib.RenderCache.validateConfig(_rcServerCache, _rcRouting || {}, gna.core.startingApp);
+                                        for (var _rcW = 0; _rcW < _rcCheck.warnings.length; _rcW++) {
+                                            console.warn('[render-cache] ' + _rcCheck.warnings[_rcW]);
+                                        }
+                                        if (_rcCheck.fatal) {
+                                            if (_rcEnabled) {
+                                                var _rcFatalMsg = '[render-cache] invalid cache configuration — aborting boot: ' + _rcCheck.fatal;
+                                                console.emerg(_rcFatalMsg);
+                                                // boot-exit-flush: process.exit() truncates async stdio on a pipe.
+                                                try { fs.writeSync(2, _rcFatalMsg + '\n'); } catch (_e) {}
+                                                process.exit(1);
+                                            } else {
+                                                console.warn('[render-cache] cache is disabled (server.cache.enable != "true") — the following WOULD abort boot once enabled: ' + _rcCheck.fatal);
+                                            }
+                                        }
+                                        if (_rcCheck.redisConfigured && _rcEnabled) {
+                                            if (!process.gina) { process.gina = {}; }
+                                            try {
+                                                process.gina._renderCacheStore = lib.RenderCacheStore(_rcServerCache.store);
+                                            } catch (rcStoreErr) {
+                                                var _rcStoreMsg = '[render-cache] server.cache.store `' + _rcServerCache.store + '` could not be built — aborting boot: ' + (rcStoreErr.message || rcStoreErr);
+                                                console.emerg(_rcStoreMsg + '\n' + (rcStoreErr.stack || ''));
+                                                try { fs.writeSync(2, _rcStoreMsg + '\n'); } catch (_e) {}
+                                                process.exit(1);
+                                            }
+                                        }
+                                    }
+                                } catch (rcErr) {
+                                    console.warn('[render-cache] config validation skipped: ' + (rcErr.message || rcErr));
+                                }
+
                                 // setting default global middlewares
                                 if ( typeof(instance.use) == 'function' ) {
 

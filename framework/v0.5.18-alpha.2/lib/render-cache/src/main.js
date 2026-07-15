@@ -166,6 +166,10 @@ function rmFsFiles(body) {
 // read path), and the warn's job is ONE signal per deployment, not one per site.
 var _l2ErrorWarned = false;
 
+// The recognised output-cache strategies. A defined `cache.type` outside this set is
+// a typo that silently disabled caching (#B114) — validateConfig names it loudly.
+var _RC_STRATEGIES = /^(memory|fs|redis)$/i;
+
 /**
  * Once-per-process L2 failure warn. Fail-open must stay silent per-operation
  * (no log spam during an outage — the store's client `error` listener already
@@ -580,6 +584,14 @@ function RenderCache(options) {
             _warnL2Once('read (corrupt value)', e);
             return undefined; // corrupt L2 value → miss (self-heals on re-render)
         }
+        // F5 — a parseable value with no string `content` (a foreign write to our
+        // keyspace, a schema drift, or a degenerate contentless render) must be a MISS,
+        // never a blank HTTP 200 — serving an empty body is strictly worse than
+        // rendering the real page. Same diagnosable family as a corrupt value.
+        if ( typeof(parsed.content) !== 'string' ) {
+            _warnL2Once('read (missing content)', new Error('L2 value has no string content'));
+            return undefined;
+        }
         var entry = {
             fromMemory      : true,
             content         : parsed.content,
@@ -878,5 +890,103 @@ function RenderCache(options) {
 
     return instance;
 }
+
+/**
+ * Boot-time validation of a bundle's RESOLVED render/output-cache configuration
+ * (#RC4 redis). Pure + never-throwing — feed the merged `server.cache` (after the
+ * config.js settings→server fold) + the bundle's routing map; returns the findings and
+ * whether any route resolves to redis (so the caller knows to build the L2 store). The
+ * ttl/sliding/type resolution mirrors the render delegates' `writeCache()` exactly
+ * (route value wins; else the bundle-wide `server.cache` default), so what validates
+ * here is what actually caches at runtime.
+ *
+ * FATAL (the caller aborts boot — the #B57 fail-fast convention):
+ *   - a redis route with an effective `sliding:true` — redis TTL is per-key absolute, so
+ *     sliding + redis is semantically undefined (B3);
+ *   - a redis route with no effective ttl AND no `invalidateOnEvents` (F2) — a
+ *     non-expiring L2 key that a release-namespace rotation orphans permanently
+ *     (`clear()` enumerates only L1-known keys; redis has no fs-orphan reclaim analog);
+ *   - any redis route but no `server.cache.store` naming a connectors.json entry (the
+ *     L2 store cannot be built).
+ * WARN (loud, non-fatal — the surface simply is not cached / is at-risk):
+ *   - an unknown `cache.type` (bundle-wide or per-route) — the fold made the config
+ *     non-silent; this names the typo (#B114);
+ *   - a redis route with no effective ttl but WITH `invalidateOnEvents` — the legit
+ *     invalidate-only pattern, still orphaned on a namespace rotation.
+ *
+ * @memberof RenderCache
+ * @static
+ * @param {object}  serverCache - Merged `server.cache` (type/store/ttl/sliding/maxAge/…).
+ * @param {object}  routing     - The bundle routing map (`{ ruleName: { cache, bundle, … } }`).
+ * @param {string}  [bundle]    - When set, per-route checks skip routes of another bundle.
+ * @returns {{ fatal: (string|null), warnings: string[], redisConfigured: boolean }}
+ *
+ * @example
+ * var v = RenderCache.validateConfig(serverCache, gna.getConfig('routing'), bundle);
+ * v.warnings.forEach(function (w) { console.warn('[render-cache] ' + w); });
+ * if (v.fatal) { console.emerg('[render-cache] ' + v.fatal); process.exit(1); }
+ * if (v.redisConfigured) { process.gina._renderCacheStore = lib.RenderCacheStore(serverCache.store); }
+ */
+RenderCache.validateConfig = function(serverCache, routing, bundle) {
+    var out = { fatal: null, warnings: [], redisConfigured: false };
+    serverCache = serverCache || {};
+    routing     = routing || {};
+
+    var bundleType = (typeof(serverCache.type) === 'string') ? serverCache.type : '';
+    if ( bundleType.length > 0 && !_RC_STRATEGIES.test(bundleType) ) {
+        out.warnings.push('unknown server.cache.type `' + bundleType + '` (expected memory|fs|redis) — this bundle-wide default is ignored; routes inheriting it are NOT cached');
+    }
+
+    for (var name in routing) {
+        var route = routing[name];
+        if ( !route || typeof(route) !== 'object' ) { continue; } // skip $schema / annotations
+        if ( bundle && typeof(route.bundle) === 'string' && route.bundle !== bundle ) { continue; }
+        var rc = route.cache;
+        if ( !rc ) { continue; } // route does not opt into caching
+        var rcObj   = (typeof(rc) === 'string') ? { type: rc } : rc;
+        // Effective strategy (F2 — writeCache parity): the route's `type` wins when SET
+        // AT ALL (`typeof !== 'undefined'`, mirroring writeCache's inherit gate — a
+        // blank/garbage route type is KEPT, not inherited-over, and falls through the
+        // guard below as not-cached); only an OMITTED route type inherits the
+        // bundle-wide default. (Was `length>0`, which made a route `type:""` falsely
+        // inherit a bundle `redis` → `redisConfigured` → a FALSE boot-abort for a route
+        // that writeCache never actually caches.)
+        var effType = (typeof(rcObj.type) !== 'undefined') ? rcObj.type : bundleType;
+        if ( typeof(effType) !== 'string' || effType.length === 0 ) { continue; } // no strategy → not cached (legit)
+        if ( !_RC_STRATEGIES.test(effType) ) {
+            out.warnings.push('route `' + name + '`: unknown cache.type `' + effType + '` (expected memory|fs|redis) — not cached');
+            continue;
+        }
+        if ( !/^redis$/i.test(effType) ) { continue; } // memory / fs — not this validator's concern
+
+        // --- a redis route ---
+        out.redisConfigured = true;
+        // ttl / sliding resolution mirrors writeCache: a route value (even 0/false) wins;
+        // only an ABSENT route value inherits the bundle-wide default.
+        var effSliding = (typeof(rcObj.sliding) !== 'undefined') ? rcObj.sliding : serverCache.sliding;
+        var rawTtl     = (typeof(rcObj.ttl) !== 'undefined') ? rcObj.ttl : serverCache.ttl;
+        var hasTtl     = (typeof(rawTtl) === 'number' && rawTtl > 0);
+        var events     = Array.isArray(rcObj.invalidateOnEvents) ? rcObj.invalidateOnEvents : [];
+
+        if ( effSliding === true ) {
+            out.fatal = 'route `' + name + '`: `sliding:true` + redis is unsupported (redis TTL is per-key absolute) — drop sliding, or use the memory/fs strategy';
+            return out;
+        }
+        if ( !hasTtl ) {
+            if ( events.length === 0 ) {
+                out.fatal = 'route `' + name + '`: a redis route needs a ttl (or invalidateOnEvents) — a non-expiring L2 key is orphaned permanently on a release-namespace rotation';
+                return out;
+            }
+            out.warnings.push('route `' + name + '`: redis route has no ttl (invalidate-only) — its L2 key is still orphaned on a release-namespace rotation (GINA_CACHE_NAMESPACE / GINA_VERSION); prefer adding a ttl');
+        }
+    }
+
+    if ( out.redisConfigured && !(typeof(serverCache.store) === 'string' && serverCache.store.length > 0) ) {
+        out.fatal = 'a route resolves to the redis cache strategy but `server.cache.store` (a connectors.json entry name) is not set';
+        return out;
+    }
+
+    return out;
+};
 
 module.exports = RenderCache;

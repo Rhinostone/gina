@@ -2793,6 +2793,24 @@ function Config(opt, contextResetNeeded) {
 
         conf[bundle][env].server.supportedRequestMethods = conf[bundle][env].content.settings.server.supportedRequestMethods;
         conf[bundle][env].server.preferedCompressionEncodingOrder = conf[bundle][env].content.settings.server.preferedCompressionEncodingOrder;
+
+        // #B114 — fold the bundle-wide render/output-cache defaults from settings.json's
+        // top-level `cache` block into `server.cache`. settings.json documents
+        // `cache.type` (memory|fs|redis) / `cache.store` as THE bundle-wide default, but the
+        // render delegates + the server read path read `server.cache` (env.json-derived),
+        // so without this fold the documented default is inert: a route with `cache` set
+        // but no `type` is never cached, and `type:"redis"` silently disables caching.
+        // Source-fill (merge override=false): env.json's `server.cache` keys
+        // (enable/path/ttl/sliding/maxAge/maxEntries) WIN; settings.json fills only what
+        // env.json lacks (type/store), so a per-env env.json `server.cache` override still
+        // beats the bundle-wide settings.json default.
+        if ( conf[bundle][env].content.settings && conf[bundle][env].content.settings.cache ) {
+            if ( typeof(conf[bundle][env].server.cache) == 'undefined' ) {
+                conf[bundle][env].server.cache = {};
+            }
+            conf[bundle][env].server.cache = merge(conf[bundle][env].server.cache, conf[bundle][env].content.settings.cache);
+        }
+
         conf[bundle][env].hostname = scheme + '://' + conf[bundle][env].host + ':' + conf[bundle][env].server.port;
 
         // if ( /^true$/i.test( getContext('isProxyHost') ) ) {
