@@ -1049,6 +1049,17 @@ function ServerEngineClass(options) {
                     } catch (_e) { /* metrics never crashes a request */ }
                 });
             }
+
+            // #RWATCH — in-flight request gauge for the release-watch idle gate.
+            // Sibling of the metrics hook above; mirrors the engine-agnostic
+            // server.js hook — keep the two in sync. trackRequest() returns an
+            // IDEMPOTENT finisher (finish + close can never double-decrement) and
+            // excludes /_gina/* control paths inside the lib.
+            if (lib.releaseWatch.isActive()) {
+                var _rwDone = lib.releaseWatch.trackRequest(request.url);
+                response.on('finish', _rwDone);
+                response.on('close',  _rwDone);
+            }
             // From the original
 
             acceptEncodingArr = null;
@@ -1314,6 +1325,153 @@ function ServerEngineClass(options) {
                 // Fallback HTTP/1.1
                 response.writeHead(200, cacheClearHeaders);
                 return response.end(cacheClearData);
+            }
+
+            // ── /_gina/release/* — stale built-release watch (#RWATCH) ───────────
+            // Isaac fast-path mirrors of the engine-agnostic server.js handlers —
+            // keep methods + shapes identical across engines. Present ONLY when the
+            // service armed at boot (local scope + non-dev + server.releaseWatch
+            // .enabled): when inactive the URLs fall through to routing and 404.
+            // Same admin IP allowlist as /_gina/info & /_gina/cache/*.
+            if (
+                lib.releaseWatch.isActive()
+                && request.method.toUpperCase() === 'GET'
+                && /\/_gina\/release\/status$/i.test(request.url)
+            ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    var _rwStatusForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/release/status: client IP not in app.json admin.allowFrom' });
+                    var _rwStatusForbiddenHeaders = _setPoweredByHeader({
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type' : 'application/json; charset=utf8'
+                    });
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ..._rwStatusForbiddenHeaders });
+                        return response.stream.end(_rwStatusForbiddenBody);
+                    }
+                    response.writeHead(403, _rwStatusForbiddenHeaders);
+                    return response.end(_rwStatusForbiddenBody);
+                }
+                var _rwStatusBody    = JSON.stringify(lib.releaseWatch.getStatus());
+                var _rwStatusHeaders = _setPoweredByHeader({
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    'content-type' : 'application/json; charset=utf8'
+                });
+                if (response.stream) {
+                    response.stream.respond({ ':status': 200, ..._rwStatusHeaders });
+                    return response.stream.end(_rwStatusBody);
+                }
+                response.writeHead(200, _rwStatusHeaders);
+                return response.end(_rwStatusBody);
+            }
+
+            // POST only — a rebuild is a mutation. ?restart=auto|skip|force; `force`
+            // against an ALREADY-WAITING idle gate opens the gate instead of
+            // starting a new pipeline. 409 when a rebuild is already running.
+            if (
+                lib.releaseWatch.isActive()
+                && request.method.toUpperCase() === 'POST'
+                && /\/_gina\/release\/rebuild(\?.*)?$/i.test(request.url)
+            ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    var _rwRebuildForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/release/rebuild: client IP not in app.json admin.allowFrom' });
+                    var _rwRebuildForbiddenHeaders = _setPoweredByHeader({
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type' : 'application/json; charset=utf8'
+                    });
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ..._rwRebuildForbiddenHeaders });
+                        return response.stream.end(_rwRebuildForbiddenBody);
+                    }
+                    response.writeHead(403, _rwRebuildForbiddenHeaders);
+                    return response.end(_rwRebuildForbiddenBody);
+                }
+                var _rwRebuildHeaders = _setPoweredByHeader({
+                    'cache-control': 'no-cache, no-store, must-revalidate',
+                    'content-type' : 'application/json; charset=utf8'
+                });
+                var _rwRestartMatch = request.url.match(/[?&]restart=(auto|skip|force)\b/i);
+                var _rwRestart      = _rwRestartMatch ? _rwRestartMatch[1].toLowerCase() : 'auto';
+                var _rwStatusNow    = lib.releaseWatch.getStatus();
+                var _rwCode         = 200;
+                var _rwBody         = null;
+                if ( _rwRestart === 'force' && _rwStatusNow && _rwStatusNow.action && _rwStatusNow.action.state === 'waiting' ) {
+                    _rwBody = JSON.stringify({ accepted: true, forcedGate: lib.releaseWatch.forceRestartGate() });
+                } else {
+                    var _rwResult = lib.releaseWatch.requestRebuild({ restart: _rwRestart, requestedBy: 'operator' });
+                    if ( !_rwResult.accepted ) {
+                        _rwCode = 409;
+                    }
+                    _rwBody = JSON.stringify(_rwResult);
+                }
+                if (response.stream) {
+                    response.stream.respond({ ':status': _rwCode, ..._rwRebuildHeaders });
+                    return response.stream.end(_rwBody);
+                }
+                response.writeHead(_rwCode, _rwRebuildHeaders);
+                return response.end(_rwBody);
+            }
+
+            // SSE — mirrors the /_gina/logs stream shape: registers a closer in
+            // process.gina._sseConnections so the SIGTERM drain (lib/proc.js) and
+            // the release-watch restart executor can end it before server.close().
+            if (
+                lib.releaseWatch.isActive()
+                && request.method.toUpperCase() === 'GET'
+                && /\/_gina\/release\/events$/i.test(request.url)
+            ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    var _rwEventsForbiddenBody    = JSON.stringify({ error: 'forbidden', message: '/_gina/release/events: client IP not in app.json admin.allowFrom' });
+                    var _rwEventsForbiddenHeaders = _setPoweredByHeader({
+                        'cache-control': 'no-cache, no-store, must-revalidate',
+                        'content-type' : 'application/json; charset=utf8'
+                    });
+                    if (response.stream) {
+                        response.stream.respond({ ':status': 403, ..._rwEventsForbiddenHeaders });
+                        return response.stream.end(_rwEventsForbiddenBody);
+                    }
+                    response.writeHead(403, _rwEventsForbiddenHeaders);
+                    return response.end(_rwEventsForbiddenBody);
+                }
+                var _rwSseHeaders = _setPoweredByHeader({
+                    'content-type': 'text/event-stream; charset=utf-8',
+                    'cache-control': 'no-cache, no-store',
+                    'connection': 'keep-alive',
+                    'x-content-type-options': 'nosniff'
+                });
+                var _rwWrite, _rwOnClose;
+                // HTTP/2
+                if (response.stream) {
+                    response.stream.respond({ ':status': 200, ..._rwSseHeaders });
+                    _rwWrite   = function(d) { try { response.stream.write(d); } catch(e){} };
+                    _rwOnClose = function(fn) { response.stream.on('close', fn); };
+                } else {
+                    // HTTP/1.1
+                    response.writeHead(200, _rwSseHeaders);
+                    _rwWrite   = function(d) { try { response.write(d); } catch(e){} };
+                    _rwOnClose = function(fn) { request.on('close', fn); };
+                }
+                _rwWrite(':ok\n\n');
+
+                var _rwSseSend = function(evt) {
+                    _rwWrite('data: ' + JSON.stringify(evt) + '\n\n');
+                };
+                // initial frame: the current status snapshot
+                _rwSseSend({ type: 'status', data: lib.releaseWatch.getStatus(), at: Date.now() });
+                var _rwUnsubscribe = lib.releaseWatch.subscribe(_rwSseSend);
+
+                if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+                var _rwSseClose = function() {
+                    if (_rwUnsubscribe) { try { _rwUnsubscribe(); } catch (e) {} }
+                    process.gina._sseConnections.delete(_rwSseClose);
+                    try {
+                        if (response.stream) response.stream.end();
+                        else response.end();
+                    } catch (e) {}
+                };
+                process.gina._sseConnections.add(_rwSseClose);
+                _rwOnClose(_rwSseClose);
+
+                return; // keep the connection open — do not end the response
             }
 
             // ── /_gina/jobs/:id — async-job status (#AI6 slice 3) ────────────────

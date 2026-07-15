@@ -64,6 +64,30 @@
             "type": "string",
             "examples": ["https://api.example.com:443"]
           }
+        },
+        "releaseWatch": {
+          "type": "object",
+          "description": "Stale built-release watch for LOCAL production rehearsals — hard-gated on scope `local` + a non-dev env, never active on a real cluster. When enabled, the bundle watches its SOURCE tree, compares fingerprints against the manifest release stamp, surfaces staleness on GET /_gina/release/status (+ the /_gina/release/events SSE stream) and rebuilds via POST /_gina/release/rebuild with an idle-gated restart (in-flight requests + gina.registerBusyProbe application probes). Fail-closed: disabled by default.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master opt-in. Defaults to false."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["notify", "auto"],
+              "description": "notify (default): surface staleness and wait for the operator. auto: rebuild on change automatically — the restart stays idle-gated."
+            },
+            "debounceMs": {
+              "type": "number",
+              "description": "Watch-event batch debounce window in ms. Defaults to 750."
+            },
+            "reconcileIntervalMs": {
+              "type": "number",
+              "description": "Optional slow re-fingerprint sweep interval in ms for event-lossy mounts; 0 (the default) disables the sweep."
+            }
+          }
         }
       }
     },

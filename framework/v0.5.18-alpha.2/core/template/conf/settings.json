@@ -62,6 +62,18 @@
       "maxStreamsPerSecond": 200,
       "enableConnectProtocol": false
     },
+    // Stale built-release watch (#RWATCH) — LOCAL production rehearsals only.
+    // Hard-gated on scope `local` + a non-dev env: never active on a real cluster.
+    // enabled             : master opt-in (fail-closed default: false).
+    // mode                : "notify" surfaces staleness (log + GET /_gina/release/status + SSE events) and waits for the operator; "auto" rebuilds on change — the restart stays idle-gated (in-flight requests + gina.registerBusyProbe application probes).
+    // debounceMs          : watch-event batch debounce window (default: 750).
+    // reconcileIntervalMs : slow re-fingerprint sweep for event-lossy mounts; 0 disables the sweep (default).
+    "releaseWatch": {
+      "enabled": false,
+      "mode": "notify",
+      "debounceMs": 750,
+      "reconcileIntervalMs": 0
+    },
     // Compare with core/content.encoding
     // This is the prefered order when it comes to respond with compressed content
     "preferedCompressionEncodingOrder": ["br", "deflate", "gzip", "zstdn", "dcb", "dcz", "compress"]

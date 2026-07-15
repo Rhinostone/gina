@@ -1315,7 +1315,7 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
     });
 
-    it('exactly 19 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+    it('exactly 25 object-literal sites wrap headers via _setPoweredByHeader({', function() {
         // 16 sites through #INS9b; #INS10 added the 17th — the GET/POST
         // /_gina/instrument control handler wraps its reply headers via the
         // helper so the deny/status responses honour server.hidePoweredBy.
@@ -1324,9 +1324,12 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         // reply headers via the helper, mirroring the sibling
         // /_gina/cache/stats handler, so the flush response honours
         // server.hidePoweredBy too.
+        // #RWATCH added the 20th–25th: the three /_gina/release/* mirrors
+        // (status / rebuild / events) each wrap their 403-deny AND their
+        // success reply headers via the helper.
         var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
-        assert.equal(matches && matches.length, 19,
-            'expected 19 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+        assert.equal(matches && matches.length, 25,
+            'expected 25 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
     });
 
     it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {

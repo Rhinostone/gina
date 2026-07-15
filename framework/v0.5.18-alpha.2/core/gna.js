@@ -2169,6 +2169,27 @@ gna.getModel = getModel;
  */
 gna.getModelEntity = getModelEntity;
 
+/**
+ * Register an application busy probe for the release-watch idle gate (#RWATCH).
+ * A probe reports in-flight background work (an import queue, a batch worker …)
+ * so an idle-gated restart never kills it. Two shapes: zero-arg returning
+ * `{busy, detail}` / boolean / a Promise of either, or callback-shaped
+ * `function(cb)`. A probe that throws, rejects or times out reads as BUSY
+ * (fail-safe — the operator Force override remains available).
+ *
+ * Direct reference to the lib/release-watch module function — safe detached
+ * (it reads the module-scope probe registry, never `this`).
+ *
+ * @param {string} name - Probe name (unique; re-registering overwrites with a warning)
+ * @param {function} fn - The probe
+ * @returns {void}
+ * @example
+ *   gina.registerBusyProbe('imports', function() {
+ *       return { busy: importQueue.size > 0, detail: importQueue.size + ' imports pending' };
+ *   });
+ */
+gna.registerBusyProbe = lib.releaseWatch.registerBusyProbe;
+
 // ── JSON helper (framework/v*/helpers/json/src/main.js) ──────────────────
 
 /**

@@ -840,6 +840,63 @@ function Server(options) {
                 console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _dtoCount +' route DTO reference(s) for [ '+ self.appName +' ]');
             }
 
+            // ── #RWATCH — stale built-release watch (local production rehearsals) ──
+            // Hard gates: local scope + non-dev env + explicit opt-in
+            // (server.releaseWatch.enabled === true — fail-closed default). Inert
+            // otherwise: CLI processes, dev-env bundles and real clusters never pay
+            // for it. NON-FATAL by design (unlike the DTO registrar above): an
+            // opt-in observability aid must never break a boot — and
+            // lib.releaseWatch.init() already warns loudly on every refusal path
+            // (missing src root, double-arm, watcher failure).
+            try {
+                var _rwConf = self.conf[self.appName][self.env].server.releaseWatch;
+                if (
+                    /^true$/i.test(process.env.NODE_SCOPE_IS_LOCAL)
+                    && !/^true$/i.test(process.env.NODE_ENV_IS_DEV)
+                    && _rwConf
+                    && _rwConf.enabled === true
+                ) {
+                    var _rwProjectRoot  = getContext('gina').project.path;
+                    var _rwManifestPath = _(_rwProjectRoot + '/manifest.json', true);
+                    var _rwManifest     = requireJSON(_rwManifestPath);
+                    var _rwSrcRel       = _rwManifest.bundles
+                        && _rwManifest.bundles[self.appName]
+                        && _rwManifest.bundles[self.appName].src
+                        || null;
+                    // The build verbs stamp the fingerprint of bundlesPath + '/' + bundle
+                    // (the exact tree buildEnv() copies). The manifest `src` is the same
+                    // tree by scaffold construction — warn on divergence so a hand-edited
+                    // manifest surfaces as a visible config problem instead of a
+                    // mysterious never-converging staleness compare.
+                    var _rwBuildSrc = _(self.conf[self.appName][self.env].bundlesPath + '/' + self.appName, true);
+                    var _rwSrcRoot  = _rwSrcRel ? _(_rwProjectRoot + '/' + _rwSrcRel, true) : _rwBuildSrc;
+                    if (_rwSrcRoot !== _rwBuildSrc) {
+                        console.warn('[releaseWatch] manifest `src` ('+ _rwSrcRoot +') differs from the build source tree ('+ _rwBuildSrc +') — the build stamps the latter; the staleness compare may never converge');
+                    }
+                    lib.releaseWatch.init({
+                        bundle              : self.appName,
+                        project             : self.projectName,
+                        env                 : self.env,
+                        scope               : self.scope,
+                        srcRoot             : _rwSrcRoot,
+                        manifestPath        : _rwManifestPath,
+                        mode                : _rwConf.mode,
+                        debounceMs          : _rwConf.debounceMs,
+                        reconcileIntervalMs : _rwConf.reconcileIntervalMs,
+                        httpServer          : engine.instance,
+                        // the /_gina/cache/clear flush idiom — resolved lazily at
+                        // rebuild time, when self.instance._cached provably exists
+                        flushRenderCache    : function _rwFlushRenderCache(bundle) {
+                            var _rwFlushView = new lib.RenderCache();
+                            _rwFlushView.from(self.instance._cached);
+                            _rwFlushView.clear(bundle);
+                        }
+                    });
+                }
+            } catch (rwInitErr) {
+                console.warn('[releaseWatch] init skipped: '+ (rwInitErr.stack || rwInitErr.message || rwInitErr));
+            }
+
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);
 
         } catch (err) {
@@ -3042,6 +3099,19 @@ function Server(options) {
                 });
             }
 
+            // #RWATCH — in-flight request gauge for the release-watch idle gate.
+            // Sibling of the metrics hook above; wired only when the service armed
+            // at boot (local scope + built release + opt-in). trackRequest() returns
+            // an IDEMPOTENT finisher, so wiring both `finish` and `close` can never
+            // double-decrement; /_gina/* control paths are excluded inside the lib
+            // (an open SSE stream never fires `finish` — counting the release-watch
+            // stream itself would deadlock the idle gate).
+            if (lib.releaseWatch.isActive()) {
+                var _rwDone = lib.releaseWatch.trackRequest(request.url);
+                response.on('finish', _rwDone);
+                response.on('close',  _rwDone);
+            }
+
             // Caching = [...]
             // TODO - handle this through a middleware
             /**
@@ -3284,6 +3354,98 @@ function Server(options) {
                     }
                     return response.end(JSON.stringify(lib.job.toStatusView(_jRec)));
                 });
+            }
+
+            // ── /_gina/release/* — stale built-release watch (#RWATCH) ──────────
+            // Present ONLY when the service armed at boot (local scope + non-dev +
+            // server.releaseWatch.enabled) — when inactive the URLs fall through to
+            // routing and 404 naturally (surface invisible). Same admin IP allowlist
+            // as /_gina/info & /_gina/cache/* (app.json admin.allowFrom — loopback
+            // by default). Engine-agnostic handlers; the Isaac fast-path mirrors
+            // these — keep methods + shapes identical across engines.
+            if (
+                lib.releaseWatch.isActive()
+                && request.method.toUpperCase() === 'GET'
+                && /\/_gina\/release\/status$/i.test(request.url)
+            ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    response.setHeader('content-type', 'application/json; charset=utf8');
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/release/status: client IP not in app.json admin.allowFrom' }));
+                }
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                return response.end(JSON.stringify(lib.releaseWatch.getStatus()));
+            }
+
+            // POST only — a rebuild is a mutation. ?restart=auto|skip|force; `force`
+            // against an ALREADY-WAITING idle gate opens the gate instead of
+            // starting a new pipeline. 409 when a rebuild is already running.
+            if (
+                lib.releaseWatch.isActive()
+                && request.method.toUpperCase() === 'POST'
+                && /\/_gina\/release\/rebuild(\?.*)?$/i.test(request.url)
+            ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    response.setHeader('content-type', 'application/json; charset=utf8');
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/release/rebuild: client IP not in app.json admin.allowFrom' }));
+                }
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                var _rwRestartMatch = request.url.match(/[?&]restart=(auto|skip|force)\b/i);
+                var _rwRestart      = _rwRestartMatch ? _rwRestartMatch[1].toLowerCase() : 'auto';
+                var _rwStatusNow    = lib.releaseWatch.getStatus();
+                if ( _rwRestart === 'force' && _rwStatusNow && _rwStatusNow.action && _rwStatusNow.action.state === 'waiting' ) {
+                    return response.end(JSON.stringify({ accepted: true, forcedGate: lib.releaseWatch.forceRestartGate() }));
+                }
+                var _rwResult = lib.releaseWatch.requestRebuild({ restart: _rwRestart, requestedBy: 'operator' });
+                if ( !_rwResult.accepted ) {
+                    response.statusCode = 409;
+                }
+                return response.end(JSON.stringify(_rwResult));
+            }
+
+            // SSE — mirrors the /_gina/logs stream shape: registers a closer in
+            // process.gina._sseConnections so the SIGTERM drain (lib/proc.js) and
+            // the release-watch restart executor can end it before server.close().
+            if (
+                lib.releaseWatch.isActive()
+                && request.method.toUpperCase() === 'GET'
+                && /\/_gina\/release\/events$/i.test(request.url)
+            ) {
+                if ( !lib.admin.isClientAllowed(request) ) {
+                    response.statusCode = 403;
+                    response.setHeader('content-type', 'application/json; charset=utf8');
+                    return response.end(JSON.stringify({ error: 'forbidden', message: '/_gina/release/events: client IP not in app.json admin.allowFrom' }));
+                }
+                response.setHeader('content-type', 'text/event-stream; charset=utf-8');
+                response.setHeader('cache-control', 'no-cache, no-store');
+                response.setHeader('connection', 'keep-alive');
+                response.setHeader('x-content-type-options', 'nosniff');
+                // Initial SSE comment to establish the connection
+                response.write(':ok\n\n');
+
+                var _rwSseSend = function(evt) {
+                    try {
+                        response.write('data: ' + JSON.stringify(evt) + '\n\n');
+                    } catch (e) { /* connection may be closing */ }
+                };
+                // initial frame: the current status snapshot
+                _rwSseSend({ type: 'status', data: lib.releaseWatch.getStatus(), at: Date.now() });
+                var _rwUnsubscribe = lib.releaseWatch.subscribe(_rwSseSend);
+
+                if (!process.gina._sseConnections) process.gina._sseConnections = new Set();
+                var _rwSseClose = function() {
+                    if (_rwUnsubscribe) { try { _rwUnsubscribe(); } catch (e) {} }
+                    process.gina._sseConnections.delete(_rwSseClose);
+                    try { response.end(); } catch (e) {}
+                };
+                process.gina._sseConnections.add(_rwSseClose);
+                request.on('close', _rwSseClose);
+
+                console.info(request.method + ' [200] ' + request.url + ' (SSE)');
+                return; // keep the connection open — do not call response.end()
             }
 
             // ── /_gina/instrument — toggleable instrumentation window (#INS10) ──

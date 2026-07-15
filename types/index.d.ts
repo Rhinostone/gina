@@ -811,7 +811,7 @@ declare namespace gina {
         metrics: any;
         nunjucksFilters: any;
         nunjucksResolver: any;
-        /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RW1). */
+        /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RWATCH). */
         releaseWatch: any;
         routing: {
             getRoute(name: string): RouteEntry | undefined;
@@ -948,6 +948,9 @@ declare namespace gina {
 
     /** Read bundle version from app.json */
     function getVersion(bundle?: string): string | Error | undefined;
+
+    /** Register an application busy probe for the release-watch idle gate — returns `{busy, detail}` | boolean (or a Promise of either), or callback-shaped `(cb)` (#RWATCH). */
+    function registerBusyProbe(name: string, fn: (...args: any[]) => any): void;
 
     // -- global-helper re-exports (same functions the framework injects on
     //    the global scope; see types/globals.d.ts) --
