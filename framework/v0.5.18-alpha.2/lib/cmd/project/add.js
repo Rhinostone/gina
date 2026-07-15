@@ -808,7 +808,7 @@ function Add(opt, cmd) {
             // scanning for available ports ...
             await scan(options, function(err, ports){
                 if (err) {
-                    console.error(err.stack|err.message);
+                    console.error(err.stack||err.message);
                     process.exit(1)
                 }
 

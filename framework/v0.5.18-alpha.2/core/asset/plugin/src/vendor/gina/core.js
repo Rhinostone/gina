@@ -413,7 +413,7 @@ function getDependencies(gina, cb) {
             arr[i].func.apply(null,arr[i].args);
         }
     } catch (err) {
-        console.error(err.stack|err.message|err);
+        console.error(err.stack||err.message||err);
     }
 }
 

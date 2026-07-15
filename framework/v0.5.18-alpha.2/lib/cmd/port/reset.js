@@ -405,7 +405,7 @@ function Reset(opt, cmd) {
             scan(options, function(err, ports){
 
                 if (err) {
-                    console.error(err.stack|err.message);
+                    console.error(err.stack||err.message);
                     process.exit(1)
                 }
 

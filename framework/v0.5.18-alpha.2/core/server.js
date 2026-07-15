@@ -2350,8 +2350,8 @@ function Server(options) {
                     if (err.code === 'ENOENT' || !asset.isAvailable ) {
                         header[':status'] = 404;
                     }
-                    //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack|err.message|err));
-                    var msg = ( header[':status'] == 404 ) ? 'Page not found: \n' + asset.url :  'Internal server error\n' + (err.stack|err.message|err)
+                    //console.info(headers[':method'] +' ['+ header[':status'] +'] '+ headers[':path'] + '\n' + (err.stack||err.message||err));
+                    var msg = ( header[':status'] == 404 ) ? 'Page not found: \n' + asset.url :  'Internal server error\n' + (err.stack||err.message||err)
                     throwError({stream: pushStream}, header[':status'], msg);
                     return;
                 }
@@ -4920,7 +4920,7 @@ function Server(options) {
         var expressMiddlewares  = self.instance._expressMiddlewares;
 
         if (err) {
-            return throwError(nextMiddleware._response, 500, (err.stack|err.message|err), nextMiddleware._next, nextMiddleware._nextAction);
+            return throwError(nextMiddleware._response, 500, (err.stack||err.message||err), nextMiddleware._next, nextMiddleware._nextAction);
         }
 
         // #FI — per-middleware timing

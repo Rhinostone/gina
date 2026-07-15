@@ -1998,8 +1998,8 @@ function ServerEngineClass(options) {
 
                         return fs.createReadStream(filename)
                             .on('error', function onError(err) {
-                                console.error("[SERVER][CACHE][FILE ERROR] ", err.stack|err.message|err);
-                                return response.end(''+ err.stack|err.message|err);
+                                console.error("[SERVER][CACHE][FILE ERROR] ", err.stack||err.message||err);
+                                return response.end(''+ (err.stack||err.message||err));
                             })
                             .on('end', function onResponse(){
                                 console.info(request.method +' [200] '+ request.url);
