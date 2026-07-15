@@ -125,6 +125,8 @@ var nodePath        = require('path');
 var inspectorRedact = require('lib/inspector-redact');
 // #INS10 follow-up — prod-window HTML egress (no-HTML, render-json-style emit).
 var emitInspectorWindowData = require('./inspector-window-emit');
+// #RWATCH S3 — stale-release banner injector (server-side inline; gated inert).
+var releaseBanner = require('./release-banner');
 // Collection — small data-query helper used to filter the asset list when
 // rendering without a layout (mirrors render-swig.js:494-498). Fetched via
 // the lib registry so the dev-mode hot-reload evictions of `lib/index.js`
@@ -1320,6 +1322,10 @@ module.exports = async function renderNunjucks(userData, displayInspector, errOp
         // continue with the un-injected HTML.
         try { console.warn('[render-nunjucks] inspector injection skipped: ' + injectErr.message); } catch (e) {}
     }
+
+    // #RWATCH S3 — stale-release banner before writeCache (rides cache hit + miss);
+    // byte-inert unless local + !dev + releaseWatch.enabled.
+    html = releaseBanner.maybeInject(html, localOptions.conf, _cspNonceAttr);
 
     // #FI — snapshot the timeline length AFTER the __ginaData payload was
     // serialised (inside injectInspectorScripts, which also pushed any QI

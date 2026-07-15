@@ -2218,3 +2218,136 @@ describe('23 - writeCache failures degrade, they do not 500 the render', functio
         assert.notStrictEqual(res.body, '<html>rendered fine</html>', 'the rendered page is discarded');
     });
 });
+
+
+// 24 — #RWATCH stale-release banner injection (S3). render-swig calls
+// releaseBanner.maybeInject() on the finalized HTML at BOTH finalize sites,
+// BEFORE writeCache, so the banner rides both cache-miss renders and cache-hit
+// replays (a cache hit is served verbatim from the stored bytes and never
+// re-enters the delegate). The injector is a shared, standalone module — the
+// behavioral tests below drive the REAL release-banner.js.
+describe('24 - #RWATCH stale-release banner injection', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    var BANNER_SRC = path.join(require('../fw'), 'core/controller/release-banner.js');
+    function bannerSrc() { return fs.readFileSync(BANNER_SRC, 'utf8'); }
+    var releaseBanner = require(BANNER_SRC);
+
+    // ── delegate source pins ──
+    it('render-swig requires the release-banner injector', function() {
+        assert.match(src(), /var\s+releaseBanner\s*=\s*require\('\.\/release-banner'\)/,
+            "expected `var releaseBanner = require('./release-banner')` in render-swig.js");
+    });
+
+    it('maybeInject is called at BOTH finalize sites, before writeCache', function() {
+        var s = src();
+        var calls = s.match(/releaseBanner\.maybeInject\(\s*htmlContent\s*,\s*localOptions\.conf\s*,\s*_cspNonceAttr\s*\)/g);
+        assert.ok(calls && calls.length === 2,
+            'expected exactly 2 releaseBanner.maybeInject(htmlContent, localOptions.conf, _cspNonceAttr) sites');
+        // both inject sites precede a writeCache — the banner must be in the stored bytes
+        assert.ok(s.indexOf('releaseBanner.maybeInject(') < s.indexOf('await writeCache('),
+            'the first inject must precede the first writeCache');
+        assert.ok(s.lastIndexOf('releaseBanner.maybeInject(') < s.lastIndexOf('await writeCache('),
+            'the second inject must precede the second writeCache');
+    });
+
+    // ── banner source pin: the </body> splice is a FUNCTION replacer ($-safe form) ──
+    it('maybeInject splices via a function replacer, not a string replacement', function() {
+        var b = bannerSrc();
+        assert.match(b, /html\.replace\(\/<\\\/body>\/i,\s*function\s*\(\)\s*\{\s*return\s+'\\n'\s*\+\s*snippet/,
+            'expected the </body> splice to use a function replacer (String.replace $-expansion safety)');
+        assert.doesNotMatch(b, /html\.replace\(\/<\\\/body>\/i,\s*'\\n'\s*\+\s*snippet/,
+            'the vulnerable string-replacement form must be absent');
+    });
+
+    // ── behavioral against the real release-banner module ──
+    function setOrDel(k, v) { if (v === undefined) { delete process.env[k]; } else { process.env[k] = v; } }
+    function withGate(scopeLocal, envDev, fn) {
+        var s = process.env.NODE_SCOPE_IS_LOCAL, d = process.env.NODE_ENV_IS_DEV;
+        setOrDel('NODE_SCOPE_IS_LOCAL', scopeLocal);
+        setOrDel('NODE_ENV_IS_DEV', envDev);
+        try { return fn(); } finally { setOrDel('NODE_SCOPE_IS_LOCAL', s); setOrDel('NODE_ENV_IS_DEV', d); }
+    }
+    var CONF_ON  = { server: { releaseWatch: { enabled: true  } } };
+    var CONF_OFF = { server: { releaseWatch: { enabled: false } } };
+    var PAGE = '<!DOCTYPE html><html><head></head><body><div>PAGEBODY</div></body></html>';
+
+    it('gate ON (local + !dev + enabled): injects the shadow-DOM banner into the stored HTML', function() {
+        var out = withGate('true', undefined, function() { return releaseBanner.maybeInject(PAGE, CONF_ON, ''); });
+        assert.notStrictEqual(out, PAGE, 'the banner must be injected when the gate passes');
+        assert.ok(out.indexOf(releaseBanner.MARKER) > -1, 'the marker (double-injection guard token) must be present');
+        assert.ok(out.indexOf('attachShadow') > -1, 'the shadow-DOM client must be present');
+        assert.ok(out.indexOf('EventSource(') > -1 && out.indexOf('/_gina/release/status') > -1,
+            'the live client (SSE + status fetch) must be present');
+        assert.strictEqual((out.match(/<\/body>/g) || []).length, 1, 'exactly one </body> (function replacer, no duplication)');
+        assert.strictEqual((out.match(/PAGEBODY/g) || []).length, 1, 'no page-body duplication (function replacer)');
+        assert.match(out, /<\/script>\s*<\/body>/, 'the snippet is spliced immediately before </body>');
+    });
+
+    it('gate OFF — scope not local: HTML unchanged', function() {
+        assert.strictEqual(withGate('false', undefined, function() { return releaseBanner.maybeInject(PAGE, CONF_ON, ''); }), PAGE);
+    });
+
+    it('gate OFF — dev env: HTML unchanged', function() {
+        assert.strictEqual(withGate('true', 'true', function() { return releaseBanner.maybeInject(PAGE, CONF_ON, ''); }), PAGE);
+    });
+
+    it('gate OFF — releaseWatch.enabled false: HTML unchanged', function() {
+        assert.strictEqual(withGate('true', undefined, function() { return releaseBanner.maybeInject(PAGE, CONF_OFF, ''); }), PAGE);
+    });
+
+    it('gate OFF — releaseWatch config missing: HTML unchanged', function() {
+        assert.strictEqual(withGate('true', undefined, function() { return releaseBanner.maybeInject(PAGE, { server: {} }, ''); }), PAGE);
+    });
+
+    it('non-HTML (no </body>, e.g. a JSON/API body) is skipped', function() {
+        var json = '{"ok":true}';
+        assert.strictEqual(withGate('true', undefined, function() { return releaseBanner.maybeInject(json, CONF_ON, ''); }), json);
+    });
+
+    it('non-string input is returned as-is', function() {
+        var obj = { page: 1 };
+        assert.strictEqual(withGate('true', undefined, function() { return releaseBanner.maybeInject(obj, CONF_ON); }), obj);
+    });
+
+    it('double injection is a no-op (marker guard — a cached page already carrying the banner)', function() {
+        var once  = withGate('true', undefined, function() { return releaseBanner.maybeInject(PAGE, CONF_ON, ''); });
+        var twice = withGate('true', undefined, function() { return releaseBanner.maybeInject(once, CONF_ON, ''); });
+        assert.strictEqual(twice, once, 'a second inject on already-injected HTML must be a no-op');
+        assert.strictEqual(once.split(releaseBanner.MARKER).length - 1, 1, 'the marker must appear exactly once');
+    });
+
+    it('the CSP nonce is applied to the injected <script> (#HDR16)', function() {
+        var out = withGate('true', undefined, function() {
+            return releaseBanner.maybeInject(PAGE, CONF_ON, ' nonce="abc123"');
+        });
+        assert.ok(out.indexOf('<script nonce="abc123">') > -1, 'the nonce attribute must ride the injected script tag');
+    });
+
+    // ── pure-logic $-safe replica (mirrors §18): the function-replacer FORM maybeInject
+    //    uses inserts content verbatim; the string form would $-expand / duplicate the doc.
+    //    (Measured 2026-07-15: today's serialised snippet carries NO $-special sequence, so
+    //    the form is DEFENSIVE here — it guards any future $-content in the client, per the
+    //    codebase $-splice rule — not strictly load-bearing for the current snippet.)
+    var DOLLAR_BACKTICK = '$' + '`';
+    var DOLLAR_QUOTE    = '$' + "'";
+    function spliceUnsafe(doc, inj) { return doc.replace(/<\/body>/i, inj + '</body>'); }
+    function spliceSafe(doc, inj)   { return doc.replace(/<\/body>/i, function () { return inj + '</body>'; }); }
+    var DOC = '<!DOCTYPE html><html><body><div>PAGEBODY</div></body></html>';
+    var INJ = '<script>/* ' + DOLLAR_BACKTICK + ' ' + DOLLAR_QUOTE + ' */</script>';
+
+    it('replica: the string form nests the document (why the injector avoids it)', function() {
+        var out = spliceUnsafe(DOC, INJ);
+        assert.ok((out.match(/PAGEBODY/g) || []).length > 1,
+            'a string replacement duplicates the page body via the prematch pattern');
+    });
+
+    it('replica: the function-replacer form inserts verbatim (the form maybeInject uses)', function() {
+        var out = spliceSafe(DOC, INJ);
+        assert.strictEqual((out.match(/PAGEBODY/g) || []).length, 1, 'no duplication with a function replacer');
+        assert.ok(out.indexOf(DOLLAR_BACKTICK) > -1 && out.indexOf(DOLLAR_QUOTE) > -1,
+            'the $-sequences survive verbatim in the injected content');
+    });
+
+});

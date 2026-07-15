@@ -10,6 +10,8 @@ var statusCodes       = requireJSON( _( getPath('gina').core + '/status.codes') 
 var inspectorRedact   = require('lib/inspector-redact');
 // #INS10 follow-up — prod-window HTML egress (no-HTML, render-json-style emit).
 var emitInspectorWindowData = require('./inspector-window-emit');
+// #RWATCH S3 — stale-release banner injector (server-side inline; gated inert).
+var releaseBanner = require('./release-banner');
 // Precompiled regex — avoids per-request RegExp allocation (#P3)
 var blacklistRe       = /[<>]/g;
 
@@ -951,6 +953,9 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // #HDR5 — {{ page.cspNonce }} app-template nonce helper. Absent when no nonce.
                 if (_cspNonce) { data.page.cspNonce = _cspNonce; }
                 htmlContent = compiledTemplate(data);
+                // #RWATCH S3 — stale-release banner before writeCache (rides cache
+                // hit + miss); byte-inert unless local + !dev + releaseWatch.enabled.
+                htmlContent = releaseBanner.maybeInject(htmlContent, localOptions.conf, _cspNonceAttr);
                 if (_cacheExecStart && local._timeline) {
                     local._timeline.entries.push({
                         label: 'swig-execute', cat: 'template',
@@ -1726,6 +1731,9 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // compiledTemplate(data) (swig re-evaluates the var per execute); absent when no nonce.
                 if (_cspNonce) { data.page.cspNonce = _cspNonce; }
                 htmlContent = compiledTemplate(data);
+                // #RWATCH S3 — stale-release banner before writeCache (rides cache
+                // hit + miss); byte-inert unless local + !dev + releaseWatch.enabled.
+                htmlContent = releaseBanner.maybeInject(htmlContent, localOptions.conf, _cspNonceAttr);
                 if (_execStart && local._timeline) {
                     local._timeline.entries.push({
                         label: 'swig-execute', cat: 'template',
