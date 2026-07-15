@@ -57,9 +57,14 @@ var crypto  = require('crypto');
  * and the in-flight gauge survive `refreshCore()`'s per-request `Lib()`
  * rebuild — same discipline as lib/job, lib/instrument and lib/state.
  *
- * All timers this module arms are `unref()`'d and every `fs.watch` handle is
- * created with `persistent:false` — the module can never keep a process (or a
- * test file) alive on its own.
+ * Timer hygiene: the standing timers (debounce, reconcile sweep, idle gate,
+ * auto cooldown) are `unref()`'d and every `fs.watch` handle is created with
+ * `persistent:false` — the module never keeps an idle process (or a test
+ * file) alive. The ONE exception is the per-probe deadline inside an
+ * in-flight `checkBusyProbes()` call: it stays ref'd because it is the only
+ * settlement guarantee for the caller's promise (Node 22 drains an
+ * otherwise-idle loop mid-check without it); it is bounded (`timeoutMs`) and
+ * self-clearing.
  *
  * @package gina.framework
  * @namespace releaseWatch
@@ -637,10 +642,15 @@ var listBusyProbes = function() {
  */
 var runProbe = function(name, fn, timeoutMs, done) {
     var settled = false;
+    // Deliberately NOT unref'd: while a checkBusyProbes() call is in flight,
+    // this deadline is the ONLY guarantee the caller's promise/callback ever
+    // settles — an unref'd deadline lets an otherwise-idle event loop drain
+    // with the check still pending (measured on Node 22: "Promise resolution
+    // is still pending but the event loop has already resolved"). Bounded and
+    // self-clearing, so it holds the loop for at most `timeoutMs`.
     var timer   = setTimeout(function onProbeTimeout() {
         settle({ name: name, busy: true, detail: 'probe timed out after ' + timeoutMs + 'ms' });
     }, timeoutMs);
-    if (typeof timer.unref === 'function') timer.unref();
 
     /**
      * @inner
