@@ -187,6 +187,34 @@ function Build(opt, cmd) {
                 }
             }
 
+            // #RW1 — stamp the source-tree fingerprint on the release records this
+            // run will build (defaultScope only — buildEnv() builds that scope).
+            // Taken at build START: an edit racing the src → release copy makes the
+            // boot-time recompute differ from the stamp, which correctly reads as
+            // stale (a stamp taken after the copy would match the post-edit mtimes
+            // while the release holds pre-edit bytes — a false fresh). Records that
+            // do not exist are left untouched. Never fatal: a stamp failure must
+            // not break the build.
+            try {
+                var fpResult = lib.releaseWatch.fingerprintTree( _(self.bundlesLocation +'/'+ bundle, true) );
+                if ( fpResult && fpResult.hash ) {
+                    var fpBuiltAt = new Date().toISOString();
+                    for (let f = 0, fLen = local.envs.length; f < fLen; f++) {
+                        let fpEnv = local.envs[f];
+                        let fpRec = ( typeof(local.manifest.bundles[bundle].releases[self.defaultScope]) != 'undefined' )
+                            ? local.manifest.bundles[bundle].releases[self.defaultScope][fpEnv]
+                            : null;
+                        if ( fpRec && fpRec.target ) {
+                            fpRec.fingerprint   = fpResult.hash;
+                            fpRec.builtAt       = fpBuiltAt;
+                            fpRec.fpSpec        = fpResult.spec;
+                        }
+                    }
+                }
+            } catch (fpErr) {
+                console.warn('[build] could not stamp the release fingerprint: '+ (fpErr.stack || fpErr.message || fpErr));
+            }
+
             self.projectData.bundles[bundle] = merge(self.projectData.bundles[bundle], local.manifest.bundles[bundle], true);
             lib.generator.createFileFromDataSync(
                 self.projectData,

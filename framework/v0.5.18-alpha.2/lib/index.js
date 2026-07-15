@@ -137,6 +137,14 @@ function Lib() {
         // and orphaning the expiry timer. Plain require = cache hit = the singleton
         // and its timer survive.
         instrument      : require('./instrument'),
+        // #RW1 — stale built-release watch primitives: source-tree fingerprints
+        // (stamped by bundle:build / project:build into the manifest release
+        // records), change classification, the recursive tree watcher, busy
+        // probes and the in-flight request gauge. PLAIN require (like job /
+        // instrument / State): the module holds live fs.watch handles, the
+        // probe registry and the gauge at module scope — hot-reloading it would
+        // orphan the handles and zero the gauge on every dev-mode request.
+        releaseWatch    : require('./release-watch'),
         // replaced: _require('./state') — StateStore is a singleton backed by node:sqlite
         // (DatabaseSync). Hot-reloading it in dev mode would close and re-open the DB
         // connection on every HTTP request, racing with in-flight writes. Use plain

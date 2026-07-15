@@ -160,6 +160,32 @@ function Build(opt, cmd) {
                 }
             }
 
+            // #RW1 — stamp the source-tree fingerprint on the release records this
+            // run will build (defaultScope only — buildEnv() builds that scope).
+            // Taken at build START so an edit racing the src → release copy reads
+            // as stale on the next boot compare (fail-safe direction). Records that
+            // do not exist (e.g. the skipped dev env above) are left untouched.
+            // Never fatal: a stamp failure must not break the build. Mirror of the
+            // lib/cmd/bundle/build.js stamp — keep the two in sync.
+            try {
+                var fpResult = lib.releaseWatch.fingerprintTree( _(self.bundlesLocation +'/'+ bundle, true) );
+                if ( fpResult && fpResult.hash ) {
+                    var fpBuiltAt = new Date().toISOString();
+                    for (let f = 0, fLen = local.envs.length; f < fLen; f++) {
+                        let fpEnv = local.envs[f];
+                        let fpRec = ( typeof(local.manifest.bundles[bundle].releases[self.defaultScope]) != 'undefined' )
+                            ? local.manifest.bundles[bundle].releases[self.defaultScope][fpEnv]
+                            : null;
+                        if ( fpRec && fpRec.target ) {
+                            fpRec.fingerprint   = fpResult.hash;
+                            fpRec.builtAt       = fpBuiltAt;
+                            fpRec.fpSpec        = fpResult.spec;
+                        }
+                    }
+                }
+            } catch (fpErr) {
+                console.warn('[build] could not stamp the release fingerprint: '+ (fpErr.stack || fpErr.message || fpErr));
+            }
 
             self.projectData = local.manifest;
             lib.generator.createFileFromDataSync(

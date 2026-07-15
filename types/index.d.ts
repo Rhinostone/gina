@@ -811,6 +811,8 @@ declare namespace gina {
         metrics: any;
         nunjucksFilters: any;
         nunjucksResolver: any;
+        /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RW1). */
+        releaseWatch: any;
         routing: {
             getRoute(name: string): RouteEntry | undefined;
             getRouteByUrl(url: string): RouteEntry | undefined;

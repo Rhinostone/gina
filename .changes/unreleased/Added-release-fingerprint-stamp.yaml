@@ -1,0 +1,3 @@
+kind: Added
+body: 'bundle:build and project:build now stamp a source-tree fingerprint (fingerprint, builtAt, fpSpec) into the project manifest release records — the substrate for stale built-release detection on local production rehearsals (releaseWatch groundwork)'
+time: 2026-07-15T14:38:48+01:00
