@@ -67,8 +67,16 @@ function captureDefaultCheckedPreFix($input, defaultValue) {
     ) ? true : false;
 }
 
-// Mirrors updateCheckBox's init block gating + state write (post-#49 shape).
+// Mirrors updateCheckBox's init block: the jQuery-`on` normalization preamble,
+// then the gating + state write (post-#49 shape). The preamble is load-bearing
+// for valueless checkboxes — it rewrites `.value` to false BEFORE localValue is
+// read, so a valueless *unchecked* box can never reach the legacy tick even in
+// value-as-state mode. Omitting it makes the replica claim such a box ticks.
 function replayInitTick($form, $el, isInit) {
+    // "Preventing jQuery setting `on` value when input is not checked"
+    if (isInit && /^(on)$/i.test($el.value) && !$el.checked) {
+        $el.value = false;
+    }
     var localValue = $el.attrs['data-value'] || $el.attrs['value'] || $el.value;
     localValue = (/^(true|on)$/.test(localValue)) ? true : localValue;
     if (localValue === '') {
@@ -149,6 +157,51 @@ function replayCollectPreFix($el, rules) {
         }
     }
     return fields;
+}
+
+// Mirrors the INLINE submit-path collector's checkbox/radio branch (post-#49
+// shape). Deliberate asymmetry vs replayCollect above: this path never mutates
+// `rules` — only getFormValidationInfos self-injects the isBoolean rule.
+function replayInlineCollect($el, rules) {
+    var fields = {};
+    var name = $el.name;
+    if ( typeof($el.type) != 'undefined' && $el.type == 'checkbox' && isBooleanCheckbox($el, (rules) ? rules[name] : null) ) {
+        fields[name] = $el.checked;
+    } else if ( typeof($el.type) != 'undefined' && $el.type == 'radio' || typeof($el.type) != 'undefined' && $el.type == 'checkbox' ) {
+        if ( $el.checked ) {
+            if ( /^(true|false)$/.test($el.value) ) {
+                fields[name] = $el.value = (/^true$/.test($el.value)) ? true : false;
+            } else {
+                fields[name] = $el.value;
+            }
+        } else if ( // force validator to pass `false` if boolean is required explicitly
+            rules
+            && typeof(rules[name]) != 'undefined'
+            && typeof(rules[name].isBoolean) != 'undefined' && $el.type == 'checkbox'
+            && !/^(true|false)$/.test($el.value)
+        ) {
+            fields[name] = false;
+        }
+    } else {
+        fields[name] = $el.value;
+    }
+    return fields;
+}
+
+// Mirrors bindForm's migration-warn guard (#49): the five conjuncts plus the
+// once-per-field-id map write. Returns whether the live code would warn.
+function replayWarnPass($form, $el, elId, warned) {
+    if (
+        /^(checkbox)$/i.test($el.type)
+        && !isCheckboxValueAsState($form)
+        && !$el.hasAttribute('checked')
+        && /^(true|on)$/i.test($el.getAttribute('value'))
+        && !warned[elId]
+    ) {
+        warned[elId] = true; // console.warn(...) in the live code
+        return true;
+    }
+    return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +308,71 @@ describe('01 - source inspection: #49 checkbox state model pins', function () {
         var re = /\} else if \(\s*\$form\[i\]\.checked\s*\|\| typeof \(rules\[name\]\) == 'undefined'/;
         assert.ok(re.test(mainSrc), 'original gate chain must follow the short-circuit as else-if');
     });
+
+    it('the jQuery-`on` preamble rewrites .value BEFORE updateCheckBox reads localValue', function () {
+        var i = mainSrc.indexOf('var updateCheckBox = function($el, isInit)');
+        assert.ok(i > -1, 'updateCheckBox must exist');
+        var body = mainSrc.substring(i);
+        var preamble = body.indexOf('if (isInit && /^(on)$/i.test($el.value) && !$el.checked)');
+        assert.ok(preamble > -1, 'the jQuery-`on` normalization preamble must exist');
+        var localValueRead = body.indexOf("$el.getAttribute('data-value') || $el.getAttribute('value') || $el.value");
+        assert.ok(localValueRead > -1, 'the localValue read must exist');
+        assert.ok(preamble < localValueRead,
+            'the preamble must precede the localValue read — replayInitTick mirrors this order');
+    });
+
+    it('the inline submit collector short-circuits WITHOUT self-injecting rules (asymmetry vs getFormValidationInfos)', function () {
+        var i = mainSrc.indexOf("isBooleanCheckbox($target[i], (rules) ? rules[name] : null)");
+        assert.ok(i > -1, 'inline collector must classify via the helper');
+        // end-anchor on the distinctive OUTER gate: a bare `} else if (` would
+        // terminate on an inner else-if if one is ever added to this branch
+        var tail = mainSrc.substring(i);
+        var end = tail.indexOf("} else if ( typeof($target[i].type) != 'undefined' && $target[i].type == 'radio'");
+        assert.ok(end > -1, 'the inline short-circuit must be followed by the legacy radio/checkbox chain');
+        var block = tail.substring(0, end);
+        assert.ok(block.indexOf('fields[name] = $target[i].checked;') > -1,
+            'the inline short-circuit must post live .checked');
+        assert.equal(block.indexOf('isBoolean: true'), -1,
+            'the inline path must NOT self-inject the isBoolean rule');
+        assert.equal(block.indexOf('rules[name].isRequired'), -1,
+            'the inline path must NOT inject isRequired');
+
+        // contrast — the infos collector DOES inject inside its short-circuit
+        var j = mainSrc.indexOf("isBooleanCheckbox($form[i], (rules) ? rules[name] : null)");
+        var infosTail = mainSrc.substring(j);
+        var legacyGate = infosTail.match(/\} else if \(\s*\$form\[i\]\.checked\s*\|\| typeof \(rules\[name\]\) == 'undefined'/);
+        assert.ok(legacyGate, 'the infos legacy chain must follow its short-circuit');
+        var infosBlock = infosTail.substring(0, legacyGate.index);
+        assert.ok(infosBlock.indexOf('rules[name] = { isBoolean: true };') > -1,
+            'the infos path DOES self-inject — the asymmetry is deliberate, not drift');
+    });
+
+    it('the migration warn gates on its five conjuncts and reads the value ATTRIBUTE', function () {
+        var i = mainSrc.indexOf('&& !checkboxValueStateWarned[elId]');
+        assert.ok(i > -1, 'the once-guard conjunct must exist');
+        var open = mainSrc.lastIndexOf('if (', i);
+        assert.ok(open > -1 && open < i, 'the guard must have an opening if');
+        var block = mainSrc.substring(open, i);
+        assert.ok(block.indexOf('/^(checkbox)$/i.test($inputs[f].type)') > -1,
+            'checkbox-only (radios never warn)');
+        assert.ok(block.indexOf('!isCheckboxValueAsState($form)') > -1,
+            'silent in legacy value-as-state mode');
+        assert.ok(block.indexOf("!$inputs[f].hasAttribute('checked')") > -1,
+            'silent when the checked attribute is already present');
+        assert.ok(block.indexOf("/^(true|on)$/i.test($inputs[f].getAttribute('value'))") > -1,
+            'reads the value ATTRIBUTE (null for a valueless box) case-insensitively');
+        assert.ok(mainSrc.indexOf('checkboxValueStateWarned[elId] = true;', i) > -1,
+            'the guard must set the once-map before warning');
+    });
+
+    it('the warn once-map is declared outside bindForm, so it survives re-binds', function () {
+        var mapDecl = mainSrc.indexOf('var checkboxValueStateWarned = {};');
+        var bindFormDecl = mainSrc.indexOf('var bindForm = function(');
+        assert.ok(mapDecl > -1, 'the once-map must exist');
+        assert.ok(bindFormDecl > -1, 'bindForm must exist');
+        assert.ok(mapDecl < bindFormDecl,
+            'the map must be declared OUTSIDE bindForm — a per-bind map would re-warn on every rebind');
+    });
 });
 
 
@@ -342,6 +460,25 @@ describe('04 - init-time value-driven ticking', function () {
         var f = mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true });
         assert.equal(replayInitTick(mkForm(true), f, true), false);
     });
+
+    it('legacy opt-in: a valueless UNCHECKED box is not ticked — the jQuery-`on` preamble rewrites .value first', function () {
+        var $el = mkCheckbox({});
+        assert.equal(replayInitTick(mkForm(true), $el, true), false,
+            'the preamble sets .value=false before localValue is read, so "on" never reaches the tick');
+        assert.strictEqual($el.value, false, 'the preamble must have rewritten .value');
+    });
+
+    it('legacy opt-in: a valueless CHECKED box stays checked (the preamble skips checked boxes)', function () {
+        var $el = mkCheckbox({ checkedAttr: true, checked: true });
+        assert.equal(replayInitTick(mkForm(true), $el, true), true);
+        assert.strictEqual($el.value, 'on', 'the preamble must not touch a checked box');
+    });
+
+    it('the preamble only fires at init', function () {
+        var $el = mkCheckbox({});
+        replayInitTick(mkForm(true), $el, false);
+        assert.strictEqual($el.value, 'on', 'a non-init pass must leave .value alone');
+    });
 });
 
 
@@ -396,5 +533,133 @@ describe('05 - serialization (#49 posted-value contract)', function () {
         var rules = {};
         replayCollect(mkCheckbox({ valueAttr: 'true', checked: true }), rules);
         assert.deepEqual(rules.field, { isBoolean: true });
+    });
+
+    it('a valueless checkbox posts its live .checked through BOTH collectors', function () {
+        // No `value` attribute at all — classified boolean via the getAttribute
+        // null clause, so the posted wire value is the live state, not "on".
+        assert.strictEqual(replayCollect(mkCheckbox({ checked: true }), {}).field, true);
+        assert.strictEqual(replayCollect(mkCheckbox({ checked: false }), {}).field, false);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ checked: true }), {}).field, true);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ checked: false }), {}).field, false);
+    });
+});
+
+
+// 06 — the inline submit-path collector
+
+describe('06 - inline submit collector (#49)', function () {
+
+    it('a boolean checkbox posts its live .checked in both states', function () {
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: 'true', checked: true }), {}).field, true);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: 'true', checked: false }), {}).field, false);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: 'false', checked: true }), {}).field, true);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: 'false', checked: false }), {}).field, false);
+    });
+
+    it('stale value="true" with .checked=false posts FALSE (consumer-JS desync)', function () {
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: 'true', checked: false }), {}).field, false);
+    });
+
+    it('a neutral value with an isBoolean rule posts live checked booleans', function () {
+        var rules = { field: { isBoolean: true } };
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: '1', checked: true }), rules).field, true);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ valueAttr: '1', checked: false }), rules).field, false);
+    });
+
+    it('a value-carrying checkbox posts its payload when checked, nothing when not', function () {
+        var on = mkCheckbox({ valueAttr: 'someone@domain.tld', checked: true });
+        assert.strictEqual(replayInlineCollect(on, {}).field, 'someone@domain.tld');
+        var off = mkCheckbox({ valueAttr: 'someone@domain.tld', checked: false });
+        assert.equal(Object.prototype.hasOwnProperty.call(replayInlineCollect(off, {}), 'field'), false,
+            'unchecked value-carrying checkbox must stay absent from the post');
+    });
+
+    it('the inline path does NOT mutate rules — only getFormValidationInfos self-injects', function () {
+        var inlineRules = {};
+        replayInlineCollect(mkCheckbox({ valueAttr: 'true', checked: true }), inlineRules);
+        assert.deepEqual(inlineRules, {}, 'the inline collector must leave rules untouched');
+
+        var infosRules = {};
+        replayCollect(mkCheckbox({ valueAttr: 'true', checked: true }), infosRules);
+        assert.deepEqual(infosRules.field, { isBoolean: true },
+            'the infos collector self-injects — the asymmetry is deliberate, not drift');
+    });
+
+    it('a radio keeps riding the legacy chain (never short-circuited)', function () {
+        var on = mkCheckbox({ valueAttr: 'true', checked: true });
+        on.type = 'radio';
+        assert.strictEqual(replayInlineCollect(on, {}).field, true);
+        var off = mkCheckbox({ valueAttr: 'true', checked: false });
+        off.type = 'radio';
+        assert.equal(Object.prototype.hasOwnProperty.call(replayInlineCollect(off, {}), 'field'), false,
+            'an unchecked radio posts nothing');
+    });
+
+    it('the force-false branch is unreachable post-#49 (characterization)', function () {
+        // Reaching it requires BOTH:
+        //   (1) isBooleanCheckbox($el, rule) === false — else the short-circuit wins
+        //   (2) rules[name].isBoolean !== undefined    — the branch's own gate
+        // But (2) makes isBooleanCheckbox true via its third clause, so (1) and (2)
+        // are mutually exclusive; the `&& type == 'checkbox'` conjunct then excludes
+        // radios. Asserting the exclusion, NOT an output value — both the branch and
+        // the short-circuit would yield `false`, so the result cannot discriminate.
+        var rule = { isBoolean: true };
+        assert.equal(isBooleanCheckbox(mkCheckbox({ valueAttr: '1' }), rule), true,
+            'an isBoolean-ruled checkbox is always classified boolean -> short-circuited');
+        assert.equal(isBooleanCheckbox(mkCheckbox({ valueAttr: '1' }), undefined), false,
+            'without the rule it is not boolean -> but then the force-false gate cannot pass either');
+    });
+});
+
+
+// 07 — the migration warn guard
+
+describe('07 - migration warn guard (#49)', function () {
+
+    it('warns for value="true" with no checked attribute, in spec mode', function () {
+        var warned = {};
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'true' }), 'f1', warned), true);
+        assert.equal(warned.f1, true, 'the once-map must be stamped');
+    });
+
+    it('is case-insensitive on the value attribute, and covers "on"', function () {
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'TRUE' }), 'f1', {}), true);
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'On' }), 'f2', {}), true);
+    });
+
+    it('fires once per field id — a re-bind does not re-warn', function () {
+        var warned = {};
+        var $el = mkCheckbox({ valueAttr: 'true' });
+        assert.equal(replayWarnPass(mkForm(false), $el, 'f1', warned), true, 'first bind warns');
+        assert.equal(replayWarnPass(mkForm(false), $el, 'f1', warned), false, 're-bind must stay silent');
+        assert.equal(replayWarnPass(mkForm(false), $el, 'other', warned), true, 'a different field still warns');
+    });
+
+    it('stays silent in legacy value-as-state mode (nothing changed for that form)', function () {
+        assert.equal(replayWarnPass(mkForm(true), mkCheckbox({ valueAttr: 'true' }), 'f1', {}), false);
+    });
+
+    it('stays silent when the checked attribute is present (the markup is already unambiguous)', function () {
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'true', checkedAttr: true }), 'f1', {}), false);
+    });
+
+    it('stays silent for a valueless checkbox — deliberate: the guard reads the ATTRIBUTE, not .value', function () {
+        // A valueless box has .value === "on" but getAttribute('value') === null,
+        // so /^(true|on)$/i sees the string "null" and never matches. Deliberate:
+        // warning here would fire on nearly every plain checkbox on a page, and
+        // its *rendering* did not change (no checked attribute either way) — only
+        // its form-reset default did.
+        var $el = mkCheckbox({});
+        assert.equal($el.getAttribute('value'), null, 'valueless: the attribute is absent');
+        assert.equal($el.value, 'on', 'but the DOM .value still reads "on"');
+        assert.equal(replayWarnPass(mkForm(false), $el, 'f1', {}), false);
+    });
+
+    it('stays silent for payload values and for radios', function () {
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'someone@domain.tld' }), 'f1', {}), false);
+        var radio = mkCheckbox({ valueAttr: 'true' });
+        radio.type = 'radio';
+        assert.equal(replayWarnPass(mkForm(false), radio, 'f2', {}), false);
     });
 });
