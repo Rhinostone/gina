@@ -95,7 +95,7 @@ Starting with Internet Explorer 11, [document modes are
 deprecated](https://msdn.microsoft.com/en-us/library/ie/bg182625.aspx#docmode).
 If your business still relies on older web apps and services that were
 designed for older versions of Internet Explorer, you might want to consider
-enabling [Enterprise Mode](http://blogs.msdn.com/b/ie/archive/2014/04/02/stay-up-to-date-with-enterprise-mode-for-internet-explorer-11.aspx) throughout your company.
+enabling Enterprise Mode throughout your company.
 
 
 ## Mobile viewport

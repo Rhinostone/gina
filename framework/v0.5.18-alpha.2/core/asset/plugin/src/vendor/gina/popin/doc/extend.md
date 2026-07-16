@@ -121,8 +121,6 @@ Microsoft Ajax Content Delivery Network:
 
 * https://developer.mozilla.org/en-US/docs/Controlling_DNS_prefetching
 * https://dev.chromium.org/developers/design-documents/dns-prefetching
-* http://blogs.msdn.com/b/ie/archive/2011/03/17/internet-explorer-9-network-performance-improvements.aspx
-* http://dayofjs.com/videos/22158462/web-browsers_alex-russel
 
 
 ## Google Universal Analytics
@@ -224,9 +222,9 @@ values:
 <meta http-equiv="x-ua-compatible" content="ie=edge,requiresActiveX=true">
 ```
 
-You can find more information in [Microsoft's IEBlog post about prompting for
+You can find more information in Microsoft's IEBlog post about prompting for
 plugin use in IE10 Metro
-Mode](http://blogs.msdn.com/b/ie/archive/2012/01/31/web-sites-and-a-plug-in-free-web.aspx).
+Mode.
 
 ### IE Pinned Sites (IE9+)
 
@@ -299,8 +297,8 @@ need.
 ### (Windows 8) High quality visuals for Pinned Sites
 
 Windows 8 adds the ability for you to provide a PNG tile image and specify the
-tile's background color. [Full details on the IE
-blog](http://blogs.msdn.com/b/ie/archive/2012/06/08/high-quality-visuals-for-pinned-sites-in-windows-8.aspx).
+tile's background color. Full details on the IE
+blog.
 
 * Create a 144x144 image of your site icon, filling all of the canvas, and
   using a transparent background.
@@ -316,7 +314,7 @@ tile in the Start screen. The user will be able to receive these badge updates
 even when your app isn't actively running. The badge's value can be a number,
 or one of a predefined list of glyphs.
 
-* [Tutorial on IEBlog with link to badge XML schema](http://blogs.msdn.com/b/ie/archive/2012/04/03/pinned-sites-in-windows-8.aspx)
+* Tutorial on IEBlog with link to badge XML schema
 * [Available badge values](https://msdn.microsoft.com/en-us/library/ie/br212849.aspx)
 
 ```html
