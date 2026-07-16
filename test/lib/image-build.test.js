@@ -172,9 +172,12 @@ describe('35 - image:build — OCI packaging verb (lib/image-build + lib/cmd/ima
             assert.ok(block.indexOf("'image:',") > -1, "expected 'image:' in the allowedOffline array");
         });
 
-        it('arguments.json whitelists exactly the image:build flag set', function() {
+        // arguments.json is GROUP-level (one file for image:build + image:list +
+        // image:rm), so the set necessarily grows when a new action adds a flag —
+        // `--force` belongs to image:rm.
+        it('arguments.json whitelists exactly the image group flag set', function() {
             assert.deepEqual(argsArr, [
-                '--env', '--scope', '--emit', '--format', '--stream',
+                '--env', '--scope', '--emit', '--force', '--format', '--stream',
                 '--tag', '--platform', '--start-port-from', '--gina-version'
             ]);
         });

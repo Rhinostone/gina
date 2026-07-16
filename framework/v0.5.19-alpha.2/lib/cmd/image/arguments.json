@@ -2,6 +2,7 @@
   "--env",
   "--scope",
   "--emit",
+  "--force",
   "--format",
   "--stream",
   "--tag",

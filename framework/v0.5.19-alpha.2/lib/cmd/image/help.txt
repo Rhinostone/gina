@@ -1,5 +1,7 @@
 
-Usage: gina image:<action> [<bundle>] @<project> [options]
+Usage: gina image:build [<bundle>] @<project> [options]
+       gina image:list [--format=json]
+       gina image:rm <image> [--force]
 
 Actions:
 
@@ -8,6 +10,13 @@ Actions:
                 registered state (bundles, ports, env model, node floor) and
                 executes the build with buildah — natively on Linux, or on a
                 container host reached over ssh.
+
+    list        List the images present on the container host. Every image on
+                the host is shown (there is no gina-specific marker to filter
+                on), newest buildah state — same host resolution as build.
+
+    rm          Remove an image from the container host by reference or id.
+                Requires an explicit image; there is no bulk delete.
 
     help        Show this help.
     man         Show the image group manual.
@@ -38,15 +47,30 @@ Options (image:build):
                              start -> step -> log* -> done | error.
                              `done` carries the one-shot shape.
 
+Options (image:list):
+
+    --format=json            Machine-readable output:
+                             { host, images: [{ ref, id, size, created }] }
+                             An untagged image reports ref `<none>:<none>`;
+                             a multi-tagged image yields one entry per tag.
+
+Options (image:rm):
+
+    --force                  Remove the image even when a container still
+                             references it (buildah rmi -f).
+
 Container host:
 
-    Where the build executes, in precedence order:
+    Where the image commands execute, in precedence order:
       1. GINA_CONTAINER_HOST=ssh://[user@]host[:port]   (env override)
       2. native buildah                                 (Linux + buildah on PATH)
       3. container.host in ~/.gina/<shortVersion>/settings.json
     With none of the three available the command fails (exit 1) naming the
-    descriptor surfaces. The remote path streams the build context as a tar
-    over ssh stdin — no listening socket is ever opened.
+    descriptor surfaces. All three actions resolve the host identically, so
+    `image:list` always shows what `image:build` would build onto. On the
+    remote path `build` streams the build context as a tar over ssh stdin,
+    while `list`/`rm` simply run buildah there — no listening socket is ever
+    opened.
 
 Secrets:
 
@@ -70,3 +94,13 @@ Examples:
 
     # Build on a remote Linux box
     GINA_CONTAINER_HOST=ssh://build@lin gina image:build @myproject
+
+    # What is on the host?
+    gina image:list
+
+    # Just the image references, machine-readable
+    gina image:list --format=json | jq -r '.images[].ref'
+
+    # Remove an image (by ref, then by id, forcing the second)
+    gina image:rm localhost/myproject/demo:prod
+    gina image:rm 44b5401ff810 --force

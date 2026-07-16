@@ -514,7 +514,12 @@ function CmdHelper(cmd, client, debug) {
             // project name : passed or using the current folder as project name by default
             if ( cmd.projectName == null || typeof(cmd.projectName) == 'undefined' || cmd.projectName == '' ) {
 
-                if (!/\:list$/.test(cmd.task) && !/^project\:status$/.test(cmd.task)) {// ignore this cases ( project:status is all-projects like project:list )
+                // `image:rm` is HOST-level, not project-scoped: it removes an
+                // image from the container host by ref/id, so demanding a
+                // `@<project>` would be meaningless. Anchored to `image:rm` so
+                // `project:rm` keeps its own project requirement. (`image:list`
+                // needs no entry — it rides the general `:list` exemption.)
+                if (!/\:list$/.test(cmd.task) && !/^project\:status$/.test(cmd.task) && !/^image\:rm$/.test(cmd.task)) {// ignore this cases ( project:status is all-projects like project:list )
                     var folder = new _(process.cwd()).toArray().last();
 
                     if (isDefined('project', folder)) {

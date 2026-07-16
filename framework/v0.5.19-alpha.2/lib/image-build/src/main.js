@@ -711,6 +711,113 @@ function buildOneShot(plan, extras) {
     return out;
 }
 
+/**
+ * Builds the `{ command, args }` for running a buildah (or any) subcommand on
+ * a resolved container host — native (`spawn('buildah', argv)`) or over ssh
+ * (`spawn('ssh', [...sshOpts, sshTarget, 'buildah', ...argv])`). The ssh option
+ * order mirrors the build path (`BatchMode`/`ConnectTimeout`, then `-p` only
+ * when the descriptor names a port so host aliases keep their own ssh config).
+ * Trailing argv tokens are passed as separate ssh args — ssh joins them into
+ * one remote-shell command — so no token may contain a space or shell
+ * metacharacter; the sole user-controlled token (an image ref) is charset-
+ * gated by {@link isValidImageRef} before it reaches here.
+ *
+ * @function containerHostSpawn
+ * @param {ContainerHost} host - A resolved descriptor from {@link resolveContainerHost}
+ * @param {string[]}      argv - The buildah subcommand argv, e.g. `['images','--json']`
+ * @returns {{command: string, args: string[]}} The spawn command + args
+ * @throws {Error} When `host.mode` is neither 'native' nor 'ssh'
+ *
+ * @example
+ * containerHostSpawn({ mode: 'native' }, ['images', '--json']);
+ * // { command: 'buildah', args: ['images', '--json'] }
+ *
+ * @example
+ * containerHostSpawn({ mode: 'ssh', parsed: { sshTarget: 'build@lin', port: null } }, ['rmi', '-f', 'localhost/p/b:prod']);
+ * // { command: 'ssh', args: ['-o','BatchMode=yes','-o','ConnectTimeout=10','build@lin','buildah','rmi','-f','localhost/p/b:prod'] }
+ */
+function containerHostSpawn(host, argv) {
+    if (host && host.mode === 'native') {
+        return { command: 'buildah', args: argv.slice() };
+    }
+    if (host && host.mode === 'ssh') {
+        var sshArgs = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
+        if (host.parsed && host.parsed.port) {
+            sshArgs.push('-p', String(host.parsed.port));
+        }
+        sshArgs.push(host.parsed.sshTarget, 'buildah');
+        return { command: 'ssh', args: sshArgs.concat(argv) };
+    }
+    throw new Error('containerHostSpawn: host.mode must be `native` or `ssh` (got `' + (host && host.mode) + '`)');
+}
+
+/**
+ * Normalises `buildah images --json` output into one row per image name (a
+ * multi-tagged image yields one row per tag; an untagged image yields a single
+ * `<none>:<none>` row). Tolerates empty stdout, a bare `null`, or a non-array
+ * document — each maps to `[]` rather than throwing.
+ *
+ * @function parseImagesJson
+ * @param {string} stdout - Raw stdout of `buildah images --json`
+ * @returns {Array<{ref: string, id: string, size: string, created: string}>}
+ *
+ * @example
+ * parseImagesJson('[{"id":"f030b57bbc3a","names":["localhost/p/b:prod"],"size":"293 MB","createdat":"11 days ago"}]');
+ * // [{ ref: 'localhost/p/b:prod', id: 'f030b57bbc3a', size: '293 MB', created: '11 days ago' }]
+ *
+ * @example
+ * parseImagesJson('[{"id":"a1b2c3","names":null,"size":"180 MB","createdat":"2 weeks ago"}]');
+ * // [{ ref: '<none>:<none>', id: 'a1b2c3', size: '180 MB', created: '2 weeks ago' }]
+ */
+function parseImagesJson(stdout) {
+    var doc;
+    try {
+        doc = JSON.parse(String(stdout || '').trim() || 'null');
+    } catch (e) {
+        return [];
+    }
+    if (!Array.isArray(doc)) return [];
+    var rows = [];
+    for (var i = 0; i < doc.length; i++) {
+        var img   = doc[i] || {};
+        var id    = String(img.id || '').substring(0, 12);
+        var size  = String(img.size || '');
+        var when  = String(img.createdat || '');
+        var names = Array.isArray(img.names) ? img.names : [];
+        if (names.length === 0) {
+            rows.push({ ref: '<none>:<none>', id: id, size: size, created: when });
+        } else {
+            for (var n = 0; n < names.length; n++) {
+                rows.push({ ref: String(names[n]), id: id, size: size, created: when });
+            }
+        }
+    }
+    return rows;
+}
+
+/**
+ * Charset gate for a user-supplied image reference (a `repo[:tag]`, `repo@sha256:…`
+ * digest, or short/long image id) before it is interpolated into a remote-shell
+ * command over ssh. The leading character MUST be alphanumeric — that blocks
+ * BOTH shell injection (no space/`;`/`|`/`$`/backtick/quote can appear) AND
+ * option injection (a ref like `-f` / `-rf` being read by buildah as a flag).
+ * Every legitimate image ref begins with an alphanumeric.
+ *
+ * @function isValidImageRef
+ * @param {string} ref - The candidate image reference
+ * @returns {boolean} True when `ref` is safe to pass to `buildah rmi`
+ *
+ * @example
+ * isValidImageRef('localhost/p/b:prod'); // true
+ * isValidImageRef('sha256:abc123');      // true
+ * isValidImageRef('foo; rm -rf /');      // false — space + `;`
+ * isValidImageRef('-f');                 // false — leading `-` (option injection)
+ * isValidImageRef('');                   // false — empty
+ */
+function isValidImageRef(ref) {
+    return typeof ref === 'string' && /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,511}$/.test(ref);
+}
+
 module.exports = {
     DEFAULTS             : DEFAULTS,
     computePorts         : computePorts,
@@ -723,5 +830,8 @@ module.exports = {
     stageContext         : stageContext,
     parseSshDescriptor   : parseSshDescriptor,
     resolveContainerHost : resolveContainerHost,
-    buildOneShot         : buildOneShot
+    buildOneShot         : buildOneShot,
+    containerHostSpawn   : containerHostSpawn,
+    parseImagesJson      : parseImagesJson,
+    isValidImageRef      : isValidImageRef
 };
