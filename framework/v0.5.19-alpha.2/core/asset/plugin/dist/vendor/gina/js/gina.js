@@ -14951,6 +14951,25 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         checkboxValueStateWarned[elId] = true;
                         console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer implies the checked state; add the `checked` attribute if it must render ticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior');
                     }
+
+                    // Migration aid (#49) — the mirror direction: this markup used to be
+                    // auto-UN-ticked by its `value` (the pre-fix init pass cleared a
+                    // parser-checked box whose resolved value read false/empty) and now
+                    // stays ticked. Membership mirrors the old resolution chain:
+                    // `data-value` attribute, else `value` attribute, else the DOM
+                    // `.value` — with the empty string mapping to false. Reads run
+                    // before the checkbox init pass, so `.value` is parser-fresh here.
+                    var legacyUntickValue = $inputs[f].getAttribute('data-value') || $inputs[f].getAttribute('value') || $inputs[f].value;
+                    if (
+                        /^(checkbox)$/i.test($inputs[f].type)
+                        && !isCheckboxValueAsState($form)
+                        && $inputs[f].hasAttribute('checked')
+                        && ( legacyUntickValue === '' || /^false$/i.test(legacyUntickValue) )
+                        && !checkboxValueStateWarned[elId]
+                    ) {
+                        checkboxValueStateWarned[elId] = true;
+                        console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer un-ticks a checked box; remove the `checked` attribute if it must render unticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior');
+                    }
                 }
             }
 

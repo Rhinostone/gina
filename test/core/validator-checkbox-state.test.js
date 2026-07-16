@@ -204,6 +204,26 @@ function replayWarnPass($form, $el, elId, warned) {
     return false;
 }
 
+// Mirrors the UN-TICK-direction migration warn (#49 F5): a checked-attr box
+// whose OLD resolution chain (data-value attr -> value attr -> .value, with
+// '' mapping to false) read false/empty used to render unticked and now stays
+// ticked. Shares the once-map with the tick-direction warn (the two guards
+// are mutually exclusive by the hasAttribute('checked') polarity).
+function replayWarnPassUntick($form, $el, elId, warned) {
+    var legacyUntickValue = $el.getAttribute('data-value') || $el.getAttribute('value') || $el.value;
+    if (
+        /^(checkbox)$/i.test($el.type)
+        && !isCheckboxValueAsState($form)
+        && $el.hasAttribute('checked')
+        && ( legacyUntickValue === '' || /^false$/i.test(legacyUntickValue) )
+        && !warned[elId]
+    ) {
+        warned[elId] = true; // console.warn(...) in the live code
+        return true;
+    }
+    return false;
+}
+
 // ---------------------------------------------------------------------------
 // Fixture builders (plain objects modelling the DOM surface the code reads)
 // ---------------------------------------------------------------------------
@@ -372,6 +392,30 @@ describe('01 - source inspection: #49 checkbox state model pins', function () {
         assert.ok(bindFormDecl > -1, 'bindForm must exist');
         assert.ok(mapDecl < bindFormDecl,
             'the map must be declared OUTSIDE bindForm — a per-bind map would re-warn on every rebind');
+    });
+
+    it('the un-tick-direction warn exists, mirrors the OLD resolution chain, and sits AFTER the tick warn', function () {
+        var chain = mainSrc.indexOf("var legacyUntickValue = $inputs[f].getAttribute('data-value') || $inputs[f].getAttribute('value') || $inputs[f].value;");
+        assert.ok(chain > -1, 'the faithful-mirror chain must exist (data-value -> value attr -> .value)');
+        var tickWarn = mainSrc.indexOf('no longer implies the checked state');
+        var untickWarn = mainSrc.indexOf('no longer un-ticks a checked box');
+        assert.ok(tickWarn > -1 && untickWarn > -1, 'both warn texts must exist');
+        assert.ok(tickWarn < untickWarn,
+            'the un-tick warn must sit AFTER the tick warn — the §01 five-conjunct pin anchors the FIRST once-map conjunct');
+        // the block between the chain and the warn text carries the mirror conjuncts
+        var block = mainSrc.substring(chain, untickWarn);
+        assert.ok(block.indexOf("&& $inputs[f].hasAttribute('checked')") > -1,
+            'requires the checked attribute (positive — the polarity that makes the two warns mutually exclusive)');
+        assert.ok(block.indexOf("legacyUntickValue === '' || /^false$/i.test(legacyUntickValue)") > -1,
+            "membership: resolved '' (the old ''-to-false mapping) or case-insensitive false");
+        assert.ok(block.indexOf('!isCheckboxValueAsState($form)') > -1, 'silent in legacy mode');
+        assert.ok(block.indexOf('!checkboxValueStateWarned[elId]') > -1, 'shares the once-guard');
+    });
+
+    it('both warn directions share ONE once-map (exactly two stamps, one per direction)', function () {
+        var stamps = mainSrc.match(/checkboxValueStateWarned\[elId\] = true;/g);
+        assert.ok(stamps, 'stamps must exist');
+        assert.equal(stamps.length, 2, 'exactly two stamps — the tick warn and the un-tick warn');
     });
 });
 
@@ -661,5 +705,114 @@ describe('07 - migration warn guard (#49)', function () {
         var radio = mkCheckbox({ valueAttr: 'true' });
         radio.type = 'radio';
         assert.equal(replayWarnPass(mkForm(false), radio, 'f2', {}), false);
+    });
+});
+
+
+// 08 — the un-tick-direction migration warn (#49 F5)
+
+describe('08 - un-tick migration warn (#49 F5)', function () {
+
+    it('warns for a checked-attr box whose value reads false — the markup that used to render unticked', function () {
+        var warned = {};
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true }), 'f1', warned), true);
+        assert.equal(warned.f1, true, 'the shared once-map must be stamped');
+    });
+
+    it('is case-insensitive on false, like the old un-tick was', function () {
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'FALSE', checkedAttr: true, checked: true }), 'f1', {}), true);
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'False', checkedAttr: true, checked: true }), 'f2', {}), true);
+    });
+
+    it('warns for value="" — the old chain mapped the empty string to false and un-ticked', function () {
+        var $el = mkCheckbox({ valueAttr: '', checkedAttr: true, checked: true });
+        // the empty ATTRIBUTE is falsy in the chain, so resolution falls to .value (also "")
+        assert.equal($el.getAttribute('value'), '', 'attribute present but empty');
+        assert.strictEqual($el.value, '', 'DOM .value mirrors it');
+        assert.equal(replayWarnPassUntick(mkForm(false), $el, 'f1', {}), true);
+    });
+
+    it('warns for data-value="false" — data-value WINS the old chain, even over value="true"', function () {
+        var $el = mkCheckbox({ dataValue: 'false', valueAttr: 'true', checkedAttr: true, checked: true });
+        assert.equal(replayWarnPassUntick(mkForm(false), $el, 'f1', {}), true,
+            'the old init pass resolved data-value first — this markup DID render unticked');
+    });
+
+    it('stays silent in legacy value-as-state mode (that form still un-ticks)', function () {
+        assert.equal(replayWarnPassUntick(mkForm(true), mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true }), 'f1', {}), false);
+    });
+
+    it('stays silent without the checked attribute — nothing to un-tick', function () {
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'false' }), 'f1', {}), false);
+    });
+
+    it('stays silent for value="true", valueless, and payload values on a checked box (rendering unchanged)', function () {
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'true', checkedAttr: true, checked: true }), 'f1', {}), false,
+            'value="true" + checked: the old tick was a no-op on an already-checked box');
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ checkedAttr: true, checked: true }), 'f2', {}), false,
+            'valueless: .value reads "on" -> resolved true -> the old code never un-ticked it');
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'abc', checkedAttr: true, checked: true }), 'f3', {}), false,
+            'payload value: not boolean-shaped -> the old init pass left it alone');
+    });
+
+    it('stays silent for radios', function () {
+        var radio = mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true });
+        radio.type = 'radio';
+        assert.equal(replayWarnPassUntick(mkForm(false), radio, 'f1', {}), false);
+    });
+
+    it('fires once per field id and shares the map across both directions', function () {
+        var warned = {};
+        var $el = mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true });
+        assert.equal(replayWarnPassUntick(mkForm(false), $el, 'f1', warned), true, 'first bind warns');
+        assert.equal(replayWarnPassUntick(mkForm(false), $el, 'f1', warned), false, 're-bind stays silent');
+        // the map is SHARED: a field stamped by either direction never re-warns
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'true' }), 'f1', warned), false,
+            'the tick-direction guard honors the same stamp');
+    });
+
+    it('the two directions are mutually exclusive for any single element', function () {
+        // tick requires NO checked attribute; un-tick requires it — no element
+        // can satisfy both, so sharing the once-map cannot mask either warn.
+        var candidates = [
+            mkCheckbox({ valueAttr: 'true' }),
+            mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true }),
+            mkCheckbox({ valueAttr: 'on' }),
+            mkCheckbox({ valueAttr: '', checkedAttr: true, checked: true }),
+            mkCheckbox({}),
+            mkCheckbox({ checkedAttr: true, checked: true })
+        ];
+        for (var i = 0; i < candidates.length; i++) {
+            var a = replayWarnPass(mkForm(false), candidates[i], 'x' + i, {});
+            var b = replayWarnPassUntick(mkForm(false), candidates[i], 'y' + i, {});
+            assert.ok(!(a && b), 'element ' + i + ' must not trigger both directions');
+        }
+    });
+});
+
+
+// 09 — dist fidelity: the built bundle carries both warn directions
+
+describe('09 - dist fidelity (#49 warns in the built bundle)', function () {
+
+    var DIST_DIR = path.join(FW, 'core', 'asset', 'plugin', 'dist', 'vendor', 'gina', 'js');
+    var distSrc = fs.readFileSync(path.join(DIST_DIR, 'gina.js'), 'utf8');
+    var distMin = fs.readFileSync(path.join(DIST_DIR, 'gina.min.js'), 'utf8');
+
+    it('positive control: the tick-direction warn text is findable in both artifacts', function () {
+        // proves the instrument — a warn string literal survives Closure — so the
+        // un-tick pins below cannot pass (or fail) vacuously
+        assert.ok(distSrc.indexOf('no longer implies the checked state') > -1, 'gina.js');
+        assert.ok(distMin.indexOf('no longer implies the checked state') > -1, 'gina.min.js');
+    });
+
+    it('the un-tick warn text is in gina.js', function () {
+        assert.ok(distSrc.indexOf('no longer un-ticks a checked box') > -1,
+            'rebuild dist after editing the validator src (prod build, 3 CI flags)');
+    });
+
+    it('the un-tick warn text is in gina.min.js', function () {
+        assert.ok(distMin.indexOf('no longer un-ticks a checked box') > -1,
+            'rebuild dist after editing the validator src (prod build, 3 CI flags)');
     });
 });

@@ -1,0 +1,3 @@
+kind: Added
+body: 'The checkbox migration warning now also covers the un-tick direction: markup carrying the `checked` attribute plus a `value` (or `data-value`) reading false or empty — which used to render unticked and now stays ticked — is flagged once per field, with the same legacy opt-in pointer as the existing warning'
+time: 2026-07-16T17:35:34+01:00
