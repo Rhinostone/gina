@@ -383,17 +383,23 @@ function renderContainerfile(plan) {
 
     if (plan.hasDependencies) {
         lines.push('');
-        lines.push('# Project dependencies');
+        lines.push('# Project dependencies — a dependency on gina re-runs the framework');
+        lines.push('# postinstall as root (HOME=/home/node), re-seeding $HOME/.gina root-owned');
+        lines.push('# after the earlier hand-back: re-hand $HOME back after this LAST root-run');
+        lines.push('# npm step, or gina-init EACCESes once the build drops privileges.');
         lines.push(plan.hasLockfile
-            ? 'RUN npm ci --omit=dev'
-            : 'RUN npm install --omit=dev');
+            ? 'RUN npm ci --omit=dev && chown -R node:node $HOME'
+            : 'RUN npm install --omit=dev && chown -R node:node $HOME');
     }
 
     lines.push('');
     lines.push('# The bundle entry resolves the framework via node_modules/gina — link the');
-    lines.push('# pinned global install (the project:add auto-link convention). Placed after');
-    lines.push('# any npm install, which prunes symlinks it does not know about.');
-    lines.push('RUN mkdir -p node_modules && ln -sfn /usr/local/lib/node_modules/gina node_modules/gina');
+    lines.push('# pinned global install (the project:add auto-link convention), superseding');
+    lines.push('# any copy the project\'s own dependencies extracted there (`ln -sfn` cannot');
+    lines.push('# replace a real directory — it would nest inside it and the pin would be');
+    lines.push('# silently bypassed at runtime). Placed after any npm install, which prunes');
+    lines.push('# symlinks it does not know about.');
+    lines.push('RUN mkdir -p node_modules && rm -rf node_modules/gina && ln -sfn /usr/local/lib/node_modules/gina node_modules/gina');
 
     lines.push('');
     lines.push('# gina runtime identity — consumed by gina-init (idempotent ~/.gina bootstrap)');

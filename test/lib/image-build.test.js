@@ -366,8 +366,8 @@ describe('35 - image:build — OCI packaging verb (lib/image-build + lib/cmd/ima
             assert.ok(cf.indexOf('ENTRYPOINT ["/app/gina-entrypoint.sh"]') > -1);
             assert.ok(cf.indexOf('CMD ["child", "@parent"]') > -1);
             assert.ok(cf.indexOf('USER node') > -1);
-            assert.ok(cf.indexOf('RUN mkdir -p node_modules && ln -sfn /usr/local/lib/node_modules/gina node_modules/gina') > -1,
-                'the bundle entry requires gina via node_modules — the global install must be linked (after any npm install, which prunes stray symlinks)');
+            assert.ok(cf.indexOf('RUN mkdir -p node_modules && rm -rf node_modules/gina && ln -sfn /usr/local/lib/node_modules/gina node_modules/gina') > -1,
+                'the bundle entry requires gina via node_modules — the global install must be linked (after any npm install, which prunes stray symlinks), superseding a project-extracted gina copy (ln -sfn cannot replace a real directory)');
         });
 
         it('dev env: boots from src — no in-image release build', function() {
@@ -384,6 +384,40 @@ describe('35 - image:build — OCI packaging verb (lib/image-build + lib/cmd/ima
             assert.ok(ci.indexOf('RUN npm ci --omit=dev') > -1);
             var inst = imageBuild.renderContainerfile(imageBuild.resolveBuildPlan(planInput({ hasDependencies: true, hasLockfile: false })));
             assert.ok(inst.indexOf('RUN npm install --omit=dev') > -1);
+        });
+
+        it('a dependency on gina re-seeds $HOME/.gina root-owned after the hand-back — the dep RUN re-hands $HOME back (last root-run npm step)', function() {
+            var ci = imageBuild.renderContainerfile(imageBuild.resolveBuildPlan(planInput({ hasDependencies: true, hasLockfile: true })));
+            assert.ok(ci.indexOf('RUN npm ci --omit=dev && chown -R node:node $HOME') > -1,
+                'lockfile variant must re-hand $HOME back in the same RUN (same-layer chown, no copy-up bloat) — a project depending on gina re-runs the framework postinstall as root, re-rooting $HOME/.gina, and gina-init then EACCESes once the build drops privileges');
+            var inst = imageBuild.renderContainerfile(imageBuild.resolveBuildPlan(planInput({ hasDependencies: true, hasLockfile: false })));
+            assert.ok(inst.indexOf('RUN npm install --omit=dev && chown -R node:node $HOME') > -1,
+                'no-lockfile variant must re-hand $HOME back in the same RUN');
+        });
+
+        it('hand-back ordering: global chown, then dep-RUN chown, then the privilege drop; dep-free keeps exactly the global hand-back', function() {
+            var withDeps  = imageBuild.renderContainerfile(imageBuild.resolveBuildPlan(planInput({ hasDependencies: true, hasLockfile: false })));
+            var globalIdx = withDeps.indexOf('chown -R node:node $HOME /app');
+            var depIdx    = withDeps.indexOf('--omit=dev && chown -R node:node $HOME');
+            var userIdx   = withDeps.indexOf('\nUSER node'); // newline-anchored: the framework-install comment also names the directive
+            assert.ok(globalIdx > -1 && depIdx > -1 && userIdx > -1);
+            assert.ok(globalIdx < depIdx && depIdx < userIdx,
+                'the re-hand-back must sit after the LAST root-run npm step and before the privilege drop');
+            assert.equal(withDeps.match(/chown -R node:node \$HOME/g).length, 2,
+                'dep-carrying: exactly two hand-backs (global RUN + dep RUN)');
+            var none = imageBuild.renderContainerfile(imageBuild.resolveBuildPlan(planInput()));
+            assert.equal(none.match(/chown -R node:node \$HOME/g).length, 1,
+                'dep-free: exactly the global hand-back — folding the chown into the conditional dep RUN must never strip the dep-free case');
+        });
+
+        it('the framework link supersedes a project-extracted gina copy (ln -sfn cannot replace a real directory)', function() {
+            var cf = imageBuild.renderContainerfile(imageBuild.resolveBuildPlan(planInput({ hasDependencies: true, hasLockfile: false })));
+            assert.ok(cf.indexOf('RUN mkdir -p node_modules && rm -rf node_modules/gina && ln -sfn /usr/local/lib/node_modules/gina node_modules/gina') > -1,
+                'the pinned global install must win require(\'gina\') — without the supersede, linking against the project\'s own extracted copy exits 0 but nests the symlink inside it, and the pin is silently bypassed at runtime while CLI binaries still come from the global pin (mixed-version boot)');
+            var depIdx = cf.indexOf('--omit=dev');
+            var lnIdx  = cf.indexOf('rm -rf node_modules/gina && ln -sfn');
+            assert.ok(depIdx > -1 && lnIdx > depIdx,
+                'the supersede+link must stay after the npm install (npm prunes symlinks it does not own)');
         });
 
         it('the engine floor drives the base image', function() {

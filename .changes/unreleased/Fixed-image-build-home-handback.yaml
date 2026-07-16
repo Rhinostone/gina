@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'image:build: images for projects that declare gina among their own dependencies no longer fail at gina-init with EACCES — the synthesized Containerfile re-hands the runtime home back after the project-dependency install, whose framework postinstall was re-seeding $HOME/.gina root-owned after the earlier hand-back (dependency-free projects were unaffected)'
+time: 2026-07-16T20:14:05+01:00
