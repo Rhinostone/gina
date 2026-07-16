@@ -33,11 +33,39 @@ var TEST_BUNDLE       = 'smkb';
 var TEST_DIR          = '/tmp/' + TEST_PROJECT;
 var SMOKE_PORT_START  = 9100;                     // port:reset starts here
 
-var GINA_SOCKET_PORT  = 8124;
+var GINA_SOCKET_PORT  = resolveGinaSocketPort();
 var POLL_TIMEOUT_MS   = 20000;
 var POLL_INTERVAL_MS  = 300;
 
 var GINA_BIN = path.resolve(__dirname, '../../bin/gina');
+
+/**
+ * Resolves the framework socket port the way the framework itself does:
+ * `GINA_PORT` env, then the per-version `~/.gina/<shortVersion>/settings.json`
+ * `port` key, then the shipped default 8124 (`lib/cmd/framework/init.js` +
+ * `bin/cli`). Probing a hardcoded 8124 misses a daemon an operator moved to
+ * a custom port, silently skipping the whole suite while a daemon runs.
+ *
+ * @returns {number} The port the framework socket server would bind.
+ */
+function resolveGinaSocketPort() {
+    if (process.env.GINA_PORT && ~~process.env.GINA_PORT > 0) {
+        return ~~process.env.GINA_PORT;
+    }
+    try {
+        var shortV = require('../../package.json').version
+            .split('.').slice(0, 2).join('.');
+        var raw = fs.readFileSync(
+            path.join(os.homedir(), '.gina', shortV, 'settings.json'),
+            'utf8');
+        // settings files may carry //-comment lines — strip before parsing
+        var settings = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, ''));
+        if (settings.port && ~~settings.port > 0) {
+            return ~~settings.port;
+        }
+    } catch (e) { /* fall back to the shipped default */ }
+    return 8124;
+}
 
 // Tracks what was created so after() knows what to clean up
 var created = { dir: false, project: false, bundle: false, started: false };
