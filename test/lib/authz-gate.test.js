@@ -24,6 +24,15 @@
  *       unknown rule name, parameterized target all refuse to boot).
  *   §07 login-route resolution — rule name -> the webroot-composed url config.js already
  *       built; absolute path verbatim.
+ *   §08 roles (slice 2) — ANY-of match, roles IMPLY authentication (401 before 403),
+ *       the deliberately GENERIC 403 (+ a SUBTRACT proving a non-array `roles` would be
+ *       silently OFF — the reason the boot lint rejects one).
+ *   §09 the slice-2 boot lint — pure-logic replica of the FULL post-slice-2 server.js
+ *       block (requireAuth + roles axes together; §06 keeps the slice-1 cases); every
+ *       invalid DECLARED `roles` shape refuses to boot.
+ *   §10 the client-blob strip — the boot-built client routing maps ship no
+ *       authorization keys (source pins incl. the strip-before-#B66-derivation
+ *       ordering, + a replica proving only the three keys are dropped).
  */
 var { describe, it } = require('node:test');
 var assert = require('node:assert/strict');
@@ -40,6 +49,7 @@ var ROUTER_SRC   = fs.readFileSync(path.join(FW, 'core/router.js'), 'utf8');
 var LIBIDX_SRC   = fs.readFileSync(path.join(FW, 'lib/index.js'), 'utf8');
 var SERVER_SRC   = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
 var SETTINGS_SRC = fs.readFileSync(path.join(FW, 'core/template/conf/settings.json'), 'utf8');
+var ISAAC_SRC    = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
 
 /** A controller stub recording what the gate put on the wire. */
 function ctl() {
@@ -88,6 +98,14 @@ function captureInfo(fn) {
     console.info = function (m) { lines.push(String(m)); };
     console.warn = function () {};
     try { fn(); } finally { console.info = prevInfo; console.warn = prevWarn; }
+    return lines;
+}
+/** Silence + capture the gate's server-side denial detail (console.debug). */
+function captureDebug(fn) {
+    var lines = [];
+    var prevDebug = console.debug;
+    console.debug = function (m) { lines.push(String(m)); };
+    try { fn(); } finally { console.debug = prevDebug; }
     return lines;
 }
 
@@ -452,5 +470,264 @@ describe('§07 — login-route resolution (pure-logic replica of the core/server
 
     it('07. a non-string refuses to boot', function () {
         assert.throws(function () { resolve(42, ROUTING); }, /must be a string/);
+    });
+});
+
+describe('§08 — roles (slice 2): ANY-of match, implied authentication, generic 403', function () {
+
+    it('01. source pin — the gate authenticates BEFORE it matches roles (401 precedes 403)', function () {
+        var authIdx  = GATE_SRC.indexOf('!isAuthenticated(req)');
+        var rolesIdx = GATE_SRC.indexOf('hasAnyRole(req.session.user, param.roles)');
+        assert.ok(authIdx > -1, 'the authN check');
+        assert.ok(rolesIdx > -1, 'the roles check');
+        assert.ok(authIdx < rolesIdx,
+            'authN must run first: an unauthenticated caller must never learn the route is role-restricted');
+    });
+
+    it('02. source pin — roles IMPLY requireAuth via the non-empty-array derivation', function () {
+        assert.match(GATE_SRC, /Array\.isArray\(param\.roles\) && param\.roles\.length > 0/);
+    });
+
+    it('03. a role-gated route WITHOUT requireAuth still authenticates first (roles imply auth)', function () {
+        var c = ctl();
+        withAuthConf(null, function () {
+            assert.equal(gate.authorizeRequest(c, req({ param: { roles: ['admin'] }, session: {} }), res()), false);
+        });
+        assert.equal(c.thrown.status, 401, 'unauthenticated -> 401, never a 403');
+    });
+
+    it('04. ANY-of: holding one of the required roles reaches the action', function () {
+        var c = ctl(), r = res();
+        var out = gate.authorizeRequest(c, req({
+            param   : { roles: ['admin', 'editor'] },
+            session : { user: { id: 7, roles: ['editor'] } }
+        }), r);
+        assert.equal(out, true);
+        assert.equal(c.thrown, null);
+        assert.equal(r.code, null);
+    });
+
+    it('05. holding none of the required roles -> a generic 403', function () {
+        var c = ctl(), out;
+        captureDebug(function () {
+            out = gate.authorizeRequest(c, req({
+                param   : { roles: ['admin'] },
+                session : { user: { id: 7, roles: ['viewer'] } }
+            }), res());
+        });
+        assert.equal(out, false);
+        assert.deepEqual(c.thrown, { status: 403, error: 'Forbidden' });
+    });
+
+    it('06. absent / non-array / empty user.roles means NO roles -> 403', function () {
+        [ { id: 1 },                       // no roles at all
+          { id: 1, roles: 'admin' },       // a bare string is NOT a role list
+          { id: 1, roles: { admin: 1 } },  // nor an object
+          { id: 1, roles: [] }             // nor an empty list
+        ].forEach(function (user) {
+            var c = ctl();
+            captureDebug(function () {
+                assert.equal(gate.authorizeRequest(c, req({ param: { roles: ['admin'] }, session: { user: user } }), res()), false);
+            });
+            assert.equal(c.thrown.status, 403, JSON.stringify(user));
+        });
+    });
+
+    it('07. requireAuth + roles compose: authenticated but role-less is a 403, never a 401', function () {
+        var c = ctl();
+        captureDebug(function () {
+            assert.equal(gate.authorizeRequest(c, req({
+                param   : { requireAuth: true, roles: ['admin'] },
+                session : { user: { id: 7 } }
+            }), res()), false);
+        });
+        assert.equal(c.thrown.status, 403);
+    });
+
+    it('08. DECISIVE — the 403 body never echoes the required roles, the user\'s roles or the rule', function () {
+        var c = ctl();
+        captureDebug(function () {
+            gate.authorizeRequest(c, req({
+                rule    : 'secret-admin-panel',
+                param   : { roles: ['operators-tier-1', 'operators-tier-2'] },
+                session : { user: { id: 7, roles: ['plain-user-role'] } }
+            }), res());
+        });
+        var wire = JSON.stringify(c.thrown);
+        assert.equal(c.thrown.error, 'Forbidden');
+        assert.doesNotMatch(wire, /operators-tier/, 'the required roles must never reach the wire');
+        assert.doesNotMatch(wire, /plain-user-role/, 'the user\'s roles must never reach the wire');
+        assert.doesNotMatch(wire, /secret-admin-panel/, 'the rule name must never reach the wire');
+        assert.equal(typeof c.thrown.fields, 'undefined');
+    });
+
+    it('09. ...but the denial IS observable server-side (the debug line names the rule)', function () {
+        var c = ctl(), lines;
+        lines = captureDebug(function () {
+            gate.authorizeRequest(c, req({
+                rule    : 'admin-panel',
+                param   : { roles: ['admin'] },
+                session : { user: { id: 7, roles: ['viewer'] } }
+            }), res());
+        });
+        assert.ok(lines.some(function (l) { return l.indexOf('admin-panel') > -1; }), lines.join('|'));
+    });
+
+    it('10. an empty declared roles array does NOT gate (the boot lint refuses it — it must never HALF-gate)', function () {
+        var c = ctl();
+        assert.equal(gate.authorizeRequest(c, req({ param: { roles: [] } }), res()), true);
+        assert.equal(c.thrown, null);
+    });
+
+    it('11. SUBTRACT — a non-array roles (a bare string) does NOT gate: the silent-off case the lint exists for', function () {
+        var c = ctl();
+        assert.equal(gate.authorizeRequest(c, req({ param: { roles: 'admin' } }), res()), true);
+        assert.equal(c.thrown, null, 'a string roles is NOT enforced — the boot lint must reject it');
+    });
+
+    it('12. an authenticated, role-matched user passes the composed requireAuth + roles gate', function () {
+        var c = ctl(), r = res();
+        assert.equal(gate.authorizeRequest(c, req({
+            param   : { requireAuth: true, roles: ['admin', 'editor'] },
+            session : { user: { id: 7, roles: ['ops', 'admin'] } }
+        }), r), true);
+        assert.equal(c.thrown, null);
+        assert.equal(r.code, null);
+    });
+});
+
+describe('§09 — the slice-2 boot lint (pure-logic replica of the FULL core/server.js block)', function () {
+
+    // Mirrors the post-slice-2 shipped block — the requireAuth AND roles axes together
+    // (§06 keeps the slice-1 requireAuth-axis cases; its assertions still hold, this is
+    // the full-block mirror). §01.06 + §09.01 pins lock the source against drift.
+    function lint(routing) {
+        var count = 0, rolesCount = 0;
+        for (var rule in routing) {
+            var route = routing[rule];
+            if (typeof route != 'object' || route === null || !route.param) { continue; }
+            var gated = false;
+            if (typeof route.param.requireAuth != 'undefined') {
+                if (typeof route.param.requireAuth != 'boolean') {
+                    throw new Error('Route `' + rule + '`: `param.requireAuth` must be a boolean (got `' + typeof route.param.requireAuth + '`).');
+                }
+                if (route.param.requireAuth === true) { gated = true; }
+            }
+            if (typeof route.param.roles != 'undefined') {
+                var roles = route.param.roles;
+                if (!Array.isArray(roles) || roles.length === 0) {
+                    throw new Error('Route `' + rule + '`: `param.roles` must be a non-empty array of role names.');
+                }
+                for (var i = 0; i < roles.length; ++i) {
+                    if (typeof roles[i] != 'string' || roles[i] === '') {
+                        throw new Error('Route `' + rule + '`: `param.roles` must contain only non-empty strings.');
+                    }
+                }
+                gated = true;
+                ++rolesCount;
+            }
+            if (gated) { ++count; }
+        }
+        return { count: count, rolesCount: rolesCount };
+    }
+
+    it('01. source pin — the shipped block lints the roles shape', function () {
+        assert.match(SERVER_SRC, /param\.roles` must be a non-empty array of role names/);
+        assert.match(SERVER_SRC, /param\.roles` must contain only non-empty strings/);
+    });
+
+    it('02. a valid roles array gates the route even without requireAuth', function () {
+        assert.deepEqual(lint({ a: { param: { roles: ['admin'] } } }), { count: 1, rolesCount: 1 });
+    });
+
+    it('03. roles + requireAuth on one route counts ONCE', function () {
+        assert.deepEqual(lint({ a: { param: { requireAuth: true, roles: ['admin'] } } }), { count: 1, rolesCount: 1 });
+    });
+
+    it('04. `roles: null` refuses to boot (typeof null is object — it would be silently ungated)', function () {
+        assert.throws(function () { lint({ a: { param: { roles: null } } }); }, /non-empty array/);
+    });
+
+    it('05. a bare-string roles refuses to boot', function () {
+        assert.throws(function () { lint({ a: { param: { roles: 'admin' } } }); }, /non-empty array/);
+    });
+
+    it('06. an empty roles array refuses to boot', function () {
+        assert.throws(function () { lint({ a: { param: { roles: [] } } }); }, /non-empty array/);
+    });
+
+    it('07. a non-string member refuses to boot', function () {
+        assert.throws(function () { lint({ a: { param: { roles: ['admin', 42] } } }); }, /non-empty strings/);
+    });
+
+    it('08. an empty-string member refuses to boot', function () {
+        assert.throws(function () { lint({ a: { param: { roles: ['admin', ''] } } }); }, /non-empty strings/);
+    });
+
+    it('09. the requireAuth axis is unchanged (§06 parity against the restructured block)', function () {
+        assert.deepEqual(lint({
+            home:    { param: { control: 'home' } },
+            account: { param: { requireAuth: true } },
+            login:   { param: { requireAuth: false } },
+            admin:   { param: { requireAuth: true } }
+        }), { count: 2, rolesCount: 0 });
+        assert.throws(function () { lint({ a: { param: { requireAuth: 'true' } } }); }, /must be a boolean/);
+        assert.equal(lint({ a: {}, b: null, c: 'nope', d: { param: {} } }).count, 0);
+    });
+});
+
+describe('§10 — the client-served routing blob strips the authorization keys (server.isaac.js)', function () {
+
+    // Verbatim-lifted from the server.isaac.js full-blob loop body.
+    function stripLikeIsaac(route) {
+        const { _comment, middleware, ...clean } = route;
+        if ( clean.param && typeof(clean.param) == 'object' ) {
+            const { requireAuth, roles, policy, ...cleanParam } = clean.param;
+            clean.param = cleanParam;
+        }
+        return clean;
+    }
+
+    it('01. source pin — the boot-built blob rebuilds param without requireAuth/roles/policy', function () {
+        assert.match(ISAAC_SRC, /const \{ requireAuth, roles, policy, \.\.\.cleanParam \} = clean\.param;/);
+        assert.match(ISAAC_SRC, /clean\.param = cleanParam;/);
+    });
+
+    it('02. DECISIVE — the strip runs BEFORE the #B66 stripped variant is derived, so BOTH client blobs inherit it', function () {
+        var stripIdx   = ISAAC_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;');
+        var derivedIdx = ISAAC_SRC.indexOf('var _routingStripped = JSON.clone(_routing);');
+        assert.ok(stripIdx > -1, 'the strip');
+        assert.ok(derivedIdx > -1, 'the #B66 host-stripped derivation');
+        assert.ok(stripIdx < derivedIdx,
+            'stripping after the derivation would leave the proxied-client blob carrying the keys');
+    });
+
+    it('03. replica — only the three authorization keys are dropped; the client contract survives', function () {
+        var served = stripLikeIsaac({
+            method    : 'GET',
+            url       : '/web/admin',
+            webroot   : '/web/',
+            middleware: ['x'],
+            _comment  : 'internal',
+            param     : { control: 'panel', file: 'admin', path: '/x', requireAuth: true, roles: ['admin'], policy: 'isOwner' }
+        });
+        assert.equal(typeof served.param.requireAuth, 'undefined');
+        assert.equal(typeof served.param.roles, 'undefined');
+        assert.equal(typeof served.param.policy, 'undefined');
+        // The keys the client-side matcher / toUrl actually read all survive:
+        assert.equal(served.param.control, 'panel');
+        assert.equal(served.param.file, 'admin');
+        assert.equal(served.param.path, '/x');
+        assert.equal(served.url, '/web/admin');
+        assert.equal(served.webroot, '/web/', 'webroot is load-bearing for the client toUrl path (#B66)');
+        // ...and the pre-existing strips still hold:
+        assert.equal(typeof served.middleware, 'undefined');
+        assert.equal(typeof served._comment, 'undefined');
+    });
+
+    it('04. a param-less route flows through the strip untouched (guarded)', function () {
+        var served = stripLikeIsaac({ method: 'GET', url: '/x' });
+        assert.equal(served.url, '/x');
+        assert.equal(typeof served.param, 'undefined');
     });
 });

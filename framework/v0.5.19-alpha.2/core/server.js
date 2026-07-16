@@ -867,19 +867,42 @@ function Server(options) {
                 throw new Error('[ SERVER ] `settings.json > auth` must be an object.');
             }
 
-            var _authzCount = 0;
+            var _authzCount      = 0;
+            var _authzRolesCount = 0;
             for (var _authzRule in _authzRouting) {
                 var _authzRoute = _authzRouting[_authzRule];
                 if ( typeof(_authzRoute) != 'object' || _authzRoute === null || !_authzRoute.param ) {
                     continue;
                 }
-                if ( typeof(_authzRoute.param.requireAuth) == 'undefined' ) {
-                    continue;
+                var _authzGated = false;
+                if ( typeof(_authzRoute.param.requireAuth) != 'undefined' ) {
+                    if ( typeof(_authzRoute.param.requireAuth) != 'boolean' ) {
+                        throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.requireAuth` must be a boolean (got `'+ typeof(_authzRoute.param.requireAuth) +'`). A truthy string would NOT gate the route.');
+                    }
+                    if ( _authzRoute.param.requireAuth === true ) {
+                        _authzGated = true;
+                    }
                 }
-                if ( typeof(_authzRoute.param.requireAuth) != 'boolean' ) {
-                    throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.requireAuth` must be a boolean (got `'+ typeof(_authzRoute.param.requireAuth) +'`). A truthy string would NOT gate the route.');
+                // `param.roles` — a non-empty array of non-empty strings; IMPLIES
+                // `requireAuth` at the gate (an unauthenticated caller can hold no
+                // role). Any OTHER declared shape refuses to boot: the gate only
+                // enforces a non-empty string array, so `"roles": null`, a bare
+                // string or an empty array would be silently ungated — the same
+                // quietly-OFF class as a truthy-string `requireAuth`.
+                if ( typeof(_authzRoute.param.roles) != 'undefined' ) {
+                    var _authzRoles = _authzRoute.param.roles;
+                    if ( !Array.isArray(_authzRoles) || _authzRoles.length === 0 ) {
+                        throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.roles` must be a non-empty array of role names (got '+ ( Array.isArray(_authzRoles) ? 'an empty array' : '`'+ typeof(_authzRoles) +'`' ) +'). Any other shape would NOT gate the route.');
+                    }
+                    for (var _authzRi = 0; _authzRi < _authzRoles.length; ++_authzRi) {
+                        if ( typeof(_authzRoles[_authzRi]) != 'string' || _authzRoles[_authzRi] === '' ) {
+                            throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.roles` must contain only non-empty strings (index '+ _authzRi +' is '+ ( _authzRoles[_authzRi] === '' ? 'an empty string' : 'a `'+ typeof(_authzRoles[_authzRi]) +'`' ) +').');
+                        }
+                    }
+                    _authzGated = true;
+                    ++_authzRolesCount;
                 }
-                if ( _authzRoute.param.requireAuth === true ) {
+                if ( _authzGated ) {
                     ++_authzCount;
                 }
             }
@@ -922,7 +945,9 @@ function Server(options) {
             }
             process.gina._authConf = { loginRoute: _authzLoginRoute };
             if ( _authzCount > 0 ) {
-                console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _authzCount +' authorization-gated route(s) for [ '+ self.appName +' ]'
+                console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _authzCount +' authorization-gated route(s)'
+                    + ( _authzRolesCount > 0 ? ' ('+ _authzRolesCount +' role-gated)' : '' )
+                    +' for [ '+ self.appName +' ]'
                     + ( _authzLoginRoute ? ' — login bounce: '+ _authzLoginRoute : ' — no `auth.loginRoute`: unauthenticated requests get a 401' ));
             }
 

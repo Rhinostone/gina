@@ -329,6 +329,18 @@ function ServerEngineClass(options) {
         var _routingKeys = Object.keys(_routing);
         for (var ri = 0; ri < _routingKeys.length; ++ri) {
             const { _comment, middleware, ...clean } = _routing[_routingKeys[ri]];
+            // #COMPLY1 — the authorization keys are server-side contracts, stripped from
+            // the client-served map: `roles` (and later `policy`) name the bundle's
+            // authorization model — a disclosure to the browser — and `requireAuth`
+            // rides along for consistency. The browser bundle reads none of them
+            // (measured: zero readers in the client src AND in the built artifacts).
+            // `_routing` is a JSON.clone, so rebuilding `param` here can never touch the
+            // live config; the #B66 stripped variant below is cloned FROM this map, so
+            // it inherits the strip.
+            if ( clean.param && typeof(clean.param) == 'object' ) {
+                const { requireAuth, roles, policy, ...cleanParam } = clean.param;
+                clean.param = cleanParam;
+            }
             _routing[_routingKeys[ri]] = clean;
 
             // reverseRouting is done on the frontend side

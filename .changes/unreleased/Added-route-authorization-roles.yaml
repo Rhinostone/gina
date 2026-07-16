@@ -1,0 +1,3 @@
+kind: Added
+body: 'Role-based route authorization — a route can now require the session user to hold one of a set of roles: routing.json `param.roles: ["admin", "editor"]` (ANY-of match against `req.session.user.roles`; implies `requireAuth`, so unauthenticated callers still get the 401/login bounce). Authenticated callers holding none of the listed roles get a 403 whose body stays generic — the required roles are never echoed to the wire. Declared but invalid `roles` shapes (null, a bare string, an empty array, non-string members) refuse to boot instead of leaving the route silently ungated, and the client-served routing maps no longer ship the authorization keys (`requireAuth`/`roles`/`policy`).'
+time: 2026-07-17T00:53:58+01:00

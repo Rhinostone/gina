@@ -12,7 +12,7 @@
  * The #COMPLY1 authorization gate — the framework's request-path authorization
  * enforcement point.
  *
- * A route opts in by declaring the flag in `routing.json`:
+ * A route opts in by declaring authorization keys in `routing.json`:
  *
  *   "account": {
  *       "method" : "GET",
@@ -20,19 +20,39 @@
  *       "param"  : { "control": "account", "requireAuth": true }
  *   }
  *
- * `core/server.js` lints every declared flag at bundle BOOT (fail-fast: a
- * non-boolean `param.requireAuth` refuses to boot) and resolves the login-bounce
+ *   "admin-panel": {
+ *       "method" : "GET",
+ *       "url"    : "/admin",
+ *       "param"  : { "control": "panel", "roles": ["admin", "editor"] }
+ *   }
+ *
+ * `core/server.js` lints every declared key at bundle BOOT (fail-fast: a
+ * non-boolean `param.requireAuth`, or a `param.roles` that is not a non-empty
+ * array of non-empty strings, refuses to boot) and resolves the login-bounce
  * target ONCE there onto `process.gina._authConf`. This module then runs before
  * the controller action, at BOTH `core/router.js` dispatch sites, and:
  *
- *   1. NO-OPs for any route that does not declare `param.requireAuth: true`;
- *   2. answers `true` when the request carries an authenticated session;
- *   3. otherwise terminates the response itself — a browser navigation is
- *      snapshotted (`pauseRequest`) and bounced to the configured login route;
- *      everything else gets a machine-readable **401**.
+ *   1. NO-OPs for any route that declares no authorization key;
+ *   2. authenticates first — `param.roles` IMPLIES `requireAuth`, since an
+ *      unauthenticated caller can hold no role. An unauthenticated request is
+ *      terminated here: a browser navigation is snapshotted (`pauseRequest`)
+ *      and bounced to the configured login route; everything else gets a
+ *      machine-readable **401**;
+ *   3. then matches roles — ANY-of: the session user's `user.roles` must
+ *      intersect the declared set, else a **403** whose body stays GENERIC
+ *      (the required roles are never echoed to the wire — they name the
+ *      bundle's authorization model; the specifics go to the server-side
+ *      log only).
  *
- * It is a strict NO-OP for every route that declares no flag, so an existing
- * bundle is byte-identical.
+ * It is a strict NO-OP for every route that declares no authorization key, so an
+ * existing bundle is byte-identical.
+ *
+ * ## The roles contract (#COMPLY1 defines it; the app populates it)
+ * `req.session.user.roles` is a plain array of opaque role-name strings — the
+ * framework imposes no vocabulary and no role→permission indirection (v1 names
+ * roles directly; an indirection layer is a demand-gated follow-up). The app
+ * populates it at login alongside `session.user`. Absent or non-array means the
+ * user holds no roles, so every role-gated route answers 403 for that session.
  *
  * ## Why the gate sits before the DTO pipe
  * `core/router.js` calls this immediately BEFORE `dtoPipe.validateRequestPayload`,
@@ -93,6 +113,35 @@ var getLoginRoute = function () {
  */
 var isAuthenticated = function (req) {
     return ( req.session && typeof(req.session) == 'object' && req.session.user ) ? true : false;
+};
+
+/**
+ * ANY-of role match: does the session user hold at least one of the roles the
+ * route requires?
+ *
+ * Roles are opaque strings — no framework vocabulary, no wildcard, no
+ * role→permission indirection (v1 names roles directly). A user whose `roles`
+ * is absent or not an array holds NO roles, so any role-gated route denies.
+ *
+ * @param {object} user          - `req.session.user` (truthy by the time this runs —
+ *                                 the gate authenticates first).
+ * @param {string[]} requiredRoles - the route's declared `param.roles` (the boot lint
+ *                                 guarantees a non-empty array of non-empty strings).
+ * @returns {boolean} `true` when at least one required role is held.
+ * @inner
+ * @private
+ */
+var hasAnyRole = function (user, requiredRoles) {
+    var userRoles = ( user && Array.isArray(user.roles) ) ? user.roles : null;
+    if ( !userRoles || userRoles.length === 0 ) {
+        return false;
+    }
+    for (var i = 0; i < requiredRoles.length; ++i) {
+        if ( userRoles.indexOf(requiredRoles[i]) > -1 ) {
+            return true;
+        }
+    }
+    return false;
 };
 
 /**
@@ -185,22 +234,52 @@ var denyUnauthenticated = function (controller, req, res) {
 };
 
 /**
+ * Terminate an AUTHENTICATED request that fails an authorization check: a **403**
+ * with a deliberately GENERIC body.
+ *
+ * The body never echoes the required roles (nor, later, a policy name) — those
+ * name the bundle's authorization model, and a 403 that lists what WOULD have
+ * been enough is a disclosure to exactly the caller that failed it. The
+ * specifics land in the server-side log only.
+ *
+ * @param {object} controller - the per-request controller (its `throwError` writes the 403).
+ * @param {object} req        - the request (read for the server-side log line only).
+ * @param {string} reason     - the server-side-only denial detail.
+ * @returns {boolean} always `false` — the gate has answered; the router must return.
+ * @inner
+ * @private
+ */
+var denyForbidden = function (controller, req, reason) {
+    console.debug('[ authz ] denied `'+ ((req.routing && req.routing.rule) || '?') +'` — '+ reason);
+    controller.throwError({
+        status : 403,
+        error  : 'Forbidden'
+    });
+    return false;
+};
+
+/**
  * Authorize a request against the route it matched.
  *
- * NO-OP (returns `true`) unless the route declares `param.requireAuth: true`.
+ * NO-OP (returns `true`) unless the route declares an authorization key
+ * (`param.requireAuth: true` and/or `param.roles`). Evaluation order:
+ * **authN → roles** — an unauthenticated caller on a gated route always gets
+ * the 401/bounce, never a 403 (it must not learn that the route is
+ * role-restricted, only that it requires signing in).
  *
  * @param {object} controller - the per-request controller (its `throwError` / `pauseRequest`
  *                              write the response).
  * @param {object} req        - the request. Reads `req.routing.param.requireAuth`,
- *                              `req.session.user`, `req.isXMLRequest` and `req[method]`.
+ *                              `req.routing.param.roles`, `req.session.user` (and its
+ *                              `.roles`), `req.isXMLRequest` and `req[method]`.
  * @param {object} res        - the response (the bounce writes to it directly).
  * @returns {boolean} `true` to continue to the action, `false` when the gate has already
- *                    terminated the response (401 / 302).
+ *                    terminated the response (401 / 302 / 403).
  *
  * @example
  * // core/router.js, before the DTO pipe and the action dispatch
  * if ( !authzGate.authorizeRequest(controller, request, response) ) {
- *     return; // the gate answered (401 / login bounce) — never reach the action
+ *     return; // the gate answered (401 / login bounce / 403) — never reach the action
  * }
  */
 var authorizeRequest = function (controller, req, res) {
@@ -209,17 +288,31 @@ var authorizeRequest = function (controller, req, res) {
         return true;
     }
 
+    var param = req.routing.param;
+
+    // `param.roles` IMPLIES `requireAuth` — an unauthenticated caller can hold no
+    // role, so a role-gated route authenticates first even without the explicit flag.
+    // Strictly a NON-EMPTY ARRAY: the boot lint rejects every other declared shape,
+    // so an invalid `roles` reaching this point (a string, null, an empty array)
+    // must never HALF-gate the route.
+    var mustMatchRoles = ( Array.isArray(param.roles) && param.roles.length > 0 );
+
     // Strictly `=== true`: the boot lint rejects any other type, so by request time the
     // flag is `true`, `false` or absent — and an absent/false flag must never gate.
-    if ( req.routing.param.requireAuth !== true ) {
+    if ( param.requireAuth !== true && !mustMatchRoles ) {
         return true;   // the route declares no authorization — nothing to do
     }
 
-    if ( isAuthenticated(req) ) {
-        return true;
+    if ( !isAuthenticated(req) ) {
+        return denyUnauthenticated(controller, req, res);
     }
 
-    return denyUnauthenticated(controller, req, res);
+    // authN passed — from here every denial is a 403, never a 401.
+    if ( mustMatchRoles && !hasAnyRole(req.session.user, param.roles) ) {
+        return denyForbidden(controller, req, 'the session user holds none of the required roles');
+    }
+
+    return true;
 };
 
 module.exports = {
