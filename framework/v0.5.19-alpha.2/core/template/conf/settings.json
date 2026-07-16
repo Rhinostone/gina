@@ -162,6 +162,28 @@
     "safeMethods": ["GET", "HEAD", "OPTIONS"],
     "allowedOrigins": []
   },
+  // #COMPLY1 — route authorization. A route gates itself in routing.json with
+  // `"param": { "requireAuth": true }`; the framework then answers an
+  // unauthenticated request BEFORE the controller action ever runs.
+  // A request counts as authenticated when `req.session.user` is truthy —
+  // populating it at login is the application's job.
+  //
+  //   loginRoute — where to bounce an unauthenticated BROWSER navigation, so it
+  //                can come back after logging in (the framework snapshots the
+  //                request first; the login action replays it with
+  //                `self.resumeRequest()`). Accepts a routing.json rule name —
+  //                recommended, since the bundle's webroot is resolved for you —
+  //                or an absolute path used verbatim, e.g. "/login".
+  //                An unknown rule name refuses to boot.
+  //                null (default) ⇒ no bounce: every unauthenticated request to a
+  //                gated route gets a 401. XHR requests always get the 401 too,
+  //                never a redirect (an XHR follows a Location transparently and
+  //                would receive the login PAGE as its response body).
+  //                The bounce is always a non-cacheable 302.
+  //                Changing this needs a bundle restart (boot config).
+  "auth": {
+    "loginRoute": null
+  },
   // #INS9b — authenticated /_gina/agent SSE endpoint. The agent stream
   // (combined Inspector data + server-log SSE) is dev-only by default. Set
   // agent.enabled=true and provide a key to expose it OUTSIDE dev mode (e.g.

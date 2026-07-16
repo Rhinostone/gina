@@ -1,0 +1,7 @@
+{
+    "name": "authz-gate",
+    "description": "Default-on request authorization gate: enforces a route's `param.requireAuth` before the controller action, 401-ing (or bouncing to login) an unauthenticated caller",
+    "version": "0.0.1",
+    "private": true,
+    "main": "src/main"
+}

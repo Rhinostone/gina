@@ -774,6 +774,8 @@ declare namespace gina {
         admin: any;
         archiver: any;
         async: any;
+        /** The route authorization gate (framework-internal seam). */
+        authzGate: any;
         cleanFiles: any;
         cmd: any;
         cmdStatusFormat: any;

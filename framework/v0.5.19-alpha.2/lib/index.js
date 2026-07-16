@@ -162,6 +162,12 @@ function Lib() {
         // (a load-once module performing no per-request require() can never grow a
         // dead-`children` tail; #B32-residual).
         dtoPipe         : require('./dto-pipe'),
+        // #COMPLY1 — the default-on route authorization gate, run by core/router.js
+        // before the DTO pipe and the controller action. require() — NOT _require —
+        // for the same reason as dtoPipe above: a load-once module performing no
+        // per-request require() can never grow a dead-`children` tail (#B32-residual).
+        // It also keeps a security gate out of the dev-mode hot-reload path entirely.
+        authzGate       : require('./authz-gate'),
         // #DTO3 — the DTO -> TypeScript declaration emitter. Pure and CLI-only
         // (consumed by the offline `bundle:types`), so the dev-mode-hot-reloadable
         // _require is safe — same shape as routingIntrospect below.

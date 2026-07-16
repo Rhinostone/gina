@@ -840,6 +840,92 @@ function Server(options) {
                 console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _dtoCount +' route DTO reference(s) for [ '+ self.appName +' ]');
             }
 
+            // #COMPLY1 — lint every declared authorization flag and resolve the login
+            // bounce target at BOOT. A route gates its access with `param.requireAuth`;
+            // `lib/authz-gate` enforces it at both core/router.js dispatch sites.
+            //
+            // Resolving HERE rather than per request buys the same three things the DTO
+            // registrar above does:
+            //   * the request path costs an O(1) read off `process.gina._authConf` — never
+            //     a config clone per unauthenticated hit (which an unauthenticated caller
+            //     would otherwise be free to amplify). The `_adminAllowList` precedent.
+            //   * an author error — a non-boolean flag, a login route this bundle does not
+            //     declare — refuses to BOOT instead of silently leaving a route ungated in
+            //     production (the #B57 "a failure must surface, never be swallowed into a
+            //     success path" rule). A truthy STRING is the motivating case: the gate
+            //     tests `=== true`, so `"requireAuth": "true"` would silently NOT gate.
+            //   * `settings.json` is boot config (never hot-reloaded), so there is nothing
+            //     to re-read: an `auth` change needs a bundle restart, exactly like
+            //     routing.json, forms and connectors.json.
+            var _authzRouting  = serverOpt.routing || {};
+            var _authzSettings = (
+                self.conf[self.appName][self.env].content
+                && self.conf[self.appName][self.env].content.settings
+                && self.conf[self.appName][self.env].content.settings.auth
+            ) ? self.conf[self.appName][self.env].content.settings.auth : {};
+            if ( typeof(_authzSettings) != 'object' || _authzSettings === null || Array.isArray(_authzSettings) ) {
+                throw new Error('[ SERVER ] `settings.json > auth` must be an object.');
+            }
+
+            var _authzCount = 0;
+            for (var _authzRule in _authzRouting) {
+                var _authzRoute = _authzRouting[_authzRule];
+                if ( typeof(_authzRoute) != 'object' || _authzRoute === null || !_authzRoute.param ) {
+                    continue;
+                }
+                if ( typeof(_authzRoute.param.requireAuth) == 'undefined' ) {
+                    continue;
+                }
+                if ( typeof(_authzRoute.param.requireAuth) != 'boolean' ) {
+                    throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.requireAuth` must be a boolean (got `'+ typeof(_authzRoute.param.requireAuth) +'`). A truthy string would NOT gate the route.');
+                }
+                if ( _authzRoute.param.requireAuth === true ) {
+                    ++_authzCount;
+                }
+            }
+
+            // The login bounce target: a routing.json RULE NAME (recommended — config.js
+            // has already composed the bundle's webroot into `routing[rule].url`, so the
+            // resolved path is correct by construction) or an absolute path, used verbatim.
+            // Either way the emitted Location stays root-relative — same-origin by
+            // construction, which keeps the bounce clear of the proxy-host composition
+            // family (#B65/#B66/#B67) entirely.
+            var _authzLoginRoute = null;
+            if (
+                typeof(_authzSettings.loginRoute) != 'undefined'
+                && _authzSettings.loginRoute !== null
+                && _authzSettings.loginRoute !== ''
+            ) {
+                if ( typeof(_authzSettings.loginRoute) != 'string' ) {
+                    throw new Error('[ SERVER ] `settings.json > auth.loginRoute` must be a string (a routing.json rule name, or an absolute path like `/login`) or null.');
+                }
+                var _authzPath = _authzSettings.loginRoute;
+                if ( _authzPath.charAt(0) !== '/' ) {
+                    // core/config.js re-keys every rule to `<rule.toLowerCase()>@<bundle>`
+                    // at normalisation, so accept the name as the author declared it in
+                    // routing.json — and an explicit `<rule>@<bundle>` too, for a login
+                    // route this bundle inherits from another one.
+                    var _authzTarget = _authzRouting[_authzPath]
+                        || _authzRouting[ _authzPath.toLowerCase() +'@'+ self.appName ];
+                    if ( !_authzTarget ) {
+                        throw new Error('[ SERVER ] `settings.json > auth.loginRoute` names route `'+ _authzPath +'`, which this bundle does not declare. Use an existing routing.json rule name, or an absolute path like `/login`.');
+                    }
+                    if ( typeof(_authzTarget.url) != 'string' ) {
+                        throw new Error('[ SERVER ] `settings.json > auth.loginRoute` names route `'+ _authzPath +'`, which does not resolve to a single url. Point it at a route declaring one url, or use an absolute path.');
+                    }
+                    _authzPath = _authzTarget.url;
+                }
+                if ( /\:/.test(_authzPath) ) {
+                    throw new Error('[ SERVER ] `settings.json > auth.loginRoute` resolves to `'+ _authzPath +'`, which is parameterized. The login bounce target must be a fixed url.');
+                }
+                _authzLoginRoute = _authzPath;
+            }
+            process.gina._authConf = { loginRoute: _authzLoginRoute };
+            if ( _authzCount > 0 ) {
+                console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _authzCount +' authorization-gated route(s) for [ '+ self.appName +' ]'
+                    + ( _authzLoginRoute ? ' — login bounce: '+ _authzLoginRoute : ' — no `auth.loginRoute`: unauthenticated requests get a 401' ));
+            }
+
             // ── #RWATCH — stale built-release watch (local production rehearsals) ──
             // Hard gates: local scope + non-dev env + explicit opt-in
             // (server.releaseWatch.enabled === true — fail-closed default). Inert

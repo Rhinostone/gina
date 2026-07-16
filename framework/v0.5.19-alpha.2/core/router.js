@@ -17,6 +17,9 @@ var fs                  = require('fs')
     // #DTO2 — the default-on request-payload validation pipe (plain-required in
     // lib/index.js, so this gen-0 binding IS the live module).
     , dtoPipe           = lib.dtoPipe
+    // #COMPLY1 — the default-on route authorization gate (plain-required in
+    // lib/index.js, so this gen-0 binding IS the live module).
+    , authzGate         = lib.authzGate
     , SuperController   = require('./controller')
     , Config            = require('./config')
 ;
@@ -807,6 +810,17 @@ function Router(env, scope) {
                             request._devTimeline._actionStart = Date.now();
                         }
 
+                        // #COMPLY1 — default-on route authorization. A strict NO-OP unless
+                        // the route declares `param.requireAuth`. Placed BEFORE the DTO
+                        // pipe so an unauthenticated caller gets a 401 and never learns
+                        // whether its payload would have validated (a 422 field map is a
+                        // disclosure). Route middleware has already drained here, so a
+                        // bundle's own auth middleware keeps its semantics and this gate
+                        // is purely additive after it.
+                        if ( !authzGate.authorizeRequest(controller, request, response) ) {
+                            return;
+                        }
+
                         // #DTO2 — default-on request-payload validation. A strict NO-OP
                         // unless the route declares `param.dto`. Placed BEFORE the
                         // reservedActions loop so a 422 short-circuits the whole controller
@@ -848,6 +862,12 @@ function Router(env, scope) {
                 // #FI — action start (no middleware path)
                 if (request._devTimeline) {
                     request._devTimeline._actionStart = Date.now();
+                }
+
+                // #COMPLY1 — default-on route authorization (see the with-middleware site
+                // above). A strict NO-OP unless the route declares `param.requireAuth`.
+                if ( !authzGate.authorizeRequest(controller, request, response) ) {
+                    return;
                 }
 
                 // #DTO2 — default-on request-payload validation (see the with-middleware
