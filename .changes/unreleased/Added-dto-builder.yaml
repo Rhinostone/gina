@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added a native schema/DTO builder (gina.dto): author a data shape once and project it to dialect-aware JSON Schema (.toJsonSchema, draft-07 or 2020-12), the live form-validator rules-object (.toRules), and a stable name for the type generator. Also adds a routing-introspect helper that un-collapses inline validator:: requirements into real JSON Schema. Foundation for the #DTO validation pipe and richer OpenAPI/MCP request/response schemas.'
-time: 2026-07-14T10:17:13+01:00

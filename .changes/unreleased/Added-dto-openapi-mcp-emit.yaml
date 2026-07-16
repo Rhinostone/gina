@@ -1,3 +1,0 @@
-kind: Added
-body: '`bundle:openapi` and `bundle:mcp` now emit real request/response schemas from a route''s `param.dto` / `param.responseDto`. A bundle DTO module at `dtos/<Name>.js` — a factory `module.exports = function (dto) { return dto.object({ ... }); }` — projects to an OpenAPI 3.1 requestBody plus a 422 response, or an MCP tool inputSchema.body plus outputSchema. An inline `validator::{ ... }` routing requirement is also un-collapsed into a real parameter schema instead of the previous `.*`.'
-time: 2026-07-14T18:09:11+01:00

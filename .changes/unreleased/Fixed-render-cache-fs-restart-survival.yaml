@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The `fs` render-cache backend now survives a server restart. Previously an `fs`-cached response written to disk was orphaned on the next boot (the in-process index starts empty), so it was never served again and its file was never cleaned up — `fs` behaved no better than `memory` across a restart. The server read path now falls back to disk on an index miss, replaying the entry from a sibling `<file>.meta` JSON sidecar and preserving the ORIGINAL absolute expiry: a restart never extends a TTL (a non-sliding entry still expires at its original creation time plus `ttl`; a sliding entry keeps its absolute `maxAge` ceiling). The `memory` backend stays volatile (cleared on restart), unchanged.'
-time: 2026-07-14T02:28:35+01:00

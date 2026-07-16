@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A framework error raised from a detached context — a scheduled cron/timer, a worker, or a bootstrap-time `getLib()` call — no longer crashes the process with `TypeError: next is not a function`. The internal `throwError` helper treated the per-request router context (stored globally and never cleared) as if a live request were in flight and invoked a stale, non-callable `next()`, which additionally masked the original error. It now writes an error response only when a live response is still writable, hands back to the middleware chain only when `next` is genuinely callable, and otherwise surfaces the real error (emerg-logged for fatal calls, thrown otherwise). Live-request error handling is unchanged.'
-time: 2026-07-13T23:43:24+01:00

@@ -1,3 +1,0 @@
-kind: Added
-body: 'releaseWatch — opt-in stale built-release watch for local production rehearsals (#RWATCH): `server.releaseWatch` in settings.json arms a source-tree fingerprint watch on local-scope non-dev bundles; staleness surfaces on `GET /_gina/release/status` and the `GET /_gina/release/events` SSE stream, and `POST /_gina/release/rebuild` rebuilds with an idle-gated restart honouring in-flight requests and `gina.registerBusyProbe` application probes (notify default, opt-in auto mode)'
-time: 2026-07-15T16:16:27+01:00

@@ -1,3 +1,0 @@
-kind: Added
-body: 'Pluggable render/output-cache backend strategy: `server.cache.type` sets the default cache backend (`memory` or `fs`) for a whole bundle, and a route with `cache` set but no `type` now inherits it — mirroring the existing `ttl` / `sliding` / `maxAge` fallbacks. A per-route `cache.type` still wins. New bundles default to `memory`; behaviour is unchanged for existing installs (a route with no effective `type` is not cached, exactly as before). The memory and fs backends now share one strategy dispatcher (`lib/render-cache`) that the render controllers and the server read path go through, providing the seam for additional backends.'
-time: 2026-07-13T22:31:27+01:00

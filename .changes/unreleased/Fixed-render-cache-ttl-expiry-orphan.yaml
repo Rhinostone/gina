@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The in-process render/output cache no longer orphans `fs`-strategy files on TTL expiry: an entry expiring on its timer previously skipped the eviction cleanup, leaving its cached body and `.meta` sidecar on disk and its event registrations stranded. Timer expiry now runs the same cleanup as a manual eviction (#B113).'
-time: 2026-07-15T11:46:10+01:00

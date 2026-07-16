@@ -1,3 +1,0 @@
-kind: Added
-body: 'releaseWatch — a live stale-release banner (#RWATCH): with `server.releaseWatch` enabled on a local-scope non-dev bundle, rendered HTML pages carry a self-contained bottom-bar banner that surfaces build/restart staleness live over the `/_gina/release/events` SSE stream and offers a one-click rebuild-and-reload (idle-gated restart for server-code changes, build-only for static assets, contextual force-restart while waiting on idle); shadow-DOM isolated, CSP-nonce aware, injected server-side into both the swig and nunjucks render paths, and byte-inert on every other scope/env'
-time: 2026-07-15T20:15:44+01:00

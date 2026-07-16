@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Restored error diagnostics that a bitwise `|` was silently destroying at nine sites across the HTTP server, the browser client bundle, and three CLI commands. `err.stack|err.message|err` coerced the Error to the number `0` (because `+` binds tighter than `|`), so a rendered 500 page body, the express-middleware error handler, and the `protocol:set` / `port:reset` / `project:add` CLI error output all reported `0` instead of the cause. They now use a logical `||` and surface the real error stack/message.'
-time: 2026-07-15T01:22:26+01:00

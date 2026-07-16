@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed log messages containing a $ being mangled by the text formatter — the %-token splice used a string replacement, which dollar-expands $-sequences in the message (a $ followed by a backtick was replaced by the rendered log prefix itself, recurring at each occurrence); the formatter now uses a function replacer so messages render verbatim across all levels and all sinks (stdout, mq, file) (#B108)'
-time: 2026-07-15T04:05:48+01:00

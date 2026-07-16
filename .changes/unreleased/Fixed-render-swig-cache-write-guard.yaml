@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'A failed cache write no longer discards a page that rendered correctly. Under the swig engine a cache-write error unwound to the top-level render error handler, which answered 500 — throwing away a perfectly good response. It now degrades exactly as the nunjucks and JSON renderers already did: the response is served, the failure is logged, and the next cache miss retries the write.'
-time: 2026-07-14T22:37:47+01:00

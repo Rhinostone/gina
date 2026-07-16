@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The validator''s forced rule self-injection for boolean-classified checkboxes (and boolean-valued radios) now appends `isRequired` before `isBoolean`, so the engine''s false-value rescue applies and an unchecked box whose rule declared neither key no longer fails validation with "Cannot be left empty"'
-time: 2026-07-16T02:56:38+01:00

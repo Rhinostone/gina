@@ -1,3 +1,0 @@
-kind: Added
-body: 'Per-form legacy opt-in `data-gina-form-checkbox-value-as-state="true"` (deprecated, transitional) preserving the pre-fix value-driven checkbox ticking while markup migrates to the `checked` attribute; a once-per-field console warning now flags checkboxes whose `value` used to imply the checked state'
-time: 2026-07-14T23:17:34+01:00
