@@ -915,10 +915,11 @@ declare namespace gina {
     const getConfig: ((name?: string) => any) | undefined;
 
     /**
-     * ⚠ A DETACHED copy of the internal emitter's `emit` (`this` is the
-     * module object, not the emitter): calling it returns `false` and does
-     * NOT dispatch to listeners registered by the lifecycle hooks. Kept for
-     * parity with the runtime surface only — do not rely on it.
+     * ⚠ An inert stub: always returns `false`, never dispatches, never
+     * throws — the internal lifecycle emitter is not exposed and the module
+     * object has no listener surface. Kept for parity with the runtime
+     * surface only — do not rely on it; application events go through the
+     * controller's `emitEvent()`.
      */
     const emit: (eventName: string | symbol, ...args: any[]) => boolean;
 

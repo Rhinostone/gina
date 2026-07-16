@@ -505,7 +505,20 @@ var abort = function(err, bundle) {
     process.exit(1);
 };
 
-gna.emit = e.emit;
+// #B109 — was: gna.emit = e.emit;  (a DETACHED copy: `this` at call time was
+// the plain module object — no `_events` — so it never dispatched; it
+// returned false for every name EXCEPT 'error', which THREW its argument via
+// Node's unhandled-'error' path. Zero callers existed anywhere.)
+/**
+ * Inert by design — the internal lifecycle emitter is not exposed and the
+ * module object has no listener surface (`on`/`once` are not exported).
+ * Always returns `false`, never dispatches, never throws. Application
+ * events go through the controller's `self.emitEvent()` (#EVTBUS).
+ *
+ * @memberof module:gina/core/gna
+ * @returns {boolean} Always `false`
+ */
+gna.emit = function () { return false; };
 gna.started = false;
 
 /**
