@@ -356,3 +356,53 @@ describe('09 - real-world routing.json', function () {
     });
 
 });
+
+
+// requirementToSchema / rulesToSchemaFragment (#DTO — un-collapse the `.*`)
+describe('requirementToSchema — un-collapses validator:: into a real JSON Schema', function () {
+
+    it('un-collapses an inline validator:: rule object (the router-form parse)', function () {
+        assert.deepEqual(
+            introspect.requirementToSchema('validator::{ isEmail: true, isString: [7] }'),
+            { type: 'string', format: 'email', minLength: 7 }
+        );
+    });
+
+    it('maps isInList to a typed enum', function () {
+        assert.deepEqual(
+            introspect.requirementToSchema('validator::{ isInList: ["admin", "user"] }'),
+            { type: 'string', enum: ['admin', 'user'] }
+        );
+    });
+
+    it('maps isInteger / isNumber / isBoolean / isDate to schema types', function () {
+        assert.deepEqual(introspect.requirementToSchema('validator::{ isInteger: true }'), { type: 'integer' });
+        assert.deepEqual(introspect.requirementToSchema('validator::{ isNumber: true }'),  { type: 'number' });
+        assert.deepEqual(introspect.requirementToSchema('validator::{ isBoolean: true }'), { type: 'boolean' });
+        assert.deepEqual(introspect.requirementToSchema('validator::{ isDate: ["yyyy-mm-dd"] }'), { type: 'string', format: 'date' });
+    });
+
+    it('a bare NAMED validator degrades to { type: string } (unresolvable purely)', function () {
+        assert.deepEqual(introspect.requirementToSchema('validator::email'), { type: 'string' });
+    });
+
+    it('malformed inline object falls back to { type: string } (never throws)', function () {
+        assert.deepEqual(introspect.requirementToSchema('validator::{ not json !! }'), { type: 'string' });
+    });
+
+    it('a regex requirement becomes a string pattern; a pipe-enum becomes an enum', function () {
+        assert.deepEqual(introspect.requirementToSchema('/^[0-9]+$/'), { type: 'string', pattern: '^[0-9]+$' });
+        assert.deepEqual(introspect.requirementToSchema('admin|user|guest'), { type: 'string', enum: ['admin', 'user', 'guest'] });
+    });
+
+    it('non-string input is safe', function () {
+        assert.deepEqual(introspect.requirementToSchema(undefined), { type: 'string' });
+        assert.deepEqual(introspect.requirementToSchema(42), { type: 'string' });
+    });
+
+    it('rulesToSchemaFragment: isString bounds + trailing null placeholders', function () {
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isString: [2, 40] }), { type: 'string', minLength: 2, maxLength: 40 });
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isString: [null, 9] }), { type: 'string', maxLength: 9 });
+        assert.deepEqual(introspect.rulesToSchemaFragment({}), { type: 'string' });
+    });
+});

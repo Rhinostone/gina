@@ -64,6 +64,51 @@
             "type": "string",
             "examples": ["https://api.example.com:443"]
           }
+        },
+        "releaseWatch": {
+          "type": "object",
+          "description": "Stale built-release watch for LOCAL production rehearsals — hard-gated on scope `local` + a non-dev env, never active on a real cluster. When enabled, the bundle watches its SOURCE tree, compares fingerprints against the manifest release stamp, surfaces staleness on GET /_gina/release/status (+ the /_gina/release/events SSE stream) and rebuilds via POST /_gina/release/rebuild with an idle-gated restart (in-flight requests + gina.registerBusyProbe application probes). Fail-closed: disabled by default.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master opt-in. Defaults to false."
+            },
+            "mode": {
+              "type": "string",
+              "enum": ["notify", "auto"],
+              "description": "notify (default): surface staleness and wait for the operator. auto: rebuild on change automatically — the restart stays idle-gated."
+            },
+            "debounceMs": {
+              "type": "number",
+              "description": "Watch-event batch debounce window in ms. Defaults to 750."
+            },
+            "reconcileIntervalMs": {
+              "type": "number",
+              "description": "Optional slow re-fingerprint sweep interval in ms for event-lossy mounts; 0 (the default) disables the sweep."
+            },
+            "restartMode": {
+              "type": "string",
+              "enum": ["daemon", "supervisor"],
+              "description": "How a rebuild restarts the process. daemon (default): drain, then spawn `gina bundle:restart` (needs the framework daemon). supervisor: drain, then exit(0) for a container/orchestrator to respawn — the daemonless `gina-container` launch path; requires a restart-on-clean-exit policy (a k8s Deployment or `docker run --restart=always` qualifies; `--restart=on-failure` does not)."
+            }
+          }
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "description": "Bundle-wide render/output-cache defaults. `type` / `store` here are folded into the runtime `server.cache` (which also carries the per-env `enable` / `path` / `ttl` / `maxEntries` from env.json), so they act as the default a route inherits when its own `cache` omits them.",
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["memory", "fs", "redis"],
+          "description": "Bundle-wide default cache strategy. A per-route `cache.type` overrides it; a route with `cache` set but no `type` inherits it. `memory` = in-process (volatile); `fs` = disk-backed (restart-surviving); `redis` = shared L2 across replicas + per-replica L1."
+        },
+        "store": {
+          "type": "string",
+          "description": "Required for `redis`: the name of a `connectors.json` entry ({ \"<name>\": { \"connector\": \"redis\", \"host\": …, \"port\": … } }) providing the L2 connection. Ignored for memory / fs."
         }
       }
     },

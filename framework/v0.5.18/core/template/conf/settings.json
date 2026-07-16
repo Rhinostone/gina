@@ -1,0 +1,561 @@
+{
+  "server": {
+    "engine": "isaac",
+    // #HDR8 Phase 2 — framework-wide X-Powered-By suppression, BOTH engines. When
+    // `true`, the framework skips its X-Powered-By emission everywhere it
+    // originates: the engine-agnostic per-request `setHeader` in
+    // `core/server.js` (routed responses, static-asset serves,
+    // static/traversal 404s and framework error pages — none of the static
+    // and error paths ever traverse the express middleware chain, so this
+    // flag is the one mechanism that reaches them) AND the Isaac
+    // `_setPoweredByHeader(headers)` helper backing every `/_gina/*`
+    // writeHead emit site (plus the routing.json asset `setHeader` site).
+    // gina.plugins.HidePoweredBy() remains available as a middleware-shaped
+    // remover for routed responses.
+    // Default `false` preserves shipped behaviour; opt-in by setting to `true`.
+    "hidePoweredBy": false,
+    // #H11 — opt-in Alt-Svc HTTP/3-advertisement header. When `true`, every
+    // routed (user-facing) response carries `Alt-Svc: h3=":443"; ma=86400`,
+    // advertising HTTP/3 (QUIC) availability so QUIC-capable clients upgrade
+    // via a QUIC-capable edge proxy (Caddy / nginx-QUIC / Cloudflare). Gina
+    // does NOT implement QUIC — this only advertises it; the edge terminates
+    // HTTP/3 on :443. Idempotent (first-writer-wins: an upstream-set Alt-Svc
+    // is never clobbered). Default `false` = zero behaviour change.
+    "http3Advertisement": false,
+    // [Listen] Binding address: `0.0.0.0` by default or `127.0.0.1` for ipv4 only, `::` for ipv6 only, `:::` for both
+    "address": "0.0.0.0",
+    // [Listen] Queue length limited to os values : tcp_max_syn_backlog, somaxconn
+    "backlog": 511,
+    "credentials": {
+      "_comment": "Project ENV override: SSL Credentials: private key & certificate",
+      "privateKey": "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/private.key",
+      "certificate": "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/certificate.crt",
+      "ca": "${GINA_HOMEDIR}/certificates/scopes/${scope}/${host}/ca_bundle.crt",
+      "allowHTTP1": true
+    },
+    // refers to server.js, lib.routing & controller.js
+    "supportedRequestMethods": {
+      "body": {},
+      "get": {},
+      "post": {},
+      "put": {},
+      "delete": {},
+      "files": []
+      // https://developer.mozilla.org/en-US/docs/Web/HTTP/Methods
+      // ? connect, head, options, trace, patch, cookies, copy
+    },
+    "keepAliveTimeout": "5s",
+    // slightly longer than keepAliveTimeout — must remain > keepAliveTimeout
+    "headersTimeout": "5500ms",
+    // HTTP/2 tuning — wired into core/server.isaac.js at server creation time.
+    // maxConcurrentStreams      : max parallel streams per TCP connection (protocol default: unlimited — 4294967295, Gina default: 256).
+    // initialWindowSize        : flow-control window in bytes (Node default: 65535, Gina default: 655350 = 10×).
+    // maxSessionRejectedStreams : RST flood defense — CVE-2019-9514, CVE-2023-44487 (default: 100).
+    // maxSessionInvalidFrames  : CONTINUATION flood defense — CVE-2024-27316, CVE-2024-27983 (default: 1000).
+    // maxStreamsPerSecond       : rapid-reset rate limit — max new streams per session per rolling 1s window before GOAWAY + close — CVE-2023-44487 (default: 200).
+    // enableConnectProtocol     : RFC 8441 extended CONNECT (WebSocket over HTTP/2) — strict boolean opt-in; advertised on both https and cleartext h2c bundles (default: false).
+    "http2Options": {
+      "maxConcurrentStreams": 256,
+      "initialWindowSize": 655350,
+      "maxSessionRejectedStreams": 100,
+      "maxSessionInvalidFrames": 1000,
+      "maxStreamsPerSecond": 200,
+      "enableConnectProtocol": false
+    },
+    // Stale built-release watch (#RWATCH) — LOCAL production rehearsals only.
+    // Hard-gated on scope `local` + a non-dev env: never active on a real cluster.
+    // enabled             : master opt-in (fail-closed default: false).
+    // mode                : "notify" surfaces staleness (log + GET /_gina/release/status + SSE events) and waits for the operator; "auto" rebuilds on change — the restart stays idle-gated (in-flight requests + gina.registerBusyProbe application probes).
+    // restartMode         : how a rebuild restarts — "daemon" (default) drains + spawns gina bundle:restart (needs the framework daemon); "supervisor" drains + exit(0) for a container/orchestrator to respawn (the gina-container launch path — needs a restart-on-clean-exit policy: a k8s Deployment or `docker run --restart=always`, NOT `--restart=on-failure`).
+    // debounceMs          : watch-event batch debounce window (default: 750).
+    // reconcileIntervalMs : slow re-fingerprint sweep for event-lossy mounts; 0 disables the sweep (default).
+    "releaseWatch": {
+      "enabled": false,
+      "mode": "notify",
+      "restartMode": "daemon",
+      "debounceMs": 750,
+      "reconcileIntervalMs": 0
+    },
+    // Compare with core/content.encoding
+    // This is the prefered order when it comes to respond with compressed content
+    "preferedCompressionEncodingOrder": ["br", "deflate", "gzip", "zstdn", "dcb", "dcz", "compress"]
+  },
+  "upload": {
+    "_comment": "for more details, check out https://github.com/mscdex/busboy",
+    "encoding": "utf8",
+    "tmpPath": "${tmpPath}",
+    "maxFieldsSize": "2MB", // for all uploads by default - can be redefined under the group
+    "maxFields": 1000, // number of assets when isMultipleAllowed - can be redifined under the group
+    "maxTextFields": 1000, // #B92-adjacent — max multipart TEXT (non-file) fields per request; 0 = no limit
+    "maxTextFieldSize": "1MB", // #B92-adjacent — per text-field size cap (B/KB/MB/GB, bare number = MB); 0 = no limit
+    // timeout for tmp files removal - can be redifined under the group
+    // will be ignored by server if set to 0 or false
+    // but you will have to setup a cron to remove files from tmp dir
+    // eg.: "5s" for 5 seconds, "10m" for 10 minutes, "1h" for 1 hour
+    // eg.: "500ms" for sub-second precision
+    // eg.: 0 or false to disable
+    "autoTmpCleanupTimeout": false,
+    // You need to set groups in order to enable uploads
+    "groups": {
+      "untagged": {
+        "path": "${tmpPath}",
+        "allowedExtensions": "*", // or [ "jpg", "jpeg", "png", "svg" ]
+        "isMultipleAllowed": true // #B50 — untagged is the permissive default (now enforced); set false to require single-file
+        // optional sample
+        // ,
+        // "filePrefix": "$designId_",
+        // "subFolder": "/$ownerId_$companyId",
+        // "maxFieldsSize": "512K"
+      }
+    }
+  },
+  "cache": {
+    // Bundle-wide default render/output-cache strategy: "memory" | "fs" | "redis".
+    // A per-route `cache.type` overrides this; a route with `cache` set but no
+    // `type` inherits it (mirrors the `ttl` fallback). "memory" = in-process,
+    // volatile (cleared on restart), fastest per-serve; "fs" = disk-backed
+    // (survives a restart); "redis" = a shared L2 across replicas + a per-replica L1.
+    // "redis" also needs a `store` naming a connectors.json redis entry, and each
+    // redis route a ttl (or invalidateOnEvents) — a no-ttl no-events redis route
+    // refuses boot (a non-expiring L2 key is orphaned on a release-namespace change):
+    //   "type": "redis",
+    //   "store": "cacheRedis"   // connectors.json: { "cacheRedis": { "connector": "redis", "host": "127.0.0.1", "port": 6379 } }
+    "type": "memory"
+  },
+  // #CSRF1 — session-cookie defaults applied by gina.plugins.Session(expressSession).
+  // Bundle cookie options passed to session({ cookie: ... }) always override these.
+  //   sameSite: "lax" | "strict" | "none"   (default "lax")
+  //   httpOnly: true | false                 (default true)
+  //   secure:   true | false | "auto"        (default "auto")
+  // Invariant: sameSite="none" requires secure=true (browser-parity).
+  "session": {
+    "cookie": {
+      "sameSite": "lax",
+      "httpOnly": true,
+      "secure": "auto"
+    }
+  },
+  // #CSRF2 / #CSRF3 — signed double-submit token middleware + Origin/Referer
+  // pre-filter applied by gina.plugins.Csrf(). Generate the HMAC secret with
+  // `openssl rand -base64 64`.
+  //
+  //   secret         — HMAC signing key. Supports ${secret:KEY} placeholders
+  //                    (lib/secrets fills them from process.env at config-load
+  //                    time). Falls back to process.env.GINA_CSRF_SECRET when
+  //                    this field is empty or absent (back-compat). Example:
+  //                    "secret": "${secret:MY_CSRF_KEY}".
+  //   cookieName     — cookie name issued on safe methods
+  //   headerName     — request header read on mutating methods
+  //   fieldName      — form field read on mutating methods
+  //   rotate         — "per-session" (default) or "per-request"
+  //   safeMethods    — methods that issue without verifying (default GET/HEAD/OPTIONS)
+  //   allowedOrigins — #CSRF3 allowlist matched against the request `Origin` header
+  //                    (or `Referer` host fallback) on mutating methods.
+  //                    Empty/unset = bundle's configured hostname only;
+  //                    non-empty = explicit allowlist (multi-domain bundles).
+  //                    Format: ["https://example.com", "https://www.example.com"].
+  "csrf": {
+    "cookieName": "gina-csrf-token",
+    "headerName": "X-Gina-CSRF-Token",
+    "fieldName": "_csrf",
+    "rotate": "per-session",
+    "safeMethods": ["GET", "HEAD", "OPTIONS"],
+    "allowedOrigins": []
+  },
+  // #INS9b — authenticated /_gina/agent SSE endpoint. The agent stream
+  // (combined Inspector data + server-log SSE) is dev-only by default. Set
+  // agent.enabled=true and provide a key to expose it OUTSIDE dev mode (e.g.
+  // staging) for remote server-log streaming + connection identity. Requests
+  // authenticate via the `x-gina-inspector-key` header or a `?key=` query
+  // param (browser EventSource cannot set headers, so it uses the query
+  // param). In dev the endpoint stays open and no key is required.
+  //
+  //   enabled — expose the agent endpoint outside dev mode (default false).
+  //   key     — shared secret, compared in constant time. Supports
+  //             ${secret:KEY} placeholders (lib/secrets fills them from
+  //             process.env at config-load time). Example:
+  //             "key": "${secret:INSPECTOR_AGENT_KEY}". When enabled is true
+  //             but key is empty, the endpoint stays closed (fail-closed).
+  //   allowedOrigins — #INS8: when non-empty, a WebSocket /_gina/agent upgrade
+  //             is accepted only if its Origin header is in this list. Empty ⇒
+  //             allow any origin (the SSE channel is open by CORS * regardless).
+  "inspector": {
+    "agent": {
+      "enabled": false,
+      "key": "",
+      "allowedOrigins": []
+    },
+    // #INS10 — time-boxed instrumentation window. Lets the Inspector's query +
+    // flow capture run OUTSIDE dev mode for a bounded period, without enabling
+    // full dev mode, so a production issue can be traced over the authenticated
+    // /_gina/agent SSE stream. Toggled at runtime via POST /_gina/instrument
+    // (and queried via GET /_gina/instrument). The control endpoint authenticates
+    // with the `key` below (constant-time compared) and requires the key EVEN in
+    // dev — turning on raw query capture is more sensitive than dev being open.
+    //
+    //   enabled              — allow the window to be opened at all (default
+    //                          false / fail-closed). A bundle that never opts in
+    //                          cannot be remotely instrumented even with a key.
+    //   key                  — shared secret for POST/GET /_gina/instrument.
+    //                          Supports ${secret:KEY} (lib/secrets fills it from
+    //                          process.env at config-load). Distinct from
+    //                          inspector.agent.key on purpose.
+    //   defaultWindowSeconds — window length when the request omits ttlSeconds
+    //                          (default 300).
+    //   maxWindowSeconds     — operator ceiling for a single window; clamped to
+    //                          the absolute 3600s hard cap (can lower, never
+    //                          raise). A forgotten window auto-closes by then.
+    "instrumentation": {
+      "enabled": false,
+      "key": "",
+      "defaultWindowSeconds": 300,
+      "maxWindowSeconds": 3600
+    },
+    // #AISTREAM — AI token-stream inspection. The AI connector's stream() surfaces
+    // per-token metadata (model, role, chunk index, running token + latency
+    // counters) to the Inspector under the dev / instrumentation-window gate. The
+    // raw prompt + chunk TEXT is the sensitive part and is OFF the wire by default —
+    // the authenticated /_gina/agent channel + the dev/window gate are the
+    // protection (the key-name redactor cannot cover free text). Set captureText
+    // true to include the chunk text (and prompt) in the live stream frames +
+    // snapshot; leave it false in any shared / production-adjacent deployment.
+    "ai": {
+      "captureText": false
+    },
+    // #EVTBUS — observable application-event inspection. A bundle surfaces a
+    // named runtime event via self.emitEvent(name, meta) / lib/inspector-events;
+    // it shows up in the Inspector's Event tab (live inspector#event frame +
+    // end-of-request user.events snapshot) under the dev / instrumentation-window
+    // gate. The event NAME + framework stamps always ride the wire; the caller's
+    // metadata VALUES are OFF by default — set captureArgs true to include them in
+    // the frames + snapshot. Like captureText above, the key-name redactor cannot
+    // sanitise arbitrary arg values, so the gate + this opt-in + the authenticated
+    // channel are the protection; leave false in any shared / production-adjacent
+    // deployment.
+    "events": {
+      "captureArgs": false,
+      // #EVTBUS Slice 2a — allow-list of framework event topics to bridge onto the
+      // Inspector signal (entity triggers, e.g. "account#save" or "N1QL:*"). Exact
+      // names or a single leading/trailing "*" wildcard. Default [] = bridge nothing.
+      "topics": []
+    }
+  },
+  // #HDR1 — X-Content-Type-Options: nosniff response header applied by
+  // gina.plugins.XContentTypeOptions(). The header instructs browsers to
+  // honour the declared Content-Type strictly, blocking MIME-sniffing
+  // attacks. No tunable options today (nosniff is the only valid value
+  // per RFC 7034 / WHATWG Fetch Standard); the block is reserved for
+  // future fields (e.g. per-route opt-out). Register the plugin to opt
+  // in; do not register to opt out.
+  "xContentTypeOptions": {},
+  // #HDR2 — X-Frame-Options clickjacking-defense response header applied
+  // by gina.plugins.XFrameOptions(). Controls whether the page may be
+  // rendered inside a <frame>/<iframe>/<embed>/<object>.
+  //   value — "DENY" (no framing ever) or "SAMEORIGIN" (same-origin only).
+  //           Default "SAMEORIGIN". Legacy "ALLOW-FROM <uri>" is rejected
+  //           at factory call time — modern browsers ignore it; use CSP
+  //           `frame-ancestors` for cross-browser allow-listing.
+  "xFrameOptions": {
+    "value": "SAMEORIGIN"
+  },
+  // #HDR3 — Referrer-Policy response header applied by
+  // gina.plugins.ReferrerPolicy(). Controls how much referrer information
+  // the browser includes when navigating away from the page or fetching
+  // sub-resources.
+  //   value — one of the 8 W3C tokens: "no-referrer",
+  //           "no-referrer-when-downgrade", "origin",
+  //           "origin-when-cross-origin", "same-origin", "strict-origin",
+  //           "strict-origin-when-cross-origin" (default — matches modern
+  //           browsers since ~2021), "unsafe-url" (dangerous — leaks paths
+  //           and queries). Unknown tokens throw at factory call time.
+  "referrerPolicy": {
+    "value": "strict-origin-when-cross-origin"
+  },
+  // #HDR4 — HSTS (Strict-Transport-Security) response header applied by
+  // gina.plugins.Hsts(). Instructs browsers to access the host exclusively
+  // over HTTPS for the next maxAge seconds — defeats SSL-stripping attacks.
+  //   maxAge            — seconds; default 15552000 (180 days).
+  //   includeSubDomains — apply HSTS to all sub-domains too; default false.
+  //   preload           — opt into the HSTS preload list; default false.
+  //                       Browser-parity invariant: preload=true requires
+  //                       includeSubDomains=true AND maxAge>=31536000
+  //                       (1 year) per the HSTS preload-list submission
+  //                       requirements (https://hstspreload.org/). The
+  //                       factory throws at call time on invariant
+  //                       violations.
+  "hsts": {
+    "maxAge": 15552000,
+    "includeSubDomains": false,
+    "preload": false
+  },
+  // #HDR5 — Content-Security-Policy response header applied by
+  // gina.plugins.Csp(). Limits which resources the browser may load and
+  // from where; defeats stored XSS and clickjacking-via-frame-ancestors.
+  //   directives — Required object (factory throws at call time if
+  //                missing or empty). Keys are CSP Level 3 directive
+  //                names (case-insensitive; validated against the
+  //                standard whitelist — unknown names throw). Values:
+  //                array of source-list tokens (joined with space), a
+  //                pre-formatted string, true (boolean-only directives
+  //                + "sandbox"), or false (omit). There is no sensible
+  //                cross-bundle default — every bundle has its own
+  //                resource graph. Example:
+  //                  "csp": {
+  //                    "directives": {
+  //                      "default-src": ["'self'"],
+  //                      "script-src":  ["'self'", "https://cdn.example.com"],
+  //                      "style-src":   ["'self'", "'unsafe-inline'"],
+  //                      "img-src":     ["'self'", "data:"],
+  //                      "upgrade-insecure-requests": true
+  //                    },
+  //                    "reportOnly": false
+  //                  }
+  //   reportOnly — boolean (default false). When true, emits the header
+  //                as Content-Security-Policy-Report-Only — browsers
+  //                report violations but do not block resources. Useful
+  //                for non-enforcing migration testing.
+  //   useNonce   — boolean (default false). When true, a fresh
+  //                cryptographic nonce is generated per response, stamped
+  //                on req._ginaCspNonce, and appended to script-src (or
+  //                default-src) as 'nonce-XXXX'. Every framework-injected
+  //                inline <script> (the onGinaLoaded bootstrap + the dev-
+  //                only Inspector blocks) then carries the matching nonce
+  //                attribute, so the bundle can drop 'unsafe-inline' from
+  //                script-src. Requires a script-src/default-src directive.
+  //   reportOnlyOmit — array of directive names (default []). Only
+  //                consulted when reportOnly is true: the named directives
+  //                are omitted from the report-only header and emitted
+  //                again automatically when reportOnly flips to false —
+  //                one directive set across both modes. Built for engine-
+  //                divergent directives (e.g. frame-ancestors: reported by
+  //                Chrome + Firefox in report-only, ignored with a console
+  //                warning by Safari/WebKit) when a clean WebKit console
+  //                is preferred over the Gecko/Blink report signal. Inert
+  //                and silent when reportOnly is false. Entries validated
+  //                against the CSP Level 3 whitelist (unknown names throw).
+  "csp": {},
+  // #HDR6 — Cross-Origin-Embedder-Policy response header applied by
+  // gina.plugins.Coep(). Controls which cross-origin resources the page
+  // may embed. Required (paired with #HDR13 Coop:"same-origin") to enable
+  // SharedArrayBuffer and high-resolution performance.now() in the page.
+  //   value — one of the 3 W3C HTML spec tokens:
+  //           "require-corp" (default — cross-origin resources must opt-in
+  //           via CORP or CORS; required for the SharedArrayBuffer combo;
+  //           BREAKS embeds without matching CORP/CORS headers),
+  //           "credentialless" (no-CORS cross-origin requests sent without
+  //           cookies/HTTP auth; less restrictive but still gates the
+  //           isolation combo), "unsafe-none" (browser default; no
+  //           restrictions). Unknown tokens throw at factory call time.
+  "coep": {
+    "value": "require-corp"
+  },
+  // #HDR7 — Origin-Agent-Cluster: ?1 response header applied by
+  // gina.plugins.OriginAgentCluster(). Requests origin-keyed agent
+  // clustering — the page's origin gets its own agent isolated from
+  // sibling-origin pages (same-site cross-origin pages can no longer
+  // reach in via document.domain). Mitigates one class of Spectre
+  // side-channel attack. No tunable options today (?1 is the only useful
+  // value; ?0 is the browser default and would be a no-op); the block is
+  // reserved for future fields. Register the plugin to opt in; do not
+  // register to opt out. Browser support: Chrome 88+, Edge 88+,
+  // Firefox 109+, Safari 15+. Older browsers ignore silently.
+  "originAgentCluster": {},
+  // #HDR8 — X-Powered-By response-header REMOVAL applied by
+  // gina.plugins.HidePoweredBy(). Opens Phase 1.5 (helmet-parity gap-fill).
+  // Removes the X-Powered-By: Gina/<version> header that the framework
+  // emits by default at server.js:2425 (Express) / server.isaac.js
+  // _setPoweredByHeader() (Isaac). Reduces the attacker's reconnaissance
+  // surface — they no longer learn the server stack identity from the
+  // response header. Different SHAPE from the other HDR plugins: REMOVE
+  // (res.removeHeader) not SET. No tunable options today; the block is
+  // reserved for future fields.
+  // The middleware removes the header on responses that traverse the
+  // express middleware chain (routed responses). Static-asset serves,
+  // static/traversal 404s and framework error pages never run the chain,
+  // and Isaac's `/_gina/*` writeHead sites commit headers the middleware
+  // cannot reach — use `server.hidePoweredBy: true` above to gate the
+  // emission itself across ALL of those (engine-agnostic, incl. the
+  // `_setPoweredByHeader()` helper backing every Isaac `/_gina/*` emit
+  // site). README documents this split.
+  "hidePoweredBy": {},
+  // #HDR9 — X-DNS-Prefetch-Control response header applied by
+  // gina.plugins.XDnsPrefetchControl(). Phase 1.5 (helmet-parity).
+  // Controls whether the browser proactively resolves DNS for links,
+  // images, CSS, and JavaScript referenced by the page. "off" (default)
+  // is the privacy-respecting choice — the browser does not pre-resolve
+  // DNS for unclicked links, so the resolver only sees the hostnames
+  // the user actually navigates to. "on" enables prefetching for
+  // perceived-performance gains at the cost of leaking the page's
+  // link surface to the DNS resolver.
+  //   value — one of "on" / "off" (default "off" matches helmet).
+  //           Unknown tokens throw at factory call time.
+  // (Note: helmet uses { allow: boolean }; gina uses { value: 'on'|'off' }
+  // matching the existing single-token-enum convention.)
+  "xDnsPrefetchControl": {
+    "value": "off"
+  },
+  // #HDR10 — X-XSS-Protection: 0 response header applied by
+  // gina.plugins.XXssProtection(). Phase 1.5 (helmet-parity).
+  // Emits the literal header `X-XSS-Protection: 0` to DISABLE
+  // Chrome's legacy XSS auditor — the auditor itself had its own
+  // vulnerabilities (cross-site information disclosure), so disabling
+  // is the modern recommendation per MDN. The "0" value is deliberate;
+  // do not change it to "1" (which would re-enable the unsafe auditor).
+  // Use Content-Security-Policy (#HDR5) for the actual XSS defense.
+  // Browser status in 2026: Chrome dropped the auditor in v78 (2019);
+  // Edge follows Chrome; Firefox / Safari never implemented; IE11
+  // honoured but is EOL. Header is effectively a no-op in modern
+  // browsers but ships for defense-in-depth + helmet-parity narrative.
+  // No tunable options today; the block is reserved for future fields.
+  "xXssProtection": {},
+  // #HDR11 — X-Download-Options: noopen response header applied by
+  // gina.plugins.XDownloadOptions(). Phase 1.5 (helmet-parity).
+  // IE-legacy header: emits the literal `X-Download-Options: noopen`
+  // to prevent Internet Explorer 8+ from opening downloads in the
+  // site's security context (an old IE vulnerability shape — the
+  // "Open" button on a download dialog opened the file in the SITE's
+  // origin, allowing XSS via downloaded HTML from a trusted site).
+  // Modern browsers (Chrome / Firefox / Safari / Edge) ignore the
+  // header silently; only IE10 / IE11 honour it (both EOL since 2022).
+  // Effectively a no-op in modern browsers; ships for defense-in-depth
+  // + helmet-parity narrative. "noopen" is the only valid value per
+  // the MSDN spec — there is no "open" alternative. No tunable
+  // options today.
+  "xDownloadOptions": {},
+  // #HDR12 — X-Permitted-Cross-Domain-Policies response header applied
+  // by gina.plugins.XPermittedCrossDomainPolicies(). Phase 1.5
+  // (helmet-parity) — CLOSES Phase 1.5. Restricts Adobe Flash and PDF
+  // readers from honouring cross-domain policy files served from this
+  // origin (defends against the cross-domain-data-read shape).
+  //   value — one of the 4 Adobe spec tokens:
+  //           "none" (default — no cross-domain policy files honoured;
+  //           Flash/PDF cross-origin loading blocked; most restrictive),
+  //           "master-only" (only /crossdomain.xml is honoured),
+  //           "by-content-type" (only Content-Type: text/x-cross-domain-
+  //           policy files honoured; lighter than master-only),
+  //           "all" (any policy file honoured — NOT recommended;
+  //           defeats the header purpose).
+  //           Unknown tokens throw at factory call time.
+  // (Note: helmet uses { permittedPolicies }; gina uses { value }
+  // matching the existing single-token-enum convention.)
+  // Flash is EOL since December 2020; Adobe Reader honoured the header
+  // historically but most modern PDF readers ignore it. Defense-in-
+  // depth + helmet-parity narrative.
+  "xPermittedCrossDomainPolicies": {
+    "value": "none"
+  },
+  // #HDR13 — Cross-Origin-Opener-Policy response header applied by
+  // gina.plugins.Coop(). Controls how the page's browsing context
+  // relates to popups and cross-origin window.opener references on
+  // top-level navigation. Required (paired with #HDR6 Coep:"require-corp")
+  // to enable SharedArrayBuffer and high-resolution performance.now()
+  // in the page.
+  //   value — one of the 4 W3C HTML spec tokens:
+  //           "same-origin" (default — full isolation, severs
+  //           window.opener cross-origin; BREAKS OAuth popup flows
+  //           where the popup needs to call back into the opener),
+  //           "same-origin-allow-popups" (keeps window.opener for
+  //           same-origin popups; compat-friendly for OAuth flows),
+  //           "noopener-allow-popups" (popups open but window.opener
+  //           forced to null; Chrome 119+ / Firefox 131+),
+  //           "unsafe-none" (browser default; no isolation).
+  //           Unknown tokens throw at factory call time.
+  "coop": {
+    "value": "same-origin"
+  },
+  // #HDR14 — Cross-Origin-Resource-Policy response header applied by
+  // gina.plugins.Corp(). Restricts which other origins may load this
+  // resource as a no-CORS / <img> / <script> / <link> etc. embed.
+  // Resource-side complement to #HDR6 Coep's require-corp enforcement.
+  //   value — one of the 3 W3C HTML spec tokens:
+  //           "same-origin" (default — only the exact same origin
+  //           may embed; most restrictive practical posture; BREAKS
+  //           legitimate cross-origin embeds when the resource serves
+  //           at a separate origin from the embedding page),
+  //           "same-site" (any same-site origin / eTLD+1 match may
+  //           embed; allows app.example.com to embed cdn.example.com
+  //           assets while still blocking evil.com),
+  //           "cross-origin" (any origin may embed; required for
+  //           publicly-embeddable CDN fonts, images, public APIs).
+  //           Unknown tokens throw at factory call time.
+  "corp": {
+    "value": "same-origin"
+  },
+  // #HDR15 — Security Headers combined wrapper applied by
+  // gina.plugins.SecurityHeaders(). Composes the full HDR1-14 set
+  // in a single mount + one config block. With no opts emits the
+  // SAFE-SET (xContentTypeOptions, xFrameOptions, referrerPolicy, hsts,
+  // originAgentCluster, hidePoweredBy, xDnsPrefetchControl,
+  // xXssProtection, xDownloadOptions, xPermittedCrossDomainPolicies,
+  // coop, corp — 12 plugins with per-plugin defaults). CSP (#HDR5) and
+  // COEP (#HDR6) are opt-in only (must set csp: { directives: {...} }
+  // or coep: true / coep: { value: ... }). Per-sub-config explicit
+  // opt-out via "<key>": false (or null) skips that plugin. Sub-config
+  // shapes match the standalone plugins' settings.json keys above.
+  // Caller opts to SecurityHeaders({...}) override these settings.
+  // Extended to include the Phase 1.5 helmet-parity plugins (HDR8-12)
+  // 2026-05-17 — closes Phase 1.5 + extends the wrapper safe set to 12.
+  "securityHeaders": {},
+  "engine.io": {
+    // Reserved Gina infrastructure range: 4100–4199
+    // 4100 = socket server, 4101 = reserved, 4102 = engine.io, 4103–4199 = reserved
+    "port": 4102
+  },
+  "livereload": {},
+  // #I18N1 — runtime config for the i18n primitives. Per-bundle JSON
+  // catalogs live at `bundle/locales/<culture>.json` (e.g. en.json,
+  // en_US.json, fr.json) and are eager-loaded into
+  // `process.gina._i18nCatalogs[bundleName]` at bundle start.
+  //   cookieName    — locale-persistence cookie name read by the request-pipeline
+  //                   locale negotiation. `null` disables cookie-based negotiation.
+  //   devMissingKey — dev-mode prefix for missing keys. `null` = no marker;
+  //                   only fires when `NODE_ENV_IS_DEV === "true"`.
+  //   fallbackChain — optional override of the default chain
+  //                   (specific → base → settings.region.culture →
+  //                   GINA_CULTURE → "en"). `null` = use the default.
+  //                   Example: ["en", "fr"] forces a fixed fallback.
+  //   cultures      — RESERVED: explicit URL-prefix allowlist. Not currently
+  //                   consumed — cultures derive from the loaded catalogs.
+  "i18n": {
+    "cookieName": "gina_culture",
+    "devMissingKey": "[MISSING]",
+    "fallbackChain": null,
+    "cultures": null
+  },
+  "locale": {
+    "preferedLanguages": [ "en-US" ],
+    "region": "EN",
+    "firstDayOfWeek": 1,
+    "calendar": "gregorian",
+    "temperature": "celsius",
+    "number": {
+      "grouping": null,
+      "decimal": "."
+    },
+    "currency": {
+      "code": "usd",
+      "grouping": null,
+      "decimal": "."
+    },
+    "measurementUnits": "metric",
+    "dateFormat": {
+      "short": "mm/dd/yyyy",
+      "medium": "mmm d, yyyy",
+      "long": "mmmm d, yyyy",
+      "full": "dddd, mmmm d, yyyy"
+    },
+    "24HourTimeFormat": true,
+    "timeFormat": {
+      "default": {
+        "short": "h:MM:ss",
+        "medium": "h:MM:ss",
+        "long": "h:MM:ss TT"
+      },
+      "24H": {
+        "short": "HH:MM",
+        "medium": "HH:MM:ss",
+        "long": "HH:MM:ss TT"
+      }
+    }
+  }
+}

@@ -252,3 +252,58 @@ describe('06 - per-request requestId / durationMs (#M12b)', function () {
         assert.match(src, /durationMs\s*=\s*Date\.now\(\)\s*-\s*_reqStore\.startMs/, 'self.log durationMs not elapsed');
     });
 });
+
+
+// ─── 07  $-bearing messages survive the text formatter (#B108) ──────────────
+// The format loop (lib/logger/src/helper.js) splices each %-token's value into
+// the template. A STRING replacement dollar-expands `$`-sequences in the value
+// (`` $` `` = the prematch, i.e. the already-rendered prefix; `$'` = postmatch;
+// `$&` = the match), so a message quoting a `$` came out with the log prefix
+// spliced into it — recurring at each occurrence. The function replacer inserts
+// the value verbatim. All levels (except the skipFormating/'catch' bypass) and
+// all three sinks (stdout / mq / file) share this formatter.
+describe('07 - $-bearing messages survive the text formatter (#B108)', function () {
+    var HELPER_SRC = path.join(FRAMEWORK, 'lib/logger/src/helper.js');
+
+    it('source pin: the format loop uses a function replacer, never a string replacement', function () {
+        var src = fs.readFileSync(HELPER_SRC, 'utf8');
+        assert.match(src, /content\.replace\(new RegExp\(patt\[p\], 'g'\), function \(\) \{ return val; \}\)/,
+            'the function-replacer form is missing');
+        assert.doesNotMatch(src, /content\.replace\(new RegExp\(patt\[p\], 'g'\), repl\[patt\[p\]\]\)/,
+            'the bare string-replacement form must not return');
+    });
+
+    it('a message with `$`+backtick renders verbatim (the prefix is NOT spliced in)', function () {
+        var msg   = 'emits a `$` in its validation rules';
+        var lines = renderLines(baseOpt('text'),
+            { group: 'public@app', level: 'warn', content: msg, skipFormating: false },
+            { GINA_LOG_FORMAT: null, GINA_LOG_STDOUT: null });
+        var line = findLine(lines, 'emits a');
+        assert.ok(line, 'no text line captured');
+        assert.ok(line.indexOf(msg) > -1, 'the message must survive verbatim: ' + line);
+        assert.equal(line.split('[public@app]').length - 1, 1,
+            'the rendered prefix must appear exactly once (no prematch splice)');
+    });
+
+    it('recurrence: every occurrence survives; $\' and $& are inert too', function () {
+        var msg   = 'a `$` b `$` c — tail $\' kept, match $& kept';
+        var lines = renderLines(baseOpt('text'),
+            { group: 'g@p', level: 'warn', content: msg, skipFormating: false },
+            { GINA_LOG_FORMAT: null, GINA_LOG_STDOUT: null });
+        var line = findLine(lines, 'kept');
+        assert.ok(line, 'no text line captured');
+        assert.ok(line.indexOf(msg) > -1, 'all $-sequences must survive verbatim: ' + line);
+        assert.ok(line.indexOf('%m') < 0, '$& must not leak the token');
+    });
+
+    it('SUBTRACT: the string-replacement form dollar-expands (the pre-fix bug shape)', function () {
+        var template = '[d] [warn ][g@p] %m';
+        var msg      = 'emits a `$` in its validation rules';
+        var mangled  = template.replace(new RegExp('%m', 'g'), msg);
+        assert.ok(mangled.indexOf(msg) < 0, 'the string form must corrupt the message');
+        assert.ok(mangled.indexOf('emits a `[d] [warn ][g@p] ') > -1,
+            'the prematch (the rendered prefix) is spliced in at the $-backtick');
+        var fixed = template.replace(new RegExp('%m', 'g'), function () { return msg; });
+        assert.ok(fixed.indexOf(msg) > -1, 'the function form inserts verbatim');
+    });
+});

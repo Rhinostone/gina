@@ -1,0 +1,7 @@
+{
+    "name": "dto-pipe",
+    "description": "Default-on request-payload validation pipe: compiles a route's DTO to the live form-validator rules and short-circuits a 422 on failure",
+    "version": "0.0.1",
+    "private": true,
+    "main": "src/main"
+}

@@ -654,14 +654,18 @@ describe('06 - source inspection: updateRadio fixes pin to main.js', function ()
 // Test layering: the production capture pattern is replayed below in
 // `captureDefaultChecked`, mirroring the inline block in main.js. Source
 // inspection in section 07.b pins the live shape so the replica stays honest.
+// Since #49 the value-derived clause sits behind the per-form legacy opt-in
+// (isCheckboxValueAsState($form)); the replica mirrors that gate with its
+// third argument (omitted = spec mode, the default).
 // ============================================================================
 
-// Mirrors bindForm's fieldsSet.defaultChecked capture site (~line 4498).
-function captureDefaultChecked($input, defaultValue) {
+// Mirrors bindForm's fieldsSet.defaultChecked capture site (main.js ~line 5026).
+function captureDefaultChecked($input, defaultValue, isLegacyValueAsState) {
     return (
         $input.defaultChecked
         ||
-        /^(true|on)$/.test(defaultValue)
+        isLegacyValueAsState
+        && /^(true|on)$/.test(defaultValue)
         && /^(checkbox)$/i.test($input.type)
     ) ? true : false;
 }
@@ -750,20 +754,24 @@ describe('07 - bindForm defaultChecked cache: parse-time IDL/attribute desync re
             'cache reflects parse-time author intent, not transient IDL state');
     });
 
-    it('checkbox defaultValue=on path still fires when the attribute is absent', function () {
-        // The second branch of the capture covers the special checkbox case where
-        // the framework was told the default is "on" via a separate input config
-        // (defaultValue), without the HTML attribute being set.
+    it('checkbox defaultValue=on fires only under the legacy value-as-state opt-in (#49)', function () {
+        // The value-derived branch covers the special checkbox case where the
+        // framework was told the default is "on" via a separate input config
+        // (defaultValue), without the HTML attribute being set. Since #49 that
+        // clause is gated on the form's legacy opt-in — in spec mode (the
+        // default) only the checked attribute decides the initial state.
         var dom = new JSDOM('<!DOCTYPE html><html><body>'
             + '<form id="f"><input type="checkbox" name="opt" id="cb"></form>'
             + '</body></html>');
         var $cb = dom.window.document.getElementById('cb');
         assert.equal($cb.defaultChecked, false,
             'no attribute, no parse-time default');
-        assert.equal(captureDefaultChecked($cb, 'on'), true,
-            'checkbox + defaultValue=on should still capture TRUE');
-        assert.equal(captureDefaultChecked($cb, ''), false,
-            'checkbox + no defaultValue should capture FALSE');
+        assert.equal(captureDefaultChecked($cb, 'on'), false,
+            'spec mode: defaultValue=on must NOT capture checked-by-default');
+        assert.equal(captureDefaultChecked($cb, 'on', true), true,
+            'legacy value-as-state mode: defaultValue=on still captures TRUE');
+        assert.equal(captureDefaultChecked($cb, '', true), false,
+            'legacy mode + no defaultValue should capture FALSE');
     });
 
     it('non-regression: defaultValue=on does NOT fire for a radio (the second-branch type guard holds)', function () {
@@ -771,8 +779,8 @@ describe('07 - bindForm defaultChecked cache: parse-time IDL/attribute desync re
         // s-a: no attribute. defaultValue='on' would trigger the second branch
         // ONLY when the type is checkbox — for radios it must NOT fire.
         assert.equal(ctx.a.defaultChecked, false);
-        assert.equal(captureDefaultChecked(ctx.a, 'on'), false,
-            'radio + defaultValue=on must NOT capture TRUE (the second branch is checkbox-only)');
+        assert.equal(captureDefaultChecked(ctx.a, 'on', true), false,
+            'radio + defaultValue=on must NOT capture TRUE even in legacy mode (the second branch is checkbox-only)');
     });
 });
 
@@ -804,6 +812,12 @@ describe('07.b - source inspection: bindForm defaultChecked capture pins to main
         var re = /\(\s*true\|on\s*\)\$\/\.test\(defaultValue\)\s*[\s\S]{0,40}\&\&\s*\/\^\(checkbox\)\$\/i\.test\(\$inputs\[f\]\.type\)/;
         assert.ok(re.test(mainSrc),
             'second-branch checkbox+defaultValue path should survive the fix');
+    });
+
+    it('the value-derived clause is gated on the legacy opt-in (#49) — mirrored by the replica third argument', function () {
+        var re = /\$inputs\[f\]\.defaultChecked\s*\|\|\s*isCheckboxValueAsState\(\$form\)\s*&&\s*\/\^\(true\|on\)\$\//;
+        assert.ok(re.test(mainSrc),
+            'the (true|on) value clause must sit behind isCheckboxValueAsState($form); keep captureDefaultChecked in lockstep');
     });
 });
 

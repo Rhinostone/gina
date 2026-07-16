@@ -1,6 +1,6 @@
 {
   "name": "gina",
-  "version": "0.5.17",
+  "version": "0.5.18",
   "description": "Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency",
   "keywords": [
     "nodejs",
@@ -73,12 +73,12 @@
     "gina-container": "bin/gina-container",
     "gina-init": "bin/gina-init"
   },
-  "main": "./framework/v0.5.17/core/gna",
+  "main": "./framework/v0.5.18/core/gna",
   "exports": {
     ".": {
       "types": "./types/index.d.ts",
       "import": "./index.mjs",
-      "require": "./framework/v0.5.17/core/gna.js"
+      "require": "./framework/v0.5.18/core/gna.js"
     },
     "./gna": {
       "types": "./types/gna.d.ts",
@@ -100,7 +100,7 @@
     "test:e2e": "playwright test test/e2e",
     "smoke": "node script/smoke_test_tarball.js",
     "types:gen": "node script/generate_gna_types.js",
-    "types:check": "node script/generate_gna_types.js --check",
+    "types:check": "node script/generate_gna_types.js --check && node script/check_types_consumer.js",
     "prepare": "node script/prepare_version.js",
     "prepack": "node script/check_no_local_leak.js",
     "postpublish": "node script/post_publish.js",
@@ -117,12 +117,14 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.48.0",
+    "@types/node": "^26.1.1",
     "csso-cli": "4.0.2",
     "engine.io-client": "^6.6.4",
     "jsdom": "^29.1.1",
     "nunjucks": "^3.2.4",
     "requirejs": "^2.3.7",
-    "sass": "1.101.0"
+    "sass": "1.101.0",
+    "typescript": "^7.0.2"
   },
   "overrides": {
     "ws": "^8.21.0"

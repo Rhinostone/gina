@@ -185,22 +185,27 @@ describe('03 - TypeScript declaration files: existence and key declarations', fu
     var indexSrc;
     it('index.d.ts declares GinaRequest', function() {
         indexSrc = indexSrc || fs.readFileSync(path.join(TYPES_DIR, 'index.d.ts'), 'utf8');
-        assert.ok(/export\s+type\s+GinaRequest/.test(indexSrc));
+        assert.ok(/type\s+GinaRequest</.test(indexSrc));
     });
 
     it('index.d.ts declares GinaResponse', function() {
         indexSrc = indexSrc || fs.readFileSync(path.join(TYPES_DIR, 'index.d.ts'), 'utf8');
-        assert.ok(/export\s+type\s+GinaResponse/.test(indexSrc));
+        assert.ok(/type\s+GinaResponse/.test(indexSrc));
     });
 
-    it('index.d.ts declares SuperController class', function() {
+    it('index.d.ts declares the SuperController interface', function() {
         indexSrc = indexSrc || fs.readFileSync(path.join(TYPES_DIR, 'index.d.ts'), 'utf8');
-        assert.ok(/export\s+class\s+SuperController/.test(indexSrc));
+        assert.ok(/interface\s+SuperController\s+extends\s+EventEmitter/.test(indexSrc));
     });
 
-    it('index.d.ts declares EntitySuper class', function() {
+    it('index.d.ts declares the EntitySuper interface', function() {
         indexSrc = indexSrc || fs.readFileSync(path.join(TYPES_DIR, 'index.d.ts'), 'utf8');
-        assert.ok(/export\s+class\s+EntitySuper/.test(indexSrc));
+        assert.ok(/interface\s+EntitySuper\s+extends\s+EventEmitter/.test(indexSrc));
+    });
+
+    it('index.d.ts exports the module value with `export = gina`', function() {
+        indexSrc = indexSrc || fs.readFileSync(path.join(TYPES_DIR, 'index.d.ts'), 'utf8');
+        assert.match(indexSrc, /^export = gina;/m);
     });
 
     // Config interfaces

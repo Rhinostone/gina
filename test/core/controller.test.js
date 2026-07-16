@@ -1,4 +1,4 @@
-var { describe, it } = require('node:test');
+var { describe, it, afterEach } = require('node:test');
 var assert = require('node:assert/strict');
 var fs = require('fs');
 var path = require('path');
@@ -4246,4 +4246,126 @@ describe('36 - pauseRequest snapshots the live request into requestStorage (beha
         assert.deepStrictEqual(session.haltedRequest.data, { hello: 'world' });
     });
 
+});
+
+
+// ---------------------------------------------------------------------------
+// 37 — self.cache: the FIRING half of the cache.invalidateOnEvents contract
+//
+// A route declares which events evict it (`cache.invalidateOnEvents`) and the
+// render delegates register the key against them — that half always worked.
+// Nothing ever FIRED an invalidation, so the contract was inert end to end and
+// the documented `self.cache.invalidateByEvent()` did not exist. Behavioral:
+// drives the REAL SuperController via createTestInstance (the §14 harness).
+// ---------------------------------------------------------------------------
+describe('37 - self.cache fires cache.invalidateOnEvents (behavioral)', function() {
+
+    var FW = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW;
+    require('module').Module._initPaths();
+    require(path.join(FW, 'helpers'));
+    setPath('gina', { core: path.join(FW, 'core') });
+    var SuperController = require(SOURCE);
+    var RenderCache     = require(path.join(FW, 'lib/render-cache/src/main'));
+
+    // A controller wired to `store` as the server's shared cache Map.
+    function makeInstance(store) {
+        var inst = SuperController.createTestInstance({
+            req     : { url: '/x', method: 'GET', routing: { rule: 'r', namespace: 'default' }, params: {}, get: {} },
+            res     : { setHeader: function () {}, end: function () {} },
+            options : { conf: { bundle: 'b', content: { routing: { r: {} } } }, rule: 'r', control: 'index' }
+        });
+        if (typeof store !== 'undefined') {
+            inst.serverInstance = { _cached: store };
+            stores.push(store);
+        }
+        return inst;
+    }
+
+    // Seed the shared Map the way a render delegate does: cache the entry, then
+    // register it against the route's invalidateOnEvents.
+    //
+    // Deliberately NO ttl: lib/cache.set() arms a setTimeout(ttl * 1000) per entry,
+    // and any entry a test does not evict would keep that timer — and the event loop —
+    // alive for the whole TTL, hanging the file (node --test waits for the loop to
+    // drain; --test-force-exit would only mask it). Expiry is not what this section
+    // tests; §04 of render-cache.test.js covers it.
+    function seed(store, urls, events) {
+        var rc = new RenderCache();
+        rc.from(store);
+        return urls.map(function (u) {
+            var k = rc.buildKey('static', 'b', u);
+            rc.set('memory', k, {}, { content: u });
+            rc.setEvents(k, events);
+            return k;
+        });
+    }
+
+    // Belt-and-braces: drop every entry (and any timer it holds) after each test.
+    var stores = [];
+    afterEach(function () {
+        stores.forEach(function (st) {
+            try { new RenderCache().from(st).clear(); } catch (e) {}
+        });
+        stores = [];
+    });
+
+    it('exposes the documented invalidateByEvent + clear handles', function() {
+        var inst = makeInstance(new Map());
+        assert.equal(typeof inst.cache, 'object');
+        assert.equal(typeof inst.cache.invalidateByEvent, 'function');
+        assert.equal(typeof inst.cache.clear, 'function');
+    });
+
+    it('invalidateByEvent evicts every entry registered to the event and returns the count', function() {
+        var store = new Map();
+        var inst  = makeInstance(store);
+        var keys  = seed(store, ['/a', '/b'], ['invoice#saved']);
+
+        assert.equal(inst.cache.invalidateByEvent('invoice#saved'), 2);
+
+        var probe = new RenderCache();
+        probe.from(store);
+        keys.forEach(function (k) {
+            assert.equal(probe.has(k), false, 'entry must be evicted: ' + k);
+        });
+    });
+
+    it('leaves entries registered to a DIFFERENT event alone', function() {
+        var store = new Map();
+        var inst  = makeInstance(store);
+        var keys  = seed(store, ['/keep'], ['mine#evt']);
+
+        assert.equal(inst.cache.invalidateByEvent('other#evt'), 0);
+
+        var probe = new RenderCache();
+        probe.from(store);
+        assert.equal(probe.has(keys[0]), true, 'an unrelated event must not evict');
+    });
+
+    it('is safe to call before the server is wired — returns 0, never throws', function() {
+        var inst = makeInstance();            // no serverInstance at all
+        assert.doesNotThrow(function () {
+            assert.equal(inst.cache.invalidateByEvent('x'), 0);
+            assert.equal(inst.cache.clear(), 0);
+        });
+    });
+
+    it('clear(bundle) flushes only that bundle', function() {
+        var store = new Map();
+        var inst  = makeInstance(store);
+        var rc    = new RenderCache();
+        rc.from(store);
+        var mine  = rc.buildKey('static', 'b',     '/mine');
+        var other = rc.buildKey('static', 'other', '/other');
+        rc.set('memory', mine,  {}, { content: 'm' });
+        rc.set('memory', other, {}, { content: 'o' });
+
+        assert.equal(inst.cache.clear('b'), 1);
+
+        var probe = new RenderCache();
+        probe.from(store);
+        assert.equal(probe.has(mine),  false, 'the named bundle is flushed');
+        assert.equal(probe.has(other), true,  'other bundles are untouched');
+    });
 });

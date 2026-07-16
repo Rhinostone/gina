@@ -1,0 +1,5 @@
+[
+    "--dry-run",
+    "--event",
+    "--format"
+]

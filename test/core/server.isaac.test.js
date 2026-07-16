@@ -1101,6 +1101,54 @@ describe('08 - #S7 admin /_gina/* IP allowlist source structure', function() {
             '/_gina/cache/stats handler must return 403 on deny');
     });
 
+    // ── /_gina/cache/clear (#RC — Slice 3 cross-strategy flush) ─────────────
+    it('/_gina/cache/clear handler is POST-gated + admin-gated (403 on deny)', function() {
+        var clearMatch = src.indexOf('/_gina/cache/clear');
+        var jobsMatch  = src.indexOf('/_gina\\/jobs', clearMatch);
+        assert.ok(clearMatch > -1, '/_gina/cache/clear regex anchor not found');
+        var blk = src.slice(clearMatch, jobsMatch > clearMatch ? jobsMatch : clearMatch + 2000);
+        assert.ok(/method\.toUpperCase\(\) === 'POST'/.test(blk),
+            '/_gina/cache/clear must gate on POST (a flush is a mutation, not a safe GET)');
+        assert.ok(blk.indexOf('lib.admin.isClientAllowed(request)') > -1,
+            '/_gina/cache/clear handler must invoke lib.admin.isClientAllowed(request) before flushing');
+        assert.ok(blk.indexOf("':status': 403") > -1 || blk.indexOf(', 403') > -1,
+            '/_gina/cache/clear handler must return 403 on deny');
+    });
+
+    it('/_gina/cache/clear flushes via renderCache scoped clear(bundle) + keeps the dual HTTP/2 + HTTP/1.1 write', function() {
+        var clearMatch = src.indexOf('/_gina/cache/clear');
+        var jobsMatch  = src.indexOf('/_gina\\/jobs', clearMatch);
+        var blk = src.slice(clearMatch, jobsMatch > clearMatch ? jobsMatch : clearMatch + 2000);
+        assert.ok(blk.indexOf('renderCache.from(server._cached)') > -1, 'must adopt the shared server._cached Map');
+        assert.ok(/renderCache\.clear\(cacheClearBundle\)/.test(blk),
+            'must call the scoped clear(bundle) on the render-cache dispatcher (never lib.Cache whole-store)');
+        assert.ok(blk.indexOf("get('bundle')") > -1, 'must honour the optional ?bundle= filter');
+        assert.ok(blk.indexOf('response.stream.respond') > -1 && blk.indexOf('response.writeHead(200') > -1,
+            'must keep the isaac dual HTTP/2 (stream.respond) + HTTP/1.1 (writeHead) response');
+    });
+
+    it('/_gina/cache/clear honours ?event= and lets it WIN over ?bundle= (engine parity)', function() {
+        // Mirrors the express-engine pin in server.test.js — /_gina/* handlers must
+        // stay in step across engines. Load-bearing: `event` used to be an unparsed
+        // param, so ?event=<name> fell through with bundle === null and flushed EVERY
+        // bundle's output cache instead of evicting that event's entries.
+        var clearMatch = src.indexOf('/_gina/cache/clear');
+        var jobsMatch  = src.indexOf('/_gina\\/jobs', clearMatch);
+        var blk = src.slice(clearMatch, jobsMatch > clearMatch ? jobsMatch : clearMatch + 2000);
+
+        assert.ok(blk.indexOf("get('event')") > -1, 'must parse the ?event= selector');
+        assert.ok(/renderCache\.invalidateByEvent\(cacheClearEvent\)/.test(blk),
+            'an ?event= run must evict by event, not flush');
+
+        // The selection must be gated on cacheClearEvent, so ?event= can never reach
+        // the bundle flush.
+        assert.match(blk, /\(\s*cacheClearEvent\s*\)\s*\?[\s\S]{0,160}?invalidateByEvent\(cacheClearEvent\)[\s\S]{0,160}?:[\s\S]{0,160}?renderCache\.clear\(cacheClearBundle\)/,
+            'invalidateByEvent must be selected over clear() whenever cacheClearEvent is set');
+        // …and the reported envelope must name the event, not a null bundle.
+        assert.ok(blk.indexOf('event: cacheClearEvent') > -1,
+            'the ?event= response must echo the event (never bundle: null)');
+    });
+
     it('gna.js wires the admin allowlist init alongside the metrics init block', function() {
         var gnaSrc = fs.readFileSync(path.join(require('../fw'), 'core/gna.js'), 'utf8');
         assert.ok(
@@ -1267,13 +1315,21 @@ describe('09 - #HDR8 Phase 2 X-Powered-By framework gate source structure', func
         assert.ok(helperPos < reqPos,    "helper must be defined before `server.on('request', ...)`");
     });
 
-    it('exactly 17 object-literal sites wrap headers via _setPoweredByHeader({', function() {
+    it('exactly 25 object-literal sites wrap headers via _setPoweredByHeader({', function() {
         // 16 sites through #INS9b; #INS10 added the 17th — the GET/POST
         // /_gina/instrument control handler wraps its reply headers via the
         // helper so the deny/status responses honour server.hidePoweredBy.
+        // #RC (Slice 3 — cross-strategy flush) added the 18th + 19th: the POST
+        // /_gina/cache/clear handler wraps BOTH its 403-deny and its 200-ok
+        // reply headers via the helper, mirroring the sibling
+        // /_gina/cache/stats handler, so the flush response honours
+        // server.hidePoweredBy too.
+        // #RWATCH added the 20th–25th: the three /_gina/release/* mirrors
+        // (status / rebuild / events) each wrap their 403-deny AND their
+        // success reply headers via the helper.
         var matches = src.match(/=\s*_setPoweredByHeader\(\{/g);
-        assert.equal(matches && matches.length, 17,
-            'expected 17 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
+        assert.equal(matches && matches.length, 25,
+            'expected 25 `= _setPoweredByHeader({` call sites; found ' + (matches ? matches.length : 0));
     });
 
     it('every named headers var that previously held X-Powered-By is now wrapped via helper', function() {
@@ -3006,4 +3062,117 @@ describe('16b - #B66 host-stripped routing.json: pure-logic replica', function()
             'pre-fix, the proxied client received the internal host:port — this is the disclosure #B66 closes');
     });
 
+});
+
+
+describe('17 - #RC5 Cache-Status detail + RFC miss form + stats L2 fold — source pins', function() {
+
+    function getSrc() { return src || (src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    it('the hit path appends `detail=` from the SAME memory-vs-fs predicate the serve branch uses', function() {
+        var s = getSrc();
+        assert.match(s, /cacheStatus\s*\+=\s*'; detail='\s*\+\s*\(\s*\(typeof\(cachedContentObj\.fromMemory\)\s*!=\s*'undefined'\)\s*\?\s*'memory'\s*:\s*'fs'\s*\)/,
+            'detail token derived from cachedContentObj.fromMemory — memory (Map) vs fs (disk readBack)');
+    });
+
+    it('the detail append precedes the hit setHeader (the header carries it)', function() {
+        var s = getSrc();
+        var detailAt = s.indexOf("cacheStatus += '; detail='");
+        var setAt    = s.indexOf("response.setHeader('Cache-Status', cacheStatus)");
+        assert.ok(detailAt > -1 && setAt > -1 && detailAt < setAt,
+            'append must land in the string BEFORE the first (hit-path) setHeader');
+    });
+
+    it('the miss form is RFC 9211 §2.2 — fwd=uri-miss, never a bare uri-miss parameter', function() {
+        var s = getSrc();
+        assert.match(s, /cacheStatus\s*\+=\s*'; fwd=uri-miss'/);
+        // Window-independent negative: the pre-#RC5 bare-append form is globally gone
+        // (the code shape `+= '; uri-miss'`, not the bare token — comments legitimately
+        // name uri-miss when explaining the RFC form).
+        assert.ok(s.indexOf("+= '; uri-miss'") < 0, 'the bare uri-miss append must not return');
+    });
+
+    it('/_gina/cache/stats folds store.health() as an ADDITIVE l2 field, after the admin gate', function() {
+        var s = getSrc();
+        assert.match(s, /cacheStatsPayload\.l2\s*=\s*process\.gina\._renderCacheStore\.health\(\)/);
+        assert.match(s, /typeof\(process\.gina\._renderCacheStore\.health\)\s*===\s*'function'/,
+            'guarded on health being a function (a future store without it stays un-folded)');
+        var gateAt = s.indexOf('/_gina/cache/stats: client IP not in app.json admin.allowFrom');
+        var foldAt = s.indexOf('cacheStatsPayload.l2 =');
+        assert.ok(gateAt > -1 && foldAt > gateAt, 'the 403 gate precedes the l2 fold');
+        var stringifyAt = s.indexOf('JSON.stringify(cacheStatsPayload)');
+        assert.ok(stringifyAt > foldAt, 'the fold lands before the payload is serialized');
+    });
+});
+
+
+describe('17b - #RC5 isaac cacheStatus build — pure-logic replica', function() {
+
+    // Faithful replica of the isaac pre-routing read's cacheStatus construction
+    // (server.isaac.js hit path: '; hit' + ttl/max-age + '; detail=' append) and
+    // the miss form. `now` is injected so the arithmetic is deterministic.
+    function buildHitStatus(cachedContentObj, now) {
+        var cacheStatus = 'gina-cache';
+        cacheStatus += '; hit';
+        var cacheNow = now;
+        if ( cachedContentObj.sliding === true ) {
+            if ( typeof(cachedContentObj.ttl) != 'undefined' && cachedContentObj.ttl > 0 ) {
+                var lastAccess = cachedContentObj.lastAccessedAt
+                    ? cachedContentObj.lastAccessedAt.getTime()
+                    : cachedContentObj.createdAt.getTime();
+                var slidingRemainingSeconds = Math.max(0, Math.floor( (lastAccess + Math.round(cachedContentObj.ttl * 1000) - cacheNow) / 1000 ));
+                cacheStatus += '; ttl=' + slidingRemainingSeconds;
+            }
+            if ( cachedContentObj.expiresAt ) {
+                var absoluteRemainingSeconds = Math.max(0, Math.floor( (cachedContentObj.expiresAt.getTime() - cacheNow) / 1000 ));
+                cacheStatus += '; max-age=' + absoluteRemainingSeconds;
+            }
+        } else {
+            if ( typeof(cachedContentObj.ttl) != 'undefined' && cachedContentObj.ttl > 0) {
+                var createdAt = cachedContentObj.createdAt.getTime() + Math.round(cachedContentObj.ttl * 1000);
+                var remainingSeconds = Math.floor( (createdAt - cacheNow) /1000);
+                cacheStatus += '; ttl='+remainingSeconds;
+            }
+        }
+        cacheStatus += '; detail=' + ( (typeof(cachedContentObj.fromMemory) != 'undefined') ? 'memory' : 'fs' );
+        return cacheStatus;
+    }
+
+    function buildMissStatus() {
+        var cacheStatus = 'gina-cache';
+        cacheStatus += '; fwd=uri-miss';
+        return cacheStatus;
+    }
+
+    it('a memory (Map) entry with an absolute ttl → hit; ttl=N; detail=memory', function() {
+        var now = Date.now();
+        var s = buildHitStatus({ fromMemory: true, ttl: 60, createdAt: new Date(now - 10000) }, now);
+        assert.equal(s, 'gina-cache; hit; ttl=50; detail=memory');
+    });
+
+    it('an fs (disk readBack) entry → detail=fs — restart survival observable on the wire', function() {
+        var now = Date.now();
+        var s = buildHitStatus({ filename: '/cache/x', ttl: 60, createdAt: new Date(now - 10000) }, now);
+        assert.equal(s, 'gina-cache; hit; ttl=50; detail=fs');
+    });
+
+    it('a sliding entry → ttl (idle window) + max-age (absolute ceiling) + detail, in that order', function() {
+        var now = Date.now();
+        var s = buildHitStatus({
+            fromMemory: true, sliding: true, ttl: 30,
+            createdAt:      new Date(now - 60000),
+            lastAccessedAt: new Date(now - 5000),
+            expiresAt:      new Date(now + 100000)
+        }, now);
+        assert.equal(s, 'gina-cache; hit; ttl=25; max-age=100; detail=memory');
+    });
+
+    it('a no-ttl memory entry → hit; detail=memory (no ttl param)', function() {
+        var s = buildHitStatus({ fromMemory: true }, Date.now());
+        assert.equal(s, 'gina-cache; hit; detail=memory');
+    });
+
+    it('the miss form is gina-cache; fwd=uri-miss', function() {
+        assert.equal(buildMissStatus(), 'gina-cache; fwd=uri-miss');
+    });
 });

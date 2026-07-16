@@ -89,8 +89,9 @@ describe('01 - function-scoped captures of per-request refs (#M1 race fix)', fun
         var fnStart = src.indexOf('async function writeCache');
         assert.ok(fnStart > -1, 'writeCache not found');
         var fnBodyStart = src.indexOf('{', fnStart);
-        // Find first await within writeCache (the writeFile await)
-        var awaitIdx = src.indexOf('await fs.promises.writeFile', fnBodyStart);
+        // Find first await within writeCache (the render-cache dispatch await —
+        // #P30's inline fs.promises.writeFile moved into lib/render-cache in Slice 0).
+        var awaitIdx = src.indexOf('await renderCache.set', fnBodyStart);
         assert.ok(awaitIdx > -1, 'first await in writeCache not found');
         // Find the end of writeCache (matching closing brace) — approximate
         // by scanning forward to the next module-scope function declaration.
@@ -168,11 +169,11 @@ describe('03 - released-response guard (#B36)', function() {
         var s = src();
         var guardIdx  = s.search(/if\s*\(\s*local\.res\s*==\s*null\s*\)\s*\{[\s\S]{0,40}?return;/);
         var errIdx    = s.indexOf('if ( self.isProcessingError )');
-        var cacheIdx  = s.indexOf('cache.from(self.serverInstance._cached)');
+        var cacheIdx  = s.indexOf('renderCache.from(self.serverInstance._cached)');
         var streamIdx = s.indexOf('typeof(local.res.stream)');
         assert.ok(guardIdx > -1, 'expected an `if ( local.res == null ) return;` guard in renderJSON()');
         assert.ok(errIdx > -1 && errIdx < guardIdx, 'guard must follow the isProcessingError early-return');
-        assert.ok(cacheIdx > guardIdx, 'guard must precede cache.from(self.serverInstance._cached)');
+        assert.ok(cacheIdx > guardIdx, 'guard must precede renderCache.from(self.serverInstance._cached)');
         assert.ok(streamIdx > guardIdx, 'guard must precede the local.res.stream read (the crash site)');
     });
 
@@ -295,5 +296,48 @@ describe('04 - per-request deps are function-scoped; writeCache reads only its p
         await settle();
         assert.deepStrictEqual(tf.sort(), ['A', 'B'],
             'threaded-parameter shape must route each error through its own controller');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 05 - bundle-wide sliding / maxAge cache defaults (server.cache)
+// ---------------------------------------------------------------------------
+describe('05 - bundle-wide sliding / maxAge cache defaults (server.cache)', function() {
+    // JSON-response writeCache inherits sliding/maxAge from opt (= conf.server.cache)
+    // when the route omits them, mirroring the ttl fallback and staying in lockstep
+    // with render-swig.js and render-nunjucks.js.
+    function getSrc() { return fs.readFileSync(SOURCE, 'utf8'); }
+    it('falls back to opt.sliding / opt.maxAge next to the ttl fallback', function() {
+        var s   = getSrc();
+        var idx = s.indexOf('async function writeCache');
+        assert.ok(idx > 0, 'writeCache found');
+        var body = s.slice(idx, idx + 2600);
+        assert.match(body, /typeof\(\s*cachingOption\.ttl\s*\)\s*==\s*['"]undefined['"][\s\S]{0,120}cachingOption\.ttl\s*=\s*opt\.ttl/);
+        assert.match(body, /typeof\(\s*cachingOption\.sliding\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.sliding\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.sliding\s*=\s*opt\.sliding/);
+        assert.match(body, /typeof\(\s*cachingOption\.maxAge\s*\)\s*==\s*['"]undefined['"]\s*&&\s*typeof\(\s*opt\.maxAge\s*\)\s*!=\s*['"]undefined['"][\s\S]{0,80}cachingOption\.maxAge\s*=\s*opt\.maxAge/);
+    });
+    it('documents opt.sliding / opt.maxAge in the writeCache @param opt JSDoc', function() {
+        assert.match(getSrc(), /@param\s+\{object\}\s+opt[\s\S]{0,120}opt\.sliding[\s\S]{0,40}opt\.maxAge/);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 06 - responseDto dev warn checks the SERVED contract (#B110)
+// ---------------------------------------------------------------------------
+describe('06 - responseDto dev warn checks the SERVED contract (#B110)', function() {
+    // The dev-only missing-required warn reads required[] off the schema. A field
+    // that is `.required()` AND `.exclude()`d can never reach the wire (apply()
+    // deletes it before the single JSON.stringify feeding every body branch AND
+    // the cache write), so the warn must check the response projection — not the
+    // declared shape — or an action legitimately omitting such a field would warn
+    // on every dev render.
+    function getSrc() { return fs.readFileSync(SOURCE, 'utf8'); }
+    it('the missing-required warn reads the response projection (dropExcluded)', function() {
+        assert.match(getSrc(), /_respDto\.toJsonSchema\(null, \{ dropExcluded: true \}\)/);
+    });
+    it('the wire transform itself remains apply() — the strip is not schema-driven', function() {
+        assert.match(getSrc(), /jsonObj = _respDto\.apply\(jsonObj\)/);
     });
 });

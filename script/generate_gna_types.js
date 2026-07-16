@@ -140,7 +140,10 @@ function readCoreJsDoc() {
         jsdocs.push({ start: m.index, end: m.index + m[0].length, body: m[1] });
     }
 
-    const assignRx = /^gna\.([A-Za-z_$][\w$]*)\s*=/gm;
+    // Anchor-free on purpose: `gna.<name> =` assignments are routinely
+    // INDENTED (e.g. `gna.getConfig` is assigned inside a boot callback), so
+    // a line-anchored `/^gna\./` silently misses them and their JSDoc.
+    const assignRx = /^\s*gna\.([A-Za-z_$][\w$]*)\s*=/gm;
     while ((m = assignRx.exec(src)) !== null) {
         const name = m[1];
         const assignStart = m.index;
@@ -492,7 +495,7 @@ function generate() {
     out.push(' */');
     out.push('');
     out.push('import type { UuidFunction } from \'./globals\';');
-    out.push('import type { SuperController, EntitySuper } from \'./index\';');
+    out.push('import type { SuperControllerConstructor, EntitySuperConstructor } from \'./index\';');
     out.push('');
     out.push('interface GinaExports {');
 
@@ -508,9 +511,10 @@ function generate() {
     }
 
     out.push('');
-    out.push('    // Classes');
-    out.push('    SuperController: typeof SuperController;');
-    out.push('    EntitySuper: typeof EntitySuper;');
+    out.push('    // Classes — the CONSTRUCTOR VALUES live on this barrel (root gna.js),');
+    out.push('    // not on the main entry, whose declarations are type-only.');
+    out.push('    SuperController: SuperControllerConstructor;');
+    out.push('    EntitySuper: EntitySuperConstructor;');
     out.push('');
     out.push('    // uuid');
     out.push('    uuid: UuidFunction;');
@@ -561,4 +565,4 @@ if (require.main === module) {
     }
 }
 
-module.exports = { generate: generate };
+module.exports = { generate: generate, readDeclaredGlobals: readDeclaredGlobals };

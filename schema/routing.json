@@ -107,16 +107,16 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["memory", "fs"],
-              "description": "Cache type shorthand."
+              "enum": ["memory", "fs", "redis"],
+              "description": "Cache type shorthand. `redis` (shared L2, per-replica L1) also needs the bundle-wide `server.cache.store` (a connectors.json entry) set in settings.json, and a ttl (or invalidateOnEvents)."
             },
             {
               "type": "object",
               "properties": {
                 "type": {
                   "type": "string",
-                  "enum": ["memory", "fs"],
-                  "description": "Cache backend."
+                  "enum": ["memory", "fs", "redis"],
+                  "description": "Cache backend. `redis` requires the bundle-wide `server.cache.store` (a connectors.json entry) in settings.json; `sliding` is unsupported with `redis`."
                 },
                 "ttl": {
                   "type": "number",
