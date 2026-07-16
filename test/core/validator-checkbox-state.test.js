@@ -96,8 +96,8 @@ function replayCollect($el, rules) {
             if ( typeof(rules[name]) == 'undefined' ) {
                 rules[name] = { isBoolean: true };
             } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
-                rules[name].isBoolean = true;
                 rules[name].isRequired = true;
+                rules[name].isBoolean = true;
             }
         }
         fields[name] = $el.checked;
@@ -226,8 +226,14 @@ describe('01 - source inspection: #49 checkbox state model pins', function () {
 
         var infos = mainSrc.indexOf("isBooleanCheckbox($form[i], (rules) ? rules[name] : null)");
         assert.ok(infos > -1, 'getFormValidationInfos must classify via the helper');
-        var infosPost = mainSrc.indexOf('fields[name] = $form[i].checked;', infos);
-        assert.ok(infosPost > -1 && infosPost - infos < 900, 'getFormValidationInfos must post live .checked');
+        // end-anchored on the OUTER legacy-chain opener (the injection block has
+        // its own inner `} else if (`, so anchor on the distinctive gate text) —
+        // comment growth inside the branch cannot break this pin
+        var infosTail = mainSrc.substring(infos);
+        var legacyGate = infosTail.match(/\} else if \(\s*\$form\[i\]\.checked\s*\|\| typeof \(rules\[name\]\) == 'undefined'/);
+        assert.ok(legacyGate, 'the legacy chain must follow the short-circuit');
+        assert.ok(infosTail.substring(0, legacyGate.index).indexOf('fields[name] = $form[i].checked;') > -1,
+            'getFormValidationInfos must post live .checked inside the short-circuit branch');
     });
 
     it('the radio boolean sub-branch is untouched', function () {

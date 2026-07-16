@@ -7005,9 +7005,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         if ( typeof(rules[name]) == 'undefined' ) {
                             rules[name] = { isBoolean: true };
                         } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
-                            rules[name].isBoolean = true;
-                            // forces it when field found in validation rules
+                            // forces it when field found in validation rules; isRequired is
+                            // appended BEFORE isBoolean — rules run in key insertion order and
+                            // the engine's isBoolean rescue only clears an isRequired error
+                            // recorded before it (a boolean false otherwise reads as empty)
                             rules[name].isRequired = true;
+                            rules[name].isBoolean = true;
                         }
                     }
                     fields[name] = $form[i].checked;
@@ -7029,9 +7032,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         if ( typeof(rules[name]) == 'undefined' ) {
                             rules[name] = { isBoolean: true };
                         } else if ( typeof(rules[name]) != 'undefined' && typeof(rules[name].isBoolean) == 'undefined' ) {
-                            rules[name].isBoolean = true;
-                            // forces it when field found in validation rules
+                            // forces it when field found in validation rules; isRequired is
+                            // appended BEFORE isBoolean — rules run in key insertion order and
+                            // the engine's isBoolean rescue only clears an isRequired error
+                            // recorded before it (a boolean false otherwise reads as empty)
                             rules[name].isRequired = true;
+                            rules[name].isBoolean = true;
                         }
 
                         if ($form[i].type == 'radio') {
