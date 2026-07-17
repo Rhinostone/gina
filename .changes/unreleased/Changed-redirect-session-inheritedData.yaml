@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Request data crossing a redirect() now rides the session (the hidden inheritedData flash channel, one-shot — consumed by the next routed GET, gone on refresh) whenever a live session exists; the clear-text ?inheritedData= URL form and its 2000-char cap now apply only to session-less bundles. resumeRequest()''s plain-XHR and non-XHR GET replays no longer drop the halted request''s extra data.'
+time: 2026-07-17T05:15:37+01:00

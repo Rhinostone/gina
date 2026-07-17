@@ -2164,6 +2164,13 @@ function SuperController(options) {
      * OR when the request is classified as reverse-proxied — a proxied redirect's target host is
      * composed from proxy context, so a browser-cacheable 301 would freeze a transient value
      *
+     * Data carry: when the current request holds params (the current method bucket merged
+     * with the pre-switch one), they cross the redirect through the session flash channel
+     * (`inheritedData` on the session user or the session itself) whenever a live session
+     * exists; router.js merges them into `req.get` on the next routed GET, one-shot — a
+     * page refresh does not replay them. Session-less bundles fall back to the clear-text
+     * `?inheritedData=` URL form (2000-char cap → 424), as before.
+     *
      * Trobleshouting:
      * ---------------
      *
@@ -2447,17 +2454,30 @@ function SuperController(options) {
                 if ( typeof(requestParams) != 'undefined' && requestParams.count() > 0 ) {
                     //if ( typeof(requestParams.error) != 'undefined' )
 
-                    var inheritedData = null;
-                    if ( /\?/.test(path) ) {
-                        inheritedData = '&inheritedData='+ encodeRFC5987ValueChars(JSON.stringify(requestParams));
-                    } else {
-                        inheritedData = '?inheritedData='+ encodeRFC5987ValueChars(JSON.stringify(requestParams));
-                    }
+                    // #B75 — a session-less bundle (no Session plugin mounted) must
+                    // not deref req.session.user here (an XHR redirect carrying
+                    // request params would 500). Null userSession falls to the
+                    // session-less fallback, where inheritedData rides in the URL as before.
+                    var userSession = ( typeof(req.session) != 'undefined' && req.session )
+                        ? ( req.session.user || req.session )
+                        : null;
 
-                    if ( inheritedData.length > 2000 ) {
-                        var error = new ApiError('Controller::redirect(...) exceptions: `inheritedData` reached 2000 chars limit', 424);
-                        self.throwError(error);
-                        return;
+                    // Session-less fallback ONLY: the data rides the URL in clear — capped.
+                    // With a live session, `requestParams` rides the session instead (below):
+                    // no URL string is built and the 2000-char cap does not apply.
+                    var inheritedData = null;
+                    if ( !userSession ) {
+                        if ( /\?/.test(path) ) {
+                            inheritedData = '&inheritedData='+ encodeRFC5987ValueChars(JSON.stringify(requestParams));
+                        } else {
+                            inheritedData = '?inheritedData='+ encodeRFC5987ValueChars(JSON.stringify(requestParams));
+                        }
+
+                        if ( inheritedData.length > 2000 ) {
+                            var error = new ApiError('Controller::redirect(...) exceptions: `inheritedData` reached 2000 chars limit', 424);
+                            self.throwError(error);
+                            return;
+                        }
                     }
 
                     // if redirecting from a xhrRequest
@@ -2472,17 +2492,11 @@ function SuperController(options) {
                             redirectObj.location = path;
                         }
                         if (requestParams.count() > 0)  {
-                            // #B75 — a session-less bundle (no Session plugin mounted) must
-                            // not deref req.session.user here (an XHR redirect carrying
-                            // request params would 500). Null userSession falls to the else
-                            // branch, where inheritedData rides in the URL as before.
-                            var userSession = ( typeof(req.session) != 'undefined' && req.session )
-                                ? ( req.session.user || req.session )
-                                : null;
-                            if ( userSession && local.haltedRequestUrlResumed ) {
-                                // will be reused for server.js on `case : 'GET'`
+                            if ( userSession ) {
+                                // consumed by router.js's route dispatch on the next
+                                // routed GET (one-shot merge into `req.get`, then deleted)
                                 userSession.inheritedData = requestParams;
-                            } else { // will be passed in clear
+                            } else { // session-less fallback: will be passed in clear
                                 if (isPopinContext) {
                                     redirectObj.popin.url += inheritedData
                                 } else {
@@ -2497,7 +2511,14 @@ function SuperController(options) {
                     }
 
                     if (inheritedDataIsNeeded) {
-                        path += inheritedData;
+                        if ( userSession ) {
+                            // method-switching redirect (e.g. POST→GET 303): same session
+                            // carry as the XHR branch — consumed by router.js on the next
+                            // routed GET; the clear-text URL form stays the session-less fallback
+                            userSession.inheritedData = requestParams;
+                        } else {
+                            path += inheritedData;
+                        }
                     }
                 }
                 // Popin redirect
@@ -5581,7 +5602,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * url / method / data / params onto the live request, then re-dispatches it: a GET is
      * replayed by redirecting to the resolved url; a non-GET is re-dispatched in-process to
      * the original controller action (crossing namespaces via `requireController()` when
-     * needed). The snapshot is cleared from storage once consumed.
+     * needed). The snapshot is cleared from storage once consumed. For a GET replay, the
+     * halted request's extra data rides the session flash channel (`inheritedData`,
+     * consumed one-shot by the next routed GET) whenever a live session exists — a custom
+     * `requestStorage` with no live session degrades to a plain replay without the data.
      *
      * Requires a `haltedRequest` to have been attached to the session (or to the passed
      * `requestStorage`) beforehand — typically by `pauseRequest()`.
@@ -5670,6 +5694,24 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             delete requestStorage.haltedRequest;
             delete requestStorage.inheritedData;
             requestStorage.haltedRequestUrlResumed = url;
+
+            // Session carry for the replay (mirrors redirect()'s XHR-branch stash):
+            // without it, the plain-XHR and non-XHR replays silently DROPPED the halted
+            // request's extra data (only the popin-XHR flavor, which routes through
+            // redirect(), carried it). Consumed by router.js on the replayed GET
+            // (one-shot merge into `req.get`). A custom `requestStorage` with no live
+            // session degrades exactly as before (data dropped).
+            if ( data.count() > 0 ) {
+                if ( typeof(data.session) != 'undefined' ) {
+                    delete data.session;
+                }
+                var userSession = ( typeof(req.session) != 'undefined' && req.session )
+                    ? ( req.session.user || req.session )
+                    : null;
+                if ( userSession ) {
+                    userSession.inheritedData = data;
+                }
+            }
 
             if (
                 typeof(req.routing.param.isPopinContext) != 'undefined'
