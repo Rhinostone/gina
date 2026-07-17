@@ -8,5 +8,10 @@
   "--tag",
   "--platform",
   "--start-port-from",
-  "--gina-version"
+  "--gina-version",
+  "--name",
+  "--publish",
+  "--env-var",
+  "--env-file",
+  "--rm"
 ]

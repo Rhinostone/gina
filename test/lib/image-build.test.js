@@ -175,12 +175,16 @@ describe('35 - image:build — OCI packaging verb (lib/image-build + lib/cmd/ima
         });
 
         // arguments.json is GROUP-level (one file for image:build + image:list +
-        // image:rm), so the set necessarily grows when a new action adds a flag —
-        // `--force` belongs to image:rm.
+        // image:rm + image:run), so the set necessarily grows when a new action
+        // adds a flag — `--force` belongs to image:rm, the last five to image:run.
+        // An unlisted flag is silently routed to nodeParams (and forwarded to
+        // node), so a missing entry reads as `undefined` in the handler rather
+        // than failing loudly — which is why the set is pinned exactly.
         it('arguments.json whitelists exactly the image group flag set', function() {
             assert.deepEqual(argsArr, [
                 '--env', '--scope', '--emit', '--force', '--format', '--stream',
-                '--tag', '--platform', '--start-port-from', '--gina-version'
+                '--tag', '--platform', '--start-port-from', '--gina-version',
+                '--name', '--publish', '--env-var', '--env-file', '--rm'
             ]);
         });
 

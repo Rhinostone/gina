@@ -2,6 +2,7 @@
 Usage: gina image:build [<bundle>] @<project> [options]
        gina image:list [--format=json]
        gina image:rm <image> [--force]
+       gina image:run <image> [options]
 
 Actions:
 
@@ -17,6 +18,12 @@ Actions:
 
     rm          Remove an image from the container host by reference or id.
                 Requires an explicit image; there is no bulk delete.
+
+    run         Run an image as a container on the container host, with podman.
+                Detached by default, publishing the port the image EXPOSEs.
+                buildah builds images but cannot run them, so a build-only host
+                (buildah present, podman absent) says so honestly rather than
+                failing opaquely. Same host resolution as build.
 
     help        Show this help.
     man         Show the image group manual.
@@ -70,6 +77,39 @@ Options (image:rm):
     an id are tags of one image). The in-use refusal only applies to an
     image's last reference.
 
+Options (image:run):
+
+    --name=<name>            Container name (default: podman picks one).
+    --publish=<h>:<c>[,...]  Host:container port map(s) to publish.
+                             Default: the port the image EXPOSEs, mapped
+                             same:same — that EXPOSE is the port image:build
+                             computed with the gina-init allocator, so it is
+                             the one the bundle actually binds; it is never
+                             recomputed here. --publish=none publishes
+                             nothing. An image with no EXPOSE and no flag
+                             publishes nothing.
+    --env-var=KEY=VALUE      Set one environment variable in the container.
+                             Repeatable. Overrides --env-file on a duplicate
+                             key (podman's own --env precedence).
+    --env-file=<path>        Read KEY=VALUE lines from a LOCAL file. Blank
+                             lines and # comments are ignored.
+    --rm                     Remove the container when it exits.
+    --stream                 Run in the FOREGROUND, mirroring the container's
+                             output as NDJSON frames (one JSON object per
+                             line): start -> log* -> done | error.
+                             `done` carries the container's exitCode.
+    --format=json            Machine-readable result (detached):
+                             { host, id, name, image, ports }
+
+    Environment values never reach argv or a shell: they ride stdin into a
+    0600 file (over ssh, a remote mktemp file a trap removes when the command
+    ends), so they never appear in the host's process list. A value may
+    contain any character except a newline, which the KEY=VALUE line format
+    cannot represent.
+
+    In text mode stdout carries the container id ALONE — the progress line
+    goes to stderr — so `ID=$(gina image:run <image>)` captures just the id.
+
 Container host:
 
     Where the image commands execute, in precedence order:
@@ -88,6 +128,10 @@ Secrets:
     ${secret:KEY} placeholders in the project's config ride VERBATIM into the
     image and resolve from the container's environment at runtime. No secret
     value is ever read, resolved or baked at build time.
+
+    `image:run --env-var=KEY=VALUE` / `--env-file=<path>` is how those values
+    are supplied when the container starts — without ever entering argv, a
+    shell, or the image itself.
 
 Examples:
 
@@ -115,3 +159,15 @@ Examples:
     # Remove an image (by ref, then by id, forcing the second)
     gina image:rm localhost/myproject/demo:prod
     gina image:rm 44b5401ff810 --force
+
+    # Run what was just built, publishing the port the image EXPOSEs
+    gina image:run localhost/myproject/demo:prod --name=demo
+
+    # Explicit port map, container removed on exit
+    gina image:run localhost/myproject/demo:prod --publish=8080:3100 --rm
+
+    # Supply runtime secrets, foreground, NDJSON frames
+    gina image:run localhost/myproject/demo:prod --env-file=./.env.prod --stream
+
+    # Capture the container id (stdout carries it alone)
+    ID=$(gina image:run localhost/myproject/demo:prod)

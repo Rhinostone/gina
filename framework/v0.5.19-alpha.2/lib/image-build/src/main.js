@@ -712,19 +712,27 @@ function buildOneShot(plan, extras) {
 }
 
 /**
- * Builds the `{ command, args }` for running a buildah (or any) subcommand on
- * a resolved container host — native (`spawn('buildah', argv)`) or over ssh
- * (`spawn('ssh', [...sshOpts, sshTarget, 'buildah', ...argv])`). The ssh option
+ * Builds the `{ command, args }` for running a container-tool subcommand on a
+ * resolved container host — native (`spawn(<binary>, argv)`) or over ssh
+ * (`spawn('ssh', [...sshOpts, sshTarget, <binary>, ...argv])`). The ssh option
  * order mirrors the build path (`BatchMode`/`ConnectTimeout`, then `-p` only
  * when the descriptor names a port so host aliases keep their own ssh config).
  * Trailing argv tokens are passed as separate ssh args — ssh joins them into
  * one remote-shell command — so no token may contain a space or shell
- * metacharacter; the sole user-controlled token (an image ref) is charset-
- * gated by {@link isValidImageRef} before it reaches here.
+ * metacharacter; every user-controlled token (an image ref, a container
+ * name/id, a publish spec) is charset-gated by {@link isValidImageRef} /
+ * {@link isValidContainerToken} / {@link isValidPublishSpec} before it reaches
+ * here.
+ *
+ * `binary` defaults to `buildah` (the image-family builder). The run family
+ * passes `podman`: buildah builds images but cannot run them, and podman uses
+ * crun natively. A host may have one without the other — a build-only host
+ * (buildah, no podman) is a supported shape, reported honestly by `image:run`.
  *
  * @function containerHostSpawn
- * @param {ContainerHost} host - A resolved descriptor from {@link resolveContainerHost}
- * @param {string[]}      argv - The buildah subcommand argv, e.g. `['images','--json']`
+ * @param {ContainerHost} host     - A resolved descriptor from {@link resolveContainerHost}
+ * @param {string[]}      argv     - The subcommand argv, e.g. `['images','--json']`
+ * @param {string}        [binary] - The remote/local tool (default `'buildah'`)
  * @returns {{command: string, args: string[]}} The spawn command + args
  * @throws {Error} When `host.mode` is neither 'native' nor 'ssh'
  *
@@ -735,17 +743,22 @@ function buildOneShot(plan, extras) {
  * @example
  * containerHostSpawn({ mode: 'ssh', parsed: { sshTarget: 'build@lin', port: null } }, ['rmi', '-f', 'localhost/p/b:prod']);
  * // { command: 'ssh', args: ['-o','BatchMode=yes','-o','ConnectTimeout=10','build@lin','buildah','rmi','-f','localhost/p/b:prod'] }
+ *
+ * @example
+ * containerHostSpawn({ mode: 'native' }, ['ps', '--format', 'json'], 'podman');
+ * // { command: 'podman', args: ['ps', '--format', 'json'] }
  */
-function containerHostSpawn(host, argv) {
+function containerHostSpawn(host, argv, binary) {
+    var bin = binary || 'buildah';
     if (host && host.mode === 'native') {
-        return { command: 'buildah', args: argv.slice() };
+        return { command: bin, args: argv.slice() };
     }
     if (host && host.mode === 'ssh') {
         var sshArgs = ['-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10'];
         if (host.parsed && host.parsed.port) {
             sshArgs.push('-p', String(host.parsed.port));
         }
-        sshArgs.push(host.parsed.sshTarget, 'buildah');
+        sshArgs.push(host.parsed.sshTarget, bin);
         return { command: 'ssh', args: sshArgs.concat(argv) };
     }
     throw new Error('containerHostSpawn: host.mode must be `native` or `ssh` (got `' + (host && host.mode) + '`)');
@@ -862,6 +875,246 @@ function isValidImageRef(ref) {
     return typeof ref === 'string' && /^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,511}$/.test(ref);
 }
 
+/**
+ * Charset gate for a user-supplied container name or id (`--name`, and the
+ * `container:ps` / `container:stop` target) before it is interpolated into a
+ * remote-shell command over ssh. Mirrors podman's own name grammar
+ * (`[a-zA-Z0-9][a-zA-Z0-9_.-]*`), and — like {@link isValidImageRef} — the
+ * mandatory leading alphanumeric blocks BOTH shell injection (no space, `;`,
+ * `|`, `$`, backtick or quote can appear) AND option injection (a name like
+ * `-f` being read by podman as a flag). A 64-hex container id satisfies it.
+ *
+ * @function isValidContainerToken
+ * @param {string} token - The candidate container name or id
+ * @returns {boolean} True when `token` is safe to pass to podman
+ *
+ * @example
+ * isValidContainerToken('demo-prod');        // true
+ * isValidContainerToken('a'.repeat(64));     // true — a container id
+ * isValidContainerToken('foo; rm -rf /');    // false — space + `;`
+ * isValidContainerToken('-f');               // false — leading `-` (option injection)
+ */
+function isValidContainerToken(token) {
+    return typeof token === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(token);
+}
+
+/**
+ * Validates a `--publish` spec: one or more comma-separated `host:container`
+ * port pairs, each within 1-65535. Digits and separators only — nothing that
+ * could reach a remote shell as anything but a port map.
+ *
+ * The sentinel `none` (publish nothing) is handled by the caller, not here:
+ * this gate answers only "is this a well-formed port-map list".
+ *
+ * @function isValidPublishSpec
+ * @param {string} spec - The candidate spec, e.g. `'8080:3100,8443:8443'`
+ * @returns {boolean} True when every pair is a valid host:container port map
+ *
+ * @example
+ * isValidPublishSpec('8080:3100');           // true
+ * isValidPublishSpec('8080:3100,8443:8443'); // true
+ * isValidPublishSpec('0:3100');              // false — port 0
+ * isValidPublishSpec('99999:3100');          // false — out of range
+ * isValidPublishSpec('8080');                // false — not a pair
+ */
+function isValidPublishSpec(spec) {
+    if (typeof spec !== 'string') return false;
+    if (!/^\d{1,5}:\d{1,5}(,\d{1,5}:\d{1,5})*$/.test(spec)) return false;
+    var pairs = spec.split(',');
+    for (var i = 0; i < pairs.length; i++) {
+        var ports = pairs[i].split(':');
+        for (var j = 0; j < ports.length; j++) {
+            var n = parseInt(ports[j], 10);
+            if (!(n >= 1 && n <= 65535)) return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Parses the EXPOSE port list out of `podman image inspect <ref>` stdout. That
+ * EXPOSE is the port `image:build` baked via the gina-init allocator replica,
+ * so `image:run` maps it same:same by default rather than recomputing anything.
+ *
+ * Takes the FULL inspect document (a one-element array) and digs to
+ * `[0].Config.ExposedPorts`; a bare `ExposedPorts` map is accepted too. The
+ * full document is deliberate: the narrower
+ * `--format '{{json .Config.ExposedPorts}}'` cannot survive the ssh path —
+ * {@link containerHostSpawn} passes argv tokens to a remote shell, which splits
+ * that token on its space (measured: `bad character U+007B '{'`, rc 125). No
+ * token here contains a space, so native and ssh behave identically.
+ *
+ * An image with no EXPOSE inspects to `null` — that, an empty map, malformed
+ * JSON and unparseable keys all map to `[]` rather than throwing (the
+ * {@link parseImagesJson} tolerance contract).
+ *
+ * @function parseExposedPorts
+ * @param {string} stdout - Raw stdout of `podman image inspect <ref>`
+ * @returns {Array<{port: number, protocol: string}>} Sorted by port
+ *
+ * @example
+ * parseExposedPorts('[{"Config":{"ExposedPorts":{"3101/tcp":{}}}}]');
+ * // [{ port: 3101, protocol: 'tcp' }]
+ * @example
+ * parseExposedPorts('{"3101/tcp":{}}'); // [{ port: 3101, protocol: 'tcp' }] — a bare map too
+ * @example
+ * parseExposedPorts('[{"Config":{}}]'); // [] — the image EXPOSEs nothing
+ */
+function parseExposedPorts(stdout) {
+    var doc;
+    try {
+        doc = JSON.parse(String(stdout || '').trim() || 'null');
+    } catch (e) {
+        return [];
+    }
+    // The full inspect document: dig to the map. A bare map passes through.
+    if (Array.isArray(doc)) {
+        var first = doc[0];
+        doc = (first && first.Config && first.Config.ExposedPorts) || null;
+    }
+    if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return [];
+    var out = [];
+    Object.keys(doc).forEach(function(key) {
+        var m = /^(\d{1,5})(?:\/(tcp|udp))?$/.exec(key);
+        if (!m) return;
+        var port = parseInt(m[1], 10);
+        if (!(port >= 1 && port <= 65535)) return;
+        out.push({ port: port, protocol: m[2] || 'tcp' });
+    });
+    out.sort(function(a, b) { return a.port - b.port; });
+    return out;
+}
+
+/**
+ * Composes the `KEY=VALUE` lines of the env file `image:run` ships to podman,
+ * validating every pair. Values NEVER reach a shell — the lines ride stdin
+ * into a file (`cat > "$F"` remotely, a 0600 temp file natively) — so a value
+ * may contain any character except a newline, which the line-based `--env-file`
+ * format cannot represent. Keys are gated to the POSIX env-name grammar.
+ *
+ * Order is the caller's: `--env-file` lines first, `--env-var` after, because
+ * podman's env-file parser lets a later duplicate key win (measured) — which
+ * reproduces podman's own `--env`-overrides-`--env-file` precedence.
+ *
+ * @function composeEnvLines
+ * @param {string[]} pairs - `KEY=VALUE` strings from every source, in order
+ * @returns {string[]} The validated lines
+ * @throws {Error} With a user-facing reason on a malformed pair, key or value
+ *
+ * @example
+ * composeEnvLines(['DB_HOST=db.internal', 'TOKEN=a=b,c']);
+ * // ['DB_HOST=db.internal', 'TOKEN=a=b,c'] — only the FIRST `=` splits
+ * @example
+ * composeEnvLines(['2BAD=x']); // throws — key must not start with a digit
+ */
+function composeEnvLines(pairs) {
+    var lines = [];
+    for (var i = 0; i < pairs.length; i++) {
+        var pair = String(pairs[i]);
+        var eq   = pair.indexOf('=');
+        if (eq < 1) {
+            throw new Error('invalid env entry `' + pair + '` — expected KEY=VALUE');
+        }
+        var key = pair.substring(0, eq);
+        var val = pair.substring(eq + 1);
+        if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(key)) {
+            throw new Error('invalid env key `' + key + '` — expected a letter or underscore followed by letters, digits or underscores');
+        }
+        if (/[\r\n]/.test(val)) {
+            throw new Error('the env value for `' + key + '` contains a newline — the --env-file format is line-based and cannot carry one');
+        }
+        lines.push(key + '=' + val);
+    }
+    return lines;
+}
+
+/**
+ * Normalises one `podman ps --format json` `Ports` entry list. podman reports
+ * snake_case keys (`host_ip` / `host_port` / `container_port` / `protocol`)
+ * plus a `range` count; this maps them to the camelCase contract, omitting an
+ * empty `host_ip` and carrying `range` ONLY when it exceeds 1 (a published
+ * port RANGE — `container:ps` lists every container on the host, including
+ * ones podman ran outside gina, so reporting a range as a single pair would
+ * silently under-report it).
+ *
+ * @inner
+ * @private
+ * @param {*} ports - The raw `Ports` value (an array, or null when none)
+ * @returns {Array<object>} Normalised entries (`[]` when there are none)
+ */
+function normalizePsPorts(ports) {
+    if (!Array.isArray(ports)) return [];
+    var out = [];
+    for (var i = 0; i < ports.length; i++) {
+        var p = ports[i] || {};
+        var entry = {
+            hostPort      : p.host_port,
+            containerPort : p.container_port,
+            protocol      : String(p.protocol || 'tcp')
+        };
+        if (p.host_ip) entry.hostIp = String(p.host_ip);
+        if (typeof p.range === 'number' && p.range > 1) entry.range = p.range;
+        out.push(entry);
+    }
+    return out;
+}
+
+/**
+ * Normalises `podman ps --format json` output into one row per container.
+ * Tolerates empty stdout, a bare `null`, a non-array document and malformed
+ * JSON — each maps to `[]` rather than throwing ({@link parseImagesJson}'s
+ * contract).
+ *
+ * Mirroring the `image:list` dual-key convention, each row carries both the
+ * humanized display string podman renders (`created`, from `CreatedAt`) and an
+ * exact machine-readable sibling (`createdAt`, ISO-converted from the
+ * epoch-seconds `Created`). `id` is truncated to the 12-char short form podman
+ * displays — the `image:list` `ref`/`id` precedent.
+ *
+ * @function parsePsJson
+ * @param {string} stdout - Raw stdout of `podman ps --format json`
+ * @returns {Array<{id: string, name: string, image: string, state: string, status: string, ports: Array<object>, created: string, createdAt: string}>}
+ *
+ * @example
+ * parsePsJson('[{"Id":"745903c26735","Names":["demo"],"Image":"localhost/p/b:prod","State":"running","Status":"Up 2 minutes","Ports":[{"host_ip":"","container_port":3101,"host_port":3101,"range":1,"protocol":"tcp"}],"CreatedAt":"2 minutes ago","Created":1784256827}]');
+ * // [{ id: '745903c26735', name: 'demo', image: 'localhost/p/b:prod', state: 'running',
+ * //    status: 'Up 2 minutes', ports: [{ hostPort: 3101, containerPort: 3101, protocol: 'tcp' }],
+ * //    created: '2 minutes ago', createdAt: '2026-07-15T...' }]
+ */
+function parsePsJson(stdout) {
+    var doc;
+    try {
+        doc = JSON.parse(String(stdout || '').trim() || 'null');
+    } catch (e) {
+        return [];
+    }
+    if (!Array.isArray(doc)) return [];
+    var rows = [];
+    for (var i = 0; i < doc.length; i++) {
+        var c     = doc[i] || {};
+        var names = Array.isArray(c.Names) ? c.Names : [];
+        var iso   = '';
+        if (typeof c.Created === 'number' && isFinite(c.Created)) {
+            // An out-of-range epoch is finite yet yields an Invalid Date, whose
+            // toISOString() THROWS — and this parser's contract is that a
+            // malformed row degrades rather than throwing.
+            var when = new Date(c.Created * 1000);
+            if (!isNaN(when.getTime())) iso = when.toISOString();
+        }
+        rows.push({
+            id        : String(c.Id || '').substring(0, 12),
+            name      : names.length ? String(names[0]) : '',
+            image     : String(c.Image || ''),
+            state     : String(c.State || ''),
+            status    : String(c.Status || ''),
+            ports     : normalizePsPorts(c.Ports),
+            created   : String(c.CreatedAt || ''),
+            createdAt : iso
+        });
+    }
+    return rows;
+}
+
 module.exports = {
     DEFAULTS             : DEFAULTS,
     computePorts         : computePorts,
@@ -878,5 +1131,10 @@ module.exports = {
     containerHostSpawn   : containerHostSpawn,
     parseImagesJson      : parseImagesJson,
     parseHumanSize       : parseHumanSize,
-    isValidImageRef      : isValidImageRef
+    isValidImageRef      : isValidImageRef,
+    isValidContainerToken: isValidContainerToken,
+    isValidPublishSpec   : isValidPublishSpec,
+    parseExposedPorts    : parseExposedPorts,
+    composeEnvLines      : composeEnvLines,
+    parsePsJson          : parsePsJson
 };
