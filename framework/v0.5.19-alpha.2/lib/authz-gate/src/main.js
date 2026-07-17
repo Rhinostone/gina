@@ -26,23 +26,37 @@
  *       "param"  : { "control": "panel", "roles": ["admin", "editor"] }
  *   }
  *
+ *   "invoice-edit": {
+ *       "method" : "PUT",
+ *       "url"    : "/invoices/:id",
+ *       "param"  : { "control": "edit", "id": ":id", "policy": "ownsInvoice" }
+ *   }
+ *
  * `core/server.js` lints every declared key at bundle BOOT (fail-fast: a
- * non-boolean `param.requireAuth`, or a `param.roles` that is not a non-empty
- * array of non-empty strings, refuses to boot) and resolves the login-bounce
- * target ONCE there onto `process.gina._authConf`. This module then runs before
- * the controller action, at BOTH `core/router.js` dispatch sites, and:
+ * non-boolean `param.requireAuth`, a `param.roles` that is not a non-empty
+ * array of non-empty strings, or a `param.policy` naming a missing / broken /
+ * async module, refuses to boot) and resolves the login-bounce target ONCE
+ * there onto `process.gina._authConf`. This module then runs before the
+ * controller action, at BOTH `core/router.js` dispatch sites, and:
  *
  *   1. NO-OPs for any route that declares no authorization key;
- *   2. authenticates first — `param.roles` IMPLIES `requireAuth`, since an
- *      unauthenticated caller can hold no role. An unauthenticated request is
- *      terminated here: a browser navigation is snapshotted (`pauseRequest`)
- *      and bounced to the configured login route; everything else gets a
- *      machine-readable **401**;
+ *   2. authenticates first — `param.roles` and `param.policy` both IMPLY
+ *      `requireAuth`, since an unauthenticated caller can hold no role and no
+ *      policy can meaningfully judge a caller that is not signed in. An
+ *      unauthenticated request is terminated here: a browser navigation is
+ *      snapshotted (`pauseRequest`) and bounced to the configured login route;
+ *      everything else gets a machine-readable **401**;
  *   3. then matches roles — ANY-of: the session user's `user.roles` must
- *      intersect the declared set, else a **403** whose body stays GENERIC
- *      (the required roles are never echoed to the wire — they name the
- *      bundle's authorization model; the specifics go to the server-side
- *      log only).
+ *      intersect the declared set;
+ *   4. then runs the policy — the record/attribute escape hatch RBAC cannot
+ *      express (ownership and the like). AND-composed: a route declaring both
+ *      needs both to pass.
+ *
+ * Every denial from steps 3-4 is a **403** whose body stays GENERIC — the
+ * required roles and the policy name are never echoed to the wire (they name
+ * the bundle's authorization model, and a 403 that lists what WOULD have been
+ * enough is a disclosure to exactly the caller that failed it); the specifics
+ * go to the server-side log only.
  *
  * It is a strict NO-OP for every route that declares no authorization key, so an
  * existing bundle is byte-identical.
@@ -53,6 +67,38 @@
  * roles directly; an indirection layer is a demand-gated follow-up). The app
  * populates it at login alongside `session.user`. Absent or non-array means the
  * user holds no roles, so every role-gated route answers 403 for that session.
+ *
+ * ## The policy contract — SYNCHRONOUS, allow iff `=== true`
+ * A `param.policy` names a `<bundle>/policies/<name>.js` module exporting a plain
+ * function:
+ *
+ *   // <bundle>/policies/ownsInvoice.js
+ *   module.exports = function (user, req) {
+ *       return req.params.ownerId === user.id;
+ *   };
+ *
+ * It is registered at BOOT (`registerPolicy`) onto `process.gina._policies`, so the
+ * request path is an O(1) lookup — no fs, no re-require (which would also feed the
+ * dev-mode `module.children` leak class, #B32).
+ *
+ * The contract is synchronous because the GATE is synchronous — `authorizeRequest`
+ * returns a boolean that both `core/router.js` dispatch sites branch on directly.
+ * Two rules make that safe rather than merely convenient:
+ *
+ *   * an `async function` policy is **refused at boot**. Its constructor name reads
+ *     `AsyncFunction`, which is the only boot-visible tell (`typeof` says 'function'
+ *     for both), so the author learns at deploy instead of watching the route deny
+ *     every request forever;
+ *   * a policy that merely RETURNS a promise (the transpiled-async shape) is
+ *     boot-INVISIBLE — its constructor reads `Function`. So the allow test is
+ *     strictly `=== true`: a promise is truthy but not `true`, and a truthy-allow
+ *     gate would ALLOW it unconditionally — the control silently OFF, inverted into
+ *     fail-OPEN. Anything that is not literally `true` denies, and a non-boolean
+ *     return warns ONCE naming the policy so the contract violation is visible
+ *     without flooding the log.
+ *
+ * A throwing policy denies (403) and never 500s the wire. Async tolerance is a
+ * demand-gated follow-up: `(user, req)` extends compatibly to `(user, req, cb)`.
  *
  * ## Why the gate sits before the DTO pipe
  * `core/router.js` calls this immediately BEFORE `dtoPipe.validateRequestPayload`,
@@ -116,6 +162,126 @@ var isAuthenticated = function (req) {
 };
 
 /**
+ * Warn-once bookkeeping, keyed by policy name: a policy that violates the return
+ * contract does so on EVERY request, and one line per request would bury the very
+ * message the author needs to act on.
+ *
+ * @type {object}
+ * @inner
+ * @private
+ */
+var _warnedPolicies = {};
+
+/**
+ * The boot-built policy registry — `process.gina._policies`, name -> function.
+ *
+ * @returns {object|null} the registry, or `null` outside a booted process.
+ * @inner
+ * @private
+ */
+var getPolicyRegistry = function () {
+    if ( typeof(process.gina) == 'undefined' || !process.gina ) {
+        return null;
+    }
+    if ( !process.gina._policies || typeof(process.gina._policies) != 'object' ) {
+        process.gina._policies = {};
+    }
+    return process.gina._policies;
+};
+
+/**
+ * Resolve + register a bundle policy module at BOOT.
+ *
+ * Mirrors `lib.dto.load`'s resolution contract: returns `null` when unresolved (no
+ * such file, or the file exports no function) and THROWS when the file is present
+ * but broken — the caller decides what an unresolved reference means (here
+ * `core/server.js` refuses the boot either way, adding the route context).
+ *
+ * The `async function` refusal lives here rather than at the gate because it is the
+ * only place the tell is visible: an async policy's promise return is truthy but
+ * never `=== true`, so the strict allow test would deny the route on every request
+ * — a security control that is silently, permanently broken. Refusing at boot turns
+ * that into a deploy-time error.
+ *
+ * @param {string} bundleSrcPath - absolute path to the bundle source dir.
+ * @param {string} name          - the reference (also the file base name).
+ * @returns {function|null} the registered policy, or `null` when unresolved.
+ * @throws {Error} when the module cannot be required, or is an `async function`.
+ *
+ * @example
+ * // core/server.js, at boot
+ * var fn = authzGate.registerPolicy(bundleSrcPath, 'ownsInvoice');
+ * if ( !fn ) {
+ *     throw new Error('policies/ownsInvoice.js is missing (or exports no function)');
+ * }
+ */
+var registerPolicy = function (bundleSrcPath, name) {
+    if ( typeof(name) != 'string' || !name ) {
+        return null;
+    }
+    if ( typeof(bundleSrcPath) != 'string' || !bundleSrcPath ) {
+        return null;
+    }
+
+    var file = require('path').join(bundleSrcPath, 'policies', name + '.js');
+    if ( !require('fs').existsSync(file) ) {
+        return null;
+    }
+
+    var fn = require(file);   // may throw -> the caller wraps it with route context
+    if ( typeof(fn) != 'function' ) {
+        return null;
+    }
+    if ( fn.constructor && fn.constructor.name === 'AsyncFunction' ) {
+        throw new Error('policy `'+ name +'` is an `async function`, but the policy contract is SYNCHRONOUS: `module.exports = function (user, req) { return true; };`. The gate authorizes synchronously and allows only a literal `true`, so an async policy would deny this route on every request.');
+    }
+
+    var reg = getPolicyRegistry();
+    if ( reg ) {
+        reg[name] = fn;
+    }
+    return fn;
+};
+
+/**
+ * Read a boot-registered policy.
+ *
+ * @param {string} name - the route's declared `param.policy`.
+ * @returns {function|null}
+ * @inner
+ * @private
+ */
+var getPolicy = function (name) {
+    var reg = ( typeof(process.gina) != 'undefined' && process.gina && process.gina._policies )
+        ? process.gina._policies
+        : null;
+
+    return ( reg && typeof(reg[name]) == 'function' ) ? reg[name] : null;
+};
+
+/**
+ * Warn ONCE that a policy broke the return contract.
+ *
+ * @param {string} name     - the policy name.
+ * @param {*} returned      - whatever it returned instead of a boolean.
+ * @returns {void}
+ * @inner
+ * @private
+ */
+var warnPolicyContractOnce = function (name, returned) {
+    if ( _warnedPolicies[name] === true ) {
+        return;
+    }
+    _warnedPolicies[name] = true;
+
+    var shape = ( returned && typeof(returned.then) == 'function' )
+        ? 'a promise'
+        : '`'+ ( returned === null ? 'null' : typeof(returned) ) +'`';
+
+    console.warn('[ authz ] policy `'+ name +'` returned '+ shape +', not a boolean — DENYING (fail-closed). The policy contract is SYNCHRONOUS: `module.exports = function (user, req) { return true; };`. Every request through this policy is denied until it returns a real boolean.');
+};
+
+/**
  * ANY-of role match: does the session user hold at least one of the roles the
  * route requires?
  *
@@ -123,13 +289,23 @@ var isAuthenticated = function (req) {
  * role→permission indirection (v1 names roles directly). A user whose `roles`
  * is absent or not an array holds NO roles, so any role-gated route denies.
  *
- * @param {object} user          - `req.session.user` (truthy by the time this runs —
- *                                 the gate authenticates first).
- * @param {string[]} requiredRoles - the route's declared `param.roles` (the boot lint
- *                                 guarantees a non-empty array of non-empty strings).
+ * Exported so the controller's `self.hasRole(role)` escape hatch reads roles
+ * through THIS definition rather than its own copy — "holding a role" must mean
+ * exactly one thing framework-wide (the byte-identical-copy-paste class that
+ * `lib/cmd-status-format` and `lib/json-config-header` were extracted to end).
+ *
+ * @param {object} user            - `req.session.user` (truthy by the time the gate calls
+ *                                   this — it authenticates first; `self.hasRole` may pass
+ *                                   `null` for an unauthenticated request).
+ * @param {string[]} requiredRoles - the roles to test against. From the gate: the route's
+ *                                   declared `param.roles` (the boot lint guarantees a
+ *                                   non-empty array of non-empty strings).
  * @returns {boolean} `true` when at least one required role is held.
- * @inner
- * @private
+ *
+ * @example
+ * authzGate.hasAnyRole({ roles: ['editor'] }, ['admin', 'editor']);   // true
+ * authzGate.hasAnyRole({ roles: 'admin' },    ['admin']);             // false — not an array
+ * authzGate.hasAnyRole(null,                  ['admin']);             // false
  */
 var hasAnyRole = function (user, requiredRoles) {
     var userRoles = ( user && Array.isArray(user.roles) ) ? user.roles : null;
@@ -259,19 +435,68 @@ var denyForbidden = function (controller, req, reason) {
 };
 
 /**
+ * Run a route's declared policy — the record/attribute escape hatch RBAC cannot
+ * express. Allow **iff** it returns a literal `true`; every other outcome denies.
+ *
+ * The three deny paths, all fail-CLOSED:
+ *   * **unregistered** — the boot registrar guarantees a function for every declared
+ *     `param.policy`, so reaching this means the registry was never built or was
+ *     mutated. A gate that cannot find its policy must never allow;
+ *   * **threw** — the caller learns only that it is Forbidden; the stack goes to the
+ *     server-side log. A policy bug must not 500 the wire (nor, via the uncaught path,
+ *     the bundle);
+ *   * **did not return `true`** — including a promise, which is truthy. See the module
+ *     header: this is the strictness that keeps a transpiled-async policy (boot-invisible)
+ *     from failing OPEN.
+ *
+ * @param {object} controller - the per-request controller (its `throwError` writes the 403).
+ * @param {object} req        - the request, handed to the policy as its 2nd argument.
+ * @param {string} name       - the route's declared `param.policy`.
+ * @param {object} user       - `req.session.user`, handed to the policy as its 1st argument.
+ * @returns {boolean} `true` to continue to the action, `false` when denied (403 written).
+ * @inner
+ * @private
+ */
+var runPolicy = function (controller, req, name, user) {
+    var fn = getPolicy(name);
+    if ( !fn ) {
+        return denyForbidden(controller, req, 'policy `'+ name +'` is not registered');
+    }
+
+    var allowed;
+    try {
+        allowed = fn(user, req);
+    } catch (err) {
+        console.error('[ authz ] policy `'+ name +'` threw for `'+ ((req.routing && req.routing.rule) || '?') +'`: '+ (err.stack || err.message || err));
+        return denyForbidden(controller, req, 'policy `'+ name +'` threw');
+    }
+
+    if ( allowed === true ) {
+        return true;
+    }
+    if ( typeof(allowed) != 'boolean' ) {
+        warnPolicyContractOnce(name, allowed);
+    }
+
+    return denyForbidden(controller, req, 'policy `'+ name +'` did not allow');
+};
+
+/**
  * Authorize a request against the route it matched.
  *
  * NO-OP (returns `true`) unless the route declares an authorization key
- * (`param.requireAuth: true` and/or `param.roles`). Evaluation order:
- * **authN → roles** — an unauthenticated caller on a gated route always gets
- * the 401/bounce, never a 403 (it must not learn that the route is
- * role-restricted, only that it requires signing in).
+ * (`param.requireAuth: true`, `param.roles` and/or `param.policy`). Evaluation order:
+ * **authN → roles → policy** — an unauthenticated caller on a gated route always gets
+ * the 401/bounce, never a 403 (it must not learn that the route is role- or
+ * policy-restricted, only that it requires signing in). Roles and policy are
+ * AND-composed: a route declaring both needs both to pass.
  *
  * @param {object} controller - the per-request controller (its `throwError` / `pauseRequest`
  *                              write the response).
  * @param {object} req        - the request. Reads `req.routing.param.requireAuth`,
- *                              `req.routing.param.roles`, `req.session.user` (and its
- *                              `.roles`), `req.isXMLRequest` and `req[method]`.
+ *                              `req.routing.param.roles`, `req.routing.param.policy`,
+ *                              `req.session.user` (and its `.roles`), `req.isXMLRequest`
+ *                              and `req[method]`.
  * @param {object} res        - the response (the bounce writes to it directly).
  * @returns {boolean} `true` to continue to the action, `false` when the gate has already
  *                    terminated the response (401 / 302 / 403).
@@ -297,9 +522,15 @@ var authorizeRequest = function (controller, req, res) {
     // must never HALF-gate the route.
     var mustMatchRoles = ( Array.isArray(param.roles) && param.roles.length > 0 );
 
+    // `param.policy` IMPLIES `requireAuth` too — a policy judges an authenticated
+    // user, and it is handed one. Strictly a NON-EMPTY STRING, for the same reason:
+    // the boot lint rejects every other declared shape, so an invalid `policy`
+    // reaching this point must never HALF-gate the route.
+    var mustRunPolicy  = ( typeof(param.policy) == 'string' && param.policy !== '' );
+
     // Strictly `=== true`: the boot lint rejects any other type, so by request time the
     // flag is `true`, `false` or absent — and an absent/false flag must never gate.
-    if ( param.requireAuth !== true && !mustMatchRoles ) {
+    if ( param.requireAuth !== true && !mustMatchRoles && !mustRunPolicy ) {
         return true;   // the route declares no authorization — nothing to do
     }
 
@@ -312,10 +543,17 @@ var authorizeRequest = function (controller, req, res) {
         return denyForbidden(controller, req, 'the session user holds none of the required roles');
     }
 
+    // Roles AND policy: a route declaring both has already passed roles by here.
+    if ( mustRunPolicy ) {
+        return runPolicy(controller, req, param.policy, req.session.user);
+    }
+
     return true;
 };
 
 module.exports = {
     authorizeRequest : authorizeRequest,
-    isAuthenticated  : isAuthenticated
+    isAuthenticated  : isAuthenticated,
+    hasAnyRole       : hasAnyRole,
+    registerPolicy   : registerPolicy
 };

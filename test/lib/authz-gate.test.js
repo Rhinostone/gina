@@ -33,11 +33,22 @@
  *   §10 the client-blob strip — the boot-built client routing maps ship no
  *       authorization keys (source pins incl. the strip-before-#B66-derivation
  *       ordering, + a replica proving only the three keys are dropped).
+ *   §11 the policy escape hatch (slice 3) — AND-composed AFTER roles; allow iff the
+ *       policy returns a literal `true` (+ a SUBTRACT proving a truthy-allow gate
+ *       would ALLOW an async policy that DENIED — the fail-OPEN the strictness
+ *       closes); a throw / a non-boolean / an unregistered name all deny fail-closed;
+ *       the 403 never echoes the policy name.
+ *   §12 the policy registrar (slice 3) — `registerPolicy` against real files: a plain
+ *       function registers, a missing file / non-function export is unresolved, an
+ *       `async function` REFUSES the boot (+ the measurement showing a
+ *       promise-returning plain function is boot-INVISIBLE, which is exactly why §11's
+ *       allow test must be strict); + a pure-logic replica of the server.js lint.
  */
 var { describe, it } = require('node:test');
 var assert = require('node:assert/strict');
 var path   = require('path');
 var fs     = require('fs');
+var os     = require('os');
 
 var FW = require('../fw');
 
@@ -107,6 +118,44 @@ function captureDebug(fn) {
     console.debug = function (m) { lines.push(String(m)); };
     try { fn(); } finally { console.debug = prevDebug; }
     return lines;
+}
+/** Run `fn` with a boot-registered policy map, restoring whatever was there. */
+function withPolicies(map, fn) {
+    var had  = Object.prototype.hasOwnProperty.call(process, 'gina');
+    var prev = had ? process.gina : undefined;
+    process.gina = { _policies: map };
+    try { return fn(); }
+    finally {
+        if (had) { process.gina = prev; } else { delete process.gina; }
+    }
+}
+/** Silence + capture the gate's policy-contract warning (console.warn). */
+function captureWarn(fn) {
+    var lines = [];
+    var prevWarn = console.warn, prevDebug = console.debug;
+    console.warn  = function (m) { lines.push(String(m)); };
+    console.debug = function () {};
+    try { fn(); } finally { console.warn = prevWarn; console.debug = prevDebug; }
+    return lines;
+}
+/** Silence + capture the gate's policy-threw log (console.error). */
+function captureError(fn) {
+    var lines = [];
+    var prevErr = console.error, prevDebug = console.debug;
+    console.error = function (m) { lines.push(String(m)); };
+    console.debug = function () {};
+    try { fn(); } finally { console.error = prevErr; console.debug = prevDebug; }
+    return lines;
+}
+/** Build a throwaway bundle src dir carrying `policies/<name>.js` files. */
+function withPolicyFiles(files, fn) {
+    var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-authz-policies-'));
+    fs.mkdirSync(path.join(dir, 'policies'));
+    Object.keys(files).forEach(function (name) {
+        fs.writeFileSync(path.join(dir, 'policies', name + '.js'), files[name], 'utf8');
+    });
+    try { return fn(dir); }
+    finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
 describe('§01 — source pins: the gate is wired at both dispatch sites, before the DTO pipe', function () {
@@ -729,5 +778,433 @@ describe('§10 — the client-served routing blob strips the authorization keys 
         var served = stripLikeIsaac({ method: 'GET', url: '/x' });
         assert.equal(served.url, '/x');
         assert.equal(typeof served.param, 'undefined');
+    });
+});
+
+describe('§11 — the policy escape hatch (slice 3): AND-composed after roles, allow iff `=== true`', function () {
+
+    /** A policy-gated request with `<name>` registered as `fn`. */
+    function runWith(name, fn, opts, capture) {
+        var c = ctl(), out;
+        opts = opts || {};
+        withPolicies(fn ? (function () { var m = {}; m[name] = fn; return m; })() : {}, function () {
+            (capture || captureDebug)(function () {
+                out = gate.authorizeRequest(c, req({
+                    rule    : opts.rule || 'invoice-edit',
+                    param   : opts.param || { policy: name },
+                    session : ('session' in opts) ? opts.session : { user: { id: 7, roles: ['editor'] } }
+                }), res());
+            });
+        });
+        return { out: out, ctl: c };
+    }
+
+    it('01. DECISIVE (can-fail validated) — the roles check precedes the policy run', function () {
+        var rolesIdx  = GATE_SRC.indexOf('hasAnyRole(req.session.user, param.roles)');
+        var policyIdx = GATE_SRC.indexOf('runPolicy(controller, req, param.policy, req.session.user)');
+        assert.ok(rolesIdx > -1, 'the roles check');
+        assert.ok(policyIdx > -1, 'the policy run');
+        assert.ok(rolesIdx < policyIdx, 'roles must be matched before the policy runs (authN -> roles -> policy)');
+
+        // The pin reads the ORDER, so a source with the two swapped must flip it.
+        var perturbed = GATE_SRC
+            .replace('hasAnyRole(req.session.user, param.roles)', '__ROLES_MOVED__')
+            .replace('runPolicy(controller, req, param.policy, req.session.user)', 'hasAnyRole(req.session.user, param.roles)')
+            .replace('__ROLES_MOVED__', 'runPolicy(controller, req, param.policy, req.session.user)');
+        assert.notEqual(perturbed, GATE_SRC, 'the perturbation must actually change the source');
+        assert.ok(
+            perturbed.indexOf('hasAnyRole(req.session.user, param.roles)') > perturbed.indexOf('runPolicy(controller, req, param.policy, req.session.user)'),
+            'CONTROL: the pin must FAIL on a swapped source — otherwise it reads nothing'
+        );
+    });
+
+    it('02. source pin — the gate authenticates BEFORE it runs the policy (401 precedes 403)', function () {
+        var authIdx   = GATE_SRC.indexOf('!isAuthenticated(req)');
+        var policyIdx = GATE_SRC.indexOf('runPolicy(controller, req, param.policy, req.session.user)');
+        assert.ok(authIdx > -1 && policyIdx > -1);
+        assert.ok(authIdx < policyIdx,
+            'authN must run first: an unauthenticated caller must never learn the route is policy-restricted');
+    });
+
+    it('03. source pin — policy IMPLIES requireAuth via the non-empty-string derivation', function () {
+        assert.match(GATE_SRC, /typeof\(param\.policy\) == 'string' && param\.policy !== ''/);
+    });
+
+    it('04. a policy-gated route WITHOUT requireAuth still authenticates first (policy implies auth)', function () {
+        var c = ctl();
+        withAuthConf(null, function () {
+            assert.equal(gate.authorizeRequest(c, req({ param: { policy: 'ownsInvoice' }, session: {} }), res()), false);
+        });
+        assert.equal(c.thrown.status, 401, 'unauthenticated -> 401, never a 403');
+    });
+
+    it('05. a policy returning true reaches the action', function () {
+        var r = runWith('ownsInvoice', function () { return true; });
+        assert.equal(r.out, true);
+        assert.equal(r.ctl.thrown, null);
+    });
+
+    it('06. a policy returning false -> a generic 403', function () {
+        var r = runWith('ownsInvoice', function () { return false; });
+        assert.equal(r.out, false);
+        assert.deepEqual(r.ctl.thrown, { status: 403, error: 'Forbidden' });
+    });
+
+    it('07. the policy receives (user, req) — the record check\'s whole input', function () {
+        var seen = null;
+        var r = runWith('ownsInvoice', function (user, request) {
+            seen = { user: user, rule: request.routing.rule };
+            return user.id === 7;
+        });
+        assert.equal(r.out, true);
+        assert.equal(seen.user.id, 7, 'arg 1 is req.session.user');
+        assert.equal(seen.rule, 'invoice-edit', 'arg 2 is the request');
+    });
+
+    it('08. DECISIVE — allow is strictly `=== true`: a TRUTHY non-true return DENIES', function () {
+        [ 1, 'yes', {}, [] ].forEach(function (truthy) {
+            var r = runWith('truthy-' + typeof truthy + Math.random(), function () { return truthy; }, null, captureWarn);
+            assert.equal(r.out, false, JSON.stringify(truthy) + ' is truthy but not `true` — it must DENY');
+            assert.equal(r.ctl.thrown.status, 403);
+        });
+    });
+
+    it('09. DECISIVE — a PROMISE return denies (the transpiled-async shape the boot refusal cannot see)', function () {
+        var r = runWith('asyncish-1', function () { return Promise.resolve(true); }, null, captureWarn);
+        assert.equal(r.out, false, 'a promise is truthy — a truthy-allow gate would have ALLOWED it');
+        assert.equal(r.ctl.thrown.status, 403);
+    });
+
+    it('10. SUBTRACT — a truthy-allow gate ALLOWS an async policy that DENIED: the fail-OPEN this closes', function () {
+        // The shipped allow rule, and the one-token perturbation of it:
+        var shipped   = function (allowed) { return allowed === true; };
+        var perturbed = function (allowed) { return !!allowed; };
+        // An async policy whose answer is NO. Its promise is truthy regardless of the answer.
+        var deniedByAnAsyncPolicy = Promise.resolve(false);
+
+        assert.equal(shipped(deniedByAnAsyncPolicy), false, 'the shipped strict test denies it');
+        assert.equal(perturbed(deniedByAnAsyncPolicy), true,
+            'CONTROL: a truthy-allow gate ALLOWS a request the policy explicitly DENIED — fail-open');
+        // ...and the perturbation is not vacuous: it agrees with the shipped rule on a real boolean.
+        assert.equal(shipped(true),  perturbed(true));
+        assert.equal(shipped(false), perturbed(false));
+    });
+
+    it('11. a non-boolean return warns ONCE, naming the policy and the contract', function () {
+        var lines = captureWarn(function () {
+            withPolicies({ 'warnee-a': function () { return Promise.resolve(true); } }, function () {
+                gate.authorizeRequest(ctl(), req({ param: { policy: 'warnee-a' }, session: { user: { id: 7 } } }), res());
+            });
+        });
+        assert.equal(lines.length, 1, lines.join('|'));
+        assert.match(lines[0], /warnee-a/, 'the warning names the offending policy');
+        assert.match(lines[0], /a promise/, 'and the shape it wrongly returned');
+        assert.match(lines[0], /fail-closed/i);
+    });
+
+    it('12. ...and only once: a second request through the same policy does not re-warn', function () {
+        var policy = function () { return 'nope'; };
+        captureWarn(function () {
+            withPolicies({ 'warnee-b': policy }, function () {
+                gate.authorizeRequest(ctl(), req({ param: { policy: 'warnee-b' }, session: { user: { id: 7 } } }), res());
+            });
+        });
+        var second = captureWarn(function () {
+            withPolicies({ 'warnee-b': policy }, function () {
+                gate.authorizeRequest(ctl(), req({ param: { policy: 'warnee-b' }, session: { user: { id: 7 } } }), res());
+            });
+        });
+        assert.equal(second.length, 0, 'a per-request warning would bury the message it exists to surface');
+    });
+
+    it('13. a THROWING policy denies 403 — it never propagates (a policy bug must not 500 the wire)', function () {
+        var r;
+        assert.doesNotThrow(function () {
+            r = runWith('boom', function () { throw new Error('db is down'); }, null, captureError);
+        });
+        assert.equal(r.out, false);
+        assert.deepEqual(r.ctl.thrown, { status: 403, error: 'Forbidden' });
+    });
+
+    it('14. ...and the throw IS observable server-side', function () {
+        var lines = captureError(function () {
+            withPolicies({ 'boom-2': function () { throw new Error('db is down'); } }, function () {
+                gate.authorizeRequest(ctl(), req({ rule: 'invoice-edit', param: { policy: 'boom-2' }, session: { user: { id: 7 } } }), res());
+            });
+        });
+        assert.ok(lines.some(function (l) { return l.indexOf('boom-2') > -1 && l.indexOf('db is down') > -1; }), lines.join('|'));
+    });
+
+    it('15. an UNREGISTERED policy denies fail-closed (a gate that cannot find its policy must never allow)', function () {
+        var r = runWith('never-registered', null);
+        assert.equal(r.out, false);
+        assert.equal(r.ctl.thrown.status, 403);
+    });
+
+    it('16. DECISIVE — the 403 body never echoes the policy name or the rule', function () {
+        var r = runWith('ownsSecretLedger', function () { return false; }, { rule: 'secret-ledger-edit', param: { policy: 'ownsSecretLedger' } });
+        var wire = JSON.stringify(r.ctl.thrown);
+        assert.equal(r.ctl.thrown.error, 'Forbidden');
+        assert.doesNotMatch(wire, /ownsSecretLedger/, 'the policy name must never reach the wire');
+        assert.doesNotMatch(wire, /secret-ledger-edit/, 'the rule name must never reach the wire');
+    });
+
+    it('17. ...but the denial IS observable server-side (the debug line names the rule and the policy)', function () {
+        var lines = captureDebug(function () {
+            withPolicies({ 'ownsInvoice': function () { return false; } }, function () {
+                gate.authorizeRequest(ctl(), req({ rule: 'invoice-edit', param: { policy: 'ownsInvoice' }, session: { user: { id: 7 } } }), res());
+            });
+        });
+        assert.ok(lines.some(function (l) { return l.indexOf('invoice-edit') > -1 && l.indexOf('ownsInvoice') > -1; }), lines.join('|'));
+    });
+
+    it('18. roles AND policy compose: roles pass, policy denies -> 403', function () {
+        var r = runWith('ownsInvoice', function () { return false; }, {
+            param   : { roles: ['editor'], policy: 'ownsInvoice' },
+            session : { user: { id: 7, roles: ['editor'] } }
+        });
+        assert.equal(r.out, false);
+        assert.equal(r.ctl.thrown.status, 403);
+    });
+
+    it('19. roles AND policy compose: roles pass, policy allows -> the action', function () {
+        var r = runWith('ownsInvoice', function (user) { return user.id === 7; }, {
+            param   : { roles: ['editor'], policy: 'ownsInvoice' },
+            session : { user: { id: 7, roles: ['editor'] } }
+        });
+        assert.equal(r.out, true);
+        assert.equal(r.ctl.thrown, null);
+    });
+
+    it('20. roles short-circuit the policy: a role denial never runs it', function () {
+        var ran = false;
+        var r = runWith('ownsInvoice', function () { ran = true; return true; }, {
+            param   : { roles: ['admin'], policy: 'ownsInvoice' },
+            session : { user: { id: 7, roles: ['viewer'] } }
+        });
+        assert.equal(r.out, false);
+        assert.equal(r.ctl.thrown.status, 403);
+        assert.equal(ran, false, 'a role-denied request must not reach the policy at all');
+    });
+
+    it('21. an empty-string policy does NOT gate (the boot lint refuses it — it must never HALF-gate)', function () {
+        var c = ctl();
+        assert.equal(gate.authorizeRequest(c, req({ param: { policy: '' } }), res()), true);
+        assert.equal(c.thrown, null);
+    });
+
+    it('22. SUBTRACT — a non-string policy does NOT gate: the silent-off case the lint exists for', function () {
+        [ 42, true, {}, ['ownsInvoice'] ].forEach(function (bad) {
+            var c = ctl();
+            assert.equal(gate.authorizeRequest(c, req({ param: { policy: bad } }), res()), true, JSON.stringify(bad));
+            assert.equal(c.thrown, null, 'a non-string policy is NOT enforced — the boot lint must reject it');
+        });
+    });
+});
+
+describe('§12 — the policy registrar (slice 3): registerPolicy + the boot lint', function () {
+
+    it('01. source pin — the shipped block registers every declared policy at boot', function () {
+        assert.match(SERVER_SRC, /lib\.authzGate\.registerPolicy\(_authzSrcPath, _authzPolicy\)/);
+    });
+
+    it('02. source pin — the shipped block lints the policy string shape and refuses a missing module', function () {
+        assert.match(SERVER_SRC, /param\.policy` must be a non-empty string/);
+        assert.match(SERVER_SRC, /is missing \(or does not export a function\)/);
+    });
+
+    it('03. source pin — registerPolicy refuses an AsyncFunction by constructor name', function () {
+        assert.match(GATE_SRC, /fn\.constructor && fn\.constructor\.name === 'AsyncFunction'/);
+    });
+
+    it('04. a plain function registers and lands on process.gina._policies', function () {
+        withPolicyFiles({ ownsInvoice: 'module.exports = function (user, req) { return user.id === 7; };' }, function (dir) {
+            withPolicies({}, function () {
+                var fn = gate.registerPolicy(dir, 'ownsInvoice');
+                assert.equal(typeof fn, 'function');
+                assert.equal(process.gina._policies.ownsInvoice, fn, 'registered for the O(1) request-path lookup');
+                assert.equal(fn({ id: 7 }, {}), true, 'and it is the real module');
+            });
+        });
+    });
+
+    it('05. the registered policy is what the gate then runs end-to-end', function () {
+        withPolicyFiles({ ownsIt: 'module.exports = function (user, req) { return user.id === req.routing.param.id; };' }, function (dir) {
+            withPolicies({}, function () {
+                gate.registerPolicy(dir, 'ownsIt');
+                var c = ctl();
+                assert.equal(gate.authorizeRequest(c, req({
+                    param   : { policy: 'ownsIt', id: 7 },
+                    session : { user: { id: 7 } }
+                }), res()), true);
+                assert.equal(c.thrown, null);
+            });
+        });
+    });
+
+    it('06. a missing file is unresolved (null) — the caller refuses the boot', function () {
+        withPolicyFiles({}, function (dir) {
+            withPolicies({}, function () {
+                assert.equal(gate.registerPolicy(dir, 'nope'), null);
+            });
+        });
+    });
+
+    it('07. a module exporting a non-function is unresolved (null)', function () {
+        withPolicyFiles({ notAFn: 'module.exports = { allow: true };' }, function (dir) {
+            withPolicies({}, function () {
+                assert.equal(gate.registerPolicy(dir, 'notAFn'), null);
+            });
+        });
+    });
+
+    it('08. DECISIVE — an `async function` policy REFUSES to boot', function () {
+        withPolicyFiles({ asyncPolicy: 'module.exports = async function (user, req) { return true; };' }, function (dir) {
+            withPolicies({}, function () {
+                assert.throws(function () { gate.registerPolicy(dir, 'asyncPolicy'); }, /async function/);
+                assert.equal(typeof process.gina._policies.asyncPolicy, 'undefined', 'and it is never registered');
+            });
+        });
+    });
+
+    it('09. ...because `typeof` cannot see it — only the constructor name can (the boot-visible tell)', function () {
+        withPolicyFiles({
+            asyncP: 'module.exports = async function (user, req) { return true; };',
+            plainP: 'module.exports = function (user, req) { return true; };'
+        }, function (dir) {
+            var asyncFn = require(path.join(dir, 'policies', 'asyncP.js'));
+            var plainFn = require(path.join(dir, 'policies', 'plainP.js'));
+            assert.equal(typeof asyncFn, typeof plainFn, 'CONTROL: typeof reads `function` for BOTH — it cannot discriminate');
+            assert.equal(asyncFn.constructor.name, 'AsyncFunction');
+            assert.equal(plainFn.constructor.name, 'Function');
+        });
+    });
+
+    it('10. DECISIVE — a promise-RETURNING plain function is boot-INVISIBLE: why §11\'s allow test must be strict', function () {
+        withPolicyFiles({ transpiled: 'module.exports = function (user, req) { return Promise.resolve(true); };' }, function (dir) {
+            withPolicies({}, function () {
+                // The registrar CANNOT refuse it — it is a plain Function by every boot-visible measure.
+                var fn = gate.registerPolicy(dir, 'transpiled');
+                assert.equal(typeof fn, 'function');
+                assert.equal(fn.constructor.name, 'Function', 'the transpiled-async shape reads as an ordinary function');
+                // So the ONLY thing standing between it and a fail-open is the gate's `=== true`.
+                assert.notEqual(fn({}, {}), true, 'its return is truthy but never `true` -> the strict gate denies it');
+            });
+        });
+    });
+
+    it('11. a broken module propagates its throw (the caller wraps it with route context)', function () {
+        withPolicyFiles({ broken: 'throw new Error("syntax-ish boom");' }, function (dir) {
+            withPolicies({}, function () {
+                assert.throws(function () { gate.registerPolicy(dir, 'broken'); }, /syntax-ish boom/);
+            });
+        });
+    });
+
+    it('12. a non-string / empty name is unresolved, never a crash', function () {
+        withPolicies({}, function () {
+            [ '', null, undefined, 42, {} ].forEach(function (bad) {
+                assert.equal(gate.registerPolicy('/tmp/whatever', bad), null, JSON.stringify(bad));
+            });
+        });
+    });
+
+    // Pure-logic replica of the shipped server.js policy lint (§12.01/§12.02 pin the source).
+    function lintPolicy(routing, register) {
+        var count = 0, policyCount = 0;
+        for (var rule in routing) {
+            var route = routing[rule];
+            if (typeof route != 'object' || route === null || !route.param) { continue; }
+            var gated = false;
+            if (typeof route.param.policy != 'undefined') {
+                var name = route.param.policy;
+                if (typeof name != 'string' || name === '') {
+                    throw new Error('Route `' + rule + '`: `param.policy` must be a non-empty string.');
+                }
+                if (!register(name)) {
+                    throw new Error('Route `' + rule + '` declares `param.policy` `' + name + '` but policies/' + name + '.js is missing (or does not export a function).');
+                }
+                gated = true;
+                ++policyCount;
+            }
+            if (gated) { ++count; }
+        }
+        return { count: count, policyCount: policyCount };
+    }
+    var registered = function (name) { return name === 'ownsInvoice'; };
+
+    it('13. replica — a valid policy gates the route even without requireAuth', function () {
+        assert.deepEqual(lintPolicy({ a: { param: { policy: 'ownsInvoice' } } }, registered), { count: 1, policyCount: 1 });
+    });
+
+    it('14. replica — a non-string policy refuses to boot', function () {
+        assert.throws(function () { lintPolicy({ a: { param: { policy: 42 } } }, registered); }, /non-empty string/);
+        assert.throws(function () { lintPolicy({ a: { param: { policy: null } } }, registered); }, /non-empty string/);
+        assert.throws(function () { lintPolicy({ a: { param: { policy: ['x'] } } }, registered); }, /non-empty string/);
+    });
+
+    it('15. replica — an empty-string policy refuses to boot', function () {
+        assert.throws(function () { lintPolicy({ a: { param: { policy: '' } } }, registered); }, /non-empty string/);
+    });
+
+    it('16. replica — an unresolvable policy refuses to boot (a typo is not a silently-ungated route)', function () {
+        assert.throws(function () { lintPolicy({ a: { param: { policy: 'typoed' } } }, registered); }, /is missing/);
+    });
+
+    it('17. replica — a param-less or non-object route is skipped, never a crash', function () {
+        assert.equal(lintPolicy({ a: {}, b: null, c: 'nope', d: { param: {} } }, registered).count, 0);
+    });
+});
+
+describe('§13 — self.hasRole(role): the imperative escape hatch reads roles THROUGH the gate', function () {
+
+    var CTRL_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.js'), 'utf8');
+    var TYPES_SRC = fs.readFileSync(path.join(FW, '../../types/index.d.ts'), 'utf8');
+
+    it('01. DECISIVE — the controller delegates to the gate\'s predicate, never its own role read', function () {
+        assert.match(CTRL_SRC, /return lib\.authzGate\.hasAnyRole\(user, \[ role \]\);/,
+            'one definition of "holding a role" framework-wide');
+        // CONTROL: the pin would fail on an inlined copy — the drift class this prevents.
+        var perturbed = CTRL_SRC.replace(
+            'return lib.authzGate.hasAnyRole(user, [ role ]);',
+            'return Array.isArray(user && user.roles) ? user.roles.indexOf(role) > -1 : false;'
+        );
+        assert.notEqual(perturbed, CTRL_SRC, 'the perturbation must actually change the source');
+        assert.doesNotMatch(perturbed, /return lib\.authzGate\.hasAnyRole\(user, \[ role \]\);/,
+            'CONTROL: an inlined re-implementation must FAIL this pin');
+    });
+
+    it('02. source pin — the predicate is exported for it', function () {
+        assert.match(GATE_SRC, /hasAnyRole\s+: hasAnyRole,/);
+        assert.equal(typeof gate.hasAnyRole, 'function');
+    });
+
+    it('03. source pin — hasRole carries the #B35 released-response guard', function () {
+        var idx = CTRL_SRC.indexOf('this.hasRole = function(role) {');
+        assert.ok(idx > -1, 'the helper');
+        var body = CTRL_SRC.slice(idx, idx + 700);
+        assert.match(body, /if \( local\.req == null \) \{\s*\n\s*return false;/,
+            'a released request must answer false, never crash the bundle');
+        assert.ok(body.indexOf('local.req == null') < body.indexOf('getSession()'),
+            'the guard must precede the session read');
+    });
+
+    it('04. the #DTO3b parity gate is satisfied: the types interface declares hasRole', function () {
+        assert.match(TYPES_SRC, /hasRole\(role: string\): boolean;/,
+            'the parity gate diffs the SuperController interface against a real instance');
+    });
+
+    it('05. the predicate it delegates to: ANY-of over an opaque string list', function () {
+        assert.equal(gate.hasAnyRole({ roles: ['editor'] }, ['admin', 'editor']), true);
+        assert.equal(gate.hasAnyRole({ roles: ['admin'] },  ['admin']), true);
+        assert.equal(gate.hasAnyRole({ roles: ['viewer'] }, ['admin']), false);
+    });
+
+    it('06. ...and its "no roles" cases are exactly the gate\'s (the shared-definition payoff)', function () {
+        assert.equal(gate.hasAnyRole(null,                   ['admin']), false, 'unauthenticated');
+        assert.equal(gate.hasAnyRole({},                     ['admin']), false, 'no roles key');
+        assert.equal(gate.hasAnyRole({ roles: 'admin' },     ['admin']), false, 'a bare string is not a role list');
+        assert.equal(gate.hasAnyRole({ roles: {admin: 1} },  ['admin']), false, 'nor an object');
+        assert.equal(gate.hasAnyRole({ roles: [] },          ['admin']), false, 'nor an empty list');
     });
 });

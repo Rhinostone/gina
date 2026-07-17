@@ -265,6 +265,16 @@ declare namespace gina {
         isProductionScope(): boolean;
 
         /**
+         * True when the authenticated session user holds `role` (#COMPLY1).
+         *
+         * The imperative escape hatch for an action that authorizes mid-logic; the
+         * declarative `routing.json` `param.roles` gate covers the whole-route case.
+         * False for an unauthenticated request.
+         * @param role - The role name to test for
+         */
+        hasRole(role: string): boolean;
+
+        /**
          * Render an HTML template (Swig or Nunjucks per the route's engine).
          * @param userData - Template data merged into the view
          * @param displayInspector - Show the Gina Inspector overlay

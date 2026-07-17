@@ -5386,6 +5386,41 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     }
 
     /**
+     * Returns `true` when the authenticated session user holds `role` (#COMPLY1).
+     *
+     * The imperative escape hatch, for an action that authorizes mid-logic — the
+     * declarative `routing.json` `param.roles` gate covers the whole-route case and
+     * should be preferred when it fits (it denies before the action, and before the
+     * DTO pipe). Roles are opaque strings: the framework imposes no vocabulary.
+     *
+     * Delegates to `lib/authz-gate`'s predicate, so "holding a role" means here exactly
+     * what it means at the gate — an absent or non-array `user.roles` holds none.
+     *
+     * @param {string} role - The role name to test for.
+     * @returns {boolean} `false` for an unauthenticated request (and for a released one).
+     *
+     * @example
+     * // Widen a response for privileged callers, inside an otherwise open action:
+     * var payload = { title: doc.title };
+     * if ( self.hasRole('admin') ) {
+     *     payload.auditTrail = doc.auditTrail;
+     * }
+     * self.renderJSON(payload);
+     */
+    this.hasRole = function(role) {
+        // #B35 — released-response guard (see getSession, #B31/#B33): a terminal exit
+        // nulls local.req; a released request carries no session, hence no role. Reading
+        // through it would crash the bundle (uncaughtException -> SIGTERM).
+        if ( local.req == null ) {
+            return false;
+        }
+        var session = getSession();
+        var user    = ( session && session.user ) ? session.user : null;
+
+        return lib.authzGate.hasAnyRole(user, [ role ]);
+    }
+
+    /**
      * Returns `true` when the session (or provided storage object) holds a `haltedRequest`.
      *
      * @param {object} [session] - Defaults to the current `req.session` / `req.session.user`

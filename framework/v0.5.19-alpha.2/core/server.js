@@ -867,8 +867,10 @@ function Server(options) {
                 throw new Error('[ SERVER ] `settings.json > auth` must be an object.');
             }
 
-            var _authzCount      = 0;
-            var _authzRolesCount = 0;
+            var _authzSrcPath     = self.conf[self.appName][self.env].bundlesPath + '/' + self.appName;
+            var _authzCount       = 0;
+            var _authzRolesCount  = 0;
+            var _authzPolicyCount = 0;
             for (var _authzRule in _authzRouting) {
                 var _authzRoute = _authzRouting[_authzRule];
                 if ( typeof(_authzRoute) != 'object' || _authzRoute === null || !_authzRoute.param ) {
@@ -901,6 +903,34 @@ function Server(options) {
                     }
                     _authzGated = true;
                     ++_authzRolesCount;
+                }
+                // `param.policy` — a `<bundle>/policies/<name>.js` module exporting a
+                // plain `function (user, req) { return boolean; }`, registered HERE at
+                // boot (the DTO registrar above is the mould). Registering once makes the
+                // request path an O(1) lookup off `process.gina._policies` — no fs, no
+                // re-require per request (which would also feed the dev-mode
+                // `module.children` leak class, #B32). It also means a missing, broken or
+                // ASYNC policy refuses to BOOT rather than denying its route on every
+                // request in production: an async policy's promise return is truthy but
+                // never `=== true`, so the gate's strict allow would leave the route
+                // permanently, silently 403ing. A policy file edit therefore needs a
+                // bundle restart, exactly like routing.json, forms and connectors.json.
+                if ( typeof(_authzRoute.param.policy) != 'undefined' ) {
+                    var _authzPolicy = _authzRoute.param.policy;
+                    if ( typeof(_authzPolicy) != 'string' || _authzPolicy === '' ) {
+                        throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.policy` must be a non-empty string (the `policies/<name>.js` module to load). Any other shape would NOT gate the route.');
+                    }
+                    var _authzPolicyFn = null;
+                    try {
+                        _authzPolicyFn = lib.authzGate.registerPolicy(_authzSrcPath, _authzPolicy);
+                    } catch (_authzPolicyErr) {
+                        throw new Error('[ SERVER ] Route `'+ _authzRule +'`: policy module `policies/'+ _authzPolicy +'.js` could not be registered from `'+ _authzSrcPath +'`:\n'+ _authzPolicyErr.message);
+                    }
+                    if ( !_authzPolicyFn ) {
+                        throw new Error('[ SERVER ] Route `'+ _authzRule +'` declares `param.policy` `'+ _authzPolicy +'` but `'+ _authzSrcPath +'/policies/'+ _authzPolicy +'.js` is missing (or does not export a function).');
+                    }
+                    _authzGated = true;
+                    ++_authzPolicyCount;
                 }
                 if ( _authzGated ) {
                     ++_authzCount;
@@ -945,8 +975,11 @@ function Server(options) {
             }
             process.gina._authConf = { loginRoute: _authzLoginRoute };
             if ( _authzCount > 0 ) {
+                var _authzParts = [];
+                if ( _authzRolesCount > 0 )  { _authzParts.push(_authzRolesCount +' role-gated'); }
+                if ( _authzPolicyCount > 0 ) { _authzParts.push(_authzPolicyCount +' policy-gated'); }
                 console.debug('[ BUNDLE ][ server ][ init ] Registered '+ _authzCount +' authorization-gated route(s)'
-                    + ( _authzRolesCount > 0 ? ' ('+ _authzRolesCount +' role-gated)' : '' )
+                    + ( _authzParts.length > 0 ? ' ('+ _authzParts.join(', ') +')' : '' )
                     +' for [ '+ self.appName +' ]'
                     + ( _authzLoginRoute ? ' — login bounce: '+ _authzLoginRoute : ' — no `auth.loginRoute`: unauthenticated requests get a 401' ));
             }
