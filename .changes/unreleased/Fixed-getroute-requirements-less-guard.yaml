@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'getRoute() no longer throws (surfacing as a 500 at the caller) when composing a URL for a GET route that declares no requirements block and receives extra params — the deep-link-before-login replay (resumeRequest()) failed on any halted requirements-less GET route carrying data, and the same crash was reachable from the url template filter / getUrl() family, in the browser bundle too. Extra params now land on the composed URL as query parameters.'
-time: 2026-07-17T13:28:31+01:00

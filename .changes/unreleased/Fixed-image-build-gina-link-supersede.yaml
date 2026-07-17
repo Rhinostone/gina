@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'image:build: the pinned framework now actually wins require(''gina'') inside images built for gina-dependent projects — the node_modules/gina link supersedes the project-extracted copy (ln -sfn against a real directory exits 0 but nests the symlink inside it, so the project''s own gina was silently used at runtime while the CLI binaries ran from the global pin)'
-time: 2026-07-16T20:14:06+01:00
