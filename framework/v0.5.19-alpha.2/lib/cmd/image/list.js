@@ -23,15 +23,18 @@ var console   = lib.logger;
  *
  * Usage:
  *  gina image:list                    # text table on the resolved host
- *  gina image:list --format=json      # { host, images: [{ ref, id, size, created }] }
+ *  gina image:list --format=json      # { host, images: [{ ref, id, size, created, sizeBytes, createdAt }] }
  *
  * Output contract:
  *  - text (default): a `pad`-aligned table — REPOSITORY:TAG · IMAGE ID · SIZE ·
  *    CREATED. An untagged image renders as `<none>:<none>`; a multi-tagged
  *    image yields one row per tag.
- *  - `--format=json`: `{ host, images: [{ ref, id, size, created }] }` on
- *    stdout (synchronous `fs.writeSync` so `process.exit()` cannot truncate it
- *    on a pipe), exit 0.
+ *  - `--format=json`: `{ host, images: [{ ref, id, size, created, sizeBytes,
+ *    createdAt }] }` on stdout (synchronous `fs.writeSync` so `process.exit()`
+ *    cannot truncate it on a pipe), exit 0. `size`/`created` are buildah's
+ *    humanized display strings; `createdAt` is the exact RFC3339 creation
+ *    time and `sizeBytes` an approximate byte count derived from the
+ *    humanized size (buildah exposes no raw byte count anywhere).
  *  - failures (unresolvable host, ssh/buildah error): the reason on stdout,
  *    exit 1.
  *
@@ -140,7 +143,7 @@ function List(opt, cmd) {
      *
      * @inner
      * @private
-     * @param {Array<{ref:string,id:string,size:string,created:string}>} rows
+     * @param {Array<{ref:string,id:string,size:string,created:string,sizeBytes:(number|null),createdAt:string}>} rows - Only the four display keys are rendered
      * @returns {string} The full table (trailing newline), or a header-only
      *   note when there are no images
      */

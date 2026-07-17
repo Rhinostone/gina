@@ -104,14 +104,14 @@ describe('image:list + image:rm — host-level image verbs (lib/image-build + li
 
         // Captured verbatim from `buildah images --json` (buildah 1.42.1).
         var REAL = JSON.stringify([
-            { id: '44b5401ff810', names: ['docker.io/library/node:22-slim'], digest: 'sha256:813a74', createdat: '3 weeks ago', size: '252 MB', created: 1782265788, readonly: false, history: null },
-            { id: 'f030b57bbc3a', names: null, digest: 'sha256:1b52f1', createdat: '11 days ago', size: '293 MB', created: 1783267491, readonly: false, history: null }
+            { id: '44b5401ff810', names: ['docker.io/library/node:22-slim'], digest: 'sha256:813a74', createdat: '3 weeks ago', size: '252 MB', created: 1782265788, createdatraw: '2026-06-24T01:49:48.437707756Z', readonly: false, history: null },
+            { id: 'f030b57bbc3a', names: null, digest: 'sha256:1b52f1', createdat: '11 days ago', size: '293 MB', created: 1783267491, createdatraw: '2026-07-05T16:04:51.510116611Z', readonly: false, history: null }
         ]);
 
-        it('maps the real buildah shape to { ref, id, size, created }', function() {
+        it('maps the real buildah shape to { ref, id, size, created, sizeBytes, createdAt }', function() {
             var rows = imageBuild.parseImagesJson(REAL);
             assert.equal(rows.length, 2);
-            assert.deepEqual(rows[0], { ref: 'docker.io/library/node:22-slim', id: '44b5401ff810', size: '252 MB', created: '3 weeks ago' });
+            assert.deepEqual(rows[0], { ref: 'docker.io/library/node:22-slim', id: '44b5401ff810', size: '252 MB', created: '3 weeks ago', sizeBytes: 252000000, createdAt: '2026-06-24T01:49:48.437707756Z' });
         });
 
         it('renders an untagged image (names: null) as <none>:<none> rather than crashing', function() {
@@ -139,6 +139,53 @@ describe('image:list + image:rm — host-level image verbs (lib/image-build + li
         it('truncates a long (64-char) id to the 12-char short form buildah displays', function() {
             var long = 'a'.repeat(64);
             assert.equal(imageBuild.parseImagesJson('[{"id":"' + long + '","names":["x:1"]}]')[0].id, 'a'.repeat(12));
+        });
+
+        it('createdAt passes buildah\'s RFC3339 createdatraw through verbatim', function() {
+            var rows = imageBuild.parseImagesJson(REAL);
+            assert.equal(rows[1].createdAt, '2026-07-05T16:04:51.510116611Z');
+        });
+
+        it('createdAt falls back to the epoch `created` field (ISO-converted) when createdatraw is absent', function() {
+            var rows = imageBuild.parseImagesJson('[{"id":"i2","names":["y:1"],"size":"5 MB","createdat":"now","created":1783267491}]');
+            assert.equal(rows[0].createdAt, '2026-07-05T16:04:51.000Z');
+        });
+
+        it('createdAt is "" and sizeBytes null when the machine fields are absent or unparseable', function() {
+            var rows = imageBuild.parseImagesJson('[{"id":"i3","names":["z:1"]}]');
+            assert.equal(rows[0].createdAt, '');
+            assert.equal(rows[0].sizeBytes, null);
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // (b2) parseHumanSize — the derived sizeBytes primitive
+    // -----------------------------------------------------------------------
+    describe('02b — parseHumanSize', function() {
+
+        it('parses buildah\'s decimal suffixes (powers of 1000)', function() {
+            assert.equal(imageBuild.parseHumanSize('999 B'), 999);
+            assert.equal(imageBuild.parseHumanSize('1 KB'), 1000);
+            assert.equal(imageBuild.parseHumanSize('252 MB'), 252000000);
+            assert.equal(imageBuild.parseHumanSize('1.5 GB'), 1500000000);
+            assert.equal(imageBuild.parseHumanSize('2.93 GB'), 2930000000);
+            assert.equal(imageBuild.parseHumanSize('1 TB'), 1000000000000);
+        });
+
+        it('accepts binary suffixes defensively (powers of 1024)', function() {
+            assert.equal(imageBuild.parseHumanSize('2 KiB'), 2048);
+            assert.equal(imageBuild.parseHumanSize('1 MiB'), 1048576);
+        });
+
+        it('is case- and whitespace-tolerant', function() {
+            assert.equal(imageBuild.parseHumanSize('252MB'), 252000000);
+            assert.equal(imageBuild.parseHumanSize(' 252 mb '), 252000000);
+        });
+
+        it('returns null on anything else — never a throw, never a guess', function() {
+            [undefined, null, '', '   ', 'weird', 'MB 252', '-1 MB', '252 XB', '1e3 MB', '252'].forEach(function(input) {
+                assert.equal(imageBuild.parseHumanSize(input), null, 'input: ' + JSON.stringify(input));
+            });
         });
     });
 

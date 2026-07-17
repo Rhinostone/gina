@@ -50,14 +50,25 @@ Options (image:build):
 Options (image:list):
 
     --format=json            Machine-readable output:
-                             { host, images: [{ ref, id, size, created }] }
+                             { host, images: [{ ref, id, size, created,
+                               sizeBytes, createdAt }] }
                              An untagged image reports ref `<none>:<none>`;
                              a multi-tagged image yields one entry per tag.
+                             createdAt is the exact RFC3339 creation time;
+                             sizeBytes is approximate — derived from buildah's
+                             humanized size (buildah exposes no raw byte
+                             count). size/created stay the humanized display
+                             strings the text table shows.
 
 Options (image:rm):
 
     --force                  Remove the image even when a container still
                              references it (buildah rmi -f).
+
+    Removing one tag of a multi-tagged image is an untag: buildah exits 0
+    and the image survives under its other tags (image:list rows sharing
+    an id are tags of one image). The in-use refusal only applies to an
+    image's last reference.
 
 Container host:
 

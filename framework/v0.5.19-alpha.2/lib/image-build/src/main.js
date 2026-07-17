@@ -757,17 +757,24 @@ function containerHostSpawn(host, argv) {
  * `<none>:<none>` row). Tolerates empty stdout, a bare `null`, or a non-array
  * document — each maps to `[]` rather than throwing.
  *
+ * Alongside buildah's humanized `size`/`created` display strings, every row
+ * carries two machine-readable keys: `createdAt` — exact, buildah's RFC3339
+ * `createdatraw` passed through verbatim, falling back to the epoch-seconds
+ * `created` field (ISO-converted), else `''` — and `sizeBytes` — approximate,
+ * derived via {@link parseHumanSize} because buildah exposes no raw byte
+ * count, or null when the size string is unparseable.
+ *
  * @function parseImagesJson
  * @param {string} stdout - Raw stdout of `buildah images --json`
- * @returns {Array<{ref: string, id: string, size: string, created: string}>}
+ * @returns {Array<{ref: string, id: string, size: string, created: string, sizeBytes: (number|null), createdAt: string}>}
  *
  * @example
- * parseImagesJson('[{"id":"f030b57bbc3a","names":["localhost/p/b:prod"],"size":"293 MB","createdat":"11 days ago"}]');
- * // [{ ref: 'localhost/p/b:prod', id: 'f030b57bbc3a', size: '293 MB', created: '11 days ago' }]
+ * parseImagesJson('[{"id":"f030b57bbc3a","names":["localhost/p/b:prod"],"size":"293 MB","createdat":"11 days ago","created":1783267491,"createdatraw":"2026-07-05T16:04:51.510116611Z"}]');
+ * // [{ ref: 'localhost/p/b:prod', id: 'f030b57bbc3a', size: '293 MB', created: '11 days ago', sizeBytes: 293000000, createdAt: '2026-07-05T16:04:51.510116611Z' }]
  *
  * @example
  * parseImagesJson('[{"id":"a1b2c3","names":null,"size":"180 MB","createdat":"2 weeks ago"}]');
- * // [{ ref: '<none>:<none>', id: 'a1b2c3', size: '180 MB', created: '2 weeks ago' }]
+ * // [{ ref: '<none>:<none>', id: 'a1b2c3', size: '180 MB', created: '2 weeks ago', sizeBytes: 180000000, createdAt: '' }]
  */
 function parseImagesJson(stdout) {
     var doc;
@@ -783,16 +790,53 @@ function parseImagesJson(stdout) {
         var id    = String(img.id || '').substring(0, 12);
         var size  = String(img.size || '');
         var when  = String(img.createdat || '');
+        var bytes = parseHumanSize(size);
+        var iso   = String(img.createdatraw || '');
+        if (!iso && typeof img.created === 'number' && isFinite(img.created)) {
+            iso = new Date(img.created * 1000).toISOString();
+        }
         var names = Array.isArray(img.names) ? img.names : [];
         if (names.length === 0) {
-            rows.push({ ref: '<none>:<none>', id: id, size: size, created: when });
+            rows.push({ ref: '<none>:<none>', id: id, size: size, created: when, sizeBytes: bytes, createdAt: iso });
         } else {
             for (var n = 0; n < names.length; n++) {
-                rows.push({ ref: String(names[n]), id: id, size: size, created: when });
+                rows.push({ ref: String(names[n]), id: id, size: size, created: when, sizeBytes: bytes, createdAt: iso });
             }
         }
     }
     return rows;
+}
+
+/**
+ * Parses a humanized size string (`"252 MB"`, `"1.5 GB"`, `"999 B"`) into an
+ * approximate byte count. `buildah images` humanizes with 3 significant
+ * figures and a DECIMAL suffix (B/KB/MB/GB/TB/PB/EB — powers of 1000) and
+ * exposes the raw byte count NOWHERE — neither `--json` nor the `--format`
+ * template struct carries it (measured on buildah 1.42.1 via
+ * `--format '{{json .}}'`) — so a derived value is the only machine-readable
+ * size available without a per-image remote inspect. Binary suffixes
+ * (KiB/MiB/… — powers of 1024) are accepted defensively. The result is
+ * APPROXIMATE (±0.5% from the 3-significant-figure rounding): ordering-safe
+ * for sorting, not an exact byte count.
+ *
+ * @function parseHumanSize
+ * @param {string} str - Humanized size string, e.g. `"252 MB"`
+ * @returns {number|null} Approximate byte count (integer), or null when unparseable
+ *
+ * @example
+ * parseHumanSize('252 MB'); // 252000000
+ * parseHumanSize('1.5 GB'); // 1500000000
+ * parseHumanSize('2 KiB');  // 2048
+ * parseHumanSize('weird');  // null
+ */
+function parseHumanSize(str) {
+    var m = /^([0-9]+(?:\.[0-9]+)?)\s*(B|KB|MB|GB|TB|PB|EB|KIB|MIB|GIB|TIB|PIB|EIB)$/i.exec(String(str || '').trim());
+    if (!m) return null;
+    var pow1000 = { B: 0, KB: 1, MB: 2, GB: 3, TB: 4, PB: 5, EB: 6 };
+    var pow1024 = { KIB: 1, MIB: 2, GIB: 3, TIB: 4, PIB: 5, EIB: 6 };
+    var unit    = m[2].toUpperCase();
+    var base    = (unit in pow1000) ? Math.pow(1000, pow1000[unit]) : Math.pow(1024, pow1024[unit]);
+    return Math.round(parseFloat(m[1]) * base);
 }
 
 /**
@@ -833,5 +877,6 @@ module.exports = {
     buildOneShot         : buildOneShot,
     containerHostSpawn   : containerHostSpawn,
     parseImagesJson      : parseImagesJson,
+    parseHumanSize       : parseHumanSize,
     isValidImageRef      : isValidImageRef
 };
