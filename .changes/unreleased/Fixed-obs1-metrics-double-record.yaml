@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Prometheus metrics (app.json metrics.enabled) no longer double-count requests under the isaac engine: the request-lifecycle hook ran at both dispatch layers for any request reaching the router, so counters were double-incremented and the duration histogram double-observed. The hook now records exactly once on either engine, request durations are measured from engine entry, and the dev Inspector Flow timeline keeps its accurate request-start time.'
+time: 2026-07-17T20:24:59+01:00

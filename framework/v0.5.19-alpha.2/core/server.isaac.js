@@ -1038,7 +1038,12 @@ function ServerEngineClass(options) {
             // #FI — dev-mode request timeline for Inspector Flow tab
             // Only initialized when the Inspector has been opened (process.gina._inspectorActive)
             // #INS10 — or during a prod instrumentation window (process.gina._inspectorWindowUntil).
-            if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (isCacheless && process.gina._inspectorActive)) {
+            // #OBS1 first-seer (!request._devTimeline): this engine listener runs BEFORE it hands
+            // off to server.js's onInstance (via cb), and BOTH tops carry this same init. An
+            // unguarded overwrite would reset requestStart to onInstance's LATER time, dropping
+            // the isaac-listener setup interval from the Flow timeline. The engine listener claims
+            // first; onInstance then skips. Keep the two tops in sync.
+            if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (isCacheless && process.gina._inspectorActive)) && !request._devTimeline) {
                 request._devTimeline = { requestStart: Date.now(), entries: [] };
             }
             // #OBS1 slice 3 — HTTP request lifecycle hook for Prometheus metrics.
@@ -1047,7 +1052,14 @@ function ServerEngineClass(options) {
             // for both HTTP/1.1 ServerResponse and HTTP/2 Http2ServerResponse).
             // Errors inside the listener are swallowed — metrics must never crash
             // a request.
-            if (lib.metrics.isEnabled()) {
+            // #OBS1 first-seer (!request._metricsRecorded): under isaac a ROUTED request runs BOTH
+            // this engine listener AND server.js's onInstance (its cb) — both carry this finish-hook,
+            // so an unguarded wiring registers TWO 'finish' listeners and recordRequest fires twice
+            // (counters double-incremented, histogram double-observed). The engine listener claims
+            // first; onInstance then skips. Mirrors the RW-F8 _rwTracked claim on the gauge below.
+            // Keep the two tops in sync.
+            if (lib.metrics.isEnabled() && !request._metricsRecorded) {
+                request._metricsRecorded = true;
                 request._metricsStartTime = Date.now();
                 response.on('finish', function _gina_metrics_record() {
                     try {

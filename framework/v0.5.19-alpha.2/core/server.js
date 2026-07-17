@@ -3345,14 +3345,25 @@ function Server(options) {
             // #FI — dev-mode request timeline for Inspector Flow tab
             // Only initialized when the Inspector has been opened (process.gina._inspectorActive)
             // #INS10 — or during a prod instrumentation window (process.gina._inspectorWindowUntil).
-            if ((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (self.isCacheless() && process.gina._inspectorActive)) {
+            // #OBS1 first-seer (!request._devTimeline): under isaac this onInstance runs as the
+            // engine listener's cb, AFTER the isaac listener already ran this same init — an
+            // unguarded overwrite would reset requestStart to this LATER time, dropping the
+            // isaac-listener setup interval. The isaac listener claims first; this skips. On the
+            // Express engine there is no isaac listener, so this claims. Keep the two tops in sync.
+            if (((process.gina && process.gina._inspectorWindowUntil > Date.now()) || (self.isCacheless() && process.gina._inspectorActive)) && !request._devTimeline) {
                 request._devTimeline = { requestStart: Date.now(), entries: [] };
             }
             // #OBS1 slice 3 — HTTP request lifecycle hook for Prometheus metrics.
             // Engine-agnostic mirror of the server.isaac.js hook. Gated on
             // lib.metrics.isEnabled() so the listener is only wired when
             // app.json metrics.enabled is true.
-            if (lib.metrics.isEnabled()) {
+            // #OBS1 first-seer (!request._metricsRecorded): under isaac this onInstance runs as the
+            // engine listener's cb, AFTER the isaac listener already wired this same finish-hook — an
+            // unguarded second wiring double-registers the listener and recordRequest fires twice per
+            // routed request. The isaac listener claims first; this skips. On the Express engine there
+            // is no isaac listener, so this claims. Mirrors the RW-F8 _rwTracked claim below.
+            if (lib.metrics.isEnabled() && !request._metricsRecorded) {
+                request._metricsRecorded = true;
                 request._metricsStartTime = Date.now();
                 response.on('finish', function _gina_metrics_record() {
                     try {
