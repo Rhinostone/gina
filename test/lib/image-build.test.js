@@ -44,6 +44,7 @@ var GINA_ROOT   = path.resolve(__dirname, '..', '..');
 var LIB_MAIN    = path.join(FW, 'lib/image-build/src/main.js');
 var LIB_PKG     = path.join(FW, 'lib/image-build/package.json');
 var HANDLER     = path.join(FW, 'lib/cmd/image/build.js');
+var HOST_UTIL   = path.join(FW, 'lib/cmd/image/_host.js');
 var HELP_TXT    = path.join(FW, 'lib/cmd/image/help.txt');
 var ARGS_FILE   = path.join(FW, 'lib/cmd/image/arguments.json');
 var LIB_INDEX   = path.join(FW, 'lib/index.js');
@@ -54,6 +55,7 @@ var imageBuild = require(LIB_MAIN);
 
 var libSrc     = fs.readFileSync(LIB_MAIN, 'utf8');
 var handlerSrc = fs.readFileSync(HANDLER, 'utf8');
+var hostSrc    = fs.readFileSync(HOST_UTIL, 'utf8');
 var helpTxt    = fs.readFileSync(HELP_TXT, 'utf8');
 var argsArr    = JSON.parse(fs.readFileSync(ARGS_FILE, 'utf8'));
 var libIndex   = fs.readFileSync(LIB_INDEX, 'utf8');
@@ -608,8 +610,10 @@ describe('35 - image:build — OCI packaging verb (lib/image-build + lib/cmd/ima
         });
 
         it('the env override is read via getEnvVar (the bootstrap sweeps GINA_* off process.env)', function() {
-            assert.ok(handlerSrc.indexOf("getEnvVar('GINA_CONTAINER_HOST')") > -1,
+            assert.ok(hostSrc.indexOf("getEnvVar('GINA_CONTAINER_HOST')") > -1,
                 'the CLI bootstrap moves GINA_* OS env vars onto process.gina and deletes them from process.env — a bare process.env read never sees the override');
+            assert.ok(handlerSrc.indexOf("require('./_host')") > -1,
+                'build consumes the shared ./_host resolution preamble');
         });
 
         it('ssh runs non-interactive with a connect deadline; -p only for an explicit descriptor port', function() {

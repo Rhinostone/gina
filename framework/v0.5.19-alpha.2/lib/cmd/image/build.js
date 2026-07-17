@@ -5,6 +5,7 @@ var spawn     = require('child_process').spawn;
 var spawnSync = require('child_process').spawnSync;
 
 var CmdHelper = require('./../helper');
+var hostUtil  = require('./_host');
 var console   = lib.logger;
 
 /**
@@ -292,28 +293,6 @@ function Build(opt, cmd) {
     };
 
     /**
-     * Reads the machine-level container-host fallback from
-     * `~/.gina/<shortVersion>/settings.json` (`container.host`). Absent or
-     * unreadable settings resolve to null — resolution then falls through to
-     * the native/error branches.
-     *
-     * @inner
-     * @private
-     * @returns {string|null} The configured descriptor, or null
-     */
-    var getSettingsContainerHost = function () {
-        try {
-            var version = getEnvVar('GINA_VERSION') || require(__dirname + '/../../../../../package.json').version;
-            var short   = version.split('.').slice(0, 2).join('.');
-            var raw     = fs.readFileSync(GINA_HOMEDIR + '/' + short + '/settings.json', 'utf8');
-            var parsed  = JSON.parse(raw);
-            return (parsed.container && parsed.container.host) ? String(parsed.container.host) : null;
-        } catch (e) {
-            return null;
-        }
-    };
-
-    /**
      * Builds the remote shell command for the ssh path. buildah accepts only
      * a DIRECTORY context (no stdin-tar form), so the context tarball is
      * streamed over ssh stdin into a remote temp dir, built there, and the
@@ -348,32 +327,7 @@ function Build(opt, cmd) {
     var doBuild = function (plan, projectPath) {
         var t0 = Date.now();
 
-        var hasBuildah = false;
-        if (process.platform === 'linux') {
-            try {
-                hasBuildah = (spawnSync('buildah', ['--version']).status === 0);
-            } catch (e) {
-                hasBuildah = false;
-            }
-        }
-
-        // The CLI bootstrap sweeps every GINA_* OS env var into process.gina
-        // and DELETES it from process.env (utils/helper.js `filterArgs`), so
-        // the override must be read through the injected getEnvVar global;
-        // the process.env fallback covers contexts where the sweep never ran.
-        var envHost = getEnvVar('GINA_CONTAINER_HOST') || process.env.GINA_CONTAINER_HOST || null;
-
-        var host = null;
-        try {
-            host = imageBuild.resolveContainerHost({
-                envValue      : envHost,
-                settingsValue : getSettingsContainerHost(),
-                platform      : process.platform,
-                hasBuildah    : hasBuildah
-            });
-        } catch (e) {
-            return fail(e.message || String(e));
-        }
+        var host = hostUtil.resolveHost();
         if (host.mode === 'error') {
             return fail(host.reason);
         }

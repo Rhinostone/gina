@@ -2,6 +2,7 @@ var fs        = require('fs');
 var spawnSync = require('child_process').spawnSync;
 
 var CmdHelper = require('./../helper');
+var hostUtil  = require('./_host');
 var console   = lib.logger;
 
 /**
@@ -78,52 +79,6 @@ function Rm(opt, cmd) {
     };
 
     /**
-     * Reads the `container.host` descriptor from
-     * `~/.gina/<shortVersion>/settings.json`. Byte-for-byte the same lookup
-     * `image:build` uses, so all image commands resolve the same host.
-     *
-     * @inner
-     * @private
-     * @returns {string|null} The configured descriptor, or null
-     */
-    var getSettingsContainerHost = function () {
-        try {
-            var version = getEnvVar('GINA_VERSION') || require(__dirname + '/../../../../../package.json').version;
-            var short   = version.split('.').slice(0, 2).join('.');
-            var raw     = fs.readFileSync(GINA_HOMEDIR + '/' + short + '/settings.json', 'utf8');
-            var parsed  = JSON.parse(raw);
-            return (parsed.container && parsed.container.host) ? String(parsed.container.host) : null;
-        } catch (e) {
-            return null;
-        }
-    };
-
-    /**
-     * Resolve the container host exactly as `image:build` does.
-     *
-     * @inner
-     * @private
-     * @returns {ContainerHost} A descriptor from `imageBuild.resolveContainerHost`
-     */
-    var resolveHost = function () {
-        var hasBuildah = false;
-        if (process.platform === 'linux') {
-            try {
-                hasBuildah = (spawnSync('buildah', ['--version']).status === 0);
-            } catch (e) {
-                hasBuildah = false;
-            }
-        }
-        var envHost = getEnvVar('GINA_CONTAINER_HOST') || process.env.GINA_CONTAINER_HOST || null;
-        return imageBuild.resolveContainerHost({
-            envValue      : envHost,
-            settingsValue : getSettingsContainerHost(),
-            platform      : process.platform,
-            hasBuildah    : hasBuildah
-        });
-    };
-
-    /**
      * First positional token after the task name (not a `--flag`), i.e. the
      * image reference.
      *
@@ -159,7 +114,7 @@ function Rm(opt, cmd) {
             return fail('invalid image reference `' + ref + '` — expected a repo[:tag], repo@digest, or image id');
         }
 
-        var host = resolveHost();
+        var host = hostUtil.resolveHost();
         if (host.mode === 'error') {
             return fail(host.reason);
         }

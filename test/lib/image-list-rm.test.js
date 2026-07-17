@@ -41,6 +41,7 @@ var FW           = require('../fw');
 var LIB_MAIN     = path.join(FW, 'lib/image-build/src/main.js');
 var LIST_HANDLER = path.join(FW, 'lib/cmd/image/list.js');
 var RM_HANDLER   = path.join(FW, 'lib/cmd/image/rm.js');
+var HOST_UTIL    = path.join(FW, 'lib/cmd/image/_host.js');
 var HELP_TXT     = path.join(FW, 'lib/cmd/image/help.txt');
 var CMD_HELPER   = path.join(FW, 'lib/cmd/helper.js');
 
@@ -48,6 +49,7 @@ var imageBuild = require(LIB_MAIN);
 
 var listSrc   = fs.readFileSync(LIST_HANDLER, 'utf8');
 var rmSrc     = fs.readFileSync(RM_HANDLER, 'utf8');
+var hostSrc   = fs.readFileSync(HOST_UTIL, 'utf8');
 var helpTxt   = fs.readFileSync(HELP_TXT, 'utf8');
 var helperSrc = fs.readFileSync(CMD_HELPER, 'utf8');
 
@@ -295,13 +297,22 @@ describe('image:list + image:rm — host-level image verbs (lib/image-build + li
             assert.doesNotMatch(rmSrc,   /process\.stdout\.write/);
         });
 
-        it('both resolve the host with image:build`s precedence — env override, then native, then settings', function() {
+        it('both resolve the host through the shared ./_host preamble (image:build`s precedence)', function() {
             [listSrc, rmSrc].forEach(function(src) {
-                assert.match(src, /getEnvVar\('GINA_CONTAINER_HOST'\)/);
-                assert.match(src, /imageBuild\.resolveContainerHost\(/);
-                assert.match(src, /settingsValue *: *getSettingsContainerHost\(\)/);
+                assert.match(src, /require\('\.\/_host'\)/, 'the handler consumes the shared preamble');
+                assert.match(src, /hostUtil\.resolveHost\(\)/);
+                assert.doesNotMatch(src, /var getSettingsContainerHost = function/, 'the inline copy is gone');
+                assert.doesNotMatch(src, /var resolveHost = function/, 'the inline copy is gone');
                 assert.match(src, /host\.mode === 'error'/, 'an unresolvable host fails with the resolver reason');
             });
+            // The precedence chain itself now lives in _host.js — env override,
+            // then native probe, then settings, with the resolver's throw case
+            // folded into the same error-mode shape.
+            assert.match(hostSrc, /getEnvVar\('GINA_CONTAINER_HOST'\)/);
+            assert.match(hostSrc, /resolveContainerHost\(/);
+            assert.match(hostSrc, /settingsValue *: *getSettingsContainerHost\(\)/);
+            assert.match(hostSrc, /return \{ mode: 'error', reason: \(e\.message \|\| String\(e\)\) \}/,
+                'a malformed descriptor degrades to error-mode instead of an uncaught throw');
         });
 
         it('list validates --format and defaults to text', function() {
