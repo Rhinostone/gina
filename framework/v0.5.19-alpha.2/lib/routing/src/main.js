@@ -1019,7 +1019,7 @@ function Routing() {
      * @function getRoute
      *
      * @param {string} rule e.g.: [ <scheme>:// ]<name>[ @<bundle> ][ /<environment> ]
-     * @param {object} params
+     * @param {object} params - substituted into the route's `:placeholders`; on a GET route, leftover keys that are neither reserved nor declared in the rule's `requirements` are appended to `route.url` as query parameters (a rule with no `requirements` block is safe — the block is optional)
      * @param {number} [urlIndex] in case you have more than one url registered for the current route, you can select the one you want to use. Default is 0.
      *
      * @returns {object} route
@@ -1152,7 +1152,10 @@ function Routing() {
             for (let p in params) {
                 if (
                     self.reservedParams.indexOf(p) > -1
-                    || typeof(route.requirements[p]) != 'undefined'
+                    // a rule that declares no `requirements` block composes with requirements: undefined —
+                    // guard the deref (the fitsWithRequirements discipline) so getRoute(rule, extraParams)
+                    // on such a GET route appends the query params instead of throwing
+                    || ( route.requirements && typeof(route.requirements[p]) != 'undefined' )
                     || extracted.indexOf(p) > -1
                 ) {
                     continue;
