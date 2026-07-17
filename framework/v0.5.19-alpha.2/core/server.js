@@ -3219,14 +3219,29 @@ function Server(options) {
         // catch all (request urls)
         self.instance.all('*', function onInstance(request, response, next) {
 
-            // #M12b — stamp request-entry time + id so the logger can attribute every
-            // line emitted during this request to it (requestId / durationMs in JSON
-            // logs). Active only in JSON mode; the per-request .run() happens at handle()
-            // (the request.on('end') boundary between here and handle() loses async
-            // context, so the store must be established where the dispatch runs).
+            // #M12b / #COMPLY2 — stamp the request id + entry time at request entry.
+            //
+            // The ID is ALWAYS-ON (#COMPLY2 slice 1): the audit trail correlates every
+            // record to its originating request, and audit is not a logging feature — an
+            // audit record's correlation key must never depend on GINA_LOG_FORMAT. One id
+            // serves both consumers, so an audit record and a JSON log line correlate by
+            // construction. First-seer-guarded: a re-entered dispatch (isaac routes a
+            // request through this catch-all as its listener's cb) must not regenerate the
+            // id and split one request's records across two keys. Text-mode cost: one
+            // crypto.randomUUID(). NOTE the id honours a sanitised inbound X-Request-Id, so
+            // it is client-influenceable BY DESIGN — it is a correlation key, never
+            // attribution (attribution is the audit record's session-derived actor).
+            if ( !request._ginaReqId ) {
+                request._ginaReqId = _resolveRequestId(request);
+            }
+
+            // The entry TIME stays JSON-log-gated — its only consumer is the logger's
+            // durationMs (an audit record stamps its own `ts` at write time). The
+            // per-request .run() happens at handle(): the request.on('end') boundary
+            // between here and handle() loses async context, so the store must be
+            // established where the dispatch runs.
             if ( _reqCtxLogging ) {
                 request._ginaReqStartMs = Date.now();
-                request._ginaReqId      = _resolveRequestId(request);
             }
 
             // #FI — dev-mode request timeline for Inspector Flow tab

@@ -5,7 +5,7 @@
  * Strategy: source inspection + behavioural simulation.
  * No live HTTP server or project required.
  */
-var { describe, it, before } = require('node:test');
+var { describe, it, before, beforeEach } = require('node:test');
 var assert = require('node:assert/strict');
 var path   = require('path');
 var fs     = require('fs');
@@ -840,6 +840,157 @@ describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function
         var req = { socket: { remoteAddress: '203.0.113.42' }, headers: { 'x-forwarded-for': '127.0.0.1' } };
         assert.equal(isAllowed(req, ['127.0.0.1', '::1']), false,
             'must NOT trust X-Forwarded-For — reverse proxies could spoof it');
+    });
+
+});
+
+
+// ─── #COMPLY2 slice 1 — the always-on request-id (the audit correlation key) ───
+//
+// The audit trail (#COMPLY2) correlates every record to its originating request. The
+// #M12b id it reuses was stamped ONLY under _reqCtxLogging (JSON logging), which would
+// have made an audit record's correlation key depend on GINA_LOG_FORMAT. Slice 1 hoists
+// the id stamp out of that gate (always-on, first-seer-guarded) while leaving the ALS
+// .run() and the durationMs startMs stamp gated exactly as #M12b shipped them.
+
+describe('#COMPLY2 slice 1 — always-on request id (audit correlation key)', function () {
+
+    var src, onInstanceBlk;
+
+    before(function () {
+        src = fs.readFileSync(SOURCE, 'utf8');
+        // End-anchor the onInstance head on distinctive OUTER text (never a bare
+        // structural token — an inner brace/else would truncate the slice).
+        var start = src.indexOf("function onInstance(request, response, next)");
+        assert.ok(start > -1, 'onInstance catch-all not found — re-anchor this slice');
+        var end = src.indexOf('#FI — dev-mode request timeline', start);
+        assert.ok(end > start, 'onInstance head end-anchor (#FI timeline comment) not found');
+        onInstanceBlk = src.slice(start, end);
+    });
+
+    // ---- source pins (structural ordering — no char-distance windows) ----
+
+    it('stamps the id OUTSIDE the _reqCtxLogging gate (always-on)', function () {
+        var idIdx   = onInstanceBlk.indexOf('request._ginaReqId = _resolveRequestId(request)');
+        var gateIdx = onInstanceBlk.indexOf('if ( _reqCtxLogging )');
+        assert.ok(idIdx   > -1, 'the id stamp must exist in the onInstance head');
+        assert.ok(gateIdx > -1, 'the _reqCtxLogging gate must still exist in the onInstance head');
+        assert.ok(idIdx < gateIdx,
+            'the id stamp must precede (i.e. sit outside) the _reqCtxLogging gate — ' +
+            'an audit correlation key must not depend on the log format');
+    });
+
+    it('first-seer-guards the id (a re-entered dispatch must not regenerate it)', function () {
+        assert.match(onInstanceBlk, /if \(\s*!request\._ginaReqId\s*\)\s*\{\s*[\r\n]+\s*request\._ginaReqId = _resolveRequestId\(request\);/,
+            'the id stamp must be wrapped in an `if ( !request._ginaReqId )` first-seer guard');
+    });
+
+    it('leaves the durationMs startMs stamp INSIDE the gate (not over-hoisted)', function () {
+        // Structural, NOT a positional `startMsIdx > gateIdx` proxy: if a future edit
+        // hoists startMs by DELETING the gate, indexOf returns -1 and `startMsIdx > -1`
+        // is trivially true — the pin would pass on the very change it exists to catch.
+        // Matching the gate-opens-then-startMs shape cannot pass with the gate gone.
+        assert.match(onInstanceBlk,
+            /if \(\s*_reqCtxLogging\s*\)\s*\{\s*[\r\n]+\s*request\._ginaReqStartMs = Date\.now\(\);/,
+            'startMs must sit immediately inside the _reqCtxLogging gate — its only consumer ' +
+            "is the logger's durationMs; an audit record stamps its own ts at write time");
+    });
+
+    it('#M12b is preserved: the ALS .run() stays JSON-gated', function () {
+        // The hoist must not have leaked the ALS into text mode — that is the
+        // un-measured #M12b always-on-throughput PoC, deliberately untouched here.
+        var runIdx  = src.indexOf('process.gina._reqALS.run(_reqStore,');
+        var gateIdx = src.lastIndexOf('if ( _reqCtxLogging ) {', runIdx);
+        assert.ok(runIdx > -1, '_reqALS.run() must still exist');
+        assert.ok(gateIdx > -1 && gateIdx < runIdx, '_reqALS.run() must still sit under a _reqCtxLogging gate');
+    });
+
+    // ---- behavioural replica + subtract control ----
+    // Shipped shape vs the pre-fix shape, driven over the same inputs. The pre-fix arm
+    // is the control: it MUST fail where the shipped one succeeds, or these tests prove
+    // nothing.
+
+    function makeStampShipped(reqCtxLogging, resolveId) {
+        return function onInstanceStamp(request) {
+            if (!request._ginaReqId) {
+                request._ginaReqId = resolveId(request);
+            }
+            if (reqCtxLogging) {
+                request._ginaReqStartMs = Date.now();
+            }
+        };
+    }
+
+    function makeStampPreFix(reqCtxLogging, resolveId) {
+        return function onInstanceStampPreFix(request) {
+            if (reqCtxLogging) {
+                request._ginaReqStartMs = Date.now();
+                request._ginaReqId      = resolveId(request);   // unguarded + gated
+            }
+        };
+    }
+
+    var seq;
+    function resolveIdStub() { return 'id-' + (++seq); }
+    beforeEach(function () { seq = 0; });
+
+    it('text mode: the id IS stamped (the whole point of the hoist)', function () {
+        var req = { headers: {} };
+        makeStampShipped(false, resolveIdStub)(req);
+        assert.equal(req._ginaReqId, 'id-1', 'a text-mode request must still get a correlation key');
+    });
+
+    it('CONTROL: the pre-fix shape stamps NO id in text mode (audit would lose correlation)', function () {
+        var req = { headers: {} };
+        makeStampPreFix(false, resolveIdStub)(req);
+        assert.equal(req._ginaReqId, undefined,
+            'subtract: pre-fix left text-mode requests id-less — if this ever passes with an id, ' +
+            'the control is dead and the always-on test above proves nothing');
+    });
+
+    it('text mode: startMs is NOT stamped (stays with its only consumer, the logger)', function () {
+        var req = { headers: {} };
+        makeStampShipped(false, resolveIdStub)(req);
+        assert.equal(req._ginaReqStartMs, undefined, 'startMs must not be hoisted along with the id');
+    });
+
+    it('json mode: both id and startMs are stamped (#M12b behaviour intact)', function () {
+        var req = { headers: {} };
+        makeStampShipped(true, resolveIdStub)(req);
+        assert.equal(req._ginaReqId, 'id-1');
+        assert.equal(typeof req._ginaReqStartMs, 'number');
+    });
+
+    it('re-entry: the id is stable across a second dispatch pass (first-seer)', function () {
+        var req = { headers: {} };
+        var stamp = makeStampShipped(true, resolveIdStub);
+        stamp(req);
+        var first = req._ginaReqId;
+        stamp(req);
+        assert.equal(req._ginaReqId, first, 'a re-entered dispatch must not regenerate the id');
+        assert.equal(req._ginaReqId, 'id-1', 'the resolver must not have been called twice');
+    });
+
+    it('CONTROL: the pre-fix shape REGENERATES the id on a second pass (records would split)', function () {
+        var req = { headers: {} };
+        var stamp = makeStampPreFix(true, resolveIdStub);
+        stamp(req);
+        var first = req._ginaReqId;
+        stamp(req);
+        assert.notEqual(req._ginaReqId, first,
+            'subtract: pre-fix regenerated the id on re-entry — if this ever holds stable, ' +
+            'the first-seer test above proves nothing');
+    });
+
+    it('an inbound X-Request-Id still wins in text mode (the resolver is reused, not bypassed)', function () {
+        var req = { headers: { 'x-request-id': 'upstream-trace-42' } };
+        // the real resolver's contract, replicated: sanitised inbound wins, else generate
+        makeStampShipped(false, function (r) {
+            var inbound = r && r.headers && r.headers['x-request-id'];
+            return (inbound && /^[\w.\-]{1,128}$/.test(inbound)) ? inbound : 'GENERATED';
+        })(req);
+        assert.equal(req._ginaReqId, 'upstream-trace-42',
+            'cross-service correlation must work in text mode too, not only under JSON logging');
     });
 
 });
