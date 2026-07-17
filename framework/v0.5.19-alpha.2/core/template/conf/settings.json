@@ -184,6 +184,37 @@
   "auth": {
     "loginRoute": null
   },
+  // #COMPLY2 — audit trail (written by lib/audit: self.audit() in your actions,
+  // plus framework auto-events). Distinct from application logging — the trail
+  // has its own append-only store and never rides the logger sinks.
+  //
+  //   enabled  — master switch. STRICTLY boolean: any other type ("true", 1)
+  //              refuses to boot, because a truthy string would otherwise leave
+  //              a compliance control silently OFF.
+  //   file     — JSONL destination for the default file backend. null (default)
+  //              ⇒ <project>/logs/audit-<bundle>-<env>.jsonl (the resolved path
+  //              is logged at boot). The file is append-only; the write order
+  //              is serialized.
+  //   store    — advanced: a connectors.json entry name resolved through
+  //              lib/audit-store instead of the file backend. No connector
+  //              ships an audit-store implementation yet (demand-gated), so
+  //              setting this today refuses the boot with a clear message.
+  //   actorKey — which session.user property is snapshotted as the record's
+  //              actor key (default "id"). Records keep ONLY that key + a copy
+  //              of user.roles — never the whole user object.
+  //   events.authz — framework auto-events: every authorization denial
+  //              (lib/authz-gate 401 / login-bounce / 403) writes an
+  //              `authz.denied` record. ON whenever audit is enabled;
+  //              set false to opt out.
+  //   Changing this needs a bundle restart (boot config).
+  "audit": {
+    "enabled": false,
+    "file": null,
+    "actorKey": "id",
+    "events": {
+      "authz": true
+    }
+  },
   // #INS9b — authenticated /_gina/agent SSE endpoint. The agent stream
   // (combined Inspector data + server-log SSE) is dev-only by default. Set
   // agent.enabled=true and provide a key to expose it OUTSIDE dev mode (e.g.

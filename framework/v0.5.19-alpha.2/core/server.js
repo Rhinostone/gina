@@ -984,6 +984,97 @@ function Server(options) {
                     + ( _authzLoginRoute ? ' — login bounce: '+ _authzLoginRoute : ' — no `auth.loginRoute`: unauthenticated requests get a 401' ));
             }
 
+            // ── #COMPLY2 — audit trail: boot resolve + fail-fast lint ──
+            // Sibling of the #COMPLY1 registrar above and the #DTO2 registrar before
+            // it, and FATAL like both (unlike #RWATCH below): every `throw` here
+            // lands in init()'s enclosing catch, which produces the #B57 shape
+            // (emerg + synchronous stderr flush + exit(1)) — an audit trail that
+            // cannot write is a compliance control that is quietly OFF, so the boot
+            // refuses instead. Shapes are linted UNCONDITIONALLY (a malformed block
+            // with `enabled: false` is still an author error better surfaced now);
+            // the store is built + adopted only when enabled.
+            var _auditSettings = (
+                self.conf[self.appName][self.env].content
+                && self.conf[self.appName][self.env].content.settings
+                && self.conf[self.appName][self.env].content.settings.audit
+            ) ? self.conf[self.appName][self.env].content.settings.audit : {};
+            if ( typeof(_auditSettings) != 'object' || _auditSettings === null || Array.isArray(_auditSettings) ) {
+                throw new Error('[ SERVER ] `settings.json > audit` must be an object.');
+            }
+            var _auditEnabled = false;
+            if ( typeof(_auditSettings.enabled) != 'undefined' ) {
+                if ( typeof(_auditSettings.enabled) != 'boolean' ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.enabled` must be a boolean — got '+ JSON.stringify(_auditSettings.enabled) +'. A truthy string would leave the audit trail silently OFF, so the boot refuses instead.');
+                }
+                _auditEnabled = _auditSettings.enabled;
+            }
+            if ( _auditSettings.file != null && ( typeof(_auditSettings.file) != 'string' || _auditSettings.file === '' ) ) {
+                throw new Error('[ SERVER ] `settings.json > audit.file` must be a non-empty string (or null for the default `<project>/logs` destination).');
+            }
+            if ( typeof(_auditSettings.store) != 'undefined' && _auditSettings.store !== null && ( typeof(_auditSettings.store) != 'string' || _auditSettings.store === '' ) ) {
+                throw new Error('[ SERVER ] `settings.json > audit.store` must be a non-empty connectors.json entry name.');
+            }
+            if ( typeof(_auditSettings.actorKey) != 'undefined' && ( typeof(_auditSettings.actorKey) != 'string' || _auditSettings.actorKey === '' ) ) {
+                throw new Error('[ SERVER ] `settings.json > audit.actorKey` must be a non-empty string.');
+            }
+            if ( typeof(_auditSettings.events) != 'undefined' ) {
+                if ( typeof(_auditSettings.events) != 'object' || _auditSettings.events === null || Array.isArray(_auditSettings.events) ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.events` must be an object.');
+                }
+                if ( typeof(_auditSettings.events.authz) != 'undefined' && typeof(_auditSettings.events.authz) != 'boolean' ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.events.authz` must be a boolean — any other type would not opt out.');
+                }
+            }
+            if ( _auditSettings.store && _auditSettings.file ) {
+                throw new Error('[ SERVER ] `settings.json > audit`: `store` and `file` are mutually exclusive — pick one backend.');
+            }
+            if ( _auditEnabled ) {
+                var _auditStartOpts = {
+                    bundle      : self.appName,
+                    env         : self.env,
+                    actorKey    : _auditSettings.actorKey || 'id',
+                    eventsAuthz : !( _auditSettings.events && _auditSettings.events.authz === false )
+                };
+                var _auditDestLabel = null;
+                if ( _auditSettings.store ) {
+                    // Connector-backed store — the lib/audit-store dispatcher throws
+                    // (⇒ boot refusal) when the entry or the implementation is missing.
+                    _auditStartOpts.store = lib.AuditStore(_auditSettings.store);
+                    _auditDestLabel = 'store: '+ _auditSettings.store;
+                } else {
+                    // Default file backend — `<project>/logs/audit-<bundle>-<env>.jsonl`.
+                    // `logsPath` is a never-propagated env.json key (dead placeholder —
+                    // declared at the file root, outside the `${bundle}`/`${env}` subtree
+                    // config.js copies), so the log dir is derived from `projectPath`:
+                    // the exact value env.json declares for it (`${projectPath}/logs`).
+                    // Per-env filename: two envs of one bundle running concurrently must
+                    // never interleave writers into one file (harmless for JSONL, fatal
+                    // for the slice-3 hash chain).
+                    var _auditFile = _auditSettings.file || null;
+                    if ( !_auditFile || !/^\//.test(_auditFile) ) {
+                        var _auditProjectPath = self.conf[self.appName][self.env].projectPath;
+                        if ( typeof(_auditProjectPath) != 'string' || _auditProjectPath === '' || /\$\{/.test(_auditProjectPath) ) {
+                            throw new Error('[ SERVER ] audit: could not derive the log dir — `projectPath` is unresolved ('+ JSON.stringify(_auditProjectPath) +'). Set an absolute `settings.json > audit.file` explicitly.');
+                        }
+                        // A relative `audit.file` resolves against the project root —
+                        // never against the process cwd (which depends on how the
+                        // bundle was launched).
+                        _auditFile = _auditFile
+                            ? _auditProjectPath + '/' + _auditFile
+                            : _auditProjectPath + '/logs/audit-'+ self.appName +'-'+ self.env +'.jsonl';
+                    }
+                    _auditStartOpts.file = _(_auditFile, true);
+                    _auditDestLabel = _auditStartOpts.file;
+                }
+                // start() mkdirs + opens the O_APPEND fd — an unwritable destination
+                // throws HERE, i.e. refuses the boot rather than dropping records later.
+                lib.audit.start(_auditStartOpts);
+                // console.info, NOT console.debug — the shipped default log_level
+                // ("info") filters debug, which would silently defeat the
+                // "path logged at boot" contract.
+                console.info('[ BUNDLE ][ server ][ init ] Audit trail enabled for [ '+ self.appName +' ] → '+ _auditDestLabel);
+            }
+
             // ── #RWATCH — stale built-release watch (local production rehearsals) ──
             // Hard gates: local scope + non-dev env + explicit opt-in
             // (server.releaseWatch.enabled === true — fail-closed default). Inert

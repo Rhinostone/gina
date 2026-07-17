@@ -994,3 +994,297 @@ describe('#COMPLY2 slice 1 — always-on request id (audit correlation key)', fu
     });
 
 });
+
+
+// ─── #COMPLY2 slice 2 — the audit-trail boot registrar (fail-fast lint + gated adoption) ───
+//
+// Source pins on core/server.js's registrar block + a pure-logic replica of its
+// lint/derivation. Every structural pin below is expressed as a FUNCTION and
+// validated can-fail against ITS OWN adversary (a string-replace perturbation
+// with a replaced!=original guard) — a pin whose adversary passes is a dead
+// control. The replica is locked to the source by a CONTIGUOUS-span pin (the
+// exact unconditional-throw count + the in-order conjunct literals), so an
+// inserted lint conjunct trips the count and forces a replica re-diff.
+describe('#COMPLY2 slice 2 — audit-trail boot registrar (fail-fast lint + gated start)', function () {
+
+    var src, blk, lintSpan, gateSpan;
+
+    before(function () {
+        src = fs.readFileSync(SOURCE, 'utf8');
+        // The whole registrar, end-anchored on distinctive OUTER text (the
+        // #RWATCH banner that follows it) — never a bare structural token.
+        var start = src.indexOf('#COMPLY2 — audit trail: boot resolve + fail-fast lint');
+        assert.ok(start > -1, 'the registrar banner — re-anchor this slice');
+        var end = src.indexOf('#RWATCH — stale built-release watch', start);
+        assert.ok(end > start, 'the #RWATCH end anchor');
+        blk = src.slice(start, end);
+
+        // The contiguous lint span (unconditional shape checks) vs the gated build.
+        var gateIdx = blk.indexOf('if ( _auditEnabled ) {');
+        assert.ok(gateIdx > -1, 'the enabled gate');
+        lintSpan = blk.slice(0, gateIdx);
+        gateSpan = blk.slice(gateIdx);
+    });
+
+    // ---- (a) placement ----
+
+    /** The placement predicate both the shipped source and its adversary run through. */
+    function registrarPlacedInsideInitTry(source) {
+        var tryIdx     = source.indexOf('// updating server protocol');   // init's try opens just above this line
+        var comply1Idx = source.indexOf('#COMPLY1 — lint every declared authorization flag');
+        var comply2Idx = source.indexOf('#COMPLY2 — audit trail: boot resolve + fail-fast lint');
+        var rwatchIdx  = source.indexOf('#RWATCH — stale built-release watch');
+        var catchIdx   = source.indexOf("ServerEngine ' + err.stack");    // init's #B57 catch
+        if (tryIdx < 0 || comply1Idx < 0 || comply2Idx < 0 || rwatchIdx < 0 || catchIdx < 0) { return false; }
+        return (tryIdx < comply1Idx && comply1Idx < comply2Idx && comply2Idx < rwatchIdx && rwatchIdx < catchIdx);
+    }
+
+    it('sits between the #COMPLY1 registrar and #RWATCH, inside init\'s try (the #B57 catch owns its throws)', function () {
+        assert.equal(registrarPlacedInsideInitTry(src), true,
+            'every throw in the block must land in the ServerEngine catch (emerg + writeSync flush + exit 1)');
+    });
+
+    it('CONTROL: the placement pin FAILS on a copy with the block moved out of the try', function () {
+        var moved = src.replace(blk, '') + '\n' + blk;   // re-homed after the catch (EOF)
+        assert.notEqual(moved, src, 'the perturbation must actually change the source');
+        assert.equal(registrarPlacedInsideInitTry(moved), false,
+            'a block outside the try would throw as an uncaughtException, not a #B57 boot refusal — the pin must see that');
+    });
+
+    // ---- (b) the enabled-boolean lint ----
+
+    it('lints `audit.enabled` STRICTLY boolean — a truthy string must refuse the boot, in the UNCONDITIONAL span', function () {
+        assert.match(lintSpan, /`settings\.json > audit\.enabled` must be a boolean/,
+            'the throw is the fail-fast: a truthy string would leave the trail silently OFF');
+        assert.match(lintSpan, /typeof\(_auditSettings\.enabled\) != 'boolean'/,
+            'the strict-type condition, not a truthiness test');
+    });
+
+    // ---- (c) start() INSIDE the enabled gate ----
+
+    /** gate-opens → start() → boot log, all in order: start cannot sit above the
+     *  gate (before the opener) nor below it (after its LAST statement, the log). */
+    function startSitsInsideGate(blockText) {
+        var g = blockText.indexOf('if ( _auditEnabled ) {');
+        var s = blockText.indexOf('lib.audit.start(_auditStartOpts)');
+        var i = blockText.indexOf('Audit trail enabled');
+        if (g < 0 || s < 0 || i < 0) { return false; }
+        return (g < s && s < i);
+    }
+
+    it('lib.audit.start() sits INSIDE the `if ( _auditEnabled )` gate — disabled bundles adopt nothing', function () {
+        assert.equal(startSitsInsideGate(blk), true);
+    });
+
+    it('CONTROL: an over-hoisted copy (start moved ABOVE the gate) fails the pin', function () {
+        var noCall = blk.replace('lib.audit.start(_auditStartOpts);', '');
+        assert.notEqual(noCall, blk, 'the call must have been found and removed');
+        var hoisted = noCall.replace('if ( _auditEnabled ) {',
+            'lib.audit.start(_auditStartOpts);\n            if ( _auditEnabled ) {');
+        assert.notEqual(hoisted, noCall, 'the gate opener must have been found');
+        assert.equal(startSitsInsideGate(hoisted), false,
+            'an always-on start() would adopt a store on audit-disabled bundles — the pin must see the hoist');
+    });
+
+    it('CONTROL: a copy with start moved BELOW the gate fails the pin too', function () {
+        var noCall = blk.replace('lib.audit.start(_auditStartOpts);', '');
+        assert.notEqual(noCall, blk);
+        var below = noCall + '\n            lib.audit.start(_auditStartOpts);';
+        assert.equal(startSitsInsideGate(below), false,
+            'start after the gate closes is equally out of the gate — ordering alone must not pass it');
+    });
+
+    // ---- (d) the boot log is console.info ----
+
+    it('the boot destination line is console.info — the shipped default log_level ("info") filters debug', function () {
+        assert.match(gateSpan, /console\.info\('\[ BUNDLE \]\[ server \]\[ init \] Audit trail enabled/,
+            'the "path logged at boot" contract must survive the default log level');
+    });
+
+    it('CONTROL: a console.debug boot line fails the pin', function () {
+        var demoted = gateSpan.replace(
+            "console.info('[ BUNDLE ][ server ][ init ] Audit trail enabled",
+            "console.debug('[ BUNDLE ][ server ][ init ] Audit trail enabled");
+        assert.notEqual(demoted, gateSpan, 'the log line must have been found');
+        assert.doesNotMatch(demoted, /console\.info\('\[ BUNDLE \]\[ server \]\[ init \] Audit trail enabled/);
+    });
+
+    // ---- the contiguous-span lock for the replica below ----
+
+    it('the lint span is CONTIGUOUS and fully mirrored: exactly 8 unconditional throws, in pinned order, + 1 gated', function () {
+        assert.equal((lintSpan.match(/throw new Error/g) || []).length, 8,
+            'an added/removed lint conjunct must trip this count and force a replica re-diff');
+        assert.equal((gateSpan.match(/throw new Error/g) || []).length, 1,
+            'the gated span carries exactly the unresolved-projectPath guard');
+
+        // Every conjunct, in source order — the gap-free lock the replica mirrors.
+        var conjuncts = [
+            '`settings.json > audit` must be an object',
+            '`settings.json > audit.enabled` must be a boolean',
+            '`settings.json > audit.file` must be a non-empty string',
+            '`settings.json > audit.store` must be a non-empty connectors.json entry name',
+            '`settings.json > audit.actorKey` must be a non-empty string',
+            '`settings.json > audit.events` must be an object',
+            '`settings.json > audit.events.authz` must be a boolean',
+            '`store` and `file` are mutually exclusive'
+        ];
+        var at = 0;
+        conjuncts.forEach(function (lit) {
+            var idx = lintSpan.indexOf(lit, at);
+            assert.ok(idx > -1, 'lint conjunct missing or out of order: ' + lit);
+            at = idx;
+        });
+        assert.ok(gateSpan.indexOf('could not derive the log dir — `projectPath` is unresolved') > -1,
+            'the gated projectPath guard');
+    });
+
+    // ---- pure-logic replica: the lint + the destination derivation ----
+    //
+    // Mirrors the shipped block statement-for-statement (locked by the span pin
+    // above). One documented divergence: the shipped code wraps the final path
+    // in the `_()` PathObject normalizer — the replica returns the raw string
+    // (the LOGIC under test is the lint + derivation, not path normalization).
+    function auditRegistrarReplica(auditSettings, projectPath, appName, env) {
+        var _auditSettings = (typeof auditSettings != 'undefined' && auditSettings !== null) ? auditSettings : {};
+        if ( typeof(_auditSettings) != 'object' || _auditSettings === null || Array.isArray(_auditSettings) ) {
+            throw new Error('`settings.json > audit` must be an object.');
+        }
+        var _auditEnabled = false;
+        if ( typeof(_auditSettings.enabled) != 'undefined' ) {
+            if ( typeof(_auditSettings.enabled) != 'boolean' ) {
+                throw new Error('`settings.json > audit.enabled` must be a boolean — got '+ JSON.stringify(_auditSettings.enabled) +'.');
+            }
+            _auditEnabled = _auditSettings.enabled;
+        }
+        if ( _auditSettings.file != null && ( typeof(_auditSettings.file) != 'string' || _auditSettings.file === '' ) ) {
+            throw new Error('`settings.json > audit.file` must be a non-empty string (or null).');
+        }
+        if ( typeof(_auditSettings.store) != 'undefined' && _auditSettings.store !== null && ( typeof(_auditSettings.store) != 'string' || _auditSettings.store === '' ) ) {
+            throw new Error('`settings.json > audit.store` must be a non-empty connectors.json entry name.');
+        }
+        if ( typeof(_auditSettings.actorKey) != 'undefined' && ( typeof(_auditSettings.actorKey) != 'string' || _auditSettings.actorKey === '' ) ) {
+            throw new Error('`settings.json > audit.actorKey` must be a non-empty string.');
+        }
+        if ( typeof(_auditSettings.events) != 'undefined' ) {
+            if ( typeof(_auditSettings.events) != 'object' || _auditSettings.events === null || Array.isArray(_auditSettings.events) ) {
+                throw new Error('`settings.json > audit.events` must be an object.');
+            }
+            if ( typeof(_auditSettings.events.authz) != 'undefined' && typeof(_auditSettings.events.authz) != 'boolean' ) {
+                throw new Error('`settings.json > audit.events.authz` must be a boolean.');
+            }
+        }
+        if ( _auditSettings.store && _auditSettings.file ) {
+            throw new Error('`settings.json > audit`: `store` and `file` are mutually exclusive.');
+        }
+        if ( !_auditEnabled ) { return { enabled: false }; }
+
+        var out = {
+            enabled     : true,
+            actorKey    : _auditSettings.actorKey || 'id',
+            eventsAuthz : !( _auditSettings.events && _auditSettings.events.authz === false )
+        };
+        if ( _auditSettings.store ) {
+            out.store = _auditSettings.store;
+            return out;
+        }
+        var _auditFile = _auditSettings.file || null;
+        if ( !_auditFile || !/^\//.test(_auditFile) ) {
+            if ( typeof(projectPath) != 'string' || projectPath === '' || /\$\{/.test(projectPath) ) {
+                throw new Error('audit: could not derive the log dir — `projectPath` is unresolved.');
+            }
+            _auditFile = _auditFile
+                ? projectPath + '/' + _auditFile
+                : projectPath + '/logs/audit-'+ appName +'-'+ env +'.jsonl';
+        }
+        out.file = _auditFile;
+        return out;
+    }
+
+    it('replica: the shipped template default lints clean and stays disabled', function () {
+        var out = auditRegistrarReplica({ enabled: false, file: null, actorKey: 'id', events: { authz: true } }, '/srv/app', 'web', 'prod');
+        assert.deepEqual(out, { enabled: false });
+    });
+
+    it('replica: an absent audit block is fine (disabled)', function () {
+        assert.deepEqual(auditRegistrarReplica(undefined, '/srv/app', 'web', 'prod'), { enabled: false });
+    });
+
+    it('replica: `enabled: "true"` (string) refuses the boot — the silent-OFF class', function () {
+        assert.throws(function () { auditRegistrarReplica({ enabled: 'true' }, '/srv/app', 'w', 'p'); }, /must be a boolean/);
+        assert.throws(function () { auditRegistrarReplica({ enabled: 1 }, '/srv/app', 'w', 'p'); }, /must be a boolean/);
+    });
+
+    it('replica: a non-object audit block refuses the boot', function () {
+        assert.throws(function () { auditRegistrarReplica([], '/srv/app', 'w', 'p'); }, /must be an object/);
+        assert.throws(function () { auditRegistrarReplica('yes', '/srv/app', 'w', 'p'); }, /must be an object/);
+    });
+
+    it('replica: malformed file / store / actorKey / events shapes each refuse the boot', function () {
+        assert.throws(function () { auditRegistrarReplica({ file: '' }, '/p', 'w', 'p'); },            /audit\.file/);
+        assert.throws(function () { auditRegistrarReplica({ file: 42 }, '/p', 'w', 'p'); },            /audit\.file/);
+        assert.throws(function () { auditRegistrarReplica({ store: '' }, '/p', 'w', 'p'); },           /audit\.store/);
+        assert.throws(function () { auditRegistrarReplica({ actorKey: '' }, '/p', 'w', 'p'); },        /audit\.actorKey/);
+        assert.throws(function () { auditRegistrarReplica({ events: [] }, '/p', 'w', 'p'); },          /audit\.events/);
+        assert.throws(function () { auditRegistrarReplica({ events: { authz: 'yes' } }, '/p', 'w', 'p'); }, /audit\.events\.authz/);
+    });
+
+    it('replica: the shapes are linted even when DISABLED — a malformed block is an author error either way', function () {
+        assert.throws(function () { auditRegistrarReplica({ enabled: false, file: '' }, '/p', 'w', 'p'); }, /audit\.file/);
+    });
+
+    it('replica: `store` and `file` together refuse the boot', function () {
+        assert.throws(function () {
+            auditRegistrarReplica({ enabled: true, store: 'auditDb', file: '/var/log/a.jsonl' }, '/p', 'w', 'p');
+        }, /mutually exclusive/);
+    });
+
+    it('replica: the default destination is per-bundle AND per-env under <project>/logs', function () {
+        var out = auditRegistrarReplica({ enabled: true }, '/srv/app', 'web', 'prod');
+        assert.equal(out.file, '/srv/app/logs/audit-web-prod.jsonl',
+            'two envs of one bundle must never interleave writers into one file');
+        assert.equal(out.actorKey, 'id');
+        assert.equal(out.eventsAuthz, true);
+    });
+
+    it('replica: a RELATIVE audit.file resolves against the project root — never the process cwd', function () {
+        var out = auditRegistrarReplica({ enabled: true, file: 'trail/audit.jsonl' }, '/srv/app', 'web', 'prod');
+        assert.equal(out.file, '/srv/app/trail/audit.jsonl');
+    });
+
+    it('replica: an ABSOLUTE audit.file is taken verbatim and skips the projectPath guard entirely', function () {
+        var out = auditRegistrarReplica({ enabled: true, file: '/var/log/gina/audit.jsonl' }, '${projectPath}', 'web', 'prod');
+        assert.equal(out.file, '/var/log/gina/audit.jsonl',
+            'a poisoned projectPath must be irrelevant when the destination is explicit');
+    });
+
+    it('replica: an unresolved `${` projectPath refuses the boot when the destination must be derived', function () {
+        assert.throws(function () { auditRegistrarReplica({ enabled: true }, '${projectPath}', 'w', 'p'); }, /could not derive/);
+        assert.throws(function () { auditRegistrarReplica({ enabled: true }, '', 'w', 'p'); },              /could not derive/);
+        assert.throws(function () { auditRegistrarReplica({ enabled: true }, undefined, 'w', 'p'); },       /could not derive/);
+        assert.throws(function () { auditRegistrarReplica({ enabled: true, file: 'rel.jsonl' }, '${projectPath}', 'w', 'p'); }, /could not derive/,
+            'a relative file needs the project root too');
+    });
+
+    it('replica: events.authz false opts the auto-events out; a store entry rides instead of a file', function () {
+        var out = auditRegistrarReplica({ enabled: true, store: 'auditDb', events: { authz: false }, actorKey: 'email' }, '/p', 'w', 'p');
+        assert.deepEqual(out, { enabled: true, actorKey: 'email', eventsAuthz: false, store: 'auditDb' });
+        assert.equal('file' in out, false, 'the connector path derives no file');
+    });
+
+    // ---- the settings template ships the block DISABLED + coherent ----
+
+    it('the shipped settings.json template carries the audit block with enabled:false (a booting bundle lints clean)', function () {
+        var settingsSrc = fs.readFileSync(path.join(require('../fw'), 'core/template/conf/settings.json'), 'utf8');
+        var stripped = settingsSrc.split('\n').map(function (l) {
+            return l.replace(/(^|\s)\/\/.*$/, '');
+        }).join('\n');
+        var o = JSON.parse(stripped);
+        assert.ok(o.audit, 'settings.json > audit');
+        assert.equal(o.audit.enabled, false, 'the template must ship the trail OFF');
+        assert.equal(o.audit.file, null);
+        assert.equal(o.audit.actorKey, 'id');
+        assert.deepEqual(o.audit.events, { authz: true });
+        // ...and the shipped default passes the shipped lint:
+        assert.deepEqual(auditRegistrarReplica(o.audit, '/srv/app', 'web', 'prod'), { enabled: false });
+    });
+});

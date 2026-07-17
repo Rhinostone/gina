@@ -1208,3 +1208,164 @@ describe('§13 — self.hasRole(role): the imperative escape hatch reads roles T
         assert.equal(gate.hasAnyRole({ roles: [] },          ['admin']), false, 'nor an empty list');
     });
 });
+
+describe('§14 — #COMPLY2 audit auto-events: every denial writes one authz.denied record', function () {
+
+    var { beforeEach, afterEach } = require('node:test');
+
+    // The audit module by the SAME deep path the gate requires
+    // (`../../audit/src/main` from lib/authz-gate/src/ ⇒ lib/audit/src/main) —
+    // Node's cache keys on the resolved file, so this IS the gate's singleton:
+    // start()/reset() here govern exactly what the gate's emits see.
+    var audit = require(path.join(FW, 'lib/audit/src/main'));
+
+    it('00. source pin — the gate requires the audit module by DEEP PATH (no registry dependency)', function () {
+        assert.match(GATE_SRC, /var audit = require\('\.\.\/\.\.\/audit\/src\/main'\);/,
+            'the one-way deep-path dependency (the lib/job -> lib/uuid precedent)');
+        assert.doesNotMatch(GATE_SRC, /lib\.audit/, 'never through the registry — the gate must not depend on injection ordering');
+    });
+
+    var dir, file;
+    beforeEach(function () {
+        dir  = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-authz-audit-'));
+        file = path.join(dir, 'audit.jsonl');
+        audit.start({ bundle: 'b', env: 'test', file: file });
+    });
+    afterEach(function () {
+        audit._resetForTest();
+        try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* best-effort */ }
+    });
+
+    /**
+     * FIFO flush barrier: the auto-events are fire-and-forget, but the file
+     * store's write queue is strictly FIFO — a marker written AFTER the
+     * trigger lands AFTER the trigger's record, so read-back is deterministic.
+     */
+    function flush() {
+        return new Promise(function (resolve) {
+            audit.write('flush.marker', {}, function () { resolve(); });
+        });
+    }
+    /** Read the records back, minus the barrier itself. */
+    function records() {
+        return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)
+            .map(function (l) { return JSON.parse(l); })
+            .filter(function (r) { return r.action !== 'flush.marker'; });
+    }
+
+    it('01. a clean 401 (no bounce possible) writes outcome "401"', async function () {
+        var c = ctl();
+        withAuthConf(null, function () {
+            gate.authorizeRequest(c, req({ param: { requireAuth: true }, session: {} }), res());
+        });
+        await flush();
+        var recs = records();
+        assert.equal(recs.length, 1);
+        assert.equal(recs[0].action, 'authz.denied');
+        assert.deepEqual(recs[0].meta, { outcome: '401' });
+        assert.equal(recs[0].rule, 'account', 'the denied route rides the record');
+        assert.deepEqual(recs[0].actor, { key: null, roles: [] }, 'a 401 has no authenticated actor');
+        assert.equal(c.thrown.status, 401, 'the denial itself is unchanged');
+    });
+
+    it('02. the login bounce writes outcome "login-bounce"', async function () {
+        var c = ctl();
+        withAuthConf('/login', function () {
+            captureInfo(function () {
+                gate.authorizeRequest(c, req({ param: { requireAuth: true }, session: {} }), res());
+            });
+        });
+        await flush();
+        var recs = records();
+        assert.equal(recs.length, 1);
+        assert.equal(recs[0].action, 'authz.denied');
+        assert.deepEqual(recs[0].meta, { outcome: 'login-bounce' });
+    });
+
+    it('03. a roles denial writes outcome "403-roles" with the denied user as the actor', async function () {
+        var c = ctl();
+        captureDebug(function () {
+            gate.authorizeRequest(c, req({
+                param   : { roles: ['admin'] },
+                session : { user: { id: 'u7', roles: ['viewer'] } }
+            }), res());
+        });
+        await flush();
+        var recs = records();
+        assert.equal(recs.length, 1);
+        assert.deepEqual(recs[0].meta, { outcome: '403-roles' });
+        assert.deepEqual(recs[0].actor, { key: 'u7', roles: ['viewer'] },
+            'an authenticated 403 records WHO was denied');
+        assert.equal(c.thrown.status, 403);
+    });
+
+    it('04. every policy denial writes outcome "403-policy" — deny return, throw, unregistered alike', async function () {
+        var c1 = ctl(), c2 = ctl(), c3 = ctl();
+        withPolicies({
+            saysNo  : function () { return false; },
+            blowsUp : function () { throw new Error('kaboom'); }
+        }, function () {
+            captureDebug(function () {
+                gate.authorizeRequest(c1, req({ param: { requireAuth: true, policy: 'saysNo' }, session: { user: { id: 'u1', roles: [] } } }), res());
+            });
+            captureError(function () {
+                gate.authorizeRequest(c2, req({ param: { requireAuth: true, policy: 'blowsUp' }, session: { user: { id: 'u1', roles: [] } } }), res());
+            });
+            captureDebug(function () {
+                gate.authorizeRequest(c3, req({ param: { requireAuth: true, policy: 'ghost' }, session: { user: { id: 'u1', roles: [] } } }), res());
+            });
+        });
+        await flush();
+        var recs = records();
+        assert.equal(recs.length, 3, 'one record per denial');
+        recs.forEach(function (r) {
+            assert.equal(r.action, 'authz.denied');
+            assert.deepEqual(r.meta, { outcome: '403-policy' });
+        });
+        [c1, c2, c3].forEach(function (c) { assert.equal(c.thrown.status, 403); });
+    });
+
+    it('05. an ALLOWED request writes nothing', async function () {
+        var c = ctl();
+        var out = gate.authorizeRequest(c, req({
+            param   : { roles: ['admin'] },
+            session : { user: { id: 'u1', roles: ['admin'] } }
+        }), res());
+        assert.equal(out, true);
+        await flush();
+        assert.equal(records().length, 0, 'the trail records denials, not grants');
+    });
+
+    it('06. events.authz: false opts the auto-events out — the denial itself is untouched', async function () {
+        audit._resetForTest();
+        audit.start({ bundle: 'b', env: 'test', file: file, eventsAuthz: false });
+        var c = ctl();
+        withAuthConf(null, function () {
+            gate.authorizeRequest(c, req({ param: { requireAuth: true }, session: {} }), res());
+        });
+        await flush();
+        assert.equal(records().length, 0, 'no auto-event');
+        assert.equal(c.thrown.status, 401, 'the 401 is untouched by the opt-out');
+    });
+
+    it('07. SUBTRACT — audit enabled vs disabled: byte-identical authz outcomes', function () {
+        // The containment contract: the trail must never CHANGE an authorization
+        // decision. Drive the same three requests once with the trail on, once
+        // with it off, and diff what the gate put on the wire.
+        var outcomes = function () {
+            var c401 = ctl(), c403 = ctl(), cOk = ctl();
+            withAuthConf(null, function () {
+                gate.authorizeRequest(c401, req({ param: { requireAuth: true }, session: {} }), res());
+            });
+            captureDebug(function () {
+                gate.authorizeRequest(c403, req({ param: { roles: ['admin'] }, session: { user: { id: 1, roles: [] } } }), res());
+            });
+            var ok = gate.authorizeRequest(cOk, req({ param: { roles: ['admin'] }, session: { user: { id: 1, roles: ['admin'] } } }), res());
+            return { t401: c401.thrown, t403: c403.thrown, allowed: ok };
+        };
+        var enabled = outcomes();          // the beforeEach started the trail
+        audit._resetForTest();             // now OFF
+        var disabled = outcomes();
+        assert.deepEqual(enabled, disabled, 'audit on/off must be invisible to the authz outcomes');
+    });
+});

@@ -128,6 +128,20 @@
  */
 
 /**
+ * #COMPLY2 — the audit-trail primitive, for the framework authz auto-events
+ * (`authz.denied` records at the deny writers below). Required by DEEP PATH
+ * (the `lib/job` -> `lib/uuid` precedent) so the gate has no dependency on the
+ * registry or on global-injection ordering; the dependency is strictly one-way
+ * (`lib/audit` never requires this module). `emitAuthzDenied` is fully
+ * contained on its side (gated on `audit.enabled` + `audit.events.authz`,
+ * whole body try/caught) — an audit failure can NEVER change an authorization
+ * outcome.
+ *
+ * @inner
+ */
+var audit = require('../../audit/src/main');
+
+/**
  * Read the boot-resolved login-bounce target.
  *
  * `core/server.js` resolves it ONCE at boot (route-name -> url resolution and
@@ -389,6 +403,7 @@ var denyUnauthenticated = function (controller, req, res) {
     var loginRoute = getLoginRoute();
 
     if ( !loginRoute || req.isXMLRequest === true || !req.session ) {
+        audit.emitAuthzDenied(req, '401'); // #COMPLY2 auto-event — contained, never affects the denial
         controller.throwError({
             status : 401,
             error  : 'Authentication required'
@@ -406,6 +421,7 @@ var denyUnauthenticated = function (controller, req, res) {
         console.warn('[ authz ] could not snapshot the halted request for `'+ ((req.routing && req.routing.rule) || '?') +'`: '+ (err.message || err));
     }
 
+    audit.emitAuthzDenied(req, 'login-bounce'); // #COMPLY2 auto-event — contained, never affects the bounce
     return bounceToLogin(req, res, loginRoute);
 };
 
@@ -421,12 +437,18 @@ var denyUnauthenticated = function (controller, req, res) {
  * @param {object} controller - the per-request controller (its `throwError` writes the 403).
  * @param {object} req        - the request (read for the server-side log line only).
  * @param {string} reason     - the server-side-only denial detail.
+ * @param {string} [outcome]  - the #COMPLY2 audit-event token (`'403-roles'` | `'403-policy'`), riding the record's `meta.outcome`.
  * @returns {boolean} always `false` — the gate has answered; the router must return.
  * @inner
  * @private
  */
-var denyForbidden = function (controller, req, reason) {
+var denyForbidden = function (controller, req, reason, outcome) {
     console.debug('[ authz ] denied `'+ ((req.routing && req.routing.rule) || '?') +'` — '+ reason);
+    // #COMPLY2 auto-event — contained, never affects the denial. The outcome
+    // token ('403-roles' | '403-policy') discriminates this writer's call
+    // sites; `reason` stays server-side-only (console.debug above), so the
+    // record leaks nothing the 403 body does not.
+    audit.emitAuthzDenied(req, outcome || '403');
     controller.throwError({
         status : 403,
         error  : 'Forbidden'
@@ -460,7 +482,7 @@ var denyForbidden = function (controller, req, reason) {
 var runPolicy = function (controller, req, name, user) {
     var fn = getPolicy(name);
     if ( !fn ) {
-        return denyForbidden(controller, req, 'policy `'+ name +'` is not registered');
+        return denyForbidden(controller, req, 'policy `'+ name +'` is not registered', '403-policy');
     }
 
     var allowed;
@@ -468,7 +490,7 @@ var runPolicy = function (controller, req, name, user) {
         allowed = fn(user, req);
     } catch (err) {
         console.error('[ authz ] policy `'+ name +'` threw for `'+ ((req.routing && req.routing.rule) || '?') +'`: '+ (err.stack || err.message || err));
-        return denyForbidden(controller, req, 'policy `'+ name +'` threw');
+        return denyForbidden(controller, req, 'policy `'+ name +'` threw', '403-policy');
     }
 
     if ( allowed === true ) {
@@ -478,7 +500,7 @@ var runPolicy = function (controller, req, name, user) {
         warnPolicyContractOnce(name, allowed);
     }
 
-    return denyForbidden(controller, req, 'policy `'+ name +'` did not allow');
+    return denyForbidden(controller, req, 'policy `'+ name +'` did not allow', '403-policy');
 };
 
 /**
@@ -540,7 +562,7 @@ var authorizeRequest = function (controller, req, res) {
 
     // authN passed — from here every denial is a 403, never a 401.
     if ( mustMatchRoles && !hasAnyRole(req.session.user, param.roles) ) {
-        return denyForbidden(controller, req, 'the session user holds none of the required roles');
+        return denyForbidden(controller, req, 'the session user holds none of the required roles', '403-roles');
     }
 
     // Roles AND policy: a route declaring both has already passed roles by here.

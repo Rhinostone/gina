@@ -93,6 +93,11 @@ function Lib() {
         // at boot from gna.js (the built store is stashed on
         // process.gina._renderCacheStore); _require like JobStore/SessionStore.
         RenderCacheStore : _require('./render-cache-store'),
+        // #COMPLY2 — connector-backed audit-store factory (lib/audit `start({store})`).
+        // Stateless dispatcher invoked ONCE at boot from core/server.js; _require
+        // like JobStore/SessionStore (no instance/singleton state to protect from
+        // eviction). No connector ships an implementation yet — demand-gated.
+        AuditStore      : _require('./audit-store'),
         SwigFilters     : _require('./swig-filters'),
         Cache           : require('./cache'),    // #B32-residual — plain require (leaf class held at gen-0 via server.isaac.js:35; Cache._events is a Collection). See Collection note above.
         RenderCache     : require('./render-cache'), // #B32-residual — plain require (server-only render-cache strategy dispatcher; wraps lib/cache and is held at gen-0 in server.isaac.js + the render delegates). See Cache above.
@@ -168,6 +173,15 @@ function Lib() {
         // per-request require() can never grow a dead-`children` tail (#B32-residual).
         // It also keeps a security gate out of the dev-mode hot-reload path entirely.
         authzGate       : require('./authz-gate'),
+        // #COMPLY2 — the audit-trail primitive behind self.audit() and the authz
+        // auto-events. Holds the boot-adopted store (an open O_APPEND fd for the
+        // default file backend), the serialized write queue and the written/dropped
+        // counters at module scope. Like job / State / logger above, it MUST use a
+        // plain require (not _require): refreshCore() re-runs Lib() on every
+        // dev-mode HTTP request, and _require would discard the adopted store and
+        // leak the fd on each request. Plain require = cache hit = the singleton
+        // survives.
+        audit           : require('./audit'),
         // #DTO3 — the DTO -> TypeScript declaration emitter. Pure and CLI-only
         // (consumed by the offline `bundle:types`), so the dev-mode-hot-reloadable
         // _require is safe — same shape as routingIntrospect below.

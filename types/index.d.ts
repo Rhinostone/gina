@@ -371,6 +371,13 @@ declare namespace gina {
         jobStatus(id: string, cb: (err: Error | null, record?: object) => void): void;
 
         /**
+         * Emit one audit-trail record (#COMPLY2). Fire-and-forget; a no-op
+         * when `settings.json > audit.enabled` is not true. `data.actor`
+         * overrides the session-derived actor snapshot.
+         */
+        audit(action: string, data?: { resource?: any; meta?: object; actor?: { key?: any; roles?: string[] } }, cb?: (err: Error | null) => void): void;
+
+        /**
          * Start an async model-inference job (wraps
          * `getModel(connector).infer(...)` in `startJob`); returns the job id.
          */
@@ -763,6 +770,8 @@ declare namespace gina {
      * `test/lib/types-runtime-parity.test.js`.
      */
     interface GinaLib {
+        /** Connector-backed audit-store dispatcher (`settings.json > audit.store`). */
+        AuditStore: any;
         Cache: any;
         Collection: any;
         Config: any;
@@ -784,6 +793,8 @@ declare namespace gina {
         admin: any;
         archiver: any;
         async: any;
+        /** The audit-trail primitive behind `self.audit()` (#COMPLY2). */
+        audit: any;
         /** The route authorization gate (framework-internal seam). */
         authzGate: any;
         cleanFiles: any;

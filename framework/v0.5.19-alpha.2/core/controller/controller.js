@@ -5421,6 +5421,54 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     }
 
     /**
+     * #COMPLY2 — Emit one audit-trail record ("who did what to which record
+     * when"). Thin pass-through to `lib.audit.write` — a no-op returning
+     * `cb(null)` when `settings.json > audit.enabled` is not `true`, so
+     * application code never branches on deployment config.
+     *
+     * Fire-and-forget by default: a write failure is counted + logged
+     * server-side, never thrown into the request path. Pass `cb` only when the
+     * caller must confirm the write.
+     *
+     * Unlike `hasRole` above, there is deliberately NO #B35 early-return on a
+     * released response (`local.req` nulled at a terminal exit): every
+     * request-derived read in the record builder is null-safe, so a late
+     * `self.audit()` still lands a DEGRADED record (null `requestId` / `ip` /
+     * `rule` / `method`, actor `{key:null, roles:[]}`) — for a compliance
+     * trail, present-but-degraded beats dropped.
+     *
+     * The actor is snapshotted from `req.session.user` (`audit.actorKey`
+     * property + a copy of `user.roles` — never the whole user object);
+     * `data.actor` overrides the snapshot per call.
+     *
+     * @param {string}   action - App-defined verb, e.g. `"invoice.delete"`.
+     * @param {object}   [data] - `{ resource, meta, actor }` — all optional; other keys are ignored.
+     * @param {function(?Error)} [cb] - Optional write confirmation (`cb(null)` on success or when audit is disabled).
+     * @returns {void}
+     *
+     * @example
+     *   this.remove = function(req, res, next) {
+     *       // ... delete the record ...
+     *       self.audit('invoice.delete', { resource: req.params.id });
+     *       self.renderJSON({ deleted: true });
+     *   };
+     */
+    this.audit = function(action, data, cb) {
+        if ( typeof(data) == 'function' ) {
+            cb   = data;
+            data = null;
+        }
+        data = ( data && typeof(data) == 'object' ) ? data : {};
+
+        return lib.audit.write(action, {
+            req      : ( local.req != null ) ? local.req : null,
+            resource : data.resource,
+            meta     : data.meta,
+            actor    : data.actor
+        }, cb);
+    };
+
+    /**
      * Returns `true` when the session (or provided storage object) holds a `haltedRequest`.
      *
      * @param {object} [session] - Defaults to the current `req.session` / `req.session.user`
