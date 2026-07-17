@@ -558,3 +558,134 @@ describe('07 - #B120 getRoute: requirements-less GET route + extra params (guard
             'gina.min.js must contain the minified guard (rebuild the bundle if this fails)');
     });
 });
+
+
+// ─── 08 — #B121: getRouteByUrl awaits the async compareUrls (server-side match restored) ───
+//
+// `compareUrls` has been async since the `validator::` routing-requirement support (it can
+// await validator rules), but `getRouteByUrl` called it WITHOUT await: `isRoute` was a
+// Promise, `isRoute.past` always undefined, so no rule could EVER match server-side — the
+// function returned its `false` sentinel for every url. Its only server callers are the
+// relative-path redirect form's two resolution attempts, which therefore always failed;
+// the `false` written onto `req.routing` then crashed the bundle downstream (the falsy-
+// routing write in the response-header composer — pinned in its own server test file).
+// Fix: `getRouteByUrl` is async, awaits `compareUrls` at both its call sites, and gains
+// the engine loop's exact-url fast-path so the two matchers stay identical (the in-source
+// N.B. above the loop demands it — the drift WAS this bug).
+//
+// Coverage: source pins (incl. a cross-file parity pin on the fast-path both matchers now
+// share) + REAL-module behavioural drive (exact + :param match, bogus/method rejects) + a
+// mechanism subtract proving the un-awaited shape structurally cannot observe a match +
+// dist-fidelity pins (lib/routing is browser-bundled; negative arm validated failing
+// against the pre-fix artifact).
+
+// -- §08 fixtures ride the §07 harness: same live table (bundle-filtered, so the new
+//    rules are invisible to §07's getRoute-by-name tests) + an envConf entry, which
+//    getRouteByUrl's server branch reads (hostname strip + webroot) and getRoute did not.
+
+B120_TABLE['landing@b121b'] = { method: 'GET', url: '/b121/landing',    bundle: 'b121b', param: { control: 'render', file: 'landing' }, requirements: {}, middleware: [] };
+B120_TABLE['user@b121b']    = { method: 'GET', url: '/b121/users/:id', bundle: 'b121b', param: { control: 'render', file: 'user', id: ':id' }, requirements: { id: '/^\\d+$/' }, middleware: [] };
+getContext('gina').config.envConf.b121b = { dev: { hostname: 'http://localhost:3121', server: { webroot: '/b121/' } } };
+
+describe('08 - #B121 getRouteByUrl: awaited async compareUrls (server-side match restored)', function() {
+
+    // active source = comments stripped, so the `// was:` replace-code convention
+    // lines cannot trip the negative pins (the documented own-comment trap)
+    var activeSrc = src.split('\n').filter(function (l) {
+        return !/^\s*(\/\/|\*|\/\*)/.test(l);
+    }).join('\n');
+
+    it('source: getRouteByUrl is declared async', function() {
+        assert.ok(
+            src.indexOf('self.getRouteByUrl = async function (url, bundle, method, request, isOverridingMethod)') > -1,
+            'getRouteByUrl must be an async function — it awaits the async compareUrls'
+        );
+    });
+
+    it('source: the loop awaits compareUrls (the #B121 root-cause site)', function() {
+        assert.ok(
+            src.indexOf('isRoute = await self.compareUrls(params, routing[name].url, request);') > -1,
+            'the match loop must await compareUrls'
+        );
+    });
+
+    it('source: the not-found bookkeeping altRoute is awaited too', function() {
+        assert.ok(
+            /var altRoute = \(\s*await self\.compareUrls\(params, url, request\)\s*\)\s*\|\|\s*null;/.test(activeSrc),
+            'the altRoute probe must await compareUrls (a truthy Promise defeated both the .past test and the || null fallback)'
+        );
+    });
+
+    it('source (negative, comment-stripped): no un-awaited compareUrls assignment remains in active code', function() {
+        assert.ok(
+            activeSrc.indexOf('isRoute = self.compareUrls(') === -1
+            && activeSrc.indexOf('altRoute = self.compareUrls(') === -1,
+            'active code must not assign a bare (un-awaited) compareUrls call'
+        );
+    });
+
+    it('parity pin: BOTH matchers carry the exact-url fast-path (`pathname == routing[name].url ||`)', function() {
+        var FAST = /if\s*\(\s*pathname == routing\[name\]\.url \|\| isRoute\.past\s*\)/;
+        assert.ok(FAST.test(src), 'lib/routing getRouteByUrl must carry the engine loop\'s exact-url fast-path');
+        var serverSrc = require('fs').readFileSync(path.join(FW, 'core/server.js'), 'utf8');
+        assert.ok(FAST.test(serverSrc), 'core/server.js must still carry the same fast-path — the two matchers are parity-locked');
+    });
+
+    // ── behavioural — the REAL module, awaited ────────────────────────────────
+    it('FIXED (real module): an exact composed url resolves to its route', async function() {
+        var route = await routingInstance.getRouteByUrl('/b121/landing', 'b121b', 'GET',
+            { routing: {}, isXMLRequest: false, method: 'get', params: {}, url: '/b121/landing' });
+        assert.ok(route && route !== true, 'a route object must come back (was the `false` sentinel for EVERY url pre-fix)');
+        assert.equal(route.name, 'landing@b121b');
+        assert.equal(route.param.file, 'landing');
+    });
+
+    it('FIXED (real module): a `:param` url resolves through the awaited matcher (no fast-path shortcut)', async function() {
+        var route = await routingInstance.getRouteByUrl('/b121/users/42', 'b121b', 'GET',
+            { routing: {}, isXMLRequest: false, method: 'get', params: {}, url: '/b121/users/42' });
+        assert.ok(route, ':param routes must match — this is the arm the exact-url fast-path alone could not deliver');
+        assert.equal(route.name, 'user@b121b');
+    });
+
+    it('control (real module): an unknown url still rejects with the `false` sentinel', async function() {
+        var route = await routingInstance.getRouteByUrl('/b121/definitely-not-a-route', 'b121b', 'GET',
+            { routing: {}, isXMLRequest: false, method: 'get', params: {}, url: '/b121/definitely-not-a-route' });
+        assert.equal(route, false, 'the reject path must still fire — a matcher that cannot say no proves nothing');
+    });
+
+    it('control (real module): a method mismatch still rejects', async function() {
+        var route = await routingInstance.getRouteByUrl('/b121/landing', 'b121b', 'POST',
+            { routing: {}, isXMLRequest: false, method: 'post', params: {}, url: '/b121/landing' });
+        assert.equal(route, false, 'landing@b121b is GET-only; a POST lookup must not match');
+    });
+
+    // ── mechanism subtract: WHY the pre-fix shape could never match ───────────
+    it('SUBTRACT (mechanism): the un-awaited call yields a truthy thenable whose .past is undefined', function() {
+        var unawaited = routingInstance.compareUrls(
+            { method: 'GET', requirements: {}, url: '/b121/landing', rule: 'landing',
+              param: { control: 'render', file: 'landing' }, middleware: [], bundle: 'b121b', isXMLRequest: false },
+            '/b121/landing',
+            { routing: {}, isXMLRequest: false, method: 'get', params: {}, url: '/b121/landing' });
+        assert.equal(typeof unawaited.then, 'function', 'compareUrls is async — the bare call returns a thenable');
+        assert.equal(unawaited.past, undefined, 'so `.past` reads undefined and the pre-fix `if (isRoute.past)` could NEVER be true');
+        assert.ok(unawaited, 'and the thenable is truthy — which also defeated the altRoute `|| null` fallback');
+        unawaited.then(function(){}, function(){}); // settle: keep the harness free of unhandled rejections
+    });
+
+    // ── dist fidelity (lib/routing is browser-bundled) ────────────────────────
+    // Negative arm validated against the PRE-fix artifact: `getRouteByUrl = async`
+    // counted 0 in the shipped gina.js before this fix's rebuild.
+    it('dist: the unminified bundle carries the async declaration', function() {
+        var DIST = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.js');
+        var dist = require('fs').readFileSync(DIST, 'utf8');
+        assert.ok(dist.indexOf('self.getRouteByUrl = async function') > -1,
+            'gina.js must ship the async getRouteByUrl (rebuild the bundle if this fails)');
+    });
+
+    it('dist: the minified bundle carries an async getRouteByUrl assignment', function() {
+        var DIST_MIN = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.min.js');
+        var dist = require('fs').readFileSync(DIST_MIN, 'utf8');
+        assert.ok(/getRouteByUrl\s*=\s*async function/.test(dist),
+            'gina.min.js must ship the async getRouteByUrl (rebuild the bundle if this fails)');
+    });
+});

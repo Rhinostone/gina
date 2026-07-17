@@ -2320,7 +2320,14 @@ function Server(options) {
 
         // Copy to avoid override
         resHeaders  = JSON.clone(conf.server.response.header);
-        if ( typeof(request.routing) == 'undefined' ) {
+        // #B121 — falsy-aware guard: a failed route resolution can leave
+        // `request.routing` holding the boolean `false` (a sentinel, not undefined),
+        // and this file is strict-mode — writing `.bundle` onto a primitive throws
+        // from inside the error-response path itself (a double-fault: the throw
+        // escapes the router's catch through throwError's own call back into this
+        // function, and the second identical throw is uncaught → process kill).
+        // was: if ( typeof(request.routing) == 'undefined' ) {
+        if ( !request.routing ) {
             request.routing = {
                 'url'   : request.url,
                 'method': request.method

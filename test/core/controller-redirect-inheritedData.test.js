@@ -57,7 +57,7 @@ function extractBlock(src, startToken) {
 // (existence asserted before any ordering compare), never fixed-char windows.
 describe('01 - redirect()/resumeRequest() session-default inheritedData carry — source pins', function() {
 
-    var redirectBody = sliceBetween(SRC, 'this.redirect = function(req, res, next) {', 'Move files to assets dir');
+    var redirectBody = sliceBetween(SRC, 'this.redirect = async function(req, res, next) {', 'Move files to assets dir');
     var resumeBody   = sliceBetween(SRC, 'this.resumeRequest = function(requestStorage) {', 'this.renderCustomError');
 
     it('the #B75-guarded userSession derivation is hoisted into the count>0 block, before the XHR branch', function() {

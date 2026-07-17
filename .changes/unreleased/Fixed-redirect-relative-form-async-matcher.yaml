@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The relative-path `self.redirect(''/path'')` form resolves its target again server-side: the route matcher is async and the historical un-awaited call could never match. `redirect()` is now async as a result — prefer `return self.redirect(...)` from controller actions so a resolution error reaches the framework''s handler.'
+time: 2026-07-17T19:11:28+01:00

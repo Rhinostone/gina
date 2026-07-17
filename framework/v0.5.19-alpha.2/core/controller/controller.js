@@ -2179,18 +2179,26 @@ function SuperController(options) {
      *      only means that the ID you are using for the form might be
      *      a duplicate one from the the main document !!!
      *
+     * Async since #B121: the relative-path form (`self.redirect('/path')`) resolves its
+     * target through the async route matcher (`getRouteByUrl` awaits the same
+     * `compareUrls` machinery as the engine's routing loop). The URL, route-name and
+     * `ignoreWebRoot` forms carry no await and still complete synchronously before the
+     * returned promise settles. Prefer `return self.redirect(...)` from controller
+     * actions — the router attaches a rejection handler to a returned thenable.
+     *
      * @param {object|string} req|rule|url - Request Object or Rule/Route name
      * @param {object|boolean} res|ignoreWebRoot - Response Object or Ignore WebRoot & start from domain root: /
      * @param {object} [params] TODO
      *
      * @callback [ next ]
      * */
-    this.redirect = function(req, res, next) {
-        // #B37 — released-response guard (see getSession / #B31/#B35/#B36): redirect is
-        // synchronous and reads local.req/local.res throughout; a terminal exit (a prior
-        // redirect, or a render-error path) nulls the triplet, and a second redirect on
-        // the released instance would crash the bundle (uncaughtException → SIGTERM).
-        // Nothing to redirect once the response was already sent/released.
+    this.redirect = async function(req, res, next) {
+        // #B37 — released-response guard (see getSession / #B31/#B35/#B36): redirect
+        // reads local.req/local.res throughout; a terminal exit (a prior redirect, or a
+        // render-error path) nulls the triplet, and a second redirect on the released
+        // instance would crash the bundle (uncaughtException → SIGTERM). Nothing to
+        // redirect once the response was already sent/released. The relative-path form
+        // suspends on an await (#B121), so it re-checks this guard after resuming.
         if ( local.req == null ) {
             return;
         }
@@ -2249,15 +2257,46 @@ function SuperController(options) {
                 originalMethod = ( typeof(req.originalMethod) != 'undefined') ? req.originalMethod :  req.method;
                 console.debug('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] trying to get route: ', rte, bundle, req.method);
                 if ( !ignoreWebRoot || !isStaticRoute(rte, req.method, bundle, env, ctx.config.envConf) && !ignoreWebRoot ) {
-                    req.routing     = lib.routing.getRouteByUrl(rte, bundle, req.method, req);
-                    // try alternative method
-                    if (!req.routing) {
-                        req.routing     = lib.routing.getRouteByUrl(rte, bundle, 'GET', req, true); // true == override
-                        // if still (!req.routing) { should throw a 404 }
-                        if (req.routing) {
-                            method = req.method = 'GET'
+                    // #B121 — the route matcher is async (it awaits the same `compareUrls`
+                    // machinery as the engine's routing loop, incl. `validator::`
+                    // requirements); the historical un-awaited call could never match, and
+                    // its `false` sentinel crashed the whole bundle downstream. Resolution
+                    // errors are contained here: a bad redirect target must cost the
+                    // request, never the process. The result lands in a local FIRST —
+                    // never straight onto `req.routing` — because the matcher itself
+                    // reads and stamps `request.routing` on the request it is handed
+                    // (a `false` in that slot silently voids those writes), and because
+                    // the error reporters downstream expect the request to keep a valid
+                    // routing: on a miss the request keeps the route that dispatched it.
+                    var resolvedRouting = null;
+                    try {
+                        resolvedRouting = await lib.routing.getRouteByUrl(rte, bundle, req.method, req);
+                        // try alternative method
+                        if (!resolvedRouting) {
+                            resolvedRouting = await lib.routing.getRouteByUrl(rte, bundle, 'GET', req, true); // true == override
+                            if (resolvedRouting) {
+                                method = req.method = 'GET'
+                            }
                         }
+                    } catch (redirectRouteErr) {
+                        return self.throwError(500, redirectRouteErr);
                     }
+                    // post-await release re-guard (the #M1/#B37 discipline): a concurrent
+                    // terminal exit during the await released the triplet — nothing left
+                    // to redirect on this instance.
+                    if ( local.req == null ) {
+                        return;
+                    }
+                    if ( !resolvedRouting ) {
+                        // closes the long-admitted gap ("should throw a 404"): an
+                        // unresolvable redirect target now 404s the request instead of
+                        // falling through with a `false` routing sentinel (pre-#B121 that
+                        // sentinel killed the bundle at the response-header composer;
+                        // it would also have crashed the 404 reporter itself on its
+                        // routing-derefing diagnostics).
+                        return self.throwError(404, new Error('redirect target not found: `'+ rte +'` (method: '+ req.method +')'));
+                    }
+                    req.routing = resolvedRouting;
 
                     //route = route = req.routing.name;
                 } else {

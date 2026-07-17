@@ -3095,7 +3095,7 @@ describe('26 - released-response guard on redirect() (#B37)', function() {
     // `reading 'originalMethod'`. Fixed with a top-of-function guard.
 
     it('redirect() guards a released request at the top, before getConfig/getRouting', function() {
-        var start = src.indexOf('this.redirect = function(req, res, next) {');
+        var start = src.indexOf('this.redirect = async function(req, res, next) {');
         assert.ok(start > -1, 'redirect must exist');
         var head = src.slice(start, start + 700);
         var guardIdx = head.indexOf('if ( local.req == null )');
@@ -3961,7 +3961,7 @@ describe('34 - redirect cache hardening: no-store folded into headInfos for dev 
     // End-anchored body slice (structural, not a fixed char window): start = the redirect
     // signature, end = the next method's JSDoc title — insertions inside redirect cannot
     // silently drift the pins out of the slice.
-    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var startIdx = src.indexOf('this.redirect = async function(req, res, next) {');
     var endIdx   = src.indexOf('Move files to assets dir', startIdx);
     var body     = src.substring(startIdx, endIdx);
 
@@ -4075,7 +4075,7 @@ describe('35 - redirect XHR/popin JSON exits inherit the no-store hardening (#B7
     var code = src.replace(/^\s*\/\/.*$/gm, '');
 
     // End-anchored slice of the redirect body (same structural anchors as §34).
-    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var startIdx = src.indexOf('this.redirect = async function(req, res, next) {');
     var endIdx   = src.indexOf('Move files to assets dir', startIdx);
     var body     = src.substring(startIdx, endIdx);
 

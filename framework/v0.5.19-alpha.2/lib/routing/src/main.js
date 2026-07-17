@@ -1353,9 +1353,15 @@ function Routing() {
     /**
      * Get route by url
      * N.B.: this will only work with rules declared with `GET` method property
-     * ATTENTION !!! Not fully working for frontend because of unresolved promises !!!!
+     *
+     * Async since #B121: the underlying `compareUrls` machinery is async (it can
+     * await `validator::` routing-requirement validation), and the historical
+     * un-awaited call meant no rule could ever match — callers received the
+     * `false` sentinel for every url. Await this method (or `.then()` it); the
+     * old "unresolved promises" caveat that used to sit here was this defect.
      *
      * @function getRouteByUrl
+     * @async
      *
      * @param {string} url e.g.: /webroot/some/url/path or http
      * @param {string} [bundle] targeted bundle
@@ -1363,10 +1369,15 @@ function Routing() {
      * @param {object} [request]
      * @param {boolean} [isOverridingMethod] // will replace request.method by the provided method - Used for redirections
      *
-     * @returns {object|boolean} route - when route is found; `false` when not found
+     * @returns {Promise<object|boolean>} route - when route is found; `false` when not found
+     *
+     * @example
+     *  // from an async context (e.g. a controller helper)
+     *  var route = await lib.routing.getRouteByUrl('/myapp/landing', 'myapp', 'GET', req);
+     *  if (route) { console.log(route.name, route.param); }
      * */
 
-    self.getRouteByUrl = function (url, bundle, method, request, isOverridingMethod) {
+    self.getRouteByUrl = async function (url, bundle, method, request, isOverridingMethod) {
 
         if (
             arguments.length == 2
@@ -1550,8 +1561,16 @@ function Routing() {
                 // normal case
                 //Parsing for the right url.
                 try {
-                    isRoute = self.compareUrls(params, routing[name].url, request);
-                    if (isRoute.past) {
+                    // #B121 root cause — `compareUrls` is async (it can await `validator::`
+                    // requirement validation), so the historical un-awaited call yielded a
+                    // Promise whose `.past` is always undefined: no rule could EVER match
+                    // server-side. Await it, and mirror the engine loop's exact-url
+                    // fast-path so this block stays identical to `server.js` (see the
+                    // N.B. above the loop).
+                    // was: isRoute = self.compareUrls(params, routing[name].url, request);
+                    // was: if (isRoute.past) {
+                    isRoute = await self.compareUrls(params, routing[name].url, request);
+                    if (pathname == routing[name].url || isRoute.past) {
                         route = JSON.clone(routing[name]);
                         route.name = name;
                         // #B52-residual finding-2: getRouteByUrl returns `route` (a fresh clone of the
@@ -1645,7 +1664,11 @@ function Routing() {
                 }
 
                 // forms
-                var altRoute = self.compareUrls(params, url, request) || null;
+                // #B121 root-cause sibling — un-awaited async `compareUrls`: `altRoute`
+                // was a Promise (truthy, `.past` undefined), so this not-found
+                // bookkeeping branch could never run.
+                // was: var altRoute = self.compareUrls(params, url, request) || null;
+                var altRoute = ( await self.compareUrls(params, url, request) ) || null;
                 if(altRoute.past && isMethodProvidedByDefault) {
                     notFound = method.toUpperCase() +'::'+ altRoute.request.routing.rule;
                     if ( typeof(self.notFound[notFound]) == 'undefined' ) {
