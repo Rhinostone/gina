@@ -1,0 +1,17 @@
+[
+  "--env",
+  "--scope",
+  "--emit",
+  "--force",
+  "--format",
+  "--stream",
+  "--tag",
+  "--platform",
+  "--start-port-from",
+  "--gina-version",
+  "--name",
+  "--publish",
+  "--env-var",
+  "--env-file",
+  "--rm"
+]

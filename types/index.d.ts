@@ -265,6 +265,16 @@ declare namespace gina {
         isProductionScope(): boolean;
 
         /**
+         * True when the authenticated session user holds `role` (#COMPLY1).
+         *
+         * The imperative escape hatch for an action that authorizes mid-logic; the
+         * declarative `routing.json` `param.roles` gate covers the whole-route case.
+         * False for an unauthenticated request.
+         * @param role - The role name to test for
+         */
+        hasRole(role: string): boolean;
+
+        /**
          * Render an HTML template (Swig or Nunjucks per the route's engine).
          * @param userData - Template data merged into the view
          * @param displayInspector - Show the Gina Inspector overlay
@@ -359,6 +369,13 @@ declare namespace gina {
 
         /** Read a job's full record by id (node-style callback). */
         jobStatus(id: string, cb: (err: Error | null, record?: object) => void): void;
+
+        /**
+         * Emit one audit-trail record (#COMPLY2). Fire-and-forget; a no-op
+         * when `settings.json > audit.enabled` is not true. `data.actor`
+         * overrides the session-derived actor snapshot.
+         */
+        audit(action: string, data?: { resource?: any; meta?: object; actor?: { key?: any; roles?: string[] } }, cb?: (err: Error | null) => void): void;
 
         /**
          * Start an async model-inference job (wraps
@@ -753,6 +770,8 @@ declare namespace gina {
      * `test/lib/types-runtime-parity.test.js`.
      */
     interface GinaLib {
+        /** Connector-backed audit-store dispatcher (`settings.json > audit.store`). */
+        AuditStore: any;
         Cache: any;
         Collection: any;
         Config: any;
@@ -774,6 +793,10 @@ declare namespace gina {
         admin: any;
         archiver: any;
         async: any;
+        /** The audit-trail primitive behind `self.audit()` (#COMPLY2). */
+        audit: any;
+        /** The route authorization gate (framework-internal seam). */
+        authzGate: any;
         cleanFiles: any;
         cmd: any;
         cmdStatusFormat: any;
@@ -915,10 +938,11 @@ declare namespace gina {
     const getConfig: ((name?: string) => any) | undefined;
 
     /**
-     * ⚠ A DETACHED copy of the internal emitter's `emit` (`this` is the
-     * module object, not the emitter): calling it returns `false` and does
-     * NOT dispatch to listeners registered by the lifecycle hooks. Kept for
-     * parity with the runtime surface only — do not rely on it.
+     * ⚠ An inert stub: always returns `false`, never dispatches, never
+     * throws — the internal lifecycle emitter is not exposed and the module
+     * object has no listener surface. Kept for parity with the runtime
+     * surface only — do not rely on it; application events go through the
+     * controller's `emitEvent()`.
      */
     const emit: (eventName: string | symbol, ...args: any[]) => boolean;
 

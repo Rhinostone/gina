@@ -1,0 +1,86 @@
+
+Usage: gina container:ps [--all] [--format=json]
+       gina container:stop <name|id> [--time=<s>] [--force] [--format=json]
+
+Actions:
+
+    ps          List the containers on the container host. Running only by
+                default; --all includes exited ones. Every container on the
+                host is shown — there is no gina-specific marker to filter on —
+                same host resolution as image:build.
+
+    stop        Stop a container by name or id, reporting the rung it came down
+                on: gracefully (it handled the signal) or force-killed after the
+                grace period. Stopping an already-exited container is a success
+                no-op, so the verb is safe to re-run.
+
+    help        Show this help.
+    man         Show the container group manual.
+
+Options (container:ps):
+
+    --all                    Include exited containers (default: running only).
+    --format=json            Machine-readable output:
+                             { host, containers: [{ id, name, image, state,
+                               status, ports, created, createdAt }] }
+                             `created` is podman's humanized display string;
+                             `createdAt` is its exact ISO sibling. `ports`
+                             entries are { hostPort, containerPort, protocol }
+                             plus `hostIp` when bound to one interface, and
+                             `range` when the entry publishes a port RANGE
+                             rather than a single pair.
+
+Options (container:stop):
+
+    --time=<seconds>         Grace period before podman escalates to SIGKILL
+                             (default: 10, podman's own default).
+    --force                  Kill immediately, skipping the grace period
+                             (podman kill).
+    --format=json            Machine-readable output:
+                             { host, id, name, result, exitCode }
+                             `result` is `graceful` (the container handled the
+                             signal), `killed` (force-killed after the grace
+                             period elapsed) or `forced` (--force).
+
+    podman exits 0 whether a container stopped gracefully or had to be killed,
+    so the container's own exit code is what distinguishes them: 137 is
+    128+SIGKILL (it did not handle SIGTERM in time), while a container that
+    traps SIGTERM reports its own code (commonly 143). container:stop reads it
+    with a post-stop inspect and reports the rung.
+
+Container host:
+
+    Where the container commands execute, in precedence order:
+      1. GINA_CONTAINER_HOST=ssh://[user@]host[:port]   (env override)
+      2. native buildah                                 (Linux + buildah on PATH)
+      3. container.host in ~/.gina/<shortVersion>/settings.json
+    With none of the three available the command fails (exit 1) naming the
+    descriptor surfaces. This is IDENTICAL to the image group, so container:ps
+    always lists the host image:build builds onto and image:run runs on.
+
+    These verbs drive podman, not buildah: buildah builds images but cannot run
+    them. A build-only host (buildah present, podman absent) is a supported
+    shape and is reported honestly rather than as an opaque exec failure.
+
+Examples:
+
+    # What is running on the host?
+    gina container:ps
+
+    # Everything, including exited containers
+    gina container:ps --all
+
+    # Just the names, machine-readable
+    gina container:ps --format=json | jq -r '.containers[].name'
+
+    # Stop a container, reporting how it came down
+    gina container:stop demo
+
+    # Allow a slow shutdown a longer grace period
+    gina container:stop demo --time=30
+
+    # Kill it immediately
+    gina container:stop demo --force
+
+    # Assert a graceful shutdown in CI
+    gina container:stop demo --format=json | jq -r '.result'

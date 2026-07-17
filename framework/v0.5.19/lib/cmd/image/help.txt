@@ -1,0 +1,173 @@
+
+Usage: gina image:build [<bundle>] @<project> [options]
+       gina image:list [--format=json]
+       gina image:rm <image> [--force]
+       gina image:run <image> [options]
+
+Actions:
+
+    build       Package a project bundle as a standard OCI image.
+                Synthesizes a Containerfile + build context from the project's
+                registered state (bundles, ports, env model, node floor) and
+                executes the build with buildah — natively on Linux, or on a
+                container host reached over ssh.
+
+    list        List the images present on the container host. Every image on
+                the host is shown (there is no gina-specific marker to filter
+                on), newest buildah state — same host resolution as build.
+
+    rm          Remove an image from the container host by reference or id.
+                Requires an explicit image; there is no bulk delete.
+
+    run         Run an image as a container on the container host, with podman.
+                Detached by default, publishing the port the image EXPOSEs.
+                buildah builds images but cannot run them, so a build-only host
+                (buildah present, podman absent) says so honestly rather than
+                failing opaquely. Same host resolution as build.
+
+    help        Show this help.
+    man         Show the image group manual.
+
+Options (image:build):
+
+    --env=<env>              Target env baked into the image (default: the
+                             project's single non-dev env, e.g. prod).
+                             A non-dev env ships the release tree, built
+                             in-image by `gina bundle:build` (dev/prod parity).
+    --scope=<scope>          Target scope (default: the project's production
+                             scope for a non-dev env, else its default scope).
+    --tag=<ref>              Image reference (default: <project>/<bundle>:<env>).
+    --platform=<os/arch>     linux/arm64 or linux/amd64 (default: build-host
+                             native). Cross-arch builds need qemu/binfmt on the
+                             build host.
+    --start-port-from=<n>    First in-container port (default: 3100). The
+                             EXPOSEd port is computed deterministically from
+                             the gina-init allocator.
+    --gina-version=<v>       Framework version installed in the image
+                             (default: the project's registered version).
+    --emit                   Print the synthesized Containerfile, entrypoint
+                             and context manifest — build nothing.
+    --format=json            Machine-readable output. One-shot result:
+                             { project, bundle, image, tag, imageId?,
+                               durationMs, host, exposedPort }
+    --stream                 NDJSON progress frames (one JSON object per line):
+                             start -> step -> log* -> done | error.
+                             `done` carries the one-shot shape.
+
+Options (image:list):
+
+    --format=json            Machine-readable output:
+                             { host, images: [{ ref, id, size, created,
+                               sizeBytes, createdAt }] }
+                             An untagged image reports ref `<none>:<none>`;
+                             a multi-tagged image yields one entry per tag.
+                             createdAt is the exact RFC3339 creation time;
+                             sizeBytes is approximate — derived from buildah's
+                             humanized size (buildah exposes no raw byte
+                             count). size/created stay the humanized display
+                             strings the text table shows.
+
+Options (image:rm):
+
+    --force                  Remove the image even when a container still
+                             references it (buildah rmi -f).
+
+    Removing one tag of a multi-tagged image is an untag: buildah exits 0
+    and the image survives under its other tags (image:list rows sharing
+    an id are tags of one image). The in-use refusal only applies to an
+    image's last reference.
+
+Options (image:run):
+
+    --name=<name>            Container name (default: podman picks one).
+    --publish=<h>:<c>[,...]  Host:container port map(s) to publish.
+                             Default: the port the image EXPOSEs, mapped
+                             same:same — that EXPOSE is the port image:build
+                             computed with the gina-init allocator, so it is
+                             the one the bundle actually binds; it is never
+                             recomputed here. --publish=none publishes
+                             nothing. An image with no EXPOSE and no flag
+                             publishes nothing.
+    --env-var=KEY=VALUE      Set one environment variable in the container.
+                             Repeatable. Overrides --env-file on a duplicate
+                             key (podman's own --env precedence).
+    --env-file=<path>        Read KEY=VALUE lines from a LOCAL file. Blank
+                             lines and # comments are ignored.
+    --rm                     Remove the container when it exits.
+    --stream                 Run in the FOREGROUND, mirroring the container's
+                             output as NDJSON frames (one JSON object per
+                             line): start -> log* -> done | error.
+                             `done` carries the container's exitCode.
+    --format=json            Machine-readable result (detached):
+                             { host, id, name, image, ports }
+
+    Environment values never reach argv or a shell: they ride stdin into a
+    0600 file (over ssh, a remote mktemp file a trap removes when the command
+    ends), so they never appear in the host's process list. A value may
+    contain any character except a newline, which the KEY=VALUE line format
+    cannot represent.
+
+    In text mode stdout carries the container id ALONE — the progress line
+    goes to stderr — so `ID=$(gina image:run <image>)` captures just the id.
+
+Container host:
+
+    Where the image commands execute, in precedence order:
+      1. GINA_CONTAINER_HOST=ssh://[user@]host[:port]   (env override)
+      2. native buildah                                 (Linux + buildah on PATH)
+      3. container.host in ~/.gina/<shortVersion>/settings.json
+    With none of the three available the command fails (exit 1) naming the
+    descriptor surfaces. All three actions resolve the host identically, so
+    `image:list` always shows what `image:build` would build onto. On the
+    remote path `build` streams the build context as a tar over ssh stdin,
+    while `list`/`rm` simply run buildah there — no listening socket is ever
+    opened.
+
+Secrets:
+
+    ${secret:KEY} placeholders in the project's config ride VERBATIM into the
+    image and resolve from the container's environment at runtime. No secret
+    value is ever read, resolved or baked at build time.
+
+    `image:run --env-var=KEY=VALUE` / `--env-file=<path>` is how those values
+    are supplied when the container starts — without ever entering argv, a
+    shell, or the image itself.
+
+Examples:
+
+    # Inspect the synthesized artifact without building
+    gina image:build @myproject --emit
+
+    # Production image for a single-bundle project
+    gina image:build @myproject
+
+    # Explicit bundle + env, machine-readable result
+    gina image:build demo @myproject --env=prod --format=json
+
+    # Stream progress as NDJSON (CI / GUI consumers)
+    gina image:build demo @myproject --stream
+
+    # Build on a remote Linux box
+    GINA_CONTAINER_HOST=ssh://build@lin gina image:build @myproject
+
+    # What is on the host?
+    gina image:list
+
+    # Just the image references, machine-readable
+    gina image:list --format=json | jq -r '.images[].ref'
+
+    # Remove an image (by ref, then by id, forcing the second)
+    gina image:rm localhost/myproject/demo:prod
+    gina image:rm 44b5401ff810 --force
+
+    # Run what was just built, publishing the port the image EXPOSEs
+    gina image:run localhost/myproject/demo:prod --name=demo
+
+    # Explicit port map, container removed on exit
+    gina image:run localhost/myproject/demo:prod --publish=8080:3100 --rm
+
+    # Supply runtime secrets, foreground, NDJSON frames
+    gina image:run localhost/myproject/demo:prod --env-file=./.env.prod --stream
+
+    # Capture the container id (stdout carries it alone)
+    ID=$(gina image:run localhost/myproject/demo:prod)

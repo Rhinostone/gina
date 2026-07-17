@@ -341,8 +341,9 @@ describe('06 - negative pins: the fixed lies stay fixed', function () {
             assert.ok(!declared.has(n),
                 'gina.' + n + ' declared — the runtime module object is a plain object literal, not an EventEmitter');
         });
-        // `emit` alone IS assigned at runtime (a detached, non-dispatching
-        // copy) — it stays declared for parity, with its warning JSDoc.
+        // `emit` alone IS assigned at runtime (an inert stub since #B109 —
+        // always false, never dispatches) — it stays declared for parity,
+        // with its warning JSDoc.
         assert.ok(declared.has('emit'));
     });
 

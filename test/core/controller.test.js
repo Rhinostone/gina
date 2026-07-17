@@ -3095,7 +3095,7 @@ describe('26 - released-response guard on redirect() (#B37)', function() {
     // `reading 'originalMethod'`. Fixed with a top-of-function guard.
 
     it('redirect() guards a released request at the top, before getConfig/getRouting', function() {
-        var start = src.indexOf('this.redirect = function(req, res, next) {');
+        var start = src.indexOf('this.redirect = async function(req, res, next) {');
         assert.ok(start > -1, 'redirect must exist');
         var head = src.slice(start, start + 700);
         var guardIdx = head.indexOf('if ( local.req == null )');
@@ -3961,7 +3961,7 @@ describe('34 - redirect cache hardening: no-store folded into headInfos for dev 
     // End-anchored body slice (structural, not a fixed char window): start = the redirect
     // signature, end = the next method's JSDoc title — insertions inside redirect cannot
     // silently drift the pins out of the slice.
-    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var startIdx = src.indexOf('this.redirect = async function(req, res, next) {');
     var endIdx   = src.indexOf('Move files to assets dir', startIdx);
     var body     = src.substring(startIdx, endIdx);
 
@@ -4075,7 +4075,7 @@ describe('35 - redirect XHR/popin JSON exits inherit the no-store hardening (#B7
     var code = src.replace(/^\s*\/\/.*$/gm, '');
 
     // End-anchored slice of the redirect body (same structural anchors as §34).
-    var startIdx = src.indexOf('this.redirect = function(req, res, next) {');
+    var startIdx = src.indexOf('this.redirect = async function(req, res, next) {');
     var endIdx   = src.indexOf('Move files to assets dir', startIdx);
     var body     = src.substring(startIdx, endIdx);
 
@@ -4367,5 +4367,186 @@ describe('37 - self.cache fires cache.invalidateOnEvents (behavioral)', function
         probe.from(store);
         assert.equal(probe.has(mine),  false, 'the named bundle is flushed');
         assert.equal(probe.has(other), true,  'other bundles are untouched');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 38 — #COMPLY2 self.audit(): the controller's audit-trail emit, driven
+// BEHAVIORALLY through the REAL SuperController (createTestInstance, the §14
+// harness / §36 bootstrap mould) AND the REAL lib/audit singleton writing to a
+// real temp JSONL file — the correctness here is runtime VALUES (which req the
+// record carries), which a source pin cannot see. The one contract a pin CAN
+// lock is structural: the deliberate ABSENCE of the #B35 released-response
+// early-return (degraded-record-over-dropped-record, the compliance-trail
+// rationale), pinned against its #COMPLY sibling `hasRole`, which HAS one.
+// ---------------------------------------------------------------------------
+describe('38 - #COMPLY2 self.audit emits through the real lib/audit (behavioral)', function() {
+
+    var os38 = require('os');
+    var FW38 = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW38;
+    require('module').Module._initPaths();
+    require(path.join(FW38, 'helpers'));
+    setPath('gina', { core: path.join(FW38, 'core') });
+    var SuperController38 = require(SOURCE);
+    // The SAME module instance controller.js's lib registry resolves:
+    // lib/index.js `require('./audit')` -> lib/audit/package.json main ->
+    // lib/audit/src/main.js — Node's cache keys on the resolved file.
+    var audit38 = require(path.join(FW38, 'lib/audit/src/main'));
+
+    var SRC38 = fs.readFileSync(SOURCE, 'utf8');
+
+    // ---- source pins ----
+
+    it('source pin — delegates to lib.audit.write, threading the live-or-released local.req', function() {
+        var idx = SRC38.indexOf('this.audit = function(action, data, cb) {');
+        assert.ok(idx > -1, 'the method');
+        var end = SRC38.indexOf('this.isHaltedRequest', idx);
+        assert.ok(end > idx, 'end anchor (the next controller method) — re-anchor if isHaltedRequest moves');
+        var body = SRC38.slice(idx, end);
+        assert.match(body, /return lib\.audit\.write\(action, \{/);
+        assert.match(body, /req\s*:\s*\( local\.req != null \) \? local\.req : null,/);
+    });
+
+    it('source pin — DELIBERATELY no #B35 early-return: a released response degrades, never drops', function() {
+        var hasRoleIdx = SRC38.indexOf('this.hasRole = function(role) {');
+        var auditIdx   = SRC38.indexOf('this.audit = function(action, data, cb) {');
+        assert.ok(hasRoleIdx > -1, 'the #COMPLY sibling');
+        assert.ok(auditIdx > hasRoleIdx, 'the #COMPLY cluster: audit sits after hasRole');
+        // hasRole HAS the guard (pinned in authz-gate.test.js §13); audit must NOT:
+        var body = SRC38.slice(auditIdx, SRC38.indexOf('this.isHaltedRequest', auditIdx));
+        assert.doesNotMatch(body, /if \( local\.req == null \)/,
+            'the #B35 guard is deliberately ABSENT — buildRecord is null-safe, and a ' +
+            'compliance trail prefers a degraded record over a dropped one');
+    });
+
+    it('the #DTO3b parity gate is satisfied: the types interface declares audit', function() {
+        var typesSrc = fs.readFileSync(path.join(FW38, '../../types/index.d.ts'), 'utf8');
+        assert.ok(typesSrc.indexOf('audit(action: string, data?: { resource?: any; meta?: object; actor?: { key?: any; roles?: string[] } }, cb?: (err: Error | null) => void): void;') > -1,
+            'the parity gate diffs the SuperController interface against a real instance');
+    });
+
+    // ---- behavioral (real controller + real lib + real temp file) ----
+
+    var tmp38 = [];
+    function startTrail38() {
+        var dir = fs.mkdtempSync(path.join(os38.tmpdir(), 'gina-ctrl-audit-'));
+        tmp38.push(dir);
+        var file = path.join(dir, 'audit.jsonl');
+        audit38.start({ bundle: 'b', env: 'test', file: file });
+        return file;
+    }
+    afterEach(function () {
+        audit38._resetForTest();
+        tmp38.forEach(function (d) { try { fs.rmSync(d, { recursive: true, force: true }); } catch (e) { /* best-effort */ } });
+        tmp38 = [];
+    });
+
+    function makeInstance38(reqOverrides) {
+        var req = Object.assign({
+            url        : '/invoices/42',
+            method     : 'DELETE',
+            _ginaReqId : 'rq-777',
+            routing    : { rule: 'invoice-remove', namespace: 'default' },
+            socket     : { remoteAddress: '::ffff:10.1.2.3' },
+            session    : { user: { id: 'u9', email: 'x@y.z', roles: ['ops'] } },
+            params     : {},
+            get        : {},
+            'delete'   : {}
+        }, reqOverrides || {});
+        var r = {
+            statusCode  : 200,
+            headersSent : false,
+            _headers    : {},
+            ended       : false,
+            getHeaders  : function () { return this._headers; },
+            getHeader   : function (k) { return this._headers[k]; },
+            setHeader   : function (k, v) { this._headers[k] = v; },
+            writeHead   : function () {},
+            end         : function () { this.ended = true; }
+        };
+        var inst = SuperController38.createTestInstance({
+            req     : req,
+            res     : r,
+            options : {
+                conf    : { bundle: 'b', encoding: 'utf-8', content: { routing: { 'invoice-remove': {} } } },
+                rule    : 'invoice-remove',
+                control : 'index'
+            }
+        });
+        return { inst: inst, req: req, res: r };
+    }
+
+    function auditP38(inst, action, data) {
+        return new Promise(function (resolve) {
+            inst.audit(action, data, function (err) { resolve(err || null); });
+        });
+    }
+    function records38(file) {
+        return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(function (l) { return JSON.parse(l); });
+    }
+    /** renderTEXT logs its access line via console.info — keep the run quiet. */
+    function quiet38(fn) {
+        var prevInfo = console.info;
+        console.info = function () {};
+        try { return fn(); } finally { console.info = prevInfo; }
+    }
+
+    it('threads the live request into the record — requestId/ip/rule/method/actor all from THIS req', async function() {
+        var file = startTrail38();
+        var m    = makeInstance38();
+        var err  = await auditP38(m.inst, 'invoice.delete', { resource: 'inv-42', meta: { why: 'gdpr' } });
+        assert.equal(err, null);
+        var rec = records38(file)[0];
+        assert.equal(rec.action, 'invoice.delete');
+        assert.equal(rec.resource, 'inv-42');
+        assert.deepEqual(rec.meta, { why: 'gdpr' });
+        assert.equal(rec.requestId, 'rq-777', 'the #COMPLY2 slice-1 correlation key rides the record');
+        assert.equal(rec.ip, '10.1.2.3', '::ffff:-normalized socket address');
+        assert.equal(rec.rule, 'invoice-remove');
+        assert.equal(rec.method, 'DELETE');
+        assert.deepEqual(rec.actor, { key: 'u9', roles: ['ops'] }, 'actorKey + a roles copy — never the whole user');
+        assert.equal(rec.bundle, 'b');
+        assert.equal(rec.env, 'test');
+    });
+
+    it('normalizes the 2-arg (action, cb) form', async function() {
+        var file = startTrail38();
+        var m    = makeInstance38();
+        var err  = await new Promise(function (resolve) {
+            m.inst.audit('config.readback', function (e) { resolve(e || null); });
+        });
+        assert.equal(err, null);
+        var rec = records38(file)[0];
+        assert.equal(rec.action, 'config.readback');
+        assert.equal('resource' in rec, false, 'absent, not null — nothing was passed');
+        assert.equal('meta' in rec, false);
+        assert.equal(rec.requestId, 'rq-777', 'the req still threads');
+    });
+
+    it('a released response (post-renderTEXT terminal exit) yields a DEGRADED record — never a drop', async function() {
+        var file = startTrail38();
+        var m    = makeInstance38();
+        quiet38(function () { m.inst.renderTEXT('bye'); });   // the lightest terminal exit — nulls local.req/res/next
+        assert.equal(m.res.ended, true, 'positive evidence the terminal exit actually ran');
+
+        var err = await auditP38(m.inst, 'late.audit', { resource: 'r-1' });
+        assert.equal(err, null, 'the write still lands');
+        var rec = records38(file)[0];
+        assert.equal(rec.action, 'late.audit');
+        assert.equal(rec.resource, 'r-1');
+        assert.equal(rec.requestId, null, 'degraded: the req is gone');
+        assert.equal(rec.ip, null);
+        assert.equal(rec.rule, null);
+        assert.equal(rec.method, null);
+        assert.deepEqual(rec.actor, { key: null, roles: [] });
+    });
+
+    it('disabled (no start): cb(null), nothing thrown — application code never branches on config', async function() {
+        var m   = makeInstance38();
+        var err = await auditP38(m.inst, 'any.thing', {});
+        assert.equal(err, null);
+        assert.equal(audit38.isEnabled(), false);
     });
 });

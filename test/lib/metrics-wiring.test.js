@@ -300,13 +300,25 @@ describe('08 - core/server.isaac.js — request lifecycle hook (slice 3)', funct
     function hookBlock() {
         var markerIdx = ISAAC_SRC.indexOf('#OBS1 slice 3');
         assert.ok(markerIdx > 0, 'OBS1 slice 3 marker comment not found in server.isaac.js');
-        // Window through ~1500 chars — enough for the hook block + a margin.
-        return ISAAC_SRC.substring(markerIdx, Math.min(ISAAC_SRC.length, markerIdx + 1500));
+        // End-anchor at the next hook's marker (#RWATCH) — robust to the #OBS1 first-seer
+        // comment length, unlike a fixed char window (jsdoc.md fixed-window-slicer trap).
+        var endIdx = ISAAC_SRC.indexOf('#RWATCH', markerIdx);
+        assert.ok(endIdx > markerIdx, 'expected the #RWATCH gauge block to follow the #OBS1 hook');
+        return ISAAC_SRC.substring(markerIdx, endIdx);
     }
 
-    it('gates the listener registration on lib.metrics.isEnabled()', function() {
+    it('gates the listener registration on lib.metrics.isEnabled() with the #OBS1 first-seer guard', function() {
         var blk = hookBlock();
-        assert.match(blk, /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*\)/);
+        assert.match(blk, /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*&&\s*!request\._metricsRecorded\s*\)/);
+    });
+
+    it('claims the first-seer flag (request._metricsRecorded = true) before wiring the finish listener', function() {
+        var blk = hookBlock();
+        var claimIdx = blk.indexOf('request._metricsRecorded = true');
+        var wireIdx  = blk.indexOf("response.on('finish'");
+        assert.ok(claimIdx > -1, 'the hook must set request._metricsRecorded = true (first-seer claim)');
+        assert.ok(wireIdx  > -1, 'the hook must register response.on(finish)');
+        assert.ok(claimIdx < wireIdx, 'the claim flag must be set BEFORE the finish listener is wired (so onInstance skips)');
     });
 
     it('captures request._metricsStartTime at request entry', function() {
@@ -347,12 +359,24 @@ describe('09 - core/server.js — request lifecycle hook (slice 3)', function() 
     function hookBlock() {
         var markerIdx = SERVER_SRC.indexOf('#OBS1 slice 3');
         assert.ok(markerIdx > 0, 'OBS1 slice 3 marker not found in server.js');
-        return SERVER_SRC.substring(markerIdx, Math.min(SERVER_SRC.length, markerIdx + 1500));
+        // End-anchor at the next hook's marker (#RWATCH) — robust to comment length.
+        var endIdx = SERVER_SRC.indexOf('#RWATCH', markerIdx);
+        assert.ok(endIdx > markerIdx, 'expected the #RWATCH gauge block to follow the #OBS1 hook');
+        return SERVER_SRC.substring(markerIdx, endIdx);
     }
 
-    it('gates on lib.metrics.isEnabled()', function() {
+    it('gates on lib.metrics.isEnabled() with the #OBS1 first-seer guard', function() {
         var blk = hookBlock();
-        assert.match(blk, /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*\)/);
+        assert.match(blk, /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*&&\s*!request\._metricsRecorded\s*\)/);
+    });
+
+    it('claims the first-seer flag (request._metricsRecorded = true) before wiring the finish listener', function() {
+        var blk = hookBlock();
+        var claimIdx = blk.indexOf('request._metricsRecorded = true');
+        var wireIdx  = blk.indexOf("response.on('finish'");
+        assert.ok(claimIdx > -1, 'the hook must set request._metricsRecorded = true (first-seer claim)');
+        assert.ok(wireIdx  > -1, 'the hook must register response.on(finish)');
+        assert.ok(claimIdx < wireIdx, 'the claim flag must be set BEFORE the finish listener is wired (so onInstance skips)');
     });
 
     it('captures request._metricsStartTime', function() {
@@ -434,6 +458,113 @@ describe('10 - schema/app.json — metrics block', function() {
 
     it('rejects unknown properties under metrics (additionalProperties: false)', function() {
         assert.equal(SCHEMA.properties.metrics.additionalProperties, false);
+    });
+
+});
+
+
+describe('11 - #OBS1 / #FI first-seer guards — isaac double-dispatch (both tops)', function() {
+
+    var ISAAC_SRC  = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
+    var SERVER_SRC = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
+
+    // Root cause: under the isaac engine a ROUTED request runs BOTH the engine's
+    // server.on('request') listener AND server.js's onInstance (its cb), so a per-request
+    // hook wired at the top of both tops fires twice. The #OBS1 metrics finish-hook was
+    // unguarded → recordRequest double-fired (counters double-incremented, histogram
+    // double-observed). The fix is a request._metricsRecorded first-seer claim (the isaac
+    // listener claims first, onInstance skips) — the exact shape of the RW-F8
+    // request._rwTracked gauge fix. Live-confirmed 2×→1× via the daemonless boot smoke
+    // (scratchpad/obs1-smoke.js: 10 routed GETs → 20 incs pre-fix, 10 post-fix). These
+    // source pins lock the shipped shape so the behavioral replica below cannot drift.
+
+    it('both engines carry the #OBS1 first-seer gate (isEnabled() && !request._metricsRecorded) — in sync', function() {
+        var re = /if\s*\(\s*lib\.metrics\.isEnabled\(\)\s*&&\s*!request\._metricsRecorded\s*\)/;
+        assert.match(ISAAC_SRC,  re, 'server.isaac.js must carry the #OBS1 first-seer gate');
+        assert.match(SERVER_SRC, re, 'server.js must carry the #OBS1 first-seer gate (kept in sync with isaac)');
+    });
+
+    it('both engines claim request._metricsRecorded = true before wiring the metrics finish listener', function() {
+        [{ n: 'server.isaac.js', s: ISAAC_SRC }, { n: 'server.js', s: SERVER_SRC }].forEach(function(e) {
+            var claimIdx = e.s.indexOf('request._metricsRecorded = true');
+            var wireIdx  = e.s.indexOf("response.on('finish', function _gina_metrics_record");
+            assert.ok(claimIdx > -1, e.n + ' must set request._metricsRecorded = true');
+            assert.ok(wireIdx  > -1, e.n + ' must wire the metrics finish listener');
+            assert.ok(claimIdx < wireIdx, e.n + ': the claim flag must be set BEFORE the finish listener (so onInstance skips)');
+        });
+    });
+
+    it('both engines first-seer-guard the sibling #FI timeline init (!request._devTimeline)', function() {
+        var re = /&&\s*!request\._devTimeline\s*\)\s*\{/;
+        assert.match(ISAAC_SRC,  re, 'server.isaac.js #FI init must be first-seer-guarded (unguarded overwrite drops the earlier requestStart under isaac)');
+        assert.match(SERVER_SRC, re, 'server.js #FI init must be first-seer-guarded (in sync with isaac)');
+    });
+
+    // Behavioral: the runtime VALUE the fix delivers is "recordRequest fires exactly once
+    // per routed request across the double-dispatch". Drive BOTH tops on the SAME
+    // request/response with a counting recordRequest, emit 'finish', assert once — plus a
+    // SUBTRACT proving the pre-fix (unguarded) shape double-fires. (jsdoc.md: a runtime
+    // value needs a behavioral drive + subtract, not just a source pin.)
+    it('both-tops wiring records exactly once per routed request (behavioral double-wire + subtract)', function() {
+        var EventEmitter = require('events');
+
+        // Replica of the shipped #OBS1 hook (gate + claim + finish wiring), locked to the
+        // shipped shape by the source pins above. guarded=false is the pre-fix shape.
+        function metricsHook(request, response, metrics, guarded) {
+            if (metrics.isEnabled() && (!guarded || !request._metricsRecorded)) {
+                if (guarded) { request._metricsRecorded = true; }
+                request._metricsStartTime = Date.now();
+                response.on('finish', function () {
+                    try {
+                        metrics.recordRequest({
+                            method:   request.method,
+                            route:    (request.routing && request.routing.rule) || undefined,
+                            status:   response.statusCode,
+                            duration: Date.now() - request._metricsStartTime
+                        });
+                    } catch (_e) { /* metrics never crashes a request */ }
+                });
+            }
+        }
+
+        function drive(guarded) {
+            var calls = 0;
+            var metrics = { isEnabled: function () { return true; }, recordRequest: function () { calls++; } };
+            var request  = { method: 'GET', routing: { rule: 'homepage@demo' } };
+            var response = new EventEmitter();
+            response.statusCode = 200;
+            // Under isaac a routed request runs BOTH tops on the SAME request/response:
+            metricsHook(request, response, metrics, guarded);  // isaac listener top
+            metricsHook(request, response, metrics, guarded);  // onInstance top (the cb)
+            response.emit('finish');
+            return calls;
+        }
+
+        assert.strictEqual(drive(true),  1, 'guarded: recordRequest fires exactly once across the isaac double-dispatch');
+        assert.strictEqual(drive(false), 2, 'SUBTRACT: without the first-seer guard, the two tops register two finish listeners and recordRequest double-fires (the #OBS1 bug)');
+    });
+
+    // Behavioral: the #FI runtime VALUE is "requestStart keeps the EARLIER (isaac-listener)
+    // time, not onInstance's later overwrite". Deterministic via an injected fake clock.
+    it('#FI first-seer keeps the earlier requestStart across the double-dispatch (behavioral + subtract)', function() {
+        function fiHook(request, inspectorActive, guarded) {
+            if (inspectorActive && (!guarded || !request._devTimeline)) {
+                request._devTimeline = { requestStart: request._fakeNow, entries: [] };
+            }
+        }
+        // guarded: isaac top inits at T0=100; onInstance top (later T1=250) must NOT overwrite.
+        var req = { _fakeNow: 100 };
+        fiHook(req, true, true);          // isaac listener @ 100
+        req._fakeNow = 250;               // time advances into onInstance
+        fiHook(req, true, true);          // onInstance @ 250 — must skip
+        assert.strictEqual(req._devTimeline.requestStart, 100, 'guarded: keeps the isaac-listener requestStart (earlier, more accurate)');
+
+        // SUBTRACT: without the guard, onInstance overwrites requestStart with its later time.
+        var req2 = { _fakeNow: 100 };
+        fiHook(req2, true, false);
+        req2._fakeNow = 250;
+        fiHook(req2, true, false);
+        assert.strictEqual(req2._devTimeline.requestStart, 250, 'SUBTRACT: without the guard, onInstance overwrites requestStart with its later time (drops the isaac-listener setup interval)');
     });
 
 });
