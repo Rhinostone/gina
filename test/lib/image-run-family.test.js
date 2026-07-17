@@ -45,12 +45,14 @@ var assert = require('node:assert/strict');
 var FW          = require('../fw');
 var LIB_MAIN    = path.join(FW, 'lib/image-build/src/main.js');
 var RUN_HANDLER = path.join(FW, 'lib/cmd/image/run.js');
+var HOST_UTIL   = path.join(FW, 'lib/cmd/image/_host.js');
 var HELP_TXT    = path.join(FW, 'lib/cmd/image/help.txt');
 var CMD_HELPER  = path.join(FW, 'lib/cmd/helper.js');
 
 var imageBuild = require(LIB_MAIN);
 
 var runSrc    = fs.readFileSync(RUN_HANDLER, 'utf8');
+var hostSrc   = fs.readFileSync(HOST_UTIL, 'utf8');
 var helpTxt   = fs.readFileSync(HELP_TXT, 'utf8');
 var helperSrc = fs.readFileSync(CMD_HELPER, 'utf8');
 
@@ -451,13 +453,28 @@ describe('image:run — the run family (lib/image-build primitives + lib/cmd/ima
 
         // The build-only probe is the ONE deliberate buildah call: it runs only
         // after podman already failed, so a capable host never pays for it.
+        //
+        // It lives in the shared _host preamble rather than here: image:run,
+        // container:ps and container:stop all need podman and all meet the same
+        // build-only shape, so three copies of the probe would be the very
+        // copy-paste that produced the connectors.json comment-header bug. The
+        // contract is therefore pinned ONCE, on _host.js, and holds for all
+        // three verbs — run.js is pinned to DELEGATE, not to re-implement.
         it('probes buildah ONLY in the failure path, to report a build-only host honestly', function() {
-            assert.match(runSrc, /containerHostSpawn\(host, \['--version'\], 'buildah'\)/);
-            var probeIdx = runSrc.indexOf('var runUnavailableReason');
-            var bodyEnd  = runSrc.indexOf('var isRunIncapable', probeIdx);
+            assert.match(hostSrc, /containerHostSpawn\(host, \['--version'\], 'buildah'\)/);
+            var probeIdx = hostSrc.indexOf('function runUnavailableReason');
+            var bodyEnd  = hostSrc.indexOf('module.exports', probeIdx);
             assert.ok(probeIdx > -1 && bodyEnd > probeIdx, 'the probe helper is where it is expected');
-            assert.match(runSrc.substring(probeIdx, bodyEnd), /buildah .* present — build-only host/);
-            assert.match(runSrc, /image:run needs podman \+ conmon/);
+            assert.match(hostSrc.substring(probeIdx, bodyEnd), /buildah .* present — build-only host/);
+            assert.match(hostSrc.substring(probeIdx, bodyEnd), /verb \+ ' needs podman \+ conmon'/);
+        });
+
+        it('run.js delegates the probe to the shared preamble, naming itself as the verb', function() {
+            assert.match(runSrc, /hostUtil\.runUnavailableReason\(host, hostLabel, 'image:run'\)/);
+            assert.match(runSrc, /hostUtil\.isRunIncapable\(code, errText\)/);
+            // The probe must exist in exactly one place — not re-implemented here.
+            assert.doesNotMatch(runCode, /containerHostSpawn\(host, \['--version'\]/,
+                'the buildah probe lives in _host.js, not in a second copy here');
         });
 
         // The comment-stripped copy is what the negative pin reads: run.js's own

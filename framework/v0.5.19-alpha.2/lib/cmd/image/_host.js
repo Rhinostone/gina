@@ -98,7 +98,63 @@ function resolveHost() {
     }
 }
 
+/**
+ * True when a child failure means "podman is not on this host" rather than
+ * "podman ran and refused". A remote shell reports a missing binary as exit
+ * 127; a native spawn fails with ENOENT before any exit code (the caller checks
+ * that separately, since it never reaches an exit code).
+ *
+ * @function isRunIncapable
+ * @param {number|null} code    - The child exit code
+ * @param {string}      errText - Collected stderr/stdout tail
+ * @returns {boolean}
+ *
+ * @example
+ * isRunIncapable(127, 'sh: podman: command not found'); // true
+ * isRunIncapable(125, 'Error: no such container');      // false — podman ran
+ */
+function isRunIncapable(code, errText) {
+    return code === 127 || /command not found|executable file not found|not found/i.test(String(errText || ''));
+}
+
+/**
+ * Explains a missing podman as what it usually is — a build-only host — rather
+ * than as an opaque exec failure. buildah builds images but cannot run them, so
+ * a host may legitimately have buildah and no podman; that shape is supported
+ * and must be reported honestly.
+ *
+ * The buildah probe runs ONLY from a failure path (podman has already failed to
+ * execute), so a capable host never pays for it. The probe is a courtesy: if it
+ * fails too, the reason still names the real problem.
+ *
+ * @function runUnavailableReason
+ * @param {object} host      - The resolved host descriptor
+ * @param {string} hostLabel - 'native' or the ssh descriptor
+ * @param {string} verb      - The command being explained, e.g. 'image:run'
+ * @returns {string} The user-facing reason
+ *
+ * @example
+ * runUnavailableReason(host, 'ssh://build@lin', 'image:run');
+ * // 'run unavailable on this host: podman not found on ssh://build@lin
+ * //  (buildah 1.44.0 present — build-only host); image:run needs podman + conmon'
+ */
+function runUnavailableReason(host, hostLabel, verb) {
+    var imageBuild = lib.imageBuild;
+    var reason = 'run unavailable on this host: podman not found on ' + hostLabel;
+    try {
+        var probe = imageBuild.containerHostSpawn(host, ['--version'], 'buildah');
+        var res   = spawnSync(probe.command, probe.args, { encoding: 'utf8' });
+        if (res.status === 0) {
+            var m = String(res.stdout || '').match(/buildah version ([0-9][0-9A-Za-z.\-]*)/);
+            reason += ' (buildah ' + (m ? m[1] : 'present') + ' present — build-only host)';
+        }
+    } catch (e) { /* the probe is a courtesy; never let it mask the real failure */ }
+    return reason + '; ' + verb + ' needs podman + conmon';
+}
+
 module.exports = {
     getSettingsContainerHost : getSettingsContainerHost,
-    resolveHost              : resolveHost
+    resolveHost              : resolveHost,
+    isRunIncapable           : isRunIncapable,
+    runUnavailableReason     : runUnavailableReason
 };

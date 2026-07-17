@@ -341,6 +341,7 @@ async function onExec() {
         'bundle:',
         'cache:',
         'connector:',
+        'container:',
         'dev:',
         'env:',
         'i18n:',

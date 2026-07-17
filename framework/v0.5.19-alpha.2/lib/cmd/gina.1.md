@@ -23,6 +23,7 @@ framework
 project
 bundle
 connector
+container
 image
 model
 dev

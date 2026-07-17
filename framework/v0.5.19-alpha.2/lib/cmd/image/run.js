@@ -219,11 +219,9 @@ function Run(opt, cmd) {
     };
 
     /**
-     * The failure-path-only build-only-host probe: asks the host for its
-     * buildah version so a missing podman can be reported as what it usually
-     * is — a build-only host — rather than an opaque exec failure. Runs ONLY
-     * after podman has already failed to execute, so a capable host never pays
-     * for it.
+     * Explains a missing podman as a build-only host. Shared with
+     * `container:ps` / `container:stop` via the `_host` preamble — all three
+     * verbs need podman, and all three meet the same build-only shape.
      *
      * @inner
      * @private
@@ -232,22 +230,12 @@ function Run(opt, cmd) {
      * @returns {string} The user-facing reason
      */
     var runUnavailableReason = function (host, hostLabel) {
-        var reason = 'run unavailable on this host: podman not found on ' + hostLabel;
-        try {
-            var probe = imageBuild.containerHostSpawn(host, ['--version'], 'buildah');
-            var res   = spawnSync(probe.command, probe.args, { encoding: 'utf8' });
-            if (res.status === 0) {
-                var m = String(res.stdout || '').match(/buildah version ([0-9][0-9A-Za-z.\-]*)/);
-                reason += ' (buildah ' + (m ? m[1] : 'present') + ' present — build-only host)';
-            }
-        } catch (e) { /* the probe is a courtesy; never let it mask the real failure */ }
-        return reason + '; image:run needs podman + conmon';
+        return hostUtil.runUnavailableReason(host, hostLabel, 'image:run');
     };
 
     /**
      * True when a child failure means "podman is not on this host" rather than
-     * "podman ran and refused". A remote shell reports a missing binary as
-     * exit 127; a native spawn fails with ENOENT before any exit code.
+     * "podman ran and refused". Shared via the `_host` preamble.
      *
      * @inner
      * @private
@@ -256,7 +244,7 @@ function Run(opt, cmd) {
      * @returns {boolean}
      */
     var isRunIncapable = function (code, errText) {
-        return code === 127 || /command not found|executable file not found|not found/i.test(errText);
+        return hostUtil.isRunIncapable(code, errText);
     };
 
     /**

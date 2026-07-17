@@ -1115,6 +1115,62 @@ function parsePsJson(stdout) {
     return rows;
 }
 
+/**
+ * Digs a container's identity and exit code out of `podman inspect <target>`
+ * stdout — what `container:stop` reports as its "rung": podman exits 0 whether
+ * the container stopped gracefully or was force-killed after the grace period,
+ * so the exit code is the only thing that distinguishes them (measured: a
+ * TERM-trapping container reports 143, a non-trapping one 137).
+ *
+ * Reads the FULL inspect document for the same reason as
+ * {@link parseExposedPorts}: a `--format '{{...}}'` token carries a space, which
+ * {@link containerHostSpawn}'s ssh path hands to a remote shell that splits it.
+ *
+ * podman names a single container `Name` (a string); an array `Names` is
+ * accepted defensively since the `ps` document spells it that way. Anything
+ * unparseable yields nulls rather than throwing — the caller then reports what
+ * it does know instead of crashing on a cosmetic field.
+ *
+ * @function parseInspectState
+ * @param {string} stdout - Raw stdout of `podman inspect <target>`
+ * @returns {{id: (string|null), name: (string|null), exitCode: (number|null)}}
+ *
+ * @example
+ * parseInspectState('[{"Id":"745903c26735...","Name":"demo","State":{"ExitCode":143}}]');
+ * // { id: '745903c26735', name: 'demo', exitCode: 143 }
+ * @example
+ * parseInspectState('garbage'); // { id: null, name: null, exitCode: null }
+ */
+function parseInspectState(stdout) {
+    var empty = { id: null, name: null, exitCode: null };
+    var doc;
+    try {
+        doc = JSON.parse(String(stdout || '').trim() || 'null');
+    } catch (e) {
+        return empty;
+    }
+    if (Array.isArray(doc)) doc = doc[0];
+    if (!doc || typeof doc !== 'object') return empty;
+
+    var name = null;
+    if (typeof doc.Name === 'string' && doc.Name) {
+        // podman inspect renders a leading slash on some shapes; docker always does.
+        name = doc.Name.replace(/^\//, '');
+    } else if (Array.isArray(doc.Names) && doc.Names.length) {
+        name = String(doc.Names[0]);
+    }
+
+    var code = (doc.State && typeof doc.State.ExitCode === 'number' && isFinite(doc.State.ExitCode))
+        ? doc.State.ExitCode
+        : null;
+
+    return {
+        id       : doc.Id ? String(doc.Id).substring(0, 12) : null,
+        name     : name,
+        exitCode : code
+    };
+}
+
 module.exports = {
     DEFAULTS             : DEFAULTS,
     computePorts         : computePorts,
@@ -1136,5 +1192,6 @@ module.exports = {
     isValidPublishSpec   : isValidPublishSpec,
     parseExposedPorts    : parseExposedPorts,
     composeEnvLines      : composeEnvLines,
-    parsePsJson          : parsePsJson
+    parsePsJson          : parsePsJson,
+    parseInspectState    : parseInspectState
 };
