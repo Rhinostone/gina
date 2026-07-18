@@ -4550,3 +4550,148 @@ describe('38 - #COMPLY2 self.audit emits through the real lib/audit (behavioral)
         assert.equal(audit38.isEnabled(), false);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 39 — behavioral: resumeRequest replays a halted GET request (the resume half
+// of the pause/resume pair — §36 covers pauseRequest). Runtime test via the
+// createTestInstance §14 harness / §36 bootstrap mould. The GET branch bottoms
+// out in lib.routing.getRoute (a shared module singleton, not injectable via
+// createTestInstance) + self.redirect — so it monkeypatches lib.routing.getRoute
+// (restored in finally) and stubs inst.redirect with a spy. Covers the resume
+// path documented in class.controller.md §15 (the inheritedData transport).
+// ---------------------------------------------------------------------------
+describe('39 - resumeRequest replays a halted GET request (behavioral)', function() {
+
+    var FW39 = require('../fw');
+    process.env.NODE_PATH = (process.env.NODE_PATH ? process.env.NODE_PATH + path.delimiter : '') + FW39;
+    require('module').Module._initPaths();
+    require(path.join(FW39, 'helpers'));
+    setPath('gina', { core: path.join(FW39, 'core') });
+    var SuperController39 = require(SOURCE);
+    // The SAME lib.routing instance controller.js resolves: controller.js
+    // `require('./../../lib')` and this both resolve <FW>/lib/index.js (one cache
+    // entry), and `.routing` is a stable gen-0 instance — so patching its
+    // getRoute is exactly what controller.js reads at the resume site (~:5739).
+    var lib39 = require(path.join(FW39, 'lib'));
+
+    function makeInstance39(reqOverrides) {
+        var req = Object.assign({
+            url     : '/login',
+            method  : 'GET',
+            headers : {},                                  // isPopinContext reads req.headers
+            routing : { rule: 'login', namespace: 'default', param: {} },
+            params  : {},
+            get     : {},
+            post    : {}
+        }, reqOverrides || {});
+        return SuperController39.createTestInstance({
+            req     : req,
+            res     : { setHeader: function () {}, end: function () {}, writeHead: function () {} },
+            options : {
+                conf : {
+                    bundle : 'b',
+                    // resumeRequest iterates this before resolving the route (~:5725)
+                    server : { supportedRequestMethods: { get: 1, post: 1, put: 1, 'delete': 1 } },
+                    content: { routing: { login: {} } }
+                },
+                rule    : 'login',
+                control : 'index'
+            }
+        });
+    }
+
+    // A halted GET snapshot (same namespace as the live req → no requireController).
+    function haltedGet(overrides) {
+        return Object.assign({
+            url     : '/orders/42',
+            routing : { rule: 'orders', namespace: 'default', param: {} },
+            method  : 'GET',
+            data    : {},
+            params  : { id: '42' }
+        }, overrides || {});
+    }
+
+    // Monkeypatch the shared lib.routing.getRoute; restore in finally.
+    function withStubbedRoute(url, fn) {
+        var real  = lib39.routing.getRoute;
+        var calls = [];
+        lib39.routing.getRoute = function () {
+            calls.push(Array.prototype.slice.call(arguments));
+            return { url: url };
+        };
+        try { return fn(calls); }
+        finally { lib39.routing.getRoute = real; }
+    }
+
+    it('GET branch: resolves the url via lib.routing.getRoute and redirects (url, true)', function() {
+        withStubbedRoute('/resolved', function (routeCalls) {
+            var inst = makeInstance39();
+            var redirectCalls = [];
+            inst.redirect = function () { redirectCalls.push(Array.prototype.slice.call(arguments)); };
+
+            var storage = { haltedRequest: haltedGet() };
+            inst.resumeRequest(storage);
+
+            // resolved from the HALTED rule + params (not the live req's)
+            assert.equal(routeCalls.length, 1, 'lib.routing.getRoute called once');
+            assert.equal(routeCalls[0][0], 'orders', 'arg 1 = haltedRequest.routing.rule');
+            assert.deepStrictEqual(routeCalls[0][1], { id: '42' }, 'arg 2 = haltedRequest.params');
+
+            // the non-XHR GET path bottoms out in self.redirect(url, true)
+            assert.equal(redirectCalls.length, 1, 'self.redirect called once');
+            assert.deepStrictEqual(redirectCalls[0], ['/resolved', true]);
+
+            // the resume marker is stamped and the snapshot is consumed (one-shot)
+            assert.equal(storage.haltedRequestUrlResumed, '/resolved');
+            assert.equal('haltedRequest' in storage, false, 'the halted snapshot is deleted');
+        });
+    });
+
+    it('defaults storage to req.session when requestStorage is omitted', function() {
+        withStubbedRoute('/resolved', function () {
+            var session = { haltedRequest: haltedGet() };
+            var inst    = makeInstance39({ session: session });
+            var redirectCalls = [];
+            inst.redirect = function () { redirectCalls.push(Array.prototype.slice.call(arguments)); };
+
+            inst.resumeRequest();   // no explicit storage → reads req.session
+
+            assert.equal(session.haltedRequestUrlResumed, '/resolved');
+            assert.equal(redirectCalls.length, 1, 'redirected via the session-held snapshot');
+        });
+    });
+
+    it('no haltedRequest: throwErrors (424) and resolves no route / issues no redirect', function() {
+        withStubbedRoute('/resolved', function (routeCalls) {
+            var inst = makeInstance39();
+            var errs = [];
+            inst.throwError = function (e) { errs.push(e); };
+            var redirectCalls = [];
+            inst.redirect = function () { redirectCalls.push(1); };
+
+            inst.resumeRequest({});   // storage carries no haltedRequest
+
+            assert.equal(errs.length, 1, 'throwError fired');
+            assert.match(String(errs[0] && errs[0].message), /haltedRequest.*required/i,
+                'the 424 guard message');
+            assert.equal(routeCalls.length, 0, 'no route resolved on the guard path');
+            assert.equal(redirectCalls.length, 0, 'no redirect on the guard path');
+        });
+    });
+
+    it('already-resumed (local.haltedRequestUrlResumed): a second resume is a no-op', function() {
+        withStubbedRoute('/resolved', function (routeCalls) {
+            var inst = makeInstance39();
+            inst.redirect = function () {};
+
+            var storage = { haltedRequest: haltedGet() };
+            inst.resumeRequest(storage);              // first resume (sets the local flag)
+            assert.equal(routeCalls.length, 1);
+
+            storage.haltedRequest = haltedGet();      // re-arm — so ONLY the flag can stop a 2nd resume
+            inst.resumeRequest(storage);              // second: early-returns before getRoute
+            assert.equal(routeCalls.length, 1, 'the local flag short-circuits before getRoute');
+        });
+    });
+});
