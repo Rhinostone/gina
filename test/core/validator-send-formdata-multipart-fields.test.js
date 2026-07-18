@@ -38,7 +38,7 @@ var FW            = require('../fw');
 var MAIN_SRC_PATH = path.join(FW, 'core/plugins/lib/validator/src/main.js');
 var DIST_JS       = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.js');
 var DIST_MIN      = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.min.js');
-var Busboy        = require(path.join(FW, 'core/deps/busboy-1.6.0'));
+var Busboy        = require('@rhinostone/busboy');
 
 // the REAL server-side nesting helper (implicit global once DataHelper runs)
 require(path.join(FW, 'helpers', 'data', 'src', 'main.js'))();

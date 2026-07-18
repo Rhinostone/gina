@@ -38,7 +38,7 @@ var { Readable } = require('stream');
 
 var FW         = require('../fw');
 var SERVER_SRC = path.join(FW, 'core/server.js');
-var Busboy     = require(path.join(FW, 'core/deps/busboy-1.6.0'));
+var Busboy     = require('@rhinostone/busboy');
 
 // Strip full-line `//` comments so negative pins do not trip on commented-out lines
 // (jsdoc.md: "a negative source-inspection pin trips on the file's own comment").

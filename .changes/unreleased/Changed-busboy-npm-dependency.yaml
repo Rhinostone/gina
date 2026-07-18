@@ -1,0 +1,3 @@
+kind: Changed
+body: 'Multipart parsing now uses `@rhinostone/busboy` installed from npm instead of a patched copy vendored inside the framework. The fork is a strict superset of upstream busboy 1.6.0 whose only addition exposes each part''s parsed Content-Disposition parameters, which is what lets the upload layer read the `group="..."` tag — previously a local patch that had to be re-applied by hand on every upstream upgrade. Upload behaviour and the multipart wire format are unchanged: files still arrive with their group, an unconfigured group is still rejected, and a file with no group still falls back to `untagged`. Pickup is the version plus a bundle restart; no client rebuild is needed.'
+time: 2026-07-18T17:24:01+01:00

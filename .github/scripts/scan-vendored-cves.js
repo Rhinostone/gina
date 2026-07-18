@@ -8,23 +8,37 @@
  */
 
 /**
- * OSV-based CVE scan for vendored deps.
+ * OSV-based CVE scan for dependencies whose advisories name-based matching
+ * would otherwise MISS.
  *
- * Walks every `package.json` under `framework/v*\/core/deps/`, extracts
- * `(name, version)` pairs, queries `api.osv.dev`, and exits non-zero if
- * any vulnerability is matched.
+ * Two target sources, unioned:
  *
- * Pinning convention (see internal architecture docs): the
- * vendored `package.json` stays byte-identical to upstream until
- * patched; on patch, `version` is bumped to `<upstream>-rhinostone.N`
- * (e.g. `1.6.0-rhinostone.1`). This script strips the
+ *   1. **Forked npm deps** (`TRACKED_FORKS`). Gina consumes maintained forks of
+ *      dormant upstreams (e.g. `@rhinostone/busboy`, a strict superset of
+ *      `busboy@1.6.0`). OSV matches advisories by package NAME, so an advisory
+ *      filed against `busboy` will never match `@rhinostone/busboy` — nor will
+ *      `npm audit` / Dependabot / Socket flag it. This scan therefore queries
+ *      the UPSTREAM BASE coordinates explicitly. Each entry is cross-checked
+ *      against the manifests: a fork that is no longer declared anywhere is
+ *      reported as stale so the table cannot silently rot.
+ *
+ *   2. **Vendored deps** under `framework/v*\/core/deps/<dep>/package.json`, if
+ *      any exist. Gina de-vendored busboy + streamsearch in favour of the npm
+ *      fork, so this source is normally EMPTY — it is retained so that any
+ *      future re-vendoring is picked up automatically rather than silently
+ *      escaping the scan.
+ *
+ * Pinning convention for vendored copies: the vendored `package.json` stays
+ * byte-identical to upstream until patched; on patch, `version` is bumped to
+ * `<upstream>-rhinostone.N` (e.g. `1.6.0-rhinostone.1`). This script strips the
  * `-rhinostone.N` suffix before querying so OSV still matches the base
  * upstream version.
  *
  * Exit codes:
  *   0 — clean, no CVEs matched
  *   1 — at least one vulnerability matched (build fails)
- *   2 — scan error (malformed package.json, network failure)
+ *   2 — scan error (malformed package.json, network failure, or NOTHING to
+ *       scan — an empty target list is treated as a broken scan, never a pass)
  *
  * @module .github/scripts/scan-vendored-cves
  */
@@ -36,6 +50,68 @@ var path  = require('path');
 var https = require('https');
 
 var ROOT = path.resolve(__dirname, '..', '..');
+
+/**
+ * Forked npm dependencies and the UPSTREAM coordinates their advisories are
+ * filed against. Keep `base` in step with whatever upstream release the fork is
+ * rebased onto; add the fork's own runtime deps too, since those are pulled in
+ * under their real upstream names and are what actually ship.
+ *
+ * @constant {Array<{pkg: string, base: {name: string, version: string}, deps: Array<{name: string, version: string}>}>}
+ */
+var TRACKED_FORKS = [
+    {
+        // @rhinostone/busboy@1.6.x — gina-io/busboy, a strict superset of
+        // upstream busboy@1.6.0 exposing `info.dispositionParams`.
+        pkg:  '@rhinostone/busboy',
+        base: { name: 'busboy', version: '1.6.0' },
+        deps: [
+            { name: 'streamsearch', version: '1.1.0' }
+        ]
+    }
+];
+
+/**
+ * Manifests a forked dep may be declared in. Both are checked so a fork dropped
+ * from one but not the other still counts as declared.
+ *
+ * @returns {string[]} absolute paths to every manifest that exists
+ */
+function manifestPaths() {
+    var out = [path.join(ROOT, 'package.json')];
+    var frameworkDir = path.join(ROOT, 'framework');
+    if (fs.existsSync(frameworkDir)) {
+        var fws = fs.readdirSync(frameworkDir);
+        for (var i = 0; i < fws.length; i++) {
+            var p = path.join(frameworkDir, fws[i], 'package.json');
+            if (fs.existsSync(p)) out.push(p);
+        }
+    }
+    return out.filter(function (p) { return fs.existsSync(p); });
+}
+
+/**
+ * Is `name` declared as a dependency in any manifest?
+ *
+ * @param {string} name
+ * @returns {boolean}
+ */
+function isDeclared(name) {
+    var manifests = manifestPaths();
+    for (var i = 0; i < manifests.length; i++) {
+        var pkg;
+        try {
+            pkg = JSON.parse(fs.readFileSync(manifests[i], 'utf8'));
+        } catch (e) {
+            continue;
+        }
+        var buckets = [pkg.dependencies, pkg.devDependencies, pkg.optionalDependencies];
+        for (var b = 0; b < buckets.length; b++) {
+            if (buckets[b] && Object.prototype.hasOwnProperty.call(buckets[b], name)) return true;
+        }
+    }
+    return false;
+}
 
 /**
  * Walk every `framework/v*\/core/deps/<dep>/package.json` and return the
@@ -70,6 +146,58 @@ function walkDepsPackageJsons() {
  */
 function normalizeVersion(v) {
     return String(v).replace(/-rhinostone\.\d+$/, '');
+}
+
+/**
+ * Build the full scan target list from both sources.
+ *
+ * @returns {{targets: Array<{name: string, version: string, origin: string}>, stale: string[], error: (string|null)}}
+ */
+function collectTargets() {
+    var targets = [];
+    var stale   = [];
+
+    for (var i = 0; i < TRACKED_FORKS.length; i++) {
+        var fork = TRACKED_FORKS[i];
+        if (!isDeclared(fork.pkg)) {
+            stale.push(fork.pkg);
+            continue;
+        }
+        targets.push({
+            name:    fork.base.name,
+            version: fork.base.version,
+            origin:  'fork base of ' + fork.pkg
+        });
+        for (var d = 0; d < (fork.deps || []).length; d++) {
+            targets.push({
+                name:    fork.deps[d].name,
+                version: fork.deps[d].version,
+                origin:  'dependency of ' + fork.pkg
+            });
+        }
+    }
+
+    var vendored = walkDepsPackageJsons();
+    for (var v = 0; v < vendored.length; v++) {
+        var rel = path.relative(ROOT, vendored[v]);
+        var pkg;
+        try {
+            pkg = JSON.parse(fs.readFileSync(vendored[v], 'utf8'));
+        } catch (e) {
+            return { targets: [], stale: stale, error: rel + ': cannot parse (' + e.message + ')' };
+        }
+        if (!pkg.name || !pkg.version) {
+            console.log('[osv] SKIP ' + rel + ': missing name or version');
+            continue;
+        }
+        targets.push({
+            name:    pkg.name,
+            version: normalizeVersion(pkg.version),
+            origin:  'vendored at ' + rel
+        });
+    }
+
+    return { targets: targets, stale: stale, error: null };
 }
 
 /**
@@ -116,42 +244,46 @@ function queryOSV(name, version) {
 }
 
 /**
- * Scan driver. Walks the target package.jsons, queries OSV for each,
- * prints a one-line status per dep, exits with the appropriate code.
+ * Scan driver. Builds the target list, queries OSV for each, prints a one-line
+ * status per target, exits with the appropriate code.
  *
  * @returns {Promise<number>} exit code
  */
 async function main() {
-    var pkgs = walkDepsPackageJsons();
-    if (pkgs.length === 0) {
-        console.log('[osv] no vendored package.json files found under framework/v*/core/deps/');
-        return 0;
+    var collected = collectTargets();
+
+    if (collected.error) {
+        console.error('[osv] ' + collected.error);
+        return 2;
+    }
+
+    for (var s = 0; s < collected.stale.length; s++) {
+        console.error('[osv] STALE TRACKED_FORKS entry: `' + collected.stale[s] +
+                      '` is not declared in any manifest — remove it from the table or restore the dependency.');
+    }
+    if (collected.stale.length > 0) return 2;
+
+    var targets = collected.targets;
+
+    // An empty target list means the scan inspected NOTHING. Treat that as a
+    // broken scan (2), never a pass (0): a gate that silently degrades to green
+    // reports "clean" forever while providing zero coverage.
+    if (targets.length === 0) {
+        console.error('[osv] no scan targets resolved — TRACKED_FORKS is empty AND no vendored ' +
+                      'package.json files exist under framework/v*/core/deps/. Refusing to report ' +
+                      'a clean scan over nothing.');
+        return 2;
     }
 
     var failures = 0;
     var scanned  = 0;
-    for (var i = 0; i < pkgs.length; i++) {
-        var pkgPath = pkgs[i];
-        var rel     = path.relative(ROOT, pkgPath);
-        var pkg;
-        try {
-            pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-        } catch (e) {
-            console.error('[osv] ' + rel + ': cannot parse (' + e.message + ')');
-            return 2;
-        }
-        if (!pkg.name || !pkg.version) {
-            console.log('[osv] SKIP ' + rel + ': missing name or version');
-            continue;
-        }
-
-        var baseVersion = normalizeVersion(pkg.version);
-        var suffix      = (pkg.version !== baseVersion) ? ' (patched: ' + pkg.version + ')' : '';
+    for (var i = 0; i < targets.length; i++) {
+        var t = targets[i];
         var result;
         try {
-            result = await queryOSV(pkg.name, baseVersion);
+            result = await queryOSV(t.name, t.version);
         } catch (e) {
-            console.error('[osv] ' + rel + ': query failed — ' + e.message);
+            console.error('[osv] ' + t.name + '@' + t.version + ': query failed — ' + e.message);
             return 2;
         }
 
@@ -159,7 +291,7 @@ async function main() {
         var vulns = result.vulns || [];
         if (vulns.length > 0) {
             failures++;
-            console.error('[osv] VULNERABLE ' + pkg.name + '@' + baseVersion + suffix + ' (' + rel + ')');
+            console.error('[osv] VULNERABLE ' + t.name + '@' + t.version + ' (' + t.origin + ')');
             for (var v = 0; v < vulns.length; v++) {
                 var entry   = vulns[v];
                 var aliases = (entry.aliases || []).join(', ');
@@ -167,16 +299,16 @@ async function main() {
                 console.error('       ' + entry.id + (aliases ? ' (' + aliases + ')' : '') + ' — ' + summary);
             }
         } else {
-            console.log('[osv] OK ' + pkg.name + '@' + baseVersion + suffix + ' (' + rel + ')');
+            console.log('[osv] OK ' + t.name + '@' + t.version + ' (' + t.origin + ')');
         }
     }
 
     console.log('');
     if (failures > 0) {
-        console.error('[osv] ' + failures + ' vendored dep(s) with matching CVEs — failing the build.');
+        console.error('[osv] ' + failures + ' dep(s) with matching CVEs — failing the build.');
         return 1;
     }
-    console.log('[osv] clean — no CVEs matched across ' + scanned + ' vendored dep(s).');
+    console.log('[osv] clean — no CVEs matched across ' + scanned + ' scanned dep(s).');
     return 0;
 }
 

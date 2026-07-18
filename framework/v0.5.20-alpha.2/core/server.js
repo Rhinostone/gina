@@ -37,7 +37,14 @@ const EventEmitter  = require('events').EventEmitter;
 // or a safety gate rejects the project's pin. The module is cached on
 // process.gina._swig after the first call; `swig` below resolves to the
 // framework default when no bundle has loaded yet.
-const Busboy        = require('./deps/busboy-1.6.0');
+// Busboy is consumed from npm as @rhinostone/busboy — a strict superset of the
+// dormant upstream busboy@1.6.0 whose only addition is `info.dispositionParams`
+// (each part's parsed Content-Disposition params), which is what lets the
+// upload handler below read the `group="…"` tag. It replaces the former
+// vendored copy at core/deps/busboy-1.6.0, which carried the same capability as
+// a local patch that had to be re-applied on every upstream upgrade.
+// was: const Busboy = require('./deps/busboy-1.6.0');
+const Busboy        = require('@rhinostone/busboy');
 const Stream        = require('stream');
 const util          = require('util');
 const crypto        = require('crypto');
@@ -4431,9 +4438,27 @@ function Server(options) {
                         }
                     });
 
-                    // Attention: on busboy upgrade, we needs to adapt `busboy/lib/types/multipart.js`
-                    // For this, check the emit method
-                    busboy.on('file', function(fieldname, file, filename, encoding, mimetype, group) {
+                    // @rhinostone/busboy emits upstream's object-style `info`
+                    // ({ filename, encoding, mimeType }) plus the fork's additive
+                    // `info.dispositionParams` — the part's parsed Content-Disposition
+                    // params. The former vendored copy instead threaded `group` as a 6th
+                    // POSITIONAL arg via a local patch to lib/types/multipart.js, which had
+                    // to be re-applied on every upstream upgrade; reading it off `info` here
+                    // is what retires that patch. A part carrying no `group` param yields
+                    // undefined, which the #B50 gate below resolves to `untagged`.
+                    // was: busboy.on('file', function(fieldname, file, filename, encoding, mimetype, group) {
+                    busboy.on('file', function(fieldname, file, info) {
+
+                        // Keep these as locals — do NOT inline `info.filename` /
+                        // `info.dispositionParams.group` at the use sites below. The #B49
+                        // and #B50 source pins in upload-config.test.js and
+                        // upload-groups.test.js assert on the identifiers `filename` and
+                        // `group` inside this body; neither file mentions busboy, so
+                        // inlining would break two suites for a non-obvious reason.
+                        var filename = info.filename;
+                        var encoding = info.encoding;
+                        var mimetype = info.mimeType;
+                        var group    = ( info.dispositionParams ) ? info.dispositionParams.group : undefined;
 
                         file._dataLen = 0;
                         ++fileCount;

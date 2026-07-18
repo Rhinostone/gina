@@ -110,6 +110,7 @@
   "license": "MIT",
   "readmeFilename": "README.md",
   "dependencies": {
+    "@rhinostone/busboy": "^1.6.1",
     "@rhinostone/swig": "^2.7.2",
     "engine.io": "^6.6.7",
     "psl": "^1.15.0",
