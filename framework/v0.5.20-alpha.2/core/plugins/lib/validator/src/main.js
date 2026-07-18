@@ -7259,8 +7259,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var stringifiedRules = JSON.stringify(rules);
         fields = formatFields(stringifiedRules, fields);
         if ( /\$(.*)/.test(stringifiedRules) ) {
+            // #B127 — `$fields` is null on the server paths (backendInit passes
+            // validate($form, fields, null, rules, …)), so the unguarded
+            // `$fields.count()` crashed the server pass for ANY `$`-bearing rule
+            // set (plain `is` included) before the rules ever ran. A server pass
+            // is a full-form pass by definition — never a single-element live-check.
             var isLiveCheckingOnASingleElement = (
-                !/^form$/i.test($formOrElement.tagName)
+                $fields
+                && !/^form$/i.test($formOrElement.tagName)
                 && $fields.count() == 1
                 && /true/i.test($formOrElement.form.dataset.ginaFormLiveCheckEnabled)
             ) ? true : false;
@@ -7328,17 +7334,25 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             // check each field against rule
             for (var rule in rules[field]) {
-                // skip when not processing rule function
-                if ( typeof(d[field][rule]) != 'function' ) {
-                    continue;
-                }
-
-                if ( /^((is)\d+|is$)/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases
+                // #B127 — numbered `is` aliases (`is0`, `is1`, …) must be installed
+                // BEFORE the function typecheck below: the installer requires the
+                // `undefined` state the typecheck `continue`s on, so with the old
+                // order (typecheck first) the installer was unreachable and every
+                // `is<N>` rule key was silently skipped — client AND server. The
+                // regex is anchored: the old unanchored alternative also matched
+                // names like `is0abc`, which would inherit from a nonexistent base.
+                // was (below the typecheck — unreachable):
+                // if ( /^((is)\d+|is$)/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases
+                if ( /^is\d+$/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases
                     d[field][rule] = function(){};
                     d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
                     d[field][rule].setAlias = (function(alias) {
                         this._currentValidatorAlias = alias
                     }(rule));
+                }
+                // skip when not processing rule function
+                if ( typeof(d[field][rule]) != 'function' ) {
+                    continue;
                 }
                 // check for rule params
                 try {

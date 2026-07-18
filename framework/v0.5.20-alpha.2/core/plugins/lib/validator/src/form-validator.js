@@ -1049,9 +1049,17 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
          * */
         self[el]['is'] = function(condition, errorMessage, errorStack) {
             var isValid     = false;
-            var alias       = ( typeof(window) != 'undefined' && typeof(window._currentValidatorAlias) != 'undefined' ) ? window._currentValidatorAlias : 'is';
-            if ( typeof(window) != 'undefined'  && window._currentValidatorAlias)
-                delete window._currentValidatorAlias;
+            // #B127 — alias root: window in the browser, the Node global on the
+            // server, so numbered `is<N>` aliases keep DISTINCT error keys on both
+            // sides. The installer's setAlias IIFE already writes the alias to the
+            // Node global (sloppy-mode `this`); the old window-only read collapsed
+            // every server alias to the shared key `is`, which let a later PASSING
+            // alias delete an earlier FAILING alias's error (see the !isValid /
+            // delete bookkeeping below) — the field then validated clean.
+            var _aliasRoot  = ( typeof(window) != 'undefined' ) ? window : ( ( typeof(global) != 'undefined' ) ? global : null );
+            var alias       = ( _aliasRoot && typeof(_aliasRoot._currentValidatorAlias) != 'undefined' ) ? _aliasRoot._currentValidatorAlias : 'is';
+            if ( _aliasRoot && _aliasRoot._currentValidatorAlias )
+                delete _aliasRoot._currentValidatorAlias;
 
             var errors      = self[this['name']]['errors'] || {};
             local.data[this.name] = self[this.name].value;
