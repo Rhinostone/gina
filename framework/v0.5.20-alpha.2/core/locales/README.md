@@ -55,6 +55,31 @@ node src/make --target=region --region=en,fr
 
 A `dist/region/en.json` file will be created.
 
+Each requested language emits its own **standalone** `dist/region/<lang>.json` —
+`--region=en,fr` writes `en.json` AND `fr.json`, each carrying the full country
+set exactly once. Rows without an ISO 3166 alpha-2 code are dropped (they cannot
+be matched by `isoShort` and carry no display name). An optional
+`--outdir=<path>` writes the files somewhere else (defaults to
+`dist/<target>`).
+
+#### Per-language short names — `resources/region.names.<lang>.json`
+
+The CSV carries English short names (CLDR, `ZZ-alt-short` when available — see
+above) and the LONG official names per language, but no non-English short-name
+column. For any language other than `en`, the build therefore overlays
+`countryName` from `resources/region.names.<lang>.json` — a flat
+`{ "<ISO 3166 alpha-2>": "<short name>" }` map sitting beside `region.csv` —
+and **fails fast** if that file is missing for a requested language, so a build
+can never silently ship English names under a non-English filename.
+
+`region.names.fr.json` ships with the framework. Provenance: Unicode CLDR
+(`cldr-localenames-full/main/fr/territories.json`), retrieved 2026-07-18, using
+the **plain** territory names — the French `-alt-short` variants are
+abbreviations (`É.-U.`, `R.-U.`), not display names, so the plain form is used
+deliberately (this differs from the CSV's own English column, which prefers
+`-alt-short`). To add a language, drop a `region.names.<lang>.json` built the
+same way and run `node src/make --target=region --region=<lang>`.
+
 __NB.: To keep the file updated__
 ```tty
  npm install data.js

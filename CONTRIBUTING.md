@@ -97,6 +97,17 @@ node --test test/**/*.test.js framework/v*/test/unit/*.test.js
 node --test test/core/controller.test.js
 ```
 
+Some tests resolve the framework the way a consuming project does — via
+`require('gina')`. For that to resolve from inside the clone, the repository
+must be reachable as its own `gina` module. Create a one-time self-symlink (it
+lives inside the gitignored `node_modules/`, so it never shows in `git status`):
+
+```bash
+mkdir -p node_modules && ln -sfn "$PWD" node_modules/gina
+```
+
+Without it, a handful of suite members fail with `Cannot find module 'gina'`.
+
 ---
 
 ## Development environment
