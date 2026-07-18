@@ -5233,13 +5233,16 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Get locales
      * Will take only supported lang
      *
-     * @param {string} [shortCountryCode] - e.g. EN
+     * @param {string} [shortCountryCode] - language code of the region set to load, e.g. `fr`; defaults to the request's resolved language
      *
      * @returns {object} locales
      * */
     this.getLocales = function (shortCountryCode) {
 
-        var userLocales = local.options.conf.locales;
+        // `|| []` — a bundle without views never runs the setOptions locale
+        // bridge, so `conf.locales` can be undefined; the projection below
+        // must degrade to an empty list instead of throwing
+        var userLocales = local.options.conf.locales || [];
 
         if ( typeof(shortCountryCode) != 'undefined' ) {
             shortCountryCode = shortCountryCode.toLowerCase();
@@ -5260,17 +5263,35 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         /**
          * Get countries list
          *
-         * @param {string} [code] - e.g.: officialStateName, isoShort, isoLong, continent, capital, currency.name
+         * Each row always carries `isoShort`, `isoLong`, `countryName`
+         * (the localized short name for the resolved language) and
+         * `officialStateName` (the long official form when the source data
+         * provides one). Passing a valid extra field name adds that field
+         * to every returned row.
+         *
+         * @param {string} [code] - extra field to project on each row, e.g.: `capital`, `continent`, `tld`
          *
          * @returns {object} countries - countries code & value list
+         *
+         * @example
+         * // rows for the request's resolved language
+         * var countries = self.getLocales().getCountries();
+         * // rows extended with the capital city
+         * var withCapitals = self.getLocales().getCountries('capital');
          * */
         var getCountries = function (code) {
-            var list = [], cde = 'countryName';
+            // was: `cde` defaulted to 'countryName', could be reassigned from
+            // `code`, and was then never read — the documented projection
+            // argument had no effect (gina-io/gina#50). A valid `code` now
+            // extends the projection; the 4 historical fields stay untouched.
+            // The `userLocales.length > 0` guard keeps an empty locale set
+            // from throwing on the `userLocales[0]` probe.
+            var list = [], cde = null;
 
-            if ( typeof(code) != 'undefined' && typeof(userLocales[0][code]) == 'string' ) {
+            if ( typeof(code) != 'undefined' && userLocales.length > 0 && typeof(userLocales[0][code]) == 'string' ) {
                 cde = code
             } else if ( typeof(code) != 'undefined' ) {
-                console.warn('`'+ code +'` not supported : sticking with `short` code')
+                console.warn('`'+ code +'` not supported : sticking with the default countries projection')
             }
 
 
@@ -5281,6 +5302,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     countryName: userLocales[i].countryName,
                     officialStateName: userLocales[i].officialStateName
                 };
+                if (cde) {
+                    list[ i ][ cde ] = userLocales[i][ cde ]
+                }
             }
 
             return list
