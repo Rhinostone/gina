@@ -5,8 +5,9 @@ updates:
     schedule:
       interval: "weekly"
     ignore:
-      # Vendored dependencies under framework/v*/ are managed manually.
-      # They are not installed via npm — do not auto-update them.
+      # Suppress noisy semver-patch bumps for every npm dependency — patch updates
+      # are low-risk and are applied by hand when needed. Minor/major bumps still
+      # open PRs (capped by open-pull-requests-limit below).
       - dependency-name: "*"
         update-types: ["version-update:semver-patch"]
     open-pull-requests-limit: 5

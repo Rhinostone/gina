@@ -81,7 +81,7 @@
     "preferedCompressionEncodingOrder": ["br", "deflate", "gzip", "zstdn", "dcb", "dcz", "compress"]
   },
   "upload": {
-    "_comment": "for more details, check out https://github.com/mscdex/busboy",
+    "_comment": "for more details, check out https://github.com/gina-io/busboy",
     "encoding": "utf8",
     "tmpPath": "${tmpPath}",
     "maxFieldsSize": "2MB", // for all uploads by default - can be redefined under the group
