@@ -1,47 +1,5 @@
 [
   {
-    "countryName": "",
-    "officialStateName": "Channel Islands",
-    "isoShort": "",
-    "isoLong": "",
-    "dial": [
-      ""
-    ],
-    "currency": {
-      "alphacode": "",
-      "minorUnit": "",
-      "name": ""
-    },
-    "isIndependent": "",
-    "capital": "",
-    "continent": "",
-    "tld": "",
-    "languages": [
-      ""
-    ]
-  },
-  {
-    "countryName": "",
-    "officialStateName": "Sark",
-    "isoShort": "",
-    "isoLong": "",
-    "dial": [
-      ""
-    ],
-    "currency": {
-      "alphacode": "",
-      "minorUnit": "",
-      "name": ""
-    },
-    "isIndependent": "",
-    "capital": "",
-    "continent": "",
-    "tld": "",
-    "languages": [
-      ""
-    ]
-  },
-  {
     "countryName": "Afghanistan",
     "officialStateName": "Afghanistan",
     "isoShort": "AF",

@@ -104,10 +104,21 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
     }
     var Collection = require('lib/collection');
 
-    var EN_LEN = null, FR_LEN = null;
-    for (var k = 0; k < LOCALES.length; k++) {
-        if (LOCALES[k].lang === 'en') { EN_LEN = LOCALES[k].content.length; }
-        if (LOCALES[k].lang === 'fr') { FR_LEN = LOCALES[k].content.length; }
+    // Content discriminator — the sets are told apart by the DE row's
+    // localized short name ('Germany' → en, 'Allemagne' → fr). Size stopped
+    // discriminating when the #50 fix regenerated both files to the same
+    // healthy 249-row shape (the old en-251 / fr-502 size gap was itself a
+    // property of the #50 duplication bug this replica used to lean on).
+    function resolvedLang(rows) {
+        if (!rows || !rows.length) { return null; }
+        for (var i = 0; i < rows.length; i++) {
+            if (rows[i].isoShort === 'DE') {
+                if (rows[i].countryName === 'Allemagne') { return 'fr'; }
+                if (rows[i].countryName === 'Germany')   { return 'en'; }
+                return null;
+            }
+        }
+        return null;
     }
 
     // Verbatim-lifted helper (locked to the shipped block by the §01 pins).
@@ -158,10 +169,18 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
     var confLegacyBad   = { content: { settings: { region: { shortCode: 'zz' } } } };
     var confLegacyGood  = { content: { settings: { region: { shortCode: 'fr' } } } };
 
-    it('sanity — region data loaded with en and fr', function() {
-        assert.ok(EN_LEN > 0, 'en region data present');
-        assert.ok(FR_LEN > 0, 'fr region data present');
-        assert.notEqual(EN_LEN, FR_LEN, 'the two region sets are distinguishable by size');
+    it('sanity — region data loaded, en and fr distinguishable by content', function() {
+        var en = null, fr = null;
+        for (var k = 0; k < LOCALES.length; k++) {
+            if (LOCALES[k].lang === 'en') { en = LOCALES[k].content; }
+            if (LOCALES[k].lang === 'fr') { fr = LOCALES[k].content; }
+        }
+        assert.ok(en && en.length > 0, 'en region data present');
+        assert.ok(fr && fr.length > 0, 'fr region data present');
+        // can-fail control in BOTH directions — a duplicated or unlocalized
+        // fr file (the #50 defect shapes) classifies as 'en' and fails here
+        assert.equal(resolvedLang(en), 'en', 'en set must classify as en');
+        assert.equal(resolvedLang(fr), 'fr', 'fr set must classify as fr');
     });
 
     it('helper: isoShort wins, shortCode is legacy fallback, en is the final default', function() {
@@ -176,14 +195,14 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
     it('loaded language takes the try path — catch untouched', function() {
         var warns = [];
         var out = newBridge(confSchemaValid, 'en', warns);
-        assert.equal(out.length, EN_LEN);
+        assert.equal(resolvedLang(out), 'en');
         assert.equal(warns.length, 0);
     });
 
     it('unknown lang + schema-valid region → isoShort fallback, honest warn', function() {
         var warns = [];
         var out = newBridge(confSchemaValid, 'xx', warns);
-        assert.equal(out.length, FR_LEN, 'isoShort fr resolved the fr region set');
+        assert.equal(resolvedLang(out), 'fr', 'isoShort fr resolved the fr region set');
         assert.match(warns[0], /replacing by default: `fr`/);
         assert.doesNotMatch(warns[0], /undefined/);
     });
@@ -191,28 +210,28 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
     it('unknown lang + region WITHOUT isoShort/shortCode → en default, honest warn', function() {
         var warns = [];
         var out = newBridge(confNoIsoShort, 'xx', warns);
-        assert.equal(out.length, EN_LEN);
+        assert.equal(resolvedLang(out), 'en');
         assert.match(warns[0], /replacing by default: `en`/);
     });
 
     it('unknown lang + region block ABSENT → NO throw, en default (pre-fix: TypeError)', function() {
         var warns = [];
         var out = newBridge(confNoRegion, 'xx', warns);
-        assert.equal(out.length, EN_LEN);
+        assert.equal(resolvedLang(out), 'en');
         assert.match(warns[0], /replacing by default: `en`/);
     });
 
     it('legacy shortCode naming an UNLOADED lang → NO throw, en retry (pre-fix: TypeError)', function() {
         var warns = [];
         var out = newBridge(confLegacyBad, 'xx', warns);
-        assert.equal(out.length, EN_LEN, 'fallback findOne missed → guarded en retry');
+        assert.equal(resolvedLang(out), 'en', 'fallback findOne missed → guarded en retry');
         assert.match(warns[0], /replacing by default: `zz`/);
     });
 
     it('legacy shortCode naming a LOADED lang still honoured', function() {
         var warns = [];
         var out = newBridge(confLegacyGood, 'xx', warns);
-        assert.equal(out.length, FR_LEN);
+        assert.equal(resolvedLang(out), 'fr');
     });
 
     it('SUBTRACT — pre-fix shape THREW when the region block was absent', function() {
@@ -233,7 +252,7 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
         // old shape returned the en content while warning `undefined`.
         var warns = [];
         var out = oldBridge(confNoIsoShort, 'xx', warns);
-        assert.equal(out.length, EN_LEN, 'accidental first-record fallback');
+        assert.equal(resolvedLang(out), 'en', 'accidental first-record fallback (readdir order puts en first)');
         assert.match(warns[0], /replacing by default: `undefined`/);
     });
 

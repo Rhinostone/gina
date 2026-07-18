@@ -1,5 +1,6 @@
 // imports
 var fs          = require('fs');
+var path        = require('path');
 var lib         = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
 var helpers     = lib.helpers;
 var console     = lib.logger;
@@ -59,13 +60,12 @@ function Make() {
         var mappingFile = _(dir+ '/resources/'+ opt.target +'.mapping.json', true);
         var content     = null;
         try {
-            rec.mapping = requireJSON(mappingFile);
-        } catch (err) {
-            throw err
-        }
-
-        try {
-            rec.mapping = requireJSON(mappingFile);
+            // was: rec.mapping = requireJSON(mappingFile); — loaded twice, and
+            // the cached object was then mutated by the non-en remap below, so
+            // a later pass of a `--region=<a>,<b>` run inherited the previous
+            // language's remapped mapping (`official_name_en` already deleted).
+            // Cloning the cached copy lets every pass start pristine.
+            rec.mapping = JSON.clone(requireJSON(mappingFile));
         } catch (err) {
             throw err
         }
@@ -83,9 +83,29 @@ function Make() {
 
             content = fs.readFileSync(filename);
 
+            // Each pass emits a standalone file: reset the accumulator so a
+            // `--region=en,fr` run cannot append one language's rows to the
+            // previous language's output (every `isoShort` ended up duplicated,
+            // English rows first — and lookups by `isoShort` always matched
+            // the English copy).
+            self.body = null;
+
             csvToCollection(content.toString());
 
-            var target = _(dir + '/../dist/'+ opt.target, true);
+            if ( opt.target == 'region' ) {
+                // Drop statistical-aggregate rows carrying no ISO 3166 alpha-2
+                // code (M49-only entries): they cannot be matched by `isoShort`
+                // and would ship with empty identifiers.
+                self.body = self.body.filter(function (row) {
+                    return typeof(row.isoShort) == 'string' && row.isoShort.trim().length > 0
+                });
+
+                if ( region != 'en' ) {
+                    localizeCountryNames(region, filename)
+                }
+            }
+
+            var target = ( opt.outdir ) ? _(''+ opt.outdir, true) : _(dir + '/../dist/'+ opt.target, true);
             if ( opt.target == 'region') {
                 target += '/'+ region +'.json'
             } else {
@@ -96,6 +116,32 @@ function Make() {
 
         } catch (err) {
             throw err
+        }
+    }
+
+    /**
+     * Overlay `countryName` with the localized short names shipped beside the
+     * source CSV (`region.names.<lang>.json`, keyed by ISO 3166 alpha-2 code).
+     * The CSV `name` column only carries the English short name, so a non-en
+     * build without a names file would silently emit English `countryName`
+     * values — fail fast instead. Codes absent from the names file keep the
+     * English short name.
+     *
+     * @inner
+     * @param {string} region - language code being generated (e.g. `fr`)
+     * @param {string|object} csvFilename - resolved source CSV path; the names file is expected in the same directory
+     * @returns {undefined}
+     * */
+    var localizeCountryNames = function (region, csvFilename) {
+        var namesFile = path.join( path.dirname( ''+ csvFilename ), 'region.names.'+ region +'.json' );
+        if ( !fs.existsSync(namesFile) ) {
+            throw new Error('`countryName` localization source not found for `'+ region +'`: expected `'+ namesFile +'` (ISO 3166 alpha-2 code -> localized short name)');
+        }
+        var names = requireJSON(namesFile);
+        for (let i = 0, len = self.body.length; i < len; ++i) {
+            if ( typeof(names[ self.body[i].isoShort ]) == 'string' && names[ self.body[i].isoShort ].length > 0 ) {
+                self.body[i].countryName = names[ self.body[i].isoShort ]
+            }
         }
     }
 
@@ -310,7 +356,19 @@ function Make() {
 
     }
 
-    setup();
+    return {
+        setup       : setup,
+        generate    : generate
+    }
+}
+
+// was: `setup(); process.exit(0);` inside Make() + `module.exports = Make();`
+// — executing at require time made the module untestable (any `require` ran
+// the CLI and exited the process). The CLI entry now only runs when the file
+// is invoked directly: `node src/make --target=region --region=en,fr`.
+if (require.main === module) {
+    Make().setup();
     process.exit(0);
 }
-module.exports = Make();
+
+module.exports = Make;
