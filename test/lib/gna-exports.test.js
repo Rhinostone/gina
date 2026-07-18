@@ -358,3 +358,69 @@ describe('05 - Build script Phase 7: @rhinostone/swig npm dep path', function() 
         );
     });
 });
+
+
+// 06 — Busboy require path: server.js uses @rhinostone/busboy; the vendored
+//      core/deps/{busboy-1.6.0,streamsearch-1.1.0} copies are removed.
+describe('06 - Busboy require path: @rhinostone/busboy npm dependency', function() {
+
+    var serverSrc = fs.readFileSync(path.join(FW, 'core/server.js'), 'utf8');
+
+    // controller.js is deliberately NOT checked here — only server.js ever
+    // required busboy (the multipart upload handler); controller.js never did.
+
+    it('server.js requires @rhinostone/busboy', function() {
+        assert.ok(
+            serverSrc.indexOf("require('@rhinostone/busboy')") > -1,
+            'server.js must require @rhinostone/busboy (not vendored deps/busboy-1.6.0)'
+        );
+    });
+
+    it('server.js has no ACTIVE require of the vendored deps/busboy path', function() {
+        // The replace-code convention keeps a `// was: … require('./deps/busboy-1.6.0')`
+        // comment plus a `// vendored copy at core/deps/busboy-1.6.0` note, so a bare
+        // indexOf('deps/busboy') would trip on the file's own comments. Strip comment
+        // lines first, then assert no live reference to the vendored path survives.
+        var activeSrc = serverSrc.split('\n').filter(function (l) {
+            return !/^\s*(\/\/|\*|\/\*)/.test(l);
+        }).join('\n');
+        assert.ok(
+            activeSrc.indexOf('deps/busboy') === -1,
+            'server.js must not actively require vendored deps/busboy — migration to @rhinostone/busboy incomplete'
+        );
+    });
+
+    it('vendored busboy-1.6.0 directory does not exist', function() {
+        assert.ok(
+            !fs.existsSync(path.join(FW, 'core/deps/busboy-1.6.0')),
+            'core/deps/busboy-1.6.0 must not exist — replaced by the @rhinostone/busboy npm dep'
+        );
+    });
+
+    it('vendored streamsearch-1.1.0 directory does not exist', function() {
+        assert.ok(
+            !fs.existsSync(path.join(FW, 'core/deps/streamsearch-1.1.0')),
+            'core/deps/streamsearch-1.1.0 must not exist — streamsearch now rides @rhinostone/busboy\'s npm dependency edge'
+        );
+    });
+
+    it('the core/deps directory itself does not exist', function() {
+        assert.ok(
+            !fs.existsSync(path.join(FW, 'core/deps')),
+            'core/deps must not exist — all former vendored dependencies are now npm dependencies'
+        );
+    });
+
+    it('@rhinostone/busboy resolves from the framework directory', { skip: !fs.existsSync(path.join(FW, 'node_modules')) }, function() {
+        var resolved = null;
+        try {
+            resolved = require.resolve('@rhinostone/busboy', {
+                paths: [path.join(FW, 'core')]
+            });
+        } catch (e) { /* ignore */ }
+        assert.ok(
+            resolved !== null,
+            '@rhinostone/busboy must be resolvable from framework/core/ — run npm install in ' + FW
+        );
+    });
+});
