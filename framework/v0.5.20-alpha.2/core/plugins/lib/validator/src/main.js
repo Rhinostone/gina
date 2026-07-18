@@ -499,18 +499,27 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
             var rule    = null;
             if ( typeof(customRule) == 'undefined') {
-                rule = _id.replace(/\-/g, '.');
+                // #B128 — attribute-first: an injected form carrying `data-gina-form-rule`
+                // (the popin bind path calls validateFormById with no customRule) must
+                // resolve by the attribute's dotted name — the id-derived name stays the
+                // fallback for attribute-less forms whose id names the rule. The old shape
+                // read the attribute only when `rules` was undefined — unreachable on a
+                // rules-bearing page (and its inner `rules` recheck was false by
+                // construction, so that branch could only ever throw): the id-derived
+                // lookup missed, bindForm re-resolved by id, `$form.rules` bound `{}`,
+                // and the live-check gate stamped the form
+                // `data-gina-form-live-check-enabled="false"` while the submit handler
+                // independently re-read the attribute and succeeded.
+                // was: rule = _id.replace(/\-/g, '.'); then the attribute behind an
+                // unreachable `else if` ending in a dead throw.
+                if ( typeof($form.target) != 'undefined' && $form.target !== null && $form.target.getAttribute('data-gina-form-rule') ) {
+                    rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-|\//g, '.');
+                } else {
+                    rule = _id.replace(/\-/g, '.');
+                }
 
                 if ( typeof(rules) != 'undefined' ) {
                     $form['rule'] = customRule = getRuleObjByName(rule)
-                } else if ( typeof($form.target) != 'undefined' && $form.target !== null && $form.target.getAttribute('data-gina-form-rule') ) {
-                    rule = $form.target.getAttribute('data-gina-form-rule').replace(/\-|\//g, '.');
-
-                    if ( typeof(rules) != 'undefined' ) {
-                        $form['rule'] = getRuleObjByName(rule)
-                    } else {
-                        throw new Error('[ FormValidator::validateFormById(formId) ] using `data-gina-form-rule` on form `'+$form.target+'`: no matching rule found')
-                    }
                 } // no else to allow form without any rule
             } else {
                 rule = customRule.replace(/\-|\//g, '.');
