@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The framework env template no longer declares a hardcoded accept-language RESPONSE header — Accept-Language is a request header, and the runtime-merged template default made every response (error responses included) emit it. A project or bundle env.json that declares its own response headers keeps working, including re-declaring accept-language, which is still emitted verbatim and still honored by the controller''s locale fallback; deployments whose generated env.json copied the old template value should remove that line themselves'
+time: 2026-07-20T00:34:00+01:00
