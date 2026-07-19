@@ -1627,6 +1627,10 @@ function Config(opt, contextResetNeeded) {
 
         var c       = 0
             , cLen  = configFiles.length
+            // #B132 — set inside the loop when an iteration resolves a REAL
+            // routing config file (bundle or shared; the env-versioned variant
+            // rides its base file's iteration); enforced right after the loop.
+            , routingConfigSeen = false
         ;
         for (; c < cLen; ++c) {
             let jsonFile = null;
@@ -1756,7 +1760,10 @@ function Config(opt, contextResetNeeded) {
                 }
 
                 if (!exists) {
-                    console.warn('[ ' + app + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
+                    // #B132 rider — `app` was a ReferenceError here (the loop's
+                    // bundle-name variable is `bundle`), so this readdir-race
+                    // warn could never actually fire: it crashed instead.
+                    console.warn('[ ' + bundle + ' ] [ ' + env + ' ]' + new Error('[ ' + filename + ' ] not found'));
                 } else {
                     jsonFile = requireJSON(_(filename, true));
                 }
@@ -1798,8 +1805,30 @@ function Config(opt, contextResetNeeded) {
                 files[name] = merge(files[name], fileContent);
             }
 
+            // #B132 — `exists` here reflects the MAIN config file (bundle dir or
+            // the shared-config fallback); a readdir↔existsSync race lands false
+            // and correctly routes to the post-loop refusal (supervisor retry).
+            if ( name == 'routing' && exists ) {
+                routingConfigSeen = true;
+            }
 
         } // EO for (var c = 0, cLen = configFiles.length; c < cLen; ++c)
+
+        // #B132 — fail fast on a missing/unreadable routing config. Hydration is
+        // readdir-driven: a config/routing.json absent at boot readdir time is
+        // never iterated, so the bundle's table would silently hold only the
+        // framework-synthetic routes and every app route 404s (or a sibling
+        // bundle's cross-bundle route lookup throws) hours later with no
+        // boot-time signal. A declared bundle without a readable routing config
+        // is a broken deployment (deploy still in progress?) — refuse to start,
+        // matching the malformed-JSON path above (callback(err) leads to
+        // process.exit(1)); the supervisor restart then retries until the
+        // release tree settles.
+        if (!routingConfigSeen) {
+            e = '[ ' + bundle + ' ][ ' + env + ' ] config/routing.json not found — a declared bundle without a readable routing config is a broken deployment (deploy still in progress?); refusing to start';
+            console.error(e);
+            return callback(new Error(e));
+        }
         conf[bundle][env] = merge(files, conf[bundle][env]);
 
         // building file list

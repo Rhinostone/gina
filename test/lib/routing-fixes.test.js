@@ -689,3 +689,63 @@ describe('08 - #B121 getRouteByUrl: awaited async compareUrls (server-side match
             'gina.min.js must ship the async getRouteByUrl (rebuild the bundle if this fails)');
     });
 });
+
+// ─── 09 — #B132: the getRoute not-found message names the bundle + its rule count ───
+//
+// A bundle whose routing config never loaded (hydration is readdir-driven, so an
+// absent config/routing.json is simply never iterated) holds only the
+// framework-synthetic routes; a cross-bundle getRoute then throws hours after
+// boot with a message indistinguishable from a plain mistyped rule. The message
+// now appends `(bundle \`<b>\` holds N rules)` so a degraded/near-empty table is
+// tellable at the call site. The boot-time fail-fast half of #B132 lives in
+// core/config.js (test/core/config-routing-failfast.test.js). Rides the §07
+// real-module harness/table.
+
+describe('09 - #B132 getRoute not-found names the bundle + table size', function() {
+
+    it('source: the enriched literal is present and keeps the exact historical prefix', function() {
+        assert.ok(
+            src.indexOf("` not found ! (bundle `'+ bundle +'` holds '+ Object.keys(routing).length +' rules)") > -1,
+            'the not-found throw must append the bundle + rule count'
+        );
+        assert.ok(
+            src.indexOf("[ RoutingHelper::getRouting(rule, params) ] : `' +rule + '` not found !") > -1,
+            'the historical message prefix must survive byte-identical'
+        );
+    });
+
+    it('FIXED (real module): a missing rule reports the bundle and the live table size', function() {
+        var expected = Object.keys(getContext('gina').config.getRouting()).length;
+        assert.throws(function() {
+            routingInstance.getRoute('nope@testb');
+        }, function(e) {
+            assert.equal(e.message.indexOf('[ RoutingHelper::getRouting(rule, params) ] : `nope@testb` not found !'), 0,
+                'the historical prefix must lead the message');
+            assert.ok(e.message.indexOf('(bundle `testb` holds ' + expected + ' rules)') > -1,
+                'the message must carry the bundle + its live rule count');
+            return true;
+        });
+    });
+
+    it('control (real module): an existing rule still resolves — the throw is reached only on a miss', function() {
+        var route = routingInstance.getRoute('noreq@testb');
+        assert.equal(route.url, '/deep');
+    });
+
+    // ── dist fidelity (lib/routing is browser-bundled) ────────────────────────
+    // Negative arm validated against the PRE-fix artifacts: the ` not found ! (bundle `
+    // literal counted 0 in the shipped gina.js AND gina.min.js before this fix's rebuild.
+    it('dist: the unminified bundle carries the enriched not-found literal', function() {
+        var DIST = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.js');
+        var dist = require('fs').readFileSync(DIST, 'utf8');
+        assert.ok(dist.indexOf(' not found ! (bundle ') > -1,
+            'gina.js must ship the enriched not-found message (rebuild the bundle if this fails)');
+    });
+
+    it('dist: the minified bundle carries the enriched not-found literal', function() {
+        var DIST_MIN = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.min.js');
+        var dist = require('fs').readFileSync(DIST_MIN, 'utf8');
+        assert.ok(dist.indexOf(' not found ! (bundle ') > -1,
+            'gina.min.js must ship the enriched not-found message (rebuild the bundle if this fails)');
+    });
+});

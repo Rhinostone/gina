@@ -6295,7 +6295,10 @@ function Routing() {
 
 
         if ( typeof(routing[rule]) == 'undefined' ) {
-            throw new Error('[ RoutingHelper::getRouting(rule, params) ] : `' +rule + '` not found !')
+            // #B132 — name the bundle + its table size so a degraded/near-empty
+            // table (e.g. a bundle whose routing config never loaded) is
+            // tellable from a plain mistyped rule at the call site.
+            throw new Error('[ RoutingHelper::getRouting(rule, params) ] : `' +rule + '` not found ! (bundle `'+ bundle +'` holds '+ Object.keys(routing).length +' rules)')
         }
 
         var route   = JSON.clone(routing[rule]);
