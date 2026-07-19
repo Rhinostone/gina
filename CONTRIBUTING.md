@@ -27,7 +27,7 @@ Gina follows a BDFL governance model — see [GOVERNANCE.md](./GOVERNANCE.md) fo
 | Requirement | Version |
 | --- | --- |
 | OS | macOS or Linux (Windows: Docker only) |
-| Node.js | >= 18 |
+| Node.js | >= 22 < 27 |
 | npm | >= 8 |
 | Changie | >= 1.24 |
 
@@ -35,22 +35,31 @@ Gina follows a BDFL governance model — see [GOVERNANCE.md](./GOVERNANCE.md) fo
 
 ## Getting started locally
 
-Gina must be installed globally — the CLI and framework bootstrapper expect to run from the npm global prefix. Contributors clone directly into that location instead of using `npm install -g .`.
+Gina must be reachable from the npm global prefix — the CLI and framework bootstrapper expect to run from `${prefix}/lib/node_modules/gina`. **Do not clone directly into that path**: npm owns it, and any `npm install -g gina` run on the machine replaces whatever sits there — a direct clone would be destroyed, git history, uncommitted work and all — with the published tarball. Clone to a normal workspace directory and **symlink** it into the prefix instead: npm can then only ever replace the symlink, never your repository.
 
-#### 1. Find your global prefix
+#### 1. Clone to your workspace
+
+```bash
+git clone https://github.com/gina-io/gina.git
+cd gina && git checkout develop
+```
+
+#### 2. Link the clone into the npm global prefix
 
 ```bash
 npm config get prefix --quiet
 ```
 
-The default is `/usr/local` (system) or `~/.npm-global` (user). The target directory is `${prefix}/lib/node_modules/gina`.
-
-#### 2. Clone into the prefix
+The default is `/usr/local` (system) or `~/.npm-global` (user).
 
 ```bash
-cd $(npm config get prefix)/lib/node_modules
-git clone https://github.com/gina-io/gina.git gina
-cd gina && git checkout develop
+ln -s "$PWD" "$(npm config get prefix)/lib/node_modules/gina"
+```
+
+Optional hardening (macOS): make the link immutable, so even a global install fails loudly instead of silently replacing it. Undo with `chflags -h nouchg` before an intentional change.
+
+```bash
+chflags -h uchg "$(npm config get prefix)/lib/node_modules/gina"
 ```
 
 #### 3. Run the install scripts
@@ -66,6 +75,14 @@ node ./script/post_install.js
 gina version
 ```
 
+If the `gina` command is not found, link the CLIs into the prefix bin once:
+
+```bash
+cd "$(npm config get prefix)/bin" && ln -s ../lib/node_modules/gina/bin/gina* .
+```
+
+> ⚠️ On a machine set up this way, never run `npm install -g gina` — it replaces the symlink with the published tarball and your clone stops being served (with a direct clone at that path, it would have been deleted outright). Update with `git pull` instead; to switch to the published package deliberately, remove the symlink first.
+
 ---
 
 ## Running the tests
@@ -79,6 +96,17 @@ node --test test/**/*.test.js framework/v*/test/unit/*.test.js
 # Run a single file
 node --test test/core/controller.test.js
 ```
+
+Some tests resolve the framework the way a consuming project does — via
+`require('gina')`. For that to resolve from inside the clone, the repository
+must be reachable as its own `gina` module. Create a one-time self-symlink (it
+lives inside the gitignored `node_modules/`, so it never shows in `git status`):
+
+```bash
+mkdir -p node_modules && ln -sfn "$PWD" node_modules/gina
+```
+
+Without it, a handful of suite members fail with `Cannot find module 'gina'`.
 
 ---
 

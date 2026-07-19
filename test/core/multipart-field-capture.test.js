@@ -39,7 +39,7 @@ var { Readable } = require('stream');
 var FW               = require('../fw');
 var SERVER_SRC       = path.join(FW, 'core/server.js');
 var HELPERS_DATA_SRC = path.join(FW, 'helpers', 'data', 'src', 'main.js');
-var Busboy           = require(path.join(FW, 'core/deps/busboy-1.6.0'));
+var Busboy           = require('@rhinostone/busboy');
 
 // helpers/data exposes its helpers as implicit globals once the DataHelper
 // constructor runs (gina convention — format-data-from-string.test.js precedent).

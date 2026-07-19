@@ -24,7 +24,7 @@ var fs     = require('fs');
 
 var FW         = require('../fw');
 var SERVER_SRC = path.join(FW, 'core/server.js');
-var Busboy     = require(path.join(FW, 'core/deps/busboy-1.6.0'));
+var Busboy     = require('@rhinostone/busboy');
 
 var BOUNDARY = '----ginauploadfilenamecharset';
 
@@ -53,7 +53,7 @@ function parseFilename(name, cfg, opts) {
             cfg || {}
         ));
         var got = null;
-        bb.on('file', function (fieldname, file, filename) { got = filename; file.resume(); });
+        bb.on('file', function (fieldname, file, info) { got = info.filename; file.resume(); });
         bb.on('close', function () { resolve(got); });
         bb.on('error', reject);
         bb.end(multipartBody(name, opts));

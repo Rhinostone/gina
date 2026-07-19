@@ -427,10 +427,15 @@ describe('lib/dto §09 — the `$` guard on toRules (#DTO2, measured server-fata
     it('09.6 - SUBTRACT: the pre-guard rules object really does kill the engine', function () {
         // Hand the engine the exact rules the guard now refuses. If this ever stops
         // throwing, the engine was fixed and the guard can be revisited.
+        // (Half-fired at #B127: the validate() single-element `$fields.count()` crash
+        // was fixed, so `$` tokens that NAME FIELDS now validate server-side. A `$`
+        // token that is NOT a field reference — an enum value like `$100` — still
+        // crashes from getDynamisedRules' leftovers loop (`$fields[field].value`,
+        // null server-side), so the guard's justification stands.)
         var poisoned = { amount: { isRequired: true, isInList: ['$100', '$200'] } };
         assert.throws(
             function () { Validator(poisoned, { amount: '$100' }, 'dto-test'); },
-            /count/,
+            /Cannot read properties of null/,
             'the guard exists because THIS throws — a null `$fields` deref inside the engine'
         );
         // control: the same shape without `$` validates cleanly, so the subtract can fail
