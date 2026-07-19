@@ -17764,10 +17764,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             } // EO caseEvent
                             */
                             caseValue = allFields[caseName];
+                            // #B129 — coerce the CASE value itself (the direct-case
+                            // site's semantics: unconditional string "true"/"false"
+                            // -> boolean, isGFFCtx gate kept). The old shape tested
+                            // `fields[field]` — the OUTER field being validated — so
+                            // a boolean `case` never coerced unless the outer field's
+                            // own value happened to be "true"/"false", which instead
+                            // CLOBBERED the case value for that field's pass. Masked
+                            // in full-form passes by the direct-case site below;
+                            // unmasked in single-element/live-check mode.
+                            // was:
+                            // if (isGFFCtx) {
+                            //     if (fields[field] == "true")
+                            //         caseValue = true;
+                            //     else if (fields[field] == "false")
+                            //         caseValue = false;
+                            // }
                             if (isGFFCtx) {
-                                if (fields[field] == "true")
+                                if (caseValue == "true")
                                     caseValue = true;
-                                else if (fields[field] == "false")
+                                else if (caseValue == "false")
                                     caseValue = false;
                             }
 

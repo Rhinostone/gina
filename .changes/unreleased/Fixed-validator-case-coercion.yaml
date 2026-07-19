@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed FormValidator `_case_` condition matching in live-check / single-element mode: the cross-field case scan coerced the wrong variable — the field being validated instead of the case value — so a boolean `case` declaration (e.g. `case: false`) never matched the case field''s raw "false"/"true" DOM string, and a validated field whose own value was "true"/"false" silently broke string case matching for its pass. The case value itself is now coerced, aligning the scan with the direct-case site''s semantics; note that `case` values declared as the strings "true"/"false" now coerce to booleans at this site too, consistent with full-form validation.'
+time: 2026-07-19T01:08:25+01:00
