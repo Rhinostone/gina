@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `getLocales().getCountries(code)` — the documented projection argument was computed and never applied. A valid `code` (e.g. `capital`, `continent`, `tld`) now adds that field to every returned row while the 4 historical fields stay untouched, and an empty or missing locale set degrades to an empty list instead of throwing.'
-time: 2026-07-18T14:30:01+02:00

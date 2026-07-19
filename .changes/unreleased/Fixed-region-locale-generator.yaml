@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the region locale generator so each requested language emits a standalone file — a `--region=en,fr` build used to append the second language''s rows to the first''s output, so every `isoShort` was duplicated and `isoShort` lookups always matched the English copy. Non-en builds now localize `countryName` from a per-language short-names resource (`region.names.<lang>.json`, French ships with the framework), rows without an ISO 3166 alpha-2 code are dropped, and `dist/region/en.json` / `fr.json` are regenerated clean — a bundle resolving a `fr` culture now gets `Allemagne` / `États-Unis` / `Royaume-Uni` through the existing `getLocales().getCountries()` path with zero consumer changes.'
-time: 2026-07-18T14:30:00+02:00

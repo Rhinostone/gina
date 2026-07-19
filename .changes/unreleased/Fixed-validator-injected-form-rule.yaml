@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: a form injected after init (e.g. loaded inside a popin) carrying `data-gina-form-rule` now binds its declared rule — live-check and submit-trigger gating work instead of being silently disabled. `validateFormById` resolved the rule name from the form id only and consulted the attribute in an unreachable branch, so the lookup missed, the form bound zero rules, and the form was stamped `data-gina-form-live-check-enabled="false"` while the submit pass resolved the same attribute fine. Attribute-less forms whose id names the rule resolve as before.'
-time: 2026-07-19T00:24:01+01:00
