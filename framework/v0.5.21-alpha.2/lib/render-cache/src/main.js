@@ -52,8 +52,9 @@
  * renderCache.get('static:demo:/page');  // reconstructs the entry from disk + .meta
  */
 
-var fs    = require('fs');
-var Cache = require('../../cache/src/main');
+var fs     = require('fs');
+var crypto = require('crypto');
+var Cache  = require('../../cache/src/main');
 
 /**
  * Build the on-disk paths for an `fs`-strategy entry. Single source of truth
@@ -987,6 +988,116 @@ RenderCache.validateConfig = function(serverCache, routing, bundle) {
     }
 
     return out;
+};
+
+/**
+ * #B130 — CSP-nonce re-stamp for served cache hits (pure, static).
+ *
+ * A render/output-cache hit replays the STORED response headers and the STORED
+ * body — both minted by the request that WROTE the entry. When the stored
+ * Content-Security-Policy header carries `'nonce-…'` sources, replaying the
+ * pair verbatim reuses one nonce for every client of that URL until the entry
+ * expires (and, pre-#B130, could even replay a header/body PAIR minted by two
+ * different requests). The serve sites (server.js `serveRenderCacheHit` + the
+ * isaac pre-routing read — keep both in sync) call this to mint a FRESH nonce
+ * per response and rewrite the header copy; the body is rewritten with
+ * {@link RenderCache.swapNonces}. The Csp middleware never runs on a hit (the
+ * hit short-circuits dispatch), so this is the only mint on that path.
+ *
+ * Inputs are never mutated — the cache entry keeps its original values.
+ *
+ * @function renonceCspHeaders
+ * @memberof RenderCache
+ * @static
+ *
+ * @param {object|null} responseHeaders - The stored headers snapshot (`res.getHeaders()` shape, lowercase keys)
+ *
+ * @returns {object|null} `null` when no CSP header carries a nonce (serve the stored pair verbatim);
+ *   else `{ headers, oldNonces, nonce }` — a fresh headers object with every
+ *   `'nonce-…'` value replaced, the distinct old nonce values found, and the new nonce
+ *
+ * @example
+ * var rn = RenderCache.renonceCspHeaders(hit.responseHeaders);
+ * if (rn) {
+ *     body = RenderCache.swapNonces(hit.content, rn.oldNonces, rn.nonce);
+ *     // replay rn.headers instead of hit.responseHeaders
+ * }
+ */
+RenderCache.renonceCspHeaders = function (responseHeaders) {
+    if ( !responseHeaders || typeof(responseHeaders) !== 'object' ) {
+        return null;
+    }
+    var cspKeys = [], oldNonces = [], h = null, i = 0;
+    for (h in responseHeaders) {
+        if (
+            /^content-security-policy(-report-only)?$/i.test(h)
+            && typeof(responseHeaders[h]) === 'string'
+        ) {
+            cspKeys.push(h);
+            var found = responseHeaders[h].match(/'nonce-[^']+'/g) || [];
+            for (i = 0; i < found.length; i++) {
+                // `'nonce-` prefix (7 chars) + trailing `'`
+                var val = found[i].substring(7, found[i].length - 1);
+                if (val && oldNonces.indexOf(val) === -1) {
+                    oldNonces.push(val);
+                }
+            }
+        }
+    }
+    if (oldNonces.length === 0) {
+        return null;
+    }
+    // 16 bytes = 128 bits — parity with the Csp plugin's NONCE_BYTES (the W3C
+    // CSP3 nonce-entropy floor). base64 like the middleware mint.
+    var nonce   = crypto.randomBytes(16).toString('base64');
+    var headers = {};
+    for (h in responseHeaders) {
+        headers[h] = responseHeaders[h];
+    }
+    for (i = 0; i < cspKeys.length; i++) {
+        headers[ cspKeys[i] ] = RenderCache.swapNonces(headers[ cspKeys[i] ], oldNonces, nonce);
+    }
+    return { headers: headers, oldNonces: oldNonces, nonce: nonce };
+};
+
+/**
+ * #B130 — replace every occurrence of each old nonce value with the fresh one.
+ * Exact-string swap (split/join — nonce values are base64 and may carry `+/=`,
+ * so no regex). Covers the framework bootstrap `nonce="…"` attribute AND any
+ * app-template `{{ page.cspNonce }}` occurrence baked into the stored body.
+ * Null-safe: a non-string `content` (or empty swap set) is returned unchanged.
+ *
+ * @function swapNonces
+ * @memberof RenderCache
+ * @static
+ *
+ * @param {string} content - The stored response body
+ * @param {array} oldNonces - Distinct old nonce values (from {@link RenderCache.renonceCspHeaders})
+ * @param {string} nonce - The fresh nonce
+ *
+ * @returns {string} The body with old nonce values swapped for the fresh one
+ *
+ * @example
+ * RenderCache.swapNonces('<script nonce="abc+/=">', ['abc+/='], 'Zm9v');
+ * // -> '<script nonce="Zm9v">'
+ */
+RenderCache.swapNonces = function (content, oldNonces, nonce) {
+    if (
+        typeof(content) !== 'string'
+        || !Array.isArray(oldNonces)
+        || oldNonces.length === 0
+        || typeof(nonce) !== 'string'
+        || !nonce
+    ) {
+        return content;
+    }
+    for (var i = 0; i < oldNonces.length; i++) {
+        if (oldNonces[i] === nonce) {
+            continue;
+        }
+        content = content.split(oldNonces[i]).join(nonce);
+    }
+    return content;
 };
 
 module.exports = RenderCache;

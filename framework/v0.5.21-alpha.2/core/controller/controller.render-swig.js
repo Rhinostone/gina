@@ -209,21 +209,38 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     // When present, every framework-injected inline <script> carries a matching
     // nonce="..." attribute so a bundle can drop 'unsafe-inline' from script-src.
     var _cspNonce   = (req && req._ginaCspNonce) ? req._ginaCspNonce : null;
-    // Stamp the onGinaLoaded bootstrap <script> with the nonce. The loader tag is
-    // a cached, immutable string (config.js builds it once) — .replace() returns a
-    // fresh string and never mutates the shared cache. No-op when no nonce is set.
+    // Stamp the onGinaLoaded bootstrap <script> with a RENDER-TIME nonce template
+    // (#B130). The loader tag flows into the swig-compiled layout, and the compiled
+    // template is CACHED per view on serverInstance._cached — so a literal nonce
+    // here would be frozen at first compile while the Csp middleware mints a fresh
+    // one per request (header != markup on every later request for the view).
+    // Injecting swig tags instead keeps the cached artifact nonce-agnostic: the
+    // conditional re-evaluates on every compiledTemplate(data) execute against
+    // data.page.cspNonce, which BOTH the cache-hit and compile branches assign
+    // pre-execute. The loader tag itself is a cached, immutable string (config.js
+    // builds it once) — .replace() returns a fresh string and never mutates the
+    // shared cache. No-op when no nonce is set (non-CSP deployments bake the
+    // plain tag, byte-identical to before).
     var _nonceLoader = function (loaderTag) {
         if (_cspNonce && typeof loaderTag === 'string') {
             return loaderTag.replace(
                 '<script type="text/javascript">',
-                '<script type="text/javascript" nonce="' + _cspNonce + '">'
+                '<script type="text/javascript"{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>'
             );
         }
         return loaderTag;
     };
-    // #HDR5 — nonce attribute fragment for the dev-only Inspector + metrics-patch
-    // inline <script>s (assembled as JS strings below). '' when no nonce is set.
+    // #HDR5 — nonce attribute fragment for POST-EXECUTE inline-<script> injections
+    // (release banner, cache-patch scripts): those splice into htmlContent after
+    // compiledTemplate(data) ran, so the literal per-request value is correct.
+    // '' when no nonce is set.
     var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
+    // #B130 — TEMPLATE form of the same attr for inline <script>s that are baked
+    // into the swig-compiled layout PRE-compile (the dev Inspector __ginaData /
+    // __ginaLogs pair): the compiled template is cached per view, so a literal
+    // value would freeze at first compile. The swig conditional re-evaluates per
+    // execute — the same mechanism the statusbar include already uses.
+    var _cspNonceTplAttr = _cspNonce ? '{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}' : '';
     // Using server cache to cache compiledTemplates
     cache.from(self.serverInstance._cached);
     // Output/render cache goes through the strategy dispatcher (same shared store).
@@ -893,6 +910,27 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         assets  = {assets:"${assets}"};
         // replaced: fs.readFileSync — async read (#P29)
         layout = await fs.promises.readFile(layoutPath, 'utf8');
+        // #B130 upgrade path — in cached mode the layout-cache file persists the
+        // INJECTED layout (it is the {% extends %} target swig compiles from) and
+        // is only re-primed when missing, so a file written by a pre-#B130 build
+        // still carries the bootstrap loader (and, dev+cache, the Inspector
+        // scripts) with a frozen LITERAL nonce baked in — and the injection
+        // guards below skip re-injection because onGinaLoaded is already there.
+        // Normalize those literals to the render-time conditional; anchored on
+        // each script's own idiom (the loader's `<!--` wrapper from config.js,
+        // the Inspector scripts' window.__gina* openers), idempotent (the
+        // conditional form no longer matches), and persisted back by the
+        // layout-cache write below, so this heals once per stale file.
+        if ( /<script( type="text\/javascript")? nonce="/.test(layout) ) {
+            layout = layout.replace(
+                /<script type="text\/javascript" nonce="[^"]*">(\s*<!--)/g,
+                '<script type="text/javascript"{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>$1'
+            );
+            layout = layout.replace(
+                /<script nonce="[^"]*">(window\.__gina(Data|Logs))/g,
+                '<script{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>$1'
+            );
+        }
         // Loading from cache
         if (
             String(self.serverInstance._cacheIsEnabled).toLowerCase() === 'true'
@@ -1346,7 +1384,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 replacement      : _redactConf.replacement
             });
 
-            var __gdScript = '<script' + _cspNonceAttr + '>window.__ginaData = '
+            var __gdScript = '<script' + _cspNonceTplAttr + '>window.__ginaData = '
                 + JSON.stringify(__gdPayload)
                     .replace(/<\/script>/gi, '<\\/script>')
                     .replace(/<!--/g, '<\\!--')
@@ -1362,7 +1400,7 @@ module.exports = async function render(userData, displayInspector, errOptions, d
             }
             process.emit('inspector#data', __gdPayload);
 
-            var __logsScript = '<script' + _cspNonceAttr + '>'
+            var __logsScript = '<script' + _cspNonceTplAttr + '>'
                 + 'window.__ginaLogs = window.__ginaLogs || [];'
                 + '(function(w){'
                 + 'var _c=w.console,_l=w.__ginaLogs,_b="' + (__gdUser.environment && __gdUser.environment.bundle || '') + '";'

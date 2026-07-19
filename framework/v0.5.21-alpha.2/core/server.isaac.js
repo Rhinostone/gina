@@ -2163,9 +2163,20 @@ function ServerEngineClass(options) {
                         // only; the shared handle() read (server.js) labels detail=redis.
                         cacheStatus += '; detail=' + ( (typeof(cachedContentObj.fromMemory) != 'undefined') ? 'memory' : 'fs' );
 
+                        // #B130 — same re-nonce as server.js serveRenderCacheHit (keep in
+                        // sync): a hit replays the WRITING request's stored headers + body;
+                        // when the stored CSP header carries a nonce, mint fresh + rewrite
+                        // the header copy and the body occurrences so nonces stay
+                        // per-response. The stored entry is never mutated.
+                        var _rn = lib.RenderCache.renonceCspHeaders(
+                            ( typeof(cachedContentObj.responseHeaders) != 'undefined' )
+                                ? cachedContentObj.responseHeaders
+                                : null
+                        );
                         if ( typeof(cachedContentObj.responseHeaders) != 'undefined' ) {
-                            for (let h in cachedContentObj.responseHeaders ) {
-                                response.setHeader(h, cachedContentObj.responseHeaders[h]);
+                            let _rnHeaders = _rn ? _rn.headers : cachedContentObj.responseHeaders;
+                            for (let h in _rnHeaders ) {
+                                response.setHeader(h, _rnHeaders[h]);
                             }
                         }
                         response.setHeader('Cache-Status', cacheStatus);
@@ -2195,10 +2206,30 @@ function ServerEngineClass(options) {
                             typeof(cachedContentObj.fromMemory) != 'undefined'
                         ) {
                             console.info(request.method +' [200]['+ cacheStatus +'] '+ request.url);
-                            return response.end(cachedContentObj.content);
+                            return response.end(
+                                _rn
+                                    ? lib.RenderCache.swapNonces(cachedContentObj.content, _rn.oldNonces, _rn.nonce)
+                                    : cachedContentObj.content
+                            );
                         }
 
                         filename  =  _(cachedContentObj.filename, true);
+
+                        if ( _rn ) {
+                            // #B130 — the re-nonced body needs the whole content in hand;
+                            // buffer the disk read-back instead of streaming. Only fires
+                            // when the stored headers carry a CSP nonce — nonce-less
+                            // entries keep the streaming path below byte-identical.
+                            return fs.readFile(filename, 'utf8', function onCachedFileRenonce(err, fileContent) {
+                                if (err) {
+                                    console.error("[SERVER][CACHE][FILE ERROR] ", err.stack||err.message||err);
+                                    // message-only on the wire — the stack stays in the log above
+                                    return response.end(''+ (err.message || err));
+                                }
+                                console.info(request.method +' [200] '+ request.url);
+                                return response.end( lib.RenderCache.swapNonces(fileContent, _rn.oldNonces, _rn.nonce) );
+                            });
+                        }
 
                         return fs.createReadStream(filename)
                             .on('error', function onError(err) {

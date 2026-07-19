@@ -1277,13 +1277,16 @@ describe('14 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', fun
         );
     });
 
-    it('defines the _nonceLoader helper that stamps the bootstrap <script> (#HDR5)', function() {
+    it('defines the _nonceLoader helper that stamps the bootstrap <script> (#HDR5/#B130)', function() {
         var s = src();
         assert.ok(/var _nonceLoader\s*=\s*function/.test(s), 'expected the _nonceLoader helper');
         assert.ok(s.indexOf('#HDR5') > -1, 'expected #HDR5 marker');
+        // #B130 — the injection is the RENDER-TIME swig conditional (re-evaluated per
+        // compiledTemplate(data) execute), never a literal value that would freeze in
+        // the per-view compiled-template cache + the persisted layout-cache file.
         assert.ok(
-            /'<script type="text\/javascript" nonce="'\s*\+\s*_cspNonce\s*\+\s*'">'/.test(s),
-            'expected the nonce attribute injected into the bootstrap script tag'
+            s.indexOf('\'<script type="text/javascript"{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}>\'') > -1,
+            'expected the render-time swig-conditional nonce injected into the bootstrap script tag'
         );
     });
 
@@ -1296,12 +1299,13 @@ describe('14 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', fun
             'every localOptions.template.ginaLoader occurrence should be inside a _nonceLoader() call');
     });
 
-    // pure-logic replica of the _nonceLoader transform
+    // pure-logic replica of the _nonceLoader transform (#B130 conditional form)
+    var NONCE_TPL = '{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}';
     function nonceLoader(loaderTag, cspNonce) {
         if (cspNonce && typeof loaderTag === 'string') {
             return loaderTag.replace(
                 '<script type="text/javascript">',
-                '<script type="text/javascript" nonce="' + cspNonce + '">'
+                '<script type="text/javascript"' + NONCE_TPL + '>'
             );
         }
         return loaderTag;
@@ -1309,9 +1313,12 @@ describe('14 - CSP nonce: onGinaLoaded bootstrap carries req._ginaCspNonce', fun
 
     var LOADER = '\n\t\t<script type="text/javascript">\n\t\t<!--\n\t\tvar x=1;\n\t\t//-->\n\t\t</script>';
 
-    it('replica: injects the nonce attribute when a nonce is present (base64 chars allowed)', function() {
+    it('replica: injects the swig conditional — never the literal value (#B130)', function() {
         var out = nonceLoader(LOADER, 'ABC+/=');
-        assert.ok(out.indexOf('<script type="text/javascript" nonce="ABC+/=">') > -1);
+        assert.ok(out.indexOf('<script type="text/javascript"' + NONCE_TPL + '>') > -1,
+            'the conditional should land in the opening tag');
+        assert.strictEqual(out.indexOf('ABC+/='), -1,
+            'the request nonce VALUE must not be baked into the compile-time output');
         assert.strictEqual(out.indexOf('<script type="text/javascript">'), -1,
             'the bare opening tag should be rewritten');
     });
@@ -1342,11 +1349,18 @@ describe('15 - CSP nonce: dev-only Inspector + patch inline scripts', function()
         );
     });
 
-    it('injects _cspNonceAttr into every framework-assembled inline <script> opening', function() {
-        var nonced = (src().match(/'<script' \+ _cspNonceAttr \+ '>/g) || []);
-        // __gdScript, __logsScript, _cachePatchScript, _patchScript = 4 dev-script sites
-        assert.ok(nonced.length >= 4,
-            'expected all 4 dev-script openings to carry _cspNonceAttr (got ' + nonced.length + ')');
+    it('splits the attr forms by injection time (#B130): post-execute literal, compile-baked template', function() {
+        var s = src();
+        var literal = (s.match(/'<script' \+ _cspNonceAttr \+ '>/g) || []);
+        var tpl     = (s.match(/'<script' \+ _cspNonceTplAttr \+ '>/g) || []);
+        // _cachePatchScript + _patchScript splice into htmlContent AFTER
+        // compiledTemplate(data) ran — the per-request literal is correct there.
+        assert.strictEqual(literal.length, 2,
+            'expected exactly 2 post-execute dev-script openings on _cspNonceAttr (got ' + literal.length + ')');
+        // __gdScript + __logsScript are baked into the swig-compiled layout (the
+        // cached compiled template) — they take the render-time template form.
+        assert.strictEqual(tpl.length, 2,
+            'expected exactly 2 compile-baked dev-script openings on _cspNonceTplAttr (got ' + tpl.length + ')');
     });
 
     it('leaves no bare framework-assembled <script> opening assignment', function() {
@@ -2348,6 +2362,116 @@ describe('24 - #RWATCH stale-release banner injection', function() {
         assert.strictEqual((out.match(/PAGEBODY/g) || []).length, 1, 'no duplication with a function replacer');
         assert.ok(out.indexOf(DOLLAR_BACKTICK) > -1 && out.indexOf(DOLLAR_QUOTE) > -1,
             'the $-sequences survive verbatim in the injected content');
+    });
+
+});
+
+
+// 25 — #B130: render-time bootstrap nonce vs the two caches (compiled-template + layout-cache file)
+describe('25 - #B130 render-time nonce: swig-conditional mechanism + layout-cache healing', function() {
+
+    function src() { return fs.readFileSync(SOURCE, 'utf8'); }
+
+    var NONCE_TPL = '{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}';
+
+    // ── source pins ──
+
+    it('derives _cspNonceTplAttr (the template form) alongside the literal _cspNonceAttr', function() {
+        assert.ok(
+            src().indexOf('var _cspNonceTplAttr = _cspNonce ? \'{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}\' : \'\';') > -1,
+            'expected the _cspNonceTplAttr derivation (swig-conditional form)'
+        );
+    });
+
+    it('carries the layout-cache normalization regexes (upgrade path for stale literal-nonce files)', function() {
+        var s = src();
+        // Exact-literal pins: these lock the regexes the replicas below drive, so the
+        // replicas cannot silently drift from the shipped source.
+        assert.ok(s.indexOf('/<script type="text\\/javascript" nonce="[^"]*">(\\s*<!--)/g') > -1,
+            'expected the loader-anchored normalization regex');
+        assert.ok(s.indexOf('/<script nonce="[^"]*">(window\\.__gina(Data|Logs))/g') > -1,
+            'expected the Inspector-script-anchored normalization regex');
+    });
+
+    it('normalization runs after the layout read, before the cache-hit/compile branch split', function() {
+        var s = src();
+        var readAt = s.indexOf("layout = await fs.promises.readFile(layoutPath, 'utf8')");
+        var normAt = s.indexOf('/<script type="text\\/javascript" nonce="[^"]*">(\\s*<!--)/g');
+        var hitAt  = s.indexOf('cache.has(cacheKey)', readAt);
+        assert.ok(readAt > -1 && normAt > readAt, 'normalization sits after the layout read');
+        assert.ok(hitAt > normAt, 'normalization sits before the hit/compile branch');
+    });
+
+    // ── behavioral: the REAL swig engine proves per-execute rotation from ONE compile ──
+
+    var swig = require('@rhinostone/swig');
+    var LOADER_RAW = '\n\t\t<script type="text/javascript">\n\t\t<!--\n\t\tfunction onGinaLoaded(){}\n\t\t//-->\n\t\t</script>';
+
+    it('real swig: one compiled template serves a DIFFERENT nonce per execute (the defect, inverted)', function() {
+        var injected = LOADER_RAW.replace(
+            '<script type="text/javascript">',
+            '<script type="text/javascript">'.replace('>', NONCE_TPL + '>')
+        );
+        var tpl  = swig.compile('<head>' + injected + '\n</head>');
+        var out1 = tpl({ page: { cspNonce: 'AbC+/1==' } });
+        var out2 = tpl({ page: { cspNonce: 'XyZ/9+w=' } });
+        assert.ok(out1.indexOf(' nonce="AbC+/1=="') > -1, 'execute 1 carries its own nonce');
+        assert.ok(out2.indexOf(' nonce="XyZ/9+w="') > -1, 'execute 2 carries its own nonce');
+        assert.strictEqual(out2.indexOf('AbC+/1=='), -1, 'execute 2 must NOT carry execute 1\'s nonce');
+    });
+
+    it('real swig: base64 nonce chars (+ / =) survive autoescape intact', function() {
+        var tpl = swig.compile('<s' + 'cript' + NONCE_TPL + '>');
+        var out = tpl({ page: { cspNonce: 'a+b/c=d=' } });
+        assert.ok(out.indexOf(' nonce="a+b/c=d="') > -1, 'the base64 alphabet must pass through unescaped');
+    });
+
+    it('real swig: no attr at all when page.cspNonce is absent', function() {
+        var tpl = swig.compile('<head><script type="text/javascript"' + NONCE_TPL + '></head>');
+        var out = tpl({ page: {} });
+        assert.strictEqual(out.indexOf('nonce'), -1, 'no nonce attribute without a request nonce');
+        assert.ok(out.indexOf('<script type="text/javascript">') > -1, 'bare tag preserved');
+    });
+
+    // ── normalization replicas (regex literals locked by the source pins above) ──
+
+    var NORM_LOADER = /<script type="text\/javascript" nonce="[^"]*">(\s*<!--)/g;
+    var NORM_GINA   = /<script nonce="[^"]*">(window\.__gina(Data|Logs))/g;
+    function normalize(layout) {
+        layout = layout.replace(NORM_LOADER, '<script type="text/javascript"' + '{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}' + '>$1');
+        layout = layout.replace(NORM_GINA,   '<script' + '{% if page.cspNonce %} nonce="{{ page.cspNonce }}"{% endif %}' + '>$1');
+        return layout;
+    }
+
+    it('replica: heals a stale literal-nonce loader tag written by a pre-fix build', function() {
+        var stale  = '<head>\n\t\t<script type="text/javascript" nonce="OLDNONCE+/=">\n\t\t<!--\n\t\tfunction onGinaLoaded(){}\n\t\t//-->\n\t\t</script></head>';
+        var healed = normalize(stale);
+        assert.strictEqual(healed.indexOf('OLDNONCE+/='), -1, 'the frozen literal must be gone');
+        assert.ok(healed.indexOf('{% if page.cspNonce %}') > -1, 'the conditional replaces it');
+        // and the healed layout executes with a fresh per-request nonce
+        var out = swig.compile(healed)({ page: { cspNonce: 'FRESH123' } });
+        assert.ok(out.indexOf(' nonce="FRESH123"') > -1, 'healed layout serves the request nonce');
+    });
+
+    it('replica: heals stale Inspector-script tags (dev + cache-enabled combination)', function() {
+        var stale  = '<script nonce="OLD1">window.__ginaData = {};</script><script nonce="OLD2">window.__ginaLogs = [];</script>';
+        var healed = normalize(stale);
+        assert.strictEqual(healed.indexOf('OLD1'), -1);
+        assert.strictEqual(healed.indexOf('OLD2'), -1);
+        assert.strictEqual((healed.match(/\{% if page\.cspNonce %\}/g) || []).length, 2);
+    });
+
+    it('replica: idempotent — a healed layout is not re-touched', function() {
+        var stale  = '<script type="text/javascript" nonce="X">\n<!--\nfunction onGinaLoaded(){}\n//-->\n</script>';
+        var once   = normalize(stale);
+        assert.strictEqual(normalize(once), once, 'second pass must be a no-op');
+    });
+
+    it('replica: application script tags are NOT touched (anchor safety)', function() {
+        // a literal-nonce app tag with no <!-- right after, and a non-__gina inline script
+        var app = '<script type="text/javascript" nonce="APP1">var x=1;</script>'
+                + '<script nonce="APP2">appBoot();</script>';
+        assert.strictEqual(normalize(app), app, 'app-authored tags must pass through verbatim');
     });
 
 });

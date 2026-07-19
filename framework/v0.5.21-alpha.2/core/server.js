@@ -5571,9 +5571,19 @@ function Server(options) {
             _remaining = Math.max(0, Math.floor( (hit.createdAt.getTime() + Math.round(hit.ttl * 1000) - Date.now()) / 1000 ));
         }
         var _vis = ( hit.visibility === 'public' ) ? 'public' : 'private';
+        // #B130 — a hit replays the STORED headers + body, both minted by the request
+        // that WROTE the entry. When the stored CSP header carries a nonce, replaying
+        // the pair verbatim would reuse one nonce for every client of this URL until
+        // the TTL (and the Csp middleware never re-mints here — the hit short-circuits
+        // dispatch). Mint fresh + rewrite the header copy AND the body occurrences so
+        // nonces stay per-response. The stored entry is never mutated.
+        // Keep in sync with the isaac pre-routing read (server.isaac.js).
+        var _rn         = lib.RenderCache.renonceCspHeaders(hit.responseHeaders || null);
+        var _hitContent = _rn ? lib.RenderCache.swapNonces(hit.content, _rn.oldNonces, _rn.nonce) : hit.content;
         // The page's own headers first, then the cache metadata.
         if ( hit.responseHeaders ) {
-            for (var h in hit.responseHeaders) { res.setHeader(h, hit.responseHeaders[h]); }
+            var _hitHeaders = _rn ? _rn.headers : hit.responseHeaders;
+            for (var h in _hitHeaders) { res.setHeader(h, _hitHeaders[h]); }
         }
         // #RC5 — ONE header string, set AND logged from the same var (the prior dual
         // construction at setHeader + console.info was a drift hazard).
@@ -5595,12 +5605,12 @@ function Server(options) {
                 var _pending = res.getHeaders ? res.getHeaders() : {};
                 for (var ph in _pending) { _sh[ph] = _pending[ph]; }
                 res.stream.respond(_sh);
-                res.stream.end(hit.content);
+                res.stream.end(_hitContent);
                 res.headersSent = true;
             }
         } else {
             if ( !res.headersSent && !res.writableEnded ) {
-                res.end(hit.content);
+                res.end(_hitContent);
             }
         }
         console.info(req.method + ' [200][' + _cs + '] ' + (req.originalUrl || req.url));
