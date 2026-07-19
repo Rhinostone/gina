@@ -13802,6 +13802,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                             handleErrorsDisplay($gForm, gResult.error, gResult.data, _touchedField);
                                         }
                                     }
+                                    // #B136 — the fresh global pass is VALID but the store still
+                                    // holds errors from an earlier pass (e.g. a cross-field
+                                    // comparison fixed by ANOTHER control's change: a checkbox
+                                    // handler raising the compared field). Every stored error is
+                                    // stale — clear each previously-errored field's display, not
+                                    // just the touched field's, so the re-enabled submit trigger
+                                    // never sits beside a stale blocking-error message.
+                                    // handleErrorsDisplay's empty-errors path also prunes the
+                                    // per-field bookkeeping; new errors are never rendered here
+                                    // (untouched-field display still waits for interaction or
+                                    // submit).
+                                    else if ( isFormValid && instance.$forms[formId].errors && instance.$forms[formId].errors.count() > 0 ) {
+                                        var staleErrors = instance.$forms[formId].errors;
+                                        instance.$forms[formId].errors = {};
+                                        for (var staleField in staleErrors) {
+                                            handleErrorsDisplay($gForm, {}, null, staleField);
+                                        }
+                                    }
                                     // Fixed on 2025-03-16
                                     // Eg.: input select change impacting another element: solve `no more errors`
                                     else if ( instance.$forms[formId].errors && !instance.$forms[formId].errors.count() ) {
@@ -15584,6 +15602,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             var _touchedField = event.target.name;
                             if ( typeof(gResult.error[_touchedField]) != 'undefined' ) {
                                 handleErrorsDisplay($gForm, gResult.error, gResult.data, _touchedField);
+                            }
+                        }
+                        // #B136 — same stale-clear as processEvent's global pass (keep the
+                        // two copies in sync): the fresh pass is valid but the store still
+                        // holds earlier errors — clear each previously-errored field's
+                        // display, not just the touched field's.
+                        else if ( isFormValid && instance.$forms[formId].errors && instance.$forms[formId].errors.count() > 0 ) {
+                            var staleErrors = instance.$forms[formId].errors;
+                            instance.$forms[formId].errors = {};
+                            for (var staleField in staleErrors) {
+                                handleErrorsDisplay($gForm, {}, null, staleField);
                             }
                         }
 
