@@ -14021,6 +14021,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * are deliberately NOT intercepted (#B134): they return before
      * preventDefault so the native select-all/copy/paste/cut/undo defaults
      * run — the rebuild cannot reproduce them.
+     *
+     * Gated to REAL Safari at the registerForLiveChecking call site (#B135):
+     * Chromium UAs carry the Safari token but were never this workaround's
+     * target — they get native behavior.
      * @param {object} $el HTMLElement
      * @param {number} [liveCheckTimer] - live-check debounce handle, cleared per intercepted keystroke
      */
@@ -14260,9 +14264,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 addLiveForInput($form, $el, liveCheckTimer, isCustomEl);
                 if ( !isCustomEl ) {
                     // Bypass Safari autocomplete (native inputs only)
+                    // #B135 — REAL Safari only: every Chromium UA (Chrome/Edge/
+                    // Brave/Opera...) also carries the "Safari/537.36" token, so
+                    // the bare /safari/i test matched them all and ran this
+                    // WebKit workaround where it was never intended (see the
+                    // handleAutoComplete header). WebKit-on-iOS third-party
+                    // browsers (CriOS/FxiOS/EdgiOS — no "Chrome"/"Chromium"
+                    // token) stay matched on purpose: they run Safari's engine.
                     var isAutoCompleteField = $el.getAttribute('autocomplete');
                     if (
                         /safari/i.test(navigator.userAgent)
+                        && !/chrom(e|ium)/i.test(navigator.userAgent)
                         && isAutoCompleteField
                         && /^(off|false)/i.test(isAutoCompleteField)
                     ) {
