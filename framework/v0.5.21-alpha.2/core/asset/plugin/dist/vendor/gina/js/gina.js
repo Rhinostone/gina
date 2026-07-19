@@ -14014,7 +14014,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * handleAutoComplete
      * This is a temporary fix to handle safari autocomplete/autosuggest
      * Will be removed when Safari honores autocomplete="off"
+     *
+     * Intercepts keydown on the field (preventDefault + a programmatic value
+     * rebuild behind a transient readonly) so the browser never sees typing
+     * and offers no autofill/autosuggest. Modifier chords (metaKey/ctrlKey)
+     * are deliberately NOT intercepted (#B134): they return before
+     * preventDefault so the native select-all/copy/paste/cut/undo defaults
+     * run — the rebuild cannot reproduce them.
      * @param {object} $el HTMLElement
+     * @param {number} [liveCheckTimer] - live-check debounce handle, cleared per intercepted keystroke
      */
     var handleAutoComplete = function($el, liveCheckTimer) {
 
@@ -14035,6 +14043,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // add once
             if ( typeof(gina.events[evtName]) == 'undefined' ) {
                 addListener(gina, event.currentTarget, evtName, function(e) {
+                    // #B134 — modifier chords are NOT intercepted: return before
+                    // preventDefault so the native select-all/copy/paste/cut/undo
+                    // defaults run. The rebuild below cannot reproduce them — the
+                    // printable branch typed the chord letter into the field
+                    // (Cmd+A appended "a") and execCommand("paste") is inert in
+                    // unprivileged web content. The field is not readonly here
+                    // (focusin removed it), so the native edit lands and the
+                    // live-check picks it up on the keyup that follows.
+                    if ( e.metaKey || e.ctrlKey ) {
+                        return;
+                    }
                     e.preventDefault();
                     clearTimeout(liveCheckTimer);
 
@@ -14118,53 +14137,61 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             }
                             break;
                         // Shortcuts
-                        case 17: // CTRL
-                        case 91: // CMD
-                            console.debug("CMD, CTRL hit");
-                            e.preventDefault();
-                            break;
-                        case 67: // to handle CMD+C (copy)
-                            if (
-                                keyboardMapping[67] && keyboardMapping[91] // mac osx
-                                ||
-                                keyboardMapping[67] && keyboardMapping[17] // windows
-                            ) {
-                                $_el.setSelectionRange(posStart, posEnd);
-                                document.execCommand("copy");
-                                break;
-                            }
-                        case 86: // to handle CMD+V (paste)
-                            if (
-                                keyboardMapping[86] && keyboardMapping[91] // mac osx
-                                ||
-                                keyboardMapping[86] && keyboardMapping[17] // windows
-                            ) {
-                                if (posStart != posEnd) {
-                                    $_el.value = $_el.value.replace(str.substring(posStart, posEnd), '');
-                                }
-                                setCaretToPos($_el, posStart);
-                                document.execCommand("paste");
-                                break;
-                            }
-                        case 88: // to handle CMD+X (cut)
-                            if (
-                                keyboardMapping[88] && keyboardMapping[91] // mac osx
-                                ||
-                                keyboardMapping[88] && keyboardMapping[17] // windows
-                            ) {
-                                $_el.setSelectionRange(posStart, posEnd);
-                                document.execCommand("cut");
-                                break;
-                            }
-                        case 90: // to handle CMD+Z (undo)
-                            if (
-                                keyboardMapping[90] && keyboardMapping[91] // mac osx
-                                ||
-                                keyboardMapping[90] && keyboardMapping[17] // windows
-                            ) {
-                                $_el.value = $_el.defaultValue;
-                                break;
-                            }
+                        // #B134 — the modifier-chord cases below are unreachable
+                        // since the e.metaKey/e.ctrlKey bail at the top of this
+                        // handler: chords now run natively, and the native
+                        // copy/cut/paste/select-all/undo defaults are correct
+                        // where these re-implementations were not (the paste
+                        // re-implementation was inert in unprivileged web
+                        // content, and undo-to-defaultValue wiped user input).
+                        // Kept commented for the record.
+                        // case 17: // CTRL
+                        // case 91: // CMD
+                        //     console.debug("CMD, CTRL hit");
+                        //     e.preventDefault();
+                        //     break;
+                        // case 67: // to handle CMD+C (copy)
+                        //     if (
+                        //         keyboardMapping[67] && keyboardMapping[91] // mac osx
+                        //         ||
+                        //         keyboardMapping[67] && keyboardMapping[17] // windows
+                        //     ) {
+                        //         $_el.setSelectionRange(posStart, posEnd);
+                        //         document.execCommand("copy");
+                        //         break;
+                        //     }
+                        // case 86: // to handle CMD+V (paste)
+                        //     if (
+                        //         keyboardMapping[86] && keyboardMapping[91] // mac osx
+                        //         ||
+                        //         keyboardMapping[86] && keyboardMapping[17] // windows
+                        //     ) {
+                        //         if (posStart != posEnd) {
+                        //             $_el.value = $_el.value.replace(str.substring(posStart, posEnd), '');
+                        //         }
+                        //         setCaretToPos($_el, posStart);
+                        //         document.execCommand("paste");
+                        //         break;
+                        //     }
+                        // case 88: // to handle CMD+X (cut)
+                        //     if (
+                        //         keyboardMapping[88] && keyboardMapping[91] // mac osx
+                        //         ||
+                        //         keyboardMapping[88] && keyboardMapping[17] // windows
+                        //     ) {
+                        //         $_el.setSelectionRange(posStart, posEnd);
+                        //         document.execCommand("cut");
+                        //         break;
+                        //     }
+                        // case 90: // to handle CMD+Z (undo)
+                        //     if (
+                        //         keyboardMapping[90] && keyboardMapping[91] // mac osx
+                        //         ||
+                        //         keyboardMapping[90] && keyboardMapping[17] // windows
+                        //     ) {
+                        //         $_el.value = $_el.defaultValue;
+                        //         break;
+                        //     }
                         default:
                             // Replace selection
                             if (e.key.length > 1) {
