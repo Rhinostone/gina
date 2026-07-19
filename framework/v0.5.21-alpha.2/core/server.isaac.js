@@ -2234,7 +2234,11 @@ function ServerEngineClass(options) {
                         return fs.createReadStream(filename)
                             .on('error', function onError(err) {
                                 console.error("[SERVER][CACHE][FILE ERROR] ", err.stack||err.message||err);
-                                return response.end(''+ (err.stack||err.message||err));
+                                // #B131 — message-only on the wire, aligned with the
+                                // onCachedFileRenonce buffered sibling above; the stack
+                                // stays in the log line above (it previously led the
+                                // wire fallback chain, putting frames on the wire).
+                                return response.end(''+ (err.message || err));
                             })
                             .on('end', function onResponse(){
                                 console.info(request.method +' [200] '+ request.url);

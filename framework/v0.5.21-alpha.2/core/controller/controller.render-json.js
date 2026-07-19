@@ -211,12 +211,17 @@ module.exports = function renderJSON(jsonObj, deps) {
                 }
             } catch (err){
                 response.statusCode    = 500;
+                // #B131 — the reason phrase must be a short single line: a multi-line
+                // stack is invalid on the HTTP/1.1 status line (Node rejects the write)
+                // and would leak internal paths + frames to the client. The stack goes
+                // to the server log instead.
+                console.error('[ RENDER-JSON ] status resolution failed: ', err.stack||err.message||err);
                 // HTTP/2 (RFC7540 8.1.2.4):
                 // This standard for HTTP/2 explicitly states that status messages are not supported.
                 // In HTTP/2, the status is conveyed solely by the numerical status code (e.g., 200, 404, 500),
                 // and there is no field for a human-readable status message.
                 if ( !/http\/2/.test(local.options.conf.server.protocol) ) {
-                    response.statusMessage = err.stack;
+                    response.statusMessage = err.message || 'Internal Server Error';
                 }
             }
         }

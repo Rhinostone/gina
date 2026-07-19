@@ -88,14 +88,15 @@ describe('#B112 §02 — the 500 response body carries the error, not an empty b
         });
     }
 
-    it('FIXED: response.end("" + (err.stack || err.message || err)) serves the real error', async function () {
+    it('FIXED: response.end("" + (err.message || err)) serves the real error', async function () {
         var err = new Error('B112 response cause');
         var out = await serveOnce(function (req, res) {
             res.writeHead(500, { 'Content-Type': 'text/plain' });
-            res.end('' + (err.stack || err.message || err));   // exact shipped isaac:2002 shape
+            res.end('' + (err.message || err));   // exact shipped isaac cache-file-error shape (#B131 message-only)
         });
         assert.equal(out.status, 500);
         assert.ok(out.body.indexOf('B112 response cause') >= 0, 'the body carries the real error');
+        assert.ok(out.body.length > 0, 'never the #B112 empty body');
     });
 
     it('SUBTRACT: the pre-fix response.end("" + err.stack | err.message | err) serves an EMPTY body', async function () {
@@ -137,11 +138,15 @@ describe('#B112 §03 — the bitwise err.stack|err.message form is globally abse
         assert.ok(/\.stack\|\|/.test(min), 'the fixed .stack|| chain must be baked into the minified artifact');
     });
 
-    it('server.isaac.js — the response.end site keeps the load-bearing parenthesised ||-chain', function () {
+    it('server.isaac.js — the cache-file error sites ship message-only on the wire (#B131)', function () {
         var src = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
         assert.ok(
-            /response\.end\(''\+\s*\(err\.stack\|\|err\.message\|\|err\)\)/.test(src),
-            'isaac:2002 must be response.end("" + (err.stack||err.message||err)) — parens preserve the fallback'
+            /response\.end\(''\+\s*\(err\.message\s*\|\|\s*err\)\)/.test(src),
+            'the cache-file error wire sites must be response.end("" + (err.message || err)) — parens preserve the fallback; the stack stays in the server log'
+        );
+        assert.ok(
+            src.indexOf("response.end(''+ (err.stack") < 0,
+            'no isaac response.end may lead with err.stack — #B131 wire hygiene'
         );
     });
 });

@@ -6202,6 +6202,37 @@ function Server(options) {
         var bundleConf      = self.conf[self.appName][self.env];
         var _h1ContentType  = null;
 
+        // #B131 — scope-gated stack egress. Feeders (router.js action/middleware
+        // catches, server.js internals) pass `err.stack` pre-flattened as `msg`,
+        // so outside local scope every emit below (the JSON XHR/API branches, the
+        // inline HTML fallback, the custom-error page data built from `err`) would
+        // carry absolute framework paths + stack frames to HTTP clients. Outside
+        // local scope: log the full text server-side (before this gate it only
+        // survived via the wire), then send the message line only / strip the
+        // field. Local scope stays byte-identical — the dev toolbar reads the
+        // stack. The gate reads self.isLocalScope() — the same NODE_SCOPE_IS_LOCAL
+        // env read as controller.js's module-level scope cache (both set once at
+        // gna.js bootstrap), so the server-side and controller-side throwError
+        // gates can never disagree. bundleConf.server.scopeIsLocal was rejected:
+        // it derives from projects.json def_scope (config.js), which can lag the
+        // RUNTIME scope of a boot started with an explicit NODE_SCOPE/--scope.
+        var sanitizeWireError = function(m, c) {
+            if ( self.isLocalScope() ) {
+                return m;
+            }
+            if ( typeof(m) == 'string' && /\n\s+at\s/.test(m) ) {
+                console.error('[ BUNDLE ][ '+ self.appName +' ] '+ local.request.method +' [ '+ c +' ] '+ local.request.url +'\n'+ m);
+                return m.split('\n')[0];
+            }
+            if ( m && typeof(m) == 'object' && typeof(m.stack) != 'undefined' ) {
+                console.error('[ BUNDLE ][ '+ self.appName +' ] '+ local.request.method +' [ '+ c +' ] '+ local.request.url +'\n'+ m.stack);
+                m = JSON.clone(m);
+                delete m.stack;
+            }
+            return m;
+        };
+        msg = sanitizeWireError(msg, code);
+
         if ( typeof(msg) != 'object' ) {
             err = {
                 code    : code,
@@ -6221,6 +6252,9 @@ function Server(options) {
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error;
                     code    = code.status;
+                    // #B131 — the 1-arg errorObject shape lands `msg` after the
+                    // top-of-function gate already ran; sanitize the reshaped value too.
+                    msg     = sanitizeWireError(msg, code);
                 }
 
                 // Internet Explorer override

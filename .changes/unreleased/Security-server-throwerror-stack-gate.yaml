@@ -1,0 +1,3 @@
+kind: Security
+body: 'Server-side error responses no longer serialize stack traces to HTTP clients outside local scope: the engine-level error responder logs the full stack server-side and sends the message line only (JSON/XHR bodies, the inline HTML fallback, and custom-error-page data), the JSON render delegate''s HTTP/1.1 reason-phrase fallback ships the error message instead of a stack, and the cached-file stream error path ships message-only — local scope keeps the stack on the wire for the development toolbar'
+time: 2026-07-19T23:58:02+01:00
