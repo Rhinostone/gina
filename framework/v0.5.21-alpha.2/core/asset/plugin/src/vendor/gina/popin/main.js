@@ -21,9 +21,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
     /**
      * Module-level preload cache, keyed by URL. Warmed by the delegated
-     * mouseover/focusin listeners (installPreload) and consumed once at open time
-     * (consumePreload). Shared across popin instances so a hover-preload survives the
-     * subsequent click. A reserved-but-not-yet-loaded entry is `null` (in-flight).
+     * mouseover/focusin listeners (installPreload) and by the opt-in idle eager
+     * pass (installEagerPreload); consumed once at open time (consumePreload).
+     * Shared across popin instances so a warm entry survives the subsequent
+     * click. A reserved-but-not-yet-loaded entry is `null` (in-flight).
      *
      * @inner
      * @type {object}
@@ -81,6 +82,8 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
     var _ginaDialogDelegated = false;
     /** @inner @type {boolean} module guard — the preload listeners are installed once */
     var _ginaPreloadInstalled = false;
+    /** @inner @type {boolean} module guard — the idle eager-preload pass is installed once */
+    var _ginaEagerInstalled = false;
 
     /**
      * Gina Popin Handler
@@ -566,13 +569,21 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
          * Cross-origin URLs are left for the click-time XHR/CORS path.
          *
          * @inner
+         * @param {string} url - same-origin popin content URL
+         * @param {function} [onDone] - completion callback, fired on EVERY exit path
+         *   (cross-origin bail, cache, or decline) so a serialized caller — the
+         *   eager warm queue — always advances. The hover path passes none.
          */
-        function preloadFetch(url) {
+        function preloadFetch(url, onDone) {
+            var _preloadDone = function () {
+                if ( typeof(onDone) == 'function' ) { onDone(); }
+            };
             if (
                 /^(http|https):/.test(url)
                 && !new RegExp('^' + window.location.protocol + '//' + window.location.host).test(url)
             ) {
                 delete preloadCache[url];
+                _preloadDone();
                 return;
             }
             var xhrPreload = new XMLHttpRequest();
@@ -598,6 +609,7 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                         delete preloadCache[url];
                         for ( var _wf = 0; _wf < _waiters.length; ++_wf ) { _waiters[_wf](null); }
                     }
+                    _preloadDone();
                 }
             };
             xhrPreload.send();
@@ -698,10 +710,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
         /**
          * installPreload — one-time delegated `mouseover` + `focusin` listeners that warm
          * preloadCache for AJAX triggers (`data-gina-dialog-src` / legacy
-         * `data-gina-popin-url`). GET + same-origin only; disabled triggers skipped;
-         * repeated hover over descendants is a no-op (URL-cache dedup). A trigger whose
-         * GET is not safe to fire on hover/focus (server-side effects) opts out with
-         * `data-gina-dialog-preload="false"` — honored on legacy triggers too (#B91).
+         * `data-gina-popin-url`). Per-trigger gating (disabled skip, the #B91
+         * `data-gina-dialog-preload="false"` opt-out, URL-cache dedup) lives in
+         * warmTrigger, shared with the idle eager pass (installEagerPreload) so the
+         * two warm paths can never drift.
          *
          * @inner
          */
@@ -718,28 +730,117 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 if ( !$trigger ) {
                     return;
                 }
-                if (
-                    $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
-                    || $trigger.getAttribute('aria-disabled') == 'true'
-                ) {
-                    return;
-                }
-                // #B91 — per-trigger preload opt-out: a trigger whose GET has server-side
-                // effects declares itself. Case-insensitive on purpose (a templated "False"
-                // must not silently fail open and fire the GET anyway); its click still
-                // loads normally, at click time (consumePreload -> false).
-                if ( /^false$/i.test($trigger.getAttribute('data-gina-dialog-preload')) ) {
-                    return;
-                }
-                var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
-                if ( !url || typeof(preloadCache[url]) != 'undefined' ) {
-                    return; // already cached or in-flight — dedup
-                }
-                preloadCache[url] = null; // reserve in-flight slot (dedup concurrent intents)
-                preloadFetch(url);
+                warmTrigger($trigger);
             };
             document.addEventListener('mouseover', onIntent);
             document.addEventListener('focusin', onIntent);
+        }
+
+        /**
+         * warmTrigger — shared per-trigger warm gate + fetch, used by BOTH the
+         * hover/focus intent path (installPreload's onIntent) and the idle eager
+         * pass (installEagerPreload). Gates, in order: the disabled/aria-disabled
+         * skip, the #B91 `data-gina-dialog-preload="false"` opt-out
+         * (case-insensitive), URL resolution, the already-cached/in-flight dedup —
+         * then the in-flight slot reserve + GET. Keeping the gates in ONE place is
+         * the point: a future gate change cannot land in one warm path and miss
+         * the other.
+         *
+         * `onDone` (optional) fires on EVERY exit path — gate skip or fetch
+         * completion — so a serialized caller (the eager queue) always advances.
+         * The hover path passes none.
+         *
+         * @inner
+         * @param {object} $trigger - the matched trigger element
+         * @param {function} [onDone]
+         */
+        function warmTrigger($trigger, onDone) {
+            var _warmDone = function () {
+                if ( typeof(onDone) == 'function' ) { onDone(); }
+            };
+            if (
+                $trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
+                || $trigger.getAttribute('aria-disabled') == 'true'
+            ) {
+                _warmDone();
+                return;
+            }
+            // #B91 — per-trigger preload opt-out: a trigger whose GET has server-side
+            // effects declares itself. Case-insensitive on purpose (a templated "False"
+            // must not silently fail open and fire the GET anyway); its click still
+            // loads normally, at click time (consumePreload -> false).
+            if ( /^false$/i.test($trigger.getAttribute('data-gina-dialog-preload')) ) {
+                _warmDone();
+                return;
+            }
+            var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
+            if ( !url || typeof(preloadCache[url]) != 'undefined' ) {
+                _warmDone();
+                return; // already cached or in-flight — dedup
+            }
+            preloadCache[url] = null; // reserve in-flight slot (dedup concurrent intents)
+            preloadFetch(url, onDone);
+        }
+
+        /**
+         * installEagerPreload — one-time idle warm-all pass for triggers that opt
+         * in with `data-gina-dialog-preload="eager"` (case-insensitive). Runs off
+         * the critical path by construction: waits for `window` load, then
+         * schedules on requestIdleCallback (setTimeout fallback — load-bearing for
+         * browsers without rIC), and warms the opted-in triggers ONE AT A TIME
+         * through the same warmTrigger gate as the hover path — so the #B91
+         * `"false"` opt-out, the disabled skip, and the cache dedup (an eager warm
+         * and a hover warm coalesce into one GET) all apply identically. Skipped
+         * entirely when the browser signals Save-Data.
+         *
+         * One-shot: triggers injected after the pass are not re-scanned — the
+         * delegated hover/focus warm covers them. Content staleness matches the
+         * shipped hover-warm semantics (no TTL): the cache entry lives until
+         * consumed, declined, or page unload — a trigger opts into that window by
+         * declaring `eager`.
+         *
+         * @inner
+         */
+        function installEagerPreload() {
+            if ( _ginaEagerInstalled ) {
+                return;
+            }
+            _ginaEagerInstalled = true;
+            // Respect the user's reduced-data preference — no speculative warm at all.
+            if ( typeof(navigator) != 'undefined' && navigator.connection && navigator.connection.saveData ) {
+                return;
+            }
+            var run = function () {
+                var $candidates = document.querySelectorAll('[data-gina-dialog-src],[data-gina-popin-url]');
+                var queue = [];
+                for (var c = 0, cLen = $candidates.length; c < cLen; ++c) {
+                    if ( /^eager$/i.test($candidates[c].getAttribute('data-gina-dialog-preload')) ) {
+                        queue.push($candidates[c]);
+                    }
+                }
+                // Serialized: each warm starts only when the previous one finished
+                // (or was gate-skipped) — N eager popins never burst N parallel GETs.
+                var next = function () {
+                    var $trigger = queue.shift();
+                    if ( !$trigger ) {
+                        return;
+                    }
+                    warmTrigger($trigger, next);
+                };
+                next();
+            };
+            var schedule = function () {
+                if ( typeof(window.requestIdleCallback) == 'function' ) {
+                    window.requestIdleCallback(run);
+                } else {
+                    setTimeout(run, 1500);
+                }
+            };
+            if ( document.readyState == 'complete' ) {
+                schedule();
+            } else {
+                window.addEventListener('load', schedule, { once: true });
+            }
         }
 
         /**
@@ -2693,9 +2794,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
 
             // New `data-gina-dialog-*` entry layer — install the delegated open + preload
             // listeners once per page (module-guarded). Additive to the legacy bindOpen
-            // scan (which registerPopin still runs per popin).
+            // scan (which registerPopin still runs per popin). The eager pass warms
+            // `data-gina-dialog-preload="eager"` triggers off the critical path
+            // (post-load idle) through the same warmTrigger gate.
             bindDelegatedOpen();
             installPreload();
+            installEagerPreload();
             //instance.on('init', function(event) {
             addListener(gina, instance.target, 'init.'+instance.id, function(e) {
 
