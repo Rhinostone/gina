@@ -325,6 +325,123 @@ describe('validator-is-alias §05 — replicas + subtracts (pre-fix shapes fail)
     });
 });
 
+describe('validator-is-alias §07 — #B138: the alias handshake re-arms PER INVOCATION', function () {
+
+    // The pre-#B138 installer armed the shared `_currentValidatorAlias` slot ONCE, from
+    // an install-time IIFE (the installer is gated once-per-instance), while is()
+    // CONSUMES the slot with a delete on every call. On any RE-APPLICATION against the
+    // same instance (a `conditions`/_case_ re-evaluation, forEachField recursion) every
+    // numbered rule therefore fell back to the collapsed key 'is': the LAST-DECLARED
+    // rule overwrote its siblings there, and its message rendered twice (its own key +
+    // the collapsed key — the display loop has no message dedup). The digit is
+    // irrelevant — an index of 0 is never computed (the alias is the whole rule
+    // string); whichever numbered rule is declared last doubles.
+    //
+    // Harness: REAL form-validator.js field objects (server shape, $fields = null) +
+    // REAL lib/inherits; the installer body is mirrored per shape (fixed vs pre-fix),
+    // and install/invoke INTERLEAVE per rule exactly like checkFieldAgainstRules's
+    // loop (install is gated on `undefined`, so pass 2 re-invokes without installing).
+
+    var FormValidator = require(FV_PATH);
+    var inherits      = require(path.join(FW, 'lib/inherits'));
+    var _root         = ( typeof(global) != 'undefined' ) ? global : null;
+
+    function freshD() { return new FormValidator({ amount: '5' }, null); }
+
+    // Mirrors the SHIPPED (#B138-fixed) installer: inherits-composed alias wrapped so
+    // every delegation re-arms the slot first.
+    function installFixed(d, rule) {
+        d.amount[rule] = function () {};
+        d.amount[rule] = inherits(d.amount[rule], d.amount[ rule.replace(/\d+/, '') ]);
+        d.amount[rule] = (function (aliasName, composed) {
+            return function () {
+                var _aliasRoot = ( typeof(window) != 'undefined' ) ? window : ( ( typeof(global) != 'undefined' ) ? global : null );
+                if (_aliasRoot) { _aliasRoot._currentValidatorAlias = aliasName; }
+                return composed.apply(this, arguments);
+            };
+        }(rule, d.amount[rule]));
+    }
+    // Mirrors the PRE-#B138 installer: the IIFE arms the slot once, at install time.
+    function installPre(d, rule) {
+        d.amount[rule] = function () {};
+        d.amount[rule] = inherits(d.amount[rule], d.amount[ rule.replace(/\d+/, '') ]);
+        d.amount[rule].setAlias = (function (alias) { this._currentValidatorAlias = alias; }(rule));
+    }
+    // One application pass: per-rule install-then-invoke, like the executor loop.
+    // `install` is a no-op when the alias is already a function (the installer's gate).
+    function applyPass(d, install) {
+        if ( typeof(d.amount.is0) == 'undefined' ) { install(d, 'is0'); }
+        d.amount.is0.apply(d.amount, ['5 <= 3', 'too high']);   // fails
+        if ( typeof(d.amount.is1) == 'undefined' ) { install(d, 'is1'); }
+        d.amount.is1.apply(d.amount, ['5 >= 10', 'too low']);   // fails
+        return d.amount.errors || {};
+    }
+
+    it('07.1 - fixed shape: BOTH applications key distinctly, no collapsed `is`', function () {
+        if (_root) { delete _root._currentValidatorAlias; }
+        var d = freshD();
+        var p1 = applyPass(d, installFixed);
+        assert.equal(p1.is0, 'too high');
+        assert.equal(p1.is1, 'too low');
+        assert.equal(typeof p1.is, 'undefined', 'pass 1 must not collapse');
+        var p2 = applyPass(d, installFixed);                    // re-application: install gate is false
+        assert.equal(p2.is0, 'too high');
+        assert.equal(p2.is1, 'too low');
+        assert.equal(typeof p2.is, 'undefined',
+            'pass 2 must not collapse — the wrapper re-arms the slot on every invocation');
+        if (_root) { delete _root._currentValidatorAlias; }
+    });
+
+    it('07.2 - SUBTRACT: the pre-fix install-once arming collapses on RE-application (declared-last doubles)', function () {
+        if (_root) { delete _root._currentValidatorAlias; }
+        var d = freshD();
+        var p1 = applyPass(d, installPre);
+        // pass 1 is clean — install/invoke interleave arms the slot right before each read
+        assert.equal(p1.is0, 'too high');
+        assert.equal(p1.is1, 'too low');
+        assert.equal(typeof p1.is, 'undefined', 'control: the pre-fix shape is clean on pass 1');
+        var p2 = applyPass(d, installPre);                      // no re-install -> slot never re-armed
+        assert.equal(typeof p2.is, 'string',
+            'pre-fix pass 2 must collapse onto the bare `is` key (the #B138 signature)');
+        assert.equal(p2.is, 'too low',
+            'the collapsed key carries the LAST-DECLARED rule\'s message — the digit is irrelevant');
+        assert.equal(p2.is, p2.is1,
+            'the duplicate pair: the last-declared alias key and the collapsed key hold the same message');
+        if (_root) { delete _root._currentValidatorAlias; }
+    });
+
+    it('07.3 - real plugin, both aliases failing: NO collapsed `is` key ships (closes the 03.5 gap)', function () {
+        var res = Validator({
+            amount : { isNumber: true, is0: ['$amount <= $cap', 'too high'], is1: ['$amount >= $floor', 'too low'] },
+            cap    : { isNumber: true },
+            floor  : { isNumber: true }
+        }, { amount: '5', cap: '3', floor: '10' }, 'is-alias-form');
+        assert.equal(res.isValid(), false);
+        assert.equal(res.error.amount.is0, 'too high');
+        assert.equal(res.error.amount.is1, 'too low');
+        assert.equal(typeof res.error.amount.is, 'undefined',
+            'no bare `is` key may accompany numbered aliases — the missing negative that let #B138 ship');
+    });
+
+    it('07.4 - source pin: the wrapper re-arms inside the installer (active code)', function () {
+        assert.ok(MAIN_ACTIVE.indexOf('_currentValidatorAlias = aliasName') > -1,
+            'the per-invocation arming must be in active main.js');
+        assert.ok(MAIN_ACTIVE.indexOf('composed.apply(this, arguments)') > -1,
+            'the wrapper must delegate to the inherits-composed alias');
+    });
+
+    it('07.5 - source pin: the install-time setAlias IIFE is gone (comment-stripped negative)', function () {
+        assert.ok(MAIN_ACTIVE.indexOf('setAlias') < 0,
+            'the pre-fix install-time arming must not reappear in active code');
+    });
+
+    it('07.6 - dist fidelity: the wrapper reached the unminified bundle (rebuild guard)', function () {
+        var distJs = fs.readFileSync(path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.js'), 'utf8');
+        assert.ok(distJs.indexOf('composed.apply(this, arguments)') > -1,
+            'gina.js must carry the #B138 wrapper — the plugin bundle was not rebuilt from source');
+    });
+});
+
 describe('validator-is-alias §06 — dist fidelity (minify-surviving tokens only)', function () {
 
     // Both validator sources are browser-bundled; a source-only fix that skips the

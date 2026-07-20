@@ -7423,9 +7423,32 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 if ( /^is\d+$/.test(rule) && typeof(d[field][rule]) == 'undefined' ) { // is aliases
                     d[field][rule] = function(){};
                     d[field][rule] = inherits(d[field][rule], d[field][ rule.replace(/\d+/, '') ]);
-                    d[field][rule].setAlias = (function(alias) {
-                        this._currentValidatorAlias = alias
-                    }(rule));
+                    // #B138 — arm the alias handshake PER INVOCATION, not per install.
+                    // The old install-time IIFE armed the shared `_currentValidatorAlias`
+                    // slot ONCE (this install branch is gated once-per-instance), while
+                    // form-validator's is() CONSUMES the slot with a delete on every
+                    // call — so on any re-application against the same instance (a
+                    // `conditions`/_case_ re-evaluation, forEachField recursion) the
+                    // slot was empty: every numbered rule collapsed onto the shared key
+                    // 'is', the last-declared rule overwrote its siblings there, and its
+                    // message rendered TWICE (its own key + the collapsed 'is' key — the
+                    // error-display loop has no message dedup). The wrapper re-arms the
+                    // slot immediately before every delegation, so is<N> keys stay
+                    // distinct on every application. Root resolution mirrors
+                    // form-validator's _aliasRoot (browser window / server global).
+                    // was:
+                    // d[field][rule].setAlias = (function(alias) {
+                    //     this._currentValidatorAlias = alias
+                    // }(rule));
+                    d[field][rule] = (function (aliasName, composed) {
+                        return function () {
+                            var _aliasRoot = ( typeof(window) != 'undefined' ) ? window : ( ( typeof(global) != 'undefined' ) ? global : null );
+                            if (_aliasRoot) {
+                                _aliasRoot._currentValidatorAlias = aliasName;
+                            }
+                            return composed.apply(this, arguments);
+                        };
+                    }(rule, d[field][rule]));
                 }
                 // skip when not processing rule function
                 if ( typeof(d[field][rule]) != 'function' ) {
