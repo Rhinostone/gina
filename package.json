@@ -1,13 +1,16 @@
 {
   "name": "gina",
   "version": "0.5.22-alpha.2",
-  "description": "Node.js MVC framework with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency",
+  "description": "MVC framework for Node.js and Bun with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency",
   "keywords": [
     "nodejs",
+    "bun",
     "framework",
     "mvc",
     "http2",
     "rest-api",
+    "openapi",
+    "websocket",
     "full-stack",
     "server-side-rendering",
     "event-driven",
