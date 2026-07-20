@@ -3427,7 +3427,19 @@ function Server(options) {
 
 
 
-            request.setEncoding(self.conf[self.appName][self.env].encoding);
+            // #B103 (2026-07-20) — a multipart body must reach busboy RAW (Buffers):
+            // decoding the request stream to strings mangles every byte sequence that
+            // is not valid UTF-8 (→ U+FFFD) BEFORE busboy even parses, so binary file
+            // payloads arrived pre-corrupted (and re-encoded ~1.5-2x larger). The
+            // decode stays for every other content-type — the non-multipart branches
+            // accumulate request.body as text. Same flag is reused by the multipart
+            // branch below so the two sites cannot drift.
+            // was:
+            // request.setEncoding(self.conf[self.appName][self.env].encoding);
+            request.isMultipart = /multipart\/form-data;/.test(request.headers['content-type'] || '');
+            if ( !request.isMultipart ) {
+                request.setEncoding(self.conf[self.appName][self.env].encoding);
+            }
             // be carfull, if you are using jQuery + cross domain, you have to set the header manually in your $.ajax query -> headers: {'X-Requested-With': 'XMLHttpRequest'}
             request.isXMLRequest       = ( request.headers['x-requested-with'] && request.headers['x-requested-with'] == 'XMLHttpRequest' ) ? true : false;
 
@@ -4213,7 +4225,10 @@ function Server(options) {
                 // multipart wrapper for uploads
                 // files are available from your controller or any middlewares:
                 //  @param {object} req.files
-                if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
+                // #B103 — flag computed once at the request prologue (where it also
+                // gates request.setEncoding: a multipart body must stay RAW for busboy).
+                // was: if ( /multipart\/form-data;/.test(request.headers['content-type']) ) {
+                if ( request.isMultipart ) {
                     // TODO - get options from settings.json & settings.{env}.json ...
                     // -> https://github.com/mscdex/busboy
                     var opt = self.conf[self.appName][self.env].content.settings.upload;
@@ -4568,12 +4583,21 @@ function Server(options) {
                         var liner = new require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {
-
-                            var str = chunk.toString();
-                            file._dataLen += str.length;
-
-                            var ab = Buffer.from(str2ab(str));
-                            this.push(ab)
+                            // #B103 (2026-07-20) — pass the Buffer through VERBATIM. The historical
+                            // toString()/str2ab round-trip utf8-decoded every chunk (invalid sequences
+                            // → U+FFFD) and then truncated each UTF-16 code unit mod 256, so any byte
+                            // sequence that is not valid UTF-8 was mangled — binary uploads corrupted,
+                            // while pure-ASCII payloads survived byte-identical, which is what hid it.
+                            // Counting chunk.length (bytes, not post-decode UTF-16 chars) also makes
+                            // req.files[].size the real on-disk size.
+                            // was:
+                            // var str = chunk.toString();
+                            // file._dataLen += str.length;
+                            //
+                            // var ab = Buffer.from(str2ab(str));
+                            // this.push(ab)
+                            file._dataLen += chunk.length;
+                            this.push(chunk);
 
                             done()
                         }
@@ -4782,7 +4806,10 @@ function Server(options) {
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
-                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                        // #B103 — same header test as the request-prologue flag; read the flag
+                        // so the multipart content-type regex exists at exactly one site.
+                        // was: if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                        if ( !request.isMultipart ) {
                             if ( /application\/json/i.test(request.headers['content-type']) ) {
                                 // #B28 — application/json: parse the body verbatim. JSON already
                                 // carries real types, so do NOT url-decode (a %XX inside a string
@@ -4976,7 +5003,10 @@ function Server(options) {
                 if ( typeof(request.body) == 'string' ) {
                     // get rid of encoding issues
                     try {
-                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                        // #B103 — same header test as the request-prologue flag; read the flag
+                        // so the multipart content-type regex exists at exactly one site.
+                        // was: if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                        if ( !request.isMultipart ) {
                             if ( /application\/json/i.test(request.headers['content-type']) ) {
                                 // #B28 — application/json: parse the body verbatim. JSON already
                                 // carries real types, so do NOT url-decode (a %XX inside a string
@@ -5086,7 +5116,10 @@ function Server(options) {
                 var isPatchSet = false, msg = null;
                 if ( typeof(request.body) == 'string' ) {
                     try {
-                        if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                        // #B103 — same header test as the request-prologue flag; read the flag
+                        // so the multipart content-type regex exists at exactly one site.
+                        // was: if ( !/multipart\/form-data;/.test(request.headers['content-type']) ) {
+                        if ( !request.isMultipart ) {
                             if ( /application\/json/i.test(request.headers['content-type']) ) {
                                 // #B28 — application/json: parse the body verbatim. JSON already
                                 // carries real types, so do NOT url-decode (a %XX inside a string
