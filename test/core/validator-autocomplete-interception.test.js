@@ -291,7 +291,9 @@ describe('04 - #B134 dist fidelity: the built bundle carries the bail, not the d
         // handler body (measured: `if(!A.metaKey&&!A.ctrlKey){A.preventDefault()`),
         // so accept both encodings of the same invariant. Pre-fix artifact: 0
         // occurrences of either (metaKey/ctrlKey were absent from the bundle).
-        assert.match(distMin, /!?[$A-Za-z_][$\w]*\.metaKey(\|\||&&)!?[$A-Za-z_][$\w]*\.ctrlKey/,
+        // Wrap-agnostic: Closure's line-wrap position is content-dependent and
+        // may land at any token boundary (the case-coercion §04.2 lesson).
+        assert.match(distMin, /!?[$A-Za-z_][$\w]*\.metaKey\s*(\|\||&&)\s*!?[$A-Za-z_][$\w]*\.ctrlKey/,
             'the metaKey/ctrlKey chord bail must reach the minified bundle');
     });
 

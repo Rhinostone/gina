@@ -242,7 +242,8 @@ describe('04 - #B136 dist fidelity: both copies reach the bundle', function () {
         // valid+non-empty guard immediately followed by the clear loop.
         // Pre-fix artifact: 0 (every other .errors.count()>0 site is followed
         // by && / ?, never a for-in).
-        var m = distMin.match(/\.errors\.count\(\)>0\)\{?for\(/g);
+        // Wrap-agnostic at every token boundary (the case-coercion §04.2 lesson).
+        var m = distMin.match(/\.errors\.count\(\)>0\)\s*\{?\s*for\s*\(/g);
         assert.ok(m && m.length === 2,
             'expected the stale-clear guard+loop shape twice in the minified bundle, got ' + (m ? m.length : 0));
     });
