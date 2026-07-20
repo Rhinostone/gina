@@ -449,6 +449,8 @@ Counters are live — no restart required. `activeSessions` is bounded by ≥ 0.
 }
 ```
 
+**Global routing (`routing.global.json`)** — lives at bundle `config/routing.global.json` or project-wide `shared/config/routing.global.json`. The framework reads exactly ONE key from this file: `middleware` — an array of middleware references prepended to every route's own `middleware` list. Every other key in the file is ignored; do not put caching or header configuration there. For response caching / `Cache-Control`, use the per-route `cache` field in `routing.json`; for a static header on every response, declare it under `server.response.header` in `env.json`.
+
 ---
 
 ## OpenAPI spec generation
