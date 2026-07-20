@@ -257,3 +257,82 @@ describe('02 - behavioural replica — REAL Collection + REAL region data (#B100
     });
 
 });
+
+
+describe('03 - country-locale lookup keys on isoShort (#B101)', function() {
+
+    // ---- source pins --------------------------------------------------------
+
+    it('filters the region rows on isoShort with an uppercase-normalized code', function() {
+        assert.match(CTRL_SRC, /findOne\(\s*\{\s*isoShort\s*:\s*userCountryCode\.toUpperCase\(\)\s*\}\s*\)/);
+    });
+
+    it('the dead `short` filter is gone file-wide', function() {
+        // The region data never carried a `short` key — a `findOne({ short: … })`
+        // could only ever miss (or match-all on an undefined value).
+        assert.doesNotMatch(CTRL_SRC, /findOne\(\s*\{\s*short\s*:/);
+    });
+
+    it('a country-less culture resolves to an explicit {} — never the match-all', function() {
+        // The guard must gate the lookup itself: an undefined-valued filter key
+        // serializes to `{}` and matches EVERY record, so the lookup may only
+        // run when a non-empty country code exists.
+        assert.match(CTRL_SRC, /options\.conf\.locale\s*=\s*\(\s*typeof\(userCountryCode\)\s*==\s*'string'\s*&&\s*userCountryCode\.length\s*>\s*0\s*\)/);
+    });
+
+    // ---- behavioural replica — REAL Collection + REAL region data ----------
+
+    var Collection = require('lib/collection');
+    var EN_ROWS    = require(path.join(FW, 'core/locales/dist/region/en.json'));
+
+    // Verbatim-lifted NEW lookup (locked to the shipped statement by the pins).
+    function newLocaleLookup(userLocales, userCountryCode) {
+        return ( typeof(userCountryCode) == 'string' && userCountryCode.length > 0 )
+            ? ( new Collection(userLocales).findOne({ isoShort: userCountryCode.toUpperCase() }) || {} )
+            : {};
+    }
+
+    // Verbatim-lifted OLD lookup (the pre-fix statement) — the subtract.
+    function oldLocaleLookup(userLocales, userCountryCode) {
+        return new Collection(userLocales).findOne({ short: userCountryCode }) || {};
+    }
+
+    it('sanity — the region data carries isoShort and no `short` key', function() {
+        assert.ok(EN_ROWS.length > 0, 'region rows present');
+        assert.equal(typeof EN_ROWS[0].isoShort, 'string', 'rows key on isoShort');
+        for (var i = 0; i < EN_ROWS.length; i++) {
+            assert.ok(!('short' in EN_ROWS[i]), 'no region row may carry a `short` key');
+        }
+    });
+
+    it('a present country code resolves the REAL country record', function() {
+        var rec = newLocaleLookup(EN_ROWS, 'US');
+        assert.equal(rec.isoShort, 'US');
+        assert.equal(rec.currency.alphacode, 'USD', 'currency data rides the resolved record');
+    });
+
+    it('a lowercase country code is normalized (Accept-Language case-tolerance)', function() {
+        var rec = newLocaleLookup(EN_ROWS, 'us');
+        assert.equal(rec.isoShort, 'US');
+    });
+
+    it('a country-less culture resolves to an explicit empty object', function() {
+        assert.deepEqual(newLocaleLookup(EN_ROWS, undefined), {});
+        assert.deepEqual(newLocaleLookup(EN_ROWS, ''), {});
+    });
+
+    it('an unknown country code degrades to {} via the || {} guard', function() {
+        assert.deepEqual(newLocaleLookup(EN_ROWS, 'ZZ'), {});
+    });
+
+    it('SUBTRACT — the pre-fix `short` filter could NEVER match a real code', function() {
+        assert.deepEqual(oldLocaleLookup(EN_ROWS, 'US'), {}, 'no row carries `short`, so the lookup always missed');
+    });
+
+    it('SUBTRACT — the pre-fix shape match-alled to an arbitrary first record without a country code', function() {
+        var junk = oldLocaleLookup(EN_ROWS, undefined);
+        assert.equal(typeof junk.countryName, 'string', 'a REAL (wrong) country record leaked through');
+        assert.deepEqual(junk, EN_ROWS[0], 'the accidental record is simply the first row');
+    });
+
+});

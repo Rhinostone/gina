@@ -827,7 +827,16 @@ function SuperController(options) {
             local.options.conf.locales = userLocales;
 
             // user locale
-            options.conf.locale = new Collection(userLocales).findOne({ short: userCountryCode }) || {};
+            // #B101 — region rows key countries by `isoShort` (uppercase ISO
+            // 3166-1 alpha-2); the historical `short` filter matched a key the
+            // data never carried, so this resolved `{}` whenever a country code
+            // was present — and an arbitrary first record without one, because
+            // a filter whose only key is undefined-valued serializes to `{}`
+            // and matches everything. A country-less culture (bare `en`) now
+            // resolves to an explicit `{}` instead.
+            options.conf.locale = ( typeof(userCountryCode) == 'string' && userCountryCode.length > 0 )
+                ? ( new Collection(userLocales).findOne({ isoShort: userCountryCode.toUpperCase() }) || {} )
+                : {};
 
             // current date
             if ( typeof(options.conf.locale) == 'undefined' || !options.conf.locale ) {
