@@ -4782,6 +4782,27 @@ function ValidatorPlugin(rules, data, formId, culture) {
     var isCheckboxValueAsState = function($form) {
         return /^true$/i.test($form.target.dataset.ginaFormCheckboxValueAsState) ? true : false;
     }
+
+    /**
+     * #B125: tells whether the form EXPLICITLY declares the checkbox state
+     * model via `data-gina-form-checkbox-value-as-state` — any value counts:
+     * "true" is the legacy opt-in, anything else (canonically "false")
+     * declares the spec model. The #49 migration warns only fire when the
+     * attribute is entirely absent: an author who declares the model has
+     * already read it, so the migration aid has nothing left to teach — and
+     * the payload-only shape (`value="true"` with no `checked`, intended
+     * unticked) is legitimate post-#49 markup that is byte-identical to
+     * pre-#49 markup at the attribute level, so the declaration is the only
+     * intent signal available.
+     *
+     * @inner
+     * @param {object} $form - Form object (`instance.$forms[id]` shape)
+     *
+     * @returns {boolean} isCheckboxStateModelDeclared
+     */
+    var isCheckboxStateModelDeclared = function($form) {
+        return ( typeof($form.target.dataset.ginaFormCheckboxValueAsState) != 'undefined' ) ? true : false;
+    }
     // one warn per field id per page load (migration aid, #49)
     var checkboxValueStateWarned = {};
 
@@ -5108,12 +5129,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if (
                         /^(checkbox)$/i.test($inputs[f].type)
                         && !isCheckboxValueAsState($form)
+                        && !isCheckboxStateModelDeclared($form)
                         && !$inputs[f].hasAttribute('checked')
                         && /^(true|on)$/i.test($inputs[f].getAttribute('value'))
                         && !checkboxValueStateWarned[elId]
                     ) {
                         checkboxValueStateWarned[elId] = true;
-                        console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer implies the checked state; add the `checked` attribute if it must render ticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior');
+                        console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer implies the checked state; add the `checked` attribute if it must render ticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior. If the unticked rendering is intended, remove the `value` attribute (a boolean checkbox posts its live checked state either way), or set `data-gina-form-checkbox-value-as-state="false"` on the form to declare the current model and silence migration warnings');
                     }
 
                     // Migration aid (#49) — the mirror direction: this markup used to be
@@ -5127,12 +5149,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if (
                         /^(checkbox)$/i.test($inputs[f].type)
                         && !isCheckboxValueAsState($form)
+                        && !isCheckboxStateModelDeclared($form)
                         && $inputs[f].hasAttribute('checked')
                         && ( legacyUntickValue === '' || /^false$/i.test(legacyUntickValue) )
                         && !checkboxValueStateWarned[elId]
                     ) {
                         checkboxValueStateWarned[elId] = true;
-                        console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer un-ticks a checked box; remove the `checked` attribute if it must render unticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior');
+                        console.warn('[ FormValidator ] checkbox `'+ elId +'`: `value` no longer un-ticks a checked box; remove the `checked` attribute if it must render unticked, or set `data-gina-form-checkbox-value-as-state="true"` on the form to restore the legacy behavior. If the ticked rendering is intended, set `data-gina-form-checkbox-value-as-state="false"` on the form to declare the current model and silence migration warnings');
                     }
                 }
             }

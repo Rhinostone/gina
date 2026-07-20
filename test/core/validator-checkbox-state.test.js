@@ -46,6 +46,13 @@ function isCheckboxValueAsState($form) {
     return /^true$/i.test($form.target.dataset.ginaFormCheckboxValueAsState) ? true : false;
 }
 
+// Mirrors the `isCheckboxStateModelDeclared` helper (#B125): any EXPLICIT
+// `data-gina-form-checkbox-value-as-state` declaration silences the
+// migration warns — the author has read the state model.
+function isCheckboxStateModelDeclared($form) {
+    return ( typeof($form.target.dataset.ginaFormCheckboxValueAsState) != 'undefined' ) ? true : false;
+}
+
 // Mirrors bindForm's fieldsSet.defaultChecked capture (post-#49 shape).
 function captureDefaultChecked($form, $input, defaultValue) {
     return (
@@ -188,12 +195,14 @@ function replayInlineCollect($el, rules) {
     return fields;
 }
 
-// Mirrors bindForm's migration-warn guard (#49): the five conjuncts plus the
-// once-per-field-id map write. Returns whether the live code would warn.
+// Mirrors bindForm's migration-warn guard (#49, + the #B125 explicit-declaration
+// conjunct): six conjuncts plus the once-per-field-id map write. Returns whether
+// the live code would warn.
 function replayWarnPass($form, $el, elId, warned) {
     if (
         /^(checkbox)$/i.test($el.type)
         && !isCheckboxValueAsState($form)
+        && !isCheckboxStateModelDeclared($form)
         && !$el.hasAttribute('checked')
         && /^(true|on)$/i.test($el.getAttribute('value'))
         && !warned[elId]
@@ -214,6 +223,7 @@ function replayWarnPassUntick($form, $el, elId, warned) {
     if (
         /^(checkbox)$/i.test($el.type)
         && !isCheckboxValueAsState($form)
+        && !isCheckboxStateModelDeclared($form)
         && $el.hasAttribute('checked')
         && ( legacyUntickValue === '' || /^false$/i.test(legacyUntickValue) )
         && !warned[elId]
@@ -813,6 +823,119 @@ describe('09 - dist fidelity (#49 warns in the built bundle)', function () {
 
     it('the un-tick warn text is in gina.min.js', function () {
         assert.ok(distMin.indexOf('no longer un-ticks a checked box') > -1,
+            'rebuild dist after editing the validator src (prod build, 3 CI flags)');
+    });
+});
+
+
+// 10 — explicit state-model declaration silences the migration warns (#B125)
+
+describe('10 - explicit state-model declaration opt-out (#B125)', function () {
+
+    // A form that EXPLICITLY declares the state model (any value; canonically
+    // "false" for the spec model).
+    function mkFormDeclared(value) {
+        return { target: { dataset: { ginaFormCheckboxValueAsState: value } } };
+    }
+
+    // PRE-#B125 warn-gate shape (no declaration conjunct) — kept ONLY to prove
+    // the new conjunct is load-bearing in the subtract below.
+    function replayWarnPassPreB125($form, $el, elId, warned) {
+        if (
+            /^(checkbox)$/i.test($el.type)
+            && !isCheckboxValueAsState($form)
+            && !$el.hasAttribute('checked')
+            && /^(true|on)$/i.test($el.getAttribute('value'))
+            && !warned[elId]
+        ) {
+            warned[elId] = true;
+            return true;
+        }
+        return false;
+    }
+
+    it('source pin: the helper exists and tests dataset PRESENCE, not value', function () {
+        var re = /var isCheckboxStateModelDeclared = function\(\$form\)\s*\{\s*return \( typeof\(\$form\.target\.dataset\.ginaFormCheckboxValueAsState\) != 'undefined' \)/;
+        assert.ok(re.test(mainSrc), 'isCheckboxStateModelDeclared must test the dataset flag for presence');
+    });
+
+    it('source pin: BOTH warn gates carry the declaration conjunct (and keep the legacy one)', function () {
+        var conjuncts = mainSrc.match(/&& !isCheckboxStateModelDeclared\(\$form\)/g);
+        assert.ok(conjuncts, 'the declaration conjunct must exist');
+        assert.equal(conjuncts.length, 2, 'exactly two — one per warn direction');
+        // the legacy conjunct is retained beside it in both gates: `!declared`
+        // implies `!valueAsState`, but the pair documents the two silencing
+        // layers (legacy mode vs explicit declaration) and keeps §01's pins true
+        var legacy = mainSrc.match(/&& !isCheckboxValueAsState\(\$form\)\s*\n\s*&& !isCheckboxStateModelDeclared\(\$form\)/g);
+        assert.ok(legacy && legacy.length === 2, 'the legacy conjunct must sit directly above the new one in both gates');
+    });
+
+    it('source pin: both messages name the third remedy', function () {
+        assert.ok(mainSrc.indexOf('remove the `value` attribute (a boolean checkbox posts its live checked state either way)') > -1,
+            'the tick warn must carry the measured payload-only remedy');
+        var remedies = mainSrc.match(/declare the current model and silence migration warnings/g);
+        assert.ok(remedies && remedies.length === 2, 'both warn directions must name the declaration remedy');
+    });
+
+    it('an explicit "false" declaration silences BOTH warn directions', function () {
+        var $form = mkFormDeclared('false');
+        assert.equal(replayWarnPass($form, mkCheckbox({ valueAttr: 'true' }), 'f1', {}), false,
+            'tick direction must stay silent on a declared form');
+        assert.equal(replayWarnPassUntick($form, mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true }), 'f2', {}), false,
+            'un-tick direction must stay silent on a declared form');
+    });
+
+    it('ANY explicit declaration value counts — presence is the signal', function () {
+        assert.equal(replayWarnPass(mkFormDeclared('banana'), mkCheckbox({ valueAttr: 'true' }), 'f1', {}), false);
+        assert.equal(replayWarnPass(mkFormDeclared(''), mkCheckbox({ valueAttr: 'true' }), 'f2', {}), false,
+            'an empty-string dataset value is still an explicit declaration');
+        assert.equal(replayWarnPass(mkFormDeclared('true'), mkCheckbox({ valueAttr: 'true' }), 'f3', {}), false,
+            'declared-true stays silent (via the legacy conjunct, as before)');
+    });
+
+    it('control: an UNDECLARED form still warns — the instrument can fire', function () {
+        assert.equal(replayWarnPass(mkForm(false), mkCheckbox({ valueAttr: 'true' }), 'f1', {}), true);
+        assert.equal(replayWarnPassUntick(mkForm(false), mkCheckbox({ valueAttr: 'false', checkedAttr: true, checked: true }), 'f2', {}), true);
+    });
+
+    it('subtract: the PRE-#B125 gate warns on the declared form — the conjunct is load-bearing', function () {
+        assert.equal(replayWarnPassPreB125(mkFormDeclared('false'), mkCheckbox({ valueAttr: 'true' }), 'f1', {}), true,
+            'without the declaration conjunct the false-positive fires, proving the fix does the silencing');
+    });
+
+    it('an explicit "false" is behavior-inert everywhere else (sole reader is /^true$/i)', function () {
+        // measured 2026-07-20: isCheckboxValueAsState is the only reader of the
+        // dataset flag; "false" and absent are indistinguishable to it
+        assert.equal(isCheckboxValueAsState(mkFormDeclared('false')), false);
+        assert.equal(isCheckboxValueAsState(mkForm(false)), false);
+    });
+
+    it('wire-matrix completion: the data-value-only shape posts live booleans and never warns', function () {
+        // #B125 measurement lock: `data-value="true"` with NO value attribute is
+        // boolean-classified (null value attr), posts .checked through BOTH
+        // collectors, and the warn predicate (value-attr-only) stays silent.
+        var $el = mkCheckbox({ dataValue: 'true' });
+        assert.equal(isBooleanCheckbox($el, undefined), true, 'classified boolean via the null value attr');
+        assert.equal(replayWarnPass(mkForm(false), $el, 'f1', {}), false, 'the warn never consults data-value');
+        assert.strictEqual(replayCollect(mkCheckbox({ dataValue: 'true', checked: true }), {}).field, true);
+        assert.strictEqual(replayCollect(mkCheckbox({ dataValue: 'true', checked: false }), {}).field, false);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ dataValue: 'true', checked: true }), {}).field, true);
+        assert.strictEqual(replayInlineCollect(mkCheckbox({ dataValue: 'true', checked: false }), {}).field, false);
+    });
+
+    it('dist fidelity: the remedy text is in gina.js (rebuild guard, red before the prod rebuild)', function () {
+        var DIST_DIR = path.join(FW, 'core', 'asset', 'plugin', 'dist', 'vendor', 'gina', 'js');
+        var distSrc = fs.readFileSync(path.join(DIST_DIR, 'gina.js'), 'utf8');
+        assert.ok(distSrc.indexOf('declare the current model and silence migration warnings') > -1,
+            'rebuild dist after editing the validator src (prod build, 3 CI flags)');
+        assert.ok(distSrc.indexOf('remove the `value` attribute (a boolean checkbox posts its live checked state either way)') > -1,
+            'the tick remedy must ship in the unminified bundle');
+    });
+
+    it('dist fidelity: the remedy text is in gina.min.js (rebuild guard, red before the prod rebuild)', function () {
+        var DIST_DIR = path.join(FW, 'core', 'asset', 'plugin', 'dist', 'vendor', 'gina', 'js');
+        var distMin = fs.readFileSync(path.join(DIST_DIR, 'gina.min.js'), 'utf8');
+        assert.ok(distMin.indexOf('declare the current model and silence migration warnings') > -1,
             'rebuild dist after editing the validator src (prod build, 3 CI flags)');
     });
 });

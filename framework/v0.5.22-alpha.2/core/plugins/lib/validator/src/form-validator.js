@@ -293,6 +293,15 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
     };
 
     var compileError = function(error, data) {
+        // #B87: tolerate a non-string `error` from a future call site — the only
+        // current caller is string-gated at the query result site, but nothing in
+        // this function's own contract enforces it and `error.match()` throws on
+        // anything else. A non-string carries no `{{placeholder}}` to compile, so
+        // it is returned as-is; if it then lands in `replace()` as a label, the
+        // #B86 fail-soft degrades it to the English default with a warn.
+        if ( typeof(error) != 'string' ) {
+            return error;
+        }
         var varArr = error.match(/\{\{([^{{}}]+)\}\}/g );
         // `String.match` with a /g regex yields `null` — not [] — when nothing matches, so a
         // backend field error carrying no `{{placeholder}}` (the common shape, e.g. "Already
@@ -549,9 +558,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
         }
 
-        var onResult = function(result) {
+        var processQueryResult = function(result) {
 
-            _this.value      = local['data'][_this.name] = (_this.value) ? _this.value.toLowerCase() : _this.value;
+            // #B87: a boolean checkbox routed through a `query` rule carries a real
+            // boolean — `.toLowerCase()` only applies to string values
+            _this.value      = local['data'][_this.name] = (_this.value && typeof(_this.value) == 'string') ? _this.value.toLowerCase() : _this.value;
 
             var isValid     = result.isValid || false;
             if (validIf != isValid) {
@@ -661,22 +672,67 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             console.debug('prematurely completed event `'+ 'asyncCompleted.' + id +'`');
 
             return triggerEvent(gina, _this.target, 'asyncCompleted.' + id, self[_this['name']]);
-        } // EO onResult
+        } // EO processQueryResult
+
+        /**
+         * #B87 blanket guard: the XHR result lands asynchronously, so by the
+         * time it is processed the form may have been unbound or the field
+         * detached (e.g. a popin closed mid-flight) — a throw inside the
+         * processing used to leave `asyncCompleted.<id>` unfired, hanging the
+         * submit path's async waiter for the whole pass. Warn and release the
+         * waiter with the field state as-is: the query verdict is unknown,
+         * and the server re-validates on submit either way.
+         *
+         * @inner
+         * @param {object} err - Error thrown while handling the query result
+         *
+         * @returns {undefined}
+         */
+        var releaseQueryWaiter = function(err) {
+            console.warn('[ FormValidator ] `query` result handling failed for field `'+ (_this && _this.name) +'`: '+ ( err && err.message || err ));
+            try {
+                var _releaseId = _this.target && (_this.target.id || _this.target.getAttribute('id'));
+                if (_releaseId) {
+                    triggerEvent(gina, _this.target, 'asyncCompleted.' + _releaseId, self[_this['name']]);
+                }
+            } catch (ignore) {}
+        }
+
+        /**
+         * Guarded entry point for the XHR handlers below — delegates to
+         * `processQueryResult` and routes any throw to `releaseQueryWaiter`
+         * so the async waiter can never be left hanging (#B87).
+         *
+         * @inner
+         * @param {object} result - Parsed backend response
+         *
+         * @returns {undefined}
+         */
+        var onResult = function(result) {
+            try {
+                return processQueryResult(result);
+            } catch (err) {
+                return releaseQueryWaiter(err);
+            }
+        }
 
 
         if (xhr) {
 
             xhr.onerror = function(event, err) {
+                // #B87: blanket-guarded like `xhr.onload` — a throw while shaping
+                // the error result (e.g. bad JSON under a JSON content-type) must
+                // release the async waiter, not hang it
+                try {
+                    var error = 'Transaction error: might be due to the server CORS settings.\nPlease, check the console for more details.';
+                    var result = {
+                        'status':  xhr.status, //500,
+                        'error' : error
+                    };
 
-                var error = 'Transaction error: might be due to the server CORS settings.\nPlease, check the console for more details.';
-                var result = {
-                    'status':  xhr.status, //500,
-                    'error' : error
-                };
-
-                console.debug('query error [2] detected !! ', err, error);
-                isOnException = true;
-                result = this.responseText;
+                    console.debug('query error [2] detected !! ', err, error);
+                    isOnException = true;
+                    result = this.responseText;
                     var contentType     = this.getResponseHeader("Content-Type");
                     if ( /\/json/.test( contentType ) ) {
                         result = JSON.parse(this.responseText);
@@ -697,7 +753,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                         }
                         return onResult(result);
                     }
-
+                } catch (e) {
+                    return releaseQueryWaiter(e);
+                }
             }// Eo xhr.onerror
 
             // catching ready state cb
@@ -765,7 +823,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                         return onResult(result);
                     }
                 } catch (err) {
-                    throw err;
+                    // #B87: a malformed response (e.g. bad JSON under a JSON
+                    // content-type) must release the async waiter, not hang it
+                    return releaseQueryWaiter(err);
                 }
             }// xhr.onload = function () {
 
