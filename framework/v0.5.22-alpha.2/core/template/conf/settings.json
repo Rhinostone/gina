@@ -567,8 +567,12 @@
   //                   (specific → base → settings.region.culture →
   //                   GINA_CULTURE → "en"). `null` = use the default.
   //                   Example: ["en", "fr"] forces a fixed fallback.
-  //   cultures      — RESERVED: explicit URL-prefix allowlist. Not currently
-  //                   consumed — cultures derive from the loaded catalogs.
+  //   cultures      — explicit culture allowlist for the user-signal
+  //                   negotiation steps (URL prefix / cookie / Accept-Language),
+  //                   honoured since 0.5.22. A non-empty array constrains
+  //                   matching (staged rollouts); `null` derives from the
+  //                   loaded catalogs. The bundle-default step
+  //                   (settings.region.culture) is never constrained.
   "i18n": {
     "cookieName": "gina_culture",
     "devMissingKey": "[MISSING]",

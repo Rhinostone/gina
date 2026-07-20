@@ -33,6 +33,35 @@
         }
       }
     },
+    "i18n": {
+      "type": "object",
+      "description": "Runtime i18n configuration for the per-bundle message catalogs (bundle/locales/<culture>.json). All keys are read from the bundle's merged settings.",
+      "additionalProperties": false,
+      "properties": {
+        "cookieName": {
+          "type": ["string", "null"],
+          "description": "Locale-persistence cookie name read by the per-request locale negotiation (honoured since 0.5.16). null disables cookie-based negotiation; absent or empty keeps \"gina_culture\".",
+          "default": "gina_culture"
+        },
+        "devMissingKey": {
+          "type": ["string", "null"],
+          "description": "Dev-mode prefix marker for missing catalog keys (only applied when NODE_ENV_IS_DEV is \"true\"). null disables the marker.",
+          "default": "[MISSING]"
+        },
+        "fallbackChain": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Optional override of the default catalog-lookup fallback chain (specific culture, then base language, then settings.region.culture, then GINA_CULTURE, then \"en\"). null uses the default.",
+          "default": null
+        },
+        "cultures": {
+          "type": ["array", "null"],
+          "items": { "type": "string" },
+          "description": "Explicit culture allowlist for the user-signal negotiation steps (URL prefix, cookie, Accept-Language), honoured since 0.5.22: a non-empty array constrains matching to the listed cultures (staged rollouts). null or [] derives from the bundle's loaded catalogs. The bundle-default step (settings.region.culture) is never constrained.",
+          "default": null
+        }
+      }
+    },
     "server": {
       "type": "object",
       "description": "HTTP server engine and protocol configuration.",

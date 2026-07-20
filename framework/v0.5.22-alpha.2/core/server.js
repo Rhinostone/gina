@@ -5849,6 +5849,30 @@ function Server(options) {
                     && process.gina._i18nCatalogs[_i18nBundle] )
                     ? Object.keys(process.gina._i18nCatalogs[_i18nBundle])
                     : [];
+                // #B102 — `settings.i18n.cultures`, honoured since 0.5.22: a
+                // non-empty array constrains which cultures the USER-SIGNAL
+                // steps (URL prefix / cookie / Accept-Language) may match —
+                // e.g. a staged rollout keeps a shipped-but-unlaunched catalog
+                // out of negotiation. The bundle-default step
+                // (settings.region.culture) is deliberately NOT constrained —
+                // the operator's fallback needs no catalog match. `null`, `[]`
+                // or a non-array keep the historical derive-from-loaded-
+                // catalogs behavior.
+                if ( _i18nAvail.length > 0
+                    && _i18nBundle
+                    && self.conf[_i18nBundle]
+                    && self.conf[_i18nBundle][self.env]
+                    && self.conf[_i18nBundle][self.env].content
+                    && self.conf[_i18nBundle][self.env].content.settings
+                    && self.conf[_i18nBundle][self.env].content.settings.i18n
+                ) {
+                    var _i18nCulturesConf = self.conf[_i18nBundle][self.env].content.settings.i18n.cultures;
+                    if ( Array.isArray(_i18nCulturesConf) && _i18nCulturesConf.length > 0 ) {
+                        _i18nAvail = _i18nAvail.filter(function(c) {
+                            return _i18nCulturesConf.indexOf(c) > -1;
+                        });
+                    }
+                }
                 // #I18N — bundle-level default culture: settings.region.culture
                 // (full underscore culture, e.g. `xx_XX`, resolved at bundle:add).
                 // Ranks below URL/cookie/Accept-Language (which need loaded catalogs
