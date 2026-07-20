@@ -239,7 +239,7 @@ function Build(opt, cmd) {
                 tag             : self.tagRef,
                 ginaVersion     : self.ginaVersion,
                 platform        : self.platform,
-                nodeEngine      : (ginaPkg.engine && ginaPkg.engine.node) || null,
+                nodeEngine      : (ginaPkg.engines && ginaPkg.engines.node) || (ginaPkg.engine && ginaPkg.engine.node) || null,
                 hasDependencies : hasDependencies,
                 hasLockfile     : hasLockfile
             });

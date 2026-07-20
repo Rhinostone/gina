@@ -5,7 +5,7 @@
   "dependencies": {
     // "gina" : "${gina_version}"
   },
-  "engine": [
-    "node >=${node_version}"
-  ]
+  "engines": {
+    "node": ">=${node_version}"
+  }
 }

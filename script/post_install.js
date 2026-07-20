@@ -205,9 +205,9 @@ function PostInstall() {
                     "name": ""+ projectName,
                     "version": "0.0.1",
                     "description": projectName+ " is a nice project !",
-                    "engine": [
-                        "node >=" + process.version.substring(1)
-                    ]
+                    "engines": {
+                        "node": ">=" + process.version.substring(1)
+                    }
                 };
                 console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
                 // Inlined to avoid loading the framework lib registry at install time.

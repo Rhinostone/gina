@@ -62,7 +62,7 @@
     }
   ],
   "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
-  "engine": {
+  "engines": {
     "node": ">= 22 <27",
     "bun": ">= 1.2"
   },
