@@ -1837,7 +1837,8 @@ describe('28 - Popin: #B77 _self redirect-tunnel loads-then-returns (blind-open 
 
 // ── 29 — #B91: per-trigger preload opt-out (data-gina-dialog-preload="false") ──────
 
-// Replica of onIntent's #B91 gate + cache semantics: an opted-out trigger never
+// Replica of the #B91 gate + cache semantics (the gate lives in warmTrigger, the
+// shared per-trigger gate both warm paths route through): an opted-out trigger never
 // warms, its cache slot stays undefined, so the click-time consume finds nothing
 // and the caller's click-time load runs (the ordering is source-pinned below).
 function makeGatedPreload(netLog) {
@@ -1846,7 +1847,7 @@ function makeGatedPreload(netLog) {
     function onMouseover(target) {
         var $trigger = target.closest ? target.closest('[data-gina-dialog-src],[data-gina-popin-url]') : null;
         if (!$trigger) { return; }
-        // #B91 gate — same parse as popin/main.js onIntent (case-insensitive).
+        // #B91 gate — same parse as popin/main.js warmTrigger (case-insensitive).
         if (/^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'))) { return; }
         var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
         if (!url || typeof preloadCache[url] != 'undefined') { return; }
@@ -1928,17 +1929,26 @@ describe('29 - Popin: #B91 preload opt-out (data-gina-dialog-preload="false")', 
 
     // --- source pins (structural anchors) ---
 
-    it('source: the gate sits inside onIntent — after the disabled skip, before the fetch', function () {
+    it('source: the gate sits inside warmTrigger — after the disabled skip, before the fetch — and onIntent routes through it', function () {
         var src = getPopinSrc();
+        // the hover/focus path funnels into the shared gate
         var fnIdx = src.indexOf('function installPreload');
         assert.ok(fnIdx > -1, 'installPreload present');
         var endIdx = src.indexOf("addEventListener('mouseover'", fnIdx);
         assert.ok(endIdx > fnIdx, 'end anchor (mouseover registration) present');
-        var blk = src.substring(fnIdx, endIdx);   // end-anchored slice: the onIntent body
+        var onIntentBlk = src.substring(fnIdx, endIdx);   // end-anchored slice: the onIntent body
+        assert.ok(/warmTrigger\(\s*\$trigger\s*\)/.test(onIntentBlk),
+            'onIntent must route the matched trigger through warmTrigger (shared gate)');
+        // the gate block itself, now in warmTrigger (shared with the eager pass)
+        var wtIdx = src.indexOf('function warmTrigger(');
+        assert.ok(wtIdx > -1, 'warmTrigger present');
+        var wtEnd = src.indexOf('function installEagerPreload(', wtIdx);
+        assert.ok(wtEnd > wtIdx, 'end anchor (installEagerPreload) present');
+        var blk = src.substring(wtIdx, wtEnd);   // warmTrigger body (+ trailing JSDoc)
         var gateIdx = blk.indexOf("/^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'))");
-        assert.ok(gateIdx > -1, 'expected the case-insensitive opt-out gate in onIntent');
-        var ariaIdx = blk.indexOf('aria-disabled');
-        var fetchIdx = blk.indexOf('preloadFetch(url)');
+        assert.ok(gateIdx > -1, 'expected the case-insensitive opt-out gate in warmTrigger');
+        var ariaIdx = blk.indexOf("aria-disabled') == 'true'");
+        var fetchIdx = blk.indexOf('preloadFetch(url');
         assert.ok(ariaIdx > -1 && fetchIdx > -1, 'ordering anchors present');
         assert.ok(gateIdx > ariaIdx, 'gate sits after the disabled/aria-disabled skip');
         assert.ok(gateIdx < fetchIdx, 'gate sits before the preload GET');
@@ -1962,5 +1972,199 @@ describe('29 - Popin: #B91 preload opt-out (data-gina-dialog-preload="false")', 
             /\/\^false\$\/i\.test\([$\w.]+\.getAttribute\((?:"|')data-gina-dialog-preload(?:"|')\)\)/.test(min),
             'the case-insensitive gate must survive minification (regex literal + getAttribute + attr string)'
         );
+    });
+});
+
+
+// ── 30 — Popin: eager preload (data-gina-dialog-preload="eager" idle warm-all) ─────
+
+// Replica of warmTrigger + the installEagerPreload pass: the shared gate (disabled
+// skip → #B91 "false" opt-out → URL resolve → already-cached/in-flight dedup →
+// reserve+fetch) with an onDone that fires on EVERY exit path, and the serialized
+// queue that starts the next warm only on the previous one's completion. The fetch
+// stub completes ASYNCHRONOUSLY (flushed by the test) so serialization is observable.
+function makeEagerPreload(netLog) {
+    var preloadCache = {};
+    var pending = [];   // parked fetch completions, flushed manually by the test
+    function preloadFetch(url, onDone) {
+        netLog.push(url);
+        pending.push(function () {
+            preloadCache[url] = 'BODY:' + url;
+            if (typeof onDone == 'function') { onDone(); }
+        });
+    }
+    function warmTrigger($trigger, onDone) {
+        var done = function () { if (typeof onDone == 'function') { onDone(); } };
+        if ($trigger.getAttribute('disabled') != null && $trigger.getAttribute('disabled') != 'false'
+            || $trigger.getAttribute('aria-disabled') == 'true') { done(); return; }
+        if (/^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'))) { done(); return; }
+        var url = $trigger.getAttribute('data-gina-dialog-src') || $trigger.getAttribute('data-gina-popin-url');
+        if (!url || typeof preloadCache[url] != 'undefined') { done(); return; }
+        preloadCache[url] = null;   // reserve in-flight slot
+        preloadFetch(url, onDone);
+    }
+    function eagerPass($candidates) {
+        var queue = [];
+        for (var c = 0; c < $candidates.length; ++c) {
+            if (/^eager$/i.test($candidates[c].getAttribute('data-gina-dialog-preload'))) {
+                queue.push($candidates[c]);
+            }
+        }
+        var next = function () {
+            var $t = queue.shift();
+            if (!$t) { return; }
+            warmTrigger($t, next);
+        };
+        next();
+    }
+    return {
+        cache: preloadCache, warmTrigger: warmTrigger, eagerPass: eagerPass,
+        flushOne: function () { var f = pending.shift(); if (f) { f(); } },
+        pendingCount: function () { return pending.length; }
+    };
+}
+
+describe('30 - Popin: eager preload (data-gina-dialog-preload="eager")', function () {
+
+    // --- behavioral (replica) ---
+
+    it('an eager trigger warms with zero interaction; default and "false" stay cold', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeEagerPreload(net);
+        var $eager = mkTrigger(doc, 'button', { 'data-gina-dialog': 'a', 'data-gina-dialog-src': '/e1', 'data-gina-dialog-preload': 'eager' });
+        var $deflt = mkTrigger(doc, 'button', { 'data-gina-dialog': 'b', 'data-gina-dialog-src': '/d1' });
+        var $noped = mkTrigger(doc, 'button', { 'data-gina-dialog': 'c', 'data-gina-dialog-src': '/n1', 'data-gina-dialog-preload': 'false' });
+        pl.eagerPass([$eager, $deflt, $noped]);
+        assert.deepEqual(net, ['/e1'], 'only the eager trigger fires a GET in the pass');
+        assert.equal(pl.cache['/e1'], null, 'eager slot reserved in-flight');
+        assert.equal(typeof pl.cache['/d1'], 'undefined', 'default trigger untouched by the pass (hover-warm covers it)');
+        assert.equal(typeof pl.cache['/n1'], 'undefined', 'opted-out trigger never warms');
+    });
+
+    it('the parse is case-insensitive — "Eager"/"EAGER" warm too (templated values)', function () {
+        ['Eager', 'EAGER', 'eAgEr'].forEach(function (v) {
+            var doc = makeDoc();
+            var net = [];
+            var pl = makeEagerPreload(net);
+            var $t = mkTrigger(doc, 'button', { 'data-gina-dialog': 'a', 'data-gina-dialog-src': '/e', 'data-gina-dialog-preload': v });
+            pl.eagerPass([$t]);
+            assert.equal(net.length, 1, 'eager warm fires for value "' + v + '"');
+        });
+    });
+
+    it('serialized: the second warm starts only after the first completes', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeEagerPreload(net);
+        var $t1 = mkTrigger(doc, 'button', { 'data-gina-dialog': 'a', 'data-gina-dialog-src': '/e1', 'data-gina-dialog-preload': 'eager' });
+        var $t2 = mkTrigger(doc, 'button', { 'data-gina-dialog': 'b', 'data-gina-dialog-src': '/e2', 'data-gina-dialog-preload': 'eager' });
+        pl.eagerPass([$t1, $t2]);
+        assert.deepEqual(net, ['/e1'], 'only the FIRST GET is in flight after the pass starts');
+        assert.equal(pl.pendingCount(), 1, 'one pending completion');
+        pl.flushOne();
+        assert.deepEqual(net, ['/e1', '/e2'], 'second GET starts only after the first completed');
+        pl.flushOne();
+        assert.equal(pl.cache['/e2'], 'BODY:/e2', 'queue drained to completion');
+    });
+
+    it('onDone fires on every exit path — gate-skipped triggers never stall the queue', function () {
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeEagerPreload(net);
+        var $skip1 = mkTrigger(doc, 'button', { 'data-gina-dialog': 'a', 'data-gina-dialog-src': '/s1', 'data-gina-dialog-preload': 'eager', 'disabled': 'disabled' });
+        var $skip2 = mkTrigger(doc, 'button', { 'data-gina-dialog': 'b', 'data-gina-dialog-src': '/s2', 'data-gina-dialog-preload': 'eager' });
+        pl.cache['/s2'] = 'BODY:/s2';   // already warmed -> dedup skip
+        var $good  = mkTrigger(doc, 'button', { 'data-gina-dialog': 'c', 'data-gina-dialog-src': '/e3', 'data-gina-dialog-preload': 'eager' });
+        pl.eagerPass([$skip1, $skip2, $good]);
+        assert.deepEqual(net, ['/e3'], 'both skips advanced the queue to the good trigger');
+        pl.flushOne();
+        assert.equal(pl.cache['/e3'], 'BODY:/e3', 'good trigger warmed to completion');
+    });
+
+    it('hover-warm and eager-warm coalesce — whichever runs second is a no-op (one GET total)', function () {
+        // hover first, eager second
+        var doc = makeDoc();
+        var net = [];
+        var pl = makeEagerPreload(net);
+        var $t = mkTrigger(doc, 'button', { 'data-gina-dialog': 'a', 'data-gina-dialog-src': '/e1', 'data-gina-dialog-preload': 'eager' });
+        pl.warmTrigger($t);           // hover path
+        pl.flushOne();
+        pl.eagerPass([$t]);           // eager pass afterwards
+        assert.equal(net.length, 1, 'eager pass deduped against the hover warm');
+        // eager first (still in flight), hover second
+        var net2 = [];
+        var pl2 = makeEagerPreload(net2);
+        pl2.eagerPass([$t]);
+        pl2.warmTrigger($t);          // hover during the in-flight eager warm
+        assert.equal(net2.length, 1, 'hover deduped against the in-flight eager warm');
+    });
+
+    // --- source pins (structural anchors) ---
+
+    it('source: both warm paths route through the shared warmTrigger gate', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+warmTrigger\s*\(\s*\$trigger\s*,\s*onDone\s*\)/.test(src),
+            'expected warmTrigger($trigger, onDone)');
+        var ip = src.substring(src.indexOf('function installPreload'), src.indexOf('function warmTrigger('));
+        assert.ok(/warmTrigger\(\s*\$trigger\s*\)/.test(ip), 'hover path (onIntent) calls warmTrigger');
+        var ie = src.substring(src.indexOf('function installEagerPreload('), src.indexOf('function openInPageDialog('));
+        assert.ok(ie.length > 0, 'installEagerPreload slice found');
+        assert.ok(/warmTrigger\(\s*\$trigger\s*,\s*next\s*\)/.test(ie),
+            'eager pass chains warmTrigger($trigger, next) — serialized queue');
+    });
+
+    it('source: installEagerPreload — eager filter, off-critical-path scheduling, Save-Data skip, install-once', function () {
+        var src = getPopinSrc();
+        var ie = src.substring(src.indexOf('function installEagerPreload('), src.indexOf('function openInPageDialog('));
+        assert.ok(ie.indexOf("/^eager$/i.test($candidates[c].getAttribute('data-gina-dialog-preload'))") > -1,
+            'case-insensitive eager filter');
+        assert.ok(ie.indexOf("querySelectorAll('[data-gina-dialog-src],[data-gina-popin-url]')") > -1,
+            'candidate scan uses the same trigger selector as the intent path');
+        assert.ok(/requestIdleCallback/.test(ie) && /setTimeout\(\s*run\s*,/.test(ie),
+            'requestIdleCallback with a setTimeout fallback');
+        assert.ok(/addEventListener\(\s*'load'\s*,\s*schedule\s*,\s*\{\s*once:\s*true\s*\}\s*\)/.test(ie),
+            'waits for window load before scheduling');
+        assert.ok(/readyState\s*==\s*'complete'/.test(ie), 'already-loaded fast path');
+        assert.ok(/navigator\.connection\s*&&\s*navigator\.connection\.saveData/.test(ie),
+            'Save-Data preference suppresses the speculative warm');
+        assert.ok(/_ginaEagerInstalled/.test(ie), 'install-once module guard');
+        assert.ok(/var\s+_ginaEagerInstalled\s*=\s*false/.test(src), 'guard declared at module level');
+    });
+
+    it('source: init wires the eager pass after the intent listeners', function () {
+        var src = getPopinSrc();
+        var ipCall = src.indexOf('installPreload();');
+        var ieCall = src.indexOf('installEagerPreload();');
+        assert.ok(ipCall > -1 && ieCall > -1, 'both init calls present');
+        assert.ok(ieCall > ipCall, 'installEagerPreload() runs after installPreload()');
+    });
+
+    it('source: preloadFetch takes onDone and fires it on every exit path', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+preloadFetch\s*\(\s*url\s*,\s*onDone\s*\)/.test(src),
+            'preloadFetch(url, onDone)');
+        var pf = src.substring(src.indexOf('function preloadFetch('), src.indexOf('function ensurePopinDialog('));
+        var calls = pf.split('_preloadDone();').length - 1;
+        assert.ok(calls >= 2, 'completion fires on the cross-origin bail AND the readyState-4 tail (found ' + calls + ')');
+    });
+
+    // --- dist fidelity (RED on a stale dist — rebuild if they fail) ---
+
+    it('dist gina.js carries warmTrigger + the eager pass', function () {
+        var dist = getDistSrc();
+        assert.ok(dist.indexOf('function warmTrigger(') > -1, 'dist must carry warmTrigger — rebuild the plugin bundle');
+        assert.ok(dist.indexOf('function installEagerPreload(') > -1, 'dist must carry installEagerPreload — rebuild the plugin bundle');
+        assert.ok(dist.indexOf('/^eager$/i.test(') > -1, 'dist must carry the eager filter — rebuild the plugin bundle');
+    });
+
+    it('served gina.min.js carries the eager pass (minify-surviving tokens)', function () {
+        var min = getDistMinSrc();
+        assert.ok(/\/\^eager\$\/i\.test\(/.test(min),
+            'the case-insensitive eager filter must survive minification');
+        assert.ok(min.indexOf('requestIdleCallback') > -1,
+            'the idle scheduling must survive minification (window property access)');
+        assert.ok(min.indexOf('.saveData') > -1,
+            'the Save-Data guard must survive minification (property access)');
     });
 });

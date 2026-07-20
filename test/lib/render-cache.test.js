@@ -1439,3 +1439,80 @@ describe('12 - validateConfig (boot-time redis config validation)', function () 
         assert.equal(r.redisConfigured, false);
     });
 });
+
+
+describe('13 - #B130 statics: renonceCspHeaders + swapNonces (pure, real module)', function () {
+
+    it('returns null when no CSP header carries a nonce', function () {
+        assert.equal(RenderCache.renonceCspHeaders(null), null);
+        assert.equal(RenderCache.renonceCspHeaders(undefined), null);
+        assert.equal(RenderCache.renonceCspHeaders({}), null);
+        assert.equal(RenderCache.renonceCspHeaders({ 'content-type': 'text/html' }), null);
+        assert.equal(RenderCache.renonceCspHeaders({ 'content-security-policy': "default-src 'self'" }), null);
+    });
+
+    it('mints a fresh nonce and rewrites the enforce header; the input object is untouched', function () {
+        var stored = { 'content-security-policy': "script-src 'self' 'nonce-OLD+/1='", 'content-type': 'text/html' };
+        var before = JSON.stringify(stored);
+        var rn = RenderCache.renonceCspHeaders(stored);
+        assert.ok(rn, 'a nonce-bearing header must trigger the re-nonce');
+        assert.deepEqual(rn.oldNonces, ['OLD+/1=']);
+        assert.ok(rn.nonce && rn.nonce !== 'OLD+/1=', 'fresh mint differs from the stored one');
+        assert.ok(rn.headers['content-security-policy'].indexOf("'nonce-" + rn.nonce + "'") > -1);
+        assert.equal(rn.headers['content-security-policy'].indexOf('OLD+/1='), -1);
+        assert.equal(rn.headers['content-type'], 'text/html', 'non-CSP headers carried over');
+        assert.equal(JSON.stringify(stored), before, 'the stored entry must never be mutated');
+    });
+
+    it('handles report-only, and both headers sharing one mint', function () {
+        var ro = RenderCache.renonceCspHeaders({ 'content-security-policy-report-only': "script-src 'nonce-A1='" });
+        assert.ok(ro && ro.oldNonces.length === 1 && ro.headers['content-security-policy-report-only'].indexOf(ro.nonce) > -1);
+        var both = RenderCache.renonceCspHeaders({
+            'content-security-policy':             "script-src 'nonce-SAME='",
+            'content-security-policy-report-only': "script-src 'nonce-SAME='"
+        });
+        assert.deepEqual(both.oldNonces, ['SAME='], 'shared value collected once');
+        assert.ok(both.headers['content-security-policy'].indexOf(both.nonce) > -1);
+        assert.ok(both.headers['content-security-policy-report-only'].indexOf(both.nonce) > -1);
+    });
+
+    it('rewrites every directive occurrence of the nonce in one header', function () {
+        var rn = RenderCache.renonceCspHeaders({
+            'content-security-policy': "default-src 'nonce-N1+='; script-src 'nonce-N1+=' 'self'"
+        });
+        var v = rn.headers['content-security-policy'];
+        assert.equal(v.indexOf('N1+='), -1, 'no old occurrence survives');
+        assert.equal((v.match(new RegExp("'nonce-" + rn.nonce.replace(/[+/=]/g, '\\$&') + "'", 'g')) || []).length, 2);
+    });
+
+    it('swapNonces replaces every body occurrence — split/join, regex-hostile values safe', function () {
+        var body = '<script nonce="A+/B=">x</script><meta n="A+/B="><script nonce="A+/B=">y</script>';
+        var out  = RenderCache.swapNonces(body, ['A+/B='], 'ZZZ9');
+        assert.equal(out.indexOf('A+/B='), -1, 'all occurrences swapped');
+        assert.equal((out.match(/ZZZ9/g) || []).length, 3);
+    });
+
+    it('swapNonces passthrough: non-string content, empty swap set, same value', function () {
+        assert.equal(RenderCache.swapNonces(null, ['a'], 'b'), null);
+        var buf = Buffer.from('x');
+        assert.equal(RenderCache.swapNonces(buf, ['a'], 'b'), buf);
+        assert.equal(RenderCache.swapNonces('abc', [], 'b'), 'abc');
+        assert.equal(RenderCache.swapNonces('aXa', ['X'], 'X'), 'aXa');
+    });
+
+    it('round trip: a consistent stored pair stays consistent AND rotates across two serves', function () {
+        var stored = {
+            headers: { 'content-security-policy': "script-src 'nonce-W1+='" },
+            content: '<script nonce="W1+=">boot()</script>'
+        };
+        var s1 = RenderCache.renonceCspHeaders(stored.headers);
+        var b1 = RenderCache.swapNonces(stored.content, s1.oldNonces, s1.nonce);
+        var s2 = RenderCache.renonceCspHeaders(stored.headers);
+        var b2 = RenderCache.swapNonces(stored.content, s2.oldNonces, s2.nonce);
+        assert.ok(b1.indexOf('nonce="' + s1.nonce + '"') > -1, 'serve 1 pair consistent');
+        assert.ok(b2.indexOf('nonce="' + s2.nonce + '"') > -1, 'serve 2 pair consistent');
+        assert.notEqual(s1.nonce, s2.nonce, 'nonces rotate per serve');
+        assert.equal(stored.content.indexOf(s1.nonce), -1, 'stored body untouched between serves');
+    });
+
+});

@@ -369,8 +369,13 @@ describe('validator-case-coercion §04 — dist fidelity', function () {
         // coerced variable is the tested variable (backreferences), where the
         // pre-fix site tested a bracketed access of a different object.
         // Validated against the pre-fix artifact: 0 matches there.
+        // Wrap-agnostic (realigned 2026-07-20, approved): Closure's line-wrap
+        // position is content-dependent and an unrelated rebuild landed the
+        // wrap INSIDE this expression (`?y=` <newline> `!0`), so every token
+        // boundary tolerates whitespace; the backreference discriminator is
+        // unchanged (re-validated: still 0 on the pre-fix artifact).
         var min = fs.readFileSync(DIST_MIN, 'utf8');
-        var core = /\(([$A-Za-z0-9_]+)=='true'\?\1=!0:\1=='false'&&\(\1=!1\)\)/;
+        var core = /\(([$A-Za-z0-9_]+)=='true'\?\s*\1=\s*!0\s*:\s*\1=='false'\s*&&\s*\(\s*\1=\s*!1\s*\)\s*\)/;
         assert.ok(core.test(min),
             'gina.min.js must carry the self-testing caseValue coercion shape');
     });

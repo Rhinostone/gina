@@ -112,14 +112,16 @@ describe('01 - core/server.js — read-path source pins (#RC4)', function() {
         assert.match(serveBlock, /res\.writableEnded\s*\|\|\s*res\.destroyed\s*\|\|\s*res\.headersSent/);
     });
 
-    it('HTTP/2 folds res.getHeaders() into stream.respond({:status:200}) then end(content)', function() {
+    it('HTTP/2 folds res.getHeaders() into stream.respond({:status:200}) then end(re-nonced content)', function() {
         assert.match(serveBlock, /_sh\s*=\s*\{\s*':status':\s*200\s*\}/);
         assert.match(serveBlock, /res\.stream\.respond\(_sh\)/);
-        assert.match(serveBlock, /res\.stream\.end\(hit\.content\)/);
+        // #B130 — both ends serve _hitContent (the re-nonced body when the stored
+        // CSP header carries a nonce; the stored body verbatim otherwise).
+        assert.match(serveBlock, /res\.stream\.end\(_hitContent\)/);
     });
 
-    it('HTTP/1.1 serves via res.end(hit.content) behind a headersSent guard', function() {
-        assert.match(serveBlock, /if\s*\(\s*!res\.headersSent\s*&&\s*!res\.writableEnded\s*\)\s*\{\s*res\.end\(hit\.content\)/);
+    it('HTTP/1.1 serves via res.end(_hitContent) behind a headersSent guard', function() {
+        assert.match(serveBlock, /if\s*\(\s*!res\.headersSent\s*&&\s*!res\.writableEnded\s*\)\s*\{\s*res\.end\(_hitContent\)/);
     });
 
     it('F8/#RC5: ONE header string — built once into _cs (ttl + detail), set AND logged from it', function() {
@@ -489,4 +491,49 @@ describe('03 - /_gina/cache/stats — L2 health fold (#RC5)', function() {
         assert.equal(p.size, 2);
         assert.equal(p.entries.length, 1);
     });
+});
+
+
+describe('04 - #B130 hit-serve re-nonce (both engines, keep in sync)', function() {
+
+    var ISAAC_SRC = fs.readFileSync(path.join(FW, 'core/server.isaac.js'), 'utf8');
+
+    // ── server.js serveRenderCacheHit ──
+
+    var sStart = SERVER_SRC.indexOf('var serveRenderCacheHit');
+    var sEnd   = SERVER_SRC.indexOf('var tryServeRenderCacheHit', sStart);
+    var serveBlock = SERVER_SRC.slice(sStart, sEnd);
+
+    it('computes the re-nonce BEFORE the stored-header replay loop', function() {
+        var rnAt   = serveBlock.indexOf('lib.RenderCache.renonceCspHeaders(hit.responseHeaders || null)');
+        var loopAt = serveBlock.indexOf('for (var h in _hitHeaders)');
+        assert.ok(rnAt > -1, 'expected the renonceCspHeaders call');
+        assert.ok(loopAt > rnAt, 'the header replay loop must consume the re-nonced copy');
+    });
+
+    it('derives _hitContent via swapNonces and never mutates the stored entry', function() {
+        assert.match(serveBlock, /_hitContent\s*=\s*_rn\s*\?\s*lib\.RenderCache\.swapNonces\(hit\.content,\s*_rn\.oldNonces,\s*_rn\.nonce\)\s*:\s*hit\.content/);
+        // no assignment INTO the stored entry
+        assert.doesNotMatch(serveBlock, /hit\.responseHeaders\s*=/);
+        assert.doesNotMatch(serveBlock, /hit\.content\s*=/);
+    });
+
+    // ── isaac pre-routing read (the engine mirror) ──
+
+    it('isaac mirrors the re-nonce at its pre-routing read (keep-in-sync pair)', function() {
+        assert.ok(ISAAC_SRC.indexOf('lib.RenderCache.renonceCspHeaders(') > -1,
+            'expected the isaac re-nonce call');
+        assert.match(ISAAC_SRC, /_rnHeaders\s*=\s*_rn\s*\?\s*_rn\.headers\s*:\s*cachedContentObj\.responseHeaders/);
+        assert.match(ISAAC_SRC, /lib\.RenderCache\.swapNonces\(cachedContentObj\.content,\s*_rn\.oldNonces,\s*_rn\.nonce\)/);
+    });
+
+    it('isaac fs read-back buffers ONLY when a re-nonce applies (stream path untouched otherwise)', function() {
+        var isaacRnAt = ISAAC_SRC.indexOf('function onCachedFileRenonce');
+        assert.ok(isaacRnAt > -1, 'expected the buffered fs re-nonce branch');
+        // the buffered branch is gated on _rn, and the streaming path survives after it
+        var gateAt   = ISAAC_SRC.lastIndexOf('if ( _rn ) {', isaacRnAt);
+        var streamAt = ISAAC_SRC.indexOf('fs.createReadStream(filename)', isaacRnAt);
+        assert.ok(gateAt > -1 && streamAt > isaacRnAt, 'gated buffer branch + surviving stream path');
+    });
+
 });
