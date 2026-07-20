@@ -413,6 +413,14 @@ function Config(opt, contextResetNeeded) {
         /**
          * Get env config
          *
+         * Non-merged mode (`!self.isStandalone`, bundles on distinct ports):
+         * returns `envConf[bundle][env]` untouched. Merged mode (every bundle
+         * on the same port, one process): additionally normalises the target
+         * bundle's `hostname` to the starting app's (same host:port by
+         * definition). The target bundle's `content.routing` is NEVER
+         * reassigned (#B137) — each bundle keeps its own table, and the
+         * merged view lives in the global `envConf.routing`.
+         *
          * @param {string} bundle
          * @param {string} env
          *
@@ -460,7 +468,17 @@ function Config(opt, contextResetNeeded) {
                     self.envConf[self.startingApp][env].hostname = hostname;
 
                     self.envConf[bundle][env].hostname = self.envConf[self.startingApp][env].hostname;
-                    self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
+                    // #B137 — was: self.envConf[bundle][env].content.routing = self.envConf[self.startingApp][env].content.routing;
+                    // The 2015 single-table design aliased the target bundle's routing
+                    // table to the starting app's. Per-bundle `rule@bundle` keying made
+                    // that pure corruption: the starting app's table cannot hold a
+                    // sibling's keys, so the first cross-bundle getUrl permanently
+                    // clobbered the sibling's table — every cross-bundle link rendered
+                    // the literal `404:[<METHOD>]<rule>@<bundle>` marker, and merged-mode
+                    // inbound statics dispatch (loadBundleConfiguration → getRouting)
+                    // could match requests against the wrong bundle's table. The sibling
+                    // keeps its own table; the merged view of all bundles' rules lives
+                    // in the global `envConf.routing` (see setRouting).
 
                     if ( bundle && env ) {
                         return self.envConf[bundle][env]
