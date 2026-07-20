@@ -9,8 +9,11 @@
  * JSON, by contrast, has always failed the boot. The fix tracks whether the
  * loop actually resolved a REAL routing config (`routingConfigSeen`) and
  * refuses to start otherwise, matching the malformed-JSON idiom
- * (callback(err) which leads to process.exit(1)) so a supervisor restart
- * retries until the release tree settles — the deploy-race self-heal.
+ * (callback(err) which leads to process.exit(1)) so an EXTERNAL supervisor
+ * (an orchestrator liveness/restart or a container restart policy) can retry
+ * until the release tree settles — the deploy-race self-heal. Gina's own
+ * daemon is fail-stop on a startup crash: it reports once and does not
+ * respawn (lib/cmd/bundle/start.js, the #B9 exit path).
  *
  * Live-verified on an isolated two-bundle boot (2026-07-20): with a sibling
  * bundle's routing.json renamed away the boot REFUSES, exit 1, the error
@@ -140,7 +143,7 @@ describe('#B132 §02 — seen/skip replica: which trees pass the gate', function
         assert.equal(replicaSeen(['app.json'], ['routing.json'], { 'app.json': true, 'routing.json': true }, 'dev', ENVS), true);
     });
 
-    it('readdir↔existsSync race (listed but gone by exists time) → NOT seen (routes to the refusal; the supervisor retry is the self-heal)', function () {
+    it('readdir↔existsSync race (listed but gone by exists time) → NOT seen (routes to the refusal; an external supervisor\'s restart is the self-heal — the daemon itself is fail-stop)', function () {
         assert.equal(replicaSeen(['routing.json'], [], { 'routing.json': false }, 'dev', ENVS), false);
     });
 });
