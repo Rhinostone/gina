@@ -26,6 +26,14 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
      * Shared across popin instances so a warm entry survives the subsequent
      * click. A reserved-but-not-yet-loaded entry is `null` (in-flight).
      *
+     * #B139 — an entry never outlives the open it warmed: popinUnbind clears
+     * the consumed URL's slot at close (clearContentPreload), so a reopen's own
+     * hover/focus warm fetches CURRENT content instead of dedup-ing against a
+     * previous open's leftover. Pre-fix the leftover (the around-open re-warm,
+     * or the #B54 in-flight adoption's repopulated body) blocked the fresh warm
+     * and every open rendered the PREVIOUS open's fetch — a one-generation-
+     * lagging cache paying ~1 GET per open for content it never showed.
+     *
      * @inner
      * @type {object}
      */
@@ -695,6 +703,10 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                     if ( body == null ) {
                         if ( typeof(onMiss) == 'function' ) { onMiss(); }
                     } else {
+                        // #B139 — record the content's source URL so close can
+                        // clear the (repopulated) slot: the completion writes the
+                        // cache back even after this adoption consumed the body.
+                        $popin._contentUrl = url;
                         handleLoadedBody(body, $popin, ensurePopinDialog($popin));
                     }
                 });
@@ -702,9 +714,74 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             }
             var body = slot;
             delete preloadCache[url];
+            // #B139 — record the content's source URL so close can clear any
+            // around-open re-warm parked at the same key (the leftover that made
+            // the NEXT open render this open's generation).
+            $popin._contentUrl = url;
             var $el = ensurePopinDialog($popin);
             handleLoadedBody(body, $popin, $el);
             return true;
+        }
+
+        /**
+         * clearContentPreload — #B139: the preload cache must not outlive the
+         * open it warmed. Called from popinUnbind at the same lifecycle moment
+         * the AJAX body is wiped from the DOM: deletes the popin's content-URL
+         * slot so the NEXT open's own hover/focus warm (or click-time load)
+         * fetches current content instead of dedup-ing against this open's
+         * leftover. An in-flight slot gets a discard waiter instead — the
+         * fetch completion writes the cache BEFORE firing waiters, so the
+         * waiter deletes the just-written entry (and the failure path's own
+         * delete makes the double-delete a no-op).
+         *
+         * Never-opened warms are untouched (no close ever ran for them): the
+         * eager pass keeps its documented no-TTL page-lifetime semantics.
+         *
+         * @inner
+         * @param {object} $popin
+         */
+        function clearContentPreload($popin) {
+            var url = $popin._contentUrl;
+            if ( !url ) {
+                return;
+            }
+            $popin._contentUrl = null;
+            clearPreloadSlot(url);
+        }
+
+        /**
+         * clearPreloadSlot — #B139 slot-clearing core: deletes a ready slot;
+         * an in-flight slot gets a discard waiter (the fetch completion writes
+         * the cache BEFORE firing waiters, so the waiter deletes the
+         * just-written entry — and the failure path's own delete makes the
+         * double-delete a no-op). Split out of clearContentPreload so the
+         * close path can re-sweep the URL after the teardown task (see
+         * popinUnbind): the a11y focus-return and the pointer's re-hover after
+         * overlay removal fire TRUSTED synthetic intent events DURING teardown
+         * (measured: focusin → GET within 1ms of the close), re-warming the
+         * just-cleared URL with close-era content. A raced sweep is benign by
+         * construction — an adopted in-flight body still reaches its open via
+         * the waiter chain; only the cached copy dies, costing at most one
+         * extra fetch, never staleness.
+         *
+         * @inner
+         * @param {string} url
+         */
+        function clearPreloadSlot(url) {
+            var slot = preloadCache[url];
+            if ( typeof(slot) == 'undefined' ) {
+                return;
+            }
+            if ( slot === null ) {
+                if ( typeof(preloadWaiters[url]) == 'undefined' ) {
+                    preloadWaiters[url] = [];
+                }
+                preloadWaiters[url].push(function () {
+                    delete preloadCache[url];
+                });
+                return;
+            }
+            delete preloadCache[url];
         }
 
         /**
@@ -965,7 +1042,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                 // Consume a warmed OR in-flight preload; else fall through to a click-time XHR.
                 var loadOptions = merge({ isSynchrone: false, withCredentials: false }, existing.options);
                 var onMiss = function () { popinLoad(name, descriptor.src, loadOptions); };
-                if ( consumePreload(descriptor.src, existing, onMiss) ) {
+                // #B139 companion — `preload="false"` is the always-refetch spelling:
+                // such a trigger must NEVER serve cached content (not even a same-URL
+                // sibling trigger's warm), so skip the consume entirely — its GET
+                // always happens at open time.
+                var _noPreload = /^false$/i.test($trigger.getAttribute('data-gina-dialog-preload'));
+                if ( !_noPreload && consumePreload(descriptor.src, existing, onMiss) ) {
                     return;
                 }
                 onMiss();
@@ -1115,7 +1197,11 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                             // #B54 — reuse a hover/focus preload (warmed OR in-flight) for the
                             // same URL instead of firing a second identical GET. Mirrors the
                             // new data-gina-dialog path (openFromTrigger).
-                            if ( consumePreload(url, $popin, doLoad) ) {
+                            // #B139 companion — `preload="false"` triggers skip the consume:
+                            // always-refetch means the GET happens at open time, never from
+                            // the cache (see the openFromTrigger twin).
+                            var _noPreload = /^false$/i.test(this.getAttribute('data-gina-dialog-preload'));
+                            if ( !_noPreload && consumePreload(url, $popin, doLoad) ) {
                                 return;
                             }
                             doLoad();
@@ -1782,6 +1868,12 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
             var $popin          = getPopinByName(name);
             var id              = $popin.id;
             var $popinTrigger   = document.getElementById($popin.openTrigger) || null;
+
+            // #B139 — record the content's source URL for the close-time cache
+            // clear (covers every click-time load path, incl. validator redirects).
+            if (url) {
+                $popin._contentUrl = url;
+            }
 
             // set as active if none is active
             if ( !gina.popin.activePopinId ) {
@@ -2526,6 +2618,22 @@ define('gina/popin', [ 'require', 'lib/domain', 'lib/merge', 'utils/events' ], f
                         // (the legacy default), whose body was injected at load time.
                         if ( !$popin.isInPageDialog ) {
                             $el.innerHTML                       = '';
+                            // #B139 — the content cache dies with the content: clear
+                            // this popin's URL slot so the next open warms FRESH
+                            // instead of consuming this open's leftover — then SWEEP
+                            // the same slot once the teardown task has drained: the
+                            // close-time focus-return and pointer re-hover re-warm
+                            // the URL within ~1ms (measured), refilling it with
+                            // close-era content the next open would serve stale. The
+                            // sweep's race direction is benign (at most one extra
+                            // fetch, never stale content).
+                            var _closedContentUrl = $popin._contentUrl;
+                            clearContentPreload($popin);
+                            if ( _closedContentUrl ) {
+                                setTimeout(function () {
+                                    clearPreloadSlot(_closedContentUrl);
+                                }, 120);
+                            }
                         }
                     }
                     // Fixed: clear loading state on reset — defensive cleanup for navigation

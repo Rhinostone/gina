@@ -2168,3 +2168,178 @@ describe('30 - Popin: eager preload (data-gina-dialog-preload="eager")', functio
             'the Save-Data guard must survive minification (property access)');
     });
 });
+
+describe('31 - #B139: the content preload cache dies with the open it warmed', function () {
+
+    // Pre-fix, the cache was a ONE-GENERATION-LAGGING store (measured in a real
+    // browser, 5 opens with the server version-bumped between them: every open
+    // after the first fetched the CURRENT body but rendered the PREVIOUS open's):
+    // open N consumes the entry warmed around open N-1, and the around-open-N
+    // re-warm (mouseover/focusin near the click or close) parks the CURRENT
+    // generation in the cache — where the pre-open-N+1 hover then dedups against
+    // it instead of warming fresh. No invalidation path existed: close/unbind/
+    // destroy never touched preloadCache. The fix clears the popin's content-URL
+    // slot at the same unbind moment the AJAX body is wiped from the DOM.
+
+    // Minimal faithful replica of the cache protocol (warm reserve/complete,
+    // ready-consume with delete, close-clear) — the waiter indirection is
+    // modeled only where the assertion needs it (31.2).
+    function makeCacheModel() {
+        var m = { cache: {}, waiters: {} };
+        m.complete = function (url, body) {                // preloadFetch readyState-4 tail:
+            m.cache[url] = body;                           // completion writes…
+            var w = m.waiters[url] || [];
+            delete m.waiters[url];
+            for (var i = 0; i < w.length; i++) { w[i](body); }   // …then fires waiters
+        };
+        m.warm = function (url, body) {                    // warmTrigger: dedup + reserve + fetch
+            if ( typeof(m.cache[url]) != 'undefined' ) { return 'dedup'; }
+            m.cache[url] = null;
+            m.complete(url, body);
+            return 'fetched';
+        };
+        m.consume = function (url, $popin) {               // ready branch only
+            var slot = m.cache[url];
+            if ( typeof(slot) == 'undefined' ) { return false; }
+            delete m.cache[url];
+            $popin._contentUrl = url;
+            $popin.rendered = slot;
+            return true;
+        };
+        m.clearSlot = function (url) {                     // clearPreloadSlot core
+            var slot = m.cache[url];
+            if ( typeof(slot) == 'undefined' ) { return; }
+            if ( slot === null ) {
+                (m.waiters[url] = m.waiters[url] || []).push(function () { delete m.cache[url]; });
+                return;
+            }
+            delete m.cache[url];
+        };
+        m.clear = function ($popin) {                      // clearContentPreload
+            var url = $popin._contentUrl;
+            if ( !url ) { return; }
+            $popin._contentUrl = null;
+            m.clearSlot(url);
+        };
+        return m;
+    }
+
+    it('31.1 - replica + SUBTRACT: without the close-clear every open renders the previous generation; with it every open is fresh', function () {
+        // WITHOUT the clear (pre-fix): warm(v1) -> open1 consumes v1 -> around-open
+        // re-warm parks v2 -> close (no clear) -> pre-open-2 hover DEDUPS -> open2
+        // consumes v2 while the server is at v3 == the one-generation lag.
+        var pre = makeCacheModel();
+        var $p = {};
+        pre.warm('/frag', 'v1');
+        pre.consume('/frag', $p);                              // open 1
+        assert.equal($p.rendered, 'v1', 'open 1 is fresh on both shapes');
+        pre.warm('/frag', 'v2');                               // around-open re-warm
+        /* close: pre-fix clears nothing */
+        assert.equal(pre.warm('/frag', 'v3'), 'dedup',
+            'SUBTRACT: the pre-open-2 hover dedups against the leftover — the fresh warm never happens');
+        pre.consume('/frag', $p);                              // open 2
+        assert.equal($p.rendered, 'v2', 'SUBTRACT: open 2 renders the previous generation (the measured lag)');
+
+        // WITH the clear (#B139): the close deletes the leftover, so the next
+        // hover warms the CURRENT generation and the open renders it.
+        var fixed = makeCacheModel();
+        var $q = {};
+        fixed.warm('/frag', 'v1');
+        fixed.consume('/frag', $q);                            // open 1
+        fixed.warm('/frag', 'v2');                             // around-open re-warm
+        fixed.clear($q);                                       // close -> clearContentPreload
+        assert.equal(fixed.warm('/frag', 'v3'), 'fetched',
+            'the pre-open-2 hover warms FRESH — the leftover is gone');
+        fixed.consume('/frag', $q);                            // open 2
+        assert.equal($q.rendered, 'v3', 'open 2 renders the current generation');
+    });
+
+    it('31.2 - replica: an in-flight slot at close gets a discard waiter (completion writes, waiter deletes)', function () {
+        var m = makeCacheModel();
+        var $p = { _contentUrl: '/frag' };
+        m.cache['/frag'] = null;                               // in-flight at close time
+        m.clear($p);
+        assert.equal(m.cache['/frag'], null, 'the in-flight reservation itself is left for the completion');
+        // completion arrives: writes the body, fires the parked discard waiter
+        m.complete('/frag', 'late-body');
+        assert.equal(typeof m.cache['/frag'], 'undefined',
+            'the discard waiter deletes the just-written entry — nothing outlives the close');
+    });
+
+    it('31.3 - source: clearContentPreload exists, popinUnbind clears AND re-sweeps past the teardown', function () {
+        var src = getPopinSrc();
+        assert.ok(/function\s+clearContentPreload\s*\(/.test(src), 'clearContentPreload must exist');
+        var unbind = src.substring(src.indexOf('function popinUnbind('), src.indexOf('function popinClose('));
+        assert.ok(/if\s*\(\s*!\$popin\.isInPageDialog\s*\)\s*\{[\s\S]*?\$el\.innerHTML[\s\S]*?clearContentPreload\(\s*\$popin\s*\)/.test(unbind),
+            'popinUnbind must clear the content-URL cache slot in the same AJAX-only branch that wipes the body');
+        // the URL is captured BEFORE the clear nulls it, and re-swept after the
+        // teardown task (the close-time focus-return + pointer re-hover re-warm
+        // the slot with close-era content within ~1ms — measured)
+        assert.ok(/var\s+_closedContentUrl\s*=\s*\$popin\._contentUrl[\s\S]*?clearContentPreload\(\s*\$popin\s*\)/.test(unbind),
+            'the sweep URL must be captured before clearContentPreload nulls the stamp');
+        assert.ok(/setTimeout\(\s*function\s*\(\s*\)\s*\{\s*clearPreloadSlot\(\s*_closedContentUrl\s*\)/.test(unbind),
+            'popinUnbind must schedule the deferred sweep of the same slot');
+        // the clear core: delete on ready, discard-waiter on in-flight
+        var clear = src.substring(src.indexOf('function clearContentPreload('), src.indexOf('function installPreload('));
+        assert.ok(/delete\s+preloadCache\[\s*url\s*\]/.test(clear), 'ready slots are deleted');
+        assert.ok(/preloadWaiters\[\s*url\s*\]\.push\(\s*function\s*\(\s*\)\s*\{\s*delete preloadCache\[\s*url\s*\]/.test(clear),
+            'in-flight slots get a discard waiter');
+    });
+
+    it('31.7 - replica: the deferred sweep kills the close-time synthetic re-warm (the measured defeat of clear-only)', function () {
+        // Measured in a real browser: Esc close -> the a11y focus-return fires a
+        // TRUSTED focusin -> warmTrigger GETs close-era content within 1ms, AFTER
+        // the immediate clear ran — so clear-only left the next open serving
+        // close-era content again. The deferred sweep runs past the teardown and
+        // deletes whatever the synthetics parked; the next real open then misses
+        // and fetches CURRENT.
+        var m = makeCacheModel();
+        var $p = {};
+        m.warm('/frag', 'open-era');
+        m.consume('/frag', $p);                                // open
+        m.clear($p);                                           // close: immediate clear
+        m.warm('/frag', 'close-era');                          // synthetic focus-return re-warm (post-clear)
+        // SUBTRACT: without the sweep the next open serves the close-era body
+        var $q1 = {};
+        var probe = makeCacheModel();
+        probe.cache = JSON.parse(JSON.stringify(m.cache));
+        probe.consume('/frag', $q1);
+        assert.equal($q1.rendered, 'close-era',
+            'SUBTRACT: clear-only is defeated — the synthetic re-warm serves close-era content at reopen');
+        // WITH the sweep: the slot dies, the reopen misses and fetches current
+        m.clearSlot('/frag');                                  // the deferred sweep
+        var $q2 = {};
+        assert.equal(m.consume('/frag', $q2), false, 'the reopen must MISS after the sweep');
+        assert.equal(m.warm('/frag', 'current'), 'fetched', 'the reopen-time fetch gets CURRENT content');
+        m.consume('/frag', $q2);
+        assert.equal($q2.rendered, 'current');
+    });
+
+    it('31.4 - source: the content URL is stamped at every inject/load entry point', function () {
+        var src = getPopinSrc();
+        var consume = src.substring(src.indexOf('function consumePreload('), src.indexOf('function clearContentPreload('));
+        var stamps = consume.match(/\$popin\._contentUrl\s*=\s*url/g) || [];
+        assert.equal(stamps.length, 2, 'consumePreload must stamp _contentUrl on BOTH branches (ready + adopted in-flight)');
+        var load = src.substring(src.indexOf('function popinLoad('), src.indexOf('function popinOpen('));
+        assert.ok(/\$popin\._contentUrl\s*=\s*url/.test(load), 'popinLoad must stamp _contentUrl (click-time loads incl. redirects)');
+    });
+
+    it('31.5 - source: preload="false" triggers skip the consume on BOTH open paths (always-refetch)', function () {
+        var src = getPopinSrc();
+        var openFn = src.substring(src.indexOf('function openFromTrigger('), src.indexOf('function bindDelegatedOpen('));
+        assert.ok(/_noPreload\s*=\s*\/\^false\$\/i\.test\(\s*\$trigger\.getAttribute\('data-gina-dialog-preload'\)\s*\)/.test(openFn)
+            && /!_noPreload\s*&&\s*consumePreload\(/.test(openFn),
+            'openFromTrigger must gate the consume on the false opt-out');
+        var legacy = src.substring(src.indexOf('var bindOpen'), src.indexOf('function popinLoad('));
+        assert.ok(/_noPreload\s*=\s*\/\^false\$\/i\.test\(\s*this\.getAttribute\('data-gina-dialog-preload'\)\s*\)/.test(legacy)
+            && /!_noPreload\s*&&\s*consumePreload\(/.test(legacy),
+            'the legacy click path must gate the consume identically');
+    });
+
+    it('31.6 - dist fidelity: the close-clear reached the bundles (rebuild guard)', function () {
+        assert.ok(getDistSrc().indexOf('function clearContentPreload(') > -1,
+            'gina.js must carry clearContentPreload — the plugin bundle was not rebuilt from source');
+        assert.ok(getDistMinSrc().indexOf('_contentUrl') > -1,
+            'gina.min.js must carry the _contentUrl stamp (property names survive SIMPLE minification)');
+    });
+});
