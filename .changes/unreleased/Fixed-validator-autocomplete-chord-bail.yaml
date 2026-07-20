@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: on live-check fields with autocomplete="off", the Safari-autocomplete keydown interception no longer swallows modifier chords — Cmd/Ctrl+A/C/V/X/Z and Cmd+Arrow run their native defaults instead of typing the chord letter into the field (Cmd+A appended "a") or routing keyboard paste through document.execCommand("paste"), which is inert in unprivileged web content, so keyboard paste on intercepted fields works again (#B134)'
-time: 2026-07-20T00:26:13+01:00

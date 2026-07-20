@@ -1,3 +1,0 @@
-kind: Added
-body: 'Popin eager preload — a trigger can opt into warming its AJAX content off the critical path with data-gina-dialog-preload="eager" (case-insensitive): after window load, at browser idle, the popin plugin fetches the content one trigger at a time through the same gate as the hover/focus warm (the "false" opt-out, the disabled skip, and the cache dedup all apply — whichever warm runs second is a no-op), so a later open injects instantly with no second GET. The pass is skipped when the browser signals Save-Data. Default behavior is unchanged: hover/focus warm stays the default and "false" still disables warming entirely. Browser-bundled — rebuild your bundles to pick it up.'
-time: 2026-07-19T21:44:36+01:00

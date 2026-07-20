@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: the Safari-autocomplete keydown interception (fields with autocomplete="off" on a live-check form) now gates on REAL Safari only — every Chromium UA (Chrome/Edge/Brave/Opera) carries the Safari/537.36 token, so the bare /safari/i test ran the WebKit workaround on Chromium where it was never intended; Chromium users get native typing/autofill behavior back, while WebKit-on-iOS browsers (CriOS/FxiOS) stay covered by design (#B135)'
-time: 2026-07-20T00:41:26+01:00

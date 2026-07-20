@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator live-check: when the whole-form validation pass turns valid (e.g. a checkbox interaction raises a field another field''s comparison rule reads), the pass now clears every previously-errored field''s rendered error message along with re-enabling the submit trigger — pre-fix the stale blocking-error paragraph stayed visible next to an enabled submit until the field''s next keystroke; applied to both global-pass copies (input/checkbox/radio path and select path), and the pass still never renders new errors on untouched fields (#B136)'
-time: 2026-07-20T00:46:42+01:00
