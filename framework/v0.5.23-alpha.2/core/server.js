@@ -4476,6 +4476,11 @@ function Server(options) {
                         var group    = ( info.dispositionParams ) ? info.dispositionParams.group : undefined;
 
                         file._dataLen = 0;
+                        // #B142 — this part's request.files record, captured at the
+                        // source's 'end' and size-finalized in liner._flush (below the
+                        // pipe): at 'end' time the liner can still hold queued chunks
+                        // the byte counter has not seen.
+                        var fileRecord;
                         ++fileCount;
 
                         // #B51 (2026-06-16) — enforce the global maxFields file-count cap. It was
@@ -4602,12 +4607,29 @@ function Server(options) {
                             done()
                         }
 
-                    //     liner._flush = function (done) {
-                    //         done()
-                    //     }
-
                         file.pipe(liner).pipe(writeStreams[index]);
                         ++index;
+
+                        // #B142 (2026-07-21) — finalize req.files[].size once the LAST
+                        // _transform has counted its chunk. Ordering guarantees (probe-
+                        // measured): _flush completes strictly BEFORE the write stream can
+                        // emit 'finish', and the request only resumes (resumeAfterMultipart)
+                        // after every write stream finished — so the patched size is final
+                        // before any consumer (incl. the controller's store()) reads
+                        // request.files. On a settled pipeline _flush can run BEFORE the
+                        // source's 'end' listener; fileRecord is then still undefined here,
+                        // and the push at 'end' reads the already-complete count — both
+                        // interleavings yield the exact byte size. Assigned AFTER the pipe
+                        // on purpose: the Transform only consults _flush at end-of-input,
+                        // and the sibling suite slices the _transform block up to the pipe
+                        // call. (Supersedes the long-commented _flush stub that sat above
+                        // the pipe since the original implementation.)
+                        liner._flush = function (done) {
+                            if ( fileRecord ) {
+                                fileRecord.size = file._dataLen;
+                            }
+                            done()
+                        };
 
 
                         file.on('end', function() {
@@ -4619,7 +4641,16 @@ function Server(options) {
                             // above (file.on('end') closes over the same per-file fileUploadDir).
                             tmpFilename = _(fileUploadDir + '/' + filename);
 
-                            request.files.push({
+                            // #B142 (2026-07-21) — size here is PROVISIONAL: 'end' fires on
+                            // the SOURCE stream while the liner Transform downstream can
+                            // still hold queued chunks the byte counter has not seen
+                            // (measured live: a 1.5MB upload reported ~25% short).
+                            // liner._flush finalizes it. The push itself stays HERE: busboy
+                            // emits parts sequentially, so pushing at the source's 'end'
+                            // preserves part order in request.files — flush completion
+                            // order can invert across parts when an earlier part's sink
+                            // drains slower.
+                            fileRecord = {
                                 name: fieldname,
                                 group: group,
                                 originalFilename: filename,
@@ -4627,7 +4658,8 @@ function Server(options) {
                                 type: mimetype,
                                 size: this._dataLen,
                                 path: tmpFilename
-                            });
+                            };
+                            request.files.push(fileRecord);
 
                             // /tmp autoTmpCleanupTimeout
                             if (autoTmpCleanupTimeout) {
