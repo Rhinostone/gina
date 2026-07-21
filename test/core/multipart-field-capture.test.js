@@ -122,12 +122,16 @@ describe('01 - multipart field capture: server.js source pins (#B92-adjacent)', 
         assert.ok(from > 0 && to > from, 'finish block located');
         var block     = active.substring(from, to);
         var assignIdx = block.indexOf('request.body = multipartFields');
-        var totalIdx  = block.indexOf('var total = writeStreams.length');
+        // #B143 re-gated the dispatch: busboyDone gates the creation-time close
+        // callbacks, so assignment-before-the-flag covers BOTH resume paths
+        // (the direct zero-pending resume below it, and every close-callback
+        // resume, which cannot fire until busboyDone is set).
+        var gateIdx   = block.indexOf('busboyDone = true');
         var resumeIdx = block.indexOf('resumeAfterMultipart();');
         assert.ok(assignIdx > -1, 'request.body assignment present');
-        assert.ok(totalIdx > -1 && resumeIdx > -1, 'dispatch anchors present');
-        assert.ok(assignIdx < totalIdx, 'assignment precedes the writeStreams accounting');
-        assert.ok(assignIdx < resumeIdx, 'assignment precedes the zero-writeStreams resume');
+        assert.ok(gateIdx > -1 && resumeIdx > -1, 'dispatch anchors present');
+        assert.ok(assignIdx < gateIdx, 'assignment precedes the busboyDone gate');
+        assert.ok(assignIdx < resumeIdx, 'assignment precedes the zero-pending resume');
     });
 
     it('only body-carrying methods get the method slot (request.get / request.delete feed URL params)', function() {

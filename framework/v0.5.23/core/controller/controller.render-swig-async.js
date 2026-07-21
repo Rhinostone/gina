@@ -27,7 +27,9 @@
  * filter registration + render + HTTP/1.1 & HTTP/2 send + post-render asset
  * injection — the gina client bundle / CSS / JS are injected via injectAssets()
  * plus the gina-bootstrap whisper pass, mirroring render-nunjucks.js, so an
- * off-disk full page ships the client runtime and is production-usable.
+ * off-disk full page ships the client runtime and is production-usable. The
+ * #RWATCH stale-release banner is spliced onto the finalized HTML too
+ * (sync-delegate parity; self-gated, see release-banner.js).
  * Deferred to follow-up slices (mirroring the render-nunjucks N2 -> #NJ
  * build-out): Inspector dev-payload, static HTML cache writes, error-template
  * routing, and Early Hints.
@@ -48,6 +50,11 @@ const merge  = libRef.merge;
 // render-swig.js. Fetched via the lib registry so dev-mode hot-reload evictions
 // of lib/index.js don't poison the reference across requests.
 const Collection = libRef.Collection;
+// #RWATCH S3 — stale-release banner injector (shared standalone module; the
+// call self-gates on local scope + !dev + server.releaseWatch.enabled).
+// Sibling-file require, cache-hit-deduped across dev evictions — the same
+// shape the sync delegates use (render-swig.js:14 / render-nunjucks.js:129).
+const releaseBanner = require('./release-banner');
 
 /**
  * Lazily construct the process-wide render-context AsyncLocalStorage, parked on
@@ -664,6 +671,14 @@ module.exports = async function renderSwigAsync(userData, displayInspector, errO
     } catch (whisperErr) {
         try { console.warn('[render-swig-async] ginaLoader whisper substitution skipped: ' + (whisperErr.message || whisperErr)); } catch (e) {}
     }
+
+    // #RWATCH S3 — stale-release banner on the finalized HTML (parity with the
+    // sync delegates): after the whisper pass, before send. Self-gated in
+    // release-banner.js — byte-inert unless local scope + !dev +
+    // server.releaseWatch.enabled; skipped for partials (no </body> anchor)
+    // and already-bannered HTML (MARKER double-injection guard).
+    var _cspNonceAttr = _cspNonce ? (' nonce="' + _cspNonce + '"') : '';
+    html = releaseBanner.maybeInject(html, localOptions.conf, _cspNonceAttr);
 
     // A concurrent throwError may have sent headers while we awaited — re-check.
     if (headersSent && headersSent()) { return; }
