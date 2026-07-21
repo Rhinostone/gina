@@ -1,3 +1,0 @@
-kind: Added
-body: 'The `settings.i18n.cultures` allowlist is now honoured: a non-empty array constrains which cultures the user-signal negotiation steps (URL prefix, cookie, Accept-Language) may match — e.g. a staged rollout keeps a shipped-but-unlaunched catalog out of negotiation. `null` or `[]` keep the historical derive-from-loaded-catalogs behavior, and the bundle-default step (`settings.region.culture`) is never constrained. The whole `i18n` block (cookieName, devMissingKey, fallbackChain, cultures) is now declared in the published settings.json schema. Restart to apply.'
-time: 2026-07-20T23:48:15+01:00

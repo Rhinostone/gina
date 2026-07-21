@@ -1,3 +1,0 @@
-kind: Fixed
-body: '`npm install -g gina` no longer dies when the effective npm prefix contains a path segment npm''s redactor masks (e.g. a UUID-shaped directory — CI sandboxes, generated workspaces): `npm config get prefix` refuses such a read as protected on every current npm generation (10/11/12), and both install scripts ran that probe unguarded. The probe is now guarded, falling back to the prefix npm itself exports to the install lifecycle.'
-time: 2026-07-20T23:48:16+01:00

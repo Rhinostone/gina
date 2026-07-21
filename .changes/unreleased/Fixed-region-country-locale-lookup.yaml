@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The per-request country-locale resolution: `page.view.locale` now carries the real region record (country name, currency, capital, …) resolved from the request culture''s country code. The lookup filtered on a key the region data has never carried, so the object had always been empty when a country code was present — and an arbitrary first record when the culture had no country part (now an explicit empty object). Lowercase country segments are normalized, and the date stamp is unchanged.'
-time: 2026-07-20T23:48:14+01:00

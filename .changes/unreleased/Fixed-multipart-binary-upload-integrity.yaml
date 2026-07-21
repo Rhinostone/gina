@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Multipart binary uploads now arrive byte-identical: file payloads are no longer string-decoded on their way to disk. The request stream stays raw for multipart bodies and the per-file write pipeline passes chunks through verbatim, so content that is not valid UTF-8 — images, PDFs, archives — is no longer mangled and re-sized (pure-ASCII payloads were unaffected, which is what hid the corruption). req.files[].size now reports the real on-disk byte count instead of a decoded character count.'
-time: 2026-07-20T22:00:24+01:00

@@ -1,3 +1,0 @@
-kind: Changed
-body: 'The runtime pins now live under the standard `engines` manifest key (formerly the non-standard singular `engine`, which npm and Bun tooling ignore), so unsupported runtimes get install-time warnings (Node `>= 22 <27`, Bun `>= 1.2`). Scaffolded project manifests — the `project:add` template and the install-time fallback package.json — carry the standard object-form key too, and `image:build` reads `engines` with a legacy `engine` fallback.'
-time: 2026-07-20T23:17:37+01:00

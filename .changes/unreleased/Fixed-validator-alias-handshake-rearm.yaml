@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'FormValidator: numbered `is` aliases no longer collapse onto the bare `is` error key on re-validation — the alias handshake re-arms per invocation instead of once per install, so on conditional (`_case_`) re-evaluations and recursive passes each `is<N>` rule keeps its own distinct error key, and the last-declared rule''s message no longer renders twice (its own key plus a mirrored bare `is` key carrying the same string; the digit was irrelevant — whichever numbered rule was declared last doubled). Browser-bundled — rebuild your bundles to pick it up (#B138)'
-time: 2026-07-20T15:17:13+01:00
