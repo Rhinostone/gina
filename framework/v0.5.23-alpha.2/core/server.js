@@ -4370,7 +4370,14 @@ function Server(options) {
                         , fileCount     = 0
                         , tmpFilename   = null
                         , writeStreams  = []
-                        , index         = 0;
+                        , index         = 0
+                        // #B143 — write streams created but not yet closed. Incremented at
+                        // stream creation in the 'file' handler, decremented by each
+                        // stream's close callback (armed at creation, see below).
+                        , pending       = 0
+                        // #B143 — set once busboy has parsed the whole body. Resume fires
+                        // only when busboyDone && pending === 0, whichever event lands last.
+                        , busboyDone    = false;
 
                     request.files = [];
                     request.routing = {
@@ -4572,10 +4579,12 @@ function Server(options) {
                         // #B49 (2026-06-16) — per-group `path` overrides the global uploadDir;
                         // fall back to the global dir when the group declares no path. The
                         // configured defaults resolve to dirs that exist (os.tmpdir() always;
-                        // <project>/tmp is created at boot), but a CUSTOM dir may not exist yet —
-                        // and the writeStream 'error' handler is only attached later, in the
-                        // busboy 'finish' loop, so a missing dir would emit an unhandled ENOENT
-                        // here (during streaming) and crash the bundle. mkdir-if-missing guards it.
+                        // <project>/tmp is created at boot), but a CUSTOM dir may not exist yet.
+                        // mkdir-if-missing prevents the write error entirely; since #B143 the
+                        // writeStream 'error' handler is also armed at stream creation (below),
+                        // so a missing dir would now get a guarded 500 instead of the historical
+                        // unhandled-ENOENT crash (the handler used to attach only in the busboy
+                        // 'finish' loop, after the whole body was parsed).
                         var fileUploadDir = ( opt.groups[fileGroup] && opt.groups[fileGroup].path )
                             ? opt.groups[fileGroup].path
                             : uploadDir;
@@ -4585,6 +4594,38 @@ function Server(options) {
 
                         // creating file
                         writeStreams[index] = fs.createWriteStream( _(fileUploadDir + '/' + filename) );
+                        // #B143 (2026-07-21) — arm the write stream's terminal listeners AT
+                        // CREATION, not in a busboy 'finish' loop. The historical late attach
+                        // lost a race: an early small part's write stream emits 'finish' in
+                        // ~ms while a later large part is still streaming, and Node never
+                        // replays 'finish' for a late listener — that stream's decrement
+                        // never ran, the count never reached 0, and the request hung forever
+                        // (no log line; only a client/front-proxy timeout severed it).
+                        // Attaching here closes the race for every ordering, and gives a
+                        // write error DURING streaming (ENOENT/EIO/disk-full) a handler —
+                        // previously an unhandled 'error' → uncaughtException → SIGTERM.
+                        // An errored stream never emits 'finish', so it never decrements:
+                        // the request stays terminal at the 500 (the pre-#B143 semantics).
+                        ++pending;
+                        writeStreams[index].on('error', function(err) {
+                            console.error('[ busboy ] [ onWriteError ]', err);
+                            throwError(response, 500, 'Internal server error\n' + err, next);
+                            this.close();
+                            return;
+                        });
+                        writeStreams[index].on('finish', function() {
+                            this.close( function onUploaded(){
+                                --pending;
+                                console.debug('closing writestreams : ' + pending);
+
+                                // #B143 — exactly-once by arithmetic: busboy emits no
+                                // 'file' after 'finish', so once busboyDone is set the
+                                // counter can only drain; the LAST close callback resumes.
+                                if (busboyDone && pending === 0) {
+                                    resumeAfterMultipart();
+                                }
+                            })
+                        });
                         var liner = new require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {
@@ -4722,38 +4763,22 @@ function Server(options) {
                                 request[_fieldsMethod] = multipartFields;
                             }
                         }
-                        var total = writeStreams.length;
+                        // #B143 — the whole body is parsed; from here the per-stream close
+                        // callbacks (armed at stream creation in the 'file' handler, where
+                        // the historical attach loop that lost the early-finisher race used
+                        // to live) are allowed to resume the request.
+                        busboyDone = true;
 
-                        // #B93 — a fields-only multipart body (zero file parts) creates no
-                        // write streams, so the loop below runs zero times and the lifecycle
-                        // continuation never fired: the request hung until a front-proxy
-                        // timeout severed it. Resume directly. (Text fields, dropped when
-                        // #B93 shipped, are captured since #B92-adjacent — see the 'field'
-                        // handler and the assignment above.)
-                        if (total === 0) {
+                        // #B93 + #B143 — zero streams still pending covers BOTH terminals:
+                        // a fields-only body created no write stream at all (#B93 — this
+                        // branch is what un-hung it), and a multi-file body whose every
+                        // write stream already finished and closed while later parts were
+                        // still being parsed (#B143). Resume directly; otherwise the LAST
+                        // close callback resumes (busboyDone && pending === 0). (Text
+                        // fields, dropped when #B93 shipped, are captured since
+                        // #B92-adjacent — see the 'field' handler and the assignment above.)
+                        if (pending === 0) {
                             resumeAfterMultipart();
-                            return;
-                        }
-
-                        for (var ws = 0, wsLen = writeStreams.length; ws < wsLen; ++ws ) {
-
-                            writeStreams[ws].on('error', function(err) {
-                                console.error('[ busboy ] [ onWriteError ]', err);
-                                throwError(response, 500, 'Internal server error\n' + err, next);
-                                this.close();
-                                return;
-                            });
-
-                            writeStreams[ws].on('finish', function() {
-                                this.close( function onUploaded(){
-                                    --total;
-                                    console.debug('closing writestreams : ' + total);
-
-                                    if (total == 0) {
-                                        resumeAfterMultipart();
-                                    }
-                                })
-                            });
                         }
                     });
 

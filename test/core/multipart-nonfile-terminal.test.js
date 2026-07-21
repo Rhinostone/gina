@@ -24,10 +24,13 @@
  * server / framework bootstrap. Server-side only — no dist rebuild.
  *
  * Suites:
- *  01 — #B93 server.js source: resumeAfterMultipart extraction + zero-writeStreams branch
+ *  01 — #B93 server.js source: resumeAfterMultipart extraction + zero-pending branch
+ *       (re-gated by #B143: creation-time listeners, busboyDone && pending === 0)
  *  02 — #B97 server.js source: busboy.on('error') → 400, double-response guard, registered pre-pipe
  *  03 — behavioural (REAL vendored busboy): fields-only→finish, malformed/empty→error, file→finish
- *  04 — #B93 dispatch replica: finish handler resumes for empty AND non-empty (+ subtract: pre-fix empty never resumed)
+ *  04 — resume dispatch replica (#B93 + #B143 gating): all orderings resume exactly once
+ *       (+ subtract: pre-#B93 fields-only never resumed). The #B143 early-finisher
+ *       RACE has its own file: multipart-multifile-resume.test.js.
  *  05 — #B97 dispatch replica: error handler responds 400 once, guarded against double-response
  */
 var { describe, it, before } = require('node:test');
@@ -59,9 +62,11 @@ describe('01 - multipart fields-only hang: server.js source pins (#B93)', functi
         assert.match(active, /var resumeAfterMultipart\s*=\s*function[\s\S]{0,220}?loadBundleConfiguration\(request, response, next/);
     });
 
-    it('a zero-writeStreams branch resumes directly, then returns', function() {
-        // for a fields-only body writeStreams is [] and the per-stream loop runs 0x.
-        assert.match(active, /if\s*\(\s*total === 0\s*\)\s*\{[\s\S]{0,180}?resumeAfterMultipart\(\);[\s\S]{0,40}?return;/);
+    it('a zero-pending branch in busboy.on(finish) resumes directly (#B93, re-gated by #B143)', function() {
+        // for a fields-only body no write stream is ever created, so pending
+        // stays 0 at parse end; since #B143 the same branch also covers a body
+        // whose every write stream already finished+closed during the parse.
+        assert.match(active, /busboyDone = true;[\s\S]{0,200}?if\s*\(\s*pending === 0\s*\)\s*\{[\s\S]{0,80}?resumeAfterMultipart\(\);/);
     });
 
     it('the continuation is invoked from exactly the two dispatch sites (empty branch + has-files completion)', function() {
@@ -71,8 +76,8 @@ describe('01 - multipart fields-only hang: server.js source pins (#B93)', functi
         assert.equal(calls.length, 2);
     });
 
-    it('the has-files completion (total == 0 inside the loop) also calls resumeAfterMultipart()', function() {
-        assert.match(active, /if\s*\(total == 0\)\s*\{\s*resumeAfterMultipart\(\);/);
+    it('the has-files completion (creation-time close callback) gates on busboyDone && pending === 0 (#B143)', function() {
+        assert.match(active, /if\s*\(busboyDone && pending === 0\)\s*\{\s*resumeAfterMultipart\(\);/);
     });
 });
 
@@ -159,39 +164,60 @@ describe('03 - vendored busboy event discrimination (behavioural)', function() {
     });
 });
 
-// ─── 04 — #B93 finish-handler dispatch replica (+ subtract) ───────────────────
-describe('04 - finish-handler dispatch replica (#B93)', function() {
+// ─── 04 — resume dispatch replica (#B93, re-gated by #B143) ───────────────────
+describe('04 - resume dispatch replica (#B93 + #B143 gating)', function() {
 
-    // post-fix: mirrors busboy.on('finish') — zero-branch resumes directly, else the
-    // continuation fires after every write stream's finish decrements total to 0.
-    function onFinishFixed(nStreams, resume) {
-        var total = nStreams;
-        if (total === 0) { resume(); return; }
-        for (var i = 0; i < nStreams; i++) { --total; if (total === 0) { resume(); } }
+    // post-fix: mirrors the LIVE dispatch — each stream's close callback is
+    // armed at stream creation (++pending), decrements, and resumes only when
+    // busboyDone && pending === 0; busboy.on('finish') sets the flag and
+    // resumes directly when nothing is pending (zero file parts, or every
+    // stream already finished+closed during the parse). nEarly = streams whose
+    // finish+close land BEFORE busboy's 'finish' (the ordering the historical
+    // attach-late loop lost — the #B143 race lives in its own test file).
+    function runDispatch(nStreams, nEarly, resume) {
+        var pending = 0, busboyDone = false;
+        var lateClosers = [];
+        for (var i = 0; i < nStreams; i++) {
+            ++pending;                                       // armed at creation
+            var onClose = function() {
+                --pending;
+                if (busboyDone && pending === 0) { resume(); }
+            };
+            if (i < nEarly) { onClose(); } else { lateClosers.push(onClose); }
+        }
+        busboyDone = true;                                   // busboy.on('finish')
+        if (pending === 0) { resume(); }
+        for (var j = 0; j < lateClosers.length; j++) { lateClosers[j](); }
     }
-    // pre-fix: continuation lived ONLY inside the per-stream finish loop (no zero-branch).
-    function onFinishBuggy(nStreams, resume) {
+    // frozen pre-#B93: continuation lived ONLY inside the per-stream finish
+    // loop (no zero-branch) — the fields-only hang this file was written for.
+    function onFinishPreB93(nStreams, resume) {
         var total = nStreams;
         for (var i = 0; i < nStreams; i++) { --total; if (total === 0) { resume(); } }
     }
 
     it('post-fix: fields-only (0 write streams) resumes exactly once', function() {
-        var n = 0; onFinishFixed(0, function() { n++; });
+        var n = 0; runDispatch(0, 0, function() { n++; });
         assert.equal(n, 1);
     });
 
-    it('post-fix: has-files (N write streams) resumes exactly once after all finish', function() {
-        var n = 0; onFinishFixed(3, function() { n++; });
+    it('post-fix: has-files, all streams close after parse end — resumes exactly once', function() {
+        var n = 0; runDispatch(3, 0, function() { n++; });
         assert.equal(n, 1);
     });
 
-    it('SUBTRACT — pre-fix: fields-only (0 write streams) NEVER resumed (the hang)', function() {
-        var n = 0; onFinishBuggy(0, function() { n++; });
+    it('post-fix: has-files, ALL streams closed before parse end — resumes exactly once (#B143 all-early terminal)', function() {
+        var n = 0; runDispatch(2, 2, function() { n++; });
+        assert.equal(n, 1);
+    });
+
+    it('SUBTRACT — pre-#B93: fields-only (0 write streams) NEVER resumed (the hang)', function() {
+        var n = 0; onFinishPreB93(0, function() { n++; });
         assert.equal(n, 0);
     });
 
-    it('SUBTRACT — pre-fix: has-files still resumed (only the empty case was broken)', function() {
-        var n = 0; onFinishBuggy(2, function() { n++; });
+    it('SUBTRACT — pre-#B93: has-files still resumed (only the empty case was broken)', function() {
+        var n = 0; onFinishPreB93(2, function() { n++; });
         assert.equal(n, 1);
     });
 });

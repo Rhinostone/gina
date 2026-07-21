@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed a multipart upload hang: a request with two or more file parts never resumed when an early small file finished writing while a later large part was still streaming — the request produced no response and no log line until a client or front-proxy timeout (#B143). The per-stream completion listeners were attached only after the whole body was parsed, and an already-finished stream''s event is never replayed; they now arm at stream creation and the request resumes once the parse AND every write stream have completed, whichever lands last. A write error during streaming (missing directory, disk full) now gets a guarded 500 instead of crashing the bundle. Single-file uploads were unaffected.'
+time: 2026-07-21T17:26:18+01:00
