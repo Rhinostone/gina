@@ -270,3 +270,112 @@ describe('04 - cookie-name resolution + negotiation behaviour (#B99)', function(
     });
 
 });
+
+
+describe('05 - settings.i18n.cultures allowlist source pins (#B102)', function() {
+
+    // Same end-anchor slice as §03 — definition → the stable following comment.
+    var hStart      = SERVER_SRC.indexOf('var _negotiateReqCulture');
+    var hEnd        = SERVER_SRC.indexOf('// Checking cached route', hStart);
+    var helperBlock = SERVER_SRC.slice(hStart, hEnd);
+
+    it('slices the helper block', function() {
+        assert.ok(hStart > -1 && hEnd > hStart);
+    });
+
+    it('reads the allowlist from the bundle settings i18n block', function() {
+        assert.match(helperBlock, /content\.settings\.i18n\.cultures/);
+    });
+
+    it('applies the allowlist only when it is a NON-EMPTY array', function() {
+        assert.match(helperBlock, /Array\.isArray\(\s*_i18nCulturesConf\s*\)\s*&&\s*_i18nCulturesConf\.length\s*>\s*0/);
+    });
+
+    it('short-circuits when no catalogs are loaded (nothing to constrain)', function() {
+        assert.match(helperBlock, /if\s*\(\s*_i18nAvail\.length\s*>\s*0/);
+    });
+
+    it('constrains by INTERSECTION — the available list is filtered, never replaced', function() {
+        assert.match(helperBlock, /_i18nAvail\s*=\s*_i18nAvail\.filter\(/);
+    });
+
+    it('the intersect runs BEFORE the negotiate call, so every user-signal step sees it', function() {
+        var filterIdx    = helperBlock.indexOf('_i18nAvail.filter(');
+        var negotiateIdx = helperBlock.indexOf('negotiateCulture(');
+        assert.ok(filterIdx > -1 && negotiateIdx > filterIdx);
+    });
+
+});
+
+
+describe('06 - cultures allowlist behaviour — replica + REAL negotiateCulture (#B102)', function() {
+
+    // Verbatim-lifted settings-level tail of the shipped block (locked by the
+    // §05 pins) — same modelling convention as §04's resolveCookieName.
+    function constrainAvailable(avail, settings) {
+        var out = avail;
+        if ( out.length > 0 && settings && settings.i18n ) {
+            var _i18nCulturesConf = settings.i18n.cultures;
+            if ( Array.isArray(_i18nCulturesConf) && _i18nCulturesConf.length > 0 ) {
+                out = out.filter(function(c) {
+                    return _i18nCulturesConf.indexOf(c) > -1;
+                });
+            }
+        }
+        return out;
+    }
+
+    var AVAIL = ['en', 'fr', 'de'];
+
+    it('null keeps the historical derive-from-catalogs behaviour', function() {
+        assert.deepEqual(constrainAvailable(AVAIL, { i18n: { cultures: null } }), AVAIL);
+    });
+
+    it('an EMPTY array is treated as unset — no surprise lockout at pickup', function() {
+        assert.deepEqual(constrainAvailable(AVAIL, { i18n: { cultures: [] } }), AVAIL);
+    });
+
+    it('non-array junk is ignored', function() {
+        assert.deepEqual(constrainAvailable(AVAIL, { i18n: { cultures: 'en' } }), AVAIL);
+        assert.deepEqual(constrainAvailable(AVAIL, {}), AVAIL);
+        assert.deepEqual(constrainAvailable(AVAIL, undefined), AVAIL);
+    });
+
+    it('a non-empty array constrains by intersection', function() {
+        assert.deepEqual(constrainAvailable(AVAIL, { i18n: { cultures: ['en', 'fr'] } }), ['en', 'fr']);
+    });
+
+    it('allowlist entries with no loaded catalog are harmless (intersection, not union)', function() {
+        assert.deepEqual(constrainAvailable(AVAIL, { i18n: { cultures: ['en', 'zz'] } }), ['en']);
+    });
+
+    // ---- REAL negotiateCulture driven with a constrained list ---------------
+
+    it('a constrained Accept-Language cannot match an excluded culture (staged rollout)', function() {
+        var req   = { headers: { 'accept-language': 'de' } };
+        var avail = constrainAvailable(AVAIL, { i18n: { cultures: ['en', 'fr'] } });
+        var c = i18n.negotiateCulture(req, { availableCultures: avail, cookieName: 'gina_culture', defaultCulture: 'en' });
+        assert.equal(c, 'en', 'de is shipped but not launched — negotiation falls to the default');
+    });
+
+    it('a constrained cookie cannot match an excluded culture either', function() {
+        var req   = { headers: { cookie: 'gina_culture=de' } };
+        var avail = constrainAvailable(AVAIL, { i18n: { cultures: ['en', 'fr'] } });
+        var c = i18n.negotiateCulture(req, { availableCultures: avail, cookieName: 'gina_culture', defaultCulture: 'en' });
+        assert.equal(c, 'en');
+    });
+
+    it('the bundle-default step is NOT constrained — the operator fallback needs no catalog', function() {
+        var req   = { headers: {} };
+        var avail = constrainAvailable(['en'], { i18n: { cultures: ['en'] } });
+        var c = i18n.negotiateCulture(req, { availableCultures: avail, cookieName: 'gina_culture', defaultCulture: 'de' });
+        assert.equal(c, 'de', 'step 4 returns the configured default directly');
+    });
+
+    it('SUBTRACT — without the intersect the excluded culture wins (the pre-fix inert-key behaviour)', function() {
+        var req = { headers: { 'accept-language': 'de' } };
+        var c = i18n.negotiateCulture(req, { availableCultures: AVAIL, cookieName: 'gina_culture', defaultCulture: 'en' });
+        assert.equal(c, 'de', 'pre-fix the allowlist was never applied, so de matched regardless');
+    });
+
+});

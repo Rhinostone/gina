@@ -125,7 +125,23 @@ function PostInstall() {
         self.isResetNeeded      = ( typeof(process.env.npm_config_reset) != 'undefined' && /^(true|false)$/i.test(process.env.npm_config_reset) )
                                     ? (/^true$/i.test(process.env.npm_config_reset) ? true: false)
                                     : false;
-        self.defaultPrefix      = execSync('$(which npm) config get prefix --quiet').toString().replace(/\n$/g, '');
+        // #B126 — `npm config get prefix` REFUSES the read (exit 1: "The
+        // prefix option is protected, and cannot be retrieved in this way")
+        // whenever the RESOLVED VALUE trips npm's redactor (npm config.js
+        // isPrivate(): redact(value) !== value — e.g. a path containing a
+        // UUID-shaped segment). Measured on npm 10.9.8 / 11.6.2 / 11.18.0 /
+        // 12.0.1 — every current generation; the option's SOURCE (flag, env,
+        // npmrc) is irrelevant. Unguarded, the refusal killed the install at
+        // whichever lifecycle phase ran the probe first. npm exports the
+        // effective prefix to the lifecycle env, so fall back to it; last
+        // resort: the node-derived default prefix.
+        try {
+            self.defaultPrefix  = execSync('$(which npm) config get prefix --quiet').toString().replace(/\n$/g, '');
+        } catch (probeErr) {
+            self.defaultPrefix  = process.env.npm_config_prefix
+                                || require('path').resolve(process.execPath, '..', '..');
+            console.warn('`npm config get prefix` was refused (protected/redacted value); falling back to `'+ self.defaultPrefix +'`');
+        }
         // var pkg = null;
         // try {
         //     if (self.isGlobalInstall) {
@@ -205,9 +221,9 @@ function PostInstall() {
                     "name": ""+ projectName,
                     "version": "0.0.1",
                     "description": projectName+ " is a nice project !",
-                    "engine": [
-                        "node >=" + process.version.substring(1)
-                    ]
+                    "engines": {
+                        "node": ">=" + process.version.substring(1)
+                    }
                 };
                 console.warn('No `package.json` found for your project, creating one to avoid install exceptions');
                 // Inlined to avoid loading the framework lib registry at install time.
