@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the stale-release banner (`server.releaseWatch`) not being injected by the async template-loader render delegates — a bundle using `settings.template.<engine>.loader` during a local production rehearsal got the `/_gina/release/*` endpoints and SSE but no in-page banner. Both async delegates (swig + nunjucks) now splice the banner onto the finalized HTML exactly like the sync delegates, including the CSP nonce when `useNonce` is active.'
+time: 2026-07-21T19:52:54+01:00
