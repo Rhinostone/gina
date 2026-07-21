@@ -124,12 +124,12 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
             var $el         = document.getElementById(id) || null;
 
             var hLinkIsRequired = null;
-            // forward callback to HTML data event attribute through `hform` status
+            // forward callback to HTML data event attribute through `hlink` status
             hLinkIsRequired = ( $el.getAttribute('data-gina-link-event-on-success') || $el.getAttribute('data-gina-link-event-on-error') ) ? true : false;
-            // success -> data-gina-form-event-on-submit-success
-            // error -> data-gina-form-event-on-submit-error
+            // success -> data-gina-link-event-on-success
+            // error -> data-gina-link-event-on-error
             if (hLinkIsRequired)
-                listenToXhrEvents($link);
+                listenToXhrEvents($link, 'link');
 
             // if ( $el == null ) {
 
@@ -218,33 +218,6 @@ define('gina/link', [ 'require', 'lib/domain', 'lib/merge', 'lib/uuid', 'utils/e
             // sending
             xhr.send();
         }
-
-        // var listenToXhrEvents = function($link) {
-
-        //     //data-gina-link-event-on-success
-        //     var htmlSuccesEventCallback =  $link.target.getAttribute('data-gina-link-event-on-success') || null;
-        //     if (htmlSuccesEventCallback != null) {
-
-        //         if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
-        //             eval(htmlSuccesEventCallback)
-        //         } else {
-        //             $link.on('success.hlink',  window[htmlSuccesEventCallback])
-        //         }
-        //     }
-
-        //     //data-gina-link-event-on-error
-        //     var htmlErrorEventCallback =  $link.target.getAttribute('data-gina-link-event-on-error') || null;
-        //     if (htmlErrorEventCallback != null) {
-        //         if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
-        //             eval(htmlErrorEventCallback)
-        //         } else {
-        //             $link.on('error.hlink', window[htmlErrorEventCallback])
-        //         }
-        //     }
-        // }
-
-
-
 
         function registerLink($link, options) {
 

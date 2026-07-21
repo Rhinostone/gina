@@ -269,10 +269,9 @@ function handleXhr(xhr, $el, options, require) {
         id      = $target.getAttribute('id');
     }
 
-    // forward callback to HTML data event attribute through `hform` status
+    // forward callback to HTML data event attribute through `hlink` status
+    // (registration happens in link/main.js `linkRequest` before handleXhr runs)
     var hLinkIsRequired = ( $link && $el.getAttribute('data-gina-link-event-on-success') || $link && $el.getAttribute('data-gina-link-event-on-error') ) ? true : false;
-    // if (hLinkIsRequired && $link)
-    //     listenToXhrEvents($link, 'link');
 
     // forward callback to HTML data event attribute through `hform` status
     var hFormIsRequired = ( $form && $target.getAttribute('data-gina-form-event-on-submit-success') || $form && $target.getAttribute('data-gina-form-event-on-submit-error') ) ? true : false;
@@ -325,7 +324,7 @@ function handleXhr(xhr, $el, options, require) {
             triggerEvent(gina, $target, 'error.' + id + '.hform', result);
 
         if (hLinkIsRequired)
-            triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+            triggerEvent(gina, $link.target, 'error.' + $link.id + '.hlink', result);
     }
 
     // catching ready state cb
@@ -478,7 +477,7 @@ function handleXhr(xhr, $el, options, require) {
                         triggerEvent(gina, $target, 'success.' + id + '.hform', result);
 
                     if (hLinkIsRequired)
-                        triggerEvent(gina, $target, 'success.' + id + '.hlink', result);
+                        triggerEvent(gina, $link.target, 'success.' + $link.id + '.hlink', result);
 
                 } catch (err) {
 
@@ -512,7 +511,7 @@ function handleXhr(xhr, $el, options, require) {
                         triggerEvent(gina, $target, 'error.' + id + '.hform', result);
 
                     if (hLinkIsRequired)
-                        triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+                        triggerEvent(gina, $link.target, 'error.' + $link.id + '.hlink', result);
                 }
 
                 // handle redirect
@@ -603,7 +602,7 @@ function handleXhr(xhr, $el, options, require) {
                                 triggerEvent(gina, $target, 'error.' + id + '.hform', result);
 
                             if (hLinkIsRequired)
-                                triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+                                triggerEvent(gina, $link.target, 'error.' + $link.id + '.hlink', result);
                         }
                         return;
 
@@ -663,7 +662,7 @@ function handleXhr(xhr, $el, options, require) {
                         triggerEvent(gina, $target, 'error.' + id + '.hform', result);
 
                     if (hLinkIsRequired)
-                        triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+                        triggerEvent(gina, $link.target, 'error.' + $link.id + '.hlink', result);
                 }
 
                 return;
@@ -712,7 +711,7 @@ function handleXhr(xhr, $el, options, require) {
             triggerEvent(gina, $target, 'error.' + id + '.hform', result);
 
         if (hLinkIsRequired)
-            triggerEvent(gina, $target, 'error.' + id + '.hlink', result);
+            triggerEvent(gina, $link.target, 'error.' + $link.id + '.hlink', result);
 
         return;
     };
@@ -859,33 +858,45 @@ function on(event, cb) {
         return this
     }
 
-    // Nothing can be added after on()
+}
 
+/**
+ * listenToXhrEvents
+ *
+ * Registers the `data-gina-<type>-event-on-success` / `data-gina-<type>-event-on-error`
+ * HTML callbacks of a plugin element on its `success.h<type>` / `error.h<type>` XHR
+ * event channels. The attribute value must be a bare identifier resolving on `window`
+ * (function-call shapes are refused with a console warning — #M21a).
+ * Consumed by `link/main.js` `linkRequest` (type `'link'`) and by `handleXhr`'s form
+ * branch (type `'form'`); must stay top-level — both callers resolve it as a global.
+ *
+ * @function listenToXhrEvents
+ * @param {object} $el - plugin element object (a `$link`/`$form` carrying `.target` and `.on`)
+ * @param {string} type - attribute/channel type: `'link'` or `'form'`
+ * @returns {void}
+ */
+function listenToXhrEvents($el, type) {
 
-    var listenToXhrEvents = function($el, type) {
+    //data-gina-{type}-event-on-success
+    var htmlSuccesEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-success') || null;
+    if (htmlSuccesEventCallback != null) {
 
-
-        //data-gina-{type}-event-on-success
-        var htmlSuccesEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-success') || null;
-        if (htmlSuccesEventCallback != null) {
-
-            if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
-                // #M21a — function-call shape unsupported; register a bare handler on window instead
-                try { console.warn('[gina-event] function-call shape no longer supported on data-gina-'+ type +'-event-on-success — use a bare identifier and register the handler on window: '+ htmlSuccesEventCallback); } catch (e) {}
-            } else {
-                $el.on('success.h'+ type,  window[htmlSuccesEventCallback])
-            }
+        if ( /\((.*)\)/.test(htmlSuccesEventCallback) ) {
+            // #M21a — function-call shape unsupported; register a bare handler on window instead
+            try { console.warn('[gina-event] function-call shape no longer supported on data-gina-'+ type +'-event-on-success — use a bare identifier and register the handler on window: '+ htmlSuccesEventCallback); } catch (e) {}
+        } else {
+            $el.on('success.h'+ type,  window[htmlSuccesEventCallback])
         }
+    }
 
-        //data-gina-{type}-event-on-error
-        var htmlErrorEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-error') || null;
-        if (htmlErrorEventCallback != null) {
-            if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
-                // #M21a — function-call shape unsupported; register a bare handler on window instead
-                try { console.warn('[gina-event] function-call shape no longer supported on data-gina-'+ type +'-event-on-error — use a bare identifier and register the handler on window: '+ htmlErrorEventCallback); } catch (e) {}
-            } else {
-                $el.on('error.h'+ type, window[htmlErrorEventCallback])
-            }
+    //data-gina-{type}-event-on-error
+    var htmlErrorEventCallback =  $el.target.getAttribute('data-gina-'+ type +'-event-on-error') || null;
+    if (htmlErrorEventCallback != null) {
+        if ( /\((.*)\)/.test(htmlErrorEventCallback) ) {
+            // #M21a — function-call shape unsupported; register a bare handler on window instead
+            try { console.warn('[gina-event] function-call shape no longer supported on data-gina-'+ type +'-event-on-error — use a bare identifier and register the handler on window: '+ htmlErrorEventCallback); } catch (e) {}
+        } else {
+            $el.on('error.h'+ type, window[htmlErrorEventCallback])
         }
     }
 }
