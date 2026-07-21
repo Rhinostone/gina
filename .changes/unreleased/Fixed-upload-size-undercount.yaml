@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `req.files[].size` under-counting on multipart uploads — the value was snapshotted while the write pipeline could still hold uncounted chunks, so it came up short by a varying whole-chunk amount (file bytes on disk were always intact; only the reported number was wrong). The count is now finalized once the last chunk has been counted — strictly before the request resumes — so `req.files[].size`, and anything persisting it (e.g. via `self.store()`), reflects the exact stored byte size.'
-time: 2026-07-21T14:59:21+01:00
