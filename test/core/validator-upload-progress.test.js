@@ -385,8 +385,13 @@ describe('#R8 §06 — lifecycle finalize + reset/delete strip', function () {
     });
 
     it('onUploadResetOrDelete strips the indicator when at least one file was removed', function () {
+        // #R8 slice 2 relaxed the tail (was `'reset'\s*\);\s*\}`): the dropzone
+        // idle-reset now sits inside the same removedCount block right after
+        // this call, so the block no longer closes here. The gate + this call
+        // (with its default-id derivation) stay pinned; the full extended block
+        // shape is locked by validator-upload-dropzone.test.js §01.
         assert.match(SRC,
-            /if \(removedCount > 0\) \{\s*updateUploadProgressIndicator\(\s*\$uploadTrigger\.getAttribute\('data-gina-form-upload-progress'\) \|\| \( \(\$uploadTrigger\.id\) \? \$uploadTrigger\.id \+ '-progress' : null \),\s*'reset'\s*\);\s*\}/);
+            /if \(removedCount > 0\) \{\s*updateUploadProgressIndicator\(\s*\$uploadTrigger\.getAttribute\('data-gina-form-upload-progress'\) \|\| \( \(\$uploadTrigger\.id\) \? \$uploadTrigger\.id \+ '-progress' : null \),\s*'reset'\s*\);/);
     });
 });
 

@@ -2291,6 +2291,159 @@ function ValidatorPlugin(rules, data, formId, culture) {
         $indicator.setAttribute('data-gina-upload-progress', result.progress);
     };
 
+    /**
+     * updateUploadDropzoneState - #R8 slice 2
+     *
+     * Updates the drag-and-drop state attribute of a staged-upload dropzone.
+     * Opt-in by presence: a null id or no matching element is a silent no-op.
+     *
+     * The layer only toggles `data-gina-upload-dropzone-state`
+     * (`idle` | `over` | `dropped`) - a pure CSS styling hook. No copy/labels
+     * are hardcoded: wording is the consumer's concern (CSS on the state
+     * attribute). The binding marker (`data-gina-upload-dropzone`, value =
+     * the owner input id) is stamped once at bind time by bindUploadDropzone
+     * and is never touched here.
+     *
+     * @param {string|null} dropzoneId - resolved dropzone element id
+     * @param {string} state - `idle` | `over` | `dropped`
+     *
+     * @returns {undefined}
+     * */
+    var updateUploadDropzoneState = function(dropzoneId, state) {
+        if (!dropzoneId) return;
+        var $dropzone = document.getElementById(dropzoneId);
+        if (!$dropzone) return; // opt-in by presence
+
+        $dropzone.setAttribute('data-gina-upload-dropzone-state', state);
+    };
+
+    /**
+     * bindUploadDropzone - #R8 slice 2
+     *
+     * Binds an attribute-marked dropzone element to a staged-upload file
+     * input so files dropped on the zone route through the EXACT same
+     * staging pipeline as a native picker selection - group tagging,
+     * virtual form, staging POST, previews, hidden metadata fields,
+     * reset/delete and upload progress - with zero duplicated logic: the
+     * drop assigns the dropped `FileList` to the input, then re-fires the
+     * input's `change` through triggerEvent (the same synthetic-change
+     * idiom the form-reset path already uses). The change handler reads
+     * only `currentTarget` off its event, so a synthetic dispatch is
+     * indistinguishable from a trusted one on this path.
+     *
+     * Opt-in and EXPLICIT-ONLY: the input must carry
+     * `data-gina-form-upload-dropzone="<elementId>"`. There is deliberately
+     * no default id resolution (unlike `-preview` / `-error` / `-progress`):
+     * auto-binding a coincidentally-named element would attach drag
+     * semantics to markup that may already carry its own drop handling.
+     * Absent attribute: fully inert. Attribute present but element
+     * missing: console.warn + inert.
+     *
+     * Contract on the dropzone element:
+     * - `data-gina-upload-dropzone` (value = owner input id): binding
+     *   marker, stamped once. Also the first-wins guard - a zone serves
+     *   exactly one input; a second input naming the same zone warns and
+     *   is skipped, while the same owner re-binding (form re-bind cycles)
+     *   is a silent no-op.
+     * - `data-gina-upload-dropzone-state`: `idle` (bound, no drag) ->
+     *   `over` (a file drag hovers the zone) -> `dropped` (files dropped,
+     *   upload in flight) -> back to `idle` at the same chokepoints that
+     *   finalize upload progress (onUpload complete/error) and strip it
+     *   (reset/delete removal).
+     *
+     * Only file drags react (`dataTransfer.types` must carry `Files`):
+     * text/link drags fall through untouched. Multi-file drops on a
+     * non-`multiple` input keep the FIRST file only (console.warn) - the
+     * graceful client mirror of the single-file native picker; configured
+     * upload groups also enforce `isMultipleAllowed` server-side.
+     *
+     * @param {object} $uploadTrigger - the file `<input>` (HTMLInputElement)
+     *
+     * @returns {undefined}
+     * */
+    var bindUploadDropzone = function($uploadTrigger) {
+        var dropzoneId = $uploadTrigger.getAttribute('data-gina-form-upload-dropzone') || null;
+        if (!dropzoneId) return; // opt-in: explicit id only - no default id
+
+        var $dropzone = document.getElementById(dropzoneId);
+        if (!$dropzone) {
+            console.warn('[FormValidator][upload] `data-gina-form-upload-dropzone` targets `#'+ dropzoneId +'` but no such element was found: drag-and-drop stays inactive for `#'+ $uploadTrigger.id +'`');
+            return;
+        }
+        // first-wins: a zone serves exactly one input; re-binding by the
+        // same owner (form re-bind cycles) is a silent no-op
+        var dropzoneOwnerId = $dropzone.getAttribute('data-gina-upload-dropzone');
+        if (dropzoneOwnerId) {
+            if (dropzoneOwnerId != $uploadTrigger.id) {
+                console.warn('[FormValidator][upload] dropzone `#'+ dropzoneId +'` is already bound to `#'+ dropzoneOwnerId +'`: skipping `#'+ $uploadTrigger.id +'`');
+            }
+            return;
+        }
+        $dropzone.setAttribute('data-gina-upload-dropzone', $uploadTrigger.id);
+        updateUploadDropzoneState(dropzoneId, 'idle');
+
+        // dragenter/dragleave also fire when the pointer crosses the
+        // zone's own children - a bare leave handler would flicker the
+        // state on every child boundary, hence the depth counter
+        var dragDepth = 0;
+        var hasFilesPayload = function(event) {
+            var types = (event.dataTransfer && event.dataTransfer.types) || null;
+            if (!types) return false;
+            // `types` is a frozen array (DOMStringList on legacy engines,
+            // which lacks .indexOf - hence the borrowed call)
+            return ( Array.prototype.indexOf.call(types, 'Files') > -1 );
+        };
+
+        addListener(gina, $dropzone, 'dragenter', function(event) {
+            if ( !hasFilesPayload(event) ) return; // text/link drags fall through
+            event.preventDefault();
+            dragDepth++;
+            updateUploadDropzoneState(dropzoneId, 'over');
+        });
+
+        addListener(gina, $dropzone, 'dragover', function(event) {
+            if ( !hasFilesPayload(event) ) return;
+            event.preventDefault(); // required, or the browser refuses the drop
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'copy';
+            }
+        });
+
+        addListener(gina, $dropzone, 'dragleave', function(event) {
+            if ( !hasFilesPayload(event) ) return;
+            if (--dragDepth <= 0) {
+                dragDepth = 0;
+                updateUploadDropzoneState(dropzoneId, 'idle');
+            }
+        });
+
+        addListener(gina, $dropzone, 'drop', function(event) {
+            if ( !hasFilesPayload(event) ) return; // never swallow non-file drops
+            event.preventDefault();
+            dragDepth = 0;
+
+            var droppedFiles = event.dataTransfer.files;
+            if (!droppedFiles.length) {
+                updateUploadDropzoneState(dropzoneId, 'idle');
+                return;
+            }
+            // multi-file drop on a single-file input: keep the FIRST file
+            // only - the graceful client mirror of the native single-file
+            // picker
+            if (droppedFiles.length > 1 && !$uploadTrigger.multiple) {
+                console.warn('[FormValidator][upload] '+ droppedFiles.length +' files dropped on `#'+ dropzoneId +'` but `#'+ $uploadTrigger.id +'` is not `multiple`: keeping the first file only');
+                var singleFileTransfer = new DataTransfer();
+                singleFileTransfer.items.add(droppedFiles[0]);
+                droppedFiles = singleFileTransfer.files;
+            }
+            // route through the staging pipeline: assign, then re-fire
+            // `change` exactly like the form-reset path does
+            $uploadTrigger.files = droppedFiles;
+            updateUploadDropzoneState(dropzoneId, 'dropped');
+            triggerEvent(gina, $uploadTrigger, 'change');
+        });
+    };
+
     var onUpload = function(gina, $target, status, id, data) {
 
         var uploadProperties = $target.uploadProperties || null;
@@ -2314,6 +2467,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
             uploadProperties.progressContainer || null,
             (status == 'success') ? 'complete' : 'error'
         );
+        // #R8 slice 2 — the dropzone (if bound) returns to idle at the same
+        // single chokepoint
+        updateUploadDropzoneState(uploadProperties.dropzoneContainer || null, 'idle');
         // parent form
         // var $mainForm = uploadProperties.$form;
         var $uploadTriger = document.getElementById(uploadProperties.uploadTriggerId);
@@ -2743,6 +2899,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 $uploadTrigger.getAttribute('data-gina-form-upload-progress') || ( ($uploadTrigger.id) ? $uploadTrigger.id + '-progress' : null ),
                 'reset'
             );
+            // #R8 slice 2 — dropzone back to idle (explicit attr only)
+            updateUploadDropzoneState($uploadTrigger.getAttribute('data-gina-form-upload-dropzone') || null, 'idle');
         }
 
         // removal-path callback: dispatched ONCE per reset/delete action,
@@ -5498,6 +5656,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 //     });
                 // }
 
+                // #R8 slice 2 — drag-and-drop: bind the (optional) declarative
+                // dropzone at form-bind time — a drop can be the FIRST
+                // interaction, no picker click required
+                bindUploadDropzone($inputs[f]);
+
                 // binding file element == $upload
                 // setTimeout(() => {
                 //     removeListner(gina, $inputs[f], 'change');
@@ -5578,6 +5741,9 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 // (errorField's convention — resolved to an element at update
                                 // time), unlike previewContainer below which stores the element
                                 var progressContainer   = $el.getAttribute('data-gina-form-upload-progress') || ( (fieldId) ? fieldId + '-progress' : null );
+                                // #R8 slice 2 - dropzone target: EXPLICIT id only, deliberately
+                                // no default id (see bindUploadDropzone)
+                                var dropzoneContainer   = $el.getAttribute('data-gina-form-upload-dropzone') || null;
                                 var previewContainer    = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
                                 previewContainer        = (isPopinContext())
                                                         ? $activePopin.$target.getElementById(previewContainer)
@@ -5711,6 +5877,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     $form               : $el.form,
                                     errorField          : errorField,
                                     progressContainer   : progressContainer, // #R8 — string id
+                                    dropzoneContainer   : dropzoneContainer, // #R8 slice 2 — string id, explicit-only
                                     mandatoryFields     : mandatoryFields,
                                     uploadFields        : hiddenFields,
                                     hasPreviewContainer : hasPreviewContainer,
