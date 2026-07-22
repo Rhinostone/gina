@@ -10022,6 +10022,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         'success',
         'error',
         'progress',
+        'uploadProgress', // #R8 — upload (client-to-server) wire progress for staged uploads
         'submit',
         'reset',
         'change',
@@ -11298,6 +11299,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
         if (hFormIsRequired)
             listenToXhrEvents($form);
 
+        // #R8 — staged-upload send? (virtual `gina-upload-*` form) The upload-progress
+        // channel below only activates for these sends.
+        var isUploadXhr = /^gina\-upload/i.test(id);
+        // uploadProgress -> data-gina-form-event-on-upload-progress (copied from the
+        // file input's `data-gina-form-upload-on-progress` by the upload change
+        // handler); no default: absent attribute = no `.hform` progress channel
+        var uploadProgressHFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-upload-progress') ) ? true : false;
+
         var url         = $target.getAttribute('action') || options.url;
         var method      = $target.getAttribute('method') || options.method;
         method          = method.toUpperCase();
@@ -11943,6 +11952,59 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 triggerEvent(gina, $target, 'progress.' + id, result)
             };
 
+            // #R8 — catching upload (client-to-server) wire progress for staged uploads.
+            // Reassigned on EVERY send: `xhr` is a module-scoped singleton (created once,
+            // then reused across sends), so a stale handler would replay the previous
+            // send's closure — wrong `id`, wrong form — on later sends. The fresh
+            // assignment below (mirroring onreadystatechange/onprogress/ontimeout)
+            // prevents that. Dispatches on its own `uploadProgress.<id>` channel — the
+            // response-side (download) channel above is separate and untouched.
+            if ( typeof(xhr.upload) != 'undefined' && xhr.upload ) {
+                // snapshot the staged file names once per send — the payload's
+                // per-request identity: ONE request carries ALL files of a selection,
+                // so progress is per-request (aggregate), not per-file
+                var uploadFileNames = [];
+                if ( isUploadXhr && data instanceof FormData ) {
+                    for (var [uploadFileKey, uploadFileValue] of data.entries()) {
+                        if (uploadFileValue instanceof File) {
+                            uploadFileNames.push(uploadFileValue.name);
+                        }
+                    }
+                }
+                xhr.upload.onprogress = function(event) {
+                    // staged uploads only (`gina-upload-*` virtual forms)
+                    if (!isUploadXhr) return;
+
+                    var percentComplete = null; // null means indeterminate (length not computable)
+                    if ( event.lengthComputable && event.total > 0 ) {
+                        percentComplete = event.loaded / event.total;
+                        percentComplete = parseInt(percentComplete * 100);
+                    }
+
+                    var result = {
+                        'status'            : 100,
+                        'progress'          : percentComplete,
+                        'loaded'            : event.loaded,
+                        'total'             : event.total,
+                        'lengthComputable'  : event.lengthComputable,
+                        'files'             : uploadFileNames
+                    };
+
+                    $form.eventData.uploadProgress = result;
+
+                    // declarative indicator (opt-in by element presence)
+                    updateUploadProgressIndicator(
+                        ($target.uploadProperties) ? $target.uploadProperties.progressContainer : null,
+                        (percentComplete === null) ? 'indeterminate' : 'uploading',
+                        result
+                    );
+
+                    triggerEvent(gina, $target, 'uploadProgress.' + id, result);
+                    if (uploadProgressHFormIsRequired)
+                        triggerEvent(gina, $target, 'uploadProgress.' + id + '.hform', result);
+                };
+            }
+
             // catching timeout
             xhr.ontimeout = function (event) {
                 result = {
@@ -12119,6 +12181,99 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
     }
 
+    /**
+     * updateUploadProgressIndicator - #R8
+     *
+     * Updates the declarative upload-progress indicator of a staged upload
+     * (`data-gina-form-upload-progress`, default target id `<fieldId>-progress`).
+     * Opt-in by presence: a null id or no matching element is a silent no-op.
+     *
+     * Behavior by target type:
+     * - native `<progress>`: `value`/`max` track uploaded/total bytes; the `value`
+     *   attribute is removed while indeterminate (`preparing`, or length not
+     *   computable) so the browser renders its native indeterminate animation;
+     *   `error` empties the bar (value 0 — NOT indeterminate, whose animation
+     *   would read as still working)
+     * - any other element: `textContent` shows the integer percentage (`42%`)
+     *
+     * Every target also carries two data attributes as styling hooks:
+     * `data-gina-upload-progress` (integer percent, absent while indeterminate)
+     * and `data-gina-upload-progress-state`
+     * (`preparing|uploading|indeterminate|complete|error`). No copy/labels are
+     * hardcoded — wording is the consumer's concern (CSS on the state attribute).
+     * The `reset` state strips everything this layer ever set on the element.
+     *
+     * @param {string|null} containerId - resolved indicator element id
+     * @param {string} state - `preparing` | `uploading` | `indeterminate` | `complete` | `error` | `reset`
+     * @param {object} [result] - `uploadProgress` payload (`progress`, `loaded`, `total`) — read for `uploading` only
+     *
+     * @returns {undefined}
+     * */
+    var updateUploadProgressIndicator = function(containerId, state, result) {
+        if (!containerId) return;
+        var $indicator = document.getElementById(containerId);
+        if (!$indicator) return; // opt-in by presence
+
+        var isNativeProgress = /^progress$/i.test($indicator.tagName);
+
+        if (state == 'reset') {
+            if (isNativeProgress) {
+                $indicator.removeAttribute('value');
+                $indicator.removeAttribute('max');
+            } else {
+                $indicator.textContent = '';
+            }
+            $indicator.removeAttribute('data-gina-upload-progress');
+            $indicator.removeAttribute('data-gina-upload-progress-state');
+            return;
+        }
+
+        $indicator.setAttribute('data-gina-upload-progress-state', state);
+
+        if (state == 'complete') {
+            if (isNativeProgress) {
+                if ( !$indicator.getAttribute('max') ) {
+                    $indicator.max = 100;
+                }
+                $indicator.value = $indicator.max;
+            } else {
+                $indicator.textContent = '100%';
+            }
+            $indicator.setAttribute('data-gina-upload-progress', 100);
+            return;
+        }
+
+        if (state == 'error') {
+            if (isNativeProgress) {
+                if ( !$indicator.getAttribute('max') ) {
+                    $indicator.max = 100;
+                }
+                $indicator.value = 0;
+            } else {
+                $indicator.textContent = '';
+            }
+            $indicator.removeAttribute('data-gina-upload-progress');
+            return;
+        }
+
+        if ( state == 'preparing' || state == 'indeterminate' || !result || result.progress === null ) {
+            if (isNativeProgress) {
+                $indicator.removeAttribute('value'); // native indeterminate animation
+            }
+            $indicator.removeAttribute('data-gina-upload-progress');
+            return;
+        }
+
+        // determinate update (`uploading`)
+        if (isNativeProgress) {
+            $indicator.max      = result.total;
+            $indicator.value    = result.loaded;
+        } else {
+            $indicator.textContent = result.progress + '%';
+        }
+        $indicator.setAttribute('data-gina-upload-progress', result.progress);
+    };
+
     var onUpload = function(gina, $target, status, id, data) {
 
         var uploadProperties = $target.uploadProperties || null;
@@ -12129,11 +12284,19 @@ function ValidatorPlugin(rules, data, formId, culture) {
         //     mandatoryFields : Array,
         //     uploadFields    : ObjectList
         //     hasPreviewContainer : Boolean,
-        //     previewContainer : $Object
+        //     previewContainer : $Object,
+        //     progressContainer : String|null (#R8 — element id; string, unlike previewContainer)
         // }
 
         if ( !uploadProperties )
             throw new Error('No uploadProperties found !!');
+
+        // #R8 — finalize the upload-progress indicator: this one chokepoint covers
+        // the success path and every error/timeout path routed through onUpload
+        updateUploadProgressIndicator(
+            uploadProperties.progressContainer || null,
+            (status == 'success') ? 'complete' : 'error'
+        );
         // parent form
         // var $mainForm = uploadProperties.$form;
         var $uploadTriger = document.getElementById(uploadProperties.uploadTriggerId);
@@ -12556,6 +12719,15 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
         }
 
+        // #R8 — at least one staged file the indicator reported is gone:
+        // strip the upload-progress indicator entirely
+        if (removedCount > 0) {
+            updateUploadProgressIndicator(
+                $uploadTrigger.getAttribute('data-gina-form-upload-progress') || ( ($uploadTrigger.id) ? $uploadTrigger.id + '-progress' : null ),
+                'reset'
+            );
+        }
+
         // removal-path callback: dispatched ONCE per reset/delete action,
         // AFTER the removal XHR(s) went out and the preview DOM was cleaned
         // up. Same convention as `data-gina-form-upload-on-success`: a bare
@@ -12779,6 +12951,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 try { console.warn('[gina-form-event] function-call shape no longer supported on data-gina-form-event-on-submit-error — use a bare identifier and register the handler on window: '+ htmlErrorEventCallback); } catch (e) {}
             } else {
                 $form.on('error.hform', window[htmlErrorEventCallback])
+            }
+        }
+        // #R8 — data-gina-form-event-on-upload-progress (staged uploads: copied from
+        // the file input's `data-gina-form-upload-on-progress` by the change handler)
+        var htmlUploadProgressEventCallback = $form.target.getAttribute('data-gina-form-event-on-upload-progress') || null;
+        if (htmlUploadProgressEventCallback != null) {
+            if ( /\((.*)\)/.test(htmlUploadProgressEventCallback) ) {
+                // #M21a — function-call shape unsupported; register a bare handler on window instead
+                try { console.warn('[gina-form-event] function-call shape not supported on data-gina-form-event-on-upload-progress — use a bare identifier and register the handler on window: '+ htmlUploadProgressEventCallback); } catch (e) {}
+            } else {
+                $form.on('uploadProgress.hform', window[htmlUploadProgressEventCallback])
             }
         }
 
@@ -15323,6 +15506,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     $el.setAttribute('data-gina-form-virtual', uploadFormId);
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
                     var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
+                    var eventOnProgress = $el.getAttribute('data-gina-form-upload-on-progress'); // #R8
                     var errorField    = null;
 
                     if (files.length > 0) {
@@ -15373,6 +15557,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 var fieldId     = $el.id || $el.getAttribute('id');
 
                                 var hasPreviewContainer = false;
+                                // #R8 — upload-progress indicator target: stored as a STRING id
+                                // (errorField's convention — resolved to an element at update
+                                // time), unlike previewContainer below which stores the element
+                                var progressContainer   = $el.getAttribute('data-gina-form-upload-progress') || ( (fieldId) ? fieldId + '-progress' : null );
                                 var previewContainer    = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
                                 previewContainer        = (isPopinContext())
                                                         ? $activePopin.$target.getElementById(previewContainer)
@@ -15505,6 +15693,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     uploadTriggerId     : $el.id,
                                     $form               : $el.form,
                                     errorField          : errorField,
+                                    progressContainer   : progressContainer, // #R8 — string id
                                     mandatoryFields     : mandatoryFields,
                                     uploadFields        : hiddenFields,
                                     hasPreviewContainer : hasPreviewContainer,
@@ -15527,6 +15716,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             } else {
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             }
+                            // #R8 — upload-progress event (no default: absent attribute
+                            // means no `.hform` progress channel for this upload form)
+                            if (eventOnProgress) {
+                                $uploadForm.setAttribute('data-gina-form-event-on-upload-progress', eventOnProgress);
+                            }
 
 
                             // adding for to current document
@@ -15536,6 +15730,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             } else {
                                 document.body.appendChild($uploadForm)
                             }
+                        }
+
+                        // #R8 — upload-progress kickoff: show activity from selection
+                        // time (covers the FileReader read/assembly phase before the
+                        // first wire event). Runs on EVERY selection — the create
+                        // block above is create-only.
+                        if ( $uploadForm.uploadProperties && $uploadForm.uploadProperties.progressContainer ) {
+                            updateUploadProgressIndicator($uploadForm.uploadProperties.progressContainer, 'preparing');
                         }
 
                         // binding form
