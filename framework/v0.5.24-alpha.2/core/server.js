@@ -1082,6 +1082,32 @@ function Server(options) {
                 console.info('[ BUNDLE ][ server ][ init ] Audit trail enabled for [ '+ self.appName +' ] → '+ _auditDestLabel);
             }
 
+            // ── #B144 — upload write-error probe (`simulateWriteError`) boot warn ──
+            // A group with `simulateWriteError: true` makes every upload tagging it
+            // fail with a guarded 500 (the #B143 write-error path) so a consumer can
+            // re-confirm the crash-guard on their own surface. It is INERT in
+            // production scope (the 'file' handler gates on self.isProductionScope()),
+            // but a flag shipped to production by accident is a smell — surface it at
+            // boot either way so it can never hide.
+            var _uploadSettings = ( self.conf[self.appName]
+                && self.conf[self.appName][self.env]
+                && self.conf[self.appName][self.env].content
+                && self.conf[self.appName][self.env].content.settings
+                && self.conf[self.appName][self.env].content.settings.upload
+            ) ? self.conf[self.appName][self.env].content.settings.upload : null;
+            if ( _uploadSettings && _uploadSettings.groups && typeof(_uploadSettings.groups) == 'object' ) {
+                var _probeGroups = Object.keys(_uploadSettings.groups).filter(function(g) {
+                    return _uploadSettings.groups[g] && _uploadSettings.groups[g].simulateWriteError;
+                });
+                if ( _probeGroups.length ) {
+                    if ( self.isProductionScope() ) {
+                        console.warn('[ BUNDLE ][ server ][ init ] `upload.groups` has `simulateWriteError` set on [ '+ _probeGroups.join(', ') +' ] — IGNORED in production scope, but remove it before shipping (it is a test-only fault injector).');
+                    } else {
+                        console.warn('[ BUNDLE ][ server ][ init ] upload write-error PROBE active — group(s) [ '+ _probeGroups.join(', ') +' ] will fail every upload with a guarded 500 (`simulateWriteError`). Test-only; inert in production scope.');
+                    }
+                }
+            }
+
             // ── #RWATCH — stale built-release watch (local production rehearsals) ──
             // Hard gates: local scope + non-dev env + explicit opt-in
             // (server.releaseWatch.enabled === true — fail-closed default). Inert
@@ -4643,6 +4669,30 @@ function Server(options) {
                                 }
                             })
                         });
+
+                        // #B144 (2026-07-22) — consumer-probeable write-error path. A group
+                        // with `simulateWriteError: true` (honoured OUTSIDE production scope
+                        // only) creates the REAL write stream + arms the REAL #B143 terminal
+                        // listeners above, then synthetically destroys the stream so the
+                        // production 'error' listener fires the production throwError(500) with
+                        // the EXACT terminal semantics of a real mid-stream ENOSPC/EIO: an
+                        // errored stream never emits 'finish' → never decrements `pending` → the
+                        // request stays terminal at the 500 (a second errored part's throwError
+                        // is a no-op behind throwError's !res.headersSent guard). Lets a consumer
+                        // re-confirm the #B143 crash-guard on their own upload surface after a
+                        // pickup WITHOUT any filesystem / global-config change that touches real
+                        // uploads — the failure scopes to requests tagging this one group. INERT
+                        // in production (self.isProductionScope()); a flag shipped there by
+                        // accident is surfaced by the boot warn (init) but never fires. Faithful
+                        // to the real error path: the source part is NOT drained (matching a real
+                        // mid-stream error), and createWriteStream may leave a 0-byte tmp file —
+                        // point the probe group's `path` at a tmp dir.
+                        if ( opt.groups[fileGroup].simulateWriteError && !self.isProductionScope() ) {
+                            writeStreams[index].destroy(new Error('simulated write error — upload group `'+ fileGroup +'` has `simulateWriteError` enabled (test-only fault injector)'));
+                            ++index;
+                            return false;
+                        }
+
                         var liner = new require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {

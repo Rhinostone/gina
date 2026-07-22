@@ -1,0 +1,3 @@
+kind: Added
+body: 'A per-upload-group `simulateWriteError` flag (honoured outside production scope only) deterministically triggers the multipart write-error path, so you can confirm the guarded-500 crash-guard on your own upload surface after an upgrade — with no filesystem or global-config change that affects real uploads. A group carrying the flag makes every upload tagging it answer HTTP 500 (the same guarded response a real mid-stream write error produces), and a boot warning surfaces the flag if it is ever shipped to production, where it stays inert. Server-side only — restart your bundles to pick it up.'
+time: 2026-07-22T11:45:16+01:00
