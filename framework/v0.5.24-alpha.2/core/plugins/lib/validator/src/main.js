@@ -2922,56 +2922,65 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
     }
 
-    /**
-     * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
-     * @param {array} buffer
-     * @param {number} [byteLength] e.g.: 8, 16 or 32
-     *
-     * @returns {string} stringBufffer
-     */
-    var ab2str = function(event, buf, byteLength) {
-
-        var str = '';
-        var ab = null;
-
-        if ( typeof(byteLength) == 'undefined' ) {
-            var byteLength = 8;
-        }
-
-
-        var bits = (byteLength / 8)
-
-
-        switch (byteLength) {
-            case 8:
-                ab = new Uint8Array(buf);
-                break;
-            case 16:
-                ab = new Uint16Array(buf);
-                break;
-
-            case 32:
-                ab = new Uint32Array(buf);
-                break;
-
-            default:
-                ab = new Uint8Array(buf);
-                break;
-
-        }
-
-        var abLen = ab.length;
-        var CHUNK_SIZE = Math.pow(2, 8) + bits;
-        var offset = 0, len = null, subab = null;
-
-        for (; offset < abLen; offset += CHUNK_SIZE) {
-            len = Math.min(CHUNK_SIZE, abLen - offset);
-            subab = ab.subarray(offset, offset + len);
-            str += String.fromCharCode.apply(null, subab);
-        }
-
-        return str;
-    }
+    // #B148 (2026-07-22) — `ab2str` is RETIRED. Its only consumer was the
+    // staged-upload body assembly in `processFiles()`, which converted each
+    // file's ArrayBuffer to a per-byte JS string so the multipart body could
+    // be string-concatenated and sent as a DOMString. A DOMString is UTF-8
+    // encoded on the wire, so every file byte >= 0x80 became a 2-byte
+    // sequence and binary uploads were stored inflated/corrupted server-side.
+    // `processFiles()` now assembles a `Blob` (raw bytes, transmitted
+    // verbatim) and needs no buffer-to-string conversion at all.
+    // was:
+    // /**
+    //  * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
+    //  * @param {array} buffer
+    //  * @param {number} [byteLength] e.g.: 8, 16 or 32
+    //  *
+    //  * @returns {string} stringBufffer
+    //  */
+    // var ab2str = function(event, buf, byteLength) {
+    //
+    //     var str = '';
+    //     var ab = null;
+    //
+    //     if ( typeof(byteLength) == 'undefined' ) {
+    //         var byteLength = 8;
+    //     }
+    //
+    //
+    //     var bits = (byteLength / 8)
+    //
+    //
+    //     switch (byteLength) {
+    //         case 8:
+    //             ab = new Uint8Array(buf);
+    //             break;
+    //         case 16:
+    //             ab = new Uint16Array(buf);
+    //             break;
+    //
+    //         case 32:
+    //             ab = new Uint32Array(buf);
+    //             break;
+    //
+    //         default:
+    //             ab = new Uint8Array(buf);
+    //             break;
+    //
+    //     }
+    //
+    //     var abLen = ab.length;
+    //     var CHUNK_SIZE = Math.pow(2, 8) + bits;
+    //     var offset = 0, len = null, subab = null;
+    //
+    //     for (; offset < abLen; offset += CHUNK_SIZE) {
+    //         len = Math.min(CHUNK_SIZE, abLen - offset);
+    //         subab = ab.subarray(offset, offset + len);
+    //         str += String.fromCharCode.apply(null, subab);
+    //     }
+    //
+    //     return str;
+    // }
 
 
     /**
@@ -3011,98 +3020,179 @@ function ValidatorPlugin(rules, data, formId, culture) {
         return parts;
     };
 
+    /**
+     * processFiles
+     *
+     * Assembles the staged-upload multipart body and hands it to `onComplete`
+     * as a `Blob` (#B148). The multipart FRAMING is byte-identical to the
+     * historical hand-assembled string body — same `--<boundary>` delimiters,
+     * same `Content-Disposition: form-data; name=".."; group=".."; filename=".."`
+     * parameter set (the upload-group tag keeps its documented wire vehicle,
+     * parsed server-side from the disposition params), same per-part
+     * `Content-Type` / `Content-Length` headers — but the file BYTES now ride
+     * as raw `File` (Blob) parts instead of a per-byte JS string.
+     *
+     * Why (#B148): the historical flow read each file with a `FileReader`,
+     * converted the buffer to a JS string (one char per byte) and
+     * string-concatenated the whole body, which `XMLHttpRequest.send()` then
+     * transmitted as a DOMString — and a DOMString is UTF-8-encoded on the
+     * wire, so every file byte >= 0x80 inflated to a 2-byte sequence: any real
+     * binary upload (image / PDF / archive) was stored inflated + corrupted
+     * server-side (measured x1.49 on a cycling-byte fixture). A `Blob` body is
+     * transmitted verbatim, and an explicitly-set `Content-Type` request
+     * header survives `xhr.send(Blob)`, so the server sees the exact same
+     * wire contract with faithful bytes. String segments inside the Blob (the
+     * part headers + any field parts) are UTF-8-encoded by the Blob itself —
+     * byte-identical to the DOMString era for those segments, which is what
+     * the server-side disposition-parameter decode expects.
+     *
+     * Disposition-parameter values (`name`, `group`, `filename`) are
+     * percent-encoded for CR / LF / double-quote per the RFC 7578 §5.1.1
+     * convention — the same escaping `buildMultipartFieldParts` applies to
+     * field names (an unescaped double-quote previously produced a malformed
+     * part). The per-part `Content-Length` now reports the file's true byte
+     * size (`File.size`; numerically identical to the historical char count).
+     *
+     * The signature and the `onComplete(err, body, done)` contract are
+     * unchanged (`body` is now a `Blob` instead of a string, and the send call
+     * site passes it to `xhr.send()` opaquely either way). The `FileReader`
+     * stage is retired along with `ab2str` (their only consumer was this
+     * body), so the assembly is synchronous and `onComplete` fires in the
+     * same tick — `xhr` is already open by then (opened in `setupXhr()`
+     * before the send flow reaches this call).
+     *
+     * @param {array} binaries - staged-file records `{ key, group, file, bin }` (one per selected `File`)
+     * @param {string} boundary - multipart boundary token (as declared in the `Content-Type` request header)
+     * @param {string|Blob} data - body accumulator; the field parts built by `buildMultipartFieldParts()` ride here (`''` when the payload carries no non-file entry)
+     * @param {number} f - index of the first file to process (the send call site passes `0`)
+     * @param {function} onComplete - completion callback
+     * @param {Error|false} onComplete.err - assembly error, `false` on success
+     * @param {Blob|null} onComplete.body - the assembled multipart body
+     * @param {boolean} onComplete.done - `true` when the body is final
+     *
+     * @returns {void}
+     */
     var processFiles = function(binaries, boundary, data, f, onComplete) {
+        // #B148 (2026-07-22) — build the body as a Blob of
+        // [ field parts (string), per-file header (string), File, CRLF, ..., closer ]
+        // so file bytes reach the wire VERBATIM. The historical implementation
+        // (kept below for the record) sent the body as a DOMString, which
+        // UTF-8-inflated every file byte >= 0x80 — binary uploads corrupted.
+        var escapeDispositionParam = function(value) {
+            // RFC 7578 §5.1.1 percent-escaping (the browser convention) — the
+            // same treatment `buildMultipartFieldParts` applies to field names.
+            return String(value).replace(/\r/g, '%0D').replace(/\n/g, '%0A').replace(/"/g, '%22');
+        };
+        var parts = [];
+        if (data) {
+            // non-file field parts (string) — UTF-8-encoded by the Blob,
+            // byte-identical to the historical DOMString encoding of the same
+            // segments
+            parts.push(data);
+        }
+        try {
+            for (var i = f; i < binaries.length; i++) {
+                // MIME fallback — `File.type` is read-only, so resolve the
+                // effective type instead of assigning it (the historical
+                // assignment onto the File object was a silent no-op).
+                var partType = binaries[i].file.type || 'application/octet-stream';
 
-        var reader = new FileReader();
+                // Start a new part in our body's request
+                parts.push(
+                    "--" + boundary + "\r\n"
+                    // Describe it as form data
+                    + 'Content-Disposition: form-data; '
+                    // Define the name of the form data
+                    + 'name="' + escapeDispositionParam(binaries[i].key) + '"; '
+                    // Define the upload group
+                    + 'group="' + escapeDispositionParam(binaries[i].group) + '"; '
+                    // Provide the real name of the file
+                    + 'filename="' + escapeDispositionParam(binaries[i].file.name) + '"\r\n'
+                    // And the MIME type of the file
+                    + 'Content-Type: ' + partType + '\r\n'
+                    // File length (true byte count)
+                    + 'Content-Length: ' + binaries[i].file.size + '\r\n'
+                    // There's a blank line between the metadata and the data
+                    + '\r\n'
+                );
 
-        // progress
-        // reader.addEventListener('progress', (e) => {
-        //     var percentComplete = '0';
-        //     if (e.lengthComputable) {
-        //         percentComplete = e.loaded / e.total;
-        //         percentComplete = parseInt(percentComplete * 100);
-
-        //     }
-
-        //     // var result = {
-        //     //     'status': 100,
-        //     //     'progress': percentComplete
-        //     // };
-
-        //     console.debug('progress', percentComplete);
-
-        //     //$form.eventData.onprogress = result;
-
-        //     //triggerEvent(gina, $target, 'progress.' + id, result)
-        // });
-
-        reader.addEventListener('load', function onReaderLoaded(e) {
-
-            e.preventDefault();
-
-            // var percentComplete = '0';
-            // if (e.lengthComputable) {
-            //     percentComplete = e.loaded / e.total;
-            //     percentComplete = parseInt(percentComplete * 100);
-
-            //     console.debug('progress', percentComplete);
-            // }
-
-
-            try {
-
-                var bin = ab2str(e, this.result);
-                ;
-                binaries[this.index].bin += bin;
-
-                if (!binaries[this.index].file.type) {
-                    binaries[this.index].file.type = 'application/octet-stream'
-                }
-
-            } catch (err) {
-                return onComplete(err, null, true);
+                // The file's raw bytes — a File IS a Blob: the browser reads it
+                // lazily at transmit time, so no whole-file string or buffer is
+                // ever materialized in JS.
+                parts.push(binaries[i].file);
+                parts.push('\r\n');
             }
+        } catch (err) {
+            return onComplete(err, null, true);
+        }
 
-            // Start a new part in our body's request
-            data += "--" + boundary + "\r\n";
+        // Once we are done, "close" the body's request
+        parts.push("--" + boundary + "--");
 
-            // Describe it as form data
-            data += 'Content-Disposition: form-data; '
-                // Define the name of the form data
-                + 'name="' + binaries[this.index].key + '"; '
-                // Define the upload group
-                + 'group="' + binaries[this.index].group + '"; '
-                // Provide the real name of the file
-                + 'filename="' + binaries[this.index].file.name + '"\r\n'
-                // And the MIME type of the file
-                + 'Content-Type: ' + binaries[this.index].file.type + '\r\n'
-                // File length
-                + 'Content-Length: ' + binaries[this.index].bin.length + '\r\n'
-                // There's a blank line between the metadata and the data
-                + '\r\n';
-
-            // Append the binary data to our body's request
-            data += binaries[this.index].bin + '\r\n';
-
-            ++this.index;
-            // is last file ?
-            if (this.index == binaries.length) {
-                // Once we are done, "close" the body's request
-                data += "--" + boundary + "--";
-
-                onComplete(false, data, true);
-
-            } else { // process next file
-                processFiles(binaries, boundary, data, this.index, onComplete)
-            }
-        }, false);
-
-        reader.index = f;
-        binaries[f].bin = '';
-
-        reader.readAsArrayBuffer(binaries[f].file);
-        //reader.readAsBinaryString(binaries[f].file);
+        return onComplete(false, new Blob(parts), true);
     }
+    // was (#B148 — the historical string-assembly implementation, retired):
+    // var processFiles = function(binaries, boundary, data, f, onComplete) {
+    //
+    //     var reader = new FileReader();
+    //
+    //     reader.addEventListener('load', function onReaderLoaded(e) {
+    //
+    //         e.preventDefault();
+    //
+    //         try {
+    //
+    //             var bin = ab2str(e, this.result);
+    //             ;
+    //             binaries[this.index].bin += bin;
+    //
+    //             if (!binaries[this.index].file.type) {
+    //                 binaries[this.index].file.type = 'application/octet-stream'
+    //             }
+    //
+    //         } catch (err) {
+    //             return onComplete(err, null, true);
+    //         }
+    //
+    //         // Start a new part in our body's request
+    //         data += "--" + boundary + "\r\n";
+    //
+    //         // Describe it as form data
+    //         data += 'Content-Disposition: form-data; '
+    //             // Define the name of the form data
+    //             + 'name="' + binaries[this.index].key + '"; '
+    //             // Define the upload group
+    //             + 'group="' + binaries[this.index].group + '"; '
+    //             // Provide the real name of the file
+    //             + 'filename="' + binaries[this.index].file.name + '"\r\n'
+    //             // And the MIME type of the file
+    //             + 'Content-Type: ' + binaries[this.index].file.type + '\r\n'
+    //             // File length
+    //             + 'Content-Length: ' + binaries[this.index].bin.length + '\r\n'
+    //             // There's a blank line between the metadata and the data
+    //             + '\r\n';
+    //
+    //         // Append the binary data to our body's request
+    //         data += binaries[this.index].bin + '\r\n';
+    //
+    //         ++this.index;
+    //         // is last file ?
+    //         if (this.index == binaries.length) {
+    //             // Once we are done, "close" the body's request
+    //             data += "--" + boundary + "--";
+    //
+    //             onComplete(false, data, true);
+    //
+    //         } else { // process next file
+    //             processFiles(binaries, boundary, data, this.index, onComplete)
+    //         }
+    //     }, false);
+    //
+    //     reader.index = f;
+    //     binaries[f].bin = '';
+    //
+    //     reader.readAsArrayBuffer(binaries[f].file);
+    // }
 
 
     var listenToXhrEvents = function($form) {
