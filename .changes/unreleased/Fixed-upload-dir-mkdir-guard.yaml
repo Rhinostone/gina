@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A misconfigured upload group whose destination directory cannot be created (a read-only or permission-denied parent) now answers HTTP 500 for that one request instead of crashing the bundle; previously the synchronous directory-creation error inside the multipart parser propagated as an uncaught exception and terminated the process on the next upload tagging that group.'
+time: 2026-07-22T10:32:00+01:00

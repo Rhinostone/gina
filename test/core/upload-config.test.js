@@ -275,3 +275,75 @@ describe('06 - upload count: maxFields gate replica (#B51)', function() {
         assert.equal(exceedsMaxFields({ maxFields: 0 }, 100000), false);
     });
 });
+
+// ─── 07 — #B145: mkdirSync guarded against a non-creatable dir (crash → 500) ───
+// A configured group `path` whose parent is read-only / EROFS / EACCES makes
+// mkdirSync throw SYNCHRONOUSLY inside the busboy 'file' callback; unguarded that
+// propagates → uncaughtException → proc.js SIGTERM, an UNAUTHENTICATED single-
+// request bundle-kill (the #B30/#B97 family). The guard turns it into a 500.
+describe('07 - upload dir: mkdirSync guarded against a non-creatable dir (#B145)', function() {
+    var active;
+    before(function() {
+        active = stripLineComments(fs.readFileSync(SERVER_SRC, 'utf8'));
+    });
+
+    // the #B49 mkdir pins (section 01) still hold — the existsSync/mkdirSync pair
+    // is preserved verbatim INSIDE the try; here we assert the wrapping catch.
+    it('the existsSync/mkdirSync pair is wrapped in try/catch', function() {
+        assert.match(active, /try\s*\{[\s\S]{0,200}?fs\.mkdirSync\(fileUploadDir,\s*\{\s*recursive:\s*true\s*\}\)[\s\S]{0,80}?\}\s*catch\s*\(\s*mkdirErr\s*\)/);
+    });
+
+    it('the catch answers a guarded 500 (server config problem, not a client 400) and stops the file', function() {
+        assert.match(active, /catch\s*\(\s*mkdirErr\s*\)\s*\{[\s\S]{0,300}?throwError\(response,\s*500,[\s\S]{0,140}?not creatable[\s\S]{0,220}?return false/);
+    });
+
+    // replica of the guarded dir-creation — proves a throwing mkdir degrades to a
+    // captured 500 + `return false`, never a synchronous throw.
+    function guardedEnsureDir(fs_, fileUploadDir, fileGroup, response, throwError) {
+        try {
+            if ( !fs_.existsSync(fileUploadDir) ) {
+                fs_.mkdirSync(fileUploadDir, { recursive: true });
+            }
+        } catch (mkdirErr) {
+            throwError(response, 500, 'upload destination for group `'+ fileGroup +'` is not creatable ('+ fileUploadDir +')\n' + mkdirErr);
+            return false;
+        }
+        return true;
+    }
+
+    function throwingFs() {
+        return {
+            existsSync: function() { return false; },
+            mkdirSync: function() { var e = new Error('EACCES: permission denied, mkdir'); e.code = 'EACCES'; throw e; }
+        };
+    }
+
+    it('a non-creatable dir → captured 500 + returns false, never throws (the crash-guard)', function() {
+        var codes = [];
+        var result;
+        assert.doesNotThrow(function() {
+            result = guardedEnsureDir(throwingFs(), '/read-only/nope', 'docs', {}, function(res, code) { codes.push(code); });
+        });
+        assert.deepEqual(codes, [500], 'exactly one guarded 500');
+        assert.equal(result, false, 'the file is stopped (return false)');
+    });
+
+    it('a creatable dir → no error, proceeds (return true)', function() {
+        var codes = [];
+        var okFs = { existsSync: function() { return false; }, mkdirSync: function() { /* ok */ } };
+        var result = guardedEnsureDir(okFs, '/tmp/ok', 'docs', {}, function(res, code) { codes.push(code); });
+        assert.deepEqual(codes, [], 'no error on a creatable dir');
+        assert.equal(result, true);
+    });
+
+    // SUBTRACT — the pre-#B145 shape (no try/catch) throws SYNCHRONOUSLY, which in
+    // the real busboy callback is the uncaughtException → SIGTERM bundle-kill.
+    it('subtract: the unguarded pre-fix shape throws synchronously (the bundle-kill)', function() {
+        function unguardedEnsureDir(fs_, fileUploadDir) {
+            if ( !fs_.existsSync(fileUploadDir) ) {
+                fs_.mkdirSync(fileUploadDir, { recursive: true }); // no catch
+            }
+        }
+        assert.throws(function() { unguardedEnsureDir(throwingFs(), '/read-only/nope'); }, /EACCES/);
+    });
+});

@@ -4588,8 +4588,25 @@ function Server(options) {
                         var fileUploadDir = ( opt.groups[fileGroup] && opt.groups[fileGroup].path )
                             ? opt.groups[fileGroup].path
                             : uploadDir;
-                        if ( !fs.existsSync(fileUploadDir) ) {
-                            fs.mkdirSync(fileUploadDir, { recursive: true });
+                        // #B145 (2026-07-22) — guard the dir creation. mkdirSync throws
+                        // SYNCHRONOUSLY inside this busboy 'file' callback when the configured
+                        // group `path` is non-creatable (parent read-only / EROFS / EACCES).
+                        // Unguarded, that propagates up the parser call stack →
+                        // uncaughtException → proc.js SIGTERM: an UNAUTHENTICATED single-request
+                        // bundle-kill (the #B30/#B97 family — the multipart parse precedes
+                        // routing + middleware). #B49's "mkdir-if-missing prevents the write
+                        // error" only covered the missing-dir STREAM error (handled by the
+                        // writeStream 'error' listener below), not mkdirSync itself failing. A
+                        // non-creatable destination is a SERVER config problem, not client input
+                        // → answer a guarded 500 (not the 400 used for client-side violations).
+                        try {
+                            if ( !fs.existsSync(fileUploadDir) ) {
+                                fs.mkdirSync(fileUploadDir, { recursive: true });
+                            }
+                        } catch (mkdirErr) {
+                            console.error('[ busboy ] [ onUploadDirError ]', mkdirErr);
+                            throwError(response, 500, 'upload destination for group `'+ fileGroup +'` is not creatable ('+ fileUploadDir +')\n' + mkdirErr, next);
+                            return false;
                         }
 
                         // creating file
