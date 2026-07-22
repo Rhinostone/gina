@@ -39,6 +39,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
         'success',
         'error',
         'progress',
+        'uploadProgress', // #R8 — upload (client-to-server) wire progress for staged uploads
         'submit',
         'reset',
         'change',
@@ -1315,6 +1316,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
         if (hFormIsRequired)
             listenToXhrEvents($form);
 
+        // #R8 — staged-upload send? (virtual `gina-upload-*` form) The upload-progress
+        // channel below only activates for these sends.
+        var isUploadXhr = /^gina\-upload/i.test(id);
+        // uploadProgress -> data-gina-form-event-on-upload-progress (copied from the
+        // file input's `data-gina-form-upload-on-progress` by the upload change
+        // handler); no default: absent attribute = no `.hform` progress channel
+        var uploadProgressHFormIsRequired = ( $target.getAttribute('data-gina-form-event-on-upload-progress') ) ? true : false;
+
         var url         = $target.getAttribute('action') || options.url;
         var method      = $target.getAttribute('method') || options.method;
         method          = method.toUpperCase();
@@ -1960,6 +1969,59 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 triggerEvent(gina, $target, 'progress.' + id, result)
             };
 
+            // #R8 — catching upload (client-to-server) wire progress for staged uploads.
+            // Reassigned on EVERY send: `xhr` is a module-scoped singleton (created once,
+            // then reused across sends), so a stale handler would replay the previous
+            // send's closure — wrong `id`, wrong form — on later sends. The fresh
+            // assignment below (mirroring onreadystatechange/onprogress/ontimeout)
+            // prevents that. Dispatches on its own `uploadProgress.<id>` channel — the
+            // response-side (download) channel above is separate and untouched.
+            if ( typeof(xhr.upload) != 'undefined' && xhr.upload ) {
+                // snapshot the staged file names once per send — the payload's
+                // per-request identity: ONE request carries ALL files of a selection,
+                // so progress is per-request (aggregate), not per-file
+                var uploadFileNames = [];
+                if ( isUploadXhr && data instanceof FormData ) {
+                    for (var [uploadFileKey, uploadFileValue] of data.entries()) {
+                        if (uploadFileValue instanceof File) {
+                            uploadFileNames.push(uploadFileValue.name);
+                        }
+                    }
+                }
+                xhr.upload.onprogress = function(event) {
+                    // staged uploads only (`gina-upload-*` virtual forms)
+                    if (!isUploadXhr) return;
+
+                    var percentComplete = null; // null means indeterminate (length not computable)
+                    if ( event.lengthComputable && event.total > 0 ) {
+                        percentComplete = event.loaded / event.total;
+                        percentComplete = parseInt(percentComplete * 100);
+                    }
+
+                    var result = {
+                        'status'            : 100,
+                        'progress'          : percentComplete,
+                        'loaded'            : event.loaded,
+                        'total'             : event.total,
+                        'lengthComputable'  : event.lengthComputable,
+                        'files'             : uploadFileNames
+                    };
+
+                    $form.eventData.uploadProgress = result;
+
+                    // declarative indicator (opt-in by element presence)
+                    updateUploadProgressIndicator(
+                        ($target.uploadProperties) ? $target.uploadProperties.progressContainer : null,
+                        (percentComplete === null) ? 'indeterminate' : 'uploading',
+                        result
+                    );
+
+                    triggerEvent(gina, $target, 'uploadProgress.' + id, result);
+                    if (uploadProgressHFormIsRequired)
+                        triggerEvent(gina, $target, 'uploadProgress.' + id + '.hform', result);
+                };
+            }
+
             // catching timeout
             xhr.ontimeout = function (event) {
                 result = {
@@ -2136,6 +2198,252 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
     }
 
+    /**
+     * updateUploadProgressIndicator - #R8
+     *
+     * Updates the declarative upload-progress indicator of a staged upload
+     * (`data-gina-form-upload-progress`, default target id `<fieldId>-progress`).
+     * Opt-in by presence: a null id or no matching element is a silent no-op.
+     *
+     * Behavior by target type:
+     * - native `<progress>`: `value`/`max` track uploaded/total bytes; the `value`
+     *   attribute is removed while indeterminate (`preparing`, or length not
+     *   computable) so the browser renders its native indeterminate animation;
+     *   `error` empties the bar (value 0 — NOT indeterminate, whose animation
+     *   would read as still working)
+     * - any other element: `textContent` shows the integer percentage (`42%`)
+     *
+     * Every target also carries two data attributes as styling hooks:
+     * `data-gina-upload-progress` (integer percent, absent while indeterminate)
+     * and `data-gina-upload-progress-state`
+     * (`preparing|uploading|indeterminate|complete|error`). No copy/labels are
+     * hardcoded — wording is the consumer's concern (CSS on the state attribute).
+     * The `reset` state strips everything this layer ever set on the element.
+     *
+     * @param {string|null} containerId - resolved indicator element id
+     * @param {string} state - `preparing` | `uploading` | `indeterminate` | `complete` | `error` | `reset`
+     * @param {object} [result] - `uploadProgress` payload (`progress`, `loaded`, `total`) — read for `uploading` only
+     *
+     * @returns {undefined}
+     * */
+    var updateUploadProgressIndicator = function(containerId, state, result) {
+        if (!containerId) return;
+        var $indicator = document.getElementById(containerId);
+        if (!$indicator) return; // opt-in by presence
+
+        var isNativeProgress = /^progress$/i.test($indicator.tagName);
+
+        if (state == 'reset') {
+            if (isNativeProgress) {
+                $indicator.removeAttribute('value');
+                $indicator.removeAttribute('max');
+            } else {
+                $indicator.textContent = '';
+            }
+            $indicator.removeAttribute('data-gina-upload-progress');
+            $indicator.removeAttribute('data-gina-upload-progress-state');
+            return;
+        }
+
+        $indicator.setAttribute('data-gina-upload-progress-state', state);
+
+        if (state == 'complete') {
+            if (isNativeProgress) {
+                if ( !$indicator.getAttribute('max') ) {
+                    $indicator.max = 100;
+                }
+                $indicator.value = $indicator.max;
+            } else {
+                $indicator.textContent = '100%';
+            }
+            $indicator.setAttribute('data-gina-upload-progress', 100);
+            return;
+        }
+
+        if (state == 'error') {
+            if (isNativeProgress) {
+                if ( !$indicator.getAttribute('max') ) {
+                    $indicator.max = 100;
+                }
+                $indicator.value = 0;
+            } else {
+                $indicator.textContent = '';
+            }
+            $indicator.removeAttribute('data-gina-upload-progress');
+            return;
+        }
+
+        if ( state == 'preparing' || state == 'indeterminate' || !result || result.progress === null ) {
+            if (isNativeProgress) {
+                $indicator.removeAttribute('value'); // native indeterminate animation
+            }
+            $indicator.removeAttribute('data-gina-upload-progress');
+            return;
+        }
+
+        // determinate update (`uploading`)
+        if (isNativeProgress) {
+            $indicator.max      = result.total;
+            $indicator.value    = result.loaded;
+        } else {
+            $indicator.textContent = result.progress + '%';
+        }
+        $indicator.setAttribute('data-gina-upload-progress', result.progress);
+    };
+
+    /**
+     * updateUploadDropzoneState - #R8 slice 2
+     *
+     * Updates the drag-and-drop state attribute of a staged-upload dropzone.
+     * Opt-in by presence: a null id or no matching element is a silent no-op.
+     *
+     * The layer only toggles `data-gina-upload-dropzone-state`
+     * (`idle` | `over` | `dropped`) - a pure CSS styling hook. No copy/labels
+     * are hardcoded: wording is the consumer's concern (CSS on the state
+     * attribute). The binding marker (`data-gina-upload-dropzone`, value =
+     * the owner input id) is stamped once at bind time by bindUploadDropzone
+     * and is never touched here.
+     *
+     * @param {string|null} dropzoneId - resolved dropzone element id
+     * @param {string} state - `idle` | `over` | `dropped`
+     *
+     * @returns {undefined}
+     * */
+    var updateUploadDropzoneState = function(dropzoneId, state) {
+        if (!dropzoneId) return;
+        var $dropzone = document.getElementById(dropzoneId);
+        if (!$dropzone) return; // opt-in by presence
+
+        $dropzone.setAttribute('data-gina-upload-dropzone-state', state);
+    };
+
+    /**
+     * bindUploadDropzone - #R8 slice 2
+     *
+     * Binds an attribute-marked dropzone element to a staged-upload file
+     * input so files dropped on the zone route through the EXACT same
+     * staging pipeline as a native picker selection - group tagging,
+     * virtual form, staging POST, previews, hidden metadata fields,
+     * reset/delete and upload progress - with zero duplicated logic: the
+     * drop assigns the dropped `FileList` to the input, then re-fires the
+     * input's `change` through triggerEvent (the same synthetic-change
+     * idiom the form-reset path already uses). The change handler reads
+     * only `currentTarget` off its event, so a synthetic dispatch is
+     * indistinguishable from a trusted one on this path.
+     *
+     * Opt-in and EXPLICIT-ONLY: the input must carry
+     * `data-gina-form-upload-dropzone="<elementId>"`. There is deliberately
+     * no default id resolution (unlike `-preview` / `-error` / `-progress`):
+     * auto-binding a coincidentally-named element would attach drag
+     * semantics to markup that may already carry its own drop handling.
+     * Absent attribute: fully inert. Attribute present but element
+     * missing: console.warn + inert.
+     *
+     * Contract on the dropzone element:
+     * - `data-gina-upload-dropzone` (value = owner input id): binding
+     *   marker, stamped once. Also the first-wins guard - a zone serves
+     *   exactly one input; a second input naming the same zone warns and
+     *   is skipped, while the same owner re-binding (form re-bind cycles)
+     *   is a silent no-op.
+     * - `data-gina-upload-dropzone-state`: `idle` (bound, no drag) ->
+     *   `over` (a file drag hovers the zone) -> `dropped` (files dropped,
+     *   upload in flight) -> back to `idle` at the same chokepoints that
+     *   finalize upload progress (onUpload complete/error) and strip it
+     *   (reset/delete removal).
+     *
+     * Only file drags react (`dataTransfer.types` must carry `Files`):
+     * text/link drags fall through untouched. Multi-file drops on a
+     * non-`multiple` input keep the FIRST file only (console.warn) - the
+     * graceful client mirror of the single-file native picker; configured
+     * upload groups also enforce `isMultipleAllowed` server-side.
+     *
+     * @param {object} $uploadTrigger - the file `<input>` (HTMLInputElement)
+     *
+     * @returns {undefined}
+     * */
+    var bindUploadDropzone = function($uploadTrigger) {
+        var dropzoneId = $uploadTrigger.getAttribute('data-gina-form-upload-dropzone') || null;
+        if (!dropzoneId) return; // opt-in: explicit id only - no default id
+
+        var $dropzone = document.getElementById(dropzoneId);
+        if (!$dropzone) {
+            console.warn('[FormValidator][upload] `data-gina-form-upload-dropzone` targets `#'+ dropzoneId +'` but no such element was found: drag-and-drop stays inactive for `#'+ $uploadTrigger.id +'`');
+            return;
+        }
+        // first-wins: a zone serves exactly one input; re-binding by the
+        // same owner (form re-bind cycles) is a silent no-op
+        var dropzoneOwnerId = $dropzone.getAttribute('data-gina-upload-dropzone');
+        if (dropzoneOwnerId) {
+            if (dropzoneOwnerId != $uploadTrigger.id) {
+                console.warn('[FormValidator][upload] dropzone `#'+ dropzoneId +'` is already bound to `#'+ dropzoneOwnerId +'`: skipping `#'+ $uploadTrigger.id +'`');
+            }
+            return;
+        }
+        $dropzone.setAttribute('data-gina-upload-dropzone', $uploadTrigger.id);
+        updateUploadDropzoneState(dropzoneId, 'idle');
+
+        // dragenter/dragleave also fire when the pointer crosses the
+        // zone's own children - a bare leave handler would flicker the
+        // state on every child boundary, hence the depth counter
+        var dragDepth = 0;
+        var hasFilesPayload = function(event) {
+            var types = (event.dataTransfer && event.dataTransfer.types) || null;
+            if (!types) return false;
+            // `types` is a frozen array (DOMStringList on legacy engines,
+            // which lacks .indexOf - hence the borrowed call)
+            return ( Array.prototype.indexOf.call(types, 'Files') > -1 );
+        };
+
+        addListener(gina, $dropzone, 'dragenter', function(event) {
+            if ( !hasFilesPayload(event) ) return; // text/link drags fall through
+            event.preventDefault();
+            dragDepth++;
+            updateUploadDropzoneState(dropzoneId, 'over');
+        });
+
+        addListener(gina, $dropzone, 'dragover', function(event) {
+            if ( !hasFilesPayload(event) ) return;
+            event.preventDefault(); // required, or the browser refuses the drop
+            if (event.dataTransfer) {
+                event.dataTransfer.dropEffect = 'copy';
+            }
+        });
+
+        addListener(gina, $dropzone, 'dragleave', function(event) {
+            if ( !hasFilesPayload(event) ) return;
+            if (--dragDepth <= 0) {
+                dragDepth = 0;
+                updateUploadDropzoneState(dropzoneId, 'idle');
+            }
+        });
+
+        addListener(gina, $dropzone, 'drop', function(event) {
+            if ( !hasFilesPayload(event) ) return; // never swallow non-file drops
+            event.preventDefault();
+            dragDepth = 0;
+
+            var droppedFiles = event.dataTransfer.files;
+            if (!droppedFiles.length) {
+                updateUploadDropzoneState(dropzoneId, 'idle');
+                return;
+            }
+            // multi-file drop on a single-file input: keep the FIRST file
+            // only - the graceful client mirror of the native single-file
+            // picker
+            if (droppedFiles.length > 1 && !$uploadTrigger.multiple) {
+                console.warn('[FormValidator][upload] '+ droppedFiles.length +' files dropped on `#'+ dropzoneId +'` but `#'+ $uploadTrigger.id +'` is not `multiple`: keeping the first file only');
+                var singleFileTransfer = new DataTransfer();
+                singleFileTransfer.items.add(droppedFiles[0]);
+                droppedFiles = singleFileTransfer.files;
+            }
+            // route through the staging pipeline: assign, then re-fire
+            // `change` exactly like the form-reset path does
+            $uploadTrigger.files = droppedFiles;
+            updateUploadDropzoneState(dropzoneId, 'dropped');
+            triggerEvent(gina, $uploadTrigger, 'change');
+        });
+    };
+
     var onUpload = function(gina, $target, status, id, data) {
 
         var uploadProperties = $target.uploadProperties || null;
@@ -2146,11 +2454,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
         //     mandatoryFields : Array,
         //     uploadFields    : ObjectList
         //     hasPreviewContainer : Boolean,
-        //     previewContainer : $Object
+        //     previewContainer : $Object,
+        //     progressContainer : String|null (#R8 — element id; string, unlike previewContainer)
         // }
 
         if ( !uploadProperties )
             throw new Error('No uploadProperties found !!');
+
+        // #R8 — finalize the upload-progress indicator: this one chokepoint covers
+        // the success path and every error/timeout path routed through onUpload
+        updateUploadProgressIndicator(
+            uploadProperties.progressContainer || null,
+            (status == 'success') ? 'complete' : 'error'
+        );
+        // #R8 slice 2 — the dropzone (if bound) returns to idle at the same
+        // single chokepoint
+        updateUploadDropzoneState(uploadProperties.dropzoneContainer || null, 'idle');
         // parent form
         // var $mainForm = uploadProperties.$form;
         var $uploadTriger = document.getElementById(uploadProperties.uploadTriggerId);
@@ -2573,6 +2892,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
         }
 
+        // #R8 — at least one staged file the indicator reported is gone:
+        // strip the upload-progress indicator entirely
+        if (removedCount > 0) {
+            updateUploadProgressIndicator(
+                $uploadTrigger.getAttribute('data-gina-form-upload-progress') || ( ($uploadTrigger.id) ? $uploadTrigger.id + '-progress' : null ),
+                'reset'
+            );
+            // #R8 slice 2 — dropzone back to idle (explicit attr only)
+            updateUploadDropzoneState($uploadTrigger.getAttribute('data-gina-form-upload-dropzone') || null, 'idle');
+        }
+
         // removal-path callback: dispatched ONCE per reset/delete action,
         // AFTER the removal XHR(s) went out and the preview DOM was cleaned
         // up. Same convention as `data-gina-form-upload-on-success`: a bare
@@ -2592,56 +2922,65 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
     }
 
-    /**
-     * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
-     * @param {array} buffer
-     * @param {number} [byteLength] e.g.: 8, 16 or 32
-     *
-     * @returns {string} stringBufffer
-     */
-    var ab2str = function(event, buf, byteLength) {
-
-        var str = '';
-        var ab = null;
-
-        if ( typeof(byteLength) == 'undefined' ) {
-            var byteLength = 8;
-        }
-
-
-        var bits = (byteLength / 8)
-
-
-        switch (byteLength) {
-            case 8:
-                ab = new Uint8Array(buf);
-                break;
-            case 16:
-                ab = new Uint16Array(buf);
-                break;
-
-            case 32:
-                ab = new Uint32Array(buf);
-                break;
-
-            default:
-                ab = new Uint8Array(buf);
-                break;
-
-        }
-
-        var abLen = ab.length;
-        var CHUNK_SIZE = Math.pow(2, 8) + bits;
-        var offset = 0, len = null, subab = null;
-
-        for (; offset < abLen; offset += CHUNK_SIZE) {
-            len = Math.min(CHUNK_SIZE, abLen - offset);
-            subab = ab.subarray(offset, offset + len);
-            str += String.fromCharCode.apply(null, subab);
-        }
-
-        return str;
-    }
+    // #B148 (2026-07-22) — `ab2str` is RETIRED. Its only consumer was the
+    // staged-upload body assembly in `processFiles()`, which converted each
+    // file's ArrayBuffer to a per-byte JS string so the multipart body could
+    // be string-concatenated and sent as a DOMString. A DOMString is UTF-8
+    // encoded on the wire, so every file byte >= 0x80 became a 2-byte
+    // sequence and binary uploads were stored inflated/corrupted server-side.
+    // `processFiles()` now assembles a `Blob` (raw bytes, transmitted
+    // verbatim) and needs no buffer-to-string conversion at all.
+    // was:
+    // /**
+    //  * Convert <Uint8Array|Uint16Array|Uint32Array> to <String>
+    //  * @param {array} buffer
+    //  * @param {number} [byteLength] e.g.: 8, 16 or 32
+    //  *
+    //  * @returns {string} stringBufffer
+    //  */
+    // var ab2str = function(event, buf, byteLength) {
+    //
+    //     var str = '';
+    //     var ab = null;
+    //
+    //     if ( typeof(byteLength) == 'undefined' ) {
+    //         var byteLength = 8;
+    //     }
+    //
+    //
+    //     var bits = (byteLength / 8)
+    //
+    //
+    //     switch (byteLength) {
+    //         case 8:
+    //             ab = new Uint8Array(buf);
+    //             break;
+    //         case 16:
+    //             ab = new Uint16Array(buf);
+    //             break;
+    //
+    //         case 32:
+    //             ab = new Uint32Array(buf);
+    //             break;
+    //
+    //         default:
+    //             ab = new Uint8Array(buf);
+    //             break;
+    //
+    //     }
+    //
+    //     var abLen = ab.length;
+    //     var CHUNK_SIZE = Math.pow(2, 8) + bits;
+    //     var offset = 0, len = null, subab = null;
+    //
+    //     for (; offset < abLen; offset += CHUNK_SIZE) {
+    //         len = Math.min(CHUNK_SIZE, abLen - offset);
+    //         subab = ab.subarray(offset, offset + len);
+    //         str += String.fromCharCode.apply(null, subab);
+    //     }
+    //
+    //     return str;
+    // }
 
 
     /**
@@ -2681,98 +3020,179 @@ function ValidatorPlugin(rules, data, formId, culture) {
         return parts;
     };
 
+    /**
+     * processFiles
+     *
+     * Assembles the staged-upload multipart body and hands it to `onComplete`
+     * as a `Blob` (#B148). The multipart FRAMING is byte-identical to the
+     * historical hand-assembled string body — same `--<boundary>` delimiters,
+     * same `Content-Disposition: form-data; name=".."; group=".."; filename=".."`
+     * parameter set (the upload-group tag keeps its documented wire vehicle,
+     * parsed server-side from the disposition params), same per-part
+     * `Content-Type` / `Content-Length` headers — but the file BYTES now ride
+     * as raw `File` (Blob) parts instead of a per-byte JS string.
+     *
+     * Why (#B148): the historical flow read each file with a `FileReader`,
+     * converted the buffer to a JS string (one char per byte) and
+     * string-concatenated the whole body, which `XMLHttpRequest.send()` then
+     * transmitted as a DOMString — and a DOMString is UTF-8-encoded on the
+     * wire, so every file byte >= 0x80 inflated to a 2-byte sequence: any real
+     * binary upload (image / PDF / archive) was stored inflated + corrupted
+     * server-side (measured x1.49 on a cycling-byte fixture). A `Blob` body is
+     * transmitted verbatim, and an explicitly-set `Content-Type` request
+     * header survives `xhr.send(Blob)`, so the server sees the exact same
+     * wire contract with faithful bytes. String segments inside the Blob (the
+     * part headers + any field parts) are UTF-8-encoded by the Blob itself —
+     * byte-identical to the DOMString era for those segments, which is what
+     * the server-side disposition-parameter decode expects.
+     *
+     * Disposition-parameter values (`name`, `group`, `filename`) are
+     * percent-encoded for CR / LF / double-quote per the RFC 7578 §5.1.1
+     * convention — the same escaping `buildMultipartFieldParts` applies to
+     * field names (an unescaped double-quote previously produced a malformed
+     * part). The per-part `Content-Length` now reports the file's true byte
+     * size (`File.size`; numerically identical to the historical char count).
+     *
+     * The signature and the `onComplete(err, body, done)` contract are
+     * unchanged (`body` is now a `Blob` instead of a string, and the send call
+     * site passes it to `xhr.send()` opaquely either way). The `FileReader`
+     * stage is retired along with `ab2str` (their only consumer was this
+     * body), so the assembly is synchronous and `onComplete` fires in the
+     * same tick — `xhr` is already open by then (opened in `setupXhr()`
+     * before the send flow reaches this call).
+     *
+     * @param {array} binaries - staged-file records `{ key, group, file, bin }` (one per selected `File`)
+     * @param {string} boundary - multipart boundary token (as declared in the `Content-Type` request header)
+     * @param {string|Blob} data - body accumulator; the field parts built by `buildMultipartFieldParts()` ride here (`''` when the payload carries no non-file entry)
+     * @param {number} f - index of the first file to process (the send call site passes `0`)
+     * @param {function} onComplete - completion callback
+     * @param {Error|false} onComplete.err - assembly error, `false` on success
+     * @param {Blob|null} onComplete.body - the assembled multipart body
+     * @param {boolean} onComplete.done - `true` when the body is final
+     *
+     * @returns {void}
+     */
     var processFiles = function(binaries, boundary, data, f, onComplete) {
+        // #B148 (2026-07-22) — build the body as a Blob of
+        // [ field parts (string), per-file header (string), File, CRLF, ..., closer ]
+        // so file bytes reach the wire VERBATIM. The historical implementation
+        // (kept below for the record) sent the body as a DOMString, which
+        // UTF-8-inflated every file byte >= 0x80 — binary uploads corrupted.
+        var escapeDispositionParam = function(value) {
+            // RFC 7578 §5.1.1 percent-escaping (the browser convention) — the
+            // same treatment `buildMultipartFieldParts` applies to field names.
+            return String(value).replace(/\r/g, '%0D').replace(/\n/g, '%0A').replace(/"/g, '%22');
+        };
+        var parts = [];
+        if (data) {
+            // non-file field parts (string) — UTF-8-encoded by the Blob,
+            // byte-identical to the historical DOMString encoding of the same
+            // segments
+            parts.push(data);
+        }
+        try {
+            for (var i = f; i < binaries.length; i++) {
+                // MIME fallback — `File.type` is read-only, so resolve the
+                // effective type instead of assigning it (the historical
+                // assignment onto the File object was a silent no-op).
+                var partType = binaries[i].file.type || 'application/octet-stream';
 
-        var reader = new FileReader();
+                // Start a new part in our body's request
+                parts.push(
+                    "--" + boundary + "\r\n"
+                    // Describe it as form data
+                    + 'Content-Disposition: form-data; '
+                    // Define the name of the form data
+                    + 'name="' + escapeDispositionParam(binaries[i].key) + '"; '
+                    // Define the upload group
+                    + 'group="' + escapeDispositionParam(binaries[i].group) + '"; '
+                    // Provide the real name of the file
+                    + 'filename="' + escapeDispositionParam(binaries[i].file.name) + '"\r\n'
+                    // And the MIME type of the file
+                    + 'Content-Type: ' + partType + '\r\n'
+                    // File length (true byte count)
+                    + 'Content-Length: ' + binaries[i].file.size + '\r\n'
+                    // There's a blank line between the metadata and the data
+                    + '\r\n'
+                );
 
-        // progress
-        // reader.addEventListener('progress', (e) => {
-        //     var percentComplete = '0';
-        //     if (e.lengthComputable) {
-        //         percentComplete = e.loaded / e.total;
-        //         percentComplete = parseInt(percentComplete * 100);
-
-        //     }
-
-        //     // var result = {
-        //     //     'status': 100,
-        //     //     'progress': percentComplete
-        //     // };
-
-        //     console.debug('progress', percentComplete);
-
-        //     //$form.eventData.onprogress = result;
-
-        //     //triggerEvent(gina, $target, 'progress.' + id, result)
-        // });
-
-        reader.addEventListener('load', function onReaderLoaded(e) {
-
-            e.preventDefault();
-
-            // var percentComplete = '0';
-            // if (e.lengthComputable) {
-            //     percentComplete = e.loaded / e.total;
-            //     percentComplete = parseInt(percentComplete * 100);
-
-            //     console.debug('progress', percentComplete);
-            // }
-
-
-            try {
-
-                var bin = ab2str(e, this.result);
-                ;
-                binaries[this.index].bin += bin;
-
-                if (!binaries[this.index].file.type) {
-                    binaries[this.index].file.type = 'application/octet-stream'
-                }
-
-            } catch (err) {
-                return onComplete(err, null, true);
+                // The file's raw bytes — a File IS a Blob: the browser reads it
+                // lazily at transmit time, so no whole-file string or buffer is
+                // ever materialized in JS.
+                parts.push(binaries[i].file);
+                parts.push('\r\n');
             }
+        } catch (err) {
+            return onComplete(err, null, true);
+        }
 
-            // Start a new part in our body's request
-            data += "--" + boundary + "\r\n";
+        // Once we are done, "close" the body's request
+        parts.push("--" + boundary + "--");
 
-            // Describe it as form data
-            data += 'Content-Disposition: form-data; '
-                // Define the name of the form data
-                + 'name="' + binaries[this.index].key + '"; '
-                // Define the upload group
-                + 'group="' + binaries[this.index].group + '"; '
-                // Provide the real name of the file
-                + 'filename="' + binaries[this.index].file.name + '"\r\n'
-                // And the MIME type of the file
-                + 'Content-Type: ' + binaries[this.index].file.type + '\r\n'
-                // File length
-                + 'Content-Length: ' + binaries[this.index].bin.length + '\r\n'
-                // There's a blank line between the metadata and the data
-                + '\r\n';
-
-            // Append the binary data to our body's request
-            data += binaries[this.index].bin + '\r\n';
-
-            ++this.index;
-            // is last file ?
-            if (this.index == binaries.length) {
-                // Once we are done, "close" the body's request
-                data += "--" + boundary + "--";
-
-                onComplete(false, data, true);
-
-            } else { // process next file
-                processFiles(binaries, boundary, data, this.index, onComplete)
-            }
-        }, false);
-
-        reader.index = f;
-        binaries[f].bin = '';
-
-        reader.readAsArrayBuffer(binaries[f].file);
-        //reader.readAsBinaryString(binaries[f].file);
+        return onComplete(false, new Blob(parts), true);
     }
+    // was (#B148 — the historical string-assembly implementation, retired):
+    // var processFiles = function(binaries, boundary, data, f, onComplete) {
+    //
+    //     var reader = new FileReader();
+    //
+    //     reader.addEventListener('load', function onReaderLoaded(e) {
+    //
+    //         e.preventDefault();
+    //
+    //         try {
+    //
+    //             var bin = ab2str(e, this.result);
+    //             ;
+    //             binaries[this.index].bin += bin;
+    //
+    //             if (!binaries[this.index].file.type) {
+    //                 binaries[this.index].file.type = 'application/octet-stream'
+    //             }
+    //
+    //         } catch (err) {
+    //             return onComplete(err, null, true);
+    //         }
+    //
+    //         // Start a new part in our body's request
+    //         data += "--" + boundary + "\r\n";
+    //
+    //         // Describe it as form data
+    //         data += 'Content-Disposition: form-data; '
+    //             // Define the name of the form data
+    //             + 'name="' + binaries[this.index].key + '"; '
+    //             // Define the upload group
+    //             + 'group="' + binaries[this.index].group + '"; '
+    //             // Provide the real name of the file
+    //             + 'filename="' + binaries[this.index].file.name + '"\r\n'
+    //             // And the MIME type of the file
+    //             + 'Content-Type: ' + binaries[this.index].file.type + '\r\n'
+    //             // File length
+    //             + 'Content-Length: ' + binaries[this.index].bin.length + '\r\n'
+    //             // There's a blank line between the metadata and the data
+    //             + '\r\n';
+    //
+    //         // Append the binary data to our body's request
+    //         data += binaries[this.index].bin + '\r\n';
+    //
+    //         ++this.index;
+    //         // is last file ?
+    //         if (this.index == binaries.length) {
+    //             // Once we are done, "close" the body's request
+    //             data += "--" + boundary + "--";
+    //
+    //             onComplete(false, data, true);
+    //
+    //         } else { // process next file
+    //             processFiles(binaries, boundary, data, this.index, onComplete)
+    //         }
+    //     }, false);
+    //
+    //     reader.index = f;
+    //     binaries[f].bin = '';
+    //
+    //     reader.readAsArrayBuffer(binaries[f].file);
+    // }
 
 
     var listenToXhrEvents = function($form) {
@@ -2796,6 +3216,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 try { console.warn('[gina-form-event] function-call shape no longer supported on data-gina-form-event-on-submit-error — use a bare identifier and register the handler on window: '+ htmlErrorEventCallback); } catch (e) {}
             } else {
                 $form.on('error.hform', window[htmlErrorEventCallback])
+            }
+        }
+        // #R8 — data-gina-form-event-on-upload-progress (staged uploads: copied from
+        // the file input's `data-gina-form-upload-on-progress` by the change handler)
+        var htmlUploadProgressEventCallback = $form.target.getAttribute('data-gina-form-event-on-upload-progress') || null;
+        if (htmlUploadProgressEventCallback != null) {
+            if ( /\((.*)\)/.test(htmlUploadProgressEventCallback) ) {
+                // #M21a — function-call shape unsupported; register a bare handler on window instead
+                try { console.warn('[gina-form-event] function-call shape not supported on data-gina-form-event-on-upload-progress — use a bare identifier and register the handler on window: '+ htmlUploadProgressEventCallback); } catch (e) {}
+            } else {
+                $form.on('uploadProgress.hform', window[htmlUploadProgressEventCallback])
             }
         }
 
@@ -4437,7 +4868,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                 if (uploadActionUrl) {
                     console.info('Ignore previous warnings regarding upload. I have found a default `'+action+'` route: `'+ defaultRoute +'@'+ uploadActionUrl.bundle +'`');
-                    $el.setAttribute('data-gina-form-upload-action', uploadActionUrl.toUrl());
+                    // #B146 — write the attribute that was actually CHECKED (`action`),
+                    // not a hardcoded staging attribute. The reset-fallback used to
+                    // overwrite the staging action with the reset-default route URL, so
+                    // a file input declaring only its staging action had it silently
+                    // repointed at the delete route (the staging POST then hit delete).
+                    $el.setAttribute(action, uploadActionUrl.toUrl());
                 } else {
                     var errMsg = '`'+ action +'` needs to be defined to proceed for your `input[type=file]` with ID `'+ $el.id +'`\n'+ additionalErrorDetails +'\n';
                     if ($errorContainer) {
@@ -5315,6 +5751,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 //     });
                 // }
 
+                // #R8 slice 2 — drag-and-drop: bind the (optional) declarative
+                // dropzone at form-bind time — a drop can be the FIRST
+                // interaction, no picker click required
+                bindUploadDropzone($inputs[f]);
+
                 // binding file element == $upload
                 // setTimeout(() => {
                 //     removeListner(gina, $inputs[f], 'change');
@@ -5340,6 +5781,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     $el.setAttribute('data-gina-form-virtual', uploadFormId);
                     var eventOnSuccess  = $el.getAttribute('data-gina-form-upload-on-success');
                     var eventOnError    = $el.getAttribute('data-gina-form-upload-on-error');
+                    var eventOnProgress = $el.getAttribute('data-gina-form-upload-on-progress'); // #R8
                     var errorField    = null;
 
                     if (files.length > 0) {
@@ -5390,12 +5832,25 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                 var fieldId     = $el.id || $el.getAttribute('id');
 
                                 var hasPreviewContainer = false;
+                                // #R8 — upload-progress indicator target: stored as a STRING id
+                                // (errorField's convention — resolved to an element at update
+                                // time), unlike previewContainer below which stores the element
+                                var progressContainer   = $el.getAttribute('data-gina-form-upload-progress') || ( (fieldId) ? fieldId + '-progress' : null );
+                                // #R8 slice 2 - dropzone target: EXPLICIT id only, deliberately
+                                // no default id (see bindUploadDropzone)
+                                var dropzoneContainer   = $el.getAttribute('data-gina-form-upload-dropzone') || null;
                                 var previewContainer    = $el.getAttribute('data-gina-form-upload-preview') || fieldId + '-preview';
                                 previewContainer        = (isPopinContext())
                                                         ? $activePopin.$target.getElementById(previewContainer)
                                                         : document.getElementById(previewContainer);
 
-                                if ( typeof(previewContainer) != 'undefined' ) {
+                                // #B147 — previewContainer is a getElementById RESULT
+                                // (element or null); typeof(null) is 'object', so the
+                                // bare typeof check passed for a MISS, stored a null
+                                // container, and the success handler later dereferenced
+                                // it (TypeError). Require a truthy element — the
+                                // architecture-index typeof-null guard pattern.
+                                if ( typeof(previewContainer) != 'undefined' && previewContainer ) {
                                     hasPreviewContainer = true;
                                 }
 
@@ -5522,6 +5977,8 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                     uploadTriggerId     : $el.id,
                                     $form               : $el.form,
                                     errorField          : errorField,
+                                    progressContainer   : progressContainer, // #R8 — string id
+                                    dropzoneContainer   : dropzoneContainer, // #R8 slice 2 — string id, explicit-only
                                     mandatoryFields     : mandatoryFields,
                                     uploadFields        : hiddenFields,
                                     hasPreviewContainer : hasPreviewContainer,
@@ -5544,6 +6001,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             } else {
                                 $uploadForm.setAttribute('data-gina-form-event-on-submit-error', 'onGenericXhrResponse');
                             }
+                            // #R8 — upload-progress event (no default: absent attribute
+                            // means no `.hform` progress channel for this upload form)
+                            if (eventOnProgress) {
+                                $uploadForm.setAttribute('data-gina-form-event-on-upload-progress', eventOnProgress);
+                            }
 
 
                             // adding for to current document
@@ -5553,6 +6015,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                             } else {
                                 document.body.appendChild($uploadForm)
                             }
+                        }
+
+                        // #R8 — upload-progress kickoff: show activity from selection
+                        // time (covers the FileReader read/assembly phase before the
+                        // first wire event). Runs on EVERY selection — the create
+                        // block above is create-only.
+                        if ( $uploadForm.uploadProperties && $uploadForm.uploadProperties.progressContainer ) {
+                            updateUploadProgressIndicator($uploadForm.uploadProperties.progressContainer, 'preparing');
                         }
 
                         // binding form

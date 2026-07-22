@@ -107,6 +107,18 @@
         // "subFolder": "/$ownerId_$companyId",
         // "maxFieldsSize": "512K"
       }
+      // ,
+      // // #B144 — a TEST-ONLY write-error probe group. Every upload tagged
+      // // group="_probe_fail" fails with a guarded 500 (the #B143 write-error path)
+      // // so you can re-confirm the crash-guard on your own upload surface after a
+      // // gina upgrade. IGNORED in production scope (a boot warn flags it if shipped
+      // // there). Point `path` at a tmp dir — createWriteStream may leave a 0-byte file.
+      // "_probe_fail": {
+      //   "path": "${tmpPath}",
+      //   "allowedExtensions": "*",
+      //   "isMultipleAllowed": true,
+      //   "simulateWriteError": true
+      // }
     }
   },
   "cache": {

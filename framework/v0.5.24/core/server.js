@@ -76,6 +76,37 @@ var _resolveRequestId = function(request) {
     return crypto.randomUUID();
 };
 
+/**
+ * #ERRREF — mint (or validate a caller-supplied) incident ref for error
+ * responses.
+ *
+ * The ref is a short correlation code returned as a top-level `ref` field on
+ * every `throwError` JSON error body — in ALL scopes (it is a random
+ * correlation key carrying no server detail, unlike `stack`) — and paired
+ * server-side with the full error detail in the throwError log line, so a
+ * user-relayed ref resolves to the exact failure even where the stack
+ * egress gate strips the wire. 6 uppercase hex chars is a deliberate
+ * divergence from the base64url token house style (csrf/csp nonces): this
+ * is the one token END USERS relay by voice or typing to support, so the
+ * charset must be case-insensitively matchable and free of ambiguous
+ * symbols. A caller-supplied ref is honoured when relay-safe — same
+ * sanitize-inbound discipline as _resolveRequestId's X-Request-Id (bounded
+ * length, restricted charset — neutralises log forging); anything else gets
+ * a fresh mint. Kept in sync with the controller-side twin
+ * (core/controller/controller.js).
+ *
+ * @private
+ * @param {string} [supplied] - caller/producer-provided ref candidate
+ * @returns {string} the supplied value when relay-safe (1-32 chars of
+ *  word chars, dots or dashes), else 6 fresh uppercase hex chars
+ */
+var _mintErrorRef = function(supplied) {
+    if ( typeof(supplied) == 'string' && /^[\w.\-]{1,32}$/.test(supplied) ) {
+        return supplied;
+    }
+    return crypto.randomBytes(3).toString('hex').toUpperCase();
+};
+
 
 // Lightweight debug logger — gated on LOG_LEVEL so zero cost in production.
 // Format mirrors lib/logger template: [date] [debug  ][gina:server] message
@@ -1080,6 +1111,32 @@ function Server(options) {
                 // ("info") filters debug, which would silently defeat the
                 // "path logged at boot" contract.
                 console.info('[ BUNDLE ][ server ][ init ] Audit trail enabled for [ '+ self.appName +' ] → '+ _auditDestLabel);
+            }
+
+            // ── #B144 — upload write-error probe (`simulateWriteError`) boot warn ──
+            // A group with `simulateWriteError: true` makes every upload tagging it
+            // fail with a guarded 500 (the #B143 write-error path) so a consumer can
+            // re-confirm the crash-guard on their own surface. It is INERT in
+            // production scope (the 'file' handler gates on self.isProductionScope()),
+            // but a flag shipped to production by accident is a smell — surface it at
+            // boot either way so it can never hide.
+            var _uploadSettings = ( self.conf[self.appName]
+                && self.conf[self.appName][self.env]
+                && self.conf[self.appName][self.env].content
+                && self.conf[self.appName][self.env].content.settings
+                && self.conf[self.appName][self.env].content.settings.upload
+            ) ? self.conf[self.appName][self.env].content.settings.upload : null;
+            if ( _uploadSettings && _uploadSettings.groups && typeof(_uploadSettings.groups) == 'object' ) {
+                var _probeGroups = Object.keys(_uploadSettings.groups).filter(function(g) {
+                    return _uploadSettings.groups[g] && _uploadSettings.groups[g].simulateWriteError;
+                });
+                if ( _probeGroups.length ) {
+                    if ( self.isProductionScope() ) {
+                        console.warn('[ BUNDLE ][ server ][ init ] `upload.groups` has `simulateWriteError` set on [ '+ _probeGroups.join(', ') +' ] — IGNORED in production scope, but remove it before shipping (it is a test-only fault injector).');
+                    } else {
+                        console.warn('[ BUNDLE ][ server ][ init ] upload write-error PROBE active — group(s) [ '+ _probeGroups.join(', ') +' ] will fail every upload with a guarded 500 (`simulateWriteError`). Test-only; inert in production scope.');
+                    }
+                }
             }
 
             // ── #RWATCH — stale built-release watch (local production rehearsals) ──
@@ -4588,8 +4645,25 @@ function Server(options) {
                         var fileUploadDir = ( opt.groups[fileGroup] && opt.groups[fileGroup].path )
                             ? opt.groups[fileGroup].path
                             : uploadDir;
-                        if ( !fs.existsSync(fileUploadDir) ) {
-                            fs.mkdirSync(fileUploadDir, { recursive: true });
+                        // #B145 (2026-07-22) — guard the dir creation. mkdirSync throws
+                        // SYNCHRONOUSLY inside this busboy 'file' callback when the configured
+                        // group `path` is non-creatable (parent read-only / EROFS / EACCES).
+                        // Unguarded, that propagates up the parser call stack →
+                        // uncaughtException → proc.js SIGTERM: an UNAUTHENTICATED single-request
+                        // bundle-kill (the #B30/#B97 family — the multipart parse precedes
+                        // routing + middleware). #B49's "mkdir-if-missing prevents the write
+                        // error" only covered the missing-dir STREAM error (handled by the
+                        // writeStream 'error' listener below), not mkdirSync itself failing. A
+                        // non-creatable destination is a SERVER config problem, not client input
+                        // → answer a guarded 500 (not the 400 used for client-side violations).
+                        try {
+                            if ( !fs.existsSync(fileUploadDir) ) {
+                                fs.mkdirSync(fileUploadDir, { recursive: true });
+                            }
+                        } catch (mkdirErr) {
+                            console.error('[ busboy ] [ onUploadDirError ]', mkdirErr);
+                            throwError(response, 500, 'upload destination for group `'+ fileGroup +'` is not creatable ('+ fileUploadDir +')\n' + mkdirErr, next);
+                            return false;
                         }
 
                         // creating file
@@ -4626,6 +4700,30 @@ function Server(options) {
                                 }
                             })
                         });
+
+                        // #B144 (2026-07-22) — consumer-probeable write-error path. A group
+                        // with `simulateWriteError: true` (honoured OUTSIDE production scope
+                        // only) creates the REAL write stream + arms the REAL #B143 terminal
+                        // listeners above, then synthetically destroys the stream so the
+                        // production 'error' listener fires the production throwError(500) with
+                        // the EXACT terminal semantics of a real mid-stream ENOSPC/EIO: an
+                        // errored stream never emits 'finish' → never decrements `pending` → the
+                        // request stays terminal at the 500 (a second errored part's throwError
+                        // is a no-op behind throwError's !res.headersSent guard). Lets a consumer
+                        // re-confirm the #B143 crash-guard on their own upload surface after a
+                        // pickup WITHOUT any filesystem / global-config change that touches real
+                        // uploads — the failure scopes to requests tagging this one group. INERT
+                        // in production (self.isProductionScope()); a flag shipped there by
+                        // accident is surfaced by the boot warn (init) but never fires. Faithful
+                        // to the real error path: the source part is NOT drained (matching a real
+                        // mid-stream error), and createWriteStream may leave a 0-byte tmp file —
+                        // point the probe group's `path` at a tmp dir.
+                        if ( opt.groups[fileGroup].simulateWriteError && !self.isProductionScope() ) {
+                            writeStreams[index].destroy(new Error('simulated write error — upload group `'+ fileGroup +'` has `simulateWriteError` enabled (test-only fault injector)'));
+                            ++index;
+                            return false;
+                        }
+
                         var liner = new require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {
@@ -6297,6 +6395,16 @@ function Server(options) {
      * bundle has views and the request is not an XHR, or a JSON error body
      * for XHR/API requests. Also exposed on the server engine instance.
      *
+     * #ERRREF — every JSON error body additionally carries a top-level
+     * `ref`: a short incident ref minted per error (or honoured from a
+     * relay-safe caller-supplied `msg.ref` / 1-arg errorObject `ref`),
+     * present in ALL scopes, and paired server-side with the full error
+     * detail (message + stack + cause) plus the request correlation id in
+     * ONE error-level log line emitted at entry — so the detail the
+     * NODE_SCOPE_IS_LOCAL egress gate strips from the wire stays findable
+     * from a user-relayed ref. The HTML surfaces (custom error page data +
+     * the inline fallback page) carry the same ref.
+     *
      * @inner
      * @private
      * @param {object} res - Server response object
@@ -6316,14 +6424,51 @@ function Server(options) {
         var bundleConf      = self.conf[self.appName][self.env];
         var _h1ContentType  = null;
 
+        // #ERRREF — incident ref + the ONE full-detail pairing line, EVERY scope.
+        // The ref is a short random correlation code returned as a top-level
+        // `ref` field on every JSON error body in ALL scopes (it carries no
+        // server detail — the egress gate below keeps protecting the wire);
+        // this line pairs it with the FULL error (message + stack + cause) and
+        // the request's correlation id (#M12b/#COMPLY2) BEFORE the gate strips
+        // the wire copy, so a user-relayed ref greps to the exact failure in
+        // any scope, production included. Consolidates the two former in-gate
+        // log emits + the per-branch summary lines (one line per thrown error
+        // instead of two). Honours a relay-safe caller-supplied ref (msg.ref,
+        // or the 1-arg errorObject shape's ref). Kept in sync with the
+        // controller-side throwError twin (core/controller/controller.js).
+        var ref = _mintErrorRef(
+            ( msg && typeof(msg) == 'object' && msg.ref )
+                ? msg.ref
+                : ( typeof(code) == 'object' && code && code.ref ) ? code.ref : undefined
+        );
+        var _errSubject = ( typeof(msg) != 'undefined' && msg !== null )
+            ? msg
+            : ( typeof(code) == 'object' && code ) ? code : msg;
+        var _errDetail  = '';
+        if ( typeof(_errSubject) == 'string' ) {
+            _errDetail = _errSubject;
+        } else if ( _errSubject && typeof(_errSubject) == 'object' ) {
+            try {
+                _errDetail = _errSubject.stack || _errSubject.message || JSON.stringify(_errSubject);
+            } catch (_refJsonErr) {
+                _errDetail = String(_errSubject);
+            }
+            if ( _errSubject.cause ) {
+                _errDetail += '\ncaused by: '+ ( _errSubject.cause.stack || _errSubject.cause.message || _errSubject.cause );
+            }
+        }
+        var _displayCode = ( typeof(code) == 'object' && code && typeof(code.status) != 'undefined' ) ? code.status : code;
+        console.error('[ BUNDLE ][ '+ self.appName +' ][ ref '+ ref +' ][ req '+ ( local.request._ginaReqId || '-' ) +' ] '+ local.request.method +' [ '+ _displayCode +' ] '+ local.request.url + ( _errDetail ? '\n'+ _errDetail : '' ));
+
         // #B131 — scope-gated stack egress. Feeders (router.js action/middleware
         // catches, server.js internals) pass `err.stack` pre-flattened as `msg`,
         // so outside local scope every emit below (the JSON XHR/API branches, the
         // inline HTML fallback, the custom-error page data built from `err`) would
         // carry absolute framework paths + stack frames to HTTP clients. Outside
-        // local scope: log the full text server-side (before this gate it only
-        // survived via the wire), then send the message line only / strip the
-        // field. Local scope stays byte-identical — the dev toolbar reads the
+        // local scope: send the message line only / strip the field — the full
+        // text is captured in EVERY scope by the #ERRREF pairing line above,
+        // keyed by the ref the client receives. Local scope stays byte-identical
+        // on the wire — the dev toolbar reads the
         // stack. The gate reads self.isLocalScope() — the same NODE_SCOPE_IS_LOCAL
         // env read as controller.js's module-level scope cache (both set once at
         // gna.js bootstrap), so the server-side and controller-side throwError
@@ -6334,12 +6479,13 @@ function Server(options) {
             if ( self.isLocalScope() ) {
                 return m;
             }
+            // #ERRREF — the full text (stack included) is logged by the pairing
+            // line at throwError entry, in every scope; this gate only shapes
+            // the WIRE copy now.
             if ( typeof(m) == 'string' && /\n\s+at\s/.test(m) ) {
-                console.error('[ BUNDLE ][ '+ self.appName +' ] '+ local.request.method +' [ '+ c +' ] '+ local.request.url +'\n'+ m);
                 return m.split('\n')[0];
             }
             if ( m && typeof(m) == 'object' && typeof(m.stack) != 'undefined' ) {
-                console.error('[ BUNDLE ][ '+ self.appName +' ] '+ local.request.method +' [ '+ c +' ] '+ local.request.url +'\n'+ m.stack);
                 m = JSON.clone(m);
                 delete m.stack;
             }
@@ -6394,7 +6540,8 @@ function Server(options) {
                     }
                 }
 
-                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
+                // #ERRREF — the request summary previously logged here is
+                // carried by the pairing line at throwError entry.
 
                 // The HTTP/1.1 flush must come AFTER completeHeaders: writeHead marks
                 // headers as sent and completeHeaders' header loop is
@@ -6407,23 +6554,25 @@ function Server(options) {
                     stream.respond(header);
                     stream.end(JSON.stringify({
                         status: code,
-                        error: msg
+                        error: msg,
+                        ref: ref
                     }));
 
                 } else {
                     res.writeHead(code, { 'content-type': _h1ContentType } );
                     res.end(JSON.stringify({
                         status  : code,
-                        error   : msg
+                        error   : msg,
+                        ref     : ref
                     }));
                 }
                 return;
 
             } else {
 
-                //console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] '+ local.request.url);
-                // console.error(local.request.method +' [ '+code+' ] '+ local.request.url);
-                console.error('[ BUNDLE ][ '+self.appName+' ] '+ local.request.method +' [ '+code+' ] \n'+ msg);
+                // #ERRREF — the summary + sanitized-msg line previously logged
+                // here is superseded by the full-detail pairing line at
+                // throwError entry (which carries the pre-sanitize text + ref).
                 // intercept none HTML mime types
                 // #B30: throwError is the central error responder, reached synchronously from many
                 // request callbacks; an unguarded decodeURI of a malformed-% URL here throws URIError →
@@ -6462,7 +6611,10 @@ function Server(options) {
                             bundle                  : self.appName,
                             status                  : code || null,
                             message                 : msg || null,
-                            pathname                : url
+                            pathname                : url,
+                            // #ERRREF — the custom error template can render
+                            // the same ref the JSON wire carries
+                            ref                     : ref
                         }
                     ;
 
@@ -6546,21 +6698,23 @@ function Server(options) {
                     if (stream.destroyed || stream.closed) { return; }
                     stream.respond(header);
                     if ( isHtmlContent && !hasCustomErrorFile ) {
-                        stream.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body></html>');
+                        stream.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '\n\nref '+ ref +'</pre></body></html>');
                     } else {
                         stream.end(JSON.stringify({
                             status  : code,
-                            error   : msg
+                            error   : msg,
+                            ref     : ref
                         }));
                     }
                 } else {
                     res.writeHead(code, { 'content-type': _h1ContentType } );
                     if ( isHtmlContent && !hasCustomErrorFile ) {
-                        res.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '</pre></body><html>');
+                        res.end('<html><body><pre><h1>Error '+ code +'.</h1><pre>'+ msg + '\n\nref '+ ref +'</pre></body><html>');
                     } else {
                         res.end(JSON.stringify({
                             status  : code,
-                            error   : msg
+                            error   : msg,
+                            ref     : ref
                         }))
                     }
                 }
