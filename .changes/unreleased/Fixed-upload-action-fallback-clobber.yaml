@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Staged file uploads: a file input that declares only its upload action (data-gina-form-upload-action) is no longer silently repointed at the reset/delete route. When a reset- or delete-action attribute was absent and a default route resolved, the fallback wrote the resolved URL onto the staging action attribute regardless of which attribute it was checking, so the staging POST went to the delete route. The fallback now writes the attribute it was actually checking. This is browser-bundled - rebuild your bundles (re-bake) to pick it up.'
-time: 2026-07-22T20:58:49+01:00

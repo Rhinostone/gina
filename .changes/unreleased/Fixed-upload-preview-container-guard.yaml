@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Staged file uploads: an upload no longer throws in its success handler when no preview element is present. The preview-container lookup treated a getElementById miss (null) as a real element, stored it, and later dereferenced it; it now requires a resolved element, so an upload configured without a preview target completes cleanly. This is browser-bundled - rebuild your bundles (re-bake) to pick it up.'
-time: 2026-07-22T20:58:50+01:00
