@@ -23,8 +23,10 @@
  *       untouched wire-emit shape (the sanitize is upstream of the emits).
  * §02 — behavioral: the EXTRACTED shipped helper (real bytes, no replica)
  *       drives both msg shapes × local/non-local, the frame detector against
- *       a REAL V8 stack, non-mutation of the caller's object, and the
- *       log-carries-what-the-wire-loses guarantee.
+ *       a REAL V8 stack, non-mutation of the caller's object, and that the
+ *       helper is log-free (#ERRREF moved the full-text capture to the
+ *       ref-paired line at throwError entry, EVERY scope — behavioral
+ *       coverage of that guarantee lives in test/core/error-ref.test.js).
  * §03 — sibling pins: render-json's reason-phrase ships err.message, never a
  *       stack (a multi-line reason phrase is invalid HTTP/1.1 anyway).
  * §04 — subtract: the non-local output differs from the pre-fix wire value on
@@ -84,7 +86,7 @@ describe('#B131 §01 — the scope gate is wired inside server-side throwError',
         assert.ok(secondCall > reshapeIdx, 'the reshaped msg must be sanitized too');
     });
 
-    it('the wire-emit shape is untouched — the sanitize is upstream of the emits', function () {
+    it('the wire-emit keeps its status/error shape (the #ERRREF ref rides alongside) — the sanitize is upstream of the emits', function () {
         assert.ok(T.indexOf('error: msg') > -1,   'HTTP/2 JSON emit keeps its shape');
         assert.ok(T.indexOf('error   : msg') > -1, 'HTTP/1.1 JSON emit keeps its shape');
     });
@@ -128,7 +130,7 @@ describe('#B131 §02 — the extracted shipped helper (real bytes) behaves', fun
         assert.equal(calls.length, 0);
     });
 
-    it('NON-local: a real stack string truncates to its message line; the log carries the full text', function () {
+    it('NON-local: a real stack string truncates to its message line; the helper is log-free (#ERRREF — the pairing line at entry owns the log)', function () {
         var calls = [];
         var fn = build(false, calls);
         var input = new Error('b131 wire').stack;
@@ -136,10 +138,10 @@ describe('#B131 §02 — the extracted shipped helper (real bytes) behaves', fun
         assert.equal(out, 'Error: b131 wire');
         assert.ok(out.indexOf('\n') < 0, 'single line on the wire');
         assert.ok(out.indexOf(' at ') < 0, 'no frames on the wire');
-        assert.equal(calls.length, 1);
-        assert.ok(calls[0].indexOf(' at ') > -1, 'the log carries the frames the wire loses');
-        assert.ok(calls[0].indexOf('b131 wire') > -1);
-        assert.ok(calls[0].indexOf('[ 500 ]') > -1, 'the log line names the status code');
+        // #ERRREF — the full-text capture moved to the ref-paired line at
+        // throwError entry (fires in EVERY scope, message-only errors
+        // included); error-ref.test.js drives that guarantee behaviorally.
+        assert.equal(calls.length, 0, 'the helper itself no longer logs');
     });
 
     it('NON-local: a plain single-line message passes through untouched, not logged', function () {
@@ -166,8 +168,7 @@ describe('#B131 §02 — the extracted shipped helper (real bytes) behaves', fun
         assert.equal(out.error, 'boom');
         assert.equal(out.message, 'boom');
         assert.ok(typeof input.stack != 'undefined', 'the caller object keeps its stack (non-mutation)');
-        assert.equal(calls.length, 1);
-        assert.ok(calls[0].indexOf('at site') > -1, 'the log carries the stripped stack');
+        assert.equal(calls.length, 0, 'the helper itself no longer logs (#ERRREF — the pairing line owns it)');
     });
 
     it('NON-local: an object msg WITHOUT a stack passes through, not logged', function () {

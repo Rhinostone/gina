@@ -13,6 +13,7 @@ const {promises: {readFile}} = require("fs");
 const { pipeline }  = require('stream/promises');
 const exec          = require('child_process').exec;
 var util            = require('util');
+var crypto          = require('crypto'); // #ERRREF incident-ref mint
 var promisify       = util.promisify;
 var EventEmitter    = require('events').EventEmitter;
 
@@ -74,6 +75,33 @@ var statusCodes     = requireJSON( _( getPath('gina').core + '/status.codes') );
 // cached at module load — these env vars never change at runtime (#P19)
 var _isDev          = process.env.NODE_ENV_IS_DEV && process.env.NODE_ENV_IS_DEV.toLowerCase() === 'true';
 var _isLocalScope   = process.env.NODE_SCOPE_IS_LOCAL && process.env.NODE_SCOPE_IS_LOCAL.toLowerCase() === 'true';
+
+/**
+ * #ERRREF — mint (or validate a caller-supplied) incident ref for error
+ * responses. Controller-side copy of the server-side helper — kept in sync
+ * with core/server.js `_mintErrorRef` (two deliberate local copies, the
+ * pruneDeadModuleChildren discipline: controller.js is evicted per request
+ * in dev, so a shared home would churn; the helper is 4 lines).
+ *
+ * The ref is a short correlation code returned as a top-level `ref` field
+ * on every `throwError` JSON error body — in ALL scopes — and paired
+ * server-side with the full error detail in the throwError log line, so a
+ * user-relayed ref resolves to the exact failure even where the stack
+ * egress gate strips the wire. A caller-supplied ref is honoured when
+ * relay-safe (bounded length, restricted charset — neutralises log
+ * forging); anything else gets a fresh 6-uppercase-hex mint.
+ *
+ * @private
+ * @param {string} [supplied] - caller/producer-provided ref candidate
+ * @returns {string} the supplied value when relay-safe (1-32 chars of
+ *  word chars, dots or dashes), else 6 fresh uppercase hex chars
+ */
+var _mintErrorRef = function(supplied) {
+    if ( typeof(supplied) == 'string' && /^[\w.\-]{1,32}$/.test(supplied) ) {
+        return supplied;
+    }
+    return crypto.randomBytes(3).toString('hex').toUpperCase();
+};
 var _isProdScope    = process.env.NODE_SCOPE_IS_PRODUCTION && process.env.NODE_SCOPE_IS_PRODUCTION.toLowerCase() === 'true';
 
 
@@ -5943,6 +5971,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * dispatched via `renderCustomError` are consumer-owned — what the
      * template renders from `req.params.errorObject` is the consumer's call.
      *
+     * #ERRREF — every JSON error body additionally carries a top-level
+     * `ref`: a short incident ref minted per error (or honoured from a
+     * relay-safe producer-set `ref` on the error object / msg), present in
+     * ALL scopes, and paired server-side with the full error detail plus
+     * the request correlation id in ONE error-level log line emitted BEFORE
+     * the strip — so what the wire loses stays findable from a user-relayed
+     * ref. The HTML surfaces (custom error page `eData.ref` + the inline
+     * fallback page) carry the same ref.
+     *
      * Polymorphic signatures:
      *   - `throwError(err)` — Error instance or errorObj `{status, error, ...}`
      *   - `throwError(code, err)` — 2-arg form: HTTP status + Error|string
@@ -6207,6 +6244,25 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     }
                 }
 
+                // #ERRREF — mint/honour the incident ref + the ONE full-detail
+                // pairing line, emitted BEFORE the egress strip below: outside
+                // local scope this is the only server-side capture of the full
+                // error on this path (the strip used to run with no pre-strip
+                // log, so a production API error's stack was lost entirely).
+                // The ref rides the wire as a top-level field in ALL scopes and
+                // pairs with the request correlation id (#M12b/#COMPLY2). Kept
+                // in sync with the server-side throwError twin (core/server.js).
+                errorObject.ref = _mintErrorRef(
+                    errorObject.ref || ( ( msg && typeof(msg) == 'object' ) ? msg.ref : undefined )
+                );
+                var _errDetail = errorObject.stack || errorObject.message
+                    || ( ( errorObject.error && typeof(errorObject.error) === 'object' ) ? JSON.stringify(errorObject.error) : errorObject.error )
+                    || '';
+                if ( msg && typeof(msg) == 'object' && msg.cause ) {
+                    _errDetail += '\ncaused by: '+ ( msg.cause.stack || msg.cause.message || msg.cause );
+                }
+                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ][ ref '+ errorObject.ref +' ][ req '+ ( ( req && req._ginaReqId ) || '-' ) +' ] '+ req.method +' [ '+ ( errorObject.status || res.statusCode ) +' ] '+ req.url + ( _errDetail ? '\n'+ _errDetail : '' ));
+
                 // Fail-closed: strip server-side stack from the JSON wire outside
                 // local scope so file paths, library versions, and internal stack
                 // frames don't leak to API clients. Local scope keeps it so the
@@ -6224,19 +6280,32 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         {
                             status  : errorObject.status,
                             error   : output,
-                            stack   : errorObject.stack || null
+                            stack   : errorObject.stack || null,
+                            ref     : errorObject.ref
                         }
                     );
                 }
 
-                // console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url +'\n'+ errorObject);
-                console.error('[ BUNDLE ][ '+ bundleConf.bundle +' ][ Controller ] '+ req.method +' ['+res.statusCode +'] '+ req.url +'\n'+ errOutput);
+                // #ERRREF — the post-strip wire-mirror log previously emitted
+                // here is superseded by the full-detail pairing line above
+                // (which carries strictly more: the pre-strip stack + the ref).
                 // Release per-request refs — req/res are local copies so res.end() below is unaffected.
                 local.req = null;
                 local.res = null;
                 local.next = null;
                 return res.end(errOutput);
             } else {
+
+                // #ERRREF — HTML-branch mint: one ref for the detail log line,
+                // the custom error page data (eData), and the inline fallback
+                // page. Same mint/honour contract as the JSON branch above.
+                var _errRef = _mintErrorRef(
+                    ( errorObject && errorObject.ref )
+                    || ( ( msg && typeof(msg) == 'object' ) ? msg.ref : undefined )
+                );
+                if ( errorObject ) {
+                    errorObject.ref = _errRef;
+                }
 
                 if ( errorObject && errorObject != 'null' && /object/i.test(typeof(errorObject)) ) {
                     // replaced: (errorObject.stack||errorObject.message) — both may be undefined for plain
@@ -6252,7 +6321,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     var _logMsg = errorObject.stack || errorObject.message
                         || (typeof(errorObject.error) === 'object' ? JSON.stringify(errorObject.error) : errorObject.error)
                         || JSON.stringify(errorObject);
-                    console.error(req.method +' [ '+ errorObject.status +' ] '+ req.url + '\n'+ _logMsg);
+                    console.error('[ ref '+ _errRef +' ][ req '+ ( ( req && req._ginaReqId ) || '-' ) +' ] '+ req.method +' [ '+ errorObject.status +' ] '+ req.url + '\n'+ _logMsg);
                 }
 
                  // intercept none HTML mime types
@@ -6300,6 +6369,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                     if ( errorObject ) {
                         eData = merge(errorObject, eData);
                     }
+                    // #ERRREF — the custom error template renders the same ref
+                    // the JSON wire carries (idempotent when the merge above
+                    // already brought errorObject.ref in).
+                    eData.ref = _errRef;
 
                     if ( typeof(msg) == 'object' ) {
                         if ( typeof(msg.stack) != 'undefined' ) {
@@ -6356,6 +6429,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 //     }
                 // }
                 var msgString = '<h1 class="status">Error '+ code +'.</h1>';
+                // #ERRREF — the inline fallback page shows the same ref the
+                // log line carries, so a viewer can relay it to support.
+                msgString += '<pre class="'+ eCode +' ref">ref '+ _errRef +'</pre>';
 
                 console.error('[ BUNDLE ][ '+ local.options.conf.bundle +' ][ Controller ] `this.'+ req.routing.param.control +'(...)` ['+res.statusCode +'] '+ req.url);
                 if ( typeof(msg) == 'object' ) {
