@@ -14851,7 +14851,12 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                 if (uploadActionUrl) {
                     console.info('Ignore previous warnings regarding upload. I have found a default `'+action+'` route: `'+ defaultRoute +'@'+ uploadActionUrl.bundle +'`');
-                    $el.setAttribute('data-gina-form-upload-action', uploadActionUrl.toUrl());
+                    // #B146 — write the attribute that was actually CHECKED (`action`),
+                    // not a hardcoded staging attribute. The reset-fallback used to
+                    // overwrite the staging action with the reset-default route URL, so
+                    // a file input declaring only its staging action had it silently
+                    // repointed at the delete route (the staging POST then hit delete).
+                    $el.setAttribute(action, uploadActionUrl.toUrl());
                 } else {
                     var errMsg = '`'+ action +'` needs to be defined to proceed for your `input[type=file]` with ID `'+ $el.id +'`\n'+ additionalErrorDetails +'\n';
                     if ($errorContainer) {
@@ -15822,7 +15827,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
                                                         ? $activePopin.$target.getElementById(previewContainer)
                                                         : document.getElementById(previewContainer);
 
-                                if ( typeof(previewContainer) != 'undefined' ) {
+                                // #B147 — previewContainer is a getElementById RESULT
+                                // (element or null); typeof(null) is 'object', so the
+                                // bare typeof check passed for a MISS, stored a null
+                                // container, and the success handler later dereferenced
+                                // it (TypeError). Require a truthy element — the
+                                // architecture-index typeof-null guard pattern.
+                                if ( typeof(previewContainer) != 'undefined' && previewContainer ) {
                                     hasPreviewContainer = true;
                                 }
 
