@@ -2892,6 +2892,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
         }
 
+        // #B150 — the removal loop matched zero previews against the input's
+        // customFiles, so NOTHING was removed: the tmp-delete XHR, the #R8
+        // indicator strip, and the removal callback below are all `removedCount>0`
+        // -gated and are about to be skipped, silently, leaving any staged tmp
+        // files on the server. That is expected when there was nothing to remove
+        // (an empty preview set), but a NON-EMPTY preview set that matched nothing
+        // is a state desync (e.g. a runtime-injected bind whose customFiles names
+        // do not line up with the rendered `data-upload-original-filename`s) —
+        // signal it so the otherwise-invisible skip is diagnosable. Signal-only:
+        // the `removedCount>0` gates STAY (no removal => no removal callback, #B94).
+        if (removedCount === 0 && childNodes.length > 0) {
+            console.warn('[FormValidator][upload]['+ ($uploadTrigger.id || '?') +'] '+ bindingType +': '+ childNodes.length +' preview(s) present but none matched the staged input files — nothing removed, cleanup skipped. Ensure each preview\'s `data-upload-original-filename` matches a current input file name.');
+        }
+
         // #R8 — at least one staged file the indicator reported is gone:
         // strip the upload-progress indicator entirely
         if (removedCount > 0) {
@@ -4856,12 +4870,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
             }
             var uploadActionUrl = $el.getAttribute(action);
             if (!uploadActionUrl || uploadActionUrl == '' ) {
-                if (!defaultRoute)
-                    console.warn('`'+ action +'` definition not found for `'+ $el.id + '`. Trying to get default route.');
+                // #B149 — an action with NO framework default route is legitimately
+                // optional at bind time. `data-gina-form-upload-delete-action` removes
+                // an ALREADY-SAVED file, so its endpoint is app-specific — the injected
+                // tmp routes cannot serve it and there is deliberately no default (see
+                // the public file-uploads guide). Its real enforcement is lazy, at the
+                // delete USE site (onUploadResetOrDelete throws when a delete actually
+                // fires with no URL). So a missing no-default action is a single debug,
+                // never the warn + error + $errorContainer write that used to paint a
+                // spurious error on every (re)bind of a working upload-only input.
+                if (!defaultRoute) {
+                    console.debug('`'+ action +'` not declared for `'+ $el.id +'` (no framework default; optional until a delete is triggered).');
+                    return;
+                }
                 var additionalErrorDetails = null;
                 try {
-                    if (defaultRoute)
-                        uploadActionUrl = routing.getRoute(defaultRoute);
+                    uploadActionUrl = routing.getRoute(defaultRoute);
                 } catch (err) {
                     additionalErrorDetails = err;
                 }

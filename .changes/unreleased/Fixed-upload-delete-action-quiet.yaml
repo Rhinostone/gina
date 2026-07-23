@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A file input that declares only its staging upload action (`data-gina-form-upload-action`) and relies on route defaults for the rest no longer emits a spurious warning-and-error pair — nor writes a visible error into the form''s error container — on every bind (and re-bind). The delete action (`data-gina-form-upload-delete-action`, which removes an already-saved file) deliberately has no framework default because its endpoint is app-specific, so its absence is now a quiet debug at bind time; the requirement is still enforced when a delete is actually triggered. Declaring the delete action explicitly — the previous workaround — is no longer needed. Browser-bundled: rebuild your bundles to pick it up.'
+time: 2026-07-23T09:14:00+01:00
