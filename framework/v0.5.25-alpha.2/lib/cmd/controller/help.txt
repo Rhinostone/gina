@@ -1,0 +1,38 @@
+**********************************
+* Controller command lines e.g.  *
+**********************************
+
+
+[ Adding a controller ]
+
+    Scaffold a NAMESPACE controller inside a bundle and print the routing.json
+    rules to wire it. gina creates controllers/controller.<name>.js with one
+    JSDoc'd action stub per --controls entry (or a single `default` action when
+    --controls is omitted), and PRINTS the routing rules for you to paste — it
+    never edits routing.json. Restart the bundle after pasting the rules.
+
+    The bundle flavor is auto-detected: a view bundle (one that has views, i.e.
+    a config/templates.json) gets self.render() stubs and one template per
+    action at templates/html/<name>/<action>.html; an API-only bundle gets
+    self.renderJSON() stubs and no templates.
+
+    Controller and action names: a lowercase letter followed by letters, digits
+    or underscores (e.g. `checkout`, `user_profile`). `controller` is reserved
+    (it is the default controller that every namespace controller inherits).
+
+    $ gina controller:add <name> <bundle> @<project>
+
+    With named actions
+    ----------
+    One action stub (and, for a view bundle, one template) is created per entry.
+
+    $ gina controller:add checkout demo @myproject --controls=start,confirm,cancel
+
+    Force the flavor (override the auto-detect)
+    ----------
+    --api forces renderJSON() stubs and writes no templates; --views forces
+    render() stubs + templates even on an API-only bundle (run gina view:add
+    first if the bundle has no view support yet).
+
+    $ gina controller:add webhooks demo @myproject --controls=ping --api
+    $ gina controller:add checkout demo @myproject --views
