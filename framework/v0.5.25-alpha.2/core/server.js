@@ -549,8 +549,21 @@ function Server(options) {
 
         // swig options
         var dir = conf.content.templates._common.html;
+        // Output auto-escaping — resolve from the bundle's swig settings,
+        // mirroring nunjucks (initNunjucksEngine reads _nunjucksSettings.autoescape
+        // from settings.nunjucks). `_swigSettings` is conf.content.settings.swig,
+        // already resolved above for the swig-package opt-in. ABSENT ⇒ false
+        // (unchanged behaviour; the previous read of `conf.autoescape` was never
+        // populated by config.js — measured dead). A non-boolean value refuses the
+        // boot: a security toggle must never be silently mis-typed (the
+        // audit.enabled strictly-boolean rule).
+        if ( typeof(_swigSettings.autoescape) != 'undefined'
+            && typeof(_swigSettings.autoescape) != 'boolean' ) {
+            throw new Error('[ SWIG ] settings.swig.autoescape must be a boolean (got: '+ JSON.stringify(_swigSettings.autoescape) +')');
+        }
         var swigOptions = {
-            autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
+            // was: autoescape: ( typeof(conf.autoescape) != 'undefined') ? conf.autoescape: false,
+            autoescape: (_swigSettings.autoescape === true),
             // #TPL2 — confined loader (swig-core basepath confinement, CVE-2023-25345).
             // gina no longer resolves any template OUTSIDE the bundle templates root:
             // the processed layout cache lives in-root (controller.render-swig.js

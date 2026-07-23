@@ -217,6 +217,11 @@
           "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig to use the Twig-syntax frontend. The abandoned upstream \"swig\" name is never accepted.",
           "enum": ["@rhinostone/swig", "@rhinostone/swig-twig"],
           "default": "@rhinostone/swig"
+        },
+        "autoescape": {
+          "type": "boolean",
+          "description": "Whether swig auto-escapes variable output (`{{ x }}`) by default, passed to swig.setDefaults({ autoescape }). Defaults to false today; set true to HTML-escape variable output as an XSS defense — nunjucks defaults to true (see settings.nunjucks.autoescape).",
+          "default": false
         }
       }
     },

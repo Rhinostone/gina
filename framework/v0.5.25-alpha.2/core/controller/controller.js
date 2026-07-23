@@ -883,8 +883,27 @@ function SuperController(options) {
         if (local.options.template || self.templates) {
             dir = local.options.template.html || self.templates;
 
+            // Output auto-escaping — this per-render setDefaults GOVERNS the
+            // default (no-loader) render path: it re-applies swig defaults on
+            // every request, overriding initSwigEngine's boot default. So it must
+            // read the SAME bundle setting (settings.swig.autoescape, mirroring
+            // settings.nunjucks.autoescape). `_tSwig` is guarded to {} exactly as
+            // initSwigEngine guards `_swigSettings`, so the strict `=== true`
+            // select yields a real boolean: ABSENT ⇒ false (unchanged behaviour,
+            // byte-identical to the old `: false` — including the JSON.clone'd
+            // copy read by swig.getOptions(), where an `undefined` would be
+            // dropped); a non-boolean value was already refused at boot by
+            // initSwigEngine.
+            var _swigAutoescape = false;
+            try {
+                var _tSwig = ( getConfig()[local.options.conf.bundle][local.options.conf.env].content.settings.swig ) || {};
+                _swigAutoescape = ( _tSwig.autoescape === true );
+            } catch (_swigAeErr) {
+                _swigAutoescape = false;
+            }
             var swigOptions = {
-                autoescape  : ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
+                // was: autoescape: ( typeof(local.options.autoescape) != 'undefined') ? local.options.autoescape : false,
+                autoescape  : _swigAutoescape,
                 // `memory` is no working yet ... advanced rendering setup required
                 // cache       : (local.options.isCacheless) ? false : 'memory'
                 cache       : false
