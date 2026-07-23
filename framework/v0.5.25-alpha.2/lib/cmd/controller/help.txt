@@ -72,3 +72,34 @@
     routing.json is still never edited.
 
     $ gina controller:remove checkout demo @myproject --force
+
+
+
+[ Renaming a controller ]
+
+    Rename a NAMESPACE controller in place, rewriting the structured references
+    to the old namespace so nothing dangles. gina moves
+    controllers/controller.<old>.js to controller.<new>.js, moves the
+    templates/html/<old>/ tree, and rewrites the old namespace at the sites it can
+    do safely: the routing.json namespace values (rule-level `namespace` and
+    `param.namespace`, via comment-preserving string edits) and every
+    requireController('<old>') call. Unlike controller:remove, rename DOES edit
+    routing.json — but only those values. A full plan is shown first, then it asks
+    for confirmation before applying (all-or-nothing).
+
+    Anything a static rewrite cannot resolve — a `:variable` namespace, a
+    non-literal requireController(...), or the cosmetic controller class name — is
+    REPORTED for you to fix by hand, never rewritten.
+
+    $ gina controller:rename <old> <new> <bundle> @<project>
+    $ gina controller:rename checkout basket demo @myproject
+
+    Preview / apply without a prompt
+    ----------
+    --dry-run shows the full plan and any residuals without changing anything
+    (add --format=json for a machine-readable envelope). --force applies without
+    the interactive confirmation.
+
+    $ gina controller:rename checkout basket demo @myproject --dry-run
+    $ gina controller:rename checkout basket demo @myproject --dry-run --format=json
+    $ gina controller:rename checkout basket demo @myproject --force
