@@ -1,5 +1,8 @@
 [
   "--controls",
   "--api",
-  "--views"
+  "--views",
+  "--dry-run",
+  "--force",
+  "--format"
 ]
