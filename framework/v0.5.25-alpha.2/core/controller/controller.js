@@ -5561,7 +5561,7 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     }
 
     /**
-     * Returns `true` when the authenticated session user holds `role` (#COMPLY1).
+     * Returns `true` when the authenticated caller holds `role` (#COMPLY1).
      *
      * The imperative escape hatch, for an action that authorizes mid-logic — the
      * declarative `routing.json` `param.roles` gate covers the whole-route case and
@@ -5570,6 +5570,11 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *
      * Delegates to `lib/authz-gate`'s predicate, so "holding a role" means here exactly
      * what it means at the gate — an absent or non-array `user.roles` holds none.
+     *
+     * The caller is the EFFECTIVE principal: the session user when present, else
+     * a #MS3 machine caller the authz gate verified from `Authorization: Bearer`
+     * (`req.machineCaller` — its configured `auth.machine.callers.<name>.roles`
+     * answer here exactly like a session user's roles).
      *
      * @param {string} role - The role name to test for.
      * @returns {boolean} `false` for an unauthenticated request (and for a released one).
@@ -5590,7 +5595,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             return false;
         }
         var session = getSession();
-        var user    = ( session && session.user ) ? session.user : null;
+        // #MS3 — the effective principal: the session user when present (session
+        // wins, mirroring the authz gate's own precedence), else the machine
+        // caller the gate stamped on `req.machineCaller` from a verified
+        // `Authorization: Bearer` key — so a machine caller's configured roles
+        // answer `self.hasRole()` exactly like a signed-in user's.
+        var user    = ( session && session.user )
+            ? session.user
+            : ( ( local.req.machineCaller && typeof(local.req.machineCaller) == 'object' ) ? local.req.machineCaller : null );
 
         return lib.authzGate.hasAnyRole(user, [ role ]);
     }

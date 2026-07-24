@@ -1024,7 +1024,77 @@ function Server(options) {
                 }
                 _authzLoginRoute = _authzPath;
             }
-            process.gina._authConf = { loginRoute: _authzLoginRoute };
+
+            // #MS3 — machine-caller authentication: lint + precompute at BOOT.
+            // `settings.json > auth.machine` declares named machine callers
+            // (services, job runners, external systems) whose
+            // `Authorization: Bearer <key>` admits them through the authz gate
+            // without a session. Same three boot-resolution buys as the
+            // requireAuth/roles/policy lint above: an O(1) request-path read
+            // off `process.gina._authConf.machine`, fail-fast on author error
+            // (the quietly-OFF class — a truthy-string `enabled` or a
+            // malformed caller must never leave the control silently off or a
+            // caller silently locked out), and boot-config semantics (an
+            // `auth.machine` change needs a bundle restart). Keys support
+            // `${secret:KEY}` — resolved by config-load (lib/secrets) before
+            // this block runs, so it sees the real value. Only the sha256 hash
+            // of each key is RETAINED: the gate compares fixed-length digests
+            // (`crypto.timingSafeEqual`, no length oracle) and the raw key
+            // does not linger in process memory past this loop.
+            var _authzMachine = { enabled: false, callers: {} };
+            if ( typeof(_authzSettings.machine) != 'undefined' && _authzSettings.machine !== null ) {
+                if ( typeof(_authzSettings.machine) != 'object' || Array.isArray(_authzSettings.machine) ) {
+                    throw new Error('[ SERVER ] `settings.json > auth.machine` must be an object.');
+                }
+                var _authzMachineConf = _authzSettings.machine;
+                if ( typeof(_authzMachineConf.enabled) != 'undefined' && typeof(_authzMachineConf.enabled) != 'boolean' ) {
+                    throw new Error('[ SERVER ] `settings.json > auth.machine.enabled` must be a boolean (got `'+ typeof(_authzMachineConf.enabled) +'`). A truthy string would silently NOT enable machine authentication.');
+                }
+                _authzMachine.enabled = ( _authzMachineConf.enabled === true );
+                if ( typeof(_authzMachineConf.callers) != 'undefined' && _authzMachineConf.callers !== null ) {
+                    if ( typeof(_authzMachineConf.callers) != 'object' || Array.isArray(_authzMachineConf.callers) ) {
+                        throw new Error('[ SERVER ] `settings.json > auth.machine.callers` must be an object map (callerName -> { key, roles }).');
+                    }
+                    for (var _authzCn in _authzMachineConf.callers) {
+                        var _authzCaller = _authzMachineConf.callers[_authzCn];
+                        if ( typeof(_authzCaller) != 'object' || _authzCaller === null || Array.isArray(_authzCaller) ) {
+                            throw new Error('[ SERVER ] `auth.machine.callers > '+ _authzCn +'` must be an object ({ key, roles }).');
+                        }
+                        if ( typeof(_authzCaller.key) != 'string' || _authzCaller.key === '' ) {
+                            throw new Error('[ SERVER ] `auth.machine.callers > '+ _authzCn +'`: `key` must be a non-empty string. Use a `${secret:KEY}` placeholder to keep the value out of the config file.');
+                        }
+                        // `roles` — OPTIONAL, but when declared: the same lint as route
+                        // `param.roles` (a non-empty-strings array). Absent means the
+                        // caller holds NO roles: it can pass `requireAuth`-only routes,
+                        // never role-gated ones.
+                        var _authzCallerRoles = [];
+                        if ( typeof(_authzCaller.roles) != 'undefined' && _authzCaller.roles !== null ) {
+                            if ( !Array.isArray(_authzCaller.roles) ) {
+                                throw new Error('[ SERVER ] `auth.machine.callers > '+ _authzCn +'`: `roles` must be an array of role names.');
+                            }
+                            for (var _authzCri = 0; _authzCri < _authzCaller.roles.length; ++_authzCri) {
+                                if ( typeof(_authzCaller.roles[_authzCri]) != 'string' || _authzCaller.roles[_authzCri] === '' ) {
+                                    throw new Error('[ SERVER ] `auth.machine.callers > '+ _authzCn +'`: `roles` must contain only non-empty strings (index '+ _authzCri +' is '+ ( _authzCaller.roles[_authzCri] === '' ? 'an empty string' : 'a `'+ typeof(_authzCaller.roles[_authzCri]) +'`' ) +').');
+                                }
+                            }
+                            _authzCallerRoles = _authzCaller.roles.slice();
+                        }
+                        _authzMachine.callers[_authzCn] = {
+                            keyHash : crypto.createHash('sha256').update(_authzCaller.key, 'utf8').digest(),
+                            roles   : _authzCallerRoles
+                        };
+                    }
+                }
+                if ( _authzMachine.enabled === true && Object.keys(_authzMachine.callers).length === 0 ) {
+                    // Legal (fail-closed — nothing can authenticate), but a mis-pasted
+                    // config should be visible at boot rather than debugged per request.
+                    console.warn('[ SERVER ] `auth.machine.enabled` is true but `auth.machine.callers` declares no caller — machine authentication is ON but can admit nobody.');
+                }
+            }
+            process.gina._authConf = { loginRoute: _authzLoginRoute, machine: _authzMachine };
+            if ( _authzMachine.enabled === true ) {
+                console.debug('[ BUNDLE ][ server ][ init ] Machine-caller authentication ENABLED — '+ Object.keys(_authzMachine.callers).length +' caller(s) for [ '+ self.appName +' ]');
+            }
             if ( _authzCount > 0 ) {
                 var _authzParts = [];
                 if ( _authzRolesCount > 0 )  { _authzParts.push(_authzRolesCount +' role-gated'); }

@@ -69,7 +69,7 @@ var crypto = require('crypto');
  * @property {string}  id        - Record id (`crypto.randomUUID()`).
  * @property {number}  ts        - Epoch ms at emit time.
  * @property {?string} requestId - `req._ginaReqId` (always-on since slice 1); null off-request.
- * @property {{key: *, roles: string[]}} actor - Snapshot: `session.user[actorKey]` + a COPY of `user.roles`. NEVER the whole user object (PII).
+ * @property {{key: *, roles: string[], machine: boolean=}} actor - Snapshot: `session.user[actorKey]` + a COPY of `user.roles`. NEVER the whole user object (PII). For a #MS3 machine caller (no session): the caller NAME as `key`, its configured roles, plus `machine: true`.
  * @property {string}  action    - App-defined verb, e.g. `"invoice.delete"`; framework auto-events use `"authz.denied"`.
  * @property {*}       [resource] - App-defined subject, e.g. an id — present only when the caller passed one.
  * @property {object}  [meta]     - App-defined extras — present only when passed. Framework authz auto-events carry `{ outcome: '401'|'login-bounce'|'403-roles'|'403-policy' }` here.
@@ -173,7 +173,9 @@ function createFileStore(filePath) {
  *
  * @inner
  * @param   {?object} req
- * @returns {{key: *, roles: string[]}} `{ key: null, roles: [] }` when unauthenticated or off-request.
+ * @returns {{key: *, roles: string[], machine: boolean=}} `{ key: null, roles: [] }` when
+ *          unauthenticated or off-request; `{ key: <callerName>, roles, machine: true }`
+ *          for a #MS3 machine caller (no session, `req.machineCaller` stamped by the gate).
  */
 function deriveActor(req) {
     var user = (
@@ -182,6 +184,26 @@ function deriveActor(req) {
     ) ? req.session.user : null;
 
     if (!user) {
+        // #MS3 — a machine caller authenticated by the authz gate (Bearer key)
+        // carries its identity on `req.machineCaller`, never on the session.
+        // The caller NAME is the actor key (`actorKey` is a session-user
+        // concept — a machine principal has no configurable id property), the
+        // roles are COPIED for the same mutation-isolation reason as the
+        // session path, and the record is marked `machine: true` so a reader
+        // can tell machine actors from human ones. Session wins by
+        // construction: this branch is only reached when no session user
+        // exists — mirroring the gate's own precedence.
+        var machine = (
+            req && req.machineCaller && typeof req.machineCaller === 'object'
+            && typeof req.machineCaller.name === 'string' && req.machineCaller.name
+        ) ? req.machineCaller : null;
+        if (machine) {
+            return {
+                key     : machine.name,
+                roles   : Array.isArray(machine.roles) ? machine.roles.slice() : [],
+                machine : true
+            };
+        }
         return { key: null, roles: [] };
     }
     var key = (typeof user[_conf.actorKey] !== 'undefined' && user[_conf.actorKey] !== null)

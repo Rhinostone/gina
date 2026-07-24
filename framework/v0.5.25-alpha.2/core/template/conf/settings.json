@@ -193,8 +193,39 @@
   //                would receive the login PAGE as its response body).
   //                The bounce is always a non-cacheable 302.
   //                Changing this needs a bundle restart (boot config).
+  //
+  //   machine  — #MS3 machine-caller authentication (service-to-service). When
+  //              enabled, a request presenting `Authorization: Bearer <key>`
+  //              matching a configured caller passes the authz gate WITHOUT a
+  //              session: it satisfies `requireAuth`, its configured `roles`
+  //              match route `roles` exactly like a session user's, and route
+  //              policies receive it as `{ name, roles, machine: true }`.
+  //              STRICTLY opt-in (enabled defaults false, fail-closed; a
+  //              non-boolean refuses to boot). Session wins: a signed-in
+  //              request never consults the machine path. Enabling admits
+  //              configured callers to ALL gated routes subject to roles /
+  //              policy — keep a route human-only by requiring a role no
+  //              caller holds. Keys: prefer ${secret:KEY} placeholders
+  //              (lib/secrets fills them from process.env at config-load) and
+  //              long random values (32+ bytes); compared in constant time
+  //              against boot-computed sha256 hashes — raw keys are not
+  //              retained after boot. A presented-but-invalid key gets a clean
+  //              401 (`WWW-Authenticate: Bearer`), never the login bounce.
+  //              The caller NAME becomes the audit-trail actor key
+  //              (audit records carry `machine: true`).
+  //              Changing this needs a bundle restart (boot config). Example:
+  //                "machine": {
+  //                  "enabled": true,
+  //                  "callers": {
+  //                    "billing": { "key": "${secret:BILLING_SVC_KEY}", "roles": ["service"] }
+  //                  }
+  //                }
   "auth": {
-    "loginRoute": null
+    "loginRoute": null,
+    "machine": {
+      "enabled": false,
+      "callers": {}
+    }
   },
   // #COMPLY2 — audit trail (written by lib/audit: self.audit() in your actions,
   // plus framework auto-events). Distinct from application logging — the trail

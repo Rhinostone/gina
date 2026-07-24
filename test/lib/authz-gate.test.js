@@ -196,7 +196,9 @@ describe('§01 — source pins: the gate is wired at both dispatch sites, before
 
     it('06. core/server.js lints the flag and resolves the login route at boot', function () {
         assert.match(SERVER_SRC, /param\.requireAuth` must be a boolean/);
-        assert.match(SERVER_SRC, /process\.gina\._authConf\s*=\s*\{ loginRoute: _authzLoginRoute \}/);
+        // #MS3 widened the one-shot boot write to carry the machine registry —
+        // the invariant (conf resolved ONCE onto _authConf) is unchanged.
+        assert.match(SERVER_SRC, /process\.gina\._authConf\s*=\s*\{ loginRoute: _authzLoginRoute, machine: _authzMachine \}/);
     });
 
     it('07. the gate reads the boot-resolved conf — never a per-request config clone', function () {
@@ -525,8 +527,12 @@ describe('§07 — login-route resolution (pure-logic replica of the core/server
 describe('§08 — roles (slice 2): ANY-of match, implied authentication, generic 403', function () {
 
     it('01. source pin — the gate authenticates BEFORE it matches roles (401 precedes 403)', function () {
-        var authIdx  = GATE_SRC.indexOf('!isAuthenticated(req)');
-        var rolesIdx = GATE_SRC.indexOf('hasAnyRole(req.session.user, param.roles)');
+        // #MS3 realignment: the gate resolves an effective principal (session
+        // wins, else machine caller) — the authN check is the code-unique
+        // `if ( isAuthenticated(req) )` call site, and roles now match against
+        // `principal`. The ordering invariant is unchanged.
+        var authIdx  = GATE_SRC.indexOf('if ( isAuthenticated(req) )');
+        var rolesIdx = GATE_SRC.indexOf('hasAnyRole(principal, param.roles)');
         assert.ok(authIdx > -1, 'the authN check');
         assert.ok(rolesIdx > -1, 'the roles check');
         assert.ok(authIdx < rolesIdx,
@@ -800,27 +806,30 @@ describe('§11 — the policy escape hatch (slice 3): AND-composed after roles, 
     }
 
     it('01. DECISIVE (can-fail validated) — the roles check precedes the policy run', function () {
-        var rolesIdx  = GATE_SRC.indexOf('hasAnyRole(req.session.user, param.roles)');
-        var policyIdx = GATE_SRC.indexOf('runPolicy(controller, req, param.policy, req.session.user)');
+        // #MS3 realignment: both call sites now take the effective principal.
+        var rolesIdx  = GATE_SRC.indexOf('hasAnyRole(principal, param.roles)');
+        var policyIdx = GATE_SRC.indexOf('runPolicy(controller, req, param.policy, principal)');
         assert.ok(rolesIdx > -1, 'the roles check');
         assert.ok(policyIdx > -1, 'the policy run');
         assert.ok(rolesIdx < policyIdx, 'roles must be matched before the policy runs (authN -> roles -> policy)');
 
         // The pin reads the ORDER, so a source with the two swapped must flip it.
         var perturbed = GATE_SRC
-            .replace('hasAnyRole(req.session.user, param.roles)', '__ROLES_MOVED__')
-            .replace('runPolicy(controller, req, param.policy, req.session.user)', 'hasAnyRole(req.session.user, param.roles)')
-            .replace('__ROLES_MOVED__', 'runPolicy(controller, req, param.policy, req.session.user)');
+            .replace('hasAnyRole(principal, param.roles)', '__ROLES_MOVED__')
+            .replace('runPolicy(controller, req, param.policy, principal)', 'hasAnyRole(principal, param.roles)')
+            .replace('__ROLES_MOVED__', 'runPolicy(controller, req, param.policy, principal)');
         assert.notEqual(perturbed, GATE_SRC, 'the perturbation must actually change the source');
         assert.ok(
-            perturbed.indexOf('hasAnyRole(req.session.user, param.roles)') > perturbed.indexOf('runPolicy(controller, req, param.policy, req.session.user)'),
+            perturbed.indexOf('hasAnyRole(principal, param.roles)') > perturbed.indexOf('runPolicy(controller, req, param.policy, principal)'),
             'CONTROL: the pin must FAIL on a swapped source — otherwise it reads nothing'
         );
     });
 
     it('02. source pin — the gate authenticates BEFORE it runs the policy (401 precedes 403)', function () {
-        var authIdx   = GATE_SRC.indexOf('!isAuthenticated(req)');
-        var policyIdx = GATE_SRC.indexOf('runPolicy(controller, req, param.policy, req.session.user)');
+        // #MS3 realignment: the authN check is the code-unique effective-principal
+        // resolution; the policy run takes the principal. Ordering unchanged.
+        var authIdx   = GATE_SRC.indexOf('if ( isAuthenticated(req) )');
+        var policyIdx = GATE_SRC.indexOf('runPolicy(controller, req, param.policy, principal)');
         assert.ok(authIdx > -1 && policyIdx > -1);
         assert.ok(authIdx < policyIdx,
             'authN must run first: an unauthenticated caller must never learn the route is policy-restricted');

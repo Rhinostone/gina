@@ -116,6 +116,27 @@
  * — so the property IS the contract and the shim stays a userland convenience.
  * Populating it at login is the application's job (later #COMPLY3 ships helpers).
  *
+ * ## The machine-caller path (#MS3 — service-to-service callers)
+ * A caller that cannot hold a session — another bundle via `self.query()`, a
+ * job runner, an external service — authenticates per request with
+ * `Authorization: Bearer <key>` against `settings.json > auth.machine`
+ * (opt-in, fail-closed; `core/server.js` lints it at boot and precomputes a
+ * sha256 hash per configured caller onto `process.gina._authConf.machine`, so
+ * the request path compares fixed-length digests and never retains a raw key).
+ * SESSION WINS: the machine resolution runs only when no authenticated session
+ * is present, and only for GATED routes — an un-gated route never pays a
+ * compare, and `enabled: false` (the default) is byte-identical to the
+ * pre-#MS3 gate. On a match the gate stamps
+ * `req.machineCaller = { name, roles, machine: true }` — the effective
+ * principal for roles matching and for policies (which can discriminate via
+ * `principal.machine === true`), and the identity `lib/audit`'s `deriveActor`
+ * and the controller's `self.hasRole` read. A PRESENTED but invalid Bearer
+ * credential gets a clean 401 + `WWW-Authenticate: Bearer` and NEVER the
+ * login bounce (a 302-to-login is meaningless to a service client); per-route
+ * granularity rides `roles` — keep a route human-only by requiring a role no
+ * configured caller holds, or machine-only by requiring a role only callers
+ * hold. There is deliberately NO per-route opt-in key.
+ *
  * ## Why the bounce is a 302 + no-store, unconditionally
  * `controller.redirect()` cannot be reused for it: it defaults to a **cacheable
  * 301** (`req.routing.param.code || 301`, read off whichever route object the
@@ -140,6 +161,14 @@
  * @inner
  */
 var audit = require('../../audit/src/main');
+
+/**
+ * #MS3 — the machine-caller token digest + compare. Node built-in, no
+ * dependency edge added.
+ *
+ * @inner
+ */
+var crypto = require('crypto');
 
 /**
  * Read the boot-resolved login-bounce target.
@@ -173,6 +202,118 @@ var getLoginRoute = function () {
  */
 var isAuthenticated = function (req) {
     return ( req.session && typeof(req.session) == 'object' && req.session.user ) ? true : false;
+};
+
+/**
+ * #MS3 — read the boot-built machine-caller registry.
+ *
+ * `core/server.js` lints `settings.json > auth.machine` at boot and writes
+ * `{ enabled, callers: { <name>: { keyHash, roles } } }` onto
+ * `process.gina._authConf.machine` — the `_policies` / `loginRoute` precedent:
+ * the request path costs an O(1) property read, never a config walk. A boot
+ * that predates #MS3 (or a test fixture carrying only `loginRoute`) simply has
+ * no `machine` key, which this treats as disabled.
+ *
+ * @returns {object|null} the machine conf, or `null` when absent/disabled.
+ * @inner
+ * @private
+ */
+var getMachineConf = function () {
+    var conf = ( typeof(process.gina) != 'undefined' && process.gina && process.gina._authConf )
+        ? process.gina._authConf
+        : null;
+
+    return ( conf && conf.machine && typeof(conf.machine) == 'object' ) ? conf.machine : null;
+};
+
+/**
+ * #MS3 — extract the presented Bearer token, or `null` when the request
+ * carries none.
+ *
+ * The parse mirrors `lib/mcp-http`'s `Authorization: Bearer` verifier (the
+ * framework's one true Bearer precedent): case-insensitive scheme, the token
+ * is everything after the whitespace, trimmed. An empty-after-trim token
+ * (e.g. `Authorization: Bearer  ` — whitespace only) is treated as NOT
+ * presented, so it degrades to the ordinary unauthenticated path instead of
+ * the machine 401.
+ *
+ * @param {object} req - the request (reads `req.headers.authorization`).
+ * @returns {string|null} the presented token, or `null`.
+ * @inner
+ * @private
+ */
+var getBearerToken = function (req) {
+    var header = ( req && req.headers && typeof(req.headers['authorization']) == 'string' )
+        ? req.headers['authorization']
+        : '';
+    var m = /^Bearer\s+(.+)$/i.exec(header);
+    if ( !m ) {
+        return null;
+    }
+    var token = m[1].trim();
+    return ( token !== '' ) ? token : null;
+};
+
+/**
+ * #MS3 — verify a presented Bearer token against every configured caller and,
+ * on a match, stamp + return the machine principal.
+ *
+ * The presented token is sha256-hashed ONCE, then compared to each caller's
+ * boot-precomputed key hash via `crypto.timingSafeEqual`. Hashing BOTH sides
+ * makes every compare fixed-length (32 bytes), so neither the compare nor the
+ * scan leaks key length or content — a deliberate tightening over the
+ * framework's raw length-guard compare sites, whose short-circuit on unequal
+ * length is a (minor) length oracle. The scan visits callers until a match;
+ * an INVALID token always pays the full scan, so its timing reveals only the
+ * number of configured callers — config, not secret.
+ *
+ * The principal is stamped on `req.machineCaller` so the downstream identity
+ * readers — `lib/audit`'s `deriveActor`, the controller's `self.hasRole` —
+ * see the same resolution without a second verification. `roles` is a COPY
+ * (`.slice()`), mirroring `deriveActor`'s mutation-isolation discipline.
+ *
+ * Fail-closed at every step: no callers, malformed registry entry, hash
+ * mismatch — all return `null` and stamp nothing.
+ *
+ * @param {object} req    - the request (stamped with `machineCaller` on success).
+ * @param {object} mconf  - the boot-built machine conf (`getMachineConf()`, enabled).
+ * @param {string} token  - the presented Bearer token (`getBearerToken()`, non-empty).
+ * @returns {object|null} `{ name, roles, machine: true }`, or `null`.
+ * @inner
+ * @private
+ */
+var verifyMachineToken = function (req, mconf, token) {
+    var callers = ( mconf.callers && typeof(mconf.callers) == 'object' ) ? mconf.callers : {};
+    var names   = Object.keys(callers);
+    if ( names.length === 0 ) {
+        return null;
+    }
+
+    var presentedHash = crypto.createHash('sha256').update(token, 'utf8').digest();
+
+    for (var i = 0; i < names.length; ++i) {
+        var entry = callers[names[i]];
+        if ( !entry || !Buffer.isBuffer(entry.keyHash) || entry.keyHash.length !== presentedHash.length ) {
+            continue;   // malformed registry entry — never a match, never a throw
+        }
+        var matched = false;
+        try {
+            matched = crypto.timingSafeEqual(presentedHash, entry.keyHash);
+        } catch (err) {
+            matched = false;
+        }
+        if ( matched ) {
+            var principal = {
+                name    : names[i],
+                roles   : Array.isArray(entry.roles) ? entry.roles.slice() : [],
+                machine : true
+            };
+            req.machineCaller = principal;
+            return principal;
+        }
+    }
+
+    return null;
 };
 
 /**
@@ -426,6 +567,48 @@ var denyUnauthenticated = function (controller, req, res) {
 };
 
 /**
+ * #MS3 — terminate a request that PRESENTED a Bearer credential the machine
+ * registry rejects: a clean **401** carrying `WWW-Authenticate: Bearer`
+ * (RFC 6750/7235 — a 401 to a Bearer-credentialed caller names the scheme),
+ * and NEVER the login bounce — a 302-to-login is meaningless to a service
+ * client, and XHR-ness is irrelevant here: the presented credential already
+ * identifies the caller as a machine.
+ *
+ * The header is set BEFORE `throwError` so it rides the same response the
+ * error writer emits — both engines' response objects expose `setHeader`,
+ * and `throwError` sends via `res.writeHead`, which merges previously-set
+ * headers (Node semantics). Best-effort: a response without `setHeader`
+ * (bare test stubs) still gets the 401 itself.
+ *
+ * The body stays the generic `Authentication required` — whether the token
+ * was unknown, malformed or stale is not disclosed to the caller that
+ * failed it (the `denyForbidden` disclosure rationale, applied to authN).
+ *
+ * @param {object} controller - the per-request controller (its `throwError` writes the 401).
+ * @param {object} req        - the request.
+ * @param {object} res        - the response (the `WWW-Authenticate` header is set on it).
+ * @returns {boolean} always `false` — the gate has answered; the router must return.
+ * @inner
+ * @private
+ */
+var denyMachineUnauthenticated = function (controller, req, res) {
+    try {
+        if ( res && !res.headersSent && typeof(res.setHeader) == 'function' ) {
+            res.setHeader('WWW-Authenticate', 'Bearer');
+        }
+    } catch (err) {
+        // best-effort — the 401 itself is the contract
+    }
+
+    audit.emitAuthzDenied(req, '401-machine'); // #COMPLY2 auto-event — contained, never affects the denial
+    controller.throwError({
+        status : 401,
+        error  : 'Authentication required'
+    });
+    return false;
+};
+
+/**
  * Terminate an AUTHENTICATED request that fails an authorization check: a **403**
  * with a deliberately GENERIC body.
  *
@@ -474,7 +657,10 @@ var denyForbidden = function (controller, req, reason, outcome) {
  * @param {object} controller - the per-request controller (its `throwError` writes the 403).
  * @param {object} req        - the request, handed to the policy as its 2nd argument.
  * @param {string} name       - the route's declared `param.policy`.
- * @param {object} user       - `req.session.user`, handed to the policy as its 1st argument.
+ * @param {object} user       - the effective principal, handed to the policy as its 1st
+ *                              argument: `req.session.user`, or the #MS3 machine caller
+ *                              (`{ name, roles, machine: true }` — a policy discriminates
+ *                              via `user.machine === true`).
  * @returns {boolean} `true` to continue to the action, `false` when denied (403 written).
  * @inner
  * @private
@@ -513,12 +699,20 @@ var runPolicy = function (controller, req, name, user) {
  * policy-restricted, only that it requires signing in). Roles and policy are
  * AND-composed: a route declaring both needs both to pass.
  *
+ * AuthN resolves the EFFECTIVE principal: the session user when authenticated
+ * (session wins), else — when `auth.machine` is enabled — the #MS3 machine
+ * caller verified from a presented `Authorization: Bearer` key. A presented
+ * but rejected Bearer credential terminates with the clean machine 401
+ * (`WWW-Authenticate: Bearer`), never the login bounce.
+ *
  * @param {object} controller - the per-request controller (its `throwError` / `pauseRequest`
  *                              write the response).
  * @param {object} req        - the request. Reads `req.routing.param.requireAuth`,
  *                              `req.routing.param.roles`, `req.routing.param.policy`,
- *                              `req.session.user` (and its `.roles`), `req.isXMLRequest`
- *                              and `req[method]`.
+ *                              `req.session.user` (and its `.roles`),
+ *                              `req.headers.authorization` (#MS3, gated routes only),
+ *                              `req.isXMLRequest` and `req[method]`; stamps
+ *                              `req.machineCaller` on a machine match.
  * @param {object} res        - the response (the bounce writes to it directly).
  * @returns {boolean} `true` to continue to the action, `false` when the gate has already
  *                    terminated the response (401 / 302 / 403).
@@ -556,18 +750,45 @@ var authorizeRequest = function (controller, req, res) {
         return true;   // the route declares no authorization — nothing to do
     }
 
-    if ( !isAuthenticated(req) ) {
+    // The effective principal: the SESSION user when authenticated (session
+    // wins — the machine path is never consulted for a signed-in caller),
+    // else the #MS3 machine caller resolved from a presented Bearer key.
+    var principal = null;
+    if ( isAuthenticated(req) ) {
+        principal = req.session.user;
+    } else {
+        var mconf = getMachineConf();
+        if ( mconf && mconf.enabled === true ) {
+            var token = getBearerToken(req);
+            if ( token !== null ) {
+                principal = verifyMachineToken(req, mconf, token);
+                if ( !principal ) {
+                    // PRESENTED but rejected: the clean machine 401
+                    // (WWW-Authenticate), never the login bounce.
+                    return denyMachineUnauthenticated(controller, req, res);
+                }
+            }
+        }
+        // Machine auth disabled, or no Bearer presented: the pre-#MS3 path,
+        // byte-identical (bounce or plain 401 per denyUnauthenticated).
+    }
+
+    if ( !principal ) {
         return denyUnauthenticated(controller, req, res);
     }
 
     // authN passed — from here every denial is a 403, never a 401.
-    if ( mustMatchRoles && !hasAnyRole(req.session.user, param.roles) ) {
-        return denyForbidden(controller, req, 'the session user holds none of the required roles', '403-roles');
+    if ( mustMatchRoles && !hasAnyRole(principal, param.roles) ) {
+        return denyForbidden(controller, req,
+            ( principal.machine === true )
+                ? 'the machine caller holds none of the required roles'
+                : 'the session user holds none of the required roles',
+            '403-roles');
     }
 
     // Roles AND policy: a route declaring both has already passed roles by here.
     if ( mustRunPolicy ) {
-        return runPolicy(controller, req, param.policy, req.session.user);
+        return runPolicy(controller, req, param.policy, principal);
     }
 
     return true;
