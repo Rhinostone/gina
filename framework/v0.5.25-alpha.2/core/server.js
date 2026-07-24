@@ -3584,6 +3584,26 @@ function Server(options) {
                 response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
             }
 
+            // ── /_gina/health/check — liveness probe (always-on, UNGATED) ───────────────
+            // (MS2) Engine-agnostic mirror of the Isaac handler (server.isaac.js ~:1105).
+            // GET only, returns {status:"healthy", timestamp}. Deliberately UNGATED — no
+            // dev gate and no admin/metrics IP allowlist: it exposes no process state, and
+            // liveness probes (kubelet, Docker HEALTHCHECK, LB) originate off-loopback, so
+            // an allowlist would defeat the endpoint's purpose. Uses the express idiom
+            // (setHeader/statusCode/end), NOT the Isaac stream / _setPoweredByHeader. Kept
+            // in sync with the isaac fast-path per the /_gina/* built-in endpoint rule.
+            if (
+                request.method.toUpperCase() === 'GET'
+                && /\/_gina\/health\/check$/i.test(request.url)
+            ) {
+                response.setHeader('content-type',  'application/json; charset=utf8');
+                response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
+                response.setHeader('pragma',        'no-cache');
+                response.setHeader('expires',       '0');
+                response.statusCode = 200;
+                return response.end(JSON.stringify({ status: 'healthy', timestamp: new Date().toISOString() }));
+            }
+
             // ── /_gina/metrics — Prometheus exposition (always-on, opt-in via app.json) ──
             // (#OBS1 slice 2) Engine-agnostic mirror of the Isaac handler. Method gate
             // is GET only; IP allowlist comes from app.json `metrics.allowFrom` (default

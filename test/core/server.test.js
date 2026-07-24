@@ -845,6 +845,98 @@ describe('#S7 — admin /_gina/* IP allowlist (express-engine mirror)', function
 });
 
 
+// ─── MS2 — /_gina/health/check liveness on the express engine (isaac parity) ───
+//
+// The isaac engine has always served an ungated GET /_gina/health/check
+// ({status:"healthy", timestamp}); the default express engine 404'd it — a
+// /_gina/* endpoint-sync-rule gap that forced express-engine bundles onto isaac
+// just to satisfy a kubelet / Docker HEALTHCHECK liveness probe. server.js now
+// mirrors it, UNGATED (a liveness probe exposes no process state and originates
+// off-loopback), via the express response idiom rather than isaac's stream /
+// _setPoweredByHeader. Readiness (503-on-drain) is a tracked MS2 fast-follow.
+
+describe('MS2 — /_gina/health/check liveness (express-engine mirror + isaac parity)', function () {
+
+    var src, isaacSrc, healthBlk, healthAt, metricsAt;
+
+    before(function () {
+        src      = fs.readFileSync(SOURCE, 'utf8');
+        isaacSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.isaac.js'), 'utf8');
+        healthAt  = src.indexOf('_gina\\/health\\/check$');
+        metricsAt = src.indexOf('_gina\\/metrics$');
+        // Bound the handler block to CODE only — from its own `if (` (below the
+        // doc comment) up to the /_gina/metrics regex — so the idiom / gating
+        // assertions never trip on the doc comment's prose (which names the
+        // isaac idiom it deliberately avoids).
+        var ifAt = (healthAt > -1) ? src.lastIndexOf('if (', healthAt) : -1;
+        healthBlk = (ifAt > -1 && metricsAt > ifAt) ? src.slice(ifAt, metricsAt) : '';
+    });
+
+    // ── source-structure pins (express-engine handler wiring) ───────────────
+
+    it('defines a GET /_gina/health/check handler ordered before /_gina/metrics', function () {
+        assert.ok(healthAt > -1, '/_gina/health/check regex anchor not found in server.js');
+        assert.ok(metricsAt > healthAt, 'the ungated liveness handler must precede /_gina/metrics');
+        assert.ok(/method\.toUpperCase\(\) === 'GET'/.test(healthBlk), 'must gate on GET');
+    });
+
+    it('returns 200 {status:"healthy", timestamp:<ISO>}', function () {
+        assert.ok(/status:\s*['"]healthy['"]/.test(healthBlk), 'must return status:"healthy"');
+        assert.ok(healthBlk.indexOf('new Date().toISOString()') > -1, 'timestamp must be an ISO string (isaac parity)');
+        assert.ok(healthBlk.indexOf('statusCode = 200') > -1, 'must respond 200');
+    });
+
+    it('is UNGATED — no admin allowlist, no dev gate, no deny/unavailable path', function () {
+        assert.ok(healthBlk.indexOf('isClientAllowed') < 0, 'liveness must NOT be admin-gated');
+        assert.ok(healthBlk.indexOf('isCacheless') < 0, 'liveness must NOT be dev-gated (it is a production probe target)');
+        assert.ok(healthBlk.indexOf('statusCode = 403') < 0 && healthBlk.indexOf('statusCode = 503') < 0,
+            'no deny/unavailable path in this slice (readiness 503-on-drain is a tracked fast-follow)');
+    });
+
+    it('uses the express idiom, not isaac stream / _setPoweredByHeader', function () {
+        assert.ok(healthBlk.indexOf('response.end(') > -1, 'must respond via response.end()');
+        assert.ok(healthBlk.indexOf('response.stream') < 0 && healthBlk.indexOf('_setPoweredByHeader') < 0,
+            'express mirror must not use isaac-only response.stream / _setPoweredByHeader');
+    });
+
+    it('parity: the isaac engine still serves the same health endpoint (not dropped from either engine)', function () {
+        var iAt = isaacSrc.indexOf('_gina\\/health\\/check$');
+        assert.ok(iAt > -1, 'isaac must still match /_gina/health/check');
+        assert.ok(/status:\s*['"]healthy['"]/.test(isaacSrc.slice(iAt, iAt + 400)),
+            'isaac health handler must still return status:"healthy"');
+    });
+
+    // ── pure-logic replica of the method+regex gate and JSON body ────────────
+    // The regex is the exact one in server.js; no live server needed.
+    function healthResponse(method, url) {
+        if (String(method).toUpperCase() === 'GET' && /\/_gina\/health\/check$/i.test(url)) {
+            return { status: 200, body: { status: 'healthy', timestamp: new Date().toISOString() } };
+        }
+        return null; // falls through to the next handler / router
+    }
+
+    it('replica: GET /_gina/health/check → 200 {status:"healthy"} with a valid ISO timestamp', function () {
+        var r = healthResponse('GET', '/_gina/health/check');
+        assert.ok(r, 'must match');
+        assert.equal(r.status, 200);
+        assert.equal(r.body.status, 'healthy');
+        assert.ok(!Number.isNaN(Date.parse(r.body.timestamp)), 'timestamp must be a valid date');
+    });
+
+    it('replica: case-insensitive (isaac parity) + end-anchored (webroot prefix still matches)', function () {
+        assert.ok(healthResponse('GET', '/_gina/HEALTH/check'), 'case-insensitive like isaac');
+        assert.ok(healthResponse('GET', '/some/webroot/_gina/health/check'), 'end-anchored: a path prefix still matches');
+    });
+
+    it('replica: non-GET or a different path does not match', function () {
+        assert.equal(healthResponse('POST', '/_gina/health/check'), null, 'POST must not match');
+        assert.equal(healthResponse('GET',  '/_gina/health/checkup'), null, 'must anchor at end ($)');
+        assert.equal(healthResponse('GET',  '/_gina/health'), null, 'partial path must not match');
+    });
+
+});
+
+
 // ─── #COMPLY2 slice 1 — the always-on request-id (the audit correlation key) ───
 //
 // The audit trail (#COMPLY2) correlates every record to its originating request. The
