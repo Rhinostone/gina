@@ -978,9 +978,22 @@ function Couchbase(conn, infos) {
 
                             conn._cluster.query(query, queryOptions)
                                 .catch( function onError(err) {
-                                    try {
-                                        var error = new Error(err.cause.first_error_message);
+                                    // #B153 — guard the N1QL `cause` envelope. A socket-level /
+                                    // pre-query failure (node warming up, connection loss) has no
+                                    // `cause`; reading err.cause.first_error_message on it threw a
+                                    // TypeError that the catch below swallowed, so onQueryCallback
+                                    // never fired and the request hung forever. Build a usable error
+                                    // on BOTH paths (forwarding the raw error preserves its
+                                    // code/errno for downstream classification) and always settle.
+                                    var error;
+                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+                                        error = new Error(err.cause.first_error_message);
                                         error.stack = trigger +'\n'+ err.cause.http_body;
+                                        error.cause = err.cause;
+                                    } else {
+                                        error = (err instanceof Error) ? err : new Error(String(err));
+                                    }
+                                    try {
                                         onQueryCallback(error);
                                     } catch (_err) {
                                         console.error(_err.stack);
@@ -1016,9 +1029,22 @@ function Couchbase(conn, infos) {
                             }
                             conn._cluster.query(query, queryOptions)
                                 .catch( function onError(err) {
-                                    try {
-                                        var error = new Error(err.cause.first_error_message);
+                                    // #B153 — guard the N1QL `cause` envelope. A socket-level /
+                                    // pre-query failure (node warming up, connection loss) has no
+                                    // `cause`; reading err.cause.first_error_message on it threw a
+                                    // TypeError that the catch below swallowed, so onQueryCallback
+                                    // never fired and the request hung forever. Build a usable error
+                                    // on BOTH paths (forwarding the raw error preserves its
+                                    // code/errno for downstream classification) and always settle.
+                                    var error;
+                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+                                        error = new Error(err.cause.first_error_message);
                                         error.stack = trigger +'\n'+ err.cause.http_body;
+                                        error.cause = err.cause;
+                                    } else {
+                                        error = (err instanceof Error) ? err : new Error(String(err));
+                                    }
+                                    try {
                                         onQueryCallback(error);
                                     } catch (_err) {
                                         console.error(_err.stack);
@@ -1269,8 +1295,19 @@ function Couchbase(conn, infos) {
                             // _startMs is kept for the Flow tab timeline (#FI)
                             _biQueryEntry.error = err.message || String(err);
                         }
-                        var error = new Error(err.cause.first_error_message);
-                        error.stack = trigger +'\n'+ err.cause.http_body;
+                        // #B153 — guard the N1QL `cause` envelope (see the register() onError
+                        // sites): a socket-level failure has no `cause`, and reading
+                        // err.cause.first_error_message on it threw a swallowed TypeError so
+                        // self.emit never fired and the request hung. Emit a usable error on
+                        // BOTH paths (the raw error preserves its code/errno).
+                        var error;
+                        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+                            error = new Error(err.cause.first_error_message);
+                            error.stack = trigger +'\n'+ err.cause.http_body;
+                            error.cause = err.cause;
+                        } else {
+                            error = (err instanceof Error) ? err : new Error(String(err));
+                        }
                         self.emit(trigger, error);
                     } catch (_err) {
                         console.error(_err.stack);
