@@ -46,9 +46,17 @@ describe('#CE1 §01 — classify: transient families', function () {
         ['mysql deadlock',        { code: 'ER_LOCK_DEADLOCK' },      'mysql:deadlock'],
         ['mysql lock wait',       { code: 'ER_LOCK_WAIT_TIMEOUT' },  'mysql:lock-wait-timeout'],
         ['mysql too many conn',   { code: 'ER_CON_COUNT_ERROR' },    'mysql:too-many-connections'],
-        // sqlite
+        // sqlite — string-code form (better-sqlite3 style)
         ['sqlite busy',           { code: 'SQLITE_BUSY' },           'sqlite:busy'],
         ['sqlite locked',         { code: 'SQLITE_LOCKED' },         'sqlite:locked'],
+        // sqlite — node:sqlite numeric errcode form (the connector's ACTUAL
+        // driver; MEASURED shape: code ERR_SQLITE_ERROR + errcode, never
+        // code SQLITE_BUSY)
+        ['node:sqlite busy (measured shape)',
+            { code: 'ERR_SQLITE_ERROR', errcode: 5, errstr: 'database is locked' }, 'sqlite:busy'],
+        ['node:sqlite locked errcode 6',    { errcode: 6 },          'sqlite:locked'],
+        ['node:sqlite BUSY_RECOVERY 261 (extended -> primary 5)',
+            { errcode: 261 },                                        'sqlite:busy'],
         // postgres SQLSTATE
         ['pg serialization',      { code: '40001' },                 'postgres:serialization-failure'],
         ['pg deadlock',           { code: '40P01' },                 'postgres:deadlock'],
@@ -100,6 +108,13 @@ describe('#CE1 §02 — classify: permanent (the discriminating negative control
         ['a plain Error with a message only',        new Error('boom')],
         ['a name not in the transient set',          { name: 'MongoServerError' }],
         ['a cause with a permanent N1QL code',       { cause: { first_error_code: 3000 } }],
+        ['N1QL 12009 generic DML (covers duplicate-key — deliberately permanent)',
+                                                     { cause: { first_error_code: 12009 } }],
+        ['mongo code 7 HostNotFound (the server-side ENOTFOUND — deliberately permanent)',
+                                                     { code: 7 }],
+        ['node:sqlite constraint errcode 1555 (measured dup-key control)',
+                                                     { code: 'ERR_SQLITE_ERROR', errcode: 1555, errstr: 'constraint failed' }],
+        ['node:sqlite generic error errcode 1',      { errcode: 1 }],
         ['null',                                     null],
         ['undefined',                                undefined],
         ['a string',                                 'not an error'],

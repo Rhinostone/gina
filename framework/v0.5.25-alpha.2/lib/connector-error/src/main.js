@@ -100,8 +100,11 @@ var TRANSIENT_NAME = {
  * @constant {Object.<number,string>}
  */
 var TRANSIENT_MONGO_CODE = {
+    // NOTE: code 7 (HostNotFound) is deliberately ABSENT — it is the server-side
+    // sibling of ENOTFOUND (a name that does not resolve), which this module
+    // classifies as a configuration error, not a blip. Code 6 (HostUnreachable)
+    // stays: it is the network-level condition, consistent with EHOSTUNREACH.
     6     : 'mongo:host-unreachable',
-    7     : 'mongo:host-not-found',
     89    : 'mongo:network-timeout',
     91    : 'mongo:shutdown-in-progress',
     133   : 'mongo:failed-to-satisfy-read-preference',
@@ -136,8 +139,11 @@ var TRANSIENT_PG_SQLSTATE = {
  * @constant {Object.<number,string>}
  */
 var TRANSIENT_N1QL_CODE = {
-    1080  : 'couchbase:timeout',    // N1QL request timeout
-    12009 : 'couchbase:dml-error'   // DML error — commonly retryable (CAS mismatch, etc.)
+    // NOTE: 12009 (generic DML error) is deliberately ABSENT — it also covers
+    // duplicate-key inserts, which are PERMANENT everywhere else in this module.
+    // The server's own `cause.retry === true` flag (checked separately) is the
+    // honest signal for a retryable DML failure such as a CAS mismatch.
+    1080  : 'couchbase:timeout'     // N1QL request timeout
 };
 
 /**
@@ -171,9 +177,24 @@ function classify(err) {
             return { isTransient: true, reason: TRANSIENT_SOCKET[err.errno] };
         }
 
-        // 2. string driver codes (mysql / sqlite)
+        // 2. string driver codes (mysql / sqlite-as-string)
         if (typeof code === 'string' && TRANSIENT_DRIVER_CODE[code]) {
             return { isTransient: true, reason: TRANSIENT_DRIVER_CODE[code] };
+        }
+
+        // 2b. node:sqlite numeric errcode (MEASURED shape: a busy error carries
+        //     code 'ERR_SQLITE_ERROR' + errcode 5, never code 'SQLITE_BUSY').
+        //     Match on the PRIMARY result code (low byte) so extended codes work
+        //     too — e.g. 261 SQLITE_BUSY_RECOVERY -> 5. A constraint violation
+        //     (errcode 1555 -> primary 19) stays permanent.
+        if (typeof err.errcode === 'number') {
+            var sqlitePrimary = err.errcode & 0xff;
+            if (sqlitePrimary === 5) {
+                return { isTransient: true, reason: 'sqlite:busy' };
+            }
+            if (sqlitePrimary === 6) {
+                return { isTransient: true, reason: 'sqlite:locked' };
+            }
         }
 
         // 3. postgres SQLSTATE — exact codes, plus the whole '08' connection class
