@@ -2964,6 +2964,16 @@ function SuperController(options) {
             requestOptions.headers['x-forwarded-for'] = local.req.headers['x-forwarded-for']
         }
 
+        // MS1 — forward the always-on correlation id so a fan-out stays traceable.
+        // Source is the sanitised, resolved req._ginaReqId (never a raw inbound
+        // header); a caller that set x-request-id explicitly always wins.
+        if (
+            local.req && local.req._ginaReqId
+            && typeof(requestOptions.headers['x-request-id']) == 'undefined'
+        ) {
+            requestOptions.headers['x-request-id'] = local.req._ginaReqId;
+        }
+
         var browser = require(''+ scheme);
 
         try {
@@ -3762,6 +3772,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             options.headers['x-ingress-ip'] = local.req.headers['x-ingress-ip']
         }
 
+        // MS1 — forward the always-on correlation id (sanitised req._ginaReqId);
+        // a caller-set x-request-id always wins.
+        if ( local.req != null && local.req._ginaReqId && typeof(options.headers['x-request-id']) == 'undefined' ) {
+            options.headers['x-request-id'] = local.req._ginaReqId;
+        }
+
         if ( /https/.test(options.scheme) && typeof(options.ca) == 'undefined' ) {
             console.warn('[ CONTROLLER ][ HTTPS/1.1#query ] options.ca not found !');
         }
@@ -4337,6 +4353,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         if ( local.req != null && typeof(local.req.headers['x-ingress-ip']) != 'undefined' && local.req.headers['x-ingress-ip'] != options.headers['x-ingress-ip'] ) {
             options.headers['x-ingress-ip'] = local.req.headers['x-ingress-ip']
+        }
+
+        // MS1 — forward the always-on correlation id (sanitised req._ginaReqId);
+        // a caller-set x-request-id always wins.
+        if ( local.req != null && local.req._ginaReqId && typeof(options.headers['x-request-id']) == 'undefined' ) {
+            options.headers['x-request-id'] = local.req._ginaReqId;
         }
 
         // replaced: delete operator + for...in + forEach-delete — build filtered object in one pass (#P20, #P22)

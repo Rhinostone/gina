@@ -3584,6 +3584,14 @@ function Server(options) {
                 response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION );
             }
 
+            // MS1 — echo the always-on correlation id on every response so a
+            // caller / LB / APM can read it back (the read-side of X-Request-Id
+            // propagation). Ungated (independent of log format) and guarded
+            // against an already-sent response.
+            if ( request._ginaReqId && !response.headersSent ) {
+                response.setHeader('X-Request-Id', request._ginaReqId);
+            }
+
             // ── /_gina/health/check — liveness probe (always-on, UNGATED) ───────────────
             // (MS2) Engine-agnostic mirror of the Isaac handler (server.isaac.js ~:1105).
             // GET only, returns {status:"healthy", timestamp}. Deliberately UNGATED — no
