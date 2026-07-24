@@ -12,6 +12,10 @@
  * bundle with a factory DTO) was run during the build and confirmed a real
  * requestBody / responses / un-collapsed param schema — a scaffold boot is too
  * heavy for the unit suite, so the replica is the automated proxy.
+ *
+ * §03/§04 cover the authorization contract (securitySchemes + per-operation
+ * security + 401/403 on gated routes): §03 pins the wiring, §04 EXECUTES the
+ * shipped helper bytes (control-gated extraction — no replica to drift).
  */
 var { describe, it } = require('node:test');
 var assert = require('node:assert/strict');
@@ -197,5 +201,148 @@ describe('bundle:openapi §02 — replica: DTO emit is real (not inert)', functi
         assert.equal(res.properties.passwordHash, undefined);
         assert.deepEqual(Object.keys(res.properties), ['id', 'email']);
         assert.deepEqual(res.required, ['id'], 'required+excluded left required[] too');
+    });
+});
+
+
+/**
+ * Extracts a self-contained `var <name> = function(...) {...}` expression from
+ * SRC by brace-matching and compiles those exact bytes. Control-gated: the
+ * caller asserts the declaration exists exactly once before trusting the
+ * extraction (an extraction that cannot fail is not a control). Only safe for
+ * bodies with no braces inside string literals — true for both auth helpers.
+ */
+function extractFn(src, decl) {
+    var declIdx = src.indexOf(decl);
+    assert.ok(declIdx > -1, 'declaration found: ' + decl);
+    assert.equal(src.indexOf(decl, declIdx + 1), -1, 'declaration appears exactly once');
+    var braceIdx = declIdx + decl.length - 1;           // the trailing `{` of the decl string
+    assert.equal(src[braceIdx], '{', 'decl string ends at the opening brace');
+    var depth = 1, i = braceIdx + 1;
+    for (; i < src.length && depth > 0; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') depth--;
+    }
+    assert.equal(depth, 0, 'braces balanced');
+    var fnSrc = src.slice(src.indexOf('function', declIdx), i);
+    assert.equal(fnSrc[fnSrc.length - 1], '}', 'extraction ends at the close brace');
+    var fn = new Function('return (' + fnSrc + ');')();
+    assert.equal(typeof fn, 'function', 'extraction compiles');
+    return fn;
+}
+
+
+describe('bundle:openapi §03 — auth contract source pins', function () {
+    it('03.1 - settings.json is read via requireJSON (comment-tolerant), never a plain require', function () {
+        assert.ok(SRC.indexOf('settings = requireJSON(settingsPath)') > -1, 'requireJSON read');
+        assert.ok(SRC.indexOf('settings = require(settingsPath)') === -1, 'plain-require form retired file-wide');
+    });
+    it('03.2 - hasMachineAuth mirrors the runtime fail-closed reading (strict enabled + a credential source)', function () {
+        assert.ok(SRC.indexOf('var hasMachineAuth = function(settings) {') > -1);
+        assert.ok(SRC.indexOf('machine.enabled !== true') > -1, 'strict boolean gate — a truthy string emits nothing');
+        assert.match(SRC, /Object\.keys\(machine\.callers\)\.length > 0/, 'non-empty callers is a credential source');
+        assert.match(SRC, /typeof\(machine\.authenticator\) == 'string'\s*&&\s*machine\.authenticator !== ''/, 'named authenticator is a credential source');
+    });
+    it('03.3 - applyAuthContract gates on the exact runtime authz predicate', function () {
+        assert.ok(SRC.indexOf('var applyAuthContract = function(operation, param, machineAuth) {') > -1);
+        assert.ok(SRC.indexOf('param.requireAuth === true || hasRoles || hasPolicy') > -1, 'strict-true requireAuth, roles/policy imply');
+        assert.match(SRC, /Array\.isArray\(param\.roles\) && param\.roles\.length > 0/);
+        assert.match(SRC, /typeof\(param\.policy\) == 'string' && param\.policy !== ''/);
+    });
+    it('03.4 - the bearerAuth scheme is http/bearer and emitted only under the machine-auth gate', function () {
+        assert.match(SRC, /bearerAuth:\s*\{\s*type:\s*'http',\s*scheme:\s*'bearer'/, 'contiguous scheme shape');
+        assert.match(SRC, /var machineAuth = hasMachineAuth\(settings\);\s*if \(machineAuth\) \{\s*spec\.components = \{/, 'components assigned only inside the gate');
+        assert.equal(SRC.match(/spec\.components/g).length, 1, 'no other components writer');
+    });
+    it('03.5 - the per-operation security requirement + the loop call site', function () {
+        assert.ok(SRC.indexOf('operation.security = [ { bearerAuth: [] } ];') > -1);
+        assert.ok(SRC.indexOf('applyAuthContract(operation, route.param || {}, machineAuth);') > -1);
+    });
+    it('03.6 - 401 in both branches, 403 once; role/policy names never emitted as extensions', function () {
+        assert.equal(SRC.match(/operation\.responses\['401'\]/g).length, 2, 'machine + session branches');
+        assert.equal(SRC.match(/operation\.responses\['403'\]/g).length, 1);
+        assert.ok(SRC.indexOf('x-required-roles') === -1, 'no vendor extension naming roles');
+        assert.ok(SRC.indexOf('x-required-policy') === -1, 'no vendor extension naming the policy');
+    });
+});
+
+
+describe('bundle:openapi §04 — auth contract behavior (executing the shipped bytes)', function () {
+    var hasMachineAuthFn  = extractFn(SRC, 'var hasMachineAuth = function(settings) {');
+    var applyAuthContract = extractFn(SRC, 'var applyAuthContract = function(operation, param, machineAuth) {');
+
+    var freshOp = function () {
+        return { operationId: 'x', responses: { '200': { description: 'Successful response' } } };
+    };
+
+    it('04.1 - hasMachineAuth: fail-closed matrix', function () {
+        assert.equal(hasMachineAuthFn(null), false, 'null settings');
+        assert.equal(hasMachineAuthFn({}), false, 'no auth block');
+        assert.equal(hasMachineAuthFn({ auth: null }), false, 'null auth');
+        assert.equal(hasMachineAuthFn({ auth: {} }), false, 'no machine block');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: false, callers: { svc: { key: 'k' } } } } }), false, 'disabled');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: 'true', callers: { svc: { key: 'k' } } } } }), false, 'truthy STRING enabled emits nothing (fail-closed mirror)');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: true } } }), false, 'enabled but no credential source');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: true, callers: {} } } }), false, 'empty callers map');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: true, callers: {}, authenticator: '' } } }), false, 'empty authenticator string');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: true, callers: { svc: { key: 'k' } } } } }), true, 'one caller suffices');
+        assert.equal(hasMachineAuthFn({ auth: { machine: { enabled: true, authenticator: 'jwt' } } }), true, 'authenticator-only suffices');
+    });
+
+    it('04.2 - a non-gated route is byte-untouched (with and without machine auth)', function () {
+        var control = freshOp();
+        var op1 = freshOp();
+        applyAuthContract(op1, {}, true);
+        assert.deepEqual(op1, control, 'empty param, machine on');
+        var op2 = freshOp();
+        applyAuthContract(op2, { control: 'home', dto: 'OA_Create' }, false);
+        assert.deepEqual(op2, control, 'ungated param keys, machine off');
+        var op3 = freshOp();
+        applyAuthContract(op3, { requireAuth: 'true' }, true);
+        assert.deepEqual(op3, control, 'a truthy-STRING requireAuth does not gate (matches the runtime === true test)');
+        var op4 = freshOp();
+        applyAuthContract(op4, { roles: [], policy: '' }, true);
+        assert.deepEqual(op4, control, 'empty roles / empty policy do not gate');
+    });
+
+    it('04.3 - requireAuth + machine auth: security + 401, no 403, 200 preserved', function () {
+        var op = freshOp();
+        applyAuthContract(op, { requireAuth: true }, true);
+        assert.deepEqual(op.security, [ { bearerAuth: [] } ]);
+        assert.equal(op.responses['401'].description, 'Authentication required');
+        assert.equal(op.responses['403'], undefined, 'authN-only route never advertises a 403');
+        assert.equal(op.responses['200'].description, 'Successful response', 'existing responses preserved');
+    });
+
+    it('04.4 - requireAuth without machine auth: session-prose 401, NO security array', function () {
+        var op = freshOp();
+        applyAuthContract(op, { requireAuth: true }, false);
+        assert.equal(op.security, undefined, 'no honest scheme to reference');
+        assert.ok(op.responses['401'].description.indexOf('authenticated session') > -1, 'session prose carries the credential story');
+        assert.equal(op.responses['403'], undefined);
+    });
+
+    it('04.5 - roles/policy add the 403 — and their NAMES never reach the spec', function () {
+        var opRoles = freshOp();
+        applyAuthContract(opRoles, { roles: ['admin', 'editor'] }, true);
+        assert.deepEqual(opRoles.security, [ { bearerAuth: [] } ], 'roles imply requireAuth');
+        assert.ok(opRoles.responses['401'], '401 present');
+        assert.ok(opRoles.responses['403'], '403 present');
+        var emitted = JSON.stringify(opRoles);
+        assert.ok(emitted.indexOf('admin') === -1 && emitted.indexOf('editor') === -1, 'role names never emitted');
+
+        var opPolicy = freshOp();
+        applyAuthContract(opPolicy, { policy: 'ownsInvoice' }, false);
+        assert.ok(opPolicy.responses['403'], 'policy implies the 403');
+        assert.equal(opPolicy.security, undefined);
+        assert.ok(JSON.stringify(opPolicy).indexOf('ownsInvoice') === -1, 'policy name never emitted');
+    });
+
+    it('04.6 - a gated redirect-branch operation gains the 401 alongside its 3xx', function () {
+        var op = { operationId: 'r', responses: { '301': { description: 'Redirect to /next' } } };
+        applyAuthContract(op, { requireAuth: true }, true);
+        assert.ok(op.responses['301'], 'redirect response untouched');
+        assert.ok(op.responses['401'], '401 added');
+        assert.deepEqual(op.security, [ { bearerAuth: [] } ]);
     });
 });

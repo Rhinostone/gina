@@ -12,6 +12,14 @@ var console     = lib.logger;
  * bundles in a project.  The spec is written to each bundle's config directory
  * as `openapi.json` by default, or to a custom path via `--output`.
  *
+ * Gated routes (`param.requireAuth` / `param.roles` / `param.policy`) carry
+ * their authorization contract: a `401` response entry (+ a `403` when
+ * roles/policy add authorization beyond authentication), and — when
+ * machine-caller auth (`settings.json > auth.machine`) is effectively
+ * configured — a `components.securitySchemes.bearerAuth` scheme plus a
+ * per-operation `security` requirement. Role and policy names are never
+ * emitted into the spec.
+ *
  * Usage:
  *  gina bundle:openapi <bundle_name> @<project_name>
  *  gina bundle:openapi @<project_name>                       (all bundles)
@@ -93,13 +101,22 @@ function OpenAPI(opt, cmd) {
                 return end( new Error('Failed to parse routing.json for bundle [ '+ bundle +' ]: '+ parseErr.message) );
             }
 
-            // Optional: read settings.json for region info
+            // Optional: read settings.json — `auth.machine` drives securitySchemes
+            // emission. requireJSON, not a plain require: real settings.json files
+            // carry comment lines that would make a plain require throw, silently
+            // leaving `settings` null.
             var settings = null;
             if ( fs.existsSync(settingsPath) ) {
                 if ( typeof(require.cache[settingsPath]) != 'undefined' ) {
                     delete require.cache[require.resolve(settingsPath)];
                 }
-                try { settings = require(settingsPath) } catch(e) { /* ignore */ }
+                try {
+                    settings = requireJSON(settingsPath)
+                } catch(e) {
+                    // The spec's security emission depends on settings.json —
+                    // a parse failure is worth a warning, not a silent null.
+                    console.warn('[ '+ bundle +' ] Failed to parse settings.json — emitting spec without securitySchemes: '+ e.message);
+                }
             }
 
             // Resolve port info for the server URL
@@ -147,12 +164,93 @@ function OpenAPI(opt, cmd) {
 
 
     /**
+     * Tells whether machine-caller authentication (`settings.json > auth.machine`,
+     * the #MS3 shape) is effectively configured for the bundle.
+     *
+     * Mirrors the runtime's fail-closed reading: true only when `enabled` is
+     * strictly `true` (the boot lint's boolean rule — a truthy string emits
+     * nothing) AND at least one credential source exists: a non-empty `callers`
+     * map, or a custom `authenticator` module name.
+     *
+     * @private
+     * @param {object|null} settings - Parsed settings.json (may be null)
+     * @returns {boolean} True when the `bearerAuth` scheme should be emitted
+     */
+    var hasMachineAuth = function(settings) {
+        if ( !settings || typeof(settings.auth) != 'object' || settings.auth === null ) {
+            return false;
+        }
+        var machine = settings.auth.machine;
+        if ( !machine || typeof(machine) != 'object' ) {
+            return false;
+        }
+        if ( machine.enabled !== true ) {
+            return false;
+        }
+
+        var hasCallers = ( typeof(machine.callers) == 'object'
+                            && machine.callers !== null
+                            && Object.keys(machine.callers).length > 0 );
+        var hasAuthenticator = ( typeof(machine.authenticator) == 'string'
+                            && machine.authenticator !== '' );
+
+        return ( hasCallers || hasAuthenticator );
+    };
+
+
+    /**
+     * Applies the authorization contract to an operation when its route is
+     * gated. A route is gated exactly when the runtime authz gate would act:
+     * `param.requireAuth === true`, a non-empty `param.roles` array, or a
+     * non-empty `param.policy` string (roles/policy imply requireAuth).
+     *
+     * Emits the observable contract only: a `401` response on every gated
+     * route (+ a `403` when roles/policy add authorization beyond
+     * authentication), and — when machine-caller auth is configured — the
+     * per-operation `security` requirement referencing the `bearerAuth`
+     * scheme. Role and policy names are deliberately never emitted: the
+     * runtime keeps them off the wire (generic 403 bodies, client-map
+     * stripping), and the published spec follows the same rule.
+     *
+     * @private
+     * @param {object} operation - The OpenAPI operation object (mutated in place)
+     * @param {object} param - The route's `param` block (`route.param || {}`)
+     * @param {boolean} machineAuth - True when the `bearerAuth` scheme is emitted
+     * @returns {undefined}
+     */
+    var applyAuthContract = function(operation, param, machineAuth) {
+        var hasRoles    = ( Array.isArray(param.roles) && param.roles.length > 0 );
+        var hasPolicy   = ( typeof(param.policy) == 'string' && param.policy !== '' );
+        var isGated     = ( param.requireAuth === true || hasRoles || hasPolicy );
+
+        if ( !isGated ) return;
+
+        if (machineAuth) {
+            operation.security = [ { bearerAuth: [] } ];
+            operation.responses['401'] = {
+                description: 'Authentication required'
+            };
+        } else {
+            operation.responses['401'] = {
+                description: 'Authentication required — this route needs an authenticated session (cookie name is application-defined)'
+            };
+        }
+
+        if ( hasRoles || hasPolicy ) {
+            operation.responses['403'] = {
+                description: 'Forbidden — the caller lacks the required authorization'
+            };
+        }
+    };
+
+
+    /**
      * Builds an OpenAPI 3.1.0 specification object from a parsed routing.json.
      *
      * @private
      * @param {string} bundle - Bundle name
      * @param {object} routing - Parsed routing.json
-     * @param {object|null} settings - Parsed settings.json (may be null)
+     * @param {object|null} settings - Parsed settings.json (may be null; `auth.machine` drives securitySchemes emission)
      * @param {{ port: number|null, scheme: string, protocol: string }} portInfo
      * @param {string} srcPath - Bundle source dir (resolves `param.dto` files)
      * @returns {object} OpenAPI spec
@@ -180,6 +278,25 @@ function OpenAPI(opt, cmd) {
             url: serverUrl,
             description: 'Local development server'
         });
+
+        // Machine-caller auth (`settings.json > auth.machine`) is the describable
+        // credential: `Authorization: Bearer <key>`. The scheme is emitted only
+        // when machine auth is effectively configured, so an un-configured
+        // bundle's spec gains no components block. The scheme matches the wire's
+        // own advertisement — the machine 401 challenges with
+        // `WWW-Authenticate: Bearer`.
+        var machineAuth = hasMachineAuth(settings);
+        if (machineAuth) {
+            spec.components = {
+                securitySchemes: {
+                    bearerAuth: {
+                        type: 'http',
+                        scheme: 'bearer',
+                        description: 'Machine-caller authentication (settings.json > auth.machine): present `Authorization: Bearer <key>` with a configured caller key. A custom authenticator, when configured, may accept additional credential shapes. An authenticated session also satisfies gated routes (session wins).'
+                    }
+                }
+            };
+        }
 
         var tagSet = {};
 
@@ -213,6 +330,9 @@ function OpenAPI(opt, cmd) {
                     if ( typeof(spec.paths[oaPath][method]) != 'undefined' ) continue;
 
                     var operation = buildOperation(routeName, route, urlInfo.params, namespace, methods.length > 1, method, srcPath);
+
+                    // Authorization contract for gated routes
+                    applyAuthContract(operation, route.param || {}, machineAuth);
 
                     spec.paths[oaPath][method] = operation;
                 }
