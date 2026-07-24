@@ -73,6 +73,18 @@ describe('#CE1 §01 — classify: transient families', function () {
         // couchbase N1QL cause envelope (preserved by #B153)
         ['couchbase N1QL 1080',   { cause: { first_error_code: 1080 } }, 'couchbase:timeout'],
         ['couchbase cause retry', { cause: { retry: true } },        'couchbase:retryable'],
+        ['couchbase N1QL 12008 bulk-get retry exhaustion',
+            { cause: { first_error_code: 12008 } },              'couchbase:bulk-get-retry-exhausted'],
+        // the #B153 envelope forward reaches classify as a synthesized Error —
+        // name is 'Error' (no signal), only the cause code can discriminate
+        ['couchbase 12008 via the envelope-forward shape (synthesized Error)',
+            (function () {
+                var e = new Error('bulk get exceeded 8 attempts');
+                e.cause = { first_error_code: 12008, http_body: '{}' };
+                return e;
+            })(),                                                'couchbase:bulk-get-retry-exhausted'],
+        ['couchbase 12008 with the server retry flag (the code entry names the reason)',
+            { cause: { first_error_code: 12008, retry: true } }, 'couchbase:bulk-get-retry-exhausted'],
         // mongodb error label
         ['mongo transient txn',   { hasErrorLabel: function (l) { return l === 'TransientTransactionError'; } }, 'mongo:transient-transaction'],
         ['mongo retryable write', { hasErrorLabel: function (l) { return l === 'RetryableWriteError'; } },      'mongo:retryable-write'],
@@ -110,6 +122,8 @@ describe('#CE1 §02 — classify: permanent (the discriminating negative control
         ['a cause with a permanent N1QL code',       { cause: { first_error_code: 3000 } }],
         ['N1QL 12009 generic DML (covers duplicate-key — deliberately permanent)',
                                                      { cause: { first_error_code: 12009 } }],
+        ['N1QL 12003 keyspace not found (shares the SDK IndexFailureError bucket with 12008 — the code, not the class, discriminates)',
+                                                     { cause: { first_error_code: 12003 } }],
         ['mongo code 7 HostNotFound (the server-side ENOTFOUND — deliberately permanent)',
                                                      { code: 7 }],
         ['node:sqlite constraint errcode 1555 (measured dup-key control)',

@@ -143,7 +143,25 @@ var TRANSIENT_N1QL_CODE = {
     // duplicate-key inserts, which are PERMANENT everywhere else in this module.
     // The server's own `cause.retry === true` flag (checked separately) is the
     // honest signal for a retryable DML failure such as a CAS mismatch.
-    1080  : 'couchbase:timeout'     // N1QL request timeout
+    //
+    // These CODE entries are load-bearing on the connector path even where the
+    // SDK types the error: the couchbase connector's #B153 handlers forward a
+    // server-enveloped failure as a synthesized `new Error(first_error_message)`
+    // carrying only `cause` — `err.name` is 'Error' there, so TRANSIENT_NAME can
+    // never fire and this table is the sole classifier. On the raw SDK shape a
+    // server-side 1080 arrives typed (SDK 4.x `document_query.cxx` maps 1080 ->
+    // unambiguous_timeout -> UnambiguousTimeoutError) and the name rule catches
+    // it first — the 1080 entry is the belt for the envelope shape. 12008 has NO
+    // typed class of its own: the SDK buckets every un-cased 12xxx code
+    // (permanent 12003 keyspace-not-found included) into one IndexFailureError
+    // grab-bag, so the cause CODE is the only discriminating signal on BOTH
+    // shapes — which is why IndexFailureError must never join TRANSIENT_NAME.
+    // 12008 marks the query engine's KV bulk-get giving up after its internal
+    // retries — measured transient in a real cluster warmup (retry after
+    // backoff succeeded), and a READ, so classifying it transient carries no
+    // 12009-style conflict hazard.
+    1080  : 'couchbase:timeout',                    // N1QL request timeout
+    12008 : 'couchbase:bulk-get-retry-exhausted'    // KV bulk-get retries exhausted
 };
 
 /**
