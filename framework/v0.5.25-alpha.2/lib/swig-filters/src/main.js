@@ -215,7 +215,13 @@ function SwigFilters(conf) {
             , wrootRe           = null
             , isStandalone      = null
             , isMaster          = null
-            , isProxyHost       = ( ctx.isProxyHost && String(ctx.isProxyHost).toLowerCase() === 'true' ) ? true : (( typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined' ) ? true : false)
+            // #B152 — prefer THIS request's #B65 classification slot over the
+            // ctx/worker-global latch: a port-less internal call (service-DNS
+            // health probe, mesh hop, sibling-bundle request) classifies as
+            // proxied and rewrites process.gina.PROXY_* mid-flight, so the latch
+            // can reflect ANOTHER request's proxy context. Slot absent (req-less
+            // render, slot-less engine path) -> legacy composite, byte-identical.
+            , isProxyHost       = ( ctx.req && typeof(ctx.req._ginaIsProxyHost) != 'undefined' ) ? ( ctx.req._ginaIsProxyHost === true ) : ( ( ctx.isProxyHost && String(ctx.isProxyHost).toLowerCase() === 'true' ) ? true : (( typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined' ) ? true : false) )
             , routingRules      = null
             , rule              = null
             , url               = NaN
@@ -289,7 +295,7 @@ function SwigFilters(conf) {
                     if (isSpecialCase) {
                         hostname = config.hostname
                         if (isProxyHost) {
-                            hostname = scheme + '://'+ (process.gina.PROXY_HOST||ctx.req.headers.host||ctx.req.headers[':host']);
+                            hostname = scheme + '://'+ ((ctx.req && ctx.req._ginaProxyHost)||process.gina.PROXY_HOST||ctx.req.headers.host||ctx.req.headers[':host']);
                         }
                     }
 
@@ -299,7 +305,7 @@ function SwigFilters(conf) {
                         && !isSpecialCase
                     ) {
 
-                        hostname    = scheme + '://'+ (process.gina.PROXY_HOST||ctx.req.headers.host||ctx.req.headers[':host']);
+                        hostname    = scheme + '://'+ ((ctx.req && ctx.req._ginaProxyHost)||process.gina.PROXY_HOST||ctx.req.headers.host||ctx.req.headers[':host']);
 
                         // replaced: new RegExp(requestPort+'$') — use endsWith instead (#P5)
                         if (
@@ -345,8 +351,15 @@ function SwigFilters(conf) {
         rule = route + '@' + config.bundle;
         try {
             url = routing.getRoute(route +'@'+ config.bundle, params);
+            // #B152 — getRoute stamps the route from the worker-global latch
+            // (getContext('isProxyHost') + process.gina.PROXY_HOSTNAME); re-point
+            // BOTH to THIS request's classification before toUrl(): a raw victim
+            // flips to the config-host branch, a proxied victim emits its own
+            // host — never the last port-less caller's. Slot absent -> legacy
+            // latch/global, byte-identical.
+            url.isProxyHost = isProxyHost;
             if (isProxyHost) {
-                url.proxy_hostname    = (isGFFCtx) ? window.location.protocol +'//'+ document.location.hostname : process.gina.PROXY_HOSTNAME;
+                url.proxy_hostname    = (isGFFCtx) ? window.location.protocol +'//'+ document.location.hostname : ( (ctx.req && ctx.req._ginaProxyHostname) || process.gina.PROXY_HOSTNAME );
                 url.proxy_host        = url.hostname.replace(/(https|http)\:\/\//, '');
             }
             url = url.toUrl();

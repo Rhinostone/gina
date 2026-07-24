@@ -94,6 +94,17 @@
             "examples": ["https://api.example.com:443"]
           }
         },
+        "proxy": {
+          "type": "object",
+          "description": "Reverse-proxy request-classification options.",
+          "additionalProperties": false,
+          "properties": {
+            "requireForwardedHeaders": {
+              "type": "boolean",
+              "description": "Opt-in deterministic proxied-request classification. When true, a request is classified as proxied ONLY when it carries an X-Forwarded-Host header — the port-less-Host heuristic is disabled, so internal calls addressed by service/DNS name (container health probes on app routes, mesh hops, sibling-bundle requests) can no longer rewrite the worker's reverse-proxy host context. Enable only behind a front proxy that always sends X-Forwarded-Host. Defaults to false (historical heuristic: port-less Host OR X-Forwarded-Host)."
+            }
+          }
+        },
         "releaseWatch": {
           "type": "object",
           "description": "Stale built-release watch for LOCAL production rehearsals — hard-gated on scope `local` + a non-dev env, never active on a real cluster. When enabled, the bundle watches its SOURCE tree, compares fingerprints against the manifest release stamp, surfaces staleness on GET /_gina/release/status (+ the /_gina/release/events SSE stream) and rebuilds via POST /_gina/release/rebuild with an idle-gated restart (in-flight requests + gina.registerBusyProbe application probes). Fail-closed: disabled by default.",

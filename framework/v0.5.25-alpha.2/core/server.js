@@ -1152,6 +1152,27 @@ function Server(options) {
                 }
             }
 
+            // ── #B152 — opt-in deterministic proxied-request classification ──
+            // server.proxy.requireForwardedHeaders === true -> a request is
+            // classified proxied ONLY on an explicit X-Forwarded-Host; the
+            // port-less-Host heuristic is disabled, so an internal call addressed
+            // by service/DNS name (container health probe on an app route, mesh
+            // hop, sibling-bundle request) can no longer rewrite the worker's
+            // PROXY_* host context (the source req-less renders fall back to).
+            // Enable only behind a front proxy that ALWAYS sends X-Forwarded-Host.
+            // Boot-resolved ONCE onto the worker-global (standalone workers take
+            // the started bundle's setting); read by the two classification twins:
+            // core/server.isaac.js (#B65 block) + core/router.js (#B67 block).
+            try {
+                var _proxyClassifyConf = self.conf[self.appName][self.env].server.proxy;
+                process.gina._proxyRequireForwarded = ( _proxyClassifyConf && _proxyClassifyConf.requireForwardedHeaders === true ) ? true : false;
+                if (process.gina._proxyRequireForwarded) {
+                    console.info('[ BUNDLE ][ server ][ init ] proxied-request classification: X-Forwarded-Host REQUIRED (server.proxy.requireForwardedHeaders) — the port-less-Host heuristic is disabled.');
+                }
+            } catch (_proxyClassifyErr) {
+                process.gina._proxyRequireForwarded = false;
+            }
+
             // ── #RWATCH — stale built-release watch (local production rehearsals) ──
             // Hard gates: local scope + non-dev env + explicit opt-in
             // (server.releaseWatch.enabled === true — fail-closed default). Inert

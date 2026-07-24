@@ -2490,7 +2490,20 @@ function SuperController(options) {
                 path = ( (/\:\/\//).test(url) ) ? url : req.scheme + '://' + url;
 
                 if (/\@/.test(path)) {
-                    path = lib.routing.getRoute(path).toUrl(ignoreWebRoot);
+                    // #B152 — same re-point as the getUrl filters: the route object
+                    // inherits the worker-global proxy latch from getRoute; prefer
+                    // THIS request's #B65 slots so a port-less internal caller's
+                    // PROXY_* rewrite can't leak into this redirect's target host.
+                    // No slot (req-less / slot-less engine) -> untouched route,
+                    // byte-identical.
+                    var _rteRedirect = lib.routing.getRoute(path);
+                    if ( local.req && typeof(local.req._ginaIsProxyHost) != 'undefined' ) {
+                        _rteRedirect.isProxyHost = ( local.req._ginaIsProxyHost === true );
+                        if ( _rteRedirect.isProxyHost && local.req._ginaProxyHostname ) {
+                            _rteRedirect.proxy_hostname = local.req._ginaProxyHostname;
+                        }
+                    }
+                    path = _rteRedirect.toUrl(ignoreWebRoot);
                 }
 
             //} else if(path && typeof(isRelative) !=  'undefined') {
@@ -6210,6 +6223,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         // Reminder
                         // Here, we use route.toUrl() intead of
                         // route.url to support x-bundle com
+                        // #B152 — re-point the route object's proxy context to THIS
+                        // request's #B65 slots before toUrl() (worker-global latch
+                        // fallback when slot-less), mirroring the redirect/getUrl sites.
+                        if ( req && typeof(req._ginaIsProxyHost) != 'undefined' ) {
+                            fallback.isProxyHost = ( req._ginaIsProxyHost === true );
+                            if ( fallback.isProxyHost && req._ginaProxyHostname ) {
+                                fallback.proxy_hostname = req._ginaProxyHostname;
+                            }
+                        }
                         return self.redirect( fallback.toUrl() );
                     }
                 }

@@ -1959,8 +1959,14 @@ function ServerEngineClass(options) {
             // defect the x-forwarded-prefix block below calls out. Because the globals
             // are only ever written from a proxied request, they can never freeze to a
             // `host:port` (raw) value.
+            // #B152 — opt-in: server.proxy.requireForwardedHeaders (boot-resolved
+            // to process.gina._proxyRequireForwarded by server.js) disables the
+            // port-less-Host heuristic — only an explicit X-Forwarded-Host
+            // classifies as proxied. Keep in sync with the core/router.js twin
+            // (proxyReqIsProxied).
             var _thisReqProxied = (
-                ( requestHost && !/\:[0-9]+$/.test(requestHost) )
+                ( requestHost && !/\:[0-9]+$/.test(requestHost)
+                    && process.gina._proxyRequireForwarded !== true )
                 || request.headers['x-forwarded-host']
             ) ? true : false;
             request._ginaIsProxyHost = _thisReqProxied;

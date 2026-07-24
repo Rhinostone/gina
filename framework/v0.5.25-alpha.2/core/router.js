@@ -267,8 +267,13 @@ function Router(env, scope) {
         // X-Forwarded-Proto (TLS-terminating proxy) then PROXY_SCHEME then the
         // bundle scheme.
         var proxyReqHost = request.headers.host || request.headers[':authority'];
+        // #B152 — opt-in: server.proxy.requireForwardedHeaders (boot-resolved
+        // to process.gina._proxyRequireForwarded by server.js) disables the
+        // port-less-Host heuristic — only an explicit X-Forwarded-Host
+        // classifies as proxied. Keep in sync with the server.isaac.js twin.
         var proxyReqIsProxied = (
-            ( proxyReqHost && !/\:[0-9]+$/.test(proxyReqHost) )
+            ( proxyReqHost && !/\:[0-9]+$/.test(proxyReqHost)
+                && process.gina._proxyRequireForwarded !== true )
             || request.headers['x-forwarded-host']
         ) ? true : false;
         if ( proxyReqIsProxied ) {
@@ -281,6 +286,32 @@ function Router(env, scope) {
             } else {
                 process.gina.PROXY_HOSTNAME = proxyReqScheme +'://'+ proxyReqHost;
                 process.gina.PROXY_HOST     = proxyReqHost;
+            }
+        }
+
+        // #B152 — engine-agnostic per-request proxy slots (fill-when-absent).
+        // server.isaac.js (#B65 block) stashes request._ginaIsProxyHost /
+        // _ginaProxyHost / _ginaProxyHostname on EVERY isaac request (incl.
+        // `false`), but the Express engine never does — so slot readers (the
+        // getUrl filters, the redirect/throwError toUrl re-points, the #B66 S2b
+        // sites) silently fell back to the worker-global there. Fill only when
+        // absent: isaac's earlier, identical classification always wins; Express
+        // (and any slot-less engine) gets per-request truth here. Keep the
+        // derivation in sync with server.isaac.js — deliberate twin, like
+        // pruneDeadModuleChildren.
+        if ( typeof(request._ginaIsProxyHost) == 'undefined' ) {
+            request._ginaIsProxyHost = proxyReqIsProxied;
+            if (proxyReqIsProxied) {
+                var _slotScheme = request.headers['x-forwarded-proto']
+                    || process.gina.PROXY_SCHEME
+                    || conf.server.scheme;
+                if ( request.headers['x-forwarded-host'] ) {
+                    request._ginaProxyHostname = _slotScheme +'://'+ request.headers['x-forwarded-host'];
+                    request._ginaProxyHost     = request.headers['x-forwarded-host'];
+                } else {
+                    request._ginaProxyHostname = _slotScheme +'://'+ proxyReqHost;
+                    request._ginaProxyHost     = proxyReqHost;
+                }
             }
         }
 

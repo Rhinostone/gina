@@ -1,0 +1,3 @@
+kind: Added
+body: 'Added `server.proxy.requireForwardedHeaders` (settings.json, opt-in, declared in the published schema): when true, a request is classified as reverse-proxied ONLY when it carries an X-Forwarded-Host header — the port-less-Host heuristic is disabled, so internal service-DNS calls can never rewrite the worker''s proxy-host context. This is the deterministic option for deployments whose front proxy always sends X-Forwarded-Host, and the only mechanism that also protects renders with no request of their own (worker/cron-driven rendering). Defaults to false (historical heuristic unchanged).'
+time: 2026-07-24T12:44:27+01:00
