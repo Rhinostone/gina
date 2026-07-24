@@ -210,6 +210,14 @@ function Lib() {
         // caller can run lib.secrets.resolve() on it in place. Pure (same
         // contract as connector-registry / cmd-status-format).
         connectorConfig : _require('./connector-config'),
+        // #CE1 — transient-vs-permanent classifier for datastore query errors
+        // (stamps err.isTransient / err.transientReason). PLAIN require, NOT
+        // _require: the connectors capture `lib` at gen-0 (load-once) and invoke
+        // stamp() per-request on the error path, so a _require'd copy would be a
+        // #B32-residual leak candidate the moment this module gained any internal
+        // require. Stateless + zero-dep, so a single never-evicted instance is
+        // correct and hot-reload is unnecessary (connector code needs a restart).
+        connectorError  : require('./connector-error'),
         // Comment-aware header/body splitter for JSON-with-comments config
         // files. firstStructuralBraceIndex / splitHeader find the first `{`
         // that is NOT inside a `//` or block comment, so a rewrite preserves a

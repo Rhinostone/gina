@@ -1,0 +1,17 @@
+{
+  "name": "gina-lib-connector-error",
+  "version": "1.0.0",
+  "description": "Transient-vs-permanent classification for datastore connector errors (#CE1). Normalizes socket errno, driver codes/names, ANSI SQLSTATE, MongoDB error labels and Couchbase N1QL cause codes into err.isTransient + err.transientReason so a controller can render an honest retryable response without string-matching vendor error text. Pure, total (never throws), zero runtime deps, CJS.",
+  "authors": [
+    {
+      "name": "Martin-Luther ETOUMAN",
+      "email": "contact@gina.io"
+    }
+  ],
+  "copyright": "Copyright (c) 2009-2026 Rhinostone <contact@gina.io>",
+  "engines": {
+    "node": ">=0.10.22"
+  },
+  "main": "src/main",
+  "license": "MIT"
+}

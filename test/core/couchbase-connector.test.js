@@ -413,10 +413,14 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
             'guarded build-from-cause, else forward raw err, then always call onQueryCallback');
     });
 
-    it('the bulkInsert site emits on both paths', function() {
+    it('the bulkInsert site forwards the raw err on the fallback path', function() {
+        // Pins the #B153 else-branch fallback only. The terminal self.emit is
+        // deliberately NOT pinned here: #CE1 (slice 1) stamps the error inline as
+        // it is emitted — `self.emit(trigger, lib.connectorError.stamp(error))` —
+        // and that emit-stamp wiring is covered by connector-error.test.js §05.
         assert.match(src,
-            /else \{\s*error = \(err instanceof Error\) \? err : new Error\(String\(err\)\);\s*\}\s*self\.emit\(trigger, error\);/,
-            'bulkInsert onError forwards the raw err then always self.emit(trigger, error)');
+            /else \{\s*error = \(err instanceof Error\) \? err : new Error\(String\(err\)\);\s*\}/,
+            'bulkInsert onError forwards the raw err on the socket-level fallback path');
     });
 
     /**

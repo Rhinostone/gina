@@ -403,7 +403,7 @@ function Mysql(conn, infos) {
                     if (err) {
                         if (_queryEntry) _queryEntry.error = err.message || String(err);
                         err.message = '[ ' + source + ' ]\n' + err.message;
-                        _reject(err);
+                        _reject(lib.connectorError.stamp(err));
                         return;
                     }
                     var raw = coerce(results);
@@ -426,7 +426,7 @@ function Mysql(conn, infos) {
                     if (err) {
                         if (_queryEntry) _queryEntry.error = err.message || String(err);
                         err.message = '[ ' + source + ' ]\n' + err.message;
-                        _mainCallback(err);
+                        _mainCallback(lib.connectorError.stamp(err));
                         return;
                     }
                     var raw = coerce(results);

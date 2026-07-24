@@ -262,7 +262,11 @@ describe('02 - MongoDB connector: index.js source', function() {
 
     it('callback path uses node-style (err, result) signature', function() {
         assert.ok(/_mainCallback\(null, raw\)/.test(src));
-        assert.ok(/_mainCallback\(err\)/.test(src));
+        // #CE1 wraps the error argument in the transient-vs-permanent classifier
+        // (`_mainCallback(lib.connectorError.stamp(err))`). stamp() returns the
+        // same err, so the node-style signature is unchanged — this tolerates
+        // both the bare and the stamped form.
+        assert.ok(/_mainCallback\((?:lib\.connectorError\.stamp\()?err\)?\)/.test(src));
     });
 
     it('builds _queryEntry with type:MQL and connector:mongodb', function() {

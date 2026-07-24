@@ -851,6 +851,7 @@ function Couchbase(conn, infos) {
                         }
 
                         if (err) {
+                            lib.connectorError.stamp(err); // #CE1: classify transient vs permanent (one stamp; err flows to every downstream emit/callback)
                             if ( typeof(self.emit) != 'undefined' ) {
                                 self.emit(trigger, err);
                             } else { // Promise case
@@ -1308,7 +1309,7 @@ function Couchbase(conn, infos) {
                         } else {
                             error = (err instanceof Error) ? err : new Error(String(err));
                         }
-                        self.emit(trigger, error);
+                        self.emit(trigger, lib.connectorError.stamp(error)); // #CE1: classify transient vs permanent
                     } catch (_err) {
                         console.error(_err.stack);
                     }

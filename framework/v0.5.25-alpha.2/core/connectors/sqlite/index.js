@@ -448,7 +448,7 @@ function Sqlite(conn, infos) {
                             _queryEntry.error = e.message || String(e);
                         }
                         e.message = '[ ' + source + ' ]\n' + e.message;
-                        _reject(e);
+                        _reject(lib.connectorError.stamp(e));
                     }
                 }, 0);
 
@@ -470,7 +470,7 @@ function Sqlite(conn, infos) {
                         _queryEntry.error = e.message || String(e);
                     }
                     e.message = '[ ' + source + ' ]\n' + e.message;
-                    _mainCallback(e);
+                    _mainCallback(lib.connectorError.stamp(e));
                 }
             }
         };

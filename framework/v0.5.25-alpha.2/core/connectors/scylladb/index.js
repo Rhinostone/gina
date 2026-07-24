@@ -333,7 +333,7 @@ function Scylladb(conn, infos) {
                         _queryEntry.error      = err.message || String(err);
                     }
                     err.message = '[ ' + source + ' ]\n' + err.message;
-                    _reject(err);
+                    _reject(lib.connectorError.stamp(err));
                 });
 
                 return _promise;
@@ -355,7 +355,7 @@ function Scylladb(conn, infos) {
                         _queryEntry.error      = err.message || String(err);
                     }
                     err.message = '[ ' + source + ' ]\n' + err.message;
-                    _mainCallback(err);
+                    _mainCallback(lib.connectorError.stamp(err));
                 });
             }
         };
