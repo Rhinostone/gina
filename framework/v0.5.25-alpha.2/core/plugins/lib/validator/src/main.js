@@ -2020,6 +2020,23 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     if (uploadProgressHFormIsRequired)
                         triggerEvent(gina, $target, 'uploadProgress.' + id + '.hform', result);
                 };
+
+                // #R8 — bytes-done → server post-processing window. onloadend is the
+                // final upload-phase event (fires on success AND on abort/error/timeout),
+                // so it robustly marks "sending finished" even when a browser omits the
+                // final onprogress at loaded==total. Advance the indicator STATE only —
+                // updateUploadProgressIndicator's `processing` branch leaves value/max/the
+                // percent attribute exactly as the last onprogress left them, so a styled
+                // (appearance:none) determinate bar stays visually full instead of
+                // regressing to an empty track. onUpload later flips complete/error at the
+                // response chokepoint, cleanly overwriting `processing`.
+                xhr.upload.onloadend = function() {
+                    if (!isUploadXhr) return;
+                    updateUploadProgressIndicator(
+                        ($target.uploadProperties) ? $target.uploadProperties.progressContainer : null,
+                        'processing'
+                    );
+                };
             }
 
             // catching timeout
@@ -2216,12 +2233,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
      * Every target also carries two data attributes as styling hooks:
      * `data-gina-upload-progress` (integer percent, absent while indeterminate)
      * and `data-gina-upload-progress-state`
-     * (`preparing|uploading|indeterminate|complete|error`). No copy/labels are
-     * hardcoded — wording is the consumer's concern (CSS on the state attribute).
+     * (`preparing|uploading|indeterminate|processing|complete|error`). No copy/labels
+     * are hardcoded — wording is the consumer's concern (CSS on the state attribute).
+     * The `processing` state marks bytes-sent → awaiting-response (server-side
+     * post-processing): it advances the state attribute ONLY, leaving value/max/the
+     * percent attribute exactly as the last `uploading` update left them, so a styled
+     * determinate bar stays visually full (an indeterminate one keeps animating)
+     * through the window rather than regressing to an empty track.
      * The `reset` state strips everything this layer ever set on the element.
      *
      * @param {string|null} containerId - resolved indicator element id
-     * @param {string} state - `preparing` | `uploading` | `indeterminate` | `complete` | `error` | `reset`
+     * @param {string} state - `preparing` | `uploading` | `indeterminate` | `processing` | `complete` | `error` | `reset`
      * @param {object} [result] - `uploadProgress` payload (`progress`, `loaded`, `total`) — read for `uploading` only
      *
      * @returns {undefined}
@@ -2246,6 +2268,16 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
 
         $indicator.setAttribute('data-gina-upload-progress-state', state);
+
+        if (state == 'processing') {
+            // #R8 — byte-complete, server still post-processing. Advance the STATE only:
+            // leave value/max and the `data-gina-upload-progress` percent exactly as the
+            // last `uploading` update left them (a determinate bar stays full; an
+            // indeterminate one keeps its native animation). Falling through to the guard
+            // below would strip `value` + the percent attribute — the regression this
+            // early return prevents (the state attribute is already stamped above).
+            return;
+        }
 
         if (state == 'complete') {
             if (isNativeProgress) {
