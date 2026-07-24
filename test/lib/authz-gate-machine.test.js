@@ -571,3 +571,223 @@ describe('§06 — controller: self.hasRole() answers a machine caller\'s config
         assert.equal(inst2.hasRole('service'), false, 'the machine roles are not consulted when a session user exists');
     });
 });
+
+describe('§07 — source pins: the custom authenticator hook', function () {
+
+    it('01. registerAuthenticator is exported and mirrors registerPolicy (AsyncFunction boot-refusal, own registry)', function () {
+        assert.match(GATE_SRC, /registerAuthenticator : registerAuthenticator/);
+        var blkIdx = GATE_SRC.indexOf('var registerAuthenticator = function');
+        assert.ok(blkIdx > -1);
+        var blk = GATE_SRC.slice(blkIdx, GATE_SRC.indexOf('module.exports', blkIdx) > -1 ? undefined : undefined).slice(0, 2400);
+        assert.ok(blk.indexOf("'authenticators', name + '.js'") > -1, 'the authenticators/ dir resolution');
+        assert.ok(blk.indexOf("fn.constructor.name === 'AsyncFunction'") > -1, 'the async refusal');
+        assert.match(GATE_SRC, /process\.gina\._authenticators/);
+    });
+
+    it('02. map first, hook second — the hook runs only when the map did not authenticate', function () {
+        var mapIdx  = GATE_SRC.indexOf('verifyMachineToken(req, mconf, token)');
+        var hookIdx = GATE_SRC.indexOf('runAuthenticator(req, mconf.authenticator)');
+        assert.ok(mapIdx > -1 && hookIdx > -1);
+        assert.ok(mapIdx < hookIdx, 'the built-in map is tried before the custom hook (first success wins)');
+        // The hook call is guarded on the principal still being unresolved.
+        var between = GATE_SRC.slice(GATE_SRC.lastIndexOf('if ( !principal', hookIdx), hookIdx);
+        assert.ok(between.indexOf('!principal') > -1, 'the hook is gated on the map having missed');
+    });
+
+    it('03. the hook normalizes + forces the machine marker — it cannot mint a session-shaped identity', function () {
+        var blkIdx = GATE_SRC.indexOf('var runAuthenticator = function');
+        var blk    = GATE_SRC.slice(blkIdx, blkIdx + 2600);
+        assert.ok(blk.indexOf('machine : true') > -1, 'machine: true is forced by the gate, not trusted from the hook');
+        assert.ok(blk.indexOf('Array.isArray(returned.roles) ? returned.roles.slice() : []') > -1, 'roles normalized to a copied array');
+    });
+
+    it('04. core/server.js lints + registers the authenticator at boot — even while enabled is false', function () {
+        assert.match(SERVER_SRC, /auth\.machine\.authenticator` must be a non-empty string/);
+        assert.match(SERVER_SRC, /lib\.authzGate\.registerAuthenticator\(_authzSrcPath, _authzMachineConf\.authenticator\)/);
+        assert.match(SERVER_SRC, /is missing \(or does not export a function\)/);
+    });
+
+    it('05. the template + the schema both declare the authenticator slot, null default', function () {
+        var o = parseTemplateSettings(SETTINGS_SRC);
+        assert.equal(o.auth.machine.authenticator, null);
+        var s = JSON.parse(SCHEMA_SRC);
+        var a = s.properties.auth.properties.machine.properties.authenticator;
+        assert.deepEqual(a.type, ['string', 'null']);
+        assert.equal(a.default, null);
+    });
+});
+
+describe('§08 — registerAuthenticator against real files (the withPolicyFiles mechanics, authenticators/ dir)', function () {
+
+    function withAuthenticatorFiles(files, fn) {
+        var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-authz-authenticators-'));
+        fs.mkdirSync(path.join(dir, 'authenticators'));
+        Object.keys(files).forEach(function (name) {
+            fs.writeFileSync(path.join(dir, 'authenticators', name + '.js'), files[name], 'utf8');
+        });
+        try { return fn(dir); }
+        finally { fs.rmSync(dir, { recursive: true, force: true }); }
+    }
+
+    it('01. a plain sync function registers and lands on the registry', function () {
+        withAuthenticatorFiles({ ok: 'module.exports = function (req) { return null; };' }, function (dir) {
+            var fn = withGina({}, function () {
+                var got = gate.registerAuthenticator(dir, 'ok');
+                assert.equal(typeof process.gina._authenticators.ok, 'function', 'registered');
+                return got;
+            });
+            assert.equal(typeof fn, 'function');
+        });
+    });
+
+    it('02. a missing file / a non-function export is unresolved (null) — the boot caller refuses with context', function () {
+        withAuthenticatorFiles({ notafn: 'module.exports = { nope: true };' }, function (dir) {
+            withGina({}, function () {
+                assert.equal(gate.registerAuthenticator(dir, 'missing'), null);
+                assert.equal(gate.registerAuthenticator(dir, 'notafn'), null);
+            });
+        });
+    });
+
+    it('03. DECISIVE — an `async function` REFUSES the boot', function () {
+        withAuthenticatorFiles({ badasync: 'module.exports = async function (req) { return { name: "x" }; };' }, function (dir) {
+            withGina({}, function () {
+                assert.throws(function () { gate.registerAuthenticator(dir, 'badasync'); },
+                    /async function/, 'the boot-visible tell must refuse');
+            });
+        });
+    });
+
+    it('04. the transpiled-async shape (plain fn returning a promise) is boot-INVISIBLE — why the runtime shape check must stay strict', function () {
+        withAuthenticatorFiles({ sneaky: 'module.exports = function (req) { return Promise.resolve({ name: "x" }); };' }, function (dir) {
+            withGina({}, function () {
+                assert.equal(typeof gate.registerAuthenticator(dir, 'sneaky'), 'function',
+                    'registers fine — only the runtime return check catches it (see §09.05)');
+            });
+        });
+    });
+});
+
+describe('§09 — behavioural: the hook end-to-end through the gate', function () {
+
+    var KEY     = 'map-key-0123456789abcdef';
+    var CALLERS = machineCallers({ mapped: { key: KEY, roles: ['service'] } });
+
+    function ginaShape(authenticators, withMap) {
+        return {
+            _authConf: { loginRoute: null, machine: {
+                enabled       : true,
+                callers       : withMap === false ? {} : CALLERS,
+                authenticator : 'custom'
+            } },
+            _authenticators: authenticators
+        };
+    }
+
+    it('01. the hook admits a caller the map does not know — from a NON-Bearer scheme', function () {
+        var rq = req({ param: { requireAuth: true }, headers: { 'x-api-key': 'apik-42' } });
+        var out = withGina(ginaShape({
+            custom: function (r) {
+                return ( r.headers && r.headers['x-api-key'] === 'apik-42' )
+                    ? { name: 'partner', roles: ['integrations'] }
+                    : null;
+            }
+        }), function () {
+            return gate.authorizeRequest(ctl(), rq, res());
+        });
+        assert.equal(out, true);
+        assert.deepEqual(rq.machineCaller, { name: 'partner', roles: ['integrations'], machine: true },
+            'normalized + machine-marked by the gate');
+    });
+
+    it('02. map FIRST — a token the map knows never reaches the hook', function () {
+        var hookCalls = 0;
+        var out = withGina(ginaShape({ custom: function () { ++hookCalls; return { name: 'x' }; } }), function () {
+            return gate.authorizeRequest(ctl(), req({ param: { requireAuth: true }, bearer: 'Bearer ' + KEY }), res());
+        });
+        assert.equal(out, true);
+        assert.equal(hookCalls, 0, 'first success wins — the hook was never consulted');
+    });
+
+    it('03. a Bearer the map rejects IS handed to the hook; a hook match admits, a hook miss -> the machine 401', function () {
+        var out = withGina(ginaShape({
+            custom: function (r) {
+                var m = /^Bearer\s+(.+)$/i.exec((r.headers && r.headers.authorization) || '');
+                return ( m && m[1] === 'jwt-like-token' ) ? { name: 'jwt-caller' } : null;
+            }
+        }), function () {
+            return gate.authorizeRequest(ctl(), req({ param: { requireAuth: true }, bearer: 'Bearer jwt-like-token' }), res());
+        });
+        assert.equal(out, true, 'the hook admitted what the map could not');
+
+        var c = ctl(), r = res();
+        var out2 = withGina(ginaShape({ custom: function () { return null; } }), function () {
+            return gate.authorizeRequest(c, req({ param: { requireAuth: true }, bearer: 'Bearer nobody-knows-this' }), r);
+        });
+        assert.equal(out2, false);
+        assert.equal(c.thrown.status, 401);
+        assert.equal(r.headers['WWW-Authenticate'], 'Bearer', 'Bearer presented + both rejected -> the machine 401');
+    });
+
+    it('04. a hook THROW is fail-closed unauthenticated, never a 500 — and a custom-scheme miss stays the ORDINARY 401', function () {
+        var c = ctl(), r = res();
+        var errs = [];
+        var prevErr = console.error;
+        console.error = function (m) { errs.push(String(m)); };
+        var out;
+        try {
+            out = withGina(ginaShape({ custom: function () { throw new Error('verifier exploded'); } }), function () {
+                // NO Bearer — a custom-scheme request whose verifier dies.
+                return gate.authorizeRequest(c, req({ param: { requireAuth: true }, headers: { 'x-api-key': 'x' } }), r);
+            });
+        } finally { console.error = prevErr; }
+        assert.equal(out, false);
+        assert.equal(c.thrown.status, 401, 'the ordinary shape — no Bearer was presented');
+        assert.equal(typeof r.headers['WWW-Authenticate'], 'undefined', 'the machine 401 stays Bearer-specific');
+        assert.ok(errs.join('\n').indexOf('verifier exploded') > -1, 'the throw is logged server-side');
+    });
+
+    it('05. a malformed return — including the transpiled-async promise — warns ONCE and stays unauthenticated', function () {
+        var warns = [];
+        var prevWarn = console.warn;
+        console.warn = function (m) { warns.push(String(m)); };
+        try {
+            [1, 2].forEach(function () {
+                var c = ctl();
+                var out = withGina(ginaShape({ custom: function () { return Promise.resolve({ name: 'x' }); } }), function () {
+                    return gate.authorizeRequest(c, req({ param: { requireAuth: true }, headers: { 'x-api-key': 'x' } }), res());
+                });
+                assert.equal(out, false, 'a promise is not a principal — fail-closed');
+                assert.equal(c.thrown.status, 401);
+            });
+        } finally { console.warn = prevWarn; }
+        var contractWarns = warns.filter(function (w) { return w.indexOf('a promise') > -1; });
+        assert.equal(contractWarns.length, 1, 'warned exactly once across repeated requests');
+    });
+
+    it('06. roles from the hook normalize — a non-array becomes the empty set (role-gated routes deny)', function () {
+        var c = ctl();
+        var out;
+        captureDebug(function () {
+            out = withGina(ginaShape({ custom: function () { return { name: 'p', roles: 'admin' }; } }), function () {
+                return gate.authorizeRequest(c, req({ param: { roles: ['admin'] }, headers: { 'x-api-key': 'x' } }), res());
+            });
+        });
+        assert.equal(out, false);
+        assert.equal(c.thrown.status, 403, 'authenticated (name valid) but holds NO roles — the string never counts');
+    });
+
+    it('07. the hook is NOT consulted while machine auth is disabled (the subtract holds for slice 2 too)', function () {
+        var hookCalls = 0;
+        var c = ctl();
+        var out = withGina({
+            _authConf: { loginRoute: null, machine: { enabled: false, callers: {}, authenticator: 'custom' } },
+            _authenticators: { custom: function () { ++hookCalls; return { name: 'x' }; } }
+        }, function () {
+            return gate.authorizeRequest(c, req({ param: { requireAuth: true }, headers: { 'x-api-key': 'x' } }), res());
+        });
+        assert.equal(out, false);
+        assert.equal(hookCalls, 0, 'disabled means disabled — map AND hook');
+        assert.equal(c.thrown.status, 401);
+    });
+});

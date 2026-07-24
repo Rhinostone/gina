@@ -1085,15 +1085,39 @@ function Server(options) {
                         };
                     }
                 }
-                if ( _authzMachine.enabled === true && Object.keys(_authzMachine.callers).length === 0 ) {
+                // `authenticator` — OPTIONAL: names a `<bundle>/authenticators/<name>.js`
+                // module (the `policies/<name>.js` shape, applied to authN — the gate
+                // runs it AFTER the built-in caller map, for any sync-checkable
+                // credential). Registered HERE at boot, the registerPolicy mould: a
+                // missing, broken or ASYNC module refuses to BOOT rather than silently
+                // never admitting. Linted + registered even while `enabled` is false,
+                // so a broken file surfaces at deploy time, not at the later enable.
+                if ( typeof(_authzMachineConf.authenticator) != 'undefined' && _authzMachineConf.authenticator !== null ) {
+                    if ( typeof(_authzMachineConf.authenticator) != 'string' || _authzMachineConf.authenticator === '' ) {
+                        throw new Error('[ SERVER ] `settings.json > auth.machine.authenticator` must be a non-empty string (the `authenticators/<name>.js` module to load) or null.');
+                    }
+                    var _authzAuthFn = null;
+                    try {
+                        _authzAuthFn = lib.authzGate.registerAuthenticator(_authzSrcPath, _authzMachineConf.authenticator);
+                    } catch (_authzAuthErr) {
+                        throw new Error('[ SERVER ] `auth.machine.authenticator`: module `authenticators/'+ _authzMachineConf.authenticator +'.js` could not be registered from `'+ _authzSrcPath +'`:\n'+ _authzAuthErr.message);
+                    }
+                    if ( !_authzAuthFn ) {
+                        throw new Error('[ SERVER ] `auth.machine.authenticator` names `'+ _authzMachineConf.authenticator +'` but `'+ _authzSrcPath +'/authenticators/'+ _authzMachineConf.authenticator +'.js` is missing (or does not export a function).');
+                    }
+                    _authzMachine.authenticator = _authzMachineConf.authenticator;
+                }
+                if ( _authzMachine.enabled === true && Object.keys(_authzMachine.callers).length === 0 && !_authzMachine.authenticator ) {
                     // Legal (fail-closed — nothing can authenticate), but a mis-pasted
                     // config should be visible at boot rather than debugged per request.
-                    console.warn('[ SERVER ] `auth.machine.enabled` is true but `auth.machine.callers` declares no caller — machine authentication is ON but can admit nobody.');
+                    console.warn('[ SERVER ] `auth.machine.enabled` is true but `auth.machine.callers` declares no caller and no `authenticator` is named — machine authentication is ON but can admit nobody.');
                 }
             }
             process.gina._authConf = { loginRoute: _authzLoginRoute, machine: _authzMachine };
             if ( _authzMachine.enabled === true ) {
-                console.debug('[ BUNDLE ][ server ][ init ] Machine-caller authentication ENABLED — '+ Object.keys(_authzMachine.callers).length +' caller(s) for [ '+ self.appName +' ]');
+                console.debug('[ BUNDLE ][ server ][ init ] Machine-caller authentication ENABLED — '+ Object.keys(_authzMachine.callers).length +' caller(s)'
+                    + ( _authzMachine.authenticator ? ' + authenticator `'+ _authzMachine.authenticator +'`' : '' )
+                    +' for [ '+ self.appName +' ]');
             }
             if ( _authzCount > 0 ) {
                 var _authzParts = [];

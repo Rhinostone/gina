@@ -137,6 +137,25 @@
  * configured caller holds, or machine-only by requiring a role only callers
  * hold. There is deliberately NO per-route opt-in key.
  *
+ * ## The custom authenticator hook (#MS3 — the escape hatch)
+ * `auth.machine.authenticator` names a `<bundle>/authenticators/<name>.js`
+ * module — the `policies/<name>.js` shape, applied to authN — exporting a
+ * SYNCHRONOUS `function (req) { return { name, roles } | null; }`. It runs
+ * for gated, session-less requests AFTER the built-in caller map (map first,
+ * first success wins) and REGARDLESS of whether a Bearer header is present,
+ * so it can verify any sync-checkable credential: a JWT signature
+ * (`jwt.verify` with a local secret/public key is synchronous), an HMAC
+ * header, an `x-api-key` scheme. The gate NORMALIZES its return — the
+ * principal is always `{ name, roles: [], machine: true }`-shaped regardless
+ * of what the hook returns beyond `name`. Registered at BOOT
+ * (`registerAuthenticator` → `process.gina._authenticators`) with the same
+ * fail-fast lint as policies — an `async function` refuses to boot for the
+ * same reason (the gate is synchronous; a promise is truthy but not a
+ * principal), and at request time a THROW or a malformed return is
+ * fail-closed unauthenticated (warn-once), never a 500. A custom-scheme
+ * rejection (no Bearer presented) degrades to the ORDINARY 401/bounce — the
+ * machine 401 (`WWW-Authenticate: Bearer`) stays Bearer-specific.
+ *
  * ## Why the bounce is a 302 + no-store, unconditionally
  * `controller.redirect()` cannot be reused for it: it defaults to a **cacheable
  * 301** (`req.routing.param.code || 301`, read off whichever route object the
@@ -317,6 +336,101 @@ var verifyMachineToken = function (req, mconf, token) {
 };
 
 /**
+ * #MS3 — the boot-built custom-authenticator registry:
+ * `process.gina._authenticators`, name -> function. The `_policies` mirror.
+ *
+ * @returns {object|null} the registry, or `null` outside a booted process.
+ * @inner
+ * @private
+ */
+var getAuthenticatorRegistry = function () {
+    if ( typeof(process.gina) == 'undefined' || !process.gina ) {
+        return null;
+    }
+    if ( !process.gina._authenticators || typeof(process.gina._authenticators) != 'object' ) {
+        process.gina._authenticators = {};
+    }
+    return process.gina._authenticators;
+};
+
+/**
+ * Warn-once bookkeeping for custom authenticators that break the return
+ * contract — the `_warnedPolicies` mirror (one line per request would bury
+ * the message the author needs).
+ *
+ * @type {object}
+ * @inner
+ * @private
+ */
+var _warnedAuthenticators = {};
+
+/**
+ * #MS3 — run the bundle's custom authenticator, normalizing its return to the
+ * machine-principal shape.
+ *
+ * Contract: SYNCHRONOUS `function (req) { return { name, roles } | null; }` —
+ * `null` / `false` / `undefined` means "not authenticated by me" (silent, the
+ * normal miss). A valid return needs a non-empty string `name`; `roles` is
+ * taken only as an array (anything else normalizes to `[]`, a COPY either
+ * way). The gate FORCES `machine: true` on the principal — the hook cannot
+ * mint a session-user-shaped identity.
+ *
+ * Fail-closed, never a 500: a THROW logs server-side and resolves
+ * unauthenticated; a malformed return (a string, a number, an object without
+ * `name` — including a promise from a transpiled-async authenticator, which
+ * the boot refusal cannot see) warns ONCE naming the authenticator and
+ * resolves unauthenticated. An unregistered name (registry never built /
+ * mutated) is a silent miss — the boot registrar guarantees registration for
+ * every declared name, so reaching it means the process state was tampered
+ * with, and an authenticator that cannot be found must never admit.
+ *
+ * @param {object} req  - the request (stamped with `machineCaller` on success).
+ * @param {string} name - the configured `auth.machine.authenticator`.
+ * @returns {object|null} the normalized principal, or `null`.
+ * @inner
+ * @private
+ */
+var runAuthenticator = function (req, name) {
+    var reg = ( typeof(process.gina) != 'undefined' && process.gina && process.gina._authenticators )
+        ? process.gina._authenticators
+        : null;
+    var fn = ( reg && typeof(reg[name]) == 'function' ) ? reg[name] : null;
+    if ( !fn ) {
+        return null;
+    }
+
+    var returned;
+    try {
+        returned = fn(req);
+    } catch (err) {
+        console.error('[ authz ] authenticator `'+ name +'` threw for `'+ ((req.routing && req.routing.rule) || '?') +'`: '+ (err.stack || err.message || err));
+        return null;
+    }
+
+    if ( returned === null || returned === false || typeof(returned) == 'undefined' ) {
+        return null;   // the normal miss — not authenticated by this hook
+    }
+    if ( typeof(returned) != 'object' || typeof(returned.name) != 'string' || returned.name === '' ) {
+        if ( _warnedAuthenticators[name] !== true ) {
+            _warnedAuthenticators[name] = true;
+            var shape = ( returned && typeof(returned.then) == 'function' )
+                ? 'a promise'
+                : '`'+ typeof(returned) +'`';
+            console.warn('[ authz ] authenticator `'+ name +'` returned '+ shape +', not `{ name, roles }` or null — treating as UNAUTHENTICATED (fail-closed). The authenticator contract is SYNCHRONOUS: `module.exports = function (req) { return { name: \'caller\', roles: [] } or null; };`.');
+        }
+        return null;
+    }
+
+    var principal = {
+        name    : returned.name,
+        roles   : Array.isArray(returned.roles) ? returned.roles.slice() : [],
+        machine : true
+    };
+    req.machineCaller = principal;
+    return principal;
+};
+
+/**
  * Warn-once bookkeeping, keyed by policy name: a policy that violates the return
  * contract does so on EVERY request, and one line per request would bury the very
  * message the author needs to act on.
@@ -392,6 +506,77 @@ var registerPolicy = function (bundleSrcPath, name) {
     }
 
     var reg = getPolicyRegistry();
+    if ( reg ) {
+        reg[name] = fn;
+    }
+    return fn;
+};
+
+/**
+ * #MS3 — resolve + register a bundle's custom authenticator module at BOOT.
+ *
+ * The `registerPolicy` mirror, for the authN escape hatch: resolves
+ * `<bundleSrcPath>/authenticators/<name>.js`, returns `null` when unresolved
+ * (no such file, or the file exports no function) and THROWS when the file is
+ * present but broken — the caller (`core/server.js`) refuses the boot either
+ * way, adding the config context.
+ *
+ * An `async function` is REFUSED at boot for the same reason as an async
+ * policy: the gate authorizes synchronously, and a promise return is truthy
+ * but never a valid principal — the hook would silently never authenticate.
+ * The transpiled-async shape (a plain function returning a promise) is
+ * boot-INVISIBLE; `runAuthenticator`'s strict shape check is what keeps it
+ * fail-closed at request time.
+ *
+ * @param {string} bundleSrcPath - absolute path to the bundle source dir.
+ * @param {string} name          - the reference (also the file base name).
+ * @returns {function|null} the registered authenticator, or `null` when unresolved.
+ * @throws {Error} when the module cannot be required, or is an `async function`.
+ *
+ * @example
+ * // core/server.js, at boot
+ * var fn = authzGate.registerAuthenticator(bundleSrcPath, 'verifyJwt');
+ * if ( !fn ) {
+ *     throw new Error('authenticators/verifyJwt.js is missing (or exports no function)');
+ * }
+ *
+ * @example
+ * // <bundle>/authenticators/verifyJwt.js — a sync JWT verifier (jwt.verify
+ * // with a local secret is synchronous): the JWT-on-demand recipe.
+ * var jwt = require('jsonwebtoken');
+ * module.exports = function (req) {
+ *     var m = /^Bearer\s+(.+)$/i.exec((req.headers && req.headers.authorization) || '');
+ *     if (!m) { return null; }
+ *     try {
+ *         var claims = jwt.verify(m[1].trim(), process.env.JWT_PUBLIC_KEY);
+ *         return { name: claims.sub, roles: claims.roles || [] };
+ *     } catch (e) {
+ *         return null;   // invalid signature/expiry — not authenticated by me
+ *     }
+ * };
+ */
+var registerAuthenticator = function (bundleSrcPath, name) {
+    if ( typeof(name) != 'string' || !name ) {
+        return null;
+    }
+    if ( typeof(bundleSrcPath) != 'string' || !bundleSrcPath ) {
+        return null;
+    }
+
+    var file = require('path').join(bundleSrcPath, 'authenticators', name + '.js');
+    if ( !require('fs').existsSync(file) ) {
+        return null;
+    }
+
+    var fn = require(file);   // may throw -> the caller wraps it with config context
+    if ( typeof(fn) != 'function' ) {
+        return null;
+    }
+    if ( fn.constructor && fn.constructor.name === 'AsyncFunction' ) {
+        throw new Error('authenticator `'+ name +'` is an `async function`, but the authenticator contract is SYNCHRONOUS: `module.exports = function (req) { return { name: \'caller\', roles: [] } or null; };`. The gate authorizes synchronously, so an async authenticator could never admit a caller.');
+    }
+
+    var reg = getAuthenticatorRegistry();
     if ( reg ) {
         reg[name] = fn;
     }
@@ -762,11 +947,19 @@ var authorizeRequest = function (controller, req, res) {
             var token = getBearerToken(req);
             if ( token !== null ) {
                 principal = verifyMachineToken(req, mconf, token);
-                if ( !principal ) {
-                    // PRESENTED but rejected: the clean machine 401
-                    // (WWW-Authenticate), never the login bounce.
-                    return denyMachineUnauthenticated(controller, req, res);
-                }
+            }
+            // The custom hook — AFTER the built-in map (first success wins),
+            // and REGARDLESS of Bearer presence: it may verify another sync
+            // scheme entirely (x-api-key, an HMAC header, a JWT).
+            if ( !principal && typeof(mconf.authenticator) == 'string' && mconf.authenticator !== '' ) {
+                principal = runAuthenticator(req, mconf.authenticator);
+            }
+            if ( !principal && token !== null ) {
+                // A Bearer was PRESENTED and both the map and the hook
+                // rejected it: the clean machine 401 (WWW-Authenticate),
+                // never the login bounce. A custom-scheme miss (no Bearer)
+                // falls through to the ordinary path below instead.
+                return denyMachineUnauthenticated(controller, req, res);
             }
         }
         // Machine auth disabled, or no Bearer presented: the pre-#MS3 path,
@@ -795,8 +988,9 @@ var authorizeRequest = function (controller, req, res) {
 };
 
 module.exports = {
-    authorizeRequest : authorizeRequest,
-    isAuthenticated  : isAuthenticated,
-    hasAnyRole       : hasAnyRole,
-    registerPolicy   : registerPolicy
+    authorizeRequest      : authorizeRequest,
+    isAuthenticated       : isAuthenticated,
+    hasAnyRole            : hasAnyRole,
+    registerPolicy        : registerPolicy,
+    registerAuthenticator : registerAuthenticator
 };

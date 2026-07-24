@@ -103,6 +103,11 @@
                   }
                 }
               }
+            },
+            "authenticator": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Optional custom authenticator: names a <bundle>/authenticators/<name>.js module (the policies/<name>.js shape applied to authN) exporting a SYNCHRONOUS function (req) returning { name, roles } or null. Runs AFTER the built-in caller map (first success wins) and regardless of Bearer presence, so it can verify any sync-checkable credential — a JWT signature, an HMAC header, an x-api-key scheme. A missing, broken or async-function module refuses to boot; at request time a throw or malformed return is fail-closed unauthenticated."
             }
           }
         }

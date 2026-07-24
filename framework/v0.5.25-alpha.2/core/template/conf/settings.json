@@ -213,18 +213,27 @@
   //              401 (`WWW-Authenticate: Bearer`), never the login bounce.
   //              The caller NAME becomes the audit-trail actor key
   //              (audit records carry `machine: true`).
+  //              `authenticator` (optional) names a custom
+  //              `<bundle>/authenticators/<name>.js` module — the
+  //              policies/<name>.js shape applied to authN: a SYNCHRONOUS
+  //              `function (req) { return { name, roles } or null; }` run
+  //              AFTER the built-in caller map, for any sync-checkable
+  //              credential (a JWT signature, an HMAC header, x-api-key). A
+  //              missing/broken/async module refuses to boot.
   //              Changing this needs a bundle restart (boot config). Example:
   //                "machine": {
   //                  "enabled": true,
   //                  "callers": {
   //                    "billing": { "key": "${secret:BILLING_SVC_KEY}", "roles": ["service"] }
-  //                  }
+  //                  },
+  //                  "authenticator": null
   //                }
   "auth": {
     "loginRoute": null,
     "machine": {
       "enabled": false,
-      "callers": {}
+      "callers": {},
+      "authenticator": null
     }
   },
   // #COMPLY2 — audit trail (written by lib/audit: self.audit() in your actions,
