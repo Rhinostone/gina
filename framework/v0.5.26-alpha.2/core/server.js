@@ -702,7 +702,13 @@ function Server(options) {
                         isCacheless         : options.conf[self.appName][self.env].isCacheless,
                         routing             : options.conf[self.appName][self.env].routing,
                         allRoutes           : options.conf.routing,
-                        cachePath           : options.conf[self.appName][self.env].cachePath
+                        cachePath           : options.conf[self.appName][self.env].cachePath,
+                        // #COMPLY9 — the transport-posture knobs resolve exactly like
+                        // `scheme` itself: the bundle's settings (already seeded into
+                        // serverOpt above) win, and these fills give env.json's
+                        // per-env `server` block a voice when settings are silent.
+                        requireHttps        : options.conf[self.appName][self.env].server.requireHttps,
+                        allowInsecure       : options.conf[self.appName][self.env].server.allowInsecure
                     }
             );
 
@@ -1453,6 +1459,72 @@ function Server(options) {
                 }
             } catch (rwInitErr) {
                 console.warn('[releaseWatch] init skipped: '+ (rwInitErr.stack || rwInitErr.message || rwInitErr));
+            }
+
+            // ── #COMPLY9 — production transport posture (ZT2) ──────────────────
+            // Outside the `local` scope a bundle resolving a cleartext scheme is
+            // served exactly as configured — both engines' scheme switches default
+            // to cleartext — so the posture is surfaced at boot instead of staying
+            // invisible: warn by default, refuse when the operator asked for
+            // enforcement, acknowledge when the operator asserted the boundary.
+            //
+            //   server.requireHttps  === true  → REFUSE to boot a cleartext bundle
+            //       outside the local scope. The throw lands in this init() try,
+            //       whose catch emergs + flushes + exits BEFORE any listen() — the
+            //       same pre-listen principle as the MCP transport's fail-closed
+            //       start(): the cleartext port is never reachable at all.
+            //   server.allowInsecure === true  → the operator's assertion that TLS
+            //       terminates upstream (mesh sidecar, ingress/LB, reverse proxy —
+            //       the documented h2c topology); the warn becomes one info line.
+            //       Same vocabulary and polarity as `mcp.json > server >
+            //       allowInsecure`.
+            //
+            // Both are strict booleans resolved like `scheme` itself (bundle
+            // settings win, env.json's `server` block fills — the picked-keys
+            // merge above). A non-boolean throws: a truthy string on
+            // `requireHttps` would leave the transport silently UNENFORCED while
+            // the operator believes otherwise — the quietly-OFF class the authz
+            // lints above refuse (`auth.requireAuthByDefault` precedent). The
+            // scope gate is NOT-local, never is-production: custom scopes (e.g. a
+            // `beta`) are neither local nor production, and a production-keyed
+            // gate would silently skip them — the same reasoning as the
+            // stack-trace egress gate. `conf.server.scopeIsLocal` is deliberately
+            // not used (it derives from projects.json `def_scope`, not the live
+            // scope). The scheme test is `!== 'https'`, fail-closed: anything the
+            // engines cannot positively recognise as https is served cleartext
+            // (their scheme switches `default:` to the plain server).
+            var _tpRequireHttps  = serverOpt.requireHttps;
+            var _tpAllowInsecure = serverOpt.allowInsecure;
+            // Type lint first, scope-independent: settings.json boots every
+            // scope, so the dev machine catches the typo before it ships.
+            if ( typeof(_tpRequireHttps) != 'undefined' && typeof(_tpRequireHttps) != 'boolean' ) {
+                throw new Error('[ SERVER ] `settings.json > server.requireHttps` must be a boolean — got '+ JSON.stringify(_tpRequireHttps) +'. A truthy string would leave the transport silently UNENFORCED, so the boot refuses instead.');
+            }
+            if ( typeof(_tpAllowInsecure) != 'undefined' && typeof(_tpAllowInsecure) != 'boolean' ) {
+                throw new Error('[ SERVER ] `settings.json > server.allowInsecure` must be a boolean — got '+ JSON.stringify(_tpAllowInsecure) +'.');
+            }
+            if ( _tpRequireHttps === true && _tpAllowInsecure === true ) {
+                throw new Error('[ SERVER ] `server.requireHttps` and `server.allowInsecure` are both true — they assert opposite postures (enforce https at this bundle vs TLS terminates upstream). Keep exactly one.');
+            }
+            if ( serverOpt.scheme !== 'https' && !self.isLocalScope() ) {
+                if ( _tpRequireHttps === true ) {
+                    throw new Error('[ SERVER ] `server.requireHttps` is true, but bundle `'+ self.appName +'` resolves scheme `'+ serverOpt.scheme +'` in scope `'+ self.scope +'` — the listener would serve cleartext outside the local scope, which is exactly what this knob refuses (the refusal is pre-listen: nothing binds). Switch the bundle to https (`settings.json > server.scheme: "https"` + `server.credentials`), or — if TLS terminates upstream (mesh, ingress, reverse proxy) — replace `requireHttps` with `server.allowInsecure: true`.');
+                }
+                if ( _tpAllowInsecure === true ) {
+                    console.info('[ BUNDLE ][ server ][ init ] transport posture: scheme `'+ serverOpt.scheme +'` in scope `'+ self.scope +'` — allowInsecure asserted (TLS terminates upstream).');
+                } else {
+                    // proxy.json is advisory only — an https:// upstream hostname
+                    // for this scope+env strongly suggests TLS terminates there,
+                    // but only the explicit `allowInsecure` assertion silences
+                    // the warn (a reviewer can tell an audited acknowledgment
+                    // from a leftover; the #COMPLY10 `public`-marker rationale).
+                    var _tpProxyNote = ( typeof(process.gina.PROXY_HOSTNAME) != 'undefined' && /^https:\/\//i.test(process.gina.PROXY_HOSTNAME) )
+                        ? ' proxy.json declares `'+ process.gina.PROXY_HOSTNAME +'` for this scope+env, so TLS likely terminates there.'
+                        : '';
+                    console.warn('[ BUNDLE ][ server ][ init ] transport posture: bundle `'+ self.appName +'` serves plain `'+ serverOpt.scheme +'` in scope `'+ self.scope +'` — the transport at this listener is cleartext.'+ _tpProxyNote +' If TLS terminates upstream (mesh, ingress/LB, reverse proxy — the documented h2c topology), acknowledge with `server.allowInsecure: true`; to enforce https at this bundle, set `server.requireHttps: true`.');
+                }
+            } else if ( _tpRequireHttps === true && serverOpt.scheme === 'https' && !self.isLocalScope() ) {
+                console.info('[ BUNDLE ][ server ][ init ] transport posture: server.requireHttps satisfied — scheme is https.');
             }
 
             self.emit('configured', false, engine.instance, engine.middleware, self.conf[self.appName][self.env]);

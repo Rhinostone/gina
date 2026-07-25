@@ -133,6 +133,14 @@
           "description": "URL scheme. Use \"https\" for HTTP/2 (required) or \"http\" for HTTP/1.1 only.",
           "enum": ["https", "http"]
         },
+        "requireHttps": {
+          "type": "boolean",
+          "description": "Opt-in transport enforcement. When true, a bundle resolving a cleartext scheme (anything but \"https\") outside the local scope REFUSES to boot — pre-listen, so the cleartext port is never reachable. Inert in the local scope. Setting it together with allowInsecure is a boot-refused contradiction. Defaults to false: a cleartext bundle outside the local scope warns at boot instead."
+        },
+        "allowInsecure": {
+          "type": "boolean",
+          "description": "The operator's assertion that TLS terminates upstream (service mesh, ingress/load balancer, reverse proxy — the documented h2c topology). When true, the boot-time cleartext-transport warning outside the local scope becomes a single info line. Same vocabulary as mcp.json > server > allowInsecure. Setting it together with requireHttps is a boot-refused contradiction. Defaults to false."
+        },
         "allowHTTP1": {
           "type": "boolean",
           "description": "When true, the HTTP/2 server also accepts HTTP/1.1 connections (ALPN negotiation). Defaults to true."

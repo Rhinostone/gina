@@ -1,0 +1,3 @@
+kind: Added
+body: 'Production transport posture (#COMPLY9): a bundle resolving a cleartext scheme outside the local scope now warns at boot, naming the remediation. `server.requireHttps: true` refuses to boot the cleartext bundle instead — pre-listen, so the port is never reachable — and `server.allowInsecure: true` acknowledges that TLS terminates upstream (mesh, ingress, reverse proxy), turning the warn into one info line. Both strict booleans; a non-boolean or setting both refuses to boot.'
+time: 2026-07-25T17:15:52+01:00
