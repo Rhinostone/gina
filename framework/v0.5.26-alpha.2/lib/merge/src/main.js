@@ -5,13 +5,15 @@
  * Works in Node.js (CommonJS) and browser (AMD / GFF) contexts.
  *
  * - Objects are merged recursively.
- * - Arrays and primitives from `source` overwrite `target` (unless `override=false`).
- * - Pass `true` as the last argument to force overwrite of existing keys.
+ * - Missing keys are always filled from `source`; on a CONFLICTING key the
+ *   `target` value is preserved by default.
+ * - Pass `true` as the last argument (`override`) to make `source` win instead.
  *
  * @example
  * var merge = require('lib/merge');
  * var result = merge({ a: 1 }, { b: 2 }); // { a: 1, b: 2 }
- * merge({ a: 1 }, { a: 9 }, false); // { a: 1 }  — target wins when override=false
+ * merge({ a: 1 }, { a: 9 });       // { a: 1 }  — default: target wins on conflicts
+ * merge({ a: 1 }, { a: 9 }, true); // { a: 9 }  — override: source wins
  */
 
 /**
@@ -37,13 +39,15 @@ function Merge() {
      *
      * @param {object|Array} target    - Target (base) object or array
      * @param {object|Array} source    - Source object or array to merge into target
-     * @param {boolean}      [override=true] - When `false`, existing target keys are preserved
+     * @param {boolean}      [override=false] - Pass `true` to let `source` overwrite existing target keys; by default they are preserved
      * @returns {object|Array} Merged result (mutates and returns `target`)
      *
      * @example
      * merge({ a: 1 }, { b: 2 })          // { a: 1, b: 2 }
-     * merge({ a: 1 }, { a: 9 }, false)   // { a: 1 }
-     * merge([1, 2],   [3, 4])            // [3, 4]
+     * merge({ a: 1 }, { a: 9 })          // { a: 1 }  — default: target wins
+     * merge({ a: 1 }, { a: 9 }, true)    // { a: 9 }
+     * merge([1, 2],   [3, 4])            // [1, 2, 3, 4]
+     * merge([1, 2],   [3, 4], true)      // [3, 4]
      */
     var browse = function (_target, _source) {
 
