@@ -226,3 +226,87 @@ describe('05 - dist fidelity: the rebuilt bundle carries both fixes', function (
         assert.ok(active.indexOf("typeof(previewContainer) != 'undefined' && previewContainer") > -1, '#B147 in dist');
     });
 });
+
+// ─── 06 — #B149 source pins: a no-default action is quiet at bind ────────────
+describe('06 - #B149 source pins: a no-default action is quiet at bind time', function () {
+    var active;
+    before(function () { active = stripComments(SRC); });
+
+    it('the no-default branch debugs and returns early (before any error path)', function () {
+        assert.match(active, /if \(!defaultRoute\) \{[\s\S]{0,240}?console\.debug\([\s\S]{0,160}?return;\s*\}/);
+    });
+    it('the misleading "Trying to get default route" warn is GONE', function () {
+        assert.ok(active.indexOf('Trying to get default route') < 0, 'the no-default warn is retired');
+    });
+    it('getRoute now runs unconditionally after the early return (the if-guard is gone)', function () {
+        assert.match(active, /uploadActionUrl = routing\.getRoute\(defaultRoute\);/);
+        assert.doesNotMatch(active, /if \(defaultRoute\)\s+uploadActionUrl = routing\.getRoute/);
+    });
+});
+
+// ─── 07 — #B149 behaviour: -delete-action absent is a quiet debug ────────────
+describe('07 - #B149 behaviour: an upload-only input does not error on a missing no-default action', function () {
+    function recCon() {
+        var rec = { debug: [], warn: [], info: [], error: [] };
+        return { rec: rec,
+            debug: function (m) { rec.debug.push(m); }, warn: function (m) { rec.warn.push(m); },
+            info:  function (m) { rec.info.push(m); }, error: function (m) { rec.error.push(m); } };
+    }
+    it('missing -delete-action (no default): one debug, no error, no $errorContainer write, staging untouched', function () {
+        var con = recCon();
+        var checkAction = makeCheckAction(mockRouting, con);
+        var $errBag = { innerHTML: '' };
+        var $el = mockEl({ 'data-gina-form-upload-action': '/staging' });
+        checkAction($el, 'data-gina-form-upload-delete-action', $errBag);
+        assert.equal(con.rec.debug.length, 1, 'one debug line');
+        assert.equal(con.rec.error.length, 0, 'no console.error');
+        assert.equal($errBag.innerHTML, '', '$errorContainer untouched');
+        assert.equal($el._attrs['data-gina-form-upload-action'], '/staging', 'staging action not clobbered');
+    });
+    it('a WITH-default action that fails to resolve STILL errors (genuine misconfig — surgical fix)', function () {
+        var con = recCon();
+        var nullRouting = { getRoute: function () { return null; } };
+        var checkAction = makeCheckAction(nullRouting, con);
+        var $errBag = { innerHTML: '' };
+        var $el = mockEl({}); // -action absent, but it HAS a default (upload-to-tmp-xml)
+        checkAction($el, 'data-gina-form-upload-action', $errBag);
+        assert.equal(con.rec.error.length, 1, 'a real resolve failure still errors');
+        assert.ok($errBag.innerHTML.length > 0, '$errorContainer written for a real failure');
+    });
+    it('SUBTRACT: the frozen pre-#B149 no-default path warned + errored + wrote $errorContainer', function () {
+        function preFix($el, action, routing, con, $errBag) {
+            var defaultRoute = null;
+            switch (action) {
+                case 'data-gina-form-upload-action': defaultRoute = 'upload-to-tmp-xml'; break;
+                case 'data-gina-form-upload-reset-action': defaultRoute = 'upload-delete-from-tmp-xml'; break;
+            }
+            var uploadActionUrl = $el.getAttribute(action);
+            if (!uploadActionUrl || uploadActionUrl == '') {
+                if (!defaultRoute) con.warn('definition not found. Trying to get default route.');
+                var add = null;
+                try { if (defaultRoute) uploadActionUrl = routing.getRoute(defaultRoute); } catch (e) { add = e; }
+                if (uploadActionUrl) { $el.setAttribute(action, uploadActionUrl.toUrl()); }
+                else { var m = '`' + action + '` needs to be defined'; if ($errBag) $errBag.innerHTML += m; con.error(m); }
+            }
+        }
+        var con = recCon();
+        var $errBag = { innerHTML: '' };
+        var $el = mockEl({ 'data-gina-form-upload-action': '/staging' });
+        preFix($el, 'data-gina-form-upload-delete-action', mockRouting, con, $errBag);
+        assert.equal(con.rec.warn.length, 1, 'the bug: warned');
+        assert.equal(con.rec.error.length, 1, 'the bug: errored');
+        assert.ok($errBag.innerHTML.length > 0, 'the bug: wrote $errorContainer');
+    });
+});
+
+// ─── 08 — #B149 dist fidelity (red-first by construction: brand-new strings) ─
+describe('08 - #B149 dist fidelity: the rebuilt bundle carries the quiet-at-bind branch', function () {
+    var dist;
+    before(function () { dist = fs.readFileSync(DIST_JS, 'utf8'); });
+    it('gina.js carries the no-default debug string (absent from any pre-fix build)', function () {
+        assert.ok(dist.indexOf('optional until a delete is triggered') > -1, '#B149 in dist');
+    });
+    it('gina.js no longer carries the retired "Trying to get default route" warn', function () {
+        assert.ok(dist.indexOf('Trying to get default route') < 0);
+    });
+});

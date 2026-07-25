@@ -801,6 +801,8 @@ declare namespace gina {
         cmd: any;
         cmdStatusFormat: any;
         connectorConfig: any;
+        /** Transient-vs-permanent classifier for datastore query errors — stamps `err.isTransient` / `err.transientReason` (#CE1). */
+        connectorError: any;
         connectorRegistry: any;
         /** The native DTO builder (same object as `gina.dto`). */
         dto: DtoBuilder;

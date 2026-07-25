@@ -342,6 +342,7 @@ async function onExec() {
         'cache:',
         'connector:',
         'container:',
+        'controller:',
         'dev:',
         'env:',
         'i18n:',

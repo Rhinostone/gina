@@ -1,0 +1,105 @@
+**********************************
+* Controller command lines e.g.  *
+**********************************
+
+
+[ Adding a controller ]
+
+    Scaffold a NAMESPACE controller inside a bundle and print the routing.json
+    rules to wire it. gina creates controllers/controller.<name>.js with one
+    JSDoc'd action stub per --controls entry (or a single `default` action when
+    --controls is omitted), and PRINTS the routing rules for you to paste — it
+    never edits routing.json. Restart the bundle after pasting the rules.
+
+    The bundle flavor is auto-detected: a view bundle (one that has views, i.e.
+    a config/templates.json) gets self.render() stubs and one template per
+    action at templates/html/<name>/<action>.html; an API-only bundle gets
+    self.renderJSON() stubs and no templates.
+
+    Controller and action names: a lowercase letter followed by letters, digits
+    or underscores (e.g. `checkout`, `user_profile`). `controller` is reserved
+    (it is the default controller that every namespace controller inherits).
+
+    $ gina controller:add <name> <bundle> @<project>
+
+    With named actions
+    ----------
+    One action stub (and, for a view bundle, one template) is created per entry.
+
+    $ gina controller:add checkout demo @myproject --controls=start,confirm,cancel
+
+    Force the flavor (override the auto-detect)
+    ----------
+    --api forces renderJSON() stubs and writes no templates; --views forces
+    render() stubs + templates even on an API-only bundle (run gina view:add
+    first if the bundle has no view support yet).
+
+    $ gina controller:add webhooks demo @myproject --controls=ping --api
+    $ gina controller:add checkout demo @myproject --views
+
+
+
+[ Removing a controller ]
+
+    Remove a NAMESPACE controller from a bundle. Because a controller is
+    referenced only by its namespace string — and a routing rule that names a
+    namespace with no matching controller file silently falls back to the
+    default controller.js rather than erroring — gina first SCANS for every
+    reference (routing.json rule-level `namespace` and `param.namespace`, and
+    `requireController('<name>')` calls across the bundle) and REFUSES the removal
+    if any still point at the controller, listing each one. It never edits
+    routing.json. When clean, it asks for confirmation, then deletes the
+    controller file and its templates/html/<name>/ tree.
+
+    controller:rm is an alias for controller:remove. The default controller
+    (controller.js, namespace `controller`) can never be removed.
+
+    $ gina controller:remove <name> <bundle> @<project>
+    $ gina controller:rm checkout demo @myproject
+
+    Preview without changing anything (--dry-run)
+    ----------
+    Shows the deletion plan and any blocking references. Add --format=json for a
+    machine-readable envelope.
+
+    $ gina controller:remove checkout demo @myproject --dry-run
+    $ gina controller:remove checkout demo @myproject --dry-run --format=json
+
+    Delete the file even with blockers (--force)
+    ----------
+    Skips the confirmation and the refusal, deletes the controller file and its
+    templates, and prints the references left for you to clean up by hand.
+    routing.json is still never edited.
+
+    $ gina controller:remove checkout demo @myproject --force
+
+
+
+[ Renaming a controller ]
+
+    Rename a NAMESPACE controller in place, rewriting the structured references
+    to the old namespace so nothing dangles. gina moves
+    controllers/controller.<old>.js to controller.<new>.js, moves the
+    templates/html/<old>/ tree, and rewrites the old namespace at the sites it can
+    do safely: the routing.json namespace values (rule-level `namespace` and
+    `param.namespace`, via comment-preserving string edits) and every
+    requireController('<old>') call. Unlike controller:remove, rename DOES edit
+    routing.json — but only those values. A full plan is shown first, then it asks
+    for confirmation before applying (all-or-nothing).
+
+    Anything a static rewrite cannot resolve — a `:variable` namespace, a
+    non-literal requireController(...), or the cosmetic controller class name — is
+    REPORTED for you to fix by hand, never rewritten.
+
+    $ gina controller:rename <old> <new> <bundle> @<project>
+    $ gina controller:rename checkout basket demo @myproject
+
+    Preview / apply without a prompt
+    ----------
+    --dry-run shows the full plan and any residuals without changing anything
+    (add --format=json for a machine-readable envelope). --force applies without
+    the interactive confirmation.
+
+    $ gina controller:rename checkout basket demo @myproject --dry-run
+    $ gina controller:rename checkout basket demo @myproject --dry-run --format=json
+    $ gina controller:rename checkout basket demo @myproject --force

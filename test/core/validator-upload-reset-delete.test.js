@@ -423,3 +423,25 @@ describe('upload reset/delete — built bundles carry the fix (dist pins)', func
         assert.ok(distMin.indexOf('data-gina-form-upload-hidden-class') > -1);
     });
 });
+
+// ─── #B150 — a zero-match removal loop signals the otherwise-silent skip ─────
+describe('upload reset/delete — #B150: a zero-match removal loop signals the silent cleanup skip', function () {
+    it('01 - source: removedCount===0 with non-empty previews warns', function () {
+        assert.match(onRemoveSlice, /if \(removedCount === 0 && childNodes\.length > 0\) \{[\s\S]{0,300}?console\.warn\(/);
+    });
+    it('02 - source: the signal precedes the still-gated #R8 strip AND the callback (gates unchanged)', function () {
+        var signal   = onRemoveSlice.indexOf('if (removedCount === 0 && childNodes.length > 0)');
+        var strip    = onRemoveSlice.indexOf('if (removedCount > 0) {');
+        var dispatch = onRemoveSlice.indexOf('if (removedCount > 0 && onRemoveCbName)');
+        assert.ok(signal > -1 && strip > -1 && dispatch > -1);
+        assert.ok(signal < strip && strip < dispatch, 'the signal sits before the removedCount>0 cleanup tail');
+    });
+    function zeroMatchWarns(removedCount, childNodesLength) { return (removedCount === 0 && childNodesLength > 0); }
+    it('03 - replica: non-empty previews, zero removals => warn', function () { assert.equal(zeroMatchWarns(0, 3), true); });
+    it('04 - replica: an empty preview set => silent (nothing to remove is normal)', function () { assert.equal(zeroMatchWarns(0, 0), false); });
+    it('05 - replica: a real removal (removedCount>0) => no warn', function () { assert.equal(zeroMatchWarns(2, 3), false); });
+    it('06 - dist fidelity: the rebuilt bundle carries the zero-match signal (new string, red-first by construction)', function () {
+        var dist = fs.readFileSync(DIST_JS, 'utf8');
+        assert.ok(dist.indexOf('none matched the staged input files') > -1, '#B150 in dist');
+    });
+});

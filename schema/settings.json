@@ -62,6 +62,57 @@
         }
       }
     },
+    "auth": {
+      "type": "object",
+      "description": "Authentication & authorization gate settings (#COMPLY1 route authorization + #MS3 machine-caller authentication). Boot config: changes need a bundle restart. Route-level gating itself is declared in routing.json (param.requireAuth / param.roles / param.policy).",
+      "additionalProperties": false,
+      "properties": {
+        "loginRoute": {
+          "type": ["string", "null"],
+          "description": "Login bounce target for unauthenticated BROWSER navigations on gated routes: a routing.json rule name (recommended), or an absolute path like \"/login\". null (default) disables the bounce — every unauthenticated request to a gated route gets a 401. XHR requests always get the 401, never a redirect. The bounce is always a non-cacheable 302.",
+          "default": null
+        },
+        "machine": {
+          "type": "object",
+          "description": "Machine-caller (service-to-service) authentication, since 0.5.25: a request presenting `Authorization: Bearer <key>` matching a configured caller passes the authz gate without a session — it satisfies param.requireAuth, its roles match route param.roles like a session user's, and route policies receive it as { name, roles, machine: true }. Session wins when both are present. A presented-but-invalid key gets a clean 401 with `WWW-Authenticate: Bearer`, never the login bounce.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch — STRICTLY boolean (any other type refuses to boot). Fail-closed default: no machine caller can authenticate until this is explicitly true.",
+              "default": false
+            },
+            "callers": {
+              "type": "object",
+              "description": "Named machine callers: <callerName> -> { key, roles }. The caller name becomes the audit-trail actor key (records carry machine: true).",
+              "default": {},
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["key"],
+                "properties": {
+                  "key": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The shared secret this caller presents as `Authorization: Bearer <key>`. Supports ${secret:KEY} placeholders (resolved from process.env at config load) — prefer them, with long random values (32+ bytes). Compared in constant time against a boot-computed sha256 hash; the raw key is not retained after boot."
+                  },
+                  "roles": {
+                    "type": "array",
+                    "items": { "type": "string", "minLength": 1 },
+                    "description": "Roles this caller holds — matched against route param.roles exactly like a session user's roles. Absent = no roles: the caller passes requireAuth-only routes, never role-gated ones (which is also how a route stays human-only: require a role no caller holds)."
+                  }
+                }
+              }
+            },
+            "authenticator": {
+              "type": ["string", "null"],
+              "default": null,
+              "description": "Optional custom authenticator: names a <bundle>/authenticators/<name>.js module (the policies/<name>.js shape applied to authN) exporting a SYNCHRONOUS function (req) returning { name, roles } or null. Runs AFTER the built-in caller map (first success wins) and regardless of Bearer presence, so it can verify any sync-checkable credential — a JWT signature, an HMAC header, an x-api-key scheme. A missing, broken or async-function module refuses to boot; at request time a throw or malformed return is fail-closed unauthenticated."
+            }
+          }
+        }
+      }
+    },
     "server": {
       "type": "object",
       "description": "HTTP server engine and protocol configuration.",
@@ -92,6 +143,17 @@
           "items": {
             "type": "string",
             "examples": ["https://api.example.com:443"]
+          }
+        },
+        "proxy": {
+          "type": "object",
+          "description": "Reverse-proxy request-classification options.",
+          "additionalProperties": false,
+          "properties": {
+            "requireForwardedHeaders": {
+              "type": "boolean",
+              "description": "Opt-in deterministic proxied-request classification. When true, a request is classified as proxied ONLY when it carries an X-Forwarded-Host header — the port-less-Host heuristic is disabled, so internal calls addressed by service/DNS name (container health probes on app routes, mesh hops, sibling-bundle requests) can no longer rewrite the worker's reverse-proxy host context. Enable only behind a front proxy that always sends X-Forwarded-Host. Defaults to false (historical heuristic: port-less Host OR X-Forwarded-Host)."
+            }
           }
         },
         "releaseWatch": {
@@ -217,6 +279,11 @@
           "description": "npm package name to resolve. Defaults to @rhinostone/swig (native swig syntax). Set to @rhinostone/swig-twig to use the Twig-syntax frontend. The abandoned upstream \"swig\" name is never accepted.",
           "enum": ["@rhinostone/swig", "@rhinostone/swig-twig"],
           "default": "@rhinostone/swig"
+        },
+        "autoescape": {
+          "type": "boolean",
+          "description": "Whether swig auto-escapes variable output (`{{ x }}`) by default, passed to swig.setDefaults({ autoescape }). Defaults to false today; set true to HTML-escape variable output as an XSS defense — nunjucks defaults to true (see settings.nunjucks.autoescape).",
+          "default": false
         }
       }
     },

@@ -525,3 +525,163 @@ describe('#R8 §10 — dist fidelity: the built bundles carry the feature', func
         });
     });
 });
+
+
+/*
+ * ─────────────────────────────────────────────────────────────────────────
+ * processing state — an additive lifecycle state stamped at bytes-done
+ * (xhr.upload.onloadend), for the server post-processing window between the
+ * last byte sent and the response. Advances the state attribute ONLY, leaving
+ * the determinate bar full (value/max/percent untouched) so a styled bar does
+ * not visually regress to an empty track while the server works.
+ * ─────────────────────────────────────────────────────────────────────────
+ */
+
+describe('#R8 §11 — processing state: source pins (onloadend delegate + early-return)', function () {
+
+    it('xhr.upload.onloadend is registered once, inside the per-send block, upload-gated', function () {
+        var uploadProgIdx = SRC.indexOf('xhr.upload.onprogress = function');
+        var loadendIdx    = SRC.indexOf('xhr.upload.onloadend = function');
+        var helperIdx     = SRC.indexOf('var updateUploadProgressIndicator = function');
+        assert.ok(loadendIdx >= 0, 'onloadend handler present');
+        assert.ok(uploadProgIdx >= 0 && uploadProgIdx < loadendIdx,
+            'onloadend attaches after onprogress (sibling in the same per-send block)');
+        assert.ok(loadendIdx < helperIdx,
+            'onloadend sits inside send(), before the next module-level declaration');
+        assert.equal(SRC.indexOf('xhr.upload.onloadend', loadendIdx + 1), -1,
+            'exactly one onloadend assignment site (fresh per-send, like onprogress)');
+        // upload-only gate mirrors onprogress — no-op for non-upload sends
+        assert.match(SRC, /xhr\.upload\.onloadend = function\(\) \{[\s\S]{0,120}?if \(!isUploadXhr\) return;/,
+            'the onloadend closure self-gates on isUploadXhr');
+    });
+
+    it('onloadend delegates the processing state to the shared indicator chokepoint', function () {
+        assert.match(SRC,
+            /xhr\.upload\.onloadend = function\(\) \{[\s\S]*?updateUploadProgressIndicator\(\s*\(\$target\.uploadProperties\) \? \$target\.uploadProperties\.progressContainer : null,\s*'processing'\s*\)/,
+            'onloadend calls the same helper onprogress uses, with the processing state and no result payload');
+    });
+
+    it('the processing early-return sits right after the state stamp, before the complete/!result branches', function () {
+        var stampIdx      = SRC.indexOf("$indicator.setAttribute('data-gina-upload-progress-state', state);");
+        var processingIdx = SRC.indexOf("if (state == 'processing') {");
+        var completeIdx   = SRC.indexOf("if (state == 'complete') {");
+        assert.ok(stampIdx >= 0 && processingIdx >= 0 && completeIdx >= 0);
+        assert.ok(stampIdx < processingIdx,
+            'the state attribute is stamped unconditionally BEFORE the processing early-return');
+        assert.ok(processingIdx < completeIdx,
+            'the processing branch precedes complete (and therefore the later !result guard that would strip value/percent)');
+        // the branch is a bare early-return: it writes no value/max/percent
+        assert.match(SRC, /if \(state == 'processing'\) \{[\s\S]*?return;\s*\}/,
+            'processing branch returns without further mutation');
+    });
+
+    it('the docstring enum and @param carry the processing state', function () {
+        assert.match(SRC, /preparing\|uploading\|indeterminate\|processing\|complete\|error/,
+            'enum lists processing between indeterminate and complete');
+        assert.match(SRC, /@param \{string\} state[\s\S]{0,160}?`processing`/,
+            '@param documents the processing state');
+    });
+});
+
+
+describe('#R8 §12 — processing state: preserves the bar, advances the state (jsdom-driven shipped bytes)', function () {
+
+    /**
+     * Builds a fresh jsdom document with one native progress and one text target
+     * and returns the shipped updateUploadProgressIndicator bound to it.
+     *
+     * @returns {object} { fn, doc }
+     */
+    function freshDom() {
+        var dom = new JSDOM('<!doctype html><html><body>' +
+            '<progress id="p1"></progress>' +
+            '<div id="d1"></div>' +
+            '</body></html>');
+        var fnText = extractFunctionExpression(SRC,
+            'var updateUploadProgressIndicator = function(containerId, state, result) {');
+        /* jshint evil: true */
+        var make = new Function('document', 'return (' + fnText + ');');
+        return { fn: make(dom.window.document), doc: dom.window.document };
+    }
+
+    it('processing after a determinate uploading update leaves value/max/percent UNTOUCHED', function () {
+        var h = freshDom();
+        var $p = h.doc.getElementById('p1');
+        h.fn('p1', 'uploading', { progress: 100, loaded: 2438, total: 2438 });
+        // the byte-done state as the last onprogress left it
+        assert.equal($p.getAttribute('value'), '2438');
+        assert.equal($p.getAttribute('max'), '2438');
+        assert.equal($p.getAttribute('data-gina-upload-progress'), '100');
+        // bytes-done → processing (the onloadend delegate passes NO result)
+        h.fn('p1', 'processing');
+        assert.equal($p.getAttribute('data-gina-upload-progress-state'), 'processing', 'state advanced');
+        assert.equal($p.getAttribute('value'), '2438', 'value preserved — bar stays full');
+        assert.equal($p.getAttribute('max'), '2438', 'max preserved');
+        assert.equal($p.getAttribute('data-gina-upload-progress'), '100', 'percent attribute preserved');
+    });
+
+    it('processing on a non-progress element leaves textContent + percent attribute UNTOUCHED', function () {
+        var h = freshDom();
+        var $d = h.doc.getElementById('d1');
+        h.fn('d1', 'uploading', { progress: 100, loaded: 2438, total: 2438 });
+        h.fn('d1', 'processing');
+        assert.equal($d.getAttribute('data-gina-upload-progress-state'), 'processing');
+        assert.equal($d.textContent, '100%', 'percent text preserved');
+        assert.equal($d.getAttribute('data-gina-upload-progress'), '100', 'percent attribute preserved');
+    });
+
+    it('processing after an indeterminate update keeps the bar indeterminate (value stays absent)', function () {
+        var h = freshDom();
+        var $p = h.doc.getElementById('p1');
+        h.fn('p1', 'indeterminate', { progress: null });
+        assert.equal($p.getAttribute('value'), null, 'indeterminate: value absent (native animation)');
+        h.fn('p1', 'processing');
+        assert.equal($p.getAttribute('data-gina-upload-progress-state'), 'processing');
+        assert.equal($p.getAttribute('value'), null, 'value still absent — the native animation keeps reading as "working"');
+    });
+
+    it('processing called with NO result arg does not throw', function () {
+        var h = freshDom();
+        h.fn('p1', 'uploading', { progress: 50, loaded: 5, total: 10 });
+        assert.doesNotThrow(function () { h.fn('p1', 'processing'); }, 'the onloadend delegate passes no result — must be safe');
+    });
+
+    it('subtract control: WITHOUT the early-return, a resultless processing call strips value + percent', function () {
+        // Prove the early-return is LOAD-BEARING: remove the processing branch from
+        // the extracted shipped bytes and re-drive. A resultless call then falls
+        // through to the `!result` guard, which removes `value` (native indeterminate)
+        // and the percent attribute — exactly the regression the branch prevents.
+        var fnText  = extractFunctionExpression(SRC,
+            'var updateUploadProgressIndicator = function(containerId, state, result) {');
+        var without = fnText.replace(/if \(state == 'processing'\) \{[\s\S]*?return;\s*\}/, '');
+        assert.ok(without.indexOf("state == 'processing'") < 0, 'subtract removed the branch');
+        var dom  = new JSDOM('<!doctype html><html><body><progress id="p1"></progress></body></html>');
+        /* jshint evil: true */
+        var make = new Function('document', 'return (' + without + ');');
+        var fn   = make(dom.window.document);
+        var $p   = dom.window.document.getElementById('p1');
+        fn('p1', 'uploading', { progress: 100, loaded: 2438, total: 2438 });
+        fn('p1', 'processing'); // no result → falls through to the !result guard
+        assert.equal($p.getAttribute('value'), null, 'WITHOUT the branch: value stripped (native indeterminate) — the regression');
+        assert.equal($p.getAttribute('data-gina-upload-progress'), null, 'WITHOUT the branch: percent attribute stripped');
+    });
+});
+
+
+describe('#R8 §13 — dist fidelity: processing state in the built bundles', function () {
+    // `onloadend` is introduced ONLY by this change (absent from the pre-change
+    // dist, verified 0/0), so it is a clean RED-before / green-after subtract
+    // control proving these pins detect a stale artifact.
+
+    it('gina.js (unminified) carries the onloadend delegate and the processing branch', function () {
+        var bundle = fs.readFileSync(DIST, 'utf8');
+        assert.ok(bundle.indexOf('onloadend') >= 0, 'gina.js carries the onloadend handler');
+        assert.ok(bundle.indexOf("state == 'processing'") >= 0, 'gina.js carries the processing early-return branch');
+    });
+
+    it('gina.min.js (minified) carries the onloadend handler', function () {
+        var bundle = fs.readFileSync(DIST_MIN, 'utf8');
+        assert.ok(bundle.indexOf('onloadend') >= 0,
+            'gina.min.js carries the onloadend handler (a native DOM property — survives SIMPLE-mode minification, like onprogress)');
+    });
+});

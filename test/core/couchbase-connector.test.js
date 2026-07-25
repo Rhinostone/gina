@@ -390,3 +390,99 @@ describe('07 - field-path $N substitution behaviour (pure-logic replica)', funct
     });
 
 });
+
+
+// ─── 08 — #B153: N1QL onError guards the `cause` envelope (never hangs) ──────
+
+describe('08 - #B153: onError guards err.cause so the query always settles', function() {
+
+    var src;
+    before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
+
+    it('all three N1QL onError sites guard err.cause before reading first_error_message', function() {
+        var guardCount = (src.match(/err && err\.cause && typeof\(err\.cause\.first_error_message\) != 'undefined'/g) || []).length;
+        assert.equal(guardCount, 3, 'all three onError sites carry the cause guard');
+        // every `new Error(err.cause.first_error_message)` now sits inside a guarded branch
+        var b153 = (src.match(/#B153/g) || []).length;
+        assert.ok(b153 >= 3, 'each fixed site is annotated with the bug id');
+    });
+
+    it('the register() sites forward the raw error through onQueryCallback on the fallback path', function() {
+        assert.match(src,
+            /var error;\s*if \( err && err\.cause[\s\S]*?error = \(err instanceof Error\) \? err : new Error\(String\(err\)\);[\s\S]*?onQueryCallback\(error\);/,
+            'guarded build-from-cause, else forward raw err, then always call onQueryCallback');
+    });
+
+    it('the bulkInsert site forwards the raw err on the fallback path', function() {
+        // Pins the #B153 else-branch fallback only. The terminal self.emit is
+        // deliberately NOT pinned here: #CE1 (slice 1) stamps the error inline as
+        // it is emitted — `self.emit(trigger, lib.connectorError.stamp(error))` —
+        // and that emit-stamp wiring is covered by connector-error.test.js §05.
+        assert.match(src,
+            /else \{\s*error = \(err instanceof Error\) \? err : new Error\(String\(err\)\);\s*\}/,
+            'bulkInsert onError forwards the raw err on the socket-level fallback path');
+    });
+
+    /**
+     * Pure-logic replica of the FIXED onError handler (register()/bulkInsert share
+     * the same guard).
+     *
+     * @param {*} err
+     * @param {function} terminal - onQueryCallback / self.emit stand-in
+     * @returns {void}
+     */
+    function fixedOnError(err, terminal) {
+        var error;
+        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+            error = new Error(err.cause.first_error_message);
+            error.stack = 'trigger\n' + err.cause.http_body;
+            error.cause = err.cause;
+        } else {
+            error = (err instanceof Error) ? err : new Error(String(err));
+        }
+        terminal(error);
+    }
+
+    /**
+     * The pre-fix (unguarded) handler — the subtract control.
+     *
+     * @param {*} err
+     * @param {function} terminal
+     * @returns {void}
+     */
+    function oldOnError(err, terminal) {
+        try {
+            var error = new Error(err.cause.first_error_message); // throws when cause is absent
+            error.stack = 'trigger\n' + err.cause.http_body;
+            terminal(error);
+        } catch (_err) {
+            /* swallowed — terminal never fires → the request hangs forever */
+        }
+    }
+
+    it('fixed handler: a socket-level error (no `cause`) still settles, forwarding the raw error', function() {
+        var sockErr = new Error('connect ECONNREFUSED 127.0.0.1:8091');
+        sockErr.code = 'ECONNREFUSED';
+        var seen = null;
+        fixedOnError(sockErr, function(e) { seen = e; });
+        assert.ok(seen, 'terminal callback fired — no hang');
+        assert.equal(seen.code, 'ECONNREFUSED', 'the raw error is forwarded, so code/errno survive for classification');
+    });
+
+    it('fixed handler: an N1QL error WITH a cause builds from first_error_message and keeps the raw cause', function() {
+        var n1qlErr = { cause: { first_error_message: 'Timeout 1000ms exceeded', http_body: '{"errors":[{"code":1080}]}' } };
+        var seen = null;
+        fixedOnError(n1qlErr, function(e) { seen = e; });
+        assert.equal(seen.message, 'Timeout 1000ms exceeded');
+        assert.equal(seen.cause.first_error_message, 'Timeout 1000ms exceeded', 'raw cause preserved for downstream classification');
+    });
+
+    it('subtract control: the OLD handler HANGS on a socket-level error (terminal never called)', function() {
+        var sockErr = new Error('connect ECONNREFUSED 127.0.0.1:8091');
+        sockErr.code = 'ECONNREFUSED'; // no .cause envelope
+        var settled = false;
+        oldOnError(sockErr, function() { settled = true; });
+        assert.equal(settled, false,
+            'the pre-fix handler swallowed the TypeError and never settled — the hang #B153 fixes');
+    });
+});
