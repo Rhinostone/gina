@@ -918,10 +918,27 @@ function Server(options) {
                 throw new Error('[ SERVER ] `settings.json > auth` must be an object.');
             }
 
+            // #COMPLY10 — deny-by-default authorization: an un-annotated route is GATED
+            // rather than open, and opts back out with `param.public: true`. Read HERE,
+            // before the per-route loop, because two of that loop's refusals only apply
+            // while the mode is on. Strict boolean for the same reason as every sibling
+            // flag in this block: a truthy string would leave every un-annotated route
+            // silently UNGATED while the operator believes the bundle is deny-by-default
+            // — the quietly-OFF class this whole block exists to refuse.
+            var _authzDefaultDeny = false;
+            if ( typeof(_authzSettings.requireAuthByDefault) != 'undefined' ) {
+                if ( typeof(_authzSettings.requireAuthByDefault) != 'boolean' ) {
+                    throw new Error('[ SERVER ] `settings.json > auth.requireAuthByDefault` must be a boolean — got '+ JSON.stringify(_authzSettings.requireAuthByDefault) +'. A truthy string would leave every un-annotated route silently UNGATED, so the boot refuses instead.');
+                }
+                _authzDefaultDeny = _authzSettings.requireAuthByDefault;
+            }
+
             var _authzSrcPath     = self.conf[self.appName][self.env].bundlesPath + '/' + self.appName;
             var _authzCount       = 0;
             var _authzRolesCount  = 0;
             var _authzPolicyCount = 0;
+            var _authzPublicCount = 0;
+            var _authzDefaultGatedCount = 0;
             for (var _authzRule in _authzRouting) {
                 var _authzRoute = _authzRouting[_authzRule];
                 if ( typeof(_authzRoute) != 'object' || _authzRoute === null || !_authzRoute.param ) {
@@ -983,6 +1000,48 @@ function Server(options) {
                     _authzGated = true;
                     ++_authzPolicyCount;
                 }
+                // #COMPLY10 — `param.public`: the explicit exemption from
+                // `auth.requireAuthByDefault`. Linted UNCONDITIONALLY, mode on or off:
+                // a malformed exemption is an author error worth surfacing at the
+                // deploy that INTRODUCES it, not at the later one that enables the mode
+                // (the audit block's rationale below, applied here). Placed after the
+                // requireAuth/roles/policy blocks so `_authzGated` is already final.
+                if ( typeof(_authzRoute.param.public) != 'undefined' ) {
+                    if ( typeof(_authzRoute.param.public) != 'boolean' ) {
+                        throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.public` must be a boolean (got `'+ typeof(_authzRoute.param.public) +'`). A truthy string would NOT exempt the route from `auth.requireAuthByDefault`.');
+                    }
+                    if ( _authzRoute.param.public === true ) {
+                        // Same axis, opposite answers. Neither reading is safe: honouring
+                        // `public` silently un-gates an explicitly gated route (fail-open),
+                        // and honouring the gate silently discards what the author wrote.
+                        // `roles` and `policy` both IMPLY `requireAuth`, so they collapse
+                        // into the same contradiction.
+                        if ( _authzGated ) {
+                            throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `param.public: true` contradicts `param.requireAuth` / `param.roles` / `param.policy` on the same route — it cannot be both exempt from authentication and gated by it. Drop one.');
+                        }
+                        ++_authzPublicCount;
+                    }
+                }
+                // #COMPLY10 — a route the MODE gates must not also be cached. Both
+                // render-cache serve points run BEFORE the authorization gate, and the
+                // cache key is `<release>:<kind>:<bundle>:<url>` with no principal
+                // component, so a cached gated route replays the first authenticated
+                // caller's rendered body to every later anonymous one. Scoped strictly
+                // to the mode: an EXPLICITLY annotated gated+cached route keeps today's
+                // behaviour, so enabling the mode can never break a working bundle —
+                // the pre-existing case is tracked as its own fix.
+                if (
+                    _authzDefaultDeny
+                    && !_authzGated
+                    && _authzRoute.param.public !== true
+                    && typeof(_authzRoute.cache) != 'undefined'
+                    && _authzRoute.cache
+                ) {
+                    throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `auth.requireAuthByDefault` gates this route, but it also declares `cache`. The render cache is read BEFORE authorization runs and its key carries no user identity, so the first authenticated response would be replayed to unauthenticated callers. Mark the route `"public": true` if it is meant to be cacheable and open, or drop `cache`.');
+                }
+                if ( _authzDefaultDeny && !_authzGated && _authzRoute.param.public !== true ) {
+                    ++_authzDefaultGatedCount;
+                }
                 if ( _authzGated ) {
                     ++_authzCount;
                 }
@@ -1023,6 +1082,46 @@ function Server(options) {
                     throw new Error('[ SERVER ] `settings.json > auth.loginRoute` resolves to `'+ _authzPath +'`, which is parameterized. The login bounce target must be a fixed url.');
                 }
                 _authzLoginRoute = _authzPath;
+            }
+
+            // #COMPLY10 — the lockout check. Under deny-by-default a login route that
+            // is not itself exempt bounces to ITSELF: the gate 302s an unauthenticated
+            // caller to the login page, which is gated, which 302s again — the browser
+            // gives up with ERR_TOO_MANY_REDIRECTS and the bundle has locked out every
+            // visitor. It is statically detectable, so it refuses at boot rather than
+            // at the first visitor — the same trade this block already makes for a
+            // non-boolean `requireAuth` (one deploy-time error instead of a production
+            // incident).
+            if ( _authzDefaultDeny ) {
+                if ( !_authzLoginRoute ) {
+                    // Legal and coherent for a pure API / machine-caller bundle (#MS3):
+                    // with no bounce target every unauthenticated request simply gets a
+                    // 401, which is the correct answer for a service. Warn, never refuse
+                    // — the `auth.machine.enabled`-with-no-callers precedent below:
+                    // legal, but worth seeing at boot.
+                    console.warn('[ SERVER ] `auth.requireAuthByDefault` is true and no `auth.loginRoute` is configured — every unauthenticated request to an un-annotated route gets a 401. Correct for an API bundle; a browser-facing bundle almost certainly wants a login route.');
+                } else {
+                    var _authzLoginTarget = null;
+                    for (var _authzLr in _authzRouting) {
+                        var _authzLrRoute = _authzRouting[_authzLr];
+                        if ( typeof(_authzLrRoute) != 'object' || _authzLrRoute === null || typeof(_authzLrRoute.url) != 'string' ) {
+                            continue;
+                        }
+                        // `url` may carry the `,`-separated multi-url form (config.js
+                        // writes it for the webroot auto-redirect), so a match on any
+                        // member counts.
+                        if ( _authzLrRoute.url.split(',').indexOf(_authzLoginRoute) > -1 ) {
+                            _authzLoginTarget = _authzLrRoute;
+                            break;
+                        }
+                    }
+                    if ( !_authzLoginTarget ) {
+                        throw new Error('[ SERVER ] `auth.requireAuthByDefault` is true, but `auth.loginRoute` (`'+ _authzLoginRoute +'`) does not resolve to a route this bundle declares, so the boot cannot verify the login page is reachable without authenticating. Under deny-by-default an unverifiable login target is exactly the config that locks every visitor out — point `auth.loginRoute` at a routing.json rule name.');
+                    }
+                    if ( !_authzLoginTarget.param || _authzLoginTarget.param.public !== true ) {
+                        throw new Error('[ SERVER ] `auth.requireAuthByDefault` is true, but the login route (`'+ _authzLoginRoute +'`) is not marked `"public": true`. The mode would gate it, so an unauthenticated visitor is bounced to the login page, which bounces again — an infinite redirect that locks out every visitor. Add `"public": true` to that route\'s `param`.');
+                    }
+                }
             }
 
             // #MS3 — machine-caller authentication: lint + precompute at BOOT.
@@ -1113,7 +1212,22 @@ function Server(options) {
                     console.warn('[ SERVER ] `auth.machine.enabled` is true but `auth.machine.callers` declares no caller and no `authenticator` is named — machine authentication is ON but can admit nobody.');
                 }
             }
+            // #COMPLY10 — the per-bundle posture map. MERGED mode runs every bundle of a
+            // project in ONE process and this write happens once per init(), so a FLAT
+            // mode flag would be decided by whichever bundle booted LAST: a bundle that
+            // opted into deny-by-default would silently un-gate every one of its routes
+            // the moment a sibling booted without the key. That is a fail-OPEN, and an
+            // invisible one — the single failure direction this control must not have.
+            // Reading the existing map first preserves what earlier bundles wrote.
+            // (`loginRoute` / `machine` stay flat — pre-existing behaviour, untouched.)
+            var _authzByBundle = (
+                process.gina._authConf
+                && process.gina._authConf.byBundle
+                && typeof(process.gina._authConf.byBundle) == 'object'
+            ) ? process.gina._authConf.byBundle : {};
+            _authzByBundle[self.appName] = { requireAuthByDefault: _authzDefaultDeny };
             process.gina._authConf = { loginRoute: _authzLoginRoute, machine: _authzMachine };
+            process.gina._authConf.byBundle = _authzByBundle;
             if ( _authzMachine.enabled === true ) {
                 console.debug('[ BUNDLE ][ server ][ init ] Machine-caller authentication ENABLED — '+ Object.keys(_authzMachine.callers).length +' caller(s)'
                     + ( _authzMachine.authenticator ? ' + authenticator `'+ _authzMachine.authenticator +'`' : '' )
@@ -1127,6 +1241,12 @@ function Server(options) {
                     + ( _authzParts.length > 0 ? ' ('+ _authzParts.join(', ') +')' : '' )
                     +' for [ '+ self.appName +' ]'
                     + ( _authzLoginRoute ? ' — login bounce: '+ _authzLoginRoute : ' — no `auth.loginRoute`: unauthenticated requests get a 401' ));
+            }
+            if ( _authzDefaultDeny ) {
+                // console.info, NOT console.debug — the shipped default log_level filters
+                // debug, and under a mode that can lock a bundle out, the count of newly
+                // gated routes is the single number an operator needs confirmed at deploy.
+                console.info('[ BUNDLE ][ server ][ init ] Deny-by-default authorization ENABLED for [ '+ self.appName +' ] — '+ _authzDefaultGatedCount +' un-annotated route(s) now require authentication, '+ _authzPublicCount +' marked `public`');
             }
 
             // ── #COMPLY2 — audit trail: boot resolve + fail-fast lint ──

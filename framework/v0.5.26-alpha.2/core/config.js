@@ -1940,7 +1940,14 @@ function Config(opt, contextResetNeeded) {
             url: '/_status',
             method: 'GET',
             param: {
-                control: 'getBundleStatus'
+                control: 'getBundleStatus',
+                // #COMPLY10 — the framework-injected routes carry no authorization keys,
+                // so `auth.requireAuthByDefault` would gate every one of them and a
+                // bundle would lock itself out by flipping one settings key. Marking
+                // them public preserves today's behaviour when a bundle opts into the
+                // mode; a bundle that WANTS one of them gated declares its own route at
+                // the same url. This is a monitoring surface, so it stays reachable.
+                public: true
             },
             scopes: [ ''+ scope ]
         };
@@ -1955,7 +1962,12 @@ function Config(opt, contextResetNeeded) {
             param: {
                 control: 'renderCustomError',
                 // default data : will be fed on error
-                error: {}
+                error: {},
+                // #COMPLY10 — the error RENDERER. Gating it would mean an error is
+                // rendered through a route that itself denies, so a bundle under
+                // deny-by-default could not render its own error pages. Exempt
+                // unconditionally.
+                public: true
             },
             scopes: [ ''+ scope ]
         };
@@ -1975,7 +1987,13 @@ function Config(opt, contextResetNeeded) {
                     control: "redirect",
                     ignoreWebRoot: true,
                     path: wroot,
-                    code: 302
+                    code: 302,
+                    // #COMPLY10 — with `webrootAutoredirect` this route's url becomes
+                    // `'/,'+ …`, i.e. it also matches the SITE ROOT, across
+                    // GET/POST/PUT/DELETE/HEAD. Gating it would make `/` itself deny,
+                    // so deny-by-default would take the app's entry point offline. A
+                    // redirect-control route does run the gate, so this is not theoretical.
+                    public: true
                 },
                 scopes: [ ''+ scope ],
                 bundle: bundle,
@@ -2002,7 +2020,11 @@ function Config(opt, contextResetNeeded) {
                     "method": "POST",
                     "param": {
                         "control": "uploadToTmp",
-                        "title": "Upload file"
+                        "title": "Upload file",
+                        // #COMPLY10 — preserves today's behaviour under the mode. A
+                        // deny-by-default bundle that wants uploads authenticated
+                        // declares its own POST route at this url.
+                        "public": true
                     },
                     "scopes": [ ""+ scope ]
                 }
@@ -2015,7 +2037,9 @@ function Config(opt, contextResetNeeded) {
                     "method": "POST",
                     "param": {
                         "control": "deleteFromTmp",
-                        "title": "Delete uploaded file"
+                        "title": "Delete uploaded file",
+                        // #COMPLY10 — see `upload-to-tmp-xml` above.
+                        "public": true
                     },
                     "scopes": [ ""+ scope ]
                 }

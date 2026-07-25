@@ -339,6 +339,18 @@ function ServerEngineClass(options) {
             // it inherits the strip.
             if ( clean.param && typeof(clean.param) == 'object' ) {
                 const { requireAuth, roles, policy, ...cleanParam } = clean.param;
+                // #COMPLY10 — `public` is an authorization key too: under deny-by-default
+                // the set of public routes IS the authentication surface, so serving the
+                // markers hands an anonymous client a free recon map of what it can reach.
+                // Stripped with `delete` rather than by joining the destructuring above,
+                // for two independent reasons: `public` is a strict-mode RESERVED WORD, so
+                // the bare binding form is a SyntaxError (only a renamed binding compiles);
+                // and a separate statement leaves the destructuring line byte-identical to
+                // what the #COMPLY1 tests pin. The `#P21`/`#P22` note at the top of this
+                // loop moved AWAY from `delete` for V8 hidden-class reasons on hot paths —
+                // this loop runs once at boot over a bounded route table, so that rationale
+                // does not apply here.
+                delete cleanParam.public;
                 clean.param = cleanParam;
             }
             _routing[_routingKeys[ri]] = clean;

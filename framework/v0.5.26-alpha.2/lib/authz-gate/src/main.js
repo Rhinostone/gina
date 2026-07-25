@@ -61,6 +61,32 @@
  * It is a strict NO-OP for every route that declares no authorization key, so an
  * existing bundle is byte-identical.
  *
+ * ## Deny-by-default (#COMPLY10 — opt-in, per bundle)
+ * `settings.json > auth.requireAuthByDefault: true` INVERTS that last sentence for
+ * the bundle that sets it: a route declaring no authorization key is then GATED
+ * rather than open, and a route opts back out with `param.public: true`. Nothing
+ * else about the gate changes — an un-annotated route carries neither `roles` nor
+ * `policy`, so the mode can only ever produce the 401 or the login bounce.
+ *
+ * The exemption is a POSITIVE marker (`public: true`), matching #CSRF2's
+ * `csrfExempt` rationale: a misread leaves the SECURE state. Reusing
+ * `requireAuth: false` was rejected for the opposite reason — it would make one
+ * literal mean "no-op" in a normal bundle and "audited security exemption" in a
+ * deny-by-default one, so a reviewer could not tell an intentional exemption from
+ * a leftover.
+ *
+ * The mode is keyed PER BUNDLE (`_authConf.byBundle`), not flat: merged mode runs
+ * every bundle in one process, and a flat flag would let whichever bundle booted
+ * last decide the posture for all of them — silently un-gating a bundle that had
+ * opted in. See `requireAuthByDefault()` below.
+ *
+ * `core/server.js` refuses to boot on the contradictions the mode makes possible:
+ * `public` alongside an explicit gate key; a login route the mode would gate (which
+ * bounces to itself — an infinite redirect, i.e. total lockout); and a route the
+ * mode gates that also declares `cache`, because both render-cache serve points run
+ * BEFORE this gate and the cache key carries no principal, so a cached gated route
+ * would replay an authenticated body to anonymous callers.
+ *
  * ## The roles contract (#COMPLY1 defines it; the app populates it)
  * `req.session.user.roles` is a plain array of opaque role-name strings — the
  * framework imposes no vocabulary and no role→permission indirection (v1 names
@@ -209,6 +235,57 @@ var getLoginRoute = function () {
         : null;
 
     return ( conf && typeof(conf.loginRoute) == 'string' && conf.loginRoute ) ? conf.loginRoute : null;
+};
+
+/**
+ * #COMPLY10 — read the deny-by-default authorization mode for the request's
+ * OWN bundle.
+ *
+ * `core/server.js` lints `settings.json > auth.requireAuthByDefault` at boot and
+ * writes it onto `process.gina._authConf.byBundle[<bundle>]`, so the request path
+ * costs an O(1) property read (the `loginRoute` / `_policies` precedent).
+ *
+ * The per-bundle keying is load-bearing rather than tidy. `_authConf` is written
+ * once per `init()`, and MERGED mode runs every bundle of a project in ONE process
+ * (`core/config.js`), so a flat flag would be overwritten by whichever bundle
+ * booted last: a bundle that enabled the mode would silently un-gate every one of
+ * its routes because a sibling booted after it without the key. That is a
+ * fail-OPEN, and the one failure direction a deny-by-default control must never
+ * have. Keying by `req.routing.bundle` — populated on BOTH dispatch paths — makes
+ * each bundle's posture independent of its boot order.
+ *
+ * Fail-safe direction is deliberately INVERTED here relative to the rest of the
+ * gate: an unidentifiable bundle returns `false` (do not gate). Every other
+ * unknown in this module denies, because denying is the safe direction when the
+ * question is "may this caller through". Here the question is "did an operator
+ * ask for this mode at all", and answering yes on missing evidence would gate a
+ * bundle whose author never opted in — turning a config gap into a total outage.
+ * It is unreachable from dispatch regardless (`core/server.js` skips any route
+ * carrying no `param`, and every matched route carries a `bundle`).
+ *
+ * @param {object} req - the request (reads `req.routing.bundle`).
+ * @returns {boolean} `true` when THIS bundle opted into deny-by-default.
+ * @inner
+ * @private
+ */
+var requireAuthByDefault = function (req) {
+    var conf = ( typeof(process.gina) != 'undefined' && process.gina && process.gina._authConf )
+        ? process.gina._authConf
+        : null;
+
+    if ( !conf || !conf.byBundle || typeof(conf.byBundle) != 'object' ) {
+        return false;
+    }
+
+    var bundle = ( req && req.routing && typeof(req.routing.bundle) == 'string' && req.routing.bundle !== '' )
+        ? req.routing.bundle
+        : null;
+    if ( !bundle ) {
+        return false;
+    }
+
+    var entry = conf.byBundle[bundle];
+    return ( entry && entry.requireAuthByDefault === true ) ? true : false;
 };
 
 /**
@@ -878,7 +955,9 @@ var runPolicy = function (controller, req, name, user) {
  * Authorize a request against the route it matched.
  *
  * NO-OP (returns `true`) unless the route declares an authorization key
- * (`param.requireAuth: true`, `param.roles` and/or `param.policy`). Evaluation order:
+ * (`param.requireAuth: true`, `param.roles` and/or `param.policy`) — or unless the
+ * bundle opted into #COMPLY10 deny-by-default, in which case an un-annotated route
+ * is gated too, and only `param.public: true` exempts it. Evaluation order:
  * **authN → roles → policy** — an unauthenticated caller on a gated route always gets
  * the 401/bounce, never a 403 (it must not learn that the route is role- or
  * policy-restricted, only that it requires signing in). Roles and policy are
@@ -894,6 +973,8 @@ var runPolicy = function (controller, req, name, user) {
  *                              write the response).
  * @param {object} req        - the request. Reads `req.routing.param.requireAuth`,
  *                              `req.routing.param.roles`, `req.routing.param.policy`,
+ *                              `req.routing.param.public` and `req.routing.bundle`
+ *                              (#COMPLY10),
  *                              `req.session.user` (and its `.roles`),
  *                              `req.headers.authorization` (#MS3, gated routes only),
  *                              `req.isXMLRequest` and `req[method]`; stamps
@@ -932,7 +1013,26 @@ var authorizeRequest = function (controller, req, res) {
     // Strictly `=== true`: the boot lint rejects any other type, so by request time the
     // flag is `true`, `false` or absent — and an absent/false flag must never gate.
     if ( param.requireAuth !== true && !mustMatchRoles && !mustRunPolicy ) {
-        return true;   // the route declares no authorization — nothing to do
+        // #COMPLY10 — the deny-by-default mode inverts THIS branch, and only this
+        // branch: an un-annotated route becomes gated instead of open.
+        //
+        // `param.public` is tested INSIDE the un-annotated branch rather than
+        // beside it, which is what makes the precedence STRUCTURAL rather than
+        // conditional: a route carrying `public` alongside an explicit gate key
+        // never reaches here at all, so `public` can never un-gate an explicitly
+        // gated route. The boot lint refuses that contradiction outright — this
+        // shape means a hand-built or tampered config still fails CLOSED instead
+        // of depending on the lint having run.
+        if ( param.public === true ) {
+            return true;   // explicitly exempted from the default gate
+        }
+        if ( !requireAuthByDefault(req) ) {
+            return true;   // mode off — the pre-#COMPLY10 no-op, byte-identical
+        }
+        // Mode ON, un-annotated, not exempt: fall through to the authN block below.
+        // `roles` and `policy` are absent by definition on this path, so the only
+        // reachable outcomes are the 401 and the login bounce — a 403 cannot occur
+        // here, which preserves the shipped 401-vs-403 convention with no new code.
     }
 
     // The effective principal: the SESSION user when authenticated (session

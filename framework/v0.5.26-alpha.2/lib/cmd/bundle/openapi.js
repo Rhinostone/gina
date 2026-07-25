@@ -199,10 +199,36 @@ function OpenAPI(opt, cmd) {
 
 
     /**
+     * #COMPLY10 — reads `auth.requireAuthByDefault`, the deny-by-default mode.
+     *
+     * The published spec has to agree with the runtime, and under this mode an
+     * UN-annotated route is gated. Without reading it here the spec would declare
+     * those routes unauthenticated while every call to them answers 401 — a
+     * published contract that lies about its own security, which is worse than
+     * publishing none.
+     *
+     * Strict `=== true`, matching the boot lint: a truthy string does not enable
+     * the mode at runtime, so it must not enable it in the spec either.
+     *
+     * @private
+     * @param {object|null} settings - Parsed settings.json (may be null)
+     * @returns {boolean} True when un-annotated routes are gated by default
+     */
+    var hasRequireAuthByDefault = function(settings) {
+        if ( !settings || typeof(settings.auth) != 'object' || settings.auth === null ) {
+            return false;
+        }
+        return ( settings.auth.requireAuthByDefault === true );
+    };
+
+
+    /**
      * Applies the authorization contract to an operation when its route is
      * gated. A route is gated exactly when the runtime authz gate would act:
      * `param.requireAuth === true`, a non-empty `param.roles` array, or a
-     * non-empty `param.policy` string (roles/policy imply requireAuth).
+     * non-empty `param.policy` string (roles/policy imply requireAuth) — or,
+     * under #COMPLY10 deny-by-default, when the route declares none of those and
+     * is not marked `param.public: true`.
      *
      * Emits the observable contract only: a `401` response on every gated
      * route (+ a `403` when roles/policy add authorization beyond
@@ -216,12 +242,18 @@ function OpenAPI(opt, cmd) {
      * @param {object} operation - The OpenAPI operation object (mutated in place)
      * @param {object} param - The route's `param` block (`route.param || {}`)
      * @param {boolean} machineAuth - True when the `bearerAuth` scheme is emitted
+     * @param {boolean} defaultDeny - True when `auth.requireAuthByDefault` is on (#COMPLY10)
      * @returns {undefined}
      */
-    var applyAuthContract = function(operation, param, machineAuth) {
+    var applyAuthContract = function(operation, param, machineAuth, defaultDeny) {
         var hasRoles    = ( Array.isArray(param.roles) && param.roles.length > 0 );
         var hasPolicy   = ( typeof(param.policy) == 'string' && param.policy !== '' );
-        var isGated     = ( param.requireAuth === true || hasRoles || hasPolicy );
+        // #COMPLY10 — under deny-by-default an un-annotated route is gated unless it
+        // is explicitly `public`, so the spec must treat it as gated too. Mirrors the
+        // gate's own precedence (lib/authz-gate): `public` only ever exempts a route
+        // that declares no explicit key, so it can never un-gate an annotated one.
+        var byDefault   = ( defaultDeny === true && param.public !== true );
+        var isGated     = ( param.requireAuth === true || hasRoles || hasPolicy || byDefault );
 
         if ( !isGated ) return;
 
@@ -285,6 +317,7 @@ function OpenAPI(opt, cmd) {
         // bundle's spec gains no components block. The scheme matches the wire's
         // own advertisement — the machine 401 challenges with
         // `WWW-Authenticate: Bearer`.
+        var defaultDeny = hasRequireAuthByDefault(settings);
         var machineAuth = hasMachineAuth(settings);
         if (machineAuth) {
             spec.components = {
@@ -332,7 +365,7 @@ function OpenAPI(opt, cmd) {
                     var operation = buildOperation(routeName, route, urlInfo.params, namespace, methods.length > 1, method, srcPath);
 
                     // Authorization contract for gated routes
-                    applyAuthContract(operation, route.param || {}, machineAuth);
+                    applyAuthContract(operation, route.param || {}, machineAuth, defaultDeny);
 
                     spec.paths[oaPath][method] = operation;
                 }

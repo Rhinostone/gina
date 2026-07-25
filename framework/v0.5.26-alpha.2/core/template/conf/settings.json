@@ -228,8 +228,32 @@
   //                  },
   //                  "authenticator": null
   //                }
+  //
+  //   requireAuthByDefault — #COMPLY10 deny-by-default authorization.
+  //              false (default) keeps today's posture: a route is open unless it
+  //              declares `requireAuth` / `roles` / `policy`. true INVERTS that for
+  //              THIS bundle — every route requires authentication unless its
+  //              `param` carries `"public": true`. STRICTLY boolean: a truthy
+  //              string would leave every un-annotated route silently UNGATED while
+  //              you believed the bundle was locked down, so it refuses to boot.
+  //              Enable it in a non-production environment FIRST and read the boot
+  //              line, which reports how many routes it just gated.
+  //              The boot also refuses three configs this mode makes dangerous:
+  //                * `"public": true` on a route that ALSO declares an explicit
+  //                  gate key (it cannot be both exempt from auth and gated by it);
+  //                * a login route the mode would gate — it would bounce to itself,
+  //                  an infinite redirect that locks out every visitor;
+  //                * a mode-gated route that also declares `cache` — the render
+  //                  cache is read BEFORE authorization and its key carries no user
+  //                  identity, so a cached gated route would replay one user's
+  //                  authenticated page to anonymous callers.
+  //              The framework's own injected routes ship `"public": true`, so the
+  //              site root, the error page, `/_status` and the upload endpoints keep
+  //              working when you flip this on.
+  //              Changing this needs a bundle restart (boot config).
   "auth": {
     "loginRoute": null,
+    "requireAuthByDefault": false,
     "machine": {
       "enabled": false,
       "callers": {},

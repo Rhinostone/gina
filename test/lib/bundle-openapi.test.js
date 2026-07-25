@@ -244,7 +244,7 @@ describe('bundle:openapi §03 — auth contract source pins', function () {
         assert.match(SRC, /typeof\(machine\.authenticator\) == 'string'\s*&&\s*machine\.authenticator !== ''/, 'named authenticator is a credential source');
     });
     it('03.3 - applyAuthContract gates on the exact runtime authz predicate', function () {
-        assert.ok(SRC.indexOf('var applyAuthContract = function(operation, param, machineAuth) {') > -1);
+        assert.ok(SRC.indexOf('var applyAuthContract = function(operation, param, machineAuth, defaultDeny) {') > -1);
         assert.ok(SRC.indexOf('param.requireAuth === true || hasRoles || hasPolicy') > -1, 'strict-true requireAuth, roles/policy imply');
         assert.match(SRC, /Array\.isArray\(param\.roles\) && param\.roles\.length > 0/);
         assert.match(SRC, /typeof\(param\.policy\) == 'string' && param\.policy !== ''/);
@@ -256,7 +256,7 @@ describe('bundle:openapi §03 — auth contract source pins', function () {
     });
     it('03.5 - the per-operation security requirement + the loop call site', function () {
         assert.ok(SRC.indexOf('operation.security = [ { bearerAuth: [] } ];') > -1);
-        assert.ok(SRC.indexOf('applyAuthContract(operation, route.param || {}, machineAuth);') > -1);
+        assert.ok(SRC.indexOf('applyAuthContract(operation, route.param || {}, machineAuth, defaultDeny);') > -1);
     });
     it('03.6 - 401 in both branches, 403 once; role/policy names never emitted as extensions', function () {
         assert.equal(SRC.match(/operation\.responses\['401'\]/g).length, 2, 'machine + session branches');
@@ -269,7 +269,7 @@ describe('bundle:openapi §03 — auth contract source pins', function () {
 
 describe('bundle:openapi §04 — auth contract behavior (executing the shipped bytes)', function () {
     var hasMachineAuthFn  = extractFn(SRC, 'var hasMachineAuth = function(settings) {');
-    var applyAuthContract = extractFn(SRC, 'var applyAuthContract = function(operation, param, machineAuth) {');
+    var applyAuthContract = extractFn(SRC, 'var applyAuthContract = function(operation, param, machineAuth, defaultDeny) {');
 
     var freshOp = function () {
         return { operationId: 'x', responses: { '200': { description: 'Successful response' } } };
@@ -343,6 +343,71 @@ describe('bundle:openapi §04 — auth contract behavior (executing the shipped 
         applyAuthContract(op, { requireAuth: true }, true);
         assert.ok(op.responses['301'], 'redirect response untouched');
         assert.ok(op.responses['401'], '401 added');
+        assert.deepEqual(op.security, [ { bearerAuth: [] } ]);
+    });
+});
+
+
+/* ------------------------------------------------------------------------- *
+ * §05 — #COMPLY10: the spec follows the deny-by-default mode
+ *
+ * Under `auth.requireAuthByDefault` the runtime gates un-annotated routes, so a
+ * spec that still described them as unauthenticated would be a published
+ * contract lying about its own security. These execute the shipped bytes, so a
+ * predicate that drifts from the runtime fails here.
+ * ------------------------------------------------------------------------- */
+describe('bundle:openapi §05 — deny-by-default (#COMPLY10)', function () {
+    var hasDefaultDenyFn  = extractFn(SRC, 'var hasRequireAuthByDefault = function(settings) {');
+    var applyAuthContract = extractFn(SRC, 'var applyAuthContract = function(operation, param, machineAuth, defaultDeny) {');
+
+    var freshOp = function () {
+        return { operationId: 'x', responses: { '200': { description: 'Successful response' } } };
+    };
+
+    it('05.1 - hasRequireAuthByDefault: fail-closed matrix (strict === true)', function () {
+        assert.equal(hasDefaultDenyFn(null), false, 'null settings');
+        assert.equal(hasDefaultDenyFn({}), false, 'no auth block');
+        assert.equal(hasDefaultDenyFn({ auth: null }), false, 'null auth');
+        assert.equal(hasDefaultDenyFn({ auth: {} }), false, 'key absent');
+        assert.equal(hasDefaultDenyFn({ auth: { requireAuthByDefault: false } }), false, 'explicit false');
+        assert.equal(hasDefaultDenyFn({ auth: { requireAuthByDefault: 'true' } }), false,
+            'a truthy STRING does not enable the mode at runtime, so it must not enable it in the spec');
+        assert.equal(hasDefaultDenyFn({ auth: { requireAuthByDefault: true } }), true);
+    });
+
+    it('05.2 - mode ON: an un-annotated route is described as gated', function () {
+        var op = freshOp();
+        applyAuthContract(op, { control: 'dashboard' }, false, true);
+        assert.ok(op.responses['401'], 'the 401 the runtime would answer is published');
+        assert.equal(typeof op.responses['403'], 'undefined',
+            'no 403 — an un-annotated route carries no roles/policy, so 403 is unreachable');
+    });
+
+    it('05.3 - mode ON + `public: true`: the route stays described as open', function () {
+        var op = freshOp();
+        applyAuthContract(op, { control: 'home', public: true }, false, true);
+        assert.deepEqual(Object.keys(op.responses), ['200'], 'untouched');
+    });
+
+    it('05.4 - mode OFF: byte-identical to today (the subtract-control)', function () {
+        var off = freshOp(), absent = freshOp();
+        applyAuthContract(off,    { control: 'dashboard' }, false, false);
+        applyAuthContract(absent, { control: 'dashboard' }, false);          // arg omitted entirely
+        assert.deepEqual(Object.keys(off.responses), ['200'], 'explicit false changes nothing');
+        assert.deepEqual(off, absent, 'omitting the argument is identical to passing false');
+    });
+
+    it('05.5 - the mode never un-gates an explicitly gated route, and never adds a 403', function () {
+        var op = freshOp();
+        applyAuthContract(op, { control: 'x', roles: ['admin'] }, false, true);
+        assert.ok(op.responses['401'], 'still gated');
+        assert.ok(op.responses['403'], 'roles still add the 403');
+        assert.ok(JSON.stringify(op).indexOf('admin') === -1, 'the role name never reaches the spec');
+    });
+
+    it('05.6 - mode ON + machine auth: the bearer requirement rides un-annotated routes too', function () {
+        var op = freshOp();
+        applyAuthContract(op, { control: 'dashboard' }, true, true);
         assert.deepEqual(op.security, [ { bearerAuth: [] } ]);
     });
 });
