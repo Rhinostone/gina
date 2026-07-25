@@ -67,6 +67,11 @@
       "description": "Authentication & authorization gate settings (#COMPLY1 route authorization + #MS3 machine-caller authentication). Boot config: changes need a bundle restart. Route-level gating itself is declared in routing.json (param.requireAuth / param.roles / param.policy).",
       "additionalProperties": false,
       "properties": {
+        "requireAuthByDefault": {
+          "type": "boolean",
+          "description": "Deny-by-default authorization (#COMPLY10) — STRICTLY boolean (any other type refuses to boot: a truthy string would leave every un-annotated route silently UNGATED). When true, every route in this bundle requires an authenticated session unless its routing.json param block carries \"public\": true. Routes already declaring requireAuth / roles / policy are unaffected, and \"public\" can never un-gate one of those. Recorded PER BUNDLE, so enabling it in one bundle never changes a sibling's posture in merged mode. Fail-closed default: false.",
+          "default": false
+        },
         "loginRoute": {
           "type": ["string", "null"],
           "description": "Login bounce target for unauthenticated BROWSER navigations on gated routes: a routing.json rule name (recommended), or an absolute path like \"/login\". null (default) disables the bounce — every unauthenticated request to a gated route gets a 401. XHR requests always get the 401, never a redirect. The bounce is always a non-cacheable 302.",

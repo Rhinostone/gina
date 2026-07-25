@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The JSON schemas now describe the route-authorization vocabulary. `auth.requireAuthByDefault` was missing from the `settings.json` schema whose `auth` block forbids unknown keys, so an editor flagged a perfectly valid deny-by-default configuration as invalid; and `param.requireAuth`, `param.roles`, `param.policy` and `param.public` were undeclared in the `routing.json` schema, so they were accepted but offered no completion, no type checking and no description on hover. Runtime behaviour is unchanged — the schemas are editor tooling, never enforced at boot.'
+time: 2026-07-25T21:05:00.000000+02:00

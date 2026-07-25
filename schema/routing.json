@@ -68,6 +68,26 @@
             "isPopinContext": {
               "type": "boolean",
               "description": "Set to true for routes rendered inside a popin overlay."
+            },
+            "requireAuth": {
+              "type": "boolean",
+              "description": "Require an authenticated session (#COMPLY1). STRICTLY boolean — any other type refuses to boot, because a truthy string would NOT gate the route. An unauthenticated caller gets a 401, or a 302 to auth.loginRoute for a browser navigation. Cannot be combined with a route-level `cache` block (the cache is read before the gate and its key carries no user identity), nor declared on a method:\"ws\" route (a handshake never reaches the gate — authenticate in the wsHandler)."
+            },
+            "roles": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "type": "string", "minLength": 1 },
+              "description": "Restrict the route to callers holding ANY of these roles. IMPLIES requireAuth — an unauthenticated caller can hold no role, so authentication is checked first and a denial is a 401 before it can be a 403. Strictly a non-empty array of non-empty strings; every other declared shape refuses to boot rather than half-gating the route.",
+              "examples": [["admin"], ["admin", "editor"]]
+            },
+            "policy": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Name of a `policies/<name>.js` module in the bundle, exporting a SYNCHRONOUS function (user, req) that returns a literal true to allow. IMPLIES requireAuth, and is AND-composed after roles. Registered at boot: a missing, non-function or async module refuses to start rather than denying its route on every request."
+            },
+            "public": {
+              "type": "boolean",
+              "description": "Exempt this route from auth.requireAuthByDefault (#COMPLY10). STRICTLY boolean — a truthy string would NOT exempt it. Meaningful only while the deny-by-default mode is on; declaring it alongside requireAuth / roles / policy is a boot-refused contradiction, since a route cannot be both exempt from authentication and gated by it."
             }
           }
         },
