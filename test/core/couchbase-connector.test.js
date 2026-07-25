@@ -22,6 +22,9 @@ var fs     = require('fs');
 
 var FW        = require('../fw');
 var CONNECTOR = path.join(FW, 'core/connectors/couchbase/index.js');
+// #B153 residual (§08b): the real classifier, so the end-to-end replicas assert
+// the CLASSIFICATION outcome rather than merely the forwarded error shape.
+var ce        = require(path.join(FW, 'lib/connector-error/src/main.js'));
 
 
 // ─── 01 — shared resolveCluster() helper present, dual-shape, named throw ────
@@ -400,7 +403,10 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
     before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
 
     it('all three N1QL onError sites guard err.cause before reading first_error_message', function() {
-        var guardCount = (src.match(/err && err\.cause && typeof\(err\.cause\.first_error_message\) != 'undefined'/g) || []).length;
+        // The trailing `!== ''` clause is the #B153 RESIDUAL fix (see §08b): without
+        // it this regex is an unanchored substring of the tightened guard and would
+        // keep counting 3 while pinning nothing about the empty-message branch.
+        var guardCount = (src.match(/err && err\.cause && typeof\(err\.cause\.first_error_message\) != 'undefined' && err\.cause\.first_error_message !== ''/g) || []).length;
         assert.equal(guardCount, 3, 'all three onError sites carry the cause guard');
         // every `new Error(err.cause.first_error_message)` now sits inside a guarded branch
         var b153 = (src.match(/#B153/g) || []).length;
@@ -433,7 +439,7 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
      */
     function fixedOnError(err, terminal) {
         var error;
-        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
             error = new Error(err.cause.first_error_message);
             error.stack = 'trigger\n' + err.cause.http_body;
             error.cause = err.cause;
@@ -484,5 +490,270 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
         oldOnError(sockErr, function() { settled = true; });
         assert.equal(settled, false,
             'the pre-fix handler swallowed the TypeError and never settled — the hang #B153 fixes');
+    });
+
+    // ── #B153 RESIDUAL — an EMPTY envelope message must not destroy the typed
+    //    SDK class name the classifier matches on. The node binding marshals
+    //    first_error_code / first_error_message onto EVERY query error, so a
+    //    CLIENT-side timeout reaches the handler with `cause` present but no
+    //    server text: the 0.5.25 guard therefore synthesized `new Error('')`
+    //    and a retryable timeout was reported permanent.
+
+    /**
+     * The handler as it shipped in 0.5.25 — guarded against a missing `cause`
+     * (#B153) but NOT against an empty message. The residual subtract control.
+     *
+     * @param {*} err
+     * @param {function} terminal
+     * @returns {void}
+     */
+    function preResidualOnError(err, terminal) {
+        var error;
+        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+            error = new Error(err.cause.first_error_message);
+            error.stack = 'trigger\n' + err.cause.http_body;
+            error.cause = err.cause;
+        } else {
+            error = (err instanceof Error) ? err : new Error(String(err));
+        }
+        terminal(error);
+    }
+
+    /**
+     * The measured client-side SDK timeout shape: a typed Error carrying a
+     * `cause` envelope with a value-initialized (empty) message and code 0.
+     *
+     * @param {string} name - the SDK class name
+     * @returns {Error}
+     */
+    function clientTimeout(name) {
+        var e = new Error('unambiguous timeout (queried 1 node, 1 attempt)');
+        e.name  = name;
+        e.cause = { first_error_code: 0, first_error_message: '', http_body: '' };
+        return e;
+    }
+
+    it('the new empty-message clause is present at all three onError sites', function() {
+        var clause = (src.match(/&& err\.cause\.first_error_message !== ''/g) || []).length;
+        assert.equal(clause, 3, 'each site synthesizes only when there is envelope text to surface');
+        // control: the clause is genuinely counted, not matched by accident
+        assert.equal((src.match(/&& err\.cause\.first_error_message !== 'x'/g) || []).length, 0);
+    });
+
+    ['UnambiguousTimeoutError', 'AmbiguousTimeoutError'].forEach(function(name) {
+
+        it('fixed handler: a client-side ' + name + ' is forwarded raw, keeping its typed name', function() {
+            var timeoutErr = clientTimeout(name);
+            var seen = null;
+            fixedOnError(timeoutErr, function(e) { seen = e; });
+            assert.equal(seen, timeoutErr, 'the raw SDK error itself is forwarded — not a synthesized copy');
+            assert.equal(seen.name, name, 'the typed class name survives for the classifier');
+            assert.notEqual(seen.message, '', 'the real timeout text survives instead of being blanked');
+            assert.equal(seen.cause.first_error_code, 0, 'the envelope rides along on the raw error');
+        });
+
+        it('end-to-end: the forwarded ' + name + ' classifies TRANSIENT', function() {
+            var seen = null;
+            fixedOnError(clientTimeout(name), function(e) { seen = e; });
+            var verdict = ce.classify(seen);
+            assert.equal(verdict.isTransient, true, 'a client-side timeout is retryable');
+            assert.equal(verdict.reason, 'couchbase:timeout');
+        });
+
+        it('subtract control: the 0.5.25 handler blanked ' + name + ' and classified it PERMANENT', function() {
+            var seen = null;
+            preResidualOnError(clientTimeout(name), function(e) { seen = e; });
+            assert.equal(seen.message, '', 'the pre-residual guard synthesized new Error(\'\')');
+            assert.equal(seen.name, 'Error', 'the typed class name was destroyed');
+            assert.equal(ce.classify(seen).isTransient, false,
+                'the false negative this residual fix closes — a retryable timeout reported permanent');
+        });
+    });
+
+    it('raw-forwarding stays classification-lossless: an empty-message envelope still classifies off the code table', function() {
+        // Pathological shape (no known producer): a SERVER envelope whose message
+        // is empty. Raw-forwarding keeps `.cause`, so the N1QL code table — the
+        // sole classifier for un-typed envelope errors — still fires.
+        var envErr = new Error('index failure');
+        envErr.cause = { first_error_code: 12008, first_error_message: '', http_body: '' };
+        var seen = null;
+        fixedOnError(envErr, function(e) { seen = e; });
+        assert.equal(seen, envErr, 'forwarded raw');
+        var verdict = ce.classify(seen);
+        assert.equal(verdict.isTransient, true, 'the cause envelope survived the forward');
+        assert.equal(verdict.reason, 'couchbase:bulk-get-retry-exhausted');
+    });
+});
+
+
+// ─── 09 — `@options` .sql annotation: parse + the consistency gate ───────────
+//
+// Drives the SHIPPED bytes, not a replica: the `@options` parse block and the
+// scan-consistency/passthrough gate are sliced out of the connector at run time
+// and executed. Only `couchbase.QueryScanConsistency` is stubbed.
+//
+// Why text anchors and not line numbers or brace-matching: a line-range slice
+// silently grabs the wrong region after any edit above it, and the parse block
+// contains `/([{,]\s*)…/` — a regex whose character class holds an unbalanced
+// `{` — so a naive brace-matcher runs past the block end. Both anchors are
+// asserted unique, and §09.a fails loudly if a slice ever stops being the block.
+//
+// Motivation: the published guide documented `-- @options scanConsistency=request_plus`,
+// which the parser cannot match AND whose key the gate does not read — two
+// independent no-ops, SILENT until 0.5.26. The docs were corrected 2026-07-25
+// and the connector now warns on both shapes (#B155: an unparseable `@options`
+// mention, and a parsed one whose keys are dropped by the consistency gate);
+// these tests pin the parse/gate contract AND the warns so the docs and the
+// code cannot drift apart again unnoticed.
+
+describe('09 - @options: parse + consistency gate (shipped bytes)', function() {
+
+    var PARSE, GATE;
+
+    /**
+     * Slices an inclusive source region between two unique text anchors.
+     *
+     * @param {string} src
+     * @param {string} startNeedle - must occur exactly once
+     * @param {string} endNeedle   - must occur exactly once, after startNeedle
+     * @returns {string}
+     */
+    function region(src, startNeedle, endNeedle) {
+        var s = src.indexOf(startNeedle);
+        assert.notEqual(s, -1, 'start anchor not found: ' + startNeedle);
+        assert.equal(src.indexOf(startNeedle, s + 1), -1, 'start anchor not unique: ' + startNeedle);
+        var e = src.indexOf(endNeedle, s);
+        assert.notEqual(e, -1, 'end anchor not found: ' + endNeedle);
+        assert.equal(src.indexOf(endNeedle, e + 1), -1, 'end anchor not unique: ' + endNeedle);
+        return src.slice(s, e);
+    }
+
+    before(function() {
+        var src = fs.readFileSync(CONNECTOR, 'utf8');
+        PARSE = region(src, 'optionsArr = queryString.match(', 'optionsArr = null;');
+        GATE  = region(src, 'queryOptions.scanConsistency = couchbase.QueryScanConsistency.NotBounded;',
+                            '// _collection = queryStatement.match(');
+    });
+
+    /**
+     * Runs the extracted blocks against one `.sql` body.
+     *
+     * @param {string} sql
+     * @returns {{options: (object|null), queryOptions: object, warnings: Array.<string>}}
+     */
+    function run(sql) {
+        // `queryStatement` is referenced by the gate's unknown-consistency warn.
+        var fn = new Function('queryString', 'couchbase',
+            'var queryStatement = queryString;\n' +
+            'var optionsArr = null, options = null, userConsistencyOpt = null;\n' +
+            'var queryOptions = { adhoc: false };\n' +          // the query path's real default
+            'var warnings = [];\n' +
+            'var console = { warn: function (m) { warnings.push(String(m)); } };\n' +
+            PARSE + '\n' + GATE + '\n' +
+            'return { options: options, queryOptions: queryOptions, warnings: warnings };');
+        return fn(sql, { QueryScanConsistency: { NotBounded: 'not_bounded', RequestPlus: 'request_plus' } });
+    }
+
+    /** @param {string} body @returns {string} a `.sql` file body carrying `body` as its annotation */
+    function sql(body) { return '/*\n * @options ' + body + '\n */\nSELECT * FROM `b` WHERE x = $1'; }
+
+    // ── 09.a — extraction controls: a slice that grabbed the wrong region is not an instrument
+    it('the extracted PARSE slice really is the @options parse block', function() {
+        assert.match(PARSE, /queryString\.match\(\/\\@options \\\{\(\.\*\)\\\}\/gm\)/, 'carries the annotation regex');
+        assert.match(PARSE, /options = JSON\.parse\(_jsonOpts\)/, 'carries the JSON.parse');
+    });
+
+    it('the extracted GATE slice really is the consistency gate', function() {
+        assert.match(GATE, /if \(options && typeof\(options\.consistency\) != 'undefined'\)/, 'carries the gate');
+        assert.match(GATE, /for \(let o in options\) \{/, 'carries the passthrough loop');
+        assert.match(GATE, /queryOptions\[o\] = options\[o\];/, 'carries the assignment');
+    });
+
+    // ── 09.b — the forms the guide USED to document are inert, and silent about it
+    it('the brace-less documented form does not parse — and now WARNS with the expected shape', function() {
+        var r = run('-- @options scanConsistency=request_plus\nSELECT 1');
+        assert.equal(r.options, null, 'the annotation never matched the parser');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'left at the default');
+        assert.equal(r.warnings.length, 1, '#B155: the historical silent no-op now warns');
+        assert.match(r.warnings[0], /could not parse a brace-delimited object/);
+        assert.match(r.warnings[0], /@options \{ consistency/, 'the warn shows the exact working form');
+    });
+
+    it('the braced-but-wrong-key form PARSES, does nothing — and now WARNS naming the dropped key', function() {
+        var r = run(sql('{ scanConsistency: "request_plus" }'));
+        assert.notEqual(r.options, null, 'it does parse — which is what makes it deceptive');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'the gate reads `consistency`, not `scanConsistency`');
+        assert.equal(typeof r.queryOptions.scanConsistency_, 'undefined');
+        assert.equal(r.warnings.length, 1, '#B155: the gate-shut drop now warns');
+        assert.match(r.warnings[0], /missing a `consistency` key/);
+        assert.match(r.warnings[0], /ignoring: scanConsistency/, 'the dropped key is named');
+    });
+
+    // ── 09.c — the corrected, documented form works
+    it('the corrected form applies request_plus', function() {
+        var r = run(sql('{ consistency: "request_plus" }'));
+        assert.equal(r.queryOptions.scanConsistency, 'request_plus');
+        assert.equal(r.warnings.length, 0);
+    });
+
+    // ── 09.d — the documented gate rule
+    it('a non-consistency key ALONE is dropped (the #B155 gate) — and now WARNS', function() {
+        var r = run(sql('{ adhoc: true }'));
+        assert.notEqual(r.options, null, 'it parsed');
+        assert.equal(r.options.adhoc, true, 'and the value was read');
+        assert.equal(r.queryOptions.adhoc, false, 'but never reached queryOptions — the gate stayed shut');
+        assert.equal(r.warnings.length, 1, '#B155: the drop is no longer silent');
+        assert.match(r.warnings[0], /ignoring: adhoc/);
+        assert.match(r.warnings[0], /"consistency": "not_bounded"/, 'the warn hands over the fix');
+    });
+
+    it('a DOUBLE space before the brace also misses the parser — and warns (the gap the warn regex closed)', function() {
+        // The parse regex demands exactly `@options {`; `@options  {` never matches.
+        var r = run('/*\n * @options  { consistency: "request_plus" }\n */\nSELECT 1');
+        assert.equal(r.options, null, 'two spaces defeat the annotation regex');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded');
+        assert.equal(r.warnings.length, 1, 'caught by the unparseable-@options warn');
+        assert.match(r.warnings[0], /could not parse a brace-delimited object/);
+    });
+
+    it('an EMPTY `@options {}` parses, drops nothing, and deliberately stays quiet', function() {
+        var r = run(sql('{}'));
+        assert.notEqual(r.options, null, 'empty object parses');
+        assert.equal(Object.keys(r.options).length, 0);
+        assert.equal(r.warnings.length, 0, 'no keys were dropped, so there is nothing to warn about');
+    });
+
+    it('the same key alongside `consistency` IS applied', function() {
+        var r = run(sql('{ consistency: "not_bounded", adhoc: true }'));
+        assert.equal(r.queryOptions.adhoc, true, 'the gate opened, so the passthrough ran');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded');
+    });
+
+    it('an arbitrary key (timeout) passes through once the gate is open', function() {
+        var r = run(sql('{ consistency: "not_bounded", timeout: 1 }'));
+        assert.equal(r.queryOptions.timeout, 1);
+    });
+
+    it('an UNKNOWN consistency warns, keeps the default, but still opens the gate', function() {
+        var r = run(sql('{ consistency: "bogus_level", timeout: 5 }'));
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'unrecognised value falls back');
+        assert.equal(r.warnings.length, 1, 'and DOES warn — unlike the silent failures above');
+        assert.match(r.warnings[0], /QueryScanConsistency/);
+        assert.equal(r.queryOptions.timeout, 5, 'the gate keys on PRESENCE, not validity');
+    });
+
+    // ── 09.e — the documented defaults
+    it('no @options at all leaves the documented defaults', function() {
+        var r = run('SELECT * FROM `b`');
+        assert.equal(r.options, null);
+        assert.equal(r.queryOptions.adhoc, false, 'query path defaults adhoc to FALSE (plans cached)');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded');
+    });
+
+    it('a malformed @options body warns instead of corrupting options', function() {
+        var r = run(sql('{ consistency: }'));
+        assert.equal(r.options, null, 'parse failed, options left null');
+        assert.equal(r.warnings.length, 1, 'the CB-QUAL-2 explicit-parse-error path');
+        assert.match(r.warnings[0], /@options parse error/);
     });
 });

@@ -16,6 +16,7 @@
     "debug_port": "${debug_port}",
     "mq_port": "${mq_port}",
     "host_v4": "${host_v4}",
+    "bind_host": "${bind_host}",
     "hostname": "${hostname}",
     "user": "${user}",
     "uid": "${uid}",

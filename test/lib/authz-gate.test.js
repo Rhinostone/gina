@@ -1378,3 +1378,472 @@ describe('§14 — #COMPLY2 audit auto-events: every denial writes one authz.den
         assert.deepEqual(enabled, disabled, 'audit on/off must be invisible to the authz outcomes');
     });
 });
+
+
+/* ------------------------------------------------------------------------- *
+ * §15 — #COMPLY10 deny-by-default (`auth.requireAuthByDefault`)
+ *
+ * The mode INVERTS §02: an un-annotated route is gated instead of open, and
+ * `param.public: true` is the explicit opt-out. Everything here is additive —
+ * §02 must stay green untouched, which is itself the proof that the mode
+ * defaults OFF when `process.gina._authConf` carries no `byBundle` map.
+ *
+ * The two decisive properties, beyond the happy path:
+ *   * PER-BUNDLE keying. Merged mode runs every bundle in one process, so a
+ *     flat flag would let the last bundle to boot decide the posture for all
+ *     of them — silently un-gating a bundle that opted in (a fail-OPEN).
+ *   * STRUCTURAL precedence. `public` is tested INSIDE the un-annotated
+ *     branch, so it can never un-gate an explicitly gated route even when the
+ *     boot lint has not run (a hand-built or tampered config still fails
+ *     closed).
+ * ------------------------------------------------------------------------- */
+
+/** A request carrying the bundle the per-bundle mode lookup reads. */
+function reqB(opts) {
+    opts = opts || {};
+    var r = {
+        method  : opts.method || 'GET',
+        routing : {
+            rule   : opts.rule || 'dashboard',
+            param  : opts.param || {},
+            bundle : ( typeof opts.bundle === 'undefined' ) ? 'app' : opts.bundle
+        }
+    };
+    if (typeof opts.session !== 'undefined') { r.session = opts.session; }
+    if (typeof opts.isXhr   !== 'undefined') { r.isXMLRequest = opts.isXhr; }
+    r[String(r.method).toLowerCase()] = opts.data || {};
+    return r;
+}
+
+/** Run `fn` with a boot-built `_authConf` carrying the per-bundle mode map. */
+function withMode(byBundle, loginRoute, fn) {
+    var had  = Object.prototype.hasOwnProperty.call(process, 'gina');
+    var prev = had ? process.gina : undefined;
+    process.gina = { _authConf: { loginRoute: loginRoute || null, machine: { enabled: false, callers: {} }, byBundle: byBundle } };
+    try { return fn(); }
+    finally {
+        if (had) { process.gina = prev; } else { delete process.gina; }
+    }
+}
+
+/**
+ * Pure-logic replica of the shipped core/server.js boot-lint additions
+ * (the `param.public` axis + the mode-scoped cache cross-check).
+ */
+function lintPublic(routing, authSettings) {
+    var s = authSettings || {};
+    var defaultDeny = false;
+    if ( typeof(s.requireAuthByDefault) != 'undefined' ) {
+        if ( typeof(s.requireAuthByDefault) != 'boolean' ) {
+            throw new Error('`settings.json > auth.requireAuthByDefault` must be a boolean');
+        }
+        defaultDeny = s.requireAuthByDefault;
+    }
+    for (var rule in routing) {
+        var route = routing[rule];
+        if ( typeof(route) != 'object' || route === null || !route.param ) { continue; }
+        var gated = false;
+        if ( route.param.requireAuth === true ) { gated = true; }
+        if ( Array.isArray(route.param.roles) && route.param.roles.length > 0 ) { gated = true; }
+        if ( typeof(route.param.policy) == 'string' && route.param.policy !== '' ) { gated = true; }
+        if ( typeof(route.param.public) != 'undefined' ) {
+            if ( typeof(route.param.public) != 'boolean' ) {
+                throw new Error('Route `'+ rule +'`: `param.public` must be a boolean');
+            }
+            if ( route.param.public === true && gated ) {
+                throw new Error('Route `'+ rule +'`: `param.public: true` contradicts');
+            }
+        }
+        // #B158 — ANY gated route, however it is gated (explicit key OR the mode).
+        // #COMPLY10 shipped this scoped to mode-gated routes only; the explicitly
+        // annotated case it left open was the pre-existing leak.
+        var routeGated = gated || ( defaultDeny && route.param.public !== true );
+        if ( routeGated && route.cache ) {
+            throw new Error('Route `'+ rule +'`: gates this route, but it also declares `cache`');
+        }
+    }
+    return true;
+}
+
+describe('§15 — #COMPLY10 deny-by-default: source pins', function () {
+    it('15.1 - the gate reads the mode PER BUNDLE, never a flat flag', function () {
+        assert.match(GATE_SRC, /var requireAuthByDefault = function \(req\) \{/, 'the reader exists');
+        assert.ok(GATE_SRC.indexOf('conf.byBundle[bundle]') > -1, 'keyed by bundle');
+        assert.ok(GATE_SRC.indexOf('req.routing.bundle') > -1, 'the key comes off the request');
+    });
+    it('15.2 - the exemption is tested INSIDE the un-annotated branch (structural fail-closed)', function () {
+        var branchIdx = GATE_SRC.indexOf('if ( param.requireAuth !== true && !mustMatchRoles && !mustRunPolicy ) {');
+        var publicIdx = GATE_SRC.indexOf('if ( param.public === true ) {');
+        var modeIdx   = GATE_SRC.indexOf('if ( !requireAuthByDefault(req) ) {');
+        var principal = GATE_SRC.indexOf('if ( isAuthenticated(req) ) {');
+        assert.ok(branchIdx > -1 && publicIdx > -1 && modeIdx > -1 && principal > -1, 'all four anchors present');
+        assert.ok(publicIdx > branchIdx, '`public` is checked inside the un-annotated branch, not beside it');
+        assert.ok(modeIdx   > publicIdx, 'an explicit exemption short-circuits before the mode lookup');
+        assert.ok(principal > modeIdx,   'the mode falls through to the SAME authN block');
+    });
+    it('15.3 - core/server.js lints the new key and every contradiction it makes possible', function () {
+        assert.ok(SERVER_SRC.indexOf('`settings.json > auth.requireAuthByDefault` must be a boolean') > -1, 'strict-boolean master switch');
+        assert.ok(SERVER_SRC.indexOf('`param.public` must be a boolean') > -1, 'strict-boolean exemption');
+        assert.ok(SERVER_SRC.indexOf('contradicts `param.requireAuth` / `param.roles` / `param.policy`') > -1, 'same-axis contradiction refuses');
+        assert.ok(SERVER_SRC.indexOf('it also declares `cache`') > -1, 'mode-scoped cache cross-check refuses');
+        assert.ok(SERVER_SRC.indexOf('an infinite redirect that locks out every visitor') > -1, 'login-route lockout refuses');
+    });
+    it('15.4 - the boot write preserves sibling bundles (the merged-mode fail-open fix)', function () {
+        assert.ok(SERVER_SRC.indexOf('process.gina._authConf.byBundle = _authzByBundle;') > -1, 'the map is written');
+        assert.match(SERVER_SRC, /_authzByBundle\[self\.appName\] = \{ requireAuthByDefault: _authzDefaultDeny \};/, 'keyed by the booting bundle');
+        assert.ok(SERVER_SRC.indexOf('process.gina._authConf.byBundle') > -1
+               && SERVER_SRC.indexOf('? process.gina._authConf.byBundle : {}') > -1, 'reads the existing map first, so an earlier bundle is not erased');
+    });
+    it('15.5 - the client-served routing blob strips `public` too', function () {
+        assert.ok(ISAAC_SRC.indexOf('delete cleanParam.public;') > -1, '`public` is stripped');
+        // The #COMPLY1 destructuring line must stay byte-identical — §10 pins it.
+        assert.ok(ISAAC_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;') > -1,
+            'the pinned #COMPLY1 strip line is untouched');
+    });
+    it('15.6 - the shipped settings template ships the mode OFF', function () {
+        assert.match(SETTINGS_SRC, /"requireAuthByDefault":\s*false/, 'fail-closed default in the template');
+    });
+});
+
+describe('§15 — #COMPLY10 deny-by-default: behaviour', function () {
+    it('15.7 - mode ON: an un-annotated route now answers 401', function () {
+        withMode({ app: { requireAuthByDefault: true } }, null, function () {
+            var c = ctl(), rq = reqB({ param: { control: 'dashboard' } }), rs = res();
+            var allowed = gate.authorizeRequest(c, rq, rs);
+            assert.equal(allowed, false, 'the gate answered');
+            assert.equal(c.thrown && c.thrown.status, 401, 'a 401, never a 403 — the route declares no roles/policy');
+        });
+    });
+    it('15.8 - mode ON + `public: true`: the route stays open', function () {
+        withMode({ app: { requireAuthByDefault: true } }, null, function () {
+            var c = ctl(), rq = reqB({ param: { control: 'home', public: true } }), rs = res();
+            assert.equal(gate.authorizeRequest(c, rq, rs), true, 'the action is reached');
+            assert.equal(c.thrown, null, 'nothing was written to the wire');
+        });
+    });
+    it('15.9 - mode OFF: byte-identical to today (the subtract-control)', function () {
+        // Both shapes of "off": no byBundle map at all, and an explicit false.
+        [undefined, { app: { requireAuthByDefault: false } }].forEach(function (map, i) {
+            withMode(map, null, function () {
+                var c = ctl(), rq = reqB({ param: { control: 'dashboard' } }), rs = res();
+                assert.equal(gate.authorizeRequest(c, rq, rs), true, 'un-annotated stays open (case ' + i + ')');
+                assert.equal(c.thrown, null, 'nothing written (case ' + i + ')');
+            });
+        });
+    });
+    it('15.10 - PER-BUNDLE: one bundle opting in never gates its siblings', function () {
+        withMode({ secured: { requireAuthByDefault: true } }, null, function () {
+            var cA = ctl(), rqA = reqB({ bundle: 'secured', param: { control: 'x' } }), rsA = res();
+            assert.equal(gate.authorizeRequest(cA, rqA, rsA), false, 'the opted-in bundle gates');
+            assert.equal(cA.thrown.status, 401);
+
+            var cB = ctl(), rqB2 = reqB({ bundle: 'other', param: { control: 'x' } }), rsB = res();
+            assert.equal(gate.authorizeRequest(cB, rqB2, rsB), true, 'the sibling bundle is untouched');
+            assert.equal(cB.thrown, null);
+        });
+    });
+    it('15.11 - an unidentifiable bundle does not gate (availability-safe, and unreachable from dispatch)', function () {
+        withMode({ app: { requireAuthByDefault: true } }, null, function () {
+            var c = ctl(), rq = reqB({ bundle: undefined, param: { control: 'x' } }), rs = res();
+            delete rq.routing.bundle;
+            assert.equal(gate.authorizeRequest(c, rq, rs), true, 'no bundle -> the mode cannot apply');
+            assert.equal(c.thrown, null);
+        });
+    });
+    it('15.12 - STRUCTURAL precedence: `public` never un-gates an explicitly gated route', function () {
+        // The boot lint refuses this config; the gate must fail CLOSED anyway.
+        withMode({ app: { requireAuthByDefault: true } }, null, function () {
+            [
+                { control: 'x', public: true, requireAuth: true },
+                { control: 'x', public: true, roles: ['admin'] },
+                { control: 'x', public: true, policy: 'ownsIt' }
+            ].forEach(function (param, i) {
+                var c = ctl(), rq = reqB({ param: param }), rs = res();
+                assert.equal(gate.authorizeRequest(c, rq, rs), false, 'still gated (case ' + i + ')');
+                assert.equal(c.thrown.status, 401, 'unauthenticated -> 401 (case ' + i + ')');
+            });
+        });
+    });
+    it('15.13 - mode ON + an authenticated session: the action is reached', function () {
+        withMode({ app: { requireAuthByDefault: true } }, null, function () {
+            var c = ctl(), rq = reqB({ param: { control: 'x' }, session: { user: { id: 7 } } }), rs = res();
+            assert.equal(gate.authorizeRequest(c, rq, rs), true);
+            assert.equal(c.thrown, null);
+        });
+    });
+    it('15.14 - mode ON + a login route: a browser navigation bounces (302), never a 403', function () {
+        withMode({ app: { requireAuthByDefault: true } }, '/login', function () {
+            var c = ctl(), rq = reqB({ param: { control: 'x' }, session: {} }), rs = res();
+            var lines = captureInfo(function () { gate.authorizeRequest(c, rq, rs); });
+            assert.equal(rs.code, 302, 'the forced bounce');
+            assert.equal(rs.head['location'], '/login');
+            assert.equal(rs.head['cache-control'], 'no-cache, no-store, must-revalidate', 'never a cacheable bounce');
+            assert.ok(lines.some(function (l) { return l.indexOf('[302] /login') > -1; }), lines.join('|'));
+        });
+    });
+});
+
+describe('§15 — #COMPLY10 deny-by-default: the boot lint (pure-logic replica)', function () {
+    it('15.15 - a non-boolean `param.public` refuses to boot', function () {
+        assert.throws(function () {
+            lintPublic({ r: { param: { control: 'x', public: 'true' } } }, {});
+        }, /`param\.public` must be a boolean/);
+    });
+    it('15.16 - `public: true` alongside an explicit gate key refuses to boot', function () {
+        [ { requireAuth: true }, { roles: ['admin'] }, { policy: 'ownsIt' } ].forEach(function (extra, i) {
+            var param = Object.assign({ control: 'x', public: true }, extra);
+            assert.throws(function () {
+                lintPublic({ r: { param: param } }, {});
+            }, /contradicts/, 'case ' + i);
+        });
+    });
+    it('15.17 - `public` with a non-gating shape is accepted (redundant, not an error)', function () {
+        assert.equal(lintPublic({ r: { param: { control: 'x', public: true, requireAuth: false } } }, {}), true);
+        assert.equal(lintPublic({ r: { param: { control: 'x', public: false } } }, {}), true);
+    });
+    it('15.18 - a non-boolean `auth.requireAuthByDefault` refuses to boot', function () {
+        assert.throws(function () {
+            lintPublic({}, { requireAuthByDefault: 'true' });
+        }, /must be a boolean/);
+    });
+    it('15.19 - mode ON: a route the MODE gates may not also be cached', function () {
+        assert.throws(function () {
+            lintPublic({ r: { param: { control: 'x' }, cache: { type: 'memory' } } }, { requireAuthByDefault: true });
+        }, /it also declares `cache`/);
+    });
+    it('15.20 - #B158: an EXPLICITLY gated route may not be cached either, in either mode', function () {
+        // The pre-existing leak #COMPLY10 deliberately left open. Refused in BOTH modes
+        // now: the render cache is served before the gate and keyed without a principal,
+        // so the first authenticated body is replayed to every later anonymous caller.
+        assert.throws(function () {
+            lintPublic({ r: { param: { control: 'x', requireAuth: true }, cache: { type: 'memory' } } }, {});
+        }, /it also declares `cache`/, 'requireAuth + cache, mode OFF');
+        assert.throws(function () {
+            lintPublic({ r: { param: { control: 'x', roles: ['admin'] }, cache: { type: 'memory' } } }, {});
+        }, /it also declares `cache`/, 'roles + cache implies requireAuth');
+        assert.throws(function () {
+            lintPublic({ r: { param: { control: 'x', policy: 'p' }, cache: { type: 'memory' } } }, {});
+        }, /it also declares `cache`/, 'policy + cache implies requireAuth');
+        assert.throws(function () {
+            lintPublic({ r: { param: { control: 'x', requireAuth: true }, cache: { type: 'memory' } } }, { requireAuthByDefault: true });
+        }, /it also declares `cache`/, 'requireAuth + cache, mode ON');
+        // mode ON but the route is public -> cacheable and open is a legitimate pair.
+        assert.equal(lintPublic({ r: { param: { control: 'x', public: true }, cache: { type: 'memory' } } }, { requireAuthByDefault: true }), true,
+            'public + cache stays legal under the mode');
+    });
+    it('15.21 - #B158: an UNGATED cached route is untouched (the subtract-control)', function () {
+        // The refusal must key on gating, never on the mere presence of `cache` — a plain
+        // cached route is the single most common shape in the wild.
+        assert.equal(lintPublic({ r: { param: { control: 'x' }, cache: { type: 'memory' } } }, {}), true,
+            'mode OFF, un-annotated + cache stays legal');
+        assert.equal(lintPublic({ r: { param: { control: 'x', requireAuth: false }, cache: { type: 'memory' } } }, {}), true,
+            'an explicit requireAuth:false does not gate, so it does not forbid cache');
+        assert.equal(lintPublic({ r: { param: { control: 'x', requireAuth: true } } }, {}), true,
+            'gated WITHOUT cache is the normal gated route and stays legal');
+    });
+});
+
+/* ---------------------------------------------------------------------------
+ * §16 — #B158: a gated route is never render-cached.
+ *
+ * The defect: both render-cache serve points run BEFORE the authorization gate
+ * (the engine-agnostic read serves and RETURNS ahead of `router.route`, inside
+ * which the gate runs; isaac's runs pre-routing, before `req.routing` exists),
+ * and `buildKey` composes `<release>:<kind>:<bundle>:<url>` with no principal
+ * component. So a cached gated route replays the first authenticated caller's
+ * rendered body to every later anonymous one — reproduced live on an isolated
+ * boot before the fix, and refused at boot after it.
+ *
+ * Two layers, tested separately: the boot refusal (§15.20/§15.21 cover the lint
+ * replica) and the write-side backstop pinned here, which fails CLOSED for a
+ * config the lint never saw (hand-built, tampered, or mutated at runtime).
+ * ------------------------------------------------------------------------- */
+
+var RJSON_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-json.js'), 'utf8');
+var RSWIG_SRC = fs.readFileSync(path.join(FW, 'core/controller/controller.render-swig.js'), 'utf8');
+var RNJK_SRC  = fs.readFileSync(path.join(FW, 'core/controller/controller.render-nunjucks.js'), 'utf8');
+
+describe('§16 — #B158: `isRouteGated` is the one runtime answer', function () {
+    it('16.1 - an explicit key gates, in whatever form', function () {
+        withMode({ app: { requireAuthByDefault: false } }, null, function () {
+            assert.equal(gate.isRouteGated(reqB({ param: { requireAuth: true } })), true, 'requireAuth');
+            assert.equal(gate.isRouteGated(reqB({ param: { roles: ['admin'] } })), true, 'roles imply requireAuth');
+            assert.equal(gate.isRouteGated(reqB({ param: { policy: 'p' } })), true, 'policy implies requireAuth');
+        });
+    });
+    it('16.2 - an invalid declared shape never HALF-gates (it is boot-refused anyway)', function () {
+        withMode({ app: { requireAuthByDefault: false } }, null, function () {
+            assert.equal(gate.isRouteGated(reqB({ param: { requireAuth: 'true' } })), false, 'a truthy STRING does not gate');
+            assert.equal(gate.isRouteGated(reqB({ param: { roles: [] } })), false, 'an empty roles array does not gate');
+            assert.equal(gate.isRouteGated(reqB({ param: { policy: '' } })), false, 'an empty policy does not gate');
+        });
+    });
+    it('16.3 - the #COMPLY10 mode gates an un-annotated route, and `public` exempts it', function () {
+        withMode({ app: { requireAuthByDefault: true } }, null, function () {
+            assert.equal(gate.isRouteGated(reqB({ param: { control: 'x' } })), true, 'mode ON gates the un-annotated route');
+            assert.equal(gate.isRouteGated(reqB({ param: { control: 'x', public: true } })), false, '`public` exempts');
+        });
+        withMode({ app: { requireAuthByDefault: false } }, null, function () {
+            assert.equal(gate.isRouteGated(reqB({ param: { control: 'x' } })), false, 'mode OFF leaves it open');
+        });
+    });
+    it('16.4 - the mode is read PER BUNDLE, so a sibling bundle cannot gate this one', function () {
+        withMode({ other: { requireAuthByDefault: true } }, null, function () {
+            assert.equal(gate.isRouteGated(reqB({ param: { control: 'x' }, bundle: 'app' })), false,
+                'only the booting bundle\'s own posture counts');
+        });
+    });
+    it('16.5 - `public` can never un-gate an EXPLICITLY gated route (structural fail-closed)', function () {
+        // The boot lint refuses this contradiction outright; the predicate must still
+        // fail closed for a config that never passed the lint.
+        withMode({ app: { requireAuthByDefault: false } }, null, function () {
+            assert.equal(gate.isRouteGated(reqB({ param: { requireAuth: true, public: true } })), true,
+                'explicit gate wins over `public`');
+        });
+    });
+    it('16.6 - a request with no routing is not gated (and cannot throw)', function () {
+        assert.equal(gate.isRouteGated(undefined), false);
+        assert.equal(gate.isRouteGated({}), false);
+        assert.equal(gate.isRouteGated({ routing: {} }), false);
+    });
+});
+
+describe('§16 — #B158: the write-side backstop is wired in every render delegate', function () {
+    it('16.7 - all three delegates consult the gate before storing', function () {
+        assert.ok(RJSON_SRC.indexOf('lib.authzGate.isRouteGated(req)') > -1, 'render-json');
+        assert.ok(RSWIG_SRC.indexOf('lib.authzGate.isRouteGated(req)') > -1, 'render-swig');
+        // nunjucks binds the registry as `libRef` (see its own #B32 note).
+        assert.ok(RNJK_SRC.indexOf('libRef.authzGate.isRouteGated(req)') > -1, 'render-nunjucks');
+    });
+    it('16.8 - DECISIVE: the check sits INSIDE each writeCache early-return guard', function () {
+        // Placed in the guard, the gated route returns before any key is built. Placed
+        // after, a gated body would already be on its way into the store.
+        [['render-json', RJSON_SRC, 'lib.'], ['render-swig', RSWIG_SRC, 'lib.'], ['render-nunjucks', RNJK_SRC, 'libRef.']]
+            .forEach(function (row) {
+                var name = row[0], src = row[1], ns = row[2];
+                var guardIdx = src.indexOf('typeof(req.routing.cache) == \'undefined\'');
+                var gatedIdx = src.indexOf(ns + 'authzGate.isRouteGated(req)');
+                var keyIdx   = src.indexOf('renderCache.buildKey(');
+                assert.ok(guardIdx > -1 && gatedIdx > -1 && keyIdx > -1, name + ': all three anchors present');
+                assert.ok(gatedIdx > guardIdx, name + ': the check is part of the cache guard');
+                assert.ok(gatedIdx < keyIdx,   name + ': it runs BEFORE the cache key is built');
+            });
+    });
+    it('16.9 - the boot lint refuses the pairing for ANY gated route, not just mode-gated', function () {
+        var idx = SERVER_SRC.indexOf('var _authzRouteGated = _authzGated || ( _authzDefaultDeny && _authzRoute.param.public !== true );');
+        assert.ok(idx > -1, 'the widened predicate is computed at boot');
+        assert.ok(SERVER_SRC.indexOf('it also declares `cache`') > -1, 'the refusal still names the pairing');
+        // The remedy differs by how the route is gated: `public: true` is a legal fix
+        // only for a mode-gated route — on an explicitly gated one it is boot-refused
+        // as a contradiction, so that branch must tell the operator to drop a key.
+        assert.ok(SERVER_SRC.indexOf('or remove the authorization keys if the route is meant to be open to everyone.') > -1,
+            'the explicit branch offers the reachable remedy');
+    });
+});
+
+/* ---------------------------------------------------------------------------
+ * §17 — #B159: authorization keys on a `method: "ws"` route.
+ *
+ * A ws route is registered on the engine's extended-CONNECT handler and never
+ * reaches `handle()` / `router.route`, which is where the gate runs — so an
+ * authorization key on one is not merely skipped, it is unenforceable by
+ * construction. Left accepted it linted clean, booted, AND was counted in the
+ * "Registered N authorization-gated route(s)" line: the framework actively
+ * confirming an illusion. Refused now, matching the truthy-string `requireAuth`
+ * precedent (a structurally-OFF gate must refuse, exactly like a silently-OFF one).
+ *
+ * The MODE half is deliberately a warning, not a refusal: an explicit key is an
+ * author asserting something false, whereas `requireAuthByDefault` sweeps up every
+ * un-annotated route — refusing there would break a working ws bundle the moment
+ * the mode is enabled, the regression #COMPLY10 was scoped to avoid.
+ * ------------------------------------------------------------------------- */
+
+/** Pure-logic replica of the shipped #B159 additions to the core/server.js lint. */
+function lintWs(routing, authSettings) {
+    var s = authSettings || {};
+    var defaultDeny = ( s.requireAuthByDefault === true );
+    var out = { defaultGatedCount: 0, wsUngated: [], authzCount: 0 };
+    for (var rule in routing) {
+        var route = routing[rule];
+        if ( typeof(route) != 'object' || route === null || !route.param ) { continue; }
+        var gated = false;
+        if ( route.param.requireAuth === true ) { gated = true; }
+        if ( Array.isArray(route.param.roles) && route.param.roles.length > 0 ) { gated = true; }
+        if ( typeof(route.param.policy) == 'string' && route.param.policy !== '' ) { gated = true; }
+        if ( gated && /^ws$/i.test(route.method || '') ) {
+            throw new Error('Route `'+ rule +'`: it is a `method: "ws"` route, so `param.requireAuth` / `param.roles` / `param.policy` can never be enforced on it');
+        }
+        if ( defaultDeny && !gated && route.param.public !== true ) {
+            if ( /^ws$/i.test(route.method || '') ) { out.wsUngated.push(rule); }
+            else { ++out.defaultGatedCount; }
+        }
+        if ( gated ) { ++out.authzCount; }
+    }
+    return out;
+}
+
+describe('§17 — #B159: an unenforceable authorization key on a ws route refuses to boot', function () {
+    it('17.1 - every authorization key is refused on a ws route', function () {
+        ['requireAuth', 'roles', 'policy'].forEach(function (key) {
+            var param = { control: 'x', wsHandler: 'h' };
+            param[key] = ( key === 'roles' ) ? ['admin'] : ( key === 'policy' ? 'p' : true );
+            assert.throws(function () {
+                lintWs({ live: { method: 'ws', param: param } }, {});
+            }, /can never be enforced on it/, key + ' on a ws route');
+        });
+    });
+    it('17.2 - the method test is case-insensitive and anchored, matching the ws registrar', function () {
+        // `/^ws$/i` is the SAME predicate core/server.js uses to REGISTER a ws route,
+        // so the refusal and the registration can never disagree about what a ws route is.
+        assert.throws(function () {
+            lintWs({ live: { method: 'WS', param: { control: 'x', requireAuth: true } } }, {});
+        }, /can never be enforced on it/, 'uppercase WS is still a ws route');
+        assert.doesNotThrow(function () {
+            lintWs({ r: { method: 'websocket', param: { control: 'x', requireAuth: true } } }, {});
+        }, '`websocket` is not a ws route to the registrar either, so it must not be refused here');
+    });
+    it('17.3 - the subtract-control: a NON-ws gated route is untouched', function () {
+        assert.doesNotThrow(function () {
+            lintWs({ r: { method: 'GET', param: { control: 'x', requireAuth: true } } }, {});
+        }, 'a normal gated route still boots');
+        assert.doesNotThrow(function () {
+            lintWs({ live: { method: 'ws', param: { control: 'x', wsHandler: 'h' } } }, {});
+        }, 'a ws route WITHOUT authorization keys still boots');
+    });
+    it('17.4 - a gated ws route no longer inflates the gated-route tally', function () {
+        // Before the refusal it was counted, so boot REPORTED it as gated.
+        var r = lintWs({ a: { method: 'GET', param: { control: 'x', requireAuth: true } } }, {});
+        assert.equal(r.authzCount, 1, 'the only countable gated route is the http one');
+    });
+    it('17.5 - the MODE warns instead of refusing, and excludes ws from its count', function () {
+        var r = lintWs({
+            page: { method: 'GET', param: { control: 'x' } },
+            live: { method: 'ws',  param: { control: 'y', wsHandler: 'h' } }
+        }, { requireAuthByDefault: true });
+        assert.equal(r.defaultGatedCount, 1, 'only the http route is actually gated by the mode');
+        assert.deepEqual(r.wsUngated, ['live'], 'the ws route is named, not counted');
+    });
+    it('17.6 - a ws route marked `public` is neither counted nor warned about', function () {
+        var r = lintWs({ live: { method: 'ws', param: { control: 'y', wsHandler: 'h', public: true } } },
+                       { requireAuthByDefault: true });
+        assert.deepEqual(r.wsUngated, [], 'an acknowledged ws route is silent');
+        assert.equal(r.defaultGatedCount, 0);
+    });
+    it('17.7 - source pins: the shipped lint carries the refusal and the mode warning', function () {
+        assert.ok(SERVER_SRC.indexOf('if ( _authzGated && /^ws$/i.test(_authzRoute.method || \'\') ) {') > -1,
+            'the refusal is keyed on the final _authzGated and the registrar predicate');
+        assert.ok(SERVER_SRC.indexOf('can never be enforced on it') > -1, 'the refusal message ships');
+        assert.ok(SERVER_SRC.indexOf('Authenticate inside the `wsHandler` instead') > -1,
+            'it points at the reachable remedy');
+        assert.ok(SERVER_SRC.indexOf('_authzWsUngated.push(_authzRule);') > -1, 'the mode excludes ws from its tally');
+        assert.ok(SERVER_SRC.indexOf('does NOT cover ') > -1, 'and names them at boot');
+    });
+    it('17.8 - the refusal sits AFTER the policy block, so one check covers all three keys', function () {
+        var policyIdx = SERVER_SRC.indexOf('++_authzPolicyCount;');
+        var wsIdx     = SERVER_SRC.indexOf('if ( _authzGated && /^ws$/i.test(_authzRoute.method || \'\') ) {');
+        var publicIdx = SERVER_SRC.indexOf('if ( typeof(_authzRoute.param.public) != \'undefined\' ) {');
+        assert.ok(policyIdx > -1 && wsIdx > -1 && publicIdx > -1, 'all three anchors present');
+        assert.ok(wsIdx > policyIdx, '_authzGated is final before the ws check reads it');
+        assert.ok(wsIdx < publicIdx, 'and it runs before the `public` axis');
+    });
+});

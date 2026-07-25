@@ -669,7 +669,7 @@ describe('14 - Origin allowlist', function() {
     });
 
     it('disables the Origin check when allowedOrigins contains "*"', async function() {
-        await withTransport(makeStubServer(), { allowedOrigins: ['*'] }, async function(info) {
+        await withTransport(makeStubServer(), { allowedOrigins: ['*'], allowInsecure: true }, async function(info) {
             var r = await postRequest(info.port,
                 { jsonrpc: '2.0', id: 1, method: 'ping' },
                 { 'origin': 'http://anywhere.example.com' }
@@ -829,7 +829,7 @@ describe('16 - CORS response headers', function() {
     });
 
     it('echoes * when allowedOrigins is ["*"] (wildcard)', async function() {
-        await withTransport(makeStubServer(), { allowedOrigins: ['*'] }, async function(info) {
+        await withTransport(makeStubServer(), { allowedOrigins: ['*'], allowInsecure: true }, async function(info) {
             var r = await postRequest(info.port,
                 { jsonrpc: '2.0', id: 1, method: 'ping' },
                 { 'origin': 'http://anywhere.example.com' }
@@ -934,7 +934,7 @@ describe('17 - OPTIONS preflight (security)', function() {
     });
 
     it('echoes * on preflight when wildcard is configured', async function() {
-        await withTransport(makeStubServer(), { allowedOrigins: ['*'] }, async function(info) {
+        await withTransport(makeStubServer(), { allowedOrigins: ['*'], allowInsecure: true }, async function(info) {
             var r = await postRequest(info.port, null,
                 { 'origin': 'http://anywhere.example.com' }, 'OPTIONS');
             assert.equal(r.headers['access-control-allow-origin'], '*');
