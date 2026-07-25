@@ -118,6 +118,54 @@
         }
       }
     },
+    "audit": {
+      "type": "object",
+      "description": "Audit trail (#COMPLY2) — a user-attributed, append-only record of \"who did what to which record when\", written with self.audit(action, data). DISTINCT from lib/logger: the trail has its own store and never rides the log sinks. Boot config: changes need a bundle restart, and every shape here is linted UNCONDITIONALLY (a malformed block refuses the boot even with enabled:false, because an audit trail that is quietly OFF is a failed control). Maps to PCI-DSS req 10, SOC 2 CC7.2, HIPAA §164.312(b).",
+      "additionalProperties": false,
+      "not": {
+        "allOf": [
+          { "required": ["file"], "properties": { "file": { "type": "string" } } },
+          { "required": ["store"], "properties": { "store": { "type": "string" } } }
+        ]
+      },
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Master switch — STRICTLY boolean (any other type refuses to boot: a truthy string like \"true\" would leave the trail silently OFF, which is exactly the failure this lint exists to prevent). When true the store is built and adopted at boot, so an unwritable destination refuses the boot rather than dropping records at the first request. Fail-closed default: false.",
+          "default": false
+        },
+        "file": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "JSONL destination for the default file backend. An absolute path is used as-is; a relative path resolves against the project root, NEVER the process cwd. null (default) means <projectPath>/logs/audit-<bundle>-<env>.jsonl — the per-bundle AND per-env filename is deliberate, so two bundles or two envs never interleave writers into one file. Mutually exclusive with `store`. NOTE: pointing two bundles at the same absolute path defeats that protection and is not detectable at boot, since each bundle lints only its own settings.",
+          "default": null
+        },
+        "store": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "description": "Connector-backed backend: names a connectors.json entry whose .connector supplies core/connectors/<connector>/lib/audit-store.js. Mutually exclusive with `file`. No connector ships an audit-store implementation yet (backends are demand-gated, sqlite first), so setting this today is a clean boot refusal rather than a silent fallback to the file backend — the file backend is the v1 path.",
+          "default": null
+        },
+        "actorKey": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Which session.user property is snapshotted as the record's actor.key. Only this property plus a COPY of user.roles is stored — never the whole user object, which would leak PII into the trail. The roles copy means a later session mutation cannot retro-edit an already-written record. Machine callers (#MS3) have no session, so their caller NAME is used instead and the record is marked machine:true.",
+          "default": "id"
+        },
+        "events": {
+          "type": "object",
+          "description": "Framework auto-events — records the framework writes without an explicit self.audit() call.",
+          "additionalProperties": false,
+          "properties": {
+            "authz": {
+              "type": "boolean",
+              "description": "Record every route-authorization denial as an authz.denied record (outcome '401' | 'login-bounce' | '403-roles' | '403-policy' rides in meta.outcome). STRICTLY boolean — any other type refuses to boot, because a truthy non-boolean would not actually opt out. Note that unauthenticated 401s are attacker-triggerable, so this line is attacker-writable in volume, like any log line; throttling is a separate concern.",
+              "default": true
+            }
+          }
+        }
+      }
+    },
     "server": {
       "type": "object",
       "description": "HTTP server engine and protocol configuration.",
