@@ -295,9 +295,22 @@
                                allowlist (`http(s)://localhost`, `127.0.0.1`,
                                `[::1]` on any port). Comma-separated. Pass
                                `*` to disable the Origin check entirely.
+      --allow-insecure         Run without a bearer token even when an
+                               ambient protection has been removed. Assert
+                               only when access is restricted upstream (mesh,
+                               NetworkPolicy, authenticating proxy). Also
+                               `mcp.json > server > allowInsecure`.
 
-    Default security posture — bind loopback, no auth, Origin allowlist
-    accepts localhost / 127.0.0.1 / [::1] only. For OAuth-protected
-    deployments, place gina behind a reverse proxy (oauth2-proxy, Traefik
-    ForwardAuth, nginx `auth_request`) that handles the OAuth dance and
-    forwards the upstream request.
+    Default security posture — bind loopback, Origin allowlist accepts
+    localhost / 127.0.0.1 / [::1] only. On that default a bearer token is
+    optional: the loopback bind and the Origin allowlist are the protection.
+
+    Remove either one and a token becomes REQUIRED — binding a non-loopback
+    address (`--http-host=0.0.0.0`), or disabling the Origin check
+    (`--cors-origin=*`), makes the server refuse to start unless you pass
+    `--auth-token` or `--allow-insecure`. Nothing ever listens unauthenticated.
+
+    For OAuth-protected deployments, place gina behind a reverse proxy
+    (oauth2-proxy, Traefik ForwardAuth, nginx `auth_request`) that handles the
+    OAuth dance and forwards the upstream request — that topology is
+    non-loopback and token-less by design, so it wants `--allow-insecure`.

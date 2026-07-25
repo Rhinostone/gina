@@ -1,0 +1,3 @@
+kind: Fixed
+body: '`gina bundle:mcp-start --transport=http` now reads `GINA_MCP_AUTH_TOKEN` through the framework environment reader instead of `process.env` directly. The CLI moves every `GINA_*` variable out of `process.env` into the framework environment during startup, so the resolver''s direct read always came back empty and the token was silently never applied — a deployment that supplied the bearer token only through that variable ran with no authentication. The `--auth-token` flag and the `mcp.json > server > authToken` manifest field were not affected. If you set the token through the environment variable, restart the server and confirm the startup line now reports `bearer auth: enabled`.'
+time: 2026-07-25T14:56:40+01:00

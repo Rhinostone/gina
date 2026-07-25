@@ -13,6 +13,8 @@
  *  - Validate the `Origin` header against an allowlist (DNS rebinding
  *    mitigation per MCP spec §Security).
  *  - Enforce a static bearer token when `authToken` is configured.
+ *  - Refuse to start, token-less, once an ambient protection has been removed
+ *    (non-loopback bind, or a wildcard Origin allowlist) unless `allowInsecure`.
  *  - Emit full CORS response headers (`access-control-allow-origin` +
  *    `vary: Origin`, or `*` when wildcard allowlist is in effect).
  *
@@ -37,6 +39,41 @@ var BEARER_REALM = 'MCP';
 
 
 /**
+ * True only when `h` is unambiguously a loopback bind address, i.e. when
+ * binding it cannot make the transport reachable from another host.
+ *
+ * Deliberately fail-closed: anything this cannot positively recognise as
+ * loopback (a hostname, `0.0.0.0`, `::`, a LAN address) is treated as exposed,
+ * because guessing wrong in that direction is the expensive mistake.
+ *
+ * Recognised: `localhost`, `::1` (bracketed or bare), the whole `127.0.0.0/8`
+ * block, and IPv4-mapped forms such as `::ffff:127.0.0.1`.
+ *
+ * @param   {string} h - a bind host as handed to `server.listen()`.
+ * @returns {boolean}
+ * @inner
+ * @private
+ */
+function isLoopbackBind(h) {
+    if (typeof(h) !== 'string') return false;
+    var v = h.trim().toLowerCase();
+    if (v.charAt(0) === '[' && v.charAt(v.length - 1) === ']') {
+        v = v.substring(1, v.length - 1);
+    }
+    if (v === 'localhost' || v === '::1') return true;
+    if (v.indexOf('::ffff:') === 0) {
+        v = v.substring(7);         // IPv4-mapped IPv6 — fall through to the v4 test
+    }
+    var m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(v);
+    if (!m) return false;
+    for (var i = 1; i <= 4; ++i) {
+        if (Number(m[i]) > 255) return false;
+    }
+    return Number(m[1]) === 127;
+}
+
+
+/**
  * Creates an HTTP transport bound to an mcp-server instance. Returns a
  * controller with `start()`, `stop()`, and `address()`.
  *
@@ -47,9 +84,19 @@ var BEARER_REALM = 'MCP';
  * @param   {number}    [opts.maxBodyBytes]     - Cap on POST body size
  * @param   {string}    [opts.authToken]        - If set, `Authorization: Bearer <token>`
  *                                                is required on every non-OPTIONS request.
- *                                                Constant-time compared. When omitted,
- *                                                no auth is enforced (the network bind
- *                                                policy IS the security boundary).
+ *                                                Compared in constant time, sha256-hashed
+ *                                                on both sides. When omitted the transport
+ *                                                leans on its ambient protections (loopback
+ *                                                bind + Origin allowlist) and REFUSES to
+ *                                                start if either has been deliberately
+ *                                                removed — see `opts.allowInsecure`.
+ * @param   {boolean}   [opts.allowInsecure]    - Strict boolean. Set `true` to run
+ *                                                token-less even with an ambient protection
+ *                                                removed (non-loopback bind, or a wildcard
+ *                                                Origin allowlist). Assert this only when
+ *                                                access is restricted upstream — a service
+ *                                                mesh, a NetworkPolicy, or an
+ *                                                authenticating reverse proxy.
  * @param   {string[]}  [opts.allowedOrigins]   - Additional origins to accept beyond the
  *                                                built-in loopback allowlist
  *                                                (`http(s)://localhost`, `http(s)://127.0.0.1`,
@@ -87,7 +134,16 @@ function createHttpTransport(opts) {
     var authToken     = (typeof(opts.authToken) === 'string' && opts.authToken.length) ? opts.authToken : null;
     var extraOrigins  = Array.isArray(opts.allowedOrigins) ? opts.allowedOrigins.slice() : [];
     var originWildcard = (extraOrigins.indexOf('*') !== -1);
+    var allowInsecure = (opts.allowInsecure === true);
     var onError       = (typeof(opts.onError) === 'function') ? opts.onError : function() {};
+
+    // Digest the configured token ONCE, here, rather than per request: the
+    // compare in `isAuthed` then runs over two fixed-length (32-byte) buffers,
+    // so it can neither throw nor leak the token's length. Mirrors the
+    // boot-precomputed key hashes in `lib/authz-gate` (`verifyMachineToken`).
+    var authTokenHash = authToken
+        ? crypto.createHash('sha256').update(authToken, 'utf8').digest()
+        : null;
 
     var httpServer = null;
 
@@ -133,9 +189,13 @@ function createHttpTransport(opts) {
 
     /**
      * True when the request carries a valid bearer (or no token is configured).
-     * Constant-time compares the presented token to the configured one.
-     * Length mismatch short-circuits to false WITHOUT calling
-     * `crypto.timingSafeEqual` — that API throws on length mismatch.
+     *
+     * Both sides are sha256-hashed before the constant-time compare, so the two
+     * buffers are always 32 bytes. That removes the length short-circuit this
+     * used to need — comparing the raw tokens meant returning early on a length
+     * mismatch (`timingSafeEqual` throws on unequal lengths), which leaked the
+     * configured token's length through response timing. The try/catch is kept
+     * as the house idiom even though two same-length digests cannot throw.
      *
      * @private
      */
@@ -144,12 +204,37 @@ function createHttpTransport(opts) {
         var header = req.headers['authorization'] || '';
         var m = /^Bearer\s+(.+)$/i.exec(header);
         if (!m) return false;
-        var presented = m[1].trim();
-        var expected  = Buffer.from(authToken, 'utf8');
-        var actual    = Buffer.from(presented,  'utf8');
-        if (expected.length !== actual.length) return false;
-        try { return crypto.timingSafeEqual(expected, actual); }
+        var presented     = m[1].trim();
+        var presentedHash = crypto.createHash('sha256').update(presented, 'utf8').digest();
+        try { return crypto.timingSafeEqual(presentedHash, authTokenHash); }
         catch (e) { return false; }
+    }
+
+
+    /**
+     * Describes the ambient protection the operator has removed, when running
+     * without a bearer token — or `null` when the transport is adequately
+     * protected (or `allowInsecure` waives the requirement).
+     *
+     * Two protections make a token-less transport defensible, and losing EITHER
+     * is enough to need one:
+     *  - the loopback bind, which keeps other hosts out entirely;
+     *  - the Origin allowlist, which is the only thing standing between a
+     *    loopback-bound server and a DNS-rebinding attack driven from any web
+     *    page (the bind does not help there — the browser is already local).
+     *
+     * @returns {string|null} the reason, phrased for an operator-facing error.
+     * @private
+     */
+    function describeExposure() {
+        if (authToken || allowInsecure) return null;
+        if (!isLoopbackBind(host)) {
+            return 'it is bound to the non-loopback address `'+ host +'`';
+        }
+        if (originWildcard) {
+            return 'the Origin allowlist is disabled (`allowedOrigins: ["*"]`)';
+        }
+        return null;
     }
 
 
@@ -510,12 +595,26 @@ function createHttpTransport(opts) {
      * resolved { host, port, family } — `port` is the OS-assigned port when
      * `opts.port` was 0.
      *
+     * Also rejects, BEFORE binding, when the transport would be exposed without
+     * a bearer token (see `describeExposure`). Refusing here rather than
+     * answering 401 per request is the framework's house answer for a security
+     * control that would otherwise sit silently inert: nothing ever listens, so
+     * there is no window in which an unauthenticated port is reachable.
+     *
      * @returns {Promise<{host: string, port: number, family: string}>}
      */
     function start() {
         return new Promise(function(resolve, reject) {
             if (httpServer) {
                 return reject(new Error('start: transport already started'));
+            }
+            var exposure = describeExposure();
+            if (exposure) {
+                return reject(new Error(
+                    'start: refusing to listen without a bearer token because '+ exposure +'. '
+                  + 'Configure a token, or set `allowInsecure` to assert that access is '
+                  + 'restricted upstream (service mesh, NetworkPolicy, authenticating proxy).'
+                ));
             }
             var server = http.createServer(handleHttpRequest);
             var onListenError = function(err) { reject(err); };

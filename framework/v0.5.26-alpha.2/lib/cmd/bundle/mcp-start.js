@@ -237,6 +237,7 @@ function MCPStart(opt, cmd) {
         var port           = resolveHttpPort(mcpDoc);
         var authToken      = resolveAuthToken(mcpDoc);
         var allowedOrigins = resolveAllowedOrigins(mcpDoc);
+        var allowInsecure  = resolveAllowInsecure(mcpDoc);
 
         httpTransport = mcpHttp.createHttpTransport({
             mcpServer:      server,
@@ -244,13 +245,16 @@ function MCPStart(opt, cmd) {
             port:           port,
             authToken:      authToken,
             allowedOrigins: allowedOrigins,
+            allowInsecure:  allowInsecure,
             onError: function(err) {
                 console.error('[ '+ bundle +' ][mcp] HTTP transport: ' + (err && err.message || err));
             }
         });
 
         httpTransport.start().then(function(info) {
-            var authNote = authToken ? ' (bearer auth: enabled)' : '';
+            var authNote = authToken
+                ? ' (bearer auth: enabled)'
+                : (allowInsecure ? ' (bearer auth: none — allowInsecure asserted)' : '');
             console.info('[ '+ bundle +' ][mcp] MCP server listening on http://'+ info.host +':'+ info.port + authNote +'. Dispatch target: '+ baseUrl +' (timeout: '+ timeoutMs +' ms, maxInFlight: '+ maxInFlight +'). '+ mcpDoc.tools.length +' tool'+ (mcpDoc.tools.length === 1 ? '' : 's') +' exposed.');
         }, function(err) {
             return end( new Error('Failed to start HTTP transport on '+ host +':'+ port +': '+ (err && err.message || err)) );
@@ -360,9 +364,15 @@ function MCPStart(opt, cmd) {
      * Resolves the HTTP bind host. Precedence:
      *   1. `--http-host=<host>` CLI flag
      *   2. `mcp.json > server > httpHost`
-     *   3. `process.env.GINA_HOST_V4` (set by bin/cli from
-     *      `~/.gina/<shortVersion>/settings.json > host_v4`)
-     *   4. `'127.0.0.1'` ultimate fallback
+     *   3. `process.env.GINA_HOST_V4` — INERT under the CLI. `filterArgs()`
+     *      moves every GINA_* key into `process.gina` and deletes it from
+     *      `process.env`, so this read is always undefined there.
+     *      Deliberately NOT converted to `getEnvVar` the way the auth-token
+     *      tier was: `host_v4` is the address clients CONNECT to (commonly a
+     *      LAN address), never a bind address — reviving this tier would move
+     *      the default bind OFF loopback and expose the transport. The correct
+     *      replacement is `bind_host` / `GINA_BIND_HOST`, tracked separately.
+     *   4. `'127.0.0.1'` — in practice the effective default, per (3).
      *
      * @private
      * @param   {object} mcpDoc
@@ -429,9 +439,41 @@ function MCPStart(opt, cmd) {
         if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.authToken) === 'string' && mcpDoc.server.authToken) {
             return mcpDoc.server.authToken;
         }
-        var env = process.env.GINA_MCP_AUTH_TOKEN;
+        // `filterArgs()` (bin/cli) moves every GINA_* key OUT of `process.env`
+        // into `process.gina` and deletes the original, so a bare
+        // `process.env.GINA_MCP_AUTH_TOKEN` read is always undefined under the
+        // CLI — the documented env path silently yielded NO token, leaving the
+        // transport unauthenticated. `getEnvVar` is the supported reader; the
+        // direct read stays as the fallback for embedders that never ran the sweep.
+        var env = (typeof(getEnvVar) === 'function' && getEnvVar('GINA_MCP_AUTH_TOKEN'))
+                  || process.env.GINA_MCP_AUTH_TOKEN;
         if (typeof(env) === 'string' && env) return env;
         return null;
+    };
+
+
+    /**
+     * Resolves the insecure-transport waiver. Precedence:
+     *   1. `--allow-insecure` CLI flag
+     *   2. `mcp.json > server > allowInsecure` (strict boolean)
+     *   3. `false`
+     *
+     * Only meaningful when no bearer token is configured: it tells the
+     * transport that a non-loopback bind (or a wildcard Origin allowlist) is
+     * fronted by something else — a mesh, a NetworkPolicy, or an
+     * authenticating reverse proxy — rather than genuinely open.
+     *
+     * @private
+     * @param   {object} mcpDoc
+     * @returns {boolean}
+     */
+    var resolveAllowInsecure = function(mcpDoc) {
+        var cli = self.params && self.params['allow-insecure'];
+        if (cli === true || cli === 'true') return true;
+        if (mcpDoc && mcpDoc.server && mcpDoc.server.allowInsecure === true) {
+            return true;
+        }
+        return false;
     };
 
 

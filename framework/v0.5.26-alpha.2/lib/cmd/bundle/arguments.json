@@ -15,6 +15,7 @@
   "--max-in-flight",
   "--auth-token",
   "--cors-origin",
+  "--allow-insecure",
   "--dry-run",
   "--format"
 ]
