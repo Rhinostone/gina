@@ -1740,3 +1740,110 @@ describe('§16 — #B158: the write-side backstop is wired in every render deleg
             'the explicit branch offers the reachable remedy');
     });
 });
+
+/* ---------------------------------------------------------------------------
+ * §17 — #B159: authorization keys on a `method: "ws"` route.
+ *
+ * A ws route is registered on the engine's extended-CONNECT handler and never
+ * reaches `handle()` / `router.route`, which is where the gate runs — so an
+ * authorization key on one is not merely skipped, it is unenforceable by
+ * construction. Left accepted it linted clean, booted, AND was counted in the
+ * "Registered N authorization-gated route(s)" line: the framework actively
+ * confirming an illusion. Refused now, matching the truthy-string `requireAuth`
+ * precedent (a structurally-OFF gate must refuse, exactly like a silently-OFF one).
+ *
+ * The MODE half is deliberately a warning, not a refusal: an explicit key is an
+ * author asserting something false, whereas `requireAuthByDefault` sweeps up every
+ * un-annotated route — refusing there would break a working ws bundle the moment
+ * the mode is enabled, the regression #COMPLY10 was scoped to avoid.
+ * ------------------------------------------------------------------------- */
+
+/** Pure-logic replica of the shipped #B159 additions to the core/server.js lint. */
+function lintWs(routing, authSettings) {
+    var s = authSettings || {};
+    var defaultDeny = ( s.requireAuthByDefault === true );
+    var out = { defaultGatedCount: 0, wsUngated: [], authzCount: 0 };
+    for (var rule in routing) {
+        var route = routing[rule];
+        if ( typeof(route) != 'object' || route === null || !route.param ) { continue; }
+        var gated = false;
+        if ( route.param.requireAuth === true ) { gated = true; }
+        if ( Array.isArray(route.param.roles) && route.param.roles.length > 0 ) { gated = true; }
+        if ( typeof(route.param.policy) == 'string' && route.param.policy !== '' ) { gated = true; }
+        if ( gated && /^ws$/i.test(route.method || '') ) {
+            throw new Error('Route `'+ rule +'`: it is a `method: "ws"` route, so `param.requireAuth` / `param.roles` / `param.policy` can never be enforced on it');
+        }
+        if ( defaultDeny && !gated && route.param.public !== true ) {
+            if ( /^ws$/i.test(route.method || '') ) { out.wsUngated.push(rule); }
+            else { ++out.defaultGatedCount; }
+        }
+        if ( gated ) { ++out.authzCount; }
+    }
+    return out;
+}
+
+describe('§17 — #B159: an unenforceable authorization key on a ws route refuses to boot', function () {
+    it('17.1 - every authorization key is refused on a ws route', function () {
+        ['requireAuth', 'roles', 'policy'].forEach(function (key) {
+            var param = { control: 'x', wsHandler: 'h' };
+            param[key] = ( key === 'roles' ) ? ['admin'] : ( key === 'policy' ? 'p' : true );
+            assert.throws(function () {
+                lintWs({ live: { method: 'ws', param: param } }, {});
+            }, /can never be enforced on it/, key + ' on a ws route');
+        });
+    });
+    it('17.2 - the method test is case-insensitive and anchored, matching the ws registrar', function () {
+        // `/^ws$/i` is the SAME predicate core/server.js uses to REGISTER a ws route,
+        // so the refusal and the registration can never disagree about what a ws route is.
+        assert.throws(function () {
+            lintWs({ live: { method: 'WS', param: { control: 'x', requireAuth: true } } }, {});
+        }, /can never be enforced on it/, 'uppercase WS is still a ws route');
+        assert.doesNotThrow(function () {
+            lintWs({ r: { method: 'websocket', param: { control: 'x', requireAuth: true } } }, {});
+        }, '`websocket` is not a ws route to the registrar either, so it must not be refused here');
+    });
+    it('17.3 - the subtract-control: a NON-ws gated route is untouched', function () {
+        assert.doesNotThrow(function () {
+            lintWs({ r: { method: 'GET', param: { control: 'x', requireAuth: true } } }, {});
+        }, 'a normal gated route still boots');
+        assert.doesNotThrow(function () {
+            lintWs({ live: { method: 'ws', param: { control: 'x', wsHandler: 'h' } } }, {});
+        }, 'a ws route WITHOUT authorization keys still boots');
+    });
+    it('17.4 - a gated ws route no longer inflates the gated-route tally', function () {
+        // Before the refusal it was counted, so boot REPORTED it as gated.
+        var r = lintWs({ a: { method: 'GET', param: { control: 'x', requireAuth: true } } }, {});
+        assert.equal(r.authzCount, 1, 'the only countable gated route is the http one');
+    });
+    it('17.5 - the MODE warns instead of refusing, and excludes ws from its count', function () {
+        var r = lintWs({
+            page: { method: 'GET', param: { control: 'x' } },
+            live: { method: 'ws',  param: { control: 'y', wsHandler: 'h' } }
+        }, { requireAuthByDefault: true });
+        assert.equal(r.defaultGatedCount, 1, 'only the http route is actually gated by the mode');
+        assert.deepEqual(r.wsUngated, ['live'], 'the ws route is named, not counted');
+    });
+    it('17.6 - a ws route marked `public` is neither counted nor warned about', function () {
+        var r = lintWs({ live: { method: 'ws', param: { control: 'y', wsHandler: 'h', public: true } } },
+                       { requireAuthByDefault: true });
+        assert.deepEqual(r.wsUngated, [], 'an acknowledged ws route is silent');
+        assert.equal(r.defaultGatedCount, 0);
+    });
+    it('17.7 - source pins: the shipped lint carries the refusal and the mode warning', function () {
+        assert.ok(SERVER_SRC.indexOf('if ( _authzGated && /^ws$/i.test(_authzRoute.method || \'\') ) {') > -1,
+            'the refusal is keyed on the final _authzGated and the registrar predicate');
+        assert.ok(SERVER_SRC.indexOf('can never be enforced on it') > -1, 'the refusal message ships');
+        assert.ok(SERVER_SRC.indexOf('Authenticate inside the `wsHandler` instead') > -1,
+            'it points at the reachable remedy');
+        assert.ok(SERVER_SRC.indexOf('_authzWsUngated.push(_authzRule);') > -1, 'the mode excludes ws from its tally');
+        assert.ok(SERVER_SRC.indexOf('does NOT cover ') > -1, 'and names them at boot');
+    });
+    it('17.8 - the refusal sits AFTER the policy block, so one check covers all three keys', function () {
+        var policyIdx = SERVER_SRC.indexOf('++_authzPolicyCount;');
+        var wsIdx     = SERVER_SRC.indexOf('if ( _authzGated && /^ws$/i.test(_authzRoute.method || \'\') ) {');
+        var publicIdx = SERVER_SRC.indexOf('if ( typeof(_authzRoute.param.public) != \'undefined\' ) {');
+        assert.ok(policyIdx > -1 && wsIdx > -1 && publicIdx > -1, 'all three anchors present');
+        assert.ok(wsIdx > policyIdx, '_authzGated is final before the ws check reads it');
+        assert.ok(wsIdx < publicIdx, 'and it runs before the `public` axis');
+    });
+});

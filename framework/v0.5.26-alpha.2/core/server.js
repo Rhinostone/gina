@@ -945,6 +945,7 @@ function Server(options) {
             var _authzPolicyCount = 0;
             var _authzPublicCount = 0;
             var _authzDefaultGatedCount = 0;
+            var _authzWsUngated   = [];   // #B159 — ws routes the mode would otherwise count as gated
             for (var _authzRule in _authzRouting) {
                 var _authzRoute = _authzRouting[_authzRule];
                 if ( typeof(_authzRoute) != 'object' || _authzRoute === null || !_authzRoute.param ) {
@@ -1006,6 +1007,22 @@ function Server(options) {
                     _authzGated = true;
                     ++_authzPolicyCount;
                 }
+                // #B159 — a WebSocket route can declare an authorization key, but nothing
+                // can ever enforce it. A `method: "ws"` route is registered on the engine's
+                // extended-CONNECT handler and never reaches `handle()` / `router.route`,
+                // which is where `lib/authz-gate` runs — so the gate is not merely skipped,
+                // it is unreachable by construction. Left accepted, the route would lint
+                // clean, boot, AND be counted in the "Registered N authorization-gated
+                // route(s)" line below: the framework would actively confirm an illusion.
+                // That is precisely the quietly-OFF class the rest of this block refuses
+                // (a truthy-string `requireAuth` already refuses to boot), so a
+                // structurally unenforceable one must refuse too. `/^ws$/i` is the SAME
+                // predicate the ws registration uses, so the two can never disagree about
+                // what a ws route is. Placed after the requireAuth/roles/policy blocks so
+                // `_authzGated` is already final and one check covers all three keys.
+                if ( _authzGated && /^ws$/i.test(_authzRoute.method || '') ) {
+                    throw new Error('[ SERVER ] Route `'+ _authzRule +'`: it is a `method: "ws"` route, so `param.requireAuth` / `param.roles` / `param.policy` can never be enforced on it — a WebSocket handshake is answered by the engine\'s extended-CONNECT handler and never reaches the authorization gate. Authenticate inside the `wsHandler` instead: it receives the full request, so it can inspect headers and cookies and close the socket itself. Remove the authorization key to make that explicit.');
+                }
                 // #COMPLY10 — `param.public`: the explicit exemption from
                 // `auth.requireAuthByDefault`. Linted UNCONDITIONALLY, mode on or off:
                 // a malformed exemption is an author error worth surfacing at the
@@ -1054,7 +1071,19 @@ function Server(options) {
                     throw new Error('[ SERVER ] Route `'+ _authzRule +'`: '+ ( _authzGated ? '`param.requireAuth` / `param.roles` / `param.policy` gate this route' : '`auth.requireAuthByDefault` gates this route' ) +', but it also declares `cache`. The render cache is read BEFORE authorization runs and its key carries no user identity, so the first authenticated response would be replayed to unauthenticated callers. Drop `cache`'+ ( _authzGated ? ', or remove the authorization keys if the route is meant to be open to everyone.' : ', or mark the route `"public": true` if it is meant to be cacheable and open.' ));
                 }
                 if ( _authzDefaultDeny && !_authzGated && _authzRoute.param.public !== true ) {
-                    ++_authzDefaultGatedCount;
+                    // #B159 — the mode cannot gate a ws route either (same unreachable
+                    // gate). Counting one would repeat the illusion the explicit refusal
+                    // above exists to stop, so ws routes are excluded from the tally and
+                    // named once instead. A WARN rather than a refusal on purpose: an
+                    // explicit key is an author asserting something false, whereas the
+                    // mode sweeps up every un-annotated route, so refusing here would
+                    // break a working ws bundle the moment the mode is switched on — the
+                    // exact regression #COMPLY10 was scoped to avoid.
+                    if ( /^ws$/i.test(_authzRoute.method || '') ) {
+                        _authzWsUngated.push(_authzRule);
+                    } else {
+                        ++_authzDefaultGatedCount;
+                    }
                 }
                 if ( _authzGated ) {
                     ++_authzCount;
@@ -1261,6 +1290,11 @@ function Server(options) {
                 // debug, and under a mode that can lock a bundle out, the count of newly
                 // gated routes is the single number an operator needs confirmed at deploy.
                 console.info('[ BUNDLE ][ server ][ init ] Deny-by-default authorization ENABLED for [ '+ self.appName +' ] — '+ _authzDefaultGatedCount +' un-annotated route(s) now require authentication, '+ _authzPublicCount +' marked `public`');
+                // #B159 — say plainly which routes the mode does NOT reach. Silence here
+                // would read as "everything is gated now", which is the whole failure mode.
+                if ( _authzWsUngated.length > 0 ) {
+                    console.warn('[ BUNDLE ][ server ][ init ] `auth.requireAuthByDefault` does NOT cover '+ _authzWsUngated.length +' WebSocket route(s) — '+ _authzWsUngated.join(', ') +'. A ws handshake never reaches the authorization gate, so these stay open unless their `wsHandler` authenticates. Mark them `"public": true` once you have confirmed that is intended.');
+                }
             }
 
             // ── #COMPLY2 — audit trail: boot resolve + fail-fast lint ──
