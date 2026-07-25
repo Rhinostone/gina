@@ -1,3 +1,0 @@
-kind: Added
-body: 'Authorization contract in `bundle:openapi` — gated routes (`param.requireAuth` / `param.roles` / `param.policy`) now emit a `401` response entry (plus a `403` when roles or a policy add authorization beyond authentication), and when machine-caller auth (`settings.json > auth.machine`) is configured the spec gains `components.securitySchemes.bearerAuth` (`http`/`bearer`) plus a per-operation `security` requirement on gated routes. Role and policy names are never emitted into the spec; an un-gated, un-configured bundle''s spec is unchanged.'
-time: 2026-07-24T16:44:55+01:00

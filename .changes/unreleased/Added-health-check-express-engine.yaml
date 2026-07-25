@@ -1,3 +1,0 @@
-kind: Added
-body: 'Added GET /_gina/health/check on the default (express) engine, mirroring the isaac engine''s existing liveness endpoint. It returns 200 with {"status":"healthy","timestamp":<ISO>}, is deliberately ungated (no admin allowlist, no dev gate) so container liveness probes reach it off-loopback, and stays in sync with the isaac fast-path per the /_gina/* built-in endpoint rule. Previously only the isaac engine served it, so bundles on the express engine had no ungated liveness target and had to run the isaac engine just to satisfy a Docker or Kubernetes healthcheck. Server-side only — no bundle rebuild; restart to apply.'
-time: 2026-07-24T13:30:01+01:00

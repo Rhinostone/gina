@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'When a staged-upload reset or delete click matches none of the rendered previews, the framework now logs a diagnostic warning instead of silently doing nothing. Previously a zero-match removal skipped its whole cleanup path — the server-side temp-file delete request, the upload-progress-indicator reset, and the removal callback — with no signal, so orphaned temp files could go unnoticed. A normal removal (at least one preview matched) is unchanged. Browser-bundled: rebuild your bundles to pick it up.'
-time: 2026-07-23T09:14:01+01:00

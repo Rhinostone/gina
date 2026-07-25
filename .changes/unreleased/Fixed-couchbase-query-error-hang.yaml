@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The Couchbase connector no longer hangs the request when an N1QL query fails at the socket level — connection refused or reset, or a node still warming up after a restart or rebalance — with no query-error envelope. The three query error handlers read the vendor `cause` unconditionally, so on such a failure a swallowed TypeError left the query callback un-fired and the request never settled (no response, no error page). Each handler now forwards a usable error on both paths — building from the query-error envelope when present, otherwise the raw driver error with its code/errno preserved — and always settles the query. Server-side; restart to pick it up.'
-time: 2026-07-24T16:26:07+01:00
