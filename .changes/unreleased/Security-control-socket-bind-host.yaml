@@ -1,0 +1,3 @@
+kind: Security
+body: 'The framework control-plane listeners now bind an explicit host that defaults to loopback. A new `bind_host` setting (env `GINA_BIND_HOST`, flag `gina framework:set --bind-host=`) governs where the command socket and the MQ listener accept connections; it is separate from `host_v4`, which remains the address clients connect to, so a workstation pointing `host_v4` at another machine still starts its own daemon normally. Exposing the control plane beyond the local host is now a deliberate opt-in, the same way a bundle uses `--http-host`. Existing installs inherit the loopback default; set `bind_host` if you relied on reaching these ports from another machine.'
+time: 2026-07-25T13:05:00+01:00

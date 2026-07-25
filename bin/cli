@@ -55,6 +55,7 @@ async function onExec() {
         , settings          = null
         , hostname          = os.hostname() // by default
         , hostV4            = null
+        , bindHost          = null
         , mqPort            = null
         , settingsPath      = null
         , err               = null
@@ -122,6 +123,13 @@ async function onExec() {
                     continue;
                 }
 
+                if ( isFrameworkScopedCmd && /^\-\-bind\-host/.test(params[p]) ) {
+                    let bind = params[p].split(/\=/)[1];
+                    setEnvVar('GINA_BIND_HOST', bind);// jshint ignore:line
+                    isUpdateRequired = true;
+                    continue;
+                }
+
                 if ( isFrameworkScopedCmd && /^\-\-hostname/.test(params[p]) ) {
                     hostname = params[p].split(/\=/)[1];
                     setEnvVar('GINA_HOSTNAME', hostname);// jshint ignore:line
@@ -185,6 +193,7 @@ async function onExec() {
         if (_hasUnresolved(settings['mq_port']))    { settings['mq_port']   = 8125; }
         if (_hasUnresolved(settings['port']))       { settings['port']      = 8124; }
         if (_hasUnresolved(settings['host_v4']))    { settings['host_v4']   = '127.0.0.1'; }
+        if (_hasUnresolved(settings['bind_host']))  { settings['bind_host'] = '127.0.0.1'; }
         if (_hasUnresolved(settings['hostname']))   { settings['hostname']  = undefined; }
 
         setEnvVar('GINA_LOG_LEVEL', settings['log_level']);// jshint ignore:line
@@ -238,6 +247,12 @@ async function onExec() {
         }
         hostV4 = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || '127.0.0.1';// jshint ignore:line
         mqPort = getEnvVar('GINA_MQ_PORT')|| settings['mq_port'] || 8125;// jshint ignore:line
+        // Bind address for the framework control sockets (command socket + MQ
+        // listener). Deliberately independent of `host_v4`, which is the
+        // address CLIENTS connect to: a workstation may legitimately point
+        // `host_v4` at another machine, and inheriting that as a bind address
+        // would make the local daemon fail to start (EADDRNOTAVAIL).
+        bindHost = getEnvVar('GINA_BIND_HOST') || settings['bind_host'] || '127.0.0.1';// jshint ignore:line
 
         if (!isUpdateRequired) {
             setEnvVar('GINA_HOST_V4', settings['host_v4']);// jshint ignore:line
@@ -266,7 +281,10 @@ async function onExec() {
         if ( /(gina\/bin\/cli|gina\/\/bin\/gina)$/.test(process.argv[1]) ) {
 
             var MQListener = require(frameworkPath + '/lib/logger/src/containers/mq/listener.js');
-            var mqListener = await new MQListener({ port: mqPort, host: hostV4 });
+            // The listener reads `opt.hostV4` (see listener.js); passing `host`
+            // left it undefined, which binds every interface. Bind the control
+            // plane to `bind_host` (loopback by default) like the command socket.
+            var mqListener = await new MQListener({ port: mqPort, hostV4: bindHost });
             // required for tail command
             var mqPortFile = getTmpDir() + '/mq-listener-v'+ version +'.port';// jshint ignore:line
             console.debug('Writting: '+ mqPortFile);
@@ -323,6 +341,7 @@ async function onExec() {
 
         settings['mq_port'] = getEnvVar('GINA_MQ_PORT') || settings['mq_port'] || null;// jshint ignore:line
         settings['host_v4'] = getEnvVar('GINA_HOST_V4') || settings['host_v4'] || null;// jshint ignore:line
+        settings['bind_host'] = getEnvVar('GINA_BIND_HOST') || settings['bind_host'] || null;// jshint ignore:line
         settings['hostname'] = getEnvVar('GINA_HOSTNAME') || settings['hostname'] || null;// jshint ignore:line
         generator.createFileFromDataSync(settings, settingsPath);// jshint ignore:line
     }
@@ -391,6 +410,7 @@ async function onExec() {
                 homedir         : home,
                 port            : port,
                 hostV4          : hostV4,
+                bindHost        : bindHost,
                 mqPort          : mqPort,
                 hostname        : hostname,
                 debugPort       : debugPort,
@@ -418,6 +438,7 @@ async function onExec() {
             homedir         : home,
             port            : port,
             hostV4          : hostV4,
+            bindHost        : bindHost,
             mqPort          : mqPort,
             hostname        : hostname,
             debugPort       : debugPort,

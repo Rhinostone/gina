@@ -108,6 +108,11 @@ function Set(opt){
                 setKeyVal('host_v4', v);
             break;
 
+            case '--bind_host':
+            case '--bind-host':
+                setKeyVal('bind_host', v);
+            break;
+
             case '--iso_short':
             case '--iso-short':
                 setKeyVal('iso_short', v);

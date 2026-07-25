@@ -1,0 +1,3 @@
+kind: Security
+body: 'A command name arriving over the framework socket is now constrained to the shipped command namespace before it is resolved to a handler, so it can only ever resolve inside `lib/cmd/`. Unresolvable names are answered on the connection instead of ending the daemon process, which previously stopped serving every other client; a one-shot offline CLI run still exits non-zero. The MQ listener likewise skips a malformed frame rather than letting the parse failure drop the listener.'
+time: 2026-07-25T13:05:30+01:00

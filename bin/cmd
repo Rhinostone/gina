@@ -25,6 +25,10 @@ function Cmd(opt, runOffine) {
         local.hostV4            = opt.hostV4;
         local.mqPort            = opt.mqPort;
         local.port              = opt.port;
+        // Bind address for the framework command socket. Defaults to loopback
+        // here as well as at the resolution site (bin/cli), so a caller that
+        // omits the key can never widen the bind by accident.
+        local.bindHost          = opt.bindHost || '127.0.0.1';
 
         lib = require(local.frameworkPath + "/lib");
 
@@ -145,7 +149,13 @@ function Cmd(opt, runOffine) {
             }
         });
 
-        framework.listen(local.port, function() { //'listening' listener
+        // The command socket is a local control plane: a connection to it
+        // executes a framework CLI command. `listen(port, cb)` with no host
+        // argument binds every interface, so the bind host is passed
+        // explicitly and defaults to loopback (`bind_host` / GINA_BIND_HOST).
+        // Widening it is a deliberate opt-in, the same way a bundle's
+        // `--http-host` is.
+        framework.listen(local.port, local.bindHost, function() { //'listening' listener
 
             //First time launch.
             lib.cmd.load({

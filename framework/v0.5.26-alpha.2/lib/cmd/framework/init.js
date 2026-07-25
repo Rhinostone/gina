@@ -153,8 +153,24 @@ function Initialize(opt) {
      */
     var run = function(opt, cmd) {
         opt.task = checkForAliases(opt.task);
+
+        // The resolved topic/action pair becomes the `require()` path below, and
+        // for an online command it is supplied by the caller over the framework
+        // socket. Constrain both segments to the shipped command namespace so a
+        // name can only ever resolve INSIDE `lib/cmd/`. Every command group
+        // directory and action file gina ships matches this pattern, including
+        // the synthetic `framework:-V` / `framework:--version` forms; anything
+        // carrying a path separator or a `..` segment does not.
+        var isSafeCmdSegment = function (segment) {
+            return /^[A-Za-z0-9_-]+$/.test( String(segment) );
+        };
+        var isKnownNamespace = isSafeCmdSegment(opt.task.topic) && isSafeCmdSegment(opt.task.action);
+
         var filename ='/cmd/' + opt.task.topic + '/' + opt.task.action + '.js'
-        var path = getPath('gina').lib + filename;
+        // A segment outside that namespace resolves to '' — which never exists —
+        // so it falls into the same "not a valid command" branch as an unknown
+        // action below, and can never reach require().
+        var path = isKnownNamespace ? getPath('gina').lib + filename : '';
 
         // Unknown command → print a clean, actionable message instead of a raw
         // `Cannot find module` stack. `bin/cli` already rejects an unknown GROUP
@@ -182,6 +198,13 @@ function Initialize(opt) {
             console.error(message);
             if (opt.client) {
                 opt.client.write(message + '\n');
+            }
+
+            // Online runs inside the long-lived daemon serving every client, so
+            // exiting here would drop the control plane. End this client instead.
+            if ( opt.isOnlineCommand ) {
+                if (opt.client) { opt.client.end(); }
+                return;
             }
             process.exit(1);
             return;
@@ -666,6 +689,7 @@ function Initialize(opt) {
                         'debug_port' : 'GINA_DEBUG_PORT',
                         'mq_port'    : 'GINA_MQ_PORT',
                         'host_v4'    : 'GINA_HOST_V4',
+                        'bind_host'  : 'GINA_BIND_HOST',
                         'hostname'   : 'GINA_HOSTNAME',
                         'logdir'     : 'GINA_LOGDIR',
                         'tmpdir'     : 'GINA_TMPDIR',
@@ -764,6 +788,9 @@ function Initialize(opt) {
                 'port' : getEnvVar('GINA_PORT') || 8124, // TODO - scan for the next available port
                 'debug_port' : getEnvVar('GINA_DEBUG_PORT') || process.debugPort || 9339,
                 'host_v4' : getEnvVar('GINA_HOST_V4') || '127.0.0.1',
+                // Bind address for the framework control sockets — loopback by
+                // default; widen deliberately to expose them beyond this host.
+                'bind_host' : getEnvVar('GINA_BIND_HOST') || '127.0.0.1',
                 'mq_port' : getEnvVar('GINA_MQ_PORT') || 8125,
                 'hostname' : getEnvVar('GINA_HOSTNAME') || 'localhost',
                 'user' : process.env.USER,

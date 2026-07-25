@@ -149,9 +149,26 @@ function MQListener(opt, cb) {
         sessions[sessionId].write( JSON.stringify(payload) +'\r\n');
     }
 
+    /**
+     * Start the MQ listener that speakers, `gina tail` and the file container
+     * connect to.
+     *
+     * @inner
+     * @param   {object}   opt          - listener options
+     * @param   {number}   opt.port     - TCP port to listen on
+     * @param   {string}   [opt.hostV4='127.0.0.1'] - bind address. NOTE the key
+     *          name: a caller passing `host` leaves this undefined, and an
+     *          undefined host makes Node bind every interface. Defaults to
+     *          loopback so an omitted key can never widen the bind.
+     * @param   {function} cb           - called once listening, or with an error
+     * @returns {void}
+     */
     function startMQListener(opt, cb) {
         var port = opt.port;
-        var host = opt.hostV4;
+        // Default to loopback when the caller omits the key, matching every
+        // sibling in this subsystem (speaker.js, tail.js, file/index.js) and
+        // ensuring an omitted option can never widen the bind to all interfaces.
+        var host = opt.hostV4 || '127.0.0.1';
         var server = net.createServer( function(conn) {//'connection' listener
 
             conn.sessionId = uuid();
@@ -211,7 +228,20 @@ function MQListener(opt, cb) {
                         i++;
                         let payload = payloads[i];
                         if ( /^\{/.test(payload) && /\}$/.test(payload)) {
-                            let pl = JSON.parse(payload);
+                            // The brace test only proves the payload LOOKS like
+                            // JSON. An unguarded parse of anything else throws
+                            // from inside this 'data' handler, which surfaces as
+                            // an uncaughtException and drops the process via
+                            // proc.js's SIGTERM path — so a single malformed
+                            // frame would end the listener for every speaker.
+                            // Skip the frame instead, mirroring bin/cmd's guard.
+                            let pl = null;
+                            try {
+                                pl = JSON.parse(payload);
+                            } catch (parseErr) {
+                                console.warn('[MQListener] ignoring malformed payload');
+                                continue;
+                            }
 
 
                             // mostly after client that acknowledeged sessionId

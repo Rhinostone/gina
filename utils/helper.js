@@ -110,7 +110,7 @@ function MainHelper(opt) {
                 // (e.g. port:set reads --port itself). Framework-scoped commands
                 // still hoist them (so `gina start --port=N` / `framework:set
                 // --port=N` persist to settings.json as intended).
-                if ( !_isFrameworkScopedCmd && /^\-\-(port|mq-port|host-v4|hostname|debug-port|debug_port)=/.test(process.argv[a]) ) {
+                if ( !_isFrameworkScopedCmd && /^\-\-(port|mq-port|host-v4|bind-host|bind_host|hostname|debug-port|debug_port)=/.test(process.argv[a]) ) {
                     newArgv[a] = process.argv[a];
                     continue;
                 }
