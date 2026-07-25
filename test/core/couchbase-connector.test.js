@@ -584,3 +584,151 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
         assert.equal(verdict.reason, 'couchbase:bulk-get-retry-exhausted');
     });
 });
+
+
+// ─── 09 — `@options` .sql annotation: parse + the consistency gate ───────────
+//
+// Drives the SHIPPED bytes, not a replica: the `@options` parse block and the
+// scan-consistency/passthrough gate are sliced out of the connector at run time
+// and executed. Only `couchbase.QueryScanConsistency` is stubbed.
+//
+// Why text anchors and not line numbers or brace-matching: a line-range slice
+// silently grabs the wrong region after any edit above it, and the parse block
+// contains `/([{,]\s*)…/` — a regex whose character class holds an unbalanced
+// `{` — so a naive brace-matcher runs past the block end. Both anchors are
+// asserted unique, and §09.a fails loudly if a slice ever stops being the block.
+//
+// Motivation: the published guide documented `-- @options scanConsistency=request_plus`,
+// which the parser cannot match AND whose key the gate does not read — two
+// independent, SILENT no-ops. Corrected 2026-07-25; these tests pin the real
+// contract so the docs and the code cannot drift apart again unnoticed.
+
+describe('09 - @options: parse + consistency gate (shipped bytes)', function() {
+
+    var PARSE, GATE;
+
+    /**
+     * Slices an inclusive source region between two unique text anchors.
+     *
+     * @param {string} src
+     * @param {string} startNeedle - must occur exactly once
+     * @param {string} endNeedle   - must occur exactly once, after startNeedle
+     * @returns {string}
+     */
+    function region(src, startNeedle, endNeedle) {
+        var s = src.indexOf(startNeedle);
+        assert.notEqual(s, -1, 'start anchor not found: ' + startNeedle);
+        assert.equal(src.indexOf(startNeedle, s + 1), -1, 'start anchor not unique: ' + startNeedle);
+        var e = src.indexOf(endNeedle, s);
+        assert.notEqual(e, -1, 'end anchor not found: ' + endNeedle);
+        assert.equal(src.indexOf(endNeedle, e + 1), -1, 'end anchor not unique: ' + endNeedle);
+        return src.slice(s, e);
+    }
+
+    before(function() {
+        var src = fs.readFileSync(CONNECTOR, 'utf8');
+        PARSE = region(src, 'optionsArr = queryString.match(', 'optionsArr = null;');
+        GATE  = region(src, 'queryOptions.scanConsistency = couchbase.QueryScanConsistency.NotBounded;',
+                            '// _collection = queryStatement.match(');
+    });
+
+    /**
+     * Runs the extracted blocks against one `.sql` body.
+     *
+     * @param {string} sql
+     * @returns {{options: (object|null), queryOptions: object, warnings: Array.<string>}}
+     */
+    function run(sql) {
+        // `queryStatement` is referenced by the gate's unknown-consistency warn.
+        var fn = new Function('queryString', 'couchbase',
+            'var queryStatement = queryString;\n' +
+            'var optionsArr = null, options = null, userConsistencyOpt = null;\n' +
+            'var queryOptions = { adhoc: false };\n' +          // the query path's real default
+            'var warnings = [];\n' +
+            'var console = { warn: function (m) { warnings.push(String(m)); } };\n' +
+            PARSE + '\n' + GATE + '\n' +
+            'return { options: options, queryOptions: queryOptions, warnings: warnings };');
+        return fn(sql, { QueryScanConsistency: { NotBounded: 'not_bounded', RequestPlus: 'request_plus' } });
+    }
+
+    /** @param {string} body @returns {string} a `.sql` file body carrying `body` as its annotation */
+    function sql(body) { return '/*\n * @options ' + body + '\n */\nSELECT * FROM `b` WHERE x = $1'; }
+
+    // ── 09.a — extraction controls: a slice that grabbed the wrong region is not an instrument
+    it('the extracted PARSE slice really is the @options parse block', function() {
+        assert.match(PARSE, /queryString\.match\(\/\\@options \\\{\(\.\*\)\\\}\/gm\)/, 'carries the annotation regex');
+        assert.match(PARSE, /options = JSON\.parse\(_jsonOpts\)/, 'carries the JSON.parse');
+    });
+
+    it('the extracted GATE slice really is the consistency gate', function() {
+        assert.match(GATE, /if \(options && typeof\(options\.consistency\) != 'undefined'\)/, 'carries the gate');
+        assert.match(GATE, /for \(let o in options\) \{/, 'carries the passthrough loop');
+        assert.match(GATE, /queryOptions\[o\] = options\[o\];/, 'carries the assignment');
+    });
+
+    // ── 09.b — the forms the guide USED to document are inert, and silent about it
+    it('the brace-less documented form does not parse at all — and warns nothing', function() {
+        var r = run('-- @options scanConsistency=request_plus\nSELECT 1');
+        assert.equal(r.options, null, 'the annotation never matched the parser');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'left at the default');
+        assert.equal(r.warnings.length, 0, 'silently ignored — the trap this documents');
+    });
+
+    it('the braced-but-wrong-key form PARSES yet still does nothing — the second silent no-op', function() {
+        var r = run(sql('{ scanConsistency: "request_plus" }'));
+        assert.notEqual(r.options, null, 'it does parse — which is what makes it deceptive');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'the gate reads `consistency`, not `scanConsistency`');
+        assert.equal(typeof r.queryOptions.scanConsistency_, 'undefined');
+        assert.equal(r.warnings.length, 0, 'no warning — indistinguishable from working');
+    });
+
+    // ── 09.c — the corrected, documented form works
+    it('the corrected form applies request_plus', function() {
+        var r = run(sql('{ consistency: "request_plus" }'));
+        assert.equal(r.queryOptions.scanConsistency, 'request_plus');
+        assert.equal(r.warnings.length, 0);
+    });
+
+    // ── 09.d — the documented gate rule
+    it('a non-consistency key ALONE is dropped (the #B155 gate)', function() {
+        var r = run(sql('{ adhoc: true }'));
+        assert.notEqual(r.options, null, 'it parsed');
+        assert.equal(r.options.adhoc, true, 'and the value was read');
+        assert.equal(r.queryOptions.adhoc, false, 'but never reached queryOptions — the gate stayed shut');
+        assert.equal(r.warnings.length, 0, 'silently');
+    });
+
+    it('the same key alongside `consistency` IS applied', function() {
+        var r = run(sql('{ consistency: "not_bounded", adhoc: true }'));
+        assert.equal(r.queryOptions.adhoc, true, 'the gate opened, so the passthrough ran');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded');
+    });
+
+    it('an arbitrary key (timeout) passes through once the gate is open', function() {
+        var r = run(sql('{ consistency: "not_bounded", timeout: 1 }'));
+        assert.equal(r.queryOptions.timeout, 1);
+    });
+
+    it('an UNKNOWN consistency warns, keeps the default, but still opens the gate', function() {
+        var r = run(sql('{ consistency: "bogus_level", timeout: 5 }'));
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'unrecognised value falls back');
+        assert.equal(r.warnings.length, 1, 'and DOES warn — unlike the silent failures above');
+        assert.match(r.warnings[0], /QueryScanConsistency/);
+        assert.equal(r.queryOptions.timeout, 5, 'the gate keys on PRESENCE, not validity');
+    });
+
+    // ── 09.e — the documented defaults
+    it('no @options at all leaves the documented defaults', function() {
+        var r = run('SELECT * FROM `b`');
+        assert.equal(r.options, null);
+        assert.equal(r.queryOptions.adhoc, false, 'query path defaults adhoc to FALSE (plans cached)');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded');
+    });
+
+    it('a malformed @options body warns instead of corrupting options', function() {
+        var r = run(sql('{ consistency: }'));
+        assert.equal(r.options, null, 'parse failed, options left null');
+        assert.equal(r.warnings.length, 1, 'the CB-QUAL-2 explicit-parse-error path');
+        assert.match(r.warnings[0], /@options parse error/);
+    });
+});
