@@ -22,6 +22,9 @@ var fs     = require('fs');
 
 var FW        = require('../fw');
 var CONNECTOR = path.join(FW, 'core/connectors/couchbase/index.js');
+// #B153 residual (§08b): the real classifier, so the end-to-end replicas assert
+// the CLASSIFICATION outcome rather than merely the forwarded error shape.
+var ce        = require(path.join(FW, 'lib/connector-error/src/main.js'));
 
 
 // ─── 01 — shared resolveCluster() helper present, dual-shape, named throw ────
@@ -400,7 +403,10 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
     before(function() { src = fs.readFileSync(CONNECTOR, 'utf8'); });
 
     it('all three N1QL onError sites guard err.cause before reading first_error_message', function() {
-        var guardCount = (src.match(/err && err\.cause && typeof\(err\.cause\.first_error_message\) != 'undefined'/g) || []).length;
+        // The trailing `!== ''` clause is the #B153 RESIDUAL fix (see §08b): without
+        // it this regex is an unanchored substring of the tightened guard and would
+        // keep counting 3 while pinning nothing about the empty-message branch.
+        var guardCount = (src.match(/err && err\.cause && typeof\(err\.cause\.first_error_message\) != 'undefined' && err\.cause\.first_error_message !== ''/g) || []).length;
         assert.equal(guardCount, 3, 'all three onError sites carry the cause guard');
         // every `new Error(err.cause.first_error_message)` now sits inside a guarded branch
         var b153 = (src.match(/#B153/g) || []).length;
@@ -433,7 +439,7 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
      */
     function fixedOnError(err, terminal) {
         var error;
-        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
             error = new Error(err.cause.first_error_message);
             error.stack = 'trigger\n' + err.cause.http_body;
             error.cause = err.cause;
@@ -484,5 +490,97 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
         oldOnError(sockErr, function() { settled = true; });
         assert.equal(settled, false,
             'the pre-fix handler swallowed the TypeError and never settled — the hang #B153 fixes');
+    });
+
+    // ── #B153 RESIDUAL — an EMPTY envelope message must not destroy the typed
+    //    SDK class name the classifier matches on. The node binding marshals
+    //    first_error_code / first_error_message onto EVERY query error, so a
+    //    CLIENT-side timeout reaches the handler with `cause` present but no
+    //    server text: the 0.5.25 guard therefore synthesized `new Error('')`
+    //    and a retryable timeout was reported permanent.
+
+    /**
+     * The handler as it shipped in 0.5.25 — guarded against a missing `cause`
+     * (#B153) but NOT against an empty message. The residual subtract control.
+     *
+     * @param {*} err
+     * @param {function} terminal
+     * @returns {void}
+     */
+    function preResidualOnError(err, terminal) {
+        var error;
+        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+            error = new Error(err.cause.first_error_message);
+            error.stack = 'trigger\n' + err.cause.http_body;
+            error.cause = err.cause;
+        } else {
+            error = (err instanceof Error) ? err : new Error(String(err));
+        }
+        terminal(error);
+    }
+
+    /**
+     * The measured client-side SDK timeout shape: a typed Error carrying a
+     * `cause` envelope with a value-initialized (empty) message and code 0.
+     *
+     * @param {string} name - the SDK class name
+     * @returns {Error}
+     */
+    function clientTimeout(name) {
+        var e = new Error('unambiguous timeout (queried 1 node, 1 attempt)');
+        e.name  = name;
+        e.cause = { first_error_code: 0, first_error_message: '', http_body: '' };
+        return e;
+    }
+
+    it('the new empty-message clause is present at all three onError sites', function() {
+        var clause = (src.match(/&& err\.cause\.first_error_message !== ''/g) || []).length;
+        assert.equal(clause, 3, 'each site synthesizes only when there is envelope text to surface');
+        // control: the clause is genuinely counted, not matched by accident
+        assert.equal((src.match(/&& err\.cause\.first_error_message !== 'x'/g) || []).length, 0);
+    });
+
+    ['UnambiguousTimeoutError', 'AmbiguousTimeoutError'].forEach(function(name) {
+
+        it('fixed handler: a client-side ' + name + ' is forwarded raw, keeping its typed name', function() {
+            var timeoutErr = clientTimeout(name);
+            var seen = null;
+            fixedOnError(timeoutErr, function(e) { seen = e; });
+            assert.equal(seen, timeoutErr, 'the raw SDK error itself is forwarded — not a synthesized copy');
+            assert.equal(seen.name, name, 'the typed class name survives for the classifier');
+            assert.notEqual(seen.message, '', 'the real timeout text survives instead of being blanked');
+            assert.equal(seen.cause.first_error_code, 0, 'the envelope rides along on the raw error');
+        });
+
+        it('end-to-end: the forwarded ' + name + ' classifies TRANSIENT', function() {
+            var seen = null;
+            fixedOnError(clientTimeout(name), function(e) { seen = e; });
+            var verdict = ce.classify(seen);
+            assert.equal(verdict.isTransient, true, 'a client-side timeout is retryable');
+            assert.equal(verdict.reason, 'couchbase:timeout');
+        });
+
+        it('subtract control: the 0.5.25 handler blanked ' + name + ' and classified it PERMANENT', function() {
+            var seen = null;
+            preResidualOnError(clientTimeout(name), function(e) { seen = e; });
+            assert.equal(seen.message, '', 'the pre-residual guard synthesized new Error(\'\')');
+            assert.equal(seen.name, 'Error', 'the typed class name was destroyed');
+            assert.equal(ce.classify(seen).isTransient, false,
+                'the false negative this residual fix closes — a retryable timeout reported permanent');
+        });
+    });
+
+    it('raw-forwarding stays classification-lossless: an empty-message envelope still classifies off the code table', function() {
+        // Pathological shape (no known producer): a SERVER envelope whose message
+        // is empty. Raw-forwarding keeps `.cause`, so the N1QL code table — the
+        // sole classifier for un-typed envelope errors — still fires.
+        var envErr = new Error('index failure');
+        envErr.cause = { first_error_code: 12008, first_error_message: '', http_body: '' };
+        var seen = null;
+        fixedOnError(envErr, function(e) { seen = e; });
+        assert.equal(seen, envErr, 'forwarded raw');
+        var verdict = ce.classify(seen);
+        assert.equal(verdict.isTransient, true, 'the cause envelope survived the forward');
+        assert.equal(verdict.reason, 'couchbase:bulk-get-retry-exhausted');
     });
 });

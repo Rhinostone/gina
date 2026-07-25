@@ -145,10 +145,14 @@ var TRANSIENT_N1QL_CODE = {
     // honest signal for a retryable DML failure such as a CAS mismatch.
     //
     // These CODE entries are load-bearing on the connector path even where the
-    // SDK types the error: the couchbase connector's #B153 handlers forward a
-    // server-enveloped failure as a synthesized `new Error(first_error_message)`
-    // carrying only `cause` — `err.name` is 'Error' there, so TRANSIENT_NAME can
-    // never fire and this table is the sole classifier. On the raw SDK shape a
+    // SDK types the error: whenever the N1QL `cause` envelope carries server
+    // TEXT, the couchbase connector's #B153 handlers forward that failure as a
+    // synthesized `new Error(first_error_message)` carrying only `cause` —
+    // `err.name` is 'Error' there, so TRANSIENT_NAME cannot fire and this table
+    // is the sole classifier. (Only where there IS text: since the #B153
+    // residual fix an EMPTY envelope message is raw-forwarded instead, so a
+    // typed client-side timeout keeps its class name and the name rule catches
+    // it first — that is the whole point of the residual fix.) On the raw SDK shape a
     // server-side 1080 arrives typed (SDK 4.x `document_query.cxx` maps 1080 ->
     // unambiguous_timeout -> UnambiguousTimeoutError) and the name rule catches
     // it first — the 1080 entry is the belt for the envelope shape. 12008 has NO

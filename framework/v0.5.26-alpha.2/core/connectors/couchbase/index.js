@@ -986,8 +986,18 @@ function Couchbase(conn, infos) {
                                     // never fired and the request hung forever. Build a usable error
                                     // on BOTH paths (forwarding the raw error preserves its
                                     // code/errno for downstream classification) and always settle.
+                                    //
+                                    // #B153 residual — synthesize ONLY when there is envelope text to
+                                    // surface. The node binding marshals first_error_code /
+                                    // first_error_message onto EVERY query error, so a CLIENT-side SDK
+                                    // timeout arrives with a defined-but-EMPTY message; building
+                                    // `new Error('')` from it destroyed the typed class name
+                                    // (Un/AmbiguousTimeoutError) the classifier matches on, and a
+                                    // retryable timeout was reported permanent. Raw-forwarding is
+                                    // lossless here: the raw error keeps `.cause`, so even an
+                                    // empty-message server envelope still classifies off the code table.
                                     var error;
-                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
                                         error = new Error(err.cause.first_error_message);
                                         error.stack = trigger +'\n'+ err.cause.http_body;
                                         error.cause = err.cause;
@@ -1037,8 +1047,18 @@ function Couchbase(conn, infos) {
                                     // never fired and the request hung forever. Build a usable error
                                     // on BOTH paths (forwarding the raw error preserves its
                                     // code/errno for downstream classification) and always settle.
+                                    //
+                                    // #B153 residual — synthesize ONLY when there is envelope text to
+                                    // surface. The node binding marshals first_error_code /
+                                    // first_error_message onto EVERY query error, so a CLIENT-side SDK
+                                    // timeout arrives with a defined-but-EMPTY message; building
+                                    // `new Error('')` from it destroyed the typed class name
+                                    // (Un/AmbiguousTimeoutError) the classifier matches on, and a
+                                    // retryable timeout was reported permanent. Raw-forwarding is
+                                    // lossless here: the raw error keeps `.cause`, so even an
+                                    // empty-message server envelope still classifies off the code table.
                                     var error;
-                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+                                    if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
                                         error = new Error(err.cause.first_error_message);
                                         error.stack = trigger +'\n'+ err.cause.http_body;
                                         error.cause = err.cause;
@@ -1301,8 +1321,12 @@ function Couchbase(conn, infos) {
                         // err.cause.first_error_message on it threw a swallowed TypeError so
                         // self.emit never fired and the request hung. Emit a usable error on
                         // BOTH paths (the raw error preserves its code/errno).
+                        // #B153 residual — the empty-message clause: a CLIENT-side SDK timeout
+                        // carries a defined-but-EMPTY first_error_message, so synthesizing from it
+                        // destroyed the typed class name the classifier matches on. Synthesize only
+                        // when there is envelope text; raw-forwarding keeps `.cause` either way.
                         var error;
-                        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' ) {
+                        if ( err && err.cause && typeof(err.cause.first_error_message) != 'undefined' && err.cause.first_error_message !== '' ) {
                             error = new Error(err.cause.first_error_message);
                             error.stack = trigger +'\n'+ err.cause.http_body;
                             error.cause = err.cause;
