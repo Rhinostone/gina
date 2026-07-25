@@ -880,6 +880,10 @@ async function writeCache(local, self, bundle, opt, htmlContent, req, res) {
         ! req.routing.cache
         ||
         String(self.serverInstance._cacheIsEnabled).toLowerCase() !== 'true'
+        ||
+        // #B158 — a gated route is never stored: the key carries no principal and
+        // both serve points run before the gate. Full rationale on isRouteGated.
+        libRef.authzGate.isRouteGated(req)
     ) {
         return;
     }

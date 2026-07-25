@@ -952,6 +952,68 @@ var runPolicy = function (controller, req, name, user) {
 };
 
 /**
+ * Is the matched route gated by authorization at all?
+ *
+ * The ONE runtime answer to that question: `authorizeRequest` branches on it to
+ * decide whether to authenticate, and the render delegates read it to decide
+ * whether an entry may be written to the render cache (#B158). Keeping a single
+ * implementation is the point — a second copy that drifted would either gate a
+ * route the cache still stores (the #B158 leak, reopened) or refuse to store a
+ * route nobody gates.
+ *
+ * Precedence is STRUCTURAL, not conditional, and deliberately so: `param.public`
+ * is consulted only INSIDE the un-annotated branch, so it can never un-gate a
+ * route that carries an explicit key. The boot lint refuses that contradiction
+ * outright, but a hand-built or tampered config must still fail CLOSED without
+ * depending on the lint having run.
+ *
+ * @param {object} req - the request. Reads `req.routing.param.requireAuth`,
+ *                       `param.roles`, `param.policy`, `param.public` and
+ *                       `req.routing.bundle` (for the #COMPLY10 per-bundle mode).
+ * @returns {boolean} `true` when the route requires an authenticated principal.
+ *
+ * @example
+ * // a render delegate, before storing a rendered body
+ * if ( lib.authzGate.isRouteGated(req) ) {
+ *     return; // never cache a body rendered for an authenticated principal
+ * }
+ */
+var isRouteGated = function (req) {
+    if ( !req || !req.routing || !req.routing.param ) {
+        return false;
+    }
+
+    var param = req.routing.param;
+
+    // An explicit key gates the route. `roles` and `policy` each IMPLY
+    // `requireAuth` — an unauthenticated caller can hold no role, and a policy
+    // is handed an authenticated user. Strict shapes only: the boot lint rejects
+    // every other declared form, so an invalid key must never HALF-gate.
+    if ( param.requireAuth === true ) {
+        return true;
+    }
+    if ( Array.isArray(param.roles) && param.roles.length > 0 ) {
+        return true;
+    }
+    if ( typeof(param.policy) == 'string' && param.policy !== '' ) {
+        return true;
+    }
+
+    // Un-annotated from here — the only branch #COMPLY10 inverts. Written as a
+    // `!== true` test on purpose: §15.2 locates `authorizeRequest`'s own strict
+    // equality test on `param.public` by taking the FIRST match of that source
+    // line in this file, to prove the exemption sits inside its un-annotated
+    // branch. Spelling the same form here — in code OR in a comment quoting it —
+    // steals that position and breaks the pin without changing any behaviour,
+    // so do not "tidy" this into the strict-equality form.
+    if ( param.public !== true ) {
+        return requireAuthByDefault(req);
+    }
+
+    return false;   // explicitly exempted from the default gate
+};
+
+/**
  * Authorize a request against the route it matched.
  *
  * NO-OP (returns `true`) unless the route declares an authorization key
@@ -1012,6 +1074,10 @@ var authorizeRequest = function (controller, req, res) {
 
     // Strictly `=== true`: the boot lint rejects any other type, so by request time the
     // flag is `true`, `false` or absent — and an absent/false flag must never gate.
+    //
+    // `isRouteGated` above answers the same question for callers that need the verdict
+    // without the enforcement (the #B158 render-cache write guard). The two MUST move
+    // together; §15 pins this structure and a truth-table test pins their agreement.
     if ( param.requireAuth !== true && !mustMatchRoles && !mustRunPolicy ) {
         // #COMPLY10 — the deny-by-default mode inverts THIS branch, and only this
         // branch: an un-annotated route becomes gated instead of open.
@@ -1089,6 +1155,7 @@ var authorizeRequest = function (controller, req, res) {
 
 module.exports = {
     authorizeRequest      : authorizeRequest,
+    isRouteGated          : isRouteGated,
     isAuthenticated       : isAuthenticated,
     hasAnyRole            : hasAnyRole,
     registerPolicy        : registerPolicy,

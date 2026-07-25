@@ -2212,7 +2212,9 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
 
     it('supports sliding window (opt-in) with optional maxAge absolute ceiling', function () {
         var idx  = RENDER_NJ_SRC.indexOf('async function writeCache');
-        var body = RENDER_NJ_SRC.slice(idx, idx + 3000);
+        // Window widened for the #B158 guard added at the top of writeCache: it shifts
+        // `cacheObject.maxAge` from offset 2894 to 3113, past the old 3000 ceiling.
+        var body = RENDER_NJ_SRC.slice(idx, idx + 3400);
         assert.match(body, /cachingOption\.sliding\s*===\s*true[\s\S]{0,120}cacheObject\.sliding\s*=\s*true/);
         assert.match(
             body,
@@ -2367,6 +2369,11 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         // short-circuit guards reach first, so it is what we count. The legacy
         // `cache` / `fs` / `_` params are retained (unused by the post-Slice-0
         // writeCache body) so the injected Function signature stays stable.
+        // #B158 — writeCache now asks the authorization gate whether the matched
+        // route is gated before storing anything. The evaluated body therefore needs
+        // the lib registry in scope; `false` = "not gated", which is the premise every
+        // test below already relies on (they assert the write DOES happen).
+        var LIBREF_STUB = { authzGate: { isRouteGated: function () { return false; } } };
         var stubCalls;
         function makeFn() {
             stubCalls = { cacheHas: 0, cacheSet: 0, writeFile: 0 };
@@ -2379,9 +2386,9 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
             var cacheStub = { has: function () { return false; }, set: function () {}, setEvents: function () {} };
             var fsStub = { promises: { writeFile: function () { stubCalls.writeFile++; return Promise.resolve(); } }, rmSync: function () {} };
             /* eslint-disable no-new-func */
-            return new Function('cache', 'renderCache', 'fs', 'JSON', '_',
+            return new Function('libRef', 'cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
-            )(cacheStub, renderCacheStub, fsStub, JSON_WITH_CLONE, function () { return ''; });
+            )(LIBREF_STUB, cacheStub, renderCacheStub, fsStub, JSON_WITH_CLONE, function () { return ''; });
             /* eslint-enable no-new-func */
         }
 
@@ -2407,9 +2414,9 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         it('delegates memory writes to renderCache.set(type=memory, key, cacheObject, payload)', async function () {
             var captured;
             /* eslint-disable no-new-func */
-            var fn = new Function('cache', 'renderCache', 'fs', 'JSON', '_',
+            var fn = new Function('libRef', 'cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
-            )({ has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
+            )(LIBREF_STUB, { has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
                 buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { return false; },
                 set: function (type, k, v, payload) { captured = { type: type, key: k, value: v, payload: payload }; return Promise.resolve(); },
@@ -2440,9 +2447,9 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         it('opting visibility="public" propagates to the cacheObject on the renderCache.set entry', async function () {
             var captured;
             /* eslint-disable no-new-func */
-            var fn = new Function('cache', 'renderCache', 'fs', 'JSON', '_',
+            var fn = new Function('libRef', 'cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
-            )({ has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
+            )(LIBREF_STUB, { has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
                 buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { return false; },
                 set: function (type, k, v) { captured = v; return Promise.resolve(); },
@@ -2466,9 +2473,9 @@ describe('05e - #NJ3 static HTML cache (writeCache port)', function () {
         function makeCaptureFn() {
             var captured = {};
             /* eslint-disable no-new-func */
-            var fn = new Function('cache', 'renderCache', 'fs', 'JSON', '_',
+            var fn = new Function('libRef', 'cache', 'renderCache', 'fs', 'JSON', '_',
                 helperSrc + '\nreturn writeCache;'
-            )({ has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
+            )(LIBREF_STUB, { has: function () { return false; }, set: function () {}, setEvents: function () {} }, {
                 buildKey: function (kind, bundle, url) { return kind + ':' + bundle + ':' + url; },
                 has: function () { return false; },
                 set: function (type, k, v) { captured.type = type; captured.key = k; captured.value = v; return Promise.resolve(); },

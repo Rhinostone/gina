@@ -49,6 +49,10 @@ async function writeCache(bundle, opt, htmlContent, req, res, cacheIsEnabled, th
         // replaced: /^true$/i.test() (#P6); flag threaded as a param — module scope
         // has no render()-scoped bindings (see the #INS10 note at the top of this file)
         String(cacheIsEnabled).toLowerCase() !== 'true'
+        ||
+        // #B158 — a gated route is never stored: the key carries no principal and
+        // both serve points run before the gate. Full rationale on isRouteGated.
+        lib.authzGate.isRouteGated(req)
     ) {
         return;
     }

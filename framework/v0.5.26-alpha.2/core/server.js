@@ -1028,22 +1028,30 @@ function Server(options) {
                         ++_authzPublicCount;
                     }
                 }
-                // #COMPLY10 — a route the MODE gates must not also be cached. Both
-                // render-cache serve points run BEFORE the authorization gate, and the
-                // cache key is `<release>:<kind>:<bundle>:<url>` with no principal
-                // component, so a cached gated route replays the first authenticated
-                // caller's rendered body to every later anonymous one. Scoped strictly
-                // to the mode: an EXPLICITLY annotated gated+cached route keeps today's
-                // behaviour, so enabling the mode can never break a working bundle —
-                // the pre-existing case is tracked as its own fix.
+                // #B158 — a GATED route must not also be cached, however it is gated.
+                // Both render-cache serve points run BEFORE the authorization gate: the
+                // engine-agnostic read serves and RETURNS ahead of `router.route` (inside
+                // which the gate runs), and isaac's runs pre-routing, before `req.routing`
+                // even exists — so neither can consult authorization even in principle.
+                // The key is `<release>:<kind>:<bundle>:<url>` with no principal component,
+                // so a cached gated route replays the first authenticated caller's rendered
+                // body to every later anonymous one. Measured live on an isolated boot: a
+                // Bearer-authenticated render was served verbatim, same body and same
+                // render nonce, to the next unauthenticated caller, while the identical
+                // route WITHOUT `cache` correctly answered 401.
+                //
+                // #COMPLY10 shipped this refusal scoped to MODE-gated routes only, so that
+                // enabling the mode could not break a working bundle; the explicitly
+                // annotated case it deliberately left open is the pre-existing hole, and
+                // closing it here is what #B158 is. Explicitly gated + cached is therefore
+                // now refused in BOTH modes.
+                var _authzRouteGated = _authzGated || ( _authzDefaultDeny && _authzRoute.param.public !== true );
                 if (
-                    _authzDefaultDeny
-                    && !_authzGated
-                    && _authzRoute.param.public !== true
+                    _authzRouteGated
                     && typeof(_authzRoute.cache) != 'undefined'
                     && _authzRoute.cache
                 ) {
-                    throw new Error('[ SERVER ] Route `'+ _authzRule +'`: `auth.requireAuthByDefault` gates this route, but it also declares `cache`. The render cache is read BEFORE authorization runs and its key carries no user identity, so the first authenticated response would be replayed to unauthenticated callers. Mark the route `"public": true` if it is meant to be cacheable and open, or drop `cache`.');
+                    throw new Error('[ SERVER ] Route `'+ _authzRule +'`: '+ ( _authzGated ? '`param.requireAuth` / `param.roles` / `param.policy` gate this route' : '`auth.requireAuthByDefault` gates this route' ) +', but it also declares `cache`. The render cache is read BEFORE authorization runs and its key carries no user identity, so the first authenticated response would be replayed to unauthenticated callers. Drop `cache`'+ ( _authzGated ? ', or remove the authorization keys if the route is meant to be open to everyone.' : ', or mark the route `"public": true` if it is meant to be cacheable and open.' ));
                 }
                 if ( _authzDefaultDeny && !_authzGated && _authzRoute.param.public !== true ) {
                     ++_authzDefaultGatedCount;
