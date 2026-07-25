@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Corrected `lib/merge`''s documentation, which contradicted the shipped behaviour: the two-argument form preserves existing target keys on a conflict (`override` defaults to `false`, not `true` as documented), and the array example now shows the real result — a two-argument array merge combines elements (`merge([1,2],[3,4])` gives `[1,2,3,4]`), while replacing the target array requires `override=true`. Behaviour is unchanged; only the JSDoc (including its copy embedded in the browser bundle) was wrong.'
-time: 2026-07-25T17:58:00+01:00

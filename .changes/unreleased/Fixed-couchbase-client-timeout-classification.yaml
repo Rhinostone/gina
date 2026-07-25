@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Couchbase N1QL: a client-side SDK timeout now classifies as transient instead of permanent, and keeps its error message. The connector replaced the driver error with one built from the query `cause` envelope whenever that envelope was present — but the SDK attaches it to every query error, so a client-side timeout (which carries no server text) became an empty-message `Error` and lost the typed timeout class name the transient/permanent classifier matches on. The raw driver error is now forwarded whenever the envelope has no message to surface, so `err.isTransient` reports true and `err.message` keeps the SDK text. Server-side only — restart to pick it up.'
-time: 2026-07-25T12:29:20+01:00
