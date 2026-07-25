@@ -408,6 +408,17 @@ function Couchbase(conn, infos) {
                 } catch (parseErr) {
                     console.warn('[CONNECTOR] @options parse error in .sql file: ' + parseErr.message);
                 }
+            } else if ( /\@options/.test(queryString) ) {
+                // #B155 — the file SAYS `@options` but the annotation regex above matched
+                // nothing, so the whole annotation is a silent no-op. The regex demands
+                // `@options { … }` (single space, braces) — the historical docs taught a
+                // brace-less `key=value` form, and a double space before the brace misses
+                // too. Warn with the exact expected shape. (A prose mention of `@options`
+                // inside a comment also lands here — accepted: a spurious warn is cheaper
+                // than a silently-dead annotation.)
+                console.warn('[CONNECTOR] found `@options` but could not parse a brace-delimited object — '
+                    + 'annotation ignored. Write it as: @options { consistency: "request_plus" }\n'
+                    + 'Found on: ' + queryString.substring(0, 80));
             }
             optionsArr = null;
 
@@ -711,6 +722,16 @@ function Couchbase(conn, infos) {
                             if (o == 'consistency') continue;
                             queryOptions[o] = options[o];
                         }
+                    } else if ( options && Object.keys(options).length ) {
+                        // #B155 — a parsed `@options` with no `consistency` key never reaches
+                        // the SDK: the passthrough above is gated on `consistency`, so every
+                        // other key is dropped. Warn instead of silently ignoring; the gate
+                        // itself stays (un-gating would make historically-inert options
+                        // suddenly live for every consumer). An empty `@options {}` drops
+                        // nothing and stays quiet.
+                        console.warn('[CONNECTOR] @options is missing a `consistency` key — ignoring: '
+                            + Object.keys(options).join(', ')
+                            + '. Add e.g. "consistency": "not_bounded" alongside them to apply.\nFound on: '+ queryStatement);
                     }
 
 

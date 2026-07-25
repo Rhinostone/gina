@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Couchbase N1QL: a `.sql` `@options` annotation that silently did nothing now logs a warning naming the problem. Two shapes were affected: an annotation the parser cannot read (braces are required — write `@options { … }`), and a parsed annotation whose keys are all dropped because no `consistency` key is present (keys such as `adhoc` or `timeout` apply only alongside `consistency`). Query behaviour is unchanged — the warning lists the ignored keys and shows the exact form to write. Server-side only — restart to pick it up.'
+time: 2026-07-25T17:42:00+01:00

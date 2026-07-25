@@ -600,8 +600,11 @@ describe('08 - #B153: onError guards err.cause so the query always settles', fun
 //
 // Motivation: the published guide documented `-- @options scanConsistency=request_plus`,
 // which the parser cannot match AND whose key the gate does not read — two
-// independent, SILENT no-ops. Corrected 2026-07-25; these tests pin the real
-// contract so the docs and the code cannot drift apart again unnoticed.
+// independent no-ops, SILENT until 0.5.26. The docs were corrected 2026-07-25
+// and the connector now warns on both shapes (#B155: an unparseable `@options`
+// mention, and a parsed one whose keys are dropped by the consistency gate);
+// these tests pin the parse/gate contract AND the warns so the docs and the
+// code cannot drift apart again unnoticed.
 
 describe('09 - @options: parse + consistency gate (shipped bytes)', function() {
 
@@ -667,19 +670,23 @@ describe('09 - @options: parse + consistency gate (shipped bytes)', function() {
     });
 
     // ── 09.b — the forms the guide USED to document are inert, and silent about it
-    it('the brace-less documented form does not parse at all — and warns nothing', function() {
+    it('the brace-less documented form does not parse — and now WARNS with the expected shape', function() {
         var r = run('-- @options scanConsistency=request_plus\nSELECT 1');
         assert.equal(r.options, null, 'the annotation never matched the parser');
         assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'left at the default');
-        assert.equal(r.warnings.length, 0, 'silently ignored — the trap this documents');
+        assert.equal(r.warnings.length, 1, '#B155: the historical silent no-op now warns');
+        assert.match(r.warnings[0], /could not parse a brace-delimited object/);
+        assert.match(r.warnings[0], /@options \{ consistency/, 'the warn shows the exact working form');
     });
 
-    it('the braced-but-wrong-key form PARSES yet still does nothing — the second silent no-op', function() {
+    it('the braced-but-wrong-key form PARSES, does nothing — and now WARNS naming the dropped key', function() {
         var r = run(sql('{ scanConsistency: "request_plus" }'));
         assert.notEqual(r.options, null, 'it does parse — which is what makes it deceptive');
         assert.equal(r.queryOptions.scanConsistency, 'not_bounded', 'the gate reads `consistency`, not `scanConsistency`');
         assert.equal(typeof r.queryOptions.scanConsistency_, 'undefined');
-        assert.equal(r.warnings.length, 0, 'no warning — indistinguishable from working');
+        assert.equal(r.warnings.length, 1, '#B155: the gate-shut drop now warns');
+        assert.match(r.warnings[0], /missing a `consistency` key/);
+        assert.match(r.warnings[0], /ignoring: scanConsistency/, 'the dropped key is named');
     });
 
     // ── 09.c — the corrected, documented form works
@@ -690,12 +697,30 @@ describe('09 - @options: parse + consistency gate (shipped bytes)', function() {
     });
 
     // ── 09.d — the documented gate rule
-    it('a non-consistency key ALONE is dropped (the #B155 gate)', function() {
+    it('a non-consistency key ALONE is dropped (the #B155 gate) — and now WARNS', function() {
         var r = run(sql('{ adhoc: true }'));
         assert.notEqual(r.options, null, 'it parsed');
         assert.equal(r.options.adhoc, true, 'and the value was read');
         assert.equal(r.queryOptions.adhoc, false, 'but never reached queryOptions — the gate stayed shut');
-        assert.equal(r.warnings.length, 0, 'silently');
+        assert.equal(r.warnings.length, 1, '#B155: the drop is no longer silent');
+        assert.match(r.warnings[0], /ignoring: adhoc/);
+        assert.match(r.warnings[0], /"consistency": "not_bounded"/, 'the warn hands over the fix');
+    });
+
+    it('a DOUBLE space before the brace also misses the parser — and warns (the gap the warn regex closed)', function() {
+        // The parse regex demands exactly `@options {`; `@options  {` never matches.
+        var r = run('/*\n * @options  { consistency: "request_plus" }\n */\nSELECT 1');
+        assert.equal(r.options, null, 'two spaces defeat the annotation regex');
+        assert.equal(r.queryOptions.scanConsistency, 'not_bounded');
+        assert.equal(r.warnings.length, 1, 'caught by the unparseable-@options warn');
+        assert.match(r.warnings[0], /could not parse a brace-delimited object/);
+    });
+
+    it('an EMPTY `@options {}` parses, drops nothing, and deliberately stays quiet', function() {
+        var r = run(sql('{}'));
+        assert.notEqual(r.options, null, 'empty object parses');
+        assert.equal(Object.keys(r.options).length, 0);
+        assert.equal(r.warnings.length, 0, 'no keys were dropped, so there is nothing to warn about');
     });
 
     it('the same key alongside `consistency` IS applied', function() {
