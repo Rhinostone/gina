@@ -211,6 +211,9 @@ module.exports = function(session, bundle){
     /**
      * Commit the given `sess` object associated with the given `sid`.
      *
+     * Stamps `sess.lastModified` (ISO 8601, UTC) when `ttl > 0`, matching the
+     * redis / sqlite / mongodb / scylladb session stores.
+     *
      * @param {String} sid
      * @param {Session} sess
      * @param {Function} fn
@@ -229,7 +232,7 @@ module.exports = function(session, bundle){
                 ;
 
             if (ttl > 0) {
-                sess.lastModified = new Date();
+                sess.lastModified = new Date().toISOString();
             }
 
             sess = JSON.stringify(sess);
@@ -276,6 +279,11 @@ module.exports = function(session, bundle){
     /**
      * Refresh the time-to-live for the session with the given `sid`.
      *
+     * Also re-stamps `sess.lastModified` (ISO 8601, UTC) whenever `ttl > 0`.
+     * The stamp is unconditional by design: the `upsert` extends the document's
+     * expiry on every call, and the client-side session countdown derives its
+     * origin from that stamp, so it must track every extension (#B165).
+     *
      * @param {String} sid
      * @param {Session} sess
      * @param {Function} fn
@@ -290,19 +298,20 @@ module.exports = function(session, bundle){
             , ttl = this.ttl || ('number' == typeof maxAge
                 ? maxAge / 1000 | 0
                 : oneDay)
-            , currentDate = new Date()
-            , lastModified = sess.lastModified ? new Date(sess.lastModified).getTime() : 0;
+            ;
 
-        // if the given options has a touchAfter property, check if the
-        // current timestamp - lastModified timestamp is bigger than
-        // the specified, if it's not, don't touch the session
-        if (ttl > 0 && lastModified > 0) {
-
-            var timeElapsed = currentDate.getTime() - lastModified;
-
-            if (timeElapsed > ttl) {
-                sess.lastModified = currentDate;
-            }
+        // #B165 — an idle-check used to gate this stamp. It compared an elapsed
+        // value in MILLISECONDS against `ttl` in SECONDS, so it fired ~1000x too
+        // eagerly (86.4s idle on the 86400s default). Correcting only the units
+        // would have been worse: the `upsert` below refreshes expiry on EVERY
+        // touch, so `lastModified` must track every extension. Gating it on `ttl`
+        // seconds idle would freeze the stamp at the first `set()`, and the
+        // client-side countdown (`expiresAt = lastModified + maxAge`, see
+        // core/asset/plugin/src/vendor/gina/utils/loader.js) would then inflate
+        // from a stale origin. The `touchAfter` option the old comment referenced
+        // never existed in this codebase.
+        if (ttl > 0) {
+            sess.lastModified = new Date().toISOString();
         }
 
         sess = JSON.stringify(sess);
