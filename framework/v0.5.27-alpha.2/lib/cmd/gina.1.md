@@ -29,6 +29,7 @@ model
 dev
 view
 service
+audit
 
 ## ENVIRONMENT
 

@@ -1,0 +1,50 @@
+Usage: gina audit:<command> [<bundle>] [@<project>] [OPTIONS]
+
+Audit-trail commands (#COMPLY2). The trail itself is written by the running
+bundle (settings.json > audit); these commands inspect it offline.
+
+Commands:
+
+ audit:verify <bundle> @<project>       Verify the tamper-evidence hash chain
+                                        of the bundle's audit trail: every
+                                        record's `hash` is recomputed
+                                        (HMAC-SHA256 over the canonical record
+                                        + the previous hash) and the FIRST
+                                        break is reported with line + reason.
+
+Options:
+
+ --env=<env>                            Environment of the trail to verify
+                                        (default: the project default env).
+                                        Selects the default trail filename
+                                        <project>/logs/audit-<bundle>-<env>.jsonl
+ --file=</abs/path>                     Verify this exact file instead of
+                                        deriving the path from settings.json
+ --format=json                          Machine-readable report:
+                                        {ok, records, unchained, breakAt,
+                                         warnings, file}
+
+Signing key resolution (first match wins):
+ 1. settings.json > audit.chain.secret — a literal, or `${secret:VAR}`
+    resolved from the shell environment (VAR must NOT be GINA_-prefixed:
+    the CLI sweeps GINA_* out of process.env before handlers run).
+ 2. GINA_AUDIT_SECRET (read through the framework environment reader).
+
+Exit codes:
+ 0  chain intact (warnings, if any, are printed — read them)
+ 1  chain BROKEN (first break reported)
+ 2  usage / configuration error (no trail file, no signing key, bad --env)
+
+What an intact chain proves — and what it does not:
+ Detects post-hoc edit, deletion, insertion and reordering by anyone WITHOUT
+ the signing key. It cannot see truncation at the exact tail (nothing after
+ it commits to it), it verifies an empty trail trivially (read the record
+ count), and the process holding the key can forge a whole chain — stream
+ the trail to WORM storage (see the compliance guide) for that adversary.
+
+Examples:
+
+ gina audit:verify web @myproject
+ gina audit:verify web @myproject --env=prod
+ gina audit:verify web @myproject --file=/var/log/audit-web-prod.jsonl
+ gina audit:verify web @myproject --format=json

@@ -1341,6 +1341,42 @@ function Server(options) {
             if ( _auditSettings.store && _auditSettings.file ) {
                 throw new Error('[ SERVER ] `settings.json > audit`: `store` and `file` are mutually exclusive — pick one backend.');
             }
+            // ── #COMPLY2 slice 3 — tamper-evidence chain: shape lint (unconditional,
+            // like the rest of the audit lint family: a malformed block with the
+            // chain OFF is still an author error better surfaced now).
+            if ( typeof(_auditSettings.chain) != 'undefined' ) {
+                if ( typeof(_auditSettings.chain) != 'object' || _auditSettings.chain === null || Array.isArray(_auditSettings.chain) ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.chain` must be an object.');
+                }
+                if ( typeof(_auditSettings.chain.enabled) != 'undefined' && typeof(_auditSettings.chain.enabled) != 'boolean' ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.chain.enabled` must be a boolean — got '+ JSON.stringify(_auditSettings.chain.enabled) +'. A truthy string would leave tamper-evidence silently OFF, so the boot refuses instead.');
+                }
+                if ( typeof(_auditSettings.chain.secret) != 'undefined' && ( typeof(_auditSettings.chain.secret) != 'string' || _auditSettings.chain.secret === '' ) ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.chain.secret` must be a non-empty string.');
+                }
+                if ( typeof(_auditSettings.chain.secret) == 'string' && /\$\{/.test(_auditSettings.chain.secret) ) {
+                    throw new Error('[ SERVER ] `settings.json > audit.chain.secret` carries an unresolved `${...}` placeholder — the named variable is not set at config-load time. Note that `${secret:GINA_*}` names can never resolve (the CLI moves every GINA_* variable out of process.env before config load); use a non-GINA variable name, or set GINA_AUDIT_SECRET.');
+                }
+            }
+            var _auditChainEnabled = !!( _auditSettings.chain && _auditSettings.chain.enabled === true );
+            if ( _auditChainEnabled && !_auditEnabled ) {
+                console.warn('[ SERVER ] `audit.chain.enabled` is true but `audit.enabled` is false — the audit trail (and with it the chain) is OFF for [ '+ self.appName +' ].');
+            }
+            // Merged mode (shared port ⇒ one process) starts ONE trail — the
+            // starting bundle's. A sibling that declares `audit.enabled: true`
+            // is silently ignored otherwise (its block parses into envConf and
+            // nothing ever reads it — runtime-measured 2026-07-26), which is
+            // the quietly-OFF class this lint family exists to prevent: say so.
+            if ( self.isStandalone && Array.isArray(self.bundles) && self.bundles.length > 1 ) {
+                for (let _mb = 0; _mb < self.bundles.length; ++_mb) {
+                    if (self.bundles[_mb] === self.appName) continue;
+                    var _mbConf  = options.conf[self.bundles[_mb]] && options.conf[self.bundles[_mb]][self.env];
+                    var _mbAudit = ( _mbConf && _mbConf.content && _mbConf.content.settings && _mbConf.content.settings.audit ) ? _mbConf.content.settings.audit : null;
+                    if ( _mbAudit && _mbAudit.enabled === true ) {
+                        console.warn('[ SERVER ] [ audit ] bundle `'+ self.bundles[_mb] +'` declares `audit.enabled: true`, but in merged mode (shared port) only the starting bundle\'s audit settings apply — its audit configuration is IGNORED. The process-wide trail is governed by [ '+ self.appName +' ].');
+                    }
+                }
+            }
             if ( _auditEnabled ) {
                 var _auditStartOpts = {
                     bundle      : self.appName,
@@ -1379,13 +1415,67 @@ function Server(options) {
                     _auditStartOpts.file = _(_auditFile, true);
                     _auditDestLabel = _auditStartOpts.file;
                 }
+                if ( _auditChainEnabled ) {
+                    if ( _auditSettings.store ) {
+                        // The store seam carries NO ordering obligation — a
+                        // connector backend may persist out of emit order, and
+                        // a chain over reordered records forks silently.
+                        throw new Error('[ SERVER ] `audit.chain` requires the file backend — a connector `store` cannot guarantee the ordered append a hash chain needs. Remove `audit.store` or disable the chain.');
+                    }
+                    // Key resolution mirrors the CSRF secret chain, with the
+                    // GINA_* read through the framework env reader (the
+                    // GINA_MCP_AUTH_TOKEN precedent — the CLI sweeps GINA_*
+                    // out of process.env, so a direct read is empty there).
+                    var _auditChainSecret = ( typeof(_auditSettings.chain.secret) == 'string' && _auditSettings.chain.secret ) ? _auditSettings.chain.secret : null;
+                    if ( !_auditChainSecret ) {
+                        _auditChainSecret = ( typeof(getEnvVar) == 'function' && getEnvVar('GINA_AUDIT_SECRET') ) || process.env.GINA_AUDIT_SECRET || null;
+                    }
+                    if ( !_auditChainSecret || typeof(_auditChainSecret) != 'string' ) {
+                        throw new Error('[ SERVER ] `audit.chain.enabled` is true but no signing key is configured — set `settings.json > audit.chain.secret` (e.g. "${secret:MY_AUDIT_KEY}", a non-GINA variable name) or the GINA_AUDIT_SECRET environment variable. Tamper-evidence without a key would be silently OFF, so the boot refuses instead.');
+                    }
+                    if ( _auditChainSecret.length < 32 ) {
+                        console.warn('[ SERVER ] `audit.chain` signing key is shorter than 32 characters — a longer random key (>= 32 bytes) is recommended.');
+                    }
+                    _auditStartOpts.chain = { secret: _auditChainSecret };
+                }
+                // Cross-PROCESS shared-file refusal: two bundles resolving the
+                // SAME audit file run as separate writers in per-process mode,
+                // and two writers fork a linear hash chain. Boot-detectable in
+                // both modes — options.conf carries every bundle's parsed
+                // settings (runtime-measured 2026-07-26) — so the boot refuses
+                // when EITHER party chains. Without a chain the shared file
+                // stays legal (interleaved JSONL, pre-existing behaviour).
+                // Replicas and cross-project collisions are NOT detectable
+                // from config; the docs state that boundary.
+                if ( _auditStartOpts.file ) {
+                    for (var _ab in options.conf) {
+                        if (_ab === self.appName) continue;
+                        var _sibConf  = options.conf[_ab] && options.conf[_ab][self.env];
+                        var _sibAudit = ( _sibConf && _sibConf.content && _sibConf.content.settings && _sibConf.content.settings.audit ) ? _sibConf.content.settings.audit : null;
+                        if ( !_sibAudit || _sibAudit.enabled !== true || _sibAudit.store ) continue;
+                        var _sibChain = !!( _sibAudit.chain && _sibAudit.chain.enabled === true );
+                        if ( !_auditChainEnabled && !_sibChain ) continue;
+                        // replay the sibling's file derivation
+                        var _sibFile = ( typeof(_sibAudit.file) == 'string' && _sibAudit.file ) ? _sibAudit.file : null;
+                        if ( !_sibFile || !/^\//.test(_sibFile) ) {
+                            var _sibProjectPath = _sibConf.projectPath;
+                            if ( typeof(_sibProjectPath) != 'string' || _sibProjectPath === '' || /\$\{/.test(_sibProjectPath) ) continue; // unresolvable — its own boot lints it
+                            _sibFile = _sibFile
+                                ? _sibProjectPath + '/' + _sibFile
+                                : _sibProjectPath + '/logs/audit-'+ _ab +'-'+ self.env +'.jsonl';
+                        }
+                        if ( _( _sibFile, true) === _auditStartOpts.file ) {
+                            throw new Error('[ SERVER ] `audit.chain`: bundle `'+ _ab +'` resolves the SAME audit file ('+ _auditStartOpts.file +') and '+ ( _auditChainEnabled ? 'this bundle chains its trail' : 'that bundle chains its trail' ) +' — two writers fork a linear hash chain, so the boot refuses. Give each bundle its own `audit.file` (the default per-bundle path never collides), or disable the chain on both.');
+                        }
+                    }
+                }
                 // start() mkdirs + opens the O_APPEND fd — an unwritable destination
                 // throws HERE, i.e. refuses the boot rather than dropping records later.
                 lib.audit.start(_auditStartOpts);
                 // console.info, NOT console.debug — the shipped default log_level
                 // ("info") filters debug, which would silently defeat the
                 // "path logged at boot" contract.
-                console.info('[ BUNDLE ][ server ][ init ] Audit trail enabled for [ '+ self.appName +' ] → '+ _auditDestLabel);
+                console.info('[ BUNDLE ][ server ][ init ] Audit trail enabled for [ '+ self.appName +' ] → '+ _auditDestLabel + ( _auditChainEnabled ? ' (tamper-evident chain: ON)' : '' ));
             }
 
             // ── #B144 — upload write-error probe (`simulateWriteError`) boot warn ──
