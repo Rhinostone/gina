@@ -163,6 +163,23 @@
               "default": true
             }
           }
+        },
+        "chain": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Tamper-evidence hash chain (#COMPLY2 slice 3). When enabled, every record gains a `hash` chaining from its predecessor (HMAC-SHA256 over a canonical form of the record plus the previous hash), verified offline with `gina audit:verify`. Detects post-hoc edit, deletion, insertion or reordering by anyone without the signing key — NOT a defence against the process that writes the records, which holds the key and could forge a whole chain; stream the trail to WORM storage for that adversary. File backend only: a connector `store` is refused, because the chain needs the file store's ordered append. Every shape here is linted UNCONDITIONALLY, like the rest of the audit block.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch for the chain — STRICTLY boolean (any other type refuses to boot: a truthy string like \"true\" would leave tamper-evidence silently OFF). When true a signing key is required or the boot refuses. Fail-closed default: false.",
+              "default": false
+            },
+            "secret": {
+              "type": "string",
+              "minLength": 1,
+              "description": "The HMAC signing key. A literal, or a `${secret:VAR}` placeholder resolved at config load (VAR must NOT be GINA_-prefixed — the CLI sweeps GINA_* out of process.env before config load; use GINA_AUDIT_SECRET for the environment path instead). Optional here: when omitted the key is read from the GINA_AUDIT_SECRET environment variable. A key shorter than 32 characters boots with a warning. Enabling the chain with no key from either source refuses the boot."
+            }
+          }
         }
       }
     },
