@@ -9,6 +9,8 @@ var EventEmitter    = require('events').EventEmitter;
 var e               = new EventEmitter();
 
 var CmdHelper       = require('./../helper');
+// #B160 — control-plane dial-host resolution (pure, no framework globals)
+var netLocality     = require(__dirname + '/../../net-locality');
 var console         = lib.logger;
 var LoggerHelper    = require( _(GINA_FRAMEWORK_DIR + '/lib/logger/src/helper.js', true) );
 /**
@@ -99,7 +101,9 @@ function Tail(opt, cmd) {
     var tail = function(opt, cmd, isResuming) {
 
         var port = opt.mqPort || GINA_MQ_PORT || 8125;
-        var host = opt.hostV4 || GINA_HOST_V4 || '127.0.0.1';
+        // #B160 — the MQ listener binds `bind_host` (loopback by default):
+        // dial it when host_v4 is one of this machine's own addresses.
+        var host = netLocality.resolveDialHost(opt.hostV4 || GINA_HOST_V4 || '127.0.0.1', getEnvVar('GINA_BIND_HOST'));
         var clientOptions = {
             host    : host,
             port    : port,

@@ -834,6 +834,8 @@ declare namespace gina {
         merge: (target: object, source: object, override?: boolean) => object;
         /** Prometheus metrics primitive behind `/_gina/metrics`. */
         metrics: any;
+        /** Control-plane dial-host resolution — `bind_host` vs `host_v4` locality (#B160). */
+        netLocality: any;
         nunjucksFilters: any;
         nunjucksResolver: any;
         /** Stale built-release watch primitives — source-tree fingerprints, change classification, busy probes and the in-flight request gauge (#RWATCH). */

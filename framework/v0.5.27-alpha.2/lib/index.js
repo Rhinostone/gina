@@ -198,6 +198,12 @@ function Lib() {
         // readPidfile) for the bundle:list / service:list / bundle:status /
         // project:status CLI handlers. Pure (same contract as routing-introspect).
         cmdStatusFormat : _require('./cmd-status-format'),
+        // #B160 — control-plane dial-host resolution: is host_v4 one of this
+        // machine's own interfaces, and which address should a CLI-side client
+        // dial (`bind_host` vs `host_v4`)? Pure + stateless (only reads
+        // os.networkInterfaces()), so the dev-mode-hot-reloadable _require is
+        // safe — same contract as routing-introspect above.
+        netLocality     : _require('./net-locality'),
         // Single source of truth for the connector driver → npm package + semver
         // range mapping. Consumed by the connector:* CLI handlers (connector:add
         // install hint + connector:add --install range resolution + connector:list

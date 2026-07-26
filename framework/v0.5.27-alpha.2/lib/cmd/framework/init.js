@@ -733,6 +733,17 @@ function Initialize(opt) {
                 setEnvVar('GINA_HOST_V4', localUserSettings.host_v4);
             }
         }
+        // #B161 — bind_host was the only connection key WITHOUT a disk -> env
+        // read-back here, so the regeneration below (dic + createFileFromDataSync)
+        // reverted a value written by `gina framework:set --bind-host=` to the
+        // default on the very next CLI invocation. Mirror the host_v4 block
+        // above so the persisted value survives. The `${` guard skips the
+        // unresolved template placeholder a fresh/broken install may carry.
+        if ( !getEnvVar('GINA_BIND_HOST') && targetObj.existsSync() ) {
+            if ( typeof(localUserSettings.bind_host) != 'undefined' && String(localUserSettings.bind_host).indexOf('${') < 0 ) {
+                setEnvVar('GINA_BIND_HOST', localUserSettings.bind_host);
+            }
+        }
         if ( !getEnvVar('GINA_HOSTNAME') && targetObj.existsSync() ) {
             if ( typeof(localUserSettings.hostname) != 'undefined' ) {
                 setEnvVar('GINA_HOSTNAME', localUserSettings.hostname);

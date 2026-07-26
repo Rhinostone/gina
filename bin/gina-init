@@ -353,6 +353,20 @@ projectsOut[projectName] = projectEntry;
 var userInfo = { username: 'node', uid: -1, gid: -1 };
 try { userInfo = os.userInfo(); } catch(e) { /* running as unresolvable uid (e.g. scratch image) */ }
 
+// #B161 — honour an operator-set bind_host instead of discarding it: this file
+// overwrites settings.json unconditionally on every container start, so a
+// value written by `gina framework:set --bind-host=` (or a previous bootstrap)
+// was silently reverted to loopback. Env first (this script reads raw
+// process.env by design — see the note near the top), then the value already
+// persisted in settings.json, then the loopback default. The `${` guard skips
+// an unresolved template placeholder.
+var prevBindHost = null;
+try {
+    var _prevSettingsRaw = fs.readFileSync(ginaHome + '/' + shortVersion + '/settings.json', 'utf8');
+    prevBindHost = JSON.parse(_prevSettingsRaw).bind_host || null;
+    if (prevBindHost && String(prevBindHost).indexOf('${') > -1) { prevBindHost = null; }
+} catch (e) { /* absent or unreadable — defaults apply */ }
+
 var settingsOut = {
     version             : version,
     def_framework       : version,
@@ -368,7 +382,7 @@ var settingsOut = {
     debug_port          : '9229',
     mq_port             : '8125',
     host_v4             : '127.0.0.1',
-    bind_host           : '127.0.0.1',
+    bind_host           : process.env.GINA_BIND_HOST || prevBindHost || '127.0.0.1',
     hostname            : os.hostname(),
     user                : userInfo.username,
     uid                 : String(userInfo.uid),

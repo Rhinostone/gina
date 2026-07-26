@@ -1,6 +1,8 @@
 'use strict';
 // Imports
 const net = require('net');
+// #B160 — control-plane dial-host resolution (pure, no framework globals)
+var netLocality = require(__dirname + '/../../../../net-locality');
 // var fs                  = require('fs');
 // var util                = require('util');
 
@@ -42,6 +44,9 @@ function MQSpeaker(opt, loggers, cb) {
         var _mqPort = ~~settings.mq_port;
         opt.mqPort = (_mqPort > 0 && _mqPort < 65536) ? _mqPort : 8125;
         opt.hostV4 = settings.host_v4;
+        // #B160 — carry the daemon's bind address so startMQSpeaker() can
+        // dial locally when host_v4 names one of this machine's interfaces.
+        opt.bindHost = settings.bind_host;
         // ---------- EO - hack for early calls
 
         return startMQSpeaker(opt, cb);
@@ -50,7 +55,9 @@ function MQSpeaker(opt, loggers, cb) {
 
     function startMQSpeaker(opt, cb) {
         var port = opt.mqPort || 8125;// jshint ignore:line
-        var host = opt.hostV4 || '127.0.0.1';// jshint ignore:line
+        // #B160 — the MQ listener binds `bind_host` (loopback by default):
+        // dial it when host_v4 is one of this machine's own addresses.
+        var host = netLocality.resolveDialHost(opt.hostV4 || '127.0.0.1', opt.bindHost);// jshint ignore:line
         var clientOptions = {
             host    : host,
             port    : port,

@@ -456,7 +456,13 @@ async function onExec() {
     } else {
 
         //Connect to framework.
-        var client = net.connect({port: port, host: hostV4},
+        // #B160 — the daemon binds `bind_host` (loopback by default) while
+        // `host_v4` is the address EXTERNAL clients use. When host_v4 names
+        // one of this machine's own interfaces, the daemon is local: dial the
+        // bind address, not the external one. A remote host_v4 is dialled
+        // unchanged.
+        var dialHost = lib.netLocality.resolveDialHost(hostV4, bindHost);
+        var client = net.connect({port: port, host: dialHost},
             function() {
                 //Forwarding cmd.
                 // retieving debug infos
@@ -504,6 +510,10 @@ async function onExec() {
             } else {
                 console.log('[ gina ] not started, try to start framework with :\n$ sudo gina start')
             }
+            // #B160 — name the dial target and the bind knob: a refused
+            // connection here is either a daemon that is not running, or one
+            // bound to a different address than the one dialled.
+            console.log('Could not reach the framework command socket at `'+ dialHost +':'+ port +'`.\nThe daemon binds `bind_host` (default `127.0.0.1` — see ~/.gina/'+ shortVersion +'/settings.json, or the GINA_BIND_HOST env var).');
 
             console.debug(err.stack||err);
 

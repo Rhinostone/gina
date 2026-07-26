@@ -12,6 +12,8 @@ var helpers = null;
 
 // #M22 — merge-eval fallback removed (sister fix to lib/merge/src/main.js direct json_clone require)
 var merge     = require(__dirname + '/../../../../merge');
+// #B160 — control-plane dial-host resolution (pure, no framework globals)
+var netLocality = require(__dirname + '/../../../../net-locality');
 
 function FileContainer(opt, loggers) {
     var self = {
@@ -55,6 +57,9 @@ function FileContainer(opt, loggers) {
 
         opt.mqPort = settings.mq_port;
         opt.hostV4 = settings.host_v4;
+        // #B160 — carry the daemon's bind address for the dial-host
+        // resolution in onPayload().
+        opt.bindHost = settings.bind_host;
         // ---------- EO - hack for early calls
 
         // handle server not started yet or server exited
@@ -153,7 +158,12 @@ function FileContainer(opt, loggers) {
     function onPayload(opt, isResuming) {
         // console.debug('mqFile options: ', JSON.stringify(opt, null, 2));
         var port = opt.mqPort || getEnvVar('GINA_MQ_PORT') || 8125;// jshint ignore:line
-        var host = opt.hostV4 || getEnvVar('GINA_HOST_V4') || '127.0.0.1';// jshint ignore:line
+        // #B160 — the MQ listener binds `bind_host` (loopback by default):
+        // dial it when host_v4 is one of this machine's own addresses.
+        var host = netLocality.resolveDialHost(
+            opt.hostV4 || getEnvVar('GINA_HOST_V4') || '127.0.0.1',
+            opt.bindHost || getEnvVar('GINA_BIND_HOST')
+        );// jshint ignore:line
         var clientOptions = {
             host    : host,
             port    : port,
