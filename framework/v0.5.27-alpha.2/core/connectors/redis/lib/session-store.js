@@ -71,7 +71,8 @@ module.exports = function(session, bundle) {
      * @param {string}  [options.password]  - Redis AUTH password.
      * @param {boolean} [options.tls]       - Enable TLS (required for managed providers with TLS).
      * @param {string}  [options.prefix]    - Session key prefix (default: connectors.json → 'sess:').
-     * @param {number}  [options.ttl]       - Session TTL in seconds (default: connectors.json → 86400).
+     * @param {number}  [options.ttl]       - Session TTL in seconds (default: connectors.json ttl;
+     *                                        unset → cookie maxAge drives expiry, else 86400).
      */
     function RedisStore(options) {
         var self = this;
@@ -79,7 +80,9 @@ module.exports = function(session, bundle) {
         Store.call(this, options);
 
         this.prefix = (options.prefix != null) ? options.prefix : (connConf.prefix || 'sess:');
-        this.ttl    = (options.ttl    != null) ? options.ttl    : (connConf.ttl    || oneDay);
+        // #B163 — was `connConf.ttl || oneDay`: the implicit one-day default made the
+        // cookie-maxAge fallback in set()/touch() unreachable; unset now stays null (couchbase parity).
+        this.ttl    = (options.ttl    != null) ? options.ttl    : (connConf.ttl    || null);
 
         // Require ioredis at instantiation time so the error message is clear
         // and the framework can still boot if Redis is not configured.

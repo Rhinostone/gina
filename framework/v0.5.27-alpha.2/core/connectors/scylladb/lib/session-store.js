@@ -132,14 +132,17 @@ module.exports = function(session, bundle) {
      * @param {object}   [options.credentials]     - { username, password }.
      * @param {object}   [options.ssl]             - sslOptions passthrough.
      * @param {string}   [options.table]           - Sessions table name (default: connectors.json → 'sessions').
-     * @param {number}   [options.ttl]             - Default TTL seconds (default: connectors.json → 86400).
+     * @param {number}   [options.ttl]             - Default TTL seconds (default: connectors.json ttl;
+     *                                              unset → cookie maxAge drives expiry, else 86400).
      */
     function ScylladbStore(options) {
         options = options || {};
         Store.call(this, options);
 
         this.table = (options.table != null) ? options.table : (connConf.table || 'sessions');
-        this.ttl   = (options.ttl   != null) ? options.ttl   : (connConf.ttl   || oneDay);
+        // #B163 — was `connConf.ttl || oneDay`: the implicit one-day default made the
+        // cookie-maxAge fallback in set()/touch() unreachable; unset now stays null (couchbase parity).
+        this.ttl   = (options.ttl   != null) ? options.ttl   : (connConf.ttl   || null);
 
         var cassandra = loadDriver();
 

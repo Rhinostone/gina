@@ -71,7 +71,8 @@ module.exports = function(session, bundle) {
      *                                                 Defaults to connectors.json `database`, then
      *                                                 `~/.gina/{version}/sessions-{bundle}.db`.
      * @param {string}  [options.prefix]             - Session key prefix (default: `'sess:'`).
-     * @param {number}  [options.ttl]                - Session TTL in seconds (default: 86400).
+     * @param {number}  [options.ttl]                - Session TTL in seconds (default: connectors.json ttl;
+     *                                                 unset → cookie maxAge drives expiry, else 86400).
      * @param {number}  [options.cleanupInterval]    - Expired-session purge interval in seconds.
      *                                                 Set to 0 to disable. (default: 900).
      */
@@ -81,7 +82,9 @@ module.exports = function(session, bundle) {
         Store.call(this, options);
 
         this.prefix          = (options.prefix          != null) ? options.prefix          : (connConf.prefix          || 'sess:');
-        this.ttl             = (options.ttl             != null) ? options.ttl             : (connConf.ttl             || oneDay);
+        // #B163 — was `connConf.ttl || oneDay`: the implicit one-day default made the
+        // cookie-maxAge fallback in set()/touch() unreachable; unset now stays null (couchbase parity).
+        this.ttl             = (options.ttl             != null) ? options.ttl             : (connConf.ttl             || null);
         this.cleanupInterval = (options.cleanupInterval != null) ? options.cleanupInterval : (connConf.cleanupInterval || 900);
 
         // Resolve DB path: option > connectors.json > default per-bundle file

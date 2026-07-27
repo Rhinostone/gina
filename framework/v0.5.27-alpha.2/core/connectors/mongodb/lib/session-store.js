@@ -136,7 +136,8 @@ module.exports = function(session, bundle) {
      * @param {string} [options.replicaSet] - Replica set name.
      * @param {object|boolean} [options.ssl]- TLS configuration.
      * @param {string} [options.collection] - Sessions collection (default 'sessions').
-     * @param {number} [options.ttl]        - Default TTL seconds (default 86400).
+     * @param {number} [options.ttl]        - Default TTL seconds (default: connectors.json ttl;
+     *                                        unset → cookie maxAge drives expiry, else 86400).
      * @throws {Error} when `database` is missing.
      */
     function MongodbStore(options) {
@@ -144,7 +145,9 @@ module.exports = function(session, bundle) {
         Store.call(this, options);
 
         this.collection = (options.collection != null) ? options.collection : (connConf.collection || 'sessions');
-        this.ttl        = (options.ttl        != null) ? options.ttl        : (connConf.ttl        || oneDay);
+        // #B163 — was `connConf.ttl || oneDay`: the implicit one-day default made the
+        // cookie-maxAge fallback in set()/touch() unreachable; unset now stays null (couchbase parity).
+        this.ttl        = (options.ttl        != null) ? options.ttl        : (connConf.ttl        || null);
 
         this._ttlReady   = false;
         this._ttlPromise = null;
