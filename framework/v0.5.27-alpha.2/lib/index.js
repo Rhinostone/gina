@@ -173,6 +173,13 @@ function Lib() {
         // per-request require() can never grow a dead-`children` tail (#B32-residual).
         // It also keeps a security gate out of the dev-mode hot-reload path entirely.
         authzGate       : require('./authz-gate'),
+        // #COMPLY3 — authentication hardening primitives (password hashing +
+        // verification, password policy, lockout, TOTP). require() — NOT _require —
+        // for the authzGate reason above: a security primitive stays out of the
+        // dev-mode hot-reload path entirely. It also holds module-scope state the
+        // hot-reload would discard on every dev request: the scrypt concurrency
+        // gauge and its FIFO queue (a discarded queue strands in-flight logins).
+        authn           : require('./authn'),
         // #COMPLY2 — the audit-trail primitive behind self.audit() and the authz
         // auto-events. Holds the boot-adopted store (an open O_APPEND fd for the
         // default file backend), the serialized write queue and the written/dropped

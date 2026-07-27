@@ -1,0 +1,7 @@
+{
+    "name": "authn",
+    "description": "Authentication hardening primitives (#COMPLY3): password hashing + verification, password-policy validation, account lockout, and TOTP helpers. Hooks and helpers — never an identity provider",
+    "version": "0.0.1",
+    "private": true,
+    "main": "src/main"
+}

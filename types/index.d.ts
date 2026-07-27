@@ -795,6 +795,8 @@ declare namespace gina {
         async: any;
         /** The audit-trail primitive behind `self.audit()` (#COMPLY2). */
         audit: any;
+        /** Authentication hardening primitives — password hashing, policy, lockout, TOTP (#COMPLY3). */
+        authn: any;
         /** The route authorization gate (framework-internal seam). */
         authzGate: any;
         cleanFiles: any;
