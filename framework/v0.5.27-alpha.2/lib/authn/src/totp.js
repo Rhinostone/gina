@@ -19,8 +19,8 @@
  *
  *   - **Storing the secret.** It is a credential: encrypt it at rest, and treat
  *     it like a password in every log and error path.
- *   - **Replay defence.** {@link verifyTotp} returns the `delta` of the step it
- *     matched; persist the accepted step per user and refuse anything not
+ *   - **Replay defence.** {@link verifyTotp} returns the step `counter` it
+ *     matched; persist the accepted counter per user and refuse anything not
  *     strictly greater. Without that, a code stays valid for its whole window
  *     and an observer who sees it can reuse it. The RFC is explicit that this is
  *     the verifier's job, and gina cannot do it without a place to write.
@@ -37,9 +37,9 @@
  *
  * @example <caption>Verification, with replay defence</caption>
  * var res = lib.authn.verifyTotp(submitted, user.totpSecret);
- * if (!res.valid)                       { return deny(); }
- * if (res.delta <= user.totpLastStep)   { return deny(); }   // replay
- * user.totpLastStep = res.delta;
+ * if (!res.valid)                          { return deny(); }
+ * if (res.counter <= user.totpLastCounter) { return deny(); }   // replay
+ * user.totpLastCounter = res.counter;
  */
 
 var crypto = require('crypto');
@@ -277,9 +277,9 @@ function generateTotp(secret, options) {
  * Verify a submitted TOTP code.
  *
  * Checks the current step and `window` steps either side, comparing in constant
- * time. Returns the matched step offset as `delta` — **persist it and require
- * the next accepted delta to be strictly greater**, or a code remains reusable
- * for its whole acceptance window.
+ * time. Returns the matched step as an absolute `counter` — **persist it and
+ * require the next accepted counter to be strictly greater**, or a code remains
+ * reusable for its whole acceptance window.
  *
  * Never throws for a bad code: a malformed submission is `{valid: false}`, the
  * same shape as a wrong one, so an attacker learns nothing from the difference.
@@ -294,14 +294,14 @@ function generateTotp(secret, options) {
  * @param {number} [options.step=30]
  * @param {number} [options.digits=6]
  * @param {string} [options.algorithm=sha1]
- * @returns {{valid: boolean, delta: ?number}} `delta` is the absolute step counter that matched, or `null`.
+ * @returns {{valid: boolean, counter: ?number}} `counter` is the absolute step counter that matched — an index, not an offset from now — or `null`.
  * @throws {Error} when the secret is unusable.
  * @memberof module:lib/authn
  *
  * @example
  * var res = lib.authn.verifyTotp(self.post.code, user.totpSecret);
- * if (!res.valid || res.delta <= user.totpLastStep) { return deny(); }
- * user.totpLastStep = res.delta;
+ * if (!res.valid || res.counter <= user.totpLastCounter) { return deny(); }
+ * user.totpLastCounter = res.counter;
  */
 function verifyTotp(token, secret, options) {
     var opts = resolveOptions(options);
@@ -311,7 +311,7 @@ function verifyTotp(token, secret, options) {
     }
 
     if (typeof token !== 'string' && typeof token !== 'number') {
-        return { valid: false, delta: null };
+        return { valid: false, counter: null };
     }
     var submitted = String(token).replace(/\s+/g, '');
     // A numeric submission has already lost any leading zero — `Number('012345')`
@@ -325,7 +325,7 @@ function verifyTotp(token, secret, options) {
         }
     }
     if (!/^[0-9]+$/.test(submitted) || submitted.length !== opts.digits) {
-        return { valid: false, delta: null };
+        return { valid: false, counter: null };
     }
 
     var at      = (options && typeof options.at === 'number') ? options.at : Date.now();
@@ -350,10 +350,10 @@ function verifyTotp(token, secret, options) {
             match = false;
         }
         if (match) {
-            return { valid: true, delta: counter + i };
+            return { valid: true, counter: counter + i };
         }
     }
-    return { valid: false, delta: null };
+    return { valid: false, counter: null };
 }
 
 /**

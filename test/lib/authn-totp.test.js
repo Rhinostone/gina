@@ -17,7 +17,7 @@
  *   §05 the acceptance window — drift either side is accepted, beyond it is
  *       refused, and `window: 0` narrows to the current step (each with the
  *       control on the other side of the boundary).
- *   §06 `delta` — the replay-defence signal: it identifies WHICH step matched,
+ *   §06 `counter` — the replay-defence signal: it identifies WHICH step matched,
  *       which is the whole reason a caller can detect reuse.
  *   §07 malformed submissions — every shape is `{valid:false}`, never a throw
  *       and never an exception a caller could distinguish from a wrong code.
@@ -177,7 +177,7 @@ describe('04 - generate / verify round trip', function () {
         var code   = authn.generateTotp(secret);
         var res    = authn.verifyTotp(code, secret);
         assert.equal(res.valid, true);
-        assert.equal(typeof res.delta, 'number');
+        assert.equal(typeof res.counter, 'number');
     });
 
     it('rejects a code from a different secret', function () {
@@ -251,21 +251,21 @@ describe('05 - the acceptance window', function () {
     });
 });
 
-describe('06 - delta, the replay-defence signal', function () {
+describe('06 - counter, the replay-defence signal', function () {
 
     var SECRET = authn.generateTotpSecret();
     var NOW    = 1700000000000;
 
     it('reports the absolute step counter that matched', function () {
         var res = authn.verifyTotp(authn.generateTotp(SECRET, { at: NOW }), SECRET, { at: NOW });
-        assert.equal(res.delta, Math.floor(NOW / 1000 / 30));
+        assert.equal(res.counter, Math.floor(NOW / 1000 / 30));
     });
 
-    it('an older code reports a SMALLER delta — which is how a caller detects reuse', function () {
+    it('an older code reports a SMALLER counter — which is how a caller detects reuse', function () {
         var older = authn.verifyTotp(authn.generateTotp(SECRET, { at: NOW - 30000 }), SECRET, { at: NOW });
         var now   = authn.verifyTotp(authn.generateTotp(SECRET, { at: NOW }), SECRET, { at: NOW });
         assert.equal(older.valid, true);
-        assert.ok(older.delta < now.delta, 'the replayed step must be identifiable as older');
+        assert.ok(older.counter < now.counter, 'the replayed step must be identifiable as older');
     });
 
     it('is null when nothing matched', function () {
@@ -276,17 +276,17 @@ describe('06 - delta, the replay-defence signal', function () {
         var wrong = String((Number(real.charAt(0)) + 1) % 10) + real.slice(1);
         assert.notEqual(wrong, real, 'fixture sanity: the mutated code differs');
         assert.deepEqual(authn.verifyTotp(wrong, SECRET, { at: NOW, window: 0 }),
-            { valid: false, delta: null });
+            { valid: false, counter: null });
     });
 
     it('the documented replay check actually rejects a reused code', function () {
         // Replays the recipe from the module JSDoc, since that is what consumers
-        // will paste: persist the accepted step, require strictly greater.
-        var lastStep = 0;
+        // will paste: persist the accepted counter, require strictly greater.
+        var lastCounter = 0;
         function attempt(code, at) {
             var res = authn.verifyTotp(code, SECRET, { at: at });
-            if (!res.valid || res.delta <= lastStep) { return false; }
-            lastStep = res.delta;
+            if (!res.valid || res.counter <= lastCounter) { return false; }
+            lastCounter = res.counter;
             return true;
         }
         var code = authn.generateTotp(SECRET, { at: NOW });
@@ -317,7 +317,7 @@ describe('07 - malformed submissions', function () {
     BAD.forEach(function (pair) {
         it('returns {valid:false} without throwing for: ' + pair[0], function () {
             var res = authn.verifyTotp(pair[1], SECRET);
-            assert.deepEqual(res, { valid: false, delta: null });
+            assert.deepEqual(res, { valid: false, counter: null });
         });
     });
 
