@@ -281,6 +281,36 @@
         }
       }
     },
+    "session": {
+      "type": "object",
+      "description": "Session plugin defaults (#CSRF1) — cookie flags the gina.plugins.Session() wrapper injects into express-session options at factory-call time. Options set explicitly in bundle code always win. Boot config: changes need a bundle restart. The session-record TTL is NOT set here — it comes from the store's connectors.json entry or constructor options, and follows the cookie maxAge when neither is set.",
+      "additionalProperties": false,
+      "properties": {
+        "cookie": {
+          "type": "object",
+          "description": "Defaults for the express-session cookie object. Only these three flags are read from settings; every other cookie option (maxAge, path, domain, ...) is passed in bundle code.",
+          "additionalProperties": false,
+          "properties": {
+            "sameSite": {
+              "type": "string",
+              "enum": ["lax", "strict", "none"],
+              "default": "lax",
+              "description": "SameSite default. Matched case-insensitively at runtime; use the lowercase canonical form. \"none\" requires secure=true (browser-parity invariant, refused at factory call time otherwise)."
+            },
+            "httpOnly": {
+              "type": "boolean",
+              "default": true,
+              "description": "HttpOnly default — keeps the session cookie out of document.cookie."
+            },
+            "secure": {
+              "enum": [true, false, "auto"],
+              "default": "auto",
+              "description": "Secure default: true, false, or \"auto\" (express-session derives the flag from the connection scheme). SameSite=None with secure not strictly true refuses at factory call time."
+            }
+          }
+        }
+      }
+    },
     "ioServer": {
       "type": "object",
       "description": "Socket.io server configuration.",
