@@ -436,8 +436,22 @@ function Router(env, scope) {
             typeof(request.session) != 'undefined'
             && typeof(request.logout) == 'undefined'
         ) {
+            /**
+             * Logout shim — de-authenticates the request AND destroys the
+             * persisted session record.
+             *
+             * #B164 — nulling `session.user` alone left the store record, the
+             * session id and every other session key alive until TTL. The
+             * gina-native branch now also calls the session's own destroy()
+             * when it exposes one (express-session), degrading gracefully when
+             * it does not. Clearing the session COOKIE stays the consumer's
+             * job — the cookie name is not discoverable from the request.
+             *
+             * @param {function} [done] - Optional callback `done(err)` invoked once
+             *                            record destruction (or the fallback) completes.
+             */
             request.logout =
-            request.logOut = function() {
+            request.logOut = function(done) {
                 var property = 'user';
 
                 // by default
@@ -445,25 +459,39 @@ function Router(env, scope) {
                 if (sess._passport && sess._passport.instance) {
                     property = sess._passport.instance._userProperty || 'user';
                 }
+                var isSessionScope = false;
                 if ( !sess._passport
                     && typeof(sess.session) != 'undefined'
                 ) {
                     sess = sess.session;
+                    isSessionScope = true;
                 }
 
                 sess[property] = null;
                 if (sess._passport) {
                     sess._passport.instance._sm.logOut(sess);
+                    if ( typeof(done) == 'function' ) {
+                        done(null);
+                    }
+                    return;
                 }
-
-
-                // if (this._passport && this._passport.instance) {
-                //     property = this._passport.instance._userProperty || 'user';
-                // }
-                // this[property] = null;
-                // if (this._passport) {
-                //     this._passport.instance._sm.logOut(this);
-                // }
+                // #B164 — destroy the record, not just the `user` key. Gated on the
+                // session scope so a call after destruction (no `request.session`
+                // left) can never reach `request.destroy()` — the stream method.
+                if ( isSessionScope && typeof(sess.destroy) == 'function' ) {
+                    sess.destroy(function onLogoutSessionDestroyed(err) {
+                        if (err) {
+                            console.warn('[ ROUTER ] logout(): session.destroy() failed: ' + (err.stack || err.message || err));
+                        }
+                        if ( typeof(done) == 'function' ) {
+                            done(err || null);
+                        }
+                    });
+                    return;
+                }
+                if ( typeof(done) == 'function' ) {
+                    done(null);
+                }
             };
         }
 
