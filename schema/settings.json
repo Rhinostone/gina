@@ -283,9 +283,15 @@
     },
     "session": {
       "type": "object",
-      "description": "Session plugin defaults (#CSRF1) — cookie flags the gina.plugins.Session() wrapper injects into express-session options at factory-call time. Options set explicitly in bundle code always win. Boot config: changes need a bundle restart. The session-record TTL is NOT set here — it comes from the store's connectors.json entry or constructor options, and follows the cookie maxAge when neither is set.",
+      "description": "Session plugin defaults (#CSRF1, #COMPLY4) — cookie flags and the absolute-timeout cap the gina.plugins.Session() wrapper applies at factory-call time. Options set explicitly in bundle code always win. Boot config: changes need a bundle restart. The session-record TTL is NOT set here — it comes from the store's connectors.json entry or constructor options, and follows the cookie maxAge when neither is set.",
       "additionalProperties": false,
       "properties": {
+        "absoluteTimeout": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "Absolute session cap in MILLISECONDS, measured from login (the anchor req.login() stamps at session-id rotation; manually-bound sessions are anchored one request later). Opt-in: when set, an authenticated session older than this is destroyed on its next request — regardless of activity — and the request proceeds with a fresh anonymous session. Bundle code passing session({ absoluteTimeout }) wins over this default; absoluteTimeout: false in bundle code disables it. Composes with idle expiry: the cookie maxAge and the store-record TTL roll with activity, this cap does not.",
+          "examples": [28800000]
+        },
         "cookie": {
           "type": "object",
           "description": "Defaults for the express-session cookie object. Only these three flags are read from settings; every other cookie option (maxAge, path, domain, ...) is passed in bundle code.",

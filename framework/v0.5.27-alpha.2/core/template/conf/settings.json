@@ -152,6 +152,9 @@
   //   httpOnly: true | false                 (default true)
   //   secure:   true | false | "auto"        (default "auto")
   // Invariant: sameSite="none" requires secure=true (browser-parity).
+  // #COMPLY4 — optional absolute session cap in ms since login (opt-in, none by default);
+  // bundle code session({ absoluteTimeout }) wins, false there disables:
+  //   "absoluteTimeout": 28800000,
   "session": {
     "cookie": {
       "sameSite": "lax",
