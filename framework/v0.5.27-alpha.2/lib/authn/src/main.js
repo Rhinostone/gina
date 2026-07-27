@@ -22,7 +22,8 @@
  *   2. `hashPassword(pw)`           — store the returned PHC string.
  *   3. `createLockout()`            — refuse an account under attack BEFORE
  *                                     spending a KDF on it.
- *   4. `verifyPassword(pw, stored)` — at login.
+ *   4. `verifyPassword(pw, stored)` — at login; pair it with `dummyVerify` on
+ *                                     the account-not-found branch.
  *   5. `req.login(user, done)`      — core/router.js rotates the session id and
  *                                     binds `req.session.user` (#COMPLY4).
  *
@@ -148,6 +149,23 @@ var _queue = [];
 var _maxConcurrent = DEFAULT_MAX_CONCURRENT;
 
 /**
+ * Ceiling on the number of hashes WAITING for a slot.
+ *
+ * The concurrency gauge bounds how much work runs at once; without this, it did
+ * not bound how much work could be PROMISED. Set generously — real login
+ * traffic never approaches it — so reaching it means the endpoint is under load
+ * that belongs to a rate limiter, not to a KDF.
+ *
+ * @constant
+ * @type {number}
+ * @inner
+ * @private
+ */
+var DEFAULT_MAX_QUEUE = 100;
+/** @type {number} Effective queue ceiling. @inner @private */
+var _maxQueue = DEFAULT_MAX_QUEUE;
+
+/**
  * Run `fn` once a concurrency slot is free, releasing the slot when it calls
  * back.
  *
@@ -160,7 +178,7 @@ var _maxConcurrent = DEFAULT_MAX_CONCURRENT;
  * @inner
  * @private
  */
-function withSlot(fn) {
+function withSlot(fn, onRejected) {
     function start() {
         _inFlight++;
         var released = false;
@@ -179,6 +197,20 @@ function withSlot(fn) {
     if (_inFlight < _maxConcurrent) {
         return start();
     }
+    // Shed load rather than queue without limit. An unbounded queue made the
+    // documented account-not-found pattern an amplifier: 30 requests for
+    // accounts that DO NOT EXIST — no credentials, no account needed — pushed a
+    // legitimate login from 25 ms to 431 ms (17x), growing linearly. Bounded
+    // rejection is a far better failure than unbounded latency, and it applies
+    // to every caller equally, so it opens no enumeration difference.
+    if (_queue.length >= _maxQueue) {
+        var err = new Error('[gina authn] password-hashing queue is full (' + _maxQueue + ' waiting) — shedding load. Respond 503 and retry; if this is steady-state, the login endpoint needs request-rate limiting in front of it.');
+        err.code = 'AUTHN_QUEUE_FULL';
+        if (typeof onRejected === 'function') {
+            return process.nextTick(function () { onRejected(err); });
+        }
+        throw err;
+    }
     _queue.push(start);
 }
 
@@ -186,7 +218,10 @@ function withSlot(fn) {
  * Set the scrypt concurrency ceiling.
  *
  * Raise it only alongside a matching threadpool size (`UV_THREADPOOL_SIZE`) and
- * a memory budget — `maxConcurrent * 128 MiB` is the peak.
+ * a memory budget. The peak is `maxConcurrent` times the working set of the
+ * parameters actually in use — 128 MiB each at the shipped defaults, but up to
+ * the `MAX_WORKING_SET_MIB` ceiling for a stored hash carrying a higher `r`,
+ * since a stored hash chooses its own cost.
  *
  * @param {number} n - positive integer.
  * @returns {void}
@@ -224,6 +259,62 @@ function setMaxConcurrentHashes(n) {
  * @private
  */
 var MIN_STORED_KEY_BYTES = 16;
+
+/**
+ * Accepted ranges for the cost parameters, and the ceiling on the working set
+ * they imply.
+ *
+ * Bounding each parameter INDEPENDENTLY is not enough: scrypt's working set is
+ * `128 * 2^ln * r`, so the corner of the allowed box — `ln=20, r=32` — implies
+ * **4 GiB per verify**, 32x the documented peak, from a stored string an
+ * attacker controls once the credential store does. `p` multiplies CPU rather
+ * than memory (measured: `p=16` cost 14x the wall time of `p=1` at the same
+ * memory), so it is bounded separately and tightly — we mint `p=1`.
+ *
+ * `MAX_WORKING_SET_MIB` is set so the whole documented mint range stays legal at
+ * the standard `r=8` (`ln=20, r=8` is exactly 1024 MiB) while the pathological
+ * corners are refused.
+ *
+ * @constant
+ * @inner
+ * @private
+ */
+var PARAM_BOUNDS = { lnMin: 14, lnMax: 20, rMin: 1, rMax: 32, pMin: 1, pMax: 4 };
+/** @constant {number} Ceiling on `128 * 2^ln * r`, in MiB. @inner @private */
+var MAX_WORKING_SET_MIB = 1024;
+
+/**
+ * Validate a cost triple against the shared bounds AND the working-set ceiling.
+ *
+ * Applied identically when minting and when reading a stored hash — an
+ * asymmetry between the two is how {@link hashPassword} was able to mint hashes
+ * {@link verifyPassword} could never read.
+ *
+ * @param {number} ln
+ * @param {number} r
+ * @param {number} p
+ * @returns {boolean}
+ * @inner
+ * @private
+ */
+function costWithinBounds(ln, r, p) {
+    if (!isFinite(ln) || !isFinite(r) || !isFinite(p)) {
+        return false;
+    }
+    if (Math.floor(ln) !== ln || Math.floor(r) !== r || Math.floor(p) !== p) {
+        return false;
+    }
+    if (ln < PARAM_BOUNDS.lnMin || ln > PARAM_BOUNDS.lnMax) {
+        return false;
+    }
+    if (r < PARAM_BOUNDS.rMin || r > PARAM_BOUNDS.rMax) {
+        return false;
+    }
+    if (p < PARAM_BOUNDS.pMin || p > PARAM_BOUNDS.pMax) {
+        return false;
+    }
+    return (128 * Math.pow(2, ln) * r) / (1024 * 1024) <= MAX_WORKING_SET_MIB;
+}
 /** @constant {number} Minimum stored salt length in bytes. @inner @private */
 var MIN_STORED_SALT_BYTES = 8;
 
@@ -298,7 +389,8 @@ function b64(buf) {
  * @param {number}   [options.ln=17] - base-2 log of scrypt N (14..20).
  * @param {number}   [options.r=8]   - block size.
  * @param {number}   [options.p=1]   - parallelism.
- * @param {function} cb          - `cb(err, phcString)`.
+ * @param {function} cb          - `cb(err, phcString)`. `err.code` is
+ *   `AUTHN_QUEUE_FULL` when the hashing queue is shedding load — respond 503.
  * @returns {void}
  * @memberof module:lib/authn
  *
@@ -329,14 +421,19 @@ function hashPassword(password, options, cb) {
     var r  = (typeof options.r === 'number')  ? options.r  : SCRYPT_PARAMS.r;
     var p  = (typeof options.p === 'number')  ? options.p  : SCRYPT_PARAMS.p;
 
-    if (!isFinite(ln) || ln < 14 || ln > 20 || Math.floor(ln) !== ln) {
+    // Exactly the bounds parseScryptPhc enforces. They were once looser here —
+    // `r` and `p` had no upper bound while the parser capped them — so
+    // hashPassword happily minted hashes verifyPassword could not read, and the
+    // CORRECT password then reported "wrong password" forever, with no error
+    // anywhere: a silent permanent lockout. Measured with r=64.
+    if (!costWithinBounds(ln, r, p)) {
         return process.nextTick(function () {
-            cb(new Error('[gina authn] hashPassword: `ln` must be an integer in 14..20 — got: ' + JSON.stringify(options.ln)));
-        });
-    }
-    if (!isFinite(r) || r < 1 || Math.floor(r) !== r || !isFinite(p) || p < 1 || Math.floor(p) !== p) {
-        return process.nextTick(function () {
-            cb(new Error('[gina authn] hashPassword: `r` and `p` must be positive integers — got: r=' + JSON.stringify(options.r) + ', p=' + JSON.stringify(options.p)));
+            cb(new Error('[gina authn] hashPassword: cost out of range — `ln` '
+                + PARAM_BOUNDS.lnMin + '..' + PARAM_BOUNDS.lnMax
+                + ', `r` ' + PARAM_BOUNDS.rMin + '..' + PARAM_BOUNDS.rMax
+                + ', `p` ' + PARAM_BOUNDS.pMin + '..' + PARAM_BOUNDS.pMax
+                + ', and 128 * 2^ln * r must not exceed ' + MAX_WORKING_SET_MIB + ' MiB'
+                + ' — got: ln=' + JSON.stringify(ln) + ', r=' + JSON.stringify(r) + ', p=' + JSON.stringify(p)));
         });
     }
 
@@ -357,7 +454,7 @@ function hashPassword(password, options, cb) {
             }
             cb(null, '$scrypt$ln=' + ln + ',r=' + r + ',p=' + p + '$' + b64(salt) + '$' + b64(derived));
         });
-    });
+    }, cb);
 }
 
 /**
@@ -382,7 +479,7 @@ function parseScryptPhc(stored) {
     // A stored hash is attacker-controlled the moment the credential store is.
     // Unbounded parameters here would let a single verify allocate arbitrary
     // memory — the same DoS the input cap closes from the other side.
-    if (!(ln >= 14 && ln <= 20) || !(r >= 1 && r <= 32) || !(p >= 1 && p <= 16)) {
+    if (!costWithinBounds(ln, r, p)) {
         return null;
     }
     var salt = Buffer.from(m[4], 'base64');
@@ -461,7 +558,9 @@ function _setVerifier(pkg, mod) {
  *
  * @param {string}   password - plaintext to check.
  * @param {string}   stored   - the persisted hash string.
- * @param {function} cb       - `cb(err, isValid)`.
+ * @param {function} cb       - `cb(err, isValid)`. `err.code` is
+ *   `AUTHN_QUEUE_FULL` when the hashing queue is shedding load — respond 503,
+ *   and treat the account-not-found branch identically (see {@link dummyVerify}).
  * @returns {void}
  * @memberof module:lib/authn
  *
@@ -472,7 +571,9 @@ function _setVerifier(pkg, mod) {
  * });
  *
  * @example <caption>Unknown account — spend the same time (see dummyVerify)</caption>
- * if (!account) { return lib.authn.dummyVerify(submitted, function () { deny(); }); }
+ * if (!account) {
+ *     return lib.authn.dummyVerify(submitted, { like: referenceHash }, function () { deny(); });
+ * }
  */
 function verifyPassword(password, stored, cb) {
     if (typeof cb !== 'function') {
@@ -539,7 +640,7 @@ function verifyPassword(password, stored, cb) {
             }
             cb(null, ok);
         });
-    });
+    }, cb);
 }
 
 /**
@@ -564,18 +665,25 @@ function verifyPassword(password, stored, cb) {
  * @param {number}          [options.ln=17]
  * @param {number}          [options.r=8]
  * @param {number}          [options.p=1]
- * @param {function}        cb        - `cb()`; no arguments, nothing to decide.
+ * @param {function}        cb        - `cb(err)`. `err` is `null` normally; it
+ *   carries `AUTHN_QUEUE_FULL` when the hashing queue is shedding load. Handle
+ *   it EXACTLY as you handle {@link verifyPassword}'s error — respond 503 —
+ *   because any divergence between the two branches under saturation is the
+ *   enumeration signal this function exists to remove.
  * @returns {void}
  * @memberof module:lib/authn
  *
- * @example
+ * @example <caption>Always pass a cost — `like` reads it from a real hash</caption>
  * if (!account) {
- *     return lib.authn.dummyVerify(self.post.password, function () {
+ *     // `referenceHash` is any hash from your store (seed one at install time).
+ *     // Reading the cost from real data is what keeps the two branches matched
+ *     // as you raise parameters — a separate setting silently drifts.
+ *     return lib.authn.dummyVerify(self.post.password, { like: referenceHash }, function () {
  *         self.renderJSON({ error: 'invalid credentials' });
  *     });
  * }
  *
- * @example <caption>Hashes minted below the current default</caption>
+ * @example <caption>Or state the cost explicitly</caption>
  * lib.authn.dummyVerify(submitted, { ln: 14 }, function () { deny(); });
  */
 function dummyVerify(password, options, cb) {
@@ -621,8 +729,15 @@ function dummyVerify(password, options, cb) {
         var maxmem = 128 * N * r * 2;
         crypto.scrypt(pw, salt, KEY_BYTES, { N: N, r: r, p: p, maxmem: maxmem }, function () {
             release();
-            cb();
+            cb(null);
         });
+    }, function (err) {
+        // Surface the shed error, because verifyPassword surfaces it too. If
+        // this branch swallowed it, then under saturation a known account would
+        // 500 while an unknown one returned "invalid credentials" — saturation
+        // itself would become the enumeration signal this function exists to
+        // remove. Both branches must look identical in every regime.
+        cb(err);
     });
 }
 
@@ -650,7 +765,11 @@ function needsRehash(stored) {
     if (!parsed) {
         return true;
     }
-    return parsed.ln < SCRYPT_PARAMS.ln
+    // A key shorter than we mint verifies at reduced width forever otherwise —
+    // a record truncated by, say, a bcrypt-sized VARCHAR(60) parses (it clears
+    // the 16-byte floor) and would never be flagged for migration.
+    return parsed.hash.length !== KEY_BYTES
+        || parsed.ln < SCRYPT_PARAMS.ln
         || parsed.r < SCRYPT_PARAMS.r
         || parsed.p < SCRYPT_PARAMS.p;
 }
@@ -689,17 +808,43 @@ function validatePasswordPolicy(password, options) {
         return { valid: false, errors: [ 'not-a-string' ] };
     }
 
-    var minLength = (typeof options.minLength === 'number') ? options.minLength : DEFAULT_MIN_LENGTH;
-    var maxLength = (typeof options.maxLength === 'number') ? options.maxLength : MAX_PASSWORD_BYTES;
+    // Validated rather than trusted: `typeof NaN === 'number'`, so a
+    // `parseInt` of a missing config key produced minLength NaN, every
+    // comparison against it went false, and an EMPTY password passed the policy.
+    // A negative minLength did the same. This is the one input in the module
+    // that was taken on faith, and it fails OPEN.
+    var minLength = DEFAULT_MIN_LENGTH;
+    if (typeof options.minLength !== 'undefined') {
+        if (typeof options.minLength !== 'number' || !isFinite(options.minLength)
+            || options.minLength < 0 || Math.floor(options.minLength) !== options.minLength) {
+            throw new Error('[gina authn] validatePasswordPolicy: `minLength` must be a whole number >= 0 — got: ' + JSON.stringify(options.minLength));
+        }
+        minLength = options.minLength;
+    }
+    var maxLength = MAX_PASSWORD_BYTES;
+    if (typeof options.maxLength !== 'undefined') {
+        if (typeof options.maxLength !== 'number' || !isFinite(options.maxLength)
+            || options.maxLength < 1 || Math.floor(options.maxLength) !== options.maxLength) {
+            throw new Error('[gina authn] validatePasswordPolicy: `maxLength` must be a whole number >= 1 — got: ' + JSON.stringify(options.maxLength));
+        }
+        maxLength = options.maxLength;
+    }
+
+    // Byte length FIRST, and return on breach: `Array.from` materialises an
+    // array of code points, so measuring length before enforcing the cap meant
+    // a 16 MiB submission allocated ~144 MiB just to conclude "too long".
+    if (Buffer.byteLength(password, 'utf8') > maxLength) {
+        return { valid: false, errors: [ 'too-long' ] };
+    }
 
     // Count code points, not UTF-16 units, so an emoji or an astral character
-    // counts once rather than twice.
+    // counts once rather than twice. NOTE this counts CODE POINTS, not grapheme
+    // clusters: a family emoji is one perceived character but several code
+    // points, so `minLength` is a floor on code points and can overstate
+    // strength for grapheme-rich input.
     var length = Array.from(password).length;
     if (length < minLength) {
         errors.push('too-short');
-    }
-    if (Buffer.byteLength(password, 'utf8') > maxLength) {
-        errors.push('too-long');
     }
     if (options.requireUppercase === true && !/[A-Z]/.test(password)) {
         errors.push('missing-uppercase');

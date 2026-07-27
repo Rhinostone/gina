@@ -177,7 +177,8 @@ describe('02 - hashPassword', function () {
     it('rejects an out-of-range cost parameter', function (t, done) {
         authn.hashPassword('a password long enough', { ln: 8 }, function (err) {
             assert.ok(err instanceof Error);
-            assert.match(err.message, /`ln` must be an integer in 14\.\.20/);
+            assert.match(err.message, /cost out of range/);
+            assert.match(err.message, /`ln` 14\.\.20/);
             done();
         });
     });
@@ -533,8 +534,12 @@ describe('07 - validatePasswordPolicy', function () {
 describe('08 - dummyVerify', function () {
 
     it('calls back with no arguments', function (t, done) {
-        authn.dummyVerify('anything', function () {
-            assert.equal(arguments.length, 0, 'there is nothing to decide — no verdict is exposed');
+        authn.dummyVerify('anything', function (err) {
+            // cb(err), symmetric with verifyPassword: the shed error MUST be
+            // visible here or saturation itself becomes the enumeration signal
+            // this function exists to remove. No verdict is ever exposed.
+            assert.equal(err, null);
+            assert.equal(arguments.length, 1, 'exactly the error slot — never a verdict');
             done();
         });
     });
@@ -646,8 +651,8 @@ describe('08b - dummyVerify cost matching (enumeration resistance)', function ()
     });
 
     it('still accepts the bare (password, cb) form', function (t, done) {
-        authn.dummyVerify('anything', function () {
-            assert.equal(arguments.length, 0);
+        authn.dummyVerify('anything', function (err) {
+            assert.equal(err, null);
             done();
         });
     });

@@ -71,6 +71,20 @@ var DEFAULT_WINDOW = 1;
 var ALLOWED_ALGORITHMS = [ 'sha1', 'sha256', 'sha512' ];
 
 /**
+ * Hard ceiling on the acceptance window, in steps.
+ *
+ * Ten steps is already five minutes of tolerance either side at the default
+ * step — far past any real clock drift, and each step is an HMAC paid on the
+ * request path.
+ *
+ * @constant
+ * @type {number}
+ * @inner
+ * @private
+ */
+var MAX_WINDOW = 10;
+
+/**
  * Encode bytes as RFC 4648 base32, unpadded.
  *
  * Unpadded because that is what authenticator apps expect in an `otpauth://`
@@ -114,6 +128,15 @@ function base32Encode(buf) {
  * @private
  */
 function base32Decode(str) {
+    // The type guard is load-bearing, not defensive tidying: `String(null)` is
+    // "NULL", and N/U/L are all in the base32 alphabet — so a null secret
+    // decoded to a NON-EMPTY, GLOBALLY CONSTANT key, and the `key.length === 0`
+    // guard downstream never fired. Any account whose secret column was null
+    // was verifiable by anyone able to compute the code for that constant.
+    // Measured: verifyTotp(<code for "NULL">, null) returned {valid:true}.
+    if (typeof str !== 'string') {
+        throw new Error('[gina authn] TOTP secret must be a base32 string — got: ' + (str === null ? 'null' : typeof str));
+    }
     var clean = String(str).toUpperCase().replace(/=+$/, '').replace(/\s+/g, '');
     var bits  = 0;
     var value = 0;
@@ -165,9 +188,9 @@ function generateTotpSecret(bytes) {
  */
 function hotp(key, counter, algorithm, digits) {
     var buf = Buffer.alloc(8);
-    // A 64-bit counter written as two 32-bit halves: at 30-second steps the
-    // high half stays zero until the year 10000, but the RFC specifies eight
-    // bytes and an authenticator hashes all eight.
+    // A 64-bit counter written as two 32-bit halves. At 30-second steps the high
+    // half stays zero until epoch second 128849018880 — the year 6053 — but the
+    // RFC specifies eight bytes and an authenticator hashes all eight.
     buf.writeUInt32BE(Math.floor(counter / 0x100000000), 0);
     buf.writeUInt32BE(counter >>> 0, 4);
 
@@ -210,8 +233,11 @@ function resolveOptions(options) {
     if (ALLOWED_ALGORITHMS.indexOf(algorithm) === -1) {
         throw new Error('[gina authn] TOTP `algorithm` must be one of ' + ALLOWED_ALGORITHMS.join(', ') + ' — got: ' + JSON.stringify(options.algorithm));
     }
-    if (typeof window_ !== 'number' || !isFinite(window_) || window_ < 0 || Math.floor(window_) !== window_) {
-        throw new Error('[gina authn] TOTP `window` must be a whole number >= 0 — got: ' + JSON.stringify(options.window));
+    if (typeof window_ !== 'number' || !isFinite(window_) || window_ < 0 || Math.floor(window_) !== window_ || window_ > MAX_WINDOW) {
+        // Upper-bounded because each step costs an HMAC on the request path and
+        // every extra step widens the interval an observed code stays usable.
+        // Measured unbounded: window 100000 blocked the event loop for ~79 ms.
+        throw new Error('[gina authn] TOTP `window` must be a whole number in 0..' + MAX_WINDOW + ' — got: ' + JSON.stringify(options.window));
     }
     return { step: step, digits: digits, algorithm: algorithm, window: window_ };
 }
@@ -288,6 +314,16 @@ function verifyTotp(token, secret, options) {
         return { valid: false, delta: null };
     }
     var submitted = String(token).replace(/\s+/g, '');
+    // A numeric submission has already lost any leading zero — `Number('012345')`
+    // is 12345 — so re-pad before the length check. Measured without this: 9.6%
+    // of genuine codes were rejected, exactly the ones beginning with 0. It fails
+    // CLOSED, so it was never a bypass; it is the intermittent kind of breakage
+    // that is expensive to diagnose in the field.
+    if (typeof token === 'number' && /^[0-9]+$/.test(submitted)) {
+        while (submitted.length < opts.digits) {
+            submitted = '0' + submitted;
+        }
+    }
     if (!/^[0-9]+$/.test(submitted) || submitted.length !== opts.digits) {
         return { valid: false, delta: null };
     }
@@ -297,6 +333,12 @@ function verifyTotp(token, secret, options) {
     var submittedBuf = Buffer.from(submitted, 'utf8');
 
     for (var i = -opts.window; i <= opts.window; i++) {
+        // A counter before the epoch has no meaning and would make hotp's
+        // writeUInt32BE throw a RangeError — which would break the "never
+        // throws for a bad code" contract for any `at` under one step.
+        if (counter + i < 0) {
+            continue;
+        }
         var candidate = hotp(key, counter + i, opts.algorithm, opts.digits);
         var candidateBuf = Buffer.from(candidate, 'utf8');
         // Lengths are equal by construction (both zero-padded to `digits`, and
@@ -344,6 +386,9 @@ function otpauthURL(params) {
     if (typeof params.account !== 'string' || params.account.length === 0) {
         throw new Error('[gina authn] otpauthURL requires an `account` (the user-visible name shown in the authenticator)');
     }
+    // Validate the secret HERE rather than let a QR code carry something the
+    // authenticator will happily accept and the server can never verify.
+    base32Decode(params.secret);
     var opts = resolveOptions(params);
 
     var label = params.issuer

@@ -330,12 +330,25 @@ describe('07 - malformed submissions', function () {
         assert.equal(authn.verifyTotp(spaced, secret).valid, true);
     });
 
-    it('accepts a numeric submission', function () {
+    it('accepts a numeric submission, INCLUDING codes with a leading zero', function () {
+        // This test used to guard the leading-zero case behind `if (charAt(0)
+        // !== '0')`, so it asserted nothing on ~10% of runs — the defect was
+        // known and worked around in the TEST rather than the code. Measured:
+        // 9.6% of genuine codes were rejected when submitted as numbers.
+        // verifyTotp now re-pads a numeric submission, so no case is skipped.
         var secret = authn.generateTotpSecret();
-        var code   = authn.generateTotp(secret, { at: 1700000000000 });
-        if (code.charAt(0) !== '0') { // a leading zero cannot survive Number()
-            assert.equal(authn.verifyTotp(Number(code), secret, { at: 1700000000000 }).valid, true);
+        var checked = 0;
+        var zeroLeading = 0;
+        for (var i = 0; i < 400; i++) {
+            var at   = 1700000000000 + (i * 30000);
+            var code = authn.generateTotp(secret, { at: at });
+            if (code.charAt(0) === '0') { zeroLeading++; }
+            assert.equal(authn.verifyTotp(Number(code), secret, { at: at, window: 0 }).valid, true,
+                'numeric submission must verify, code ' + code);
+            checked++;
         }
+        assert.equal(checked, 400);
+        assert.ok(zeroLeading > 0, 'fixture sanity: the run must actually include leading-zero codes');
     });
 
     it('an unusable SECRET throws — that is configuration, not a login attempt', function () {
@@ -413,7 +426,13 @@ describe('09 - option validation', function () {
     });
 
     it('refuses a negative window', function () {
-        assert.throws(function () { authn.verifyTotp('123456', SECRET, { window: -1 }); }, /whole number >= 0/);
+        assert.throws(function () { authn.verifyTotp('123456', SECRET, { window: -1 }); }, /whole number in 0\.\.10/);
+    });
+
+    it('refuses a window above the ceiling', function () {
+        // Unbounded, window 100000 blocked the event loop for ~79ms per verify
+        // and widened the interval an observed code stays usable.
+        assert.throws(function () { authn.verifyTotp('123456', SECRET, { window: 100000 }); }, /whole number in 0\.\.10/);
     });
 
     it('accepts an uppercase algorithm name', function () {

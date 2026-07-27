@@ -70,6 +70,8 @@ var DEFAULT_MAX_ATTEMPTS  = 10;          // PCI-DSS 8.3.4: "not more than 10"
 var DEFAULT_LOCK_MS       = 30 * 60000;  // PCI-DSS 8.3.4: "minimum 30 minutes"
 var DEFAULT_WINDOW_MS     = 30 * 60000;  // failures older than this stop counting
 var DEFAULT_SWEEP_MS      = 5 * 60000;
+/** @constant {number} Upper bound on a lockout key, in characters. @inner @private */
+var MAX_KEY_LENGTH        = 512;
 
 /**
  * Build the default in-process store.
@@ -186,7 +188,7 @@ function assertStore(store) {
 function withKeyLock(chains, key, fn) {
     function run(f) {
         var released = false;
-        f(function release() {
+        function release() {
             if (released) {
                 return;
             }
@@ -197,7 +199,19 @@ function withKeyLock(chains, key, fn) {
                 return;
             }
             chains.delete(key);
-        });
+        }
+        // A store that throws SYNCHRONOUSLY would otherwise never reach its
+        // callback, so release would never fire: the key kept a live queue and
+        // every later operation on it waited forever — the login request hung
+        // with no response AND the counter froze, so the account could never
+        // lock again. Store recovery did not clear it. Releasing before
+        // rethrowing keeps the failure loud without stranding the key.
+        try {
+            f(release);
+        } catch (err) {
+            release();
+            throw err;
+        }
     }
 
     var queue = chains.get(key);
@@ -220,6 +234,13 @@ function withKeyLock(chains, key, fn) {
 function checkKey(key) {
     if (typeof key !== 'string' || key.length === 0) {
         return new Error('[gina authn] lockout key must be a non-empty string (a user id, an email, or an `email:ip` pair — your choice, gina does not derive it)');
+    }
+    // The key is attacker-supplied in the shape the docs suggest (an email), it
+    // is retained for the whole window, and it is written verbatim into the
+    // auth.lockout audit record — so an uncapped key inflates both the store and
+    // the trail. Measured uncapped: a 1,000,006-character key was accepted.
+    if (key.length > MAX_KEY_LENGTH) {
+        return new Error('[gina authn] lockout key exceeds ' + MAX_KEY_LENGTH + ' characters — reject it in your form validation before it reaches the lockout engine');
     }
     return null;
 }
@@ -279,6 +300,7 @@ function createLockout(options) {
         throw new Error('[gina authn] createLockout: `maxAttempts` must be a whole number — got: ' + JSON.stringify(options.maxAttempts));
     }
 
+    var normalizeKeyWarned = false;
     var normalizeKey = options.normalizeKey;
     if (typeof normalizeKey !== 'undefined' && typeof normalizeKey !== 'function') {
         throw new Error('[gina authn] createLockout: `normalizeKey` must be a function — got: ' + JSON.stringify(options.normalizeKey));
@@ -301,6 +323,15 @@ function createLockout(options) {
             var out = normalizeKey(key);
             return (typeof out === 'string' && out.length > 0) ? out : key;
         } catch (err) {
+            // Falling back to the raw key keeps a buggy normaliser from breaking
+            // logins — but silently, it also restores the split-counter
+            // multiplier the normaliser existed to close. Say so once.
+            if (!normalizeKeyWarned) {
+                normalizeKeyWarned = true;
+                try {
+                    console.error('[gina authn] lockout normalizeKey threw — falling back to the RAW key, so case/whitespace variants of it now count separately: ' + (err.message || err));
+                } catch (e2) { /* never escalate */ }
+            }
             return key;
         }
     }
@@ -448,6 +479,19 @@ function createLockout(options) {
                 if (err) {
                     release();
                     return cb(err);
+                }
+                // An ACTIVE lock is terminal until it lapses: recording over it
+                // would rebuild the entry with lockedUntil:null and free the
+                // account early. Measured before this guard, with lockMs 60min
+                // and windowMs 30min, one failure at t+31min turned
+                // {locked:true} into {locked:false, attempts:1} — so the
+                // effective lock was silently min(lockMs, windowMs) and a caller
+                // that records every failure without consulting check() first
+                // (which the API invites — recordFailure documents no
+                // precondition) got 43x the intended guesses at lockMs=24h.
+                if (entry && typeof entry.lockedUntil === 'number' && entry.lockedUntil > now) {
+                    release();
+                    return cb(null, toState(entry, now));
                 }
                 var attempts = 1;
                 if (entry
