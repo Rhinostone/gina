@@ -20,11 +20,13 @@
  *
  *   1. `validatePasswordPolicy(pw)` — at registration / password change.
  *   2. `hashPassword(pw)`           — store the returned PHC string.
- *   3. `verifyPassword(pw, stored)` — at login.
- *   4. `req.login(user, done)`      — core/router.js rotates the session id and
+ *   3. `createLockout()`            — refuse an account under attack BEFORE
+ *                                     spending a KDF on it.
+ *   4. `verifyPassword(pw, stored)` — at login.
+ *   5. `req.login(user, done)`      — core/router.js rotates the session id and
  *                                     binds `req.session.user` (#COMPLY4).
  *
- * Step 4 is where authentication ENDS and authorization begins: `lib/authz-gate`
+ * Step 5 is where authentication ENDS and authorization begins: `lib/authz-gate`
  * reads `req.session.user`, so nothing here ever touches a session.
  *
  * **Encoding.** Hashes are PHC strings — `$scrypt$ln=17,r=8,p=1$<salt>$<hash>`
@@ -64,7 +66,8 @@
  * });
  */
 
-var crypto = require('crypto');
+var crypto  = require('crypto');
+var lockout = require('./lockout');
 
 /**
  * Current scrypt cost parameters.
@@ -634,7 +637,11 @@ module.exports = {
     needsRehash             : needsRehash,
     validatePasswordPolicy  : validatePasswordPolicy,
     setMaxConcurrentHashes  : setMaxConcurrentHashes,
+    createLockout           : lockout.createLockout,
     // test seams — may change without notice
+    _createMemoryStore      : lockout._createMemoryStore,
+    _DEFAULT_MAX_ATTEMPTS   : lockout._DEFAULT_MAX_ATTEMPTS,
+    _DEFAULT_LOCK_MS        : lockout._DEFAULT_LOCK_MS,
     _parseScryptPhc         : parseScryptPhc,
     _setVerifier            : _setVerifier,
     _SCRYPT_PARAMS          : SCRYPT_PARAMS,
