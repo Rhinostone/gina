@@ -389,6 +389,23 @@ function Router(env, scope) {
             ||
             typeof(request.login) == 'undefined'
         ) {
+            /**
+             * Login shim — authenticates the request AND, on the gina-native
+             * branch, rotates the session id before binding the user
+             * (session-fixation defense, #COMPLY4).
+             *
+             * Passport bundles never see this shim in normal operation
+             * (passport.initialize() installs its own req.login first); the
+             * Passport-flavored branch serves the HTTP2 case where
+             * `request._passport` exists without the request extensions.
+             *
+             * @param {object}   user      - authenticated principal; bound at
+             *                               `request.session.user` (what the authorization gate reads)
+             * @param {object}   [options] - `{session: false}` binds `request.user` only
+             *                               (transient — no session work, no rotation)
+             * @param {function} done      - REQUIRED callback `done(err)` on the session paths;
+             *                               fires after rotation + bind + persist complete
+             */
             request.login =
             request.logIn = function(user, options, done) {
                 if (typeof options == 'function') {
@@ -412,7 +429,52 @@ function Router(env, scope) {
 
 
                 if (!this._passport) {
-                    throw new Error('passport.initialize() middleware not in use');
+                    // #COMPLY4 — gina-native branch. This path previously ended
+                    // in a hard passport-required throw, so the framework's own
+                    // session pattern (authz reads `req.session.user`) had no
+                    // working login here. Now: rotate the session id BEFORE
+                    // binding the user (session-fixation defense), bind at
+                    // `session.user`, stamp the absolute-timeout anchor,
+                    // persist, then report. Same degrade-gracefully shape as
+                    // the #B164 logout shim below — typeof-gated, the session
+                    // provider's capabilities decide.
+                    if (typeof done != 'function') {
+                        throw new Error('req#login requires a callback function');
+                    }
+                    var req = this;
+                    if ( !req.session || typeof(req.session) != 'object' ) {
+                        req[property] = null;
+                        return done(new Error('req#login requires a session — register the Session plugin (or express-session) before routing'));
+                    }
+                    if ( typeof(req.session.regenerate) == 'function' ) {
+                        req.session.regenerate(function onLoginSessionRegenerated(err) {
+                            if (err) {
+                                req[property] = null;
+                                return done(err);
+                            }
+                            req.session.user = user;
+                            // absolute-timeout anchor — the clock starts at login
+                            req.session._ginaCreatedAt = Date.now();
+                            if ( typeof(req.session.save) == 'function' ) {
+                                return req.session.save(function onLoginSessionSaved(saveErr) {
+                                    done(saveErr || null);
+                                });
+                            }
+                            done(null);
+                        });
+                        return;
+                    }
+                    // no regenerate() on this session provider — bind without
+                    // rotation, and say so: the fixation defense is unavailable
+                    console.warn('[ ROUTER ] login(): session provider exposes no regenerate() — user bound WITHOUT session-id rotation');
+                    req.session.user = user;
+                    req.session._ginaCreatedAt = Date.now();
+                    if ( typeof(req.session.save) == 'function' ) {
+                        return req.session.save(function onLoginSessionSavedNoRotation(saveErr) {
+                            done(saveErr || null);
+                        });
+                    }
+                    return done(null);
                 }
                 if (typeof done != 'function') {
                     throw new Error('req#login requires a callback function');
