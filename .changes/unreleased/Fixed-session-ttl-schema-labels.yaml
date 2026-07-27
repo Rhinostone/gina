@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Corrected the published `connectors.json` JSON-schema declarations for the session-store `ttl` and `prefix` keys. Both were labelled "Redis only" while `ttl` is in fact read by the Redis, SQLite, MongoDB and ScyllaDB stores and `prefix` by Redis and SQLite, so editors steered you away from keys that do work. The `ttl` entry also still advertised a default of 86400, which stopped being true when an unset ttl began deferring to the cookie''s `maxAge`; that stale default is gone and both descriptions now name the stores that read them, plus the Couchbase stores which take these as constructor options instead.'
+time: 2026-07-27T10:06:54+01:00

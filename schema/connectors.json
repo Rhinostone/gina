@@ -113,13 +113,12 @@
         },
         "prefix": {
           "type": "string",
-          "description": "Redis only. Key prefix for session store entries. Defaults to \"sess:\".",
+          "description": "Redis and SQLite session stores. Key prefix for session store entries. Defaults to \"sess:\". The Couchbase stores read `prefix` as a constructor option only, never from this file.",
           "default": "sess:"
         },
         "ttl": {
           "type": "number",
-          "description": "Redis only. Default TTL in seconds for session entries. Defaults to 86400.",
-          "default": 86400
+          "description": "Redis, SQLite, MongoDB and ScyllaDB session stores. Default TTL in seconds for session entries. When omitted, the session record follows the cookie's `maxAge`, falling back to 86400 only when the cookie has none. The Couchbase stores read `ttl` as a constructor option only, never from this file."
         },
         "cluster": {
           "type": "array",

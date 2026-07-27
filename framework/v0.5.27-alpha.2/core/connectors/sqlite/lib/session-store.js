@@ -244,14 +244,25 @@ module.exports = function(session, bundle) {
     /**
      * Refresh the expiry timestamp for an existing session without modifying its data.
      *
+     * A non-positive resolved ttl is a no-op: express-session's `cookie.maxAge`
+     * is a decaying remainder, so it truncates to zero in the session's final
+     * second and turns negative once expired. Stamping `now + ttl` from such a
+     * value would write an already-past expiry — expiring the very session the
+     * caller asked to refresh (#B166). Matches the mongodb / scylladb guard,
+     * and redis's inverted `if (ttl > 0)` spelling.
+     *
      * @param {string}   sid  - Session ID (without prefix).
      * @param {object}   sess - Session data (used to read `cookie.maxAge`).
-     * @param {function} fn   - Callback `fn(err)`.
+     * @param {function} fn   - Callback `fn(err)`. Invoked with `null` and no
+     *                          write performed when the resolved ttl is <= 0.
      */
     SqliteStore.prototype.touch = function(sid, sess, fn) {
         if ('function' !== typeof fn) fn = noop;
         var maxAge  = sess.cookie && sess.cookie.maxAge;
         var ttl     = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
+        // #B166 — never stamp a past expiry; siblings guard identically.
+        if (ttl <= 0) return fn(null);
+
         var expires = Math.floor(Date.now() / 1000) + ~~ttl;
         try {
             this._stmtTouch.run(expires, this.prefix + sid);
