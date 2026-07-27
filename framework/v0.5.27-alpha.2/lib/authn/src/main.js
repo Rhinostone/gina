@@ -500,8 +500,22 @@ function verifyPassword(password, stored, cb) {
  * one is a user-enumeration oracle, and it is measurable across a network. Call
  * this on the account-not-found branch so both branches cost the same.
  *
- * @param {string}   password - the submitted plaintext.
- * @param {function} cb       - `cb()`; no arguments, nothing to decide.
+ * **The cost must match the cost your stored hashes actually use**, and by
+ * default that is the shipped parameters. If your hashes were minted cheaper —
+ * a lowered `ln`, or legacy hashes not yet migrated by {@link needsRehash} —
+ * pass the same parameters, or pass `like: <a stored hash>` and the cost is read
+ * from it. Getting this wrong does not merely fail to close the oracle, it
+ * INVERTS it: measured at defaults against `ln=14` hashes, the unknown-account
+ * branch ran 13.9x SLOWER than the known-account one, which is a louder signal
+ * than doing nothing.
+ *
+ * @param {string}          password  - the submitted plaintext.
+ * @param {object|function} [options] - cost overrides, or the callback.
+ * @param {string}          [options.like] - a stored hash to copy the cost from (wins over ln/r/p).
+ * @param {number}          [options.ln=17]
+ * @param {number}          [options.r=8]
+ * @param {number}          [options.p=1]
+ * @param {function}        cb        - `cb()`; no arguments, nothing to decide.
  * @returns {void}
  * @memberof module:lib/authn
  *
@@ -511,19 +525,52 @@ function verifyPassword(password, stored, cb) {
  *         self.renderJSON({ error: 'invalid credentials' });
  *     });
  * }
+ *
+ * @example <caption>Hashes minted below the current default</caption>
+ * lib.authn.dummyVerify(submitted, { ln: 14 }, function () { deny(); });
  */
-function dummyVerify(password, cb) {
-    if (typeof cb !== 'function') {
-        throw new Error('[gina authn] dummyVerify(password, cb) requires a callback function');
+function dummyVerify(password, options, cb) {
+    if (typeof options === 'function') {
+        cb = options;
+        options = {};
     }
+    if (typeof cb !== 'function') {
+        throw new Error('[gina authn] dummyVerify(password[, options], cb) requires a callback function');
+    }
+    options = options || {};
+
+    var ln = SCRYPT_PARAMS.ln;
+    var r  = SCRYPT_PARAMS.r;
+    var p  = SCRYPT_PARAMS.p;
+
+    // `like` copies the cost off a real stored hash — the most reliable way to
+    // stay matched, since it needs no separate configuration to keep in sync.
+    if (typeof options.like === 'string') {
+        var ref = parseScryptPhc(options.like);
+        if (ref) {
+            ln = ref.ln;
+            r  = ref.r;
+            p  = ref.p;
+        }
+    } else {
+        if (typeof options.ln === 'number') { ln = options.ln; }
+        if (typeof options.r === 'number')  { r  = options.r; }
+        if (typeof options.p === 'number')  { p  = options.p; }
+    }
+    // Silently clamp rather than throw: this runs on a failed-login path, and an
+    // exception there would turn a mistuned parameter into an outage.
+    if (!isFinite(ln) || ln < 14 || ln > 20) { ln = SCRYPT_PARAMS.ln; }
+    if (!isFinite(r) || r < 1 || r > 32)     { r  = SCRYPT_PARAMS.r; }
+    if (!isFinite(p) || p < 1 || p > 16)     { p  = SCRYPT_PARAMS.p; }
+
     var pw = (typeof password === 'string' && password.length > 0 && Buffer.byteLength(password, 'utf8') <= MAX_PASSWORD_BYTES)
         ? password
         : 'x';
     var salt = crypto.randomBytes(SALT_BYTES);
-    var N    = Math.pow(2, SCRYPT_PARAMS.ln);
+    var N    = Math.pow(2, ln);
     withSlot(function (release) {
-        var maxmem = 128 * N * SCRYPT_PARAMS.r * 2;
-        crypto.scrypt(pw, salt, KEY_BYTES, { N: N, r: SCRYPT_PARAMS.r, p: SCRYPT_PARAMS.p, maxmem: maxmem }, function () {
+        var maxmem = 128 * N * r * 2;
+        crypto.scrypt(pw, salt, KEY_BYTES, { N: N, r: r, p: p, maxmem: maxmem }, function () {
             release();
             cb();
         });

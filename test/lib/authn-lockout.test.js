@@ -287,6 +287,125 @@ describe('04 - expiry (mock timers)', function () {
     });
 });
 
+describe('04b - concurrency: the counter update is serialized per key', function () {
+
+    it('records EVERY failure when they arrive concurrently', function (t, done) {
+        // Regression: the read-modify-write spans an async store call, so
+        // without a per-key lock N concurrent failures all read the same entry
+        // and all write `attempts = 1` — measured 20 -> 1, account never locked.
+        // An attacker only had to send attempts in parallel.
+        var lo = makeLockout({ maxAttempts: 5, lockMs: 60000 });
+        var N = 20;
+        var seen = 0;
+        for (var i = 0; i < N; i++) {
+            lo.recordFailure('victim@example.com', function () {
+                if (++seen === N) {
+                    lo.check('victim@example.com', function (err, state) {
+                        assert.equal(state.attempts, N, 'every concurrent failure must be counted');
+                        assert.equal(state.locked, true, 'and the threshold must still lock');
+                        done();
+                    });
+                }
+            });
+        }
+    });
+
+    it('locks at exactly the threshold under concurrency', function (t, done) {
+        var lo = makeLockout({ maxAttempts: 3, lockMs: 60000 });
+        var seen = 0;
+        for (var i = 0; i < 3; i++) {
+            lo.recordFailure('a@example.com', function () {
+                if (++seen === 3) {
+                    lo.check('a@example.com', function (err, state) {
+                        assert.equal(state.attempts, 3);
+                        assert.equal(state.locked, true);
+                        done();
+                    });
+                }
+            });
+        }
+    });
+
+    it('does NOT serialize distinct keys against each other', function (t, done) {
+        // One account under attack must not delay or block another.
+        var lo = makeLockout({ maxAttempts: 3, lockMs: 60000 });
+        var seen = 0;
+        [ 'a@example.com', 'b@example.com' ].forEach(function (k) {
+            for (var i = 0; i < 3; i++) {
+                lo.recordFailure(k, function () {
+                    if (++seen === 6) {
+                        lo.check('a@example.com', function (e1, sa) {
+                            lo.check('b@example.com', function (e2, sb) {
+                                assert.equal(sa.locked, true, 'a must lock');
+                                assert.equal(sb.locked, true, 'b must lock independently');
+                                done();
+                            });
+                        });
+                    }
+                });
+            }
+        });
+    });
+
+    it('a concurrent success cannot be resurrected by an in-flight failure', function (t, done) {
+        var lo = makeLockout({ maxAttempts: 5, lockMs: 60000 });
+        lo.recordFailure('a@example.com', function () {
+            lo.recordFailure('a@example.com', function () {
+                // Issue the clear and another failure in the same tick.
+                var left = 2;
+                function tick() { if (--left === 0) {
+                    lo.check('a@example.com', function (err, state) {
+                        // The delete is serialized, so the final state reflects
+                        // the LAST operation rather than a torn mix.
+                        assert.ok(state.attempts <= 1, 'a serialized clear must not leave a stale count: ' + state.attempts);
+                        done();
+                    });
+                } }
+                lo.recordSuccess('a@example.com', tick);
+                lo.recordFailure('a@example.com', tick);
+            });
+        });
+    });
+
+    it('the queue drains — it holds no memory between bursts', function (t, done) {
+        var lo = makeLockout({ maxAttempts: 100, lockMs: 60000 });
+        var seen = 0;
+        for (var i = 0; i < 10; i++) {
+            lo.recordFailure('a@example.com', function () {
+                if (++seen === 10) {
+                    // Give the release chain a tick to unwind, then assert the
+                    // per-key queue map is empty again.
+                    setImmediate(function () {
+                        assert.equal(lo._chains.size, 0, 'per-key queues must drain to nothing');
+                        done();
+                    });
+                }
+            });
+        }
+    });
+
+    it('a store error releases the lock rather than stranding the key', function (t, done) {
+        var fail = true;
+        var lo = makeLockout({
+            store: {
+                get: function (k, cb) { process.nextTick(function () { cb(fail ? new Error('down') : null, null); }); },
+                set: function (k, v, cb) { process.nextTick(function () { cb(null); }); },
+                del: function (k, cb) { process.nextTick(function () { cb(null); }); }
+            }
+        });
+        lo.recordFailure('a@example.com', function (err) {
+            assert.ok(err instanceof Error, 'the read error surfaces');
+            fail = false;
+            // If the failed operation had not released, this would hang forever.
+            lo.recordFailure('a@example.com', function (err2, state) {
+                assert.equal(err2, null, 'the key must not be stranded by the earlier error');
+                assert.equal(state.attempts, 1);
+                done();
+            });
+        });
+    });
+});
+
 describe('05 - the store contract', function () {
 
     /** A minimal conforming store that records what it was asked to do. */

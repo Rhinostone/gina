@@ -147,6 +147,52 @@ function assertStore(store) {
 }
 
 /**
+ * Serialize operations on one key.
+ *
+ * The counter update is a read-modify-write across an asynchronous store call,
+ * and that is not atomic: without this, N failures arriving in the same tick all
+ * read the same entry, all compute `attempts = 1`, and all write it — so an
+ * attacker who sends attempts CONCURRENTLY rather than sequentially never
+ * crosses the threshold. Measured before this guard existed: 20 concurrent
+ * failures against a threshold of 5 recorded 1 attempt and did not lock.
+ *
+ * Queued FIFO per key, so one account under attack cannot delay another. The
+ * queue is per-key and drains to nothing, so it holds no memory between bursts.
+ *
+ * @param {Map}      chains - the engine's per-key queue map.
+ * @param {string}   key
+ * @param {function} fn     - receives `release`, must call it exactly once.
+ * @returns {void}
+ * @inner
+ * @private
+ */
+function withKeyLock(chains, key, fn) {
+    function run(f) {
+        var released = false;
+        f(function release() {
+            if (released) {
+                return;
+            }
+            released = true;
+            var q = chains.get(key);
+            if (q && q.length > 0) {
+                run(q.shift());
+                return;
+            }
+            chains.delete(key);
+        });
+    }
+
+    var queue = chains.get(key);
+    if (queue) {
+        queue.push(fn);
+        return;
+    }
+    chains.set(key, []);
+    run(fn);
+}
+
+/**
  * Reject a key that cannot index a counter.
  *
  * @param {*} key
@@ -216,6 +262,22 @@ function createLockout(options) {
     } else {
         store = createMemoryStore(sweepMs);
     }
+
+    /**
+     * Per-key operation queues — see {@link withKeyLock}.
+     *
+     * In-process only. With a SHARED store across replicas each process
+     * serializes its own operations, so concurrent failures can still be lost
+     * BETWEEN replicas: the ceiling degrades to roughly `maxAttempts` per
+     * replica, the same bound the memory store already carries. A store whose
+     * backend offers an atomic increment closes that too; the contract does not
+     * require one, so this is documented rather than assumed away.
+     *
+     * @type {Map<string, Array<function>>}
+     * @inner
+     * @private
+     */
+    var chains = new Map();
 
     /**
      * Project a stored entry into the caller-facing state.
@@ -330,9 +392,11 @@ function createLockout(options) {
             if (keyErr) {
                 return process.nextTick(function () { cb(keyErr); });
             }
+            withKeyLock(chains, key, function (release) {
             var now = Date.now();
             store.get(key, function (err, entry) {
                 if (err) {
+                    release();
                     return cb(err);
                 }
                 var attempts = 1;
@@ -360,6 +424,10 @@ function createLockout(options) {
                 }
 
                 store.set(key, fresh, function (setErr) {
+                    // Release BEFORE the callback: the next queued attempt must
+                    // not wait on consumer code, and a consumer that throws must
+                    // not strand the key's queue forever.
+                    release();
                     if (setErr) {
                         return cb(setErr);
                     }
@@ -368,6 +436,7 @@ function createLockout(options) {
                     }
                     cb(null, toState(fresh, now));
                 });
+            });
             });
         },
 
@@ -386,7 +455,15 @@ function createLockout(options) {
             if (keyErr) {
                 return process.nextTick(function () { cb(keyErr); });
             }
-            store.del(key, cb);
+            // Serialized with recordFailure: a delete that lands between a
+            // concurrent failure's read and its write would otherwise be
+            // resurrected by that write.
+            withKeyLock(chains, key, function (release) {
+                store.del(key, function (err) {
+                    release();
+                    cb(err);
+                });
+            });
         },
 
         /**
@@ -405,7 +482,12 @@ function createLockout(options) {
             if (keyErr) {
                 return process.nextTick(function () { cb(keyErr); });
             }
-            store.del(key, cb);
+            withKeyLock(chains, key, function (release) {
+                store.del(key, function (err) {
+                    release();
+                    cb(err);
+                });
+            });
         },
 
         /**
@@ -422,6 +504,8 @@ function createLockout(options) {
 
         /** @private test seam */
         _store: store,
+        /** @private test seam — the per-key queues; must drain to empty. */
+        _chains: chains,
         /** @private test seam */
         _config: { maxAttempts: maxAttempts, lockMs: lockMs, windowMs: windowMs }
     };

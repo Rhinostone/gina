@@ -516,6 +516,63 @@ describe('08 - dummyVerify', function () {
     });
 });
 
+describe('08b - dummyVerify cost matching (enumeration resistance)', function () {
+
+    it('copies the cost from a reference hash via `like`', function (t, done) {
+        // Regression: dummyVerify always ran at the SHIPPED default while a real
+        // verify runs at the STORED hash's cost. Measured against ln=14 hashes,
+        // the unknown-account branch was 13.9x SLOWER than the known-account one
+        // — an INVERTED enumeration oracle, louder than shipping no dummy.
+        authn.hashPassword('a real password here', { ln: 14 }, function (err, stored) {
+            var t0 = process.hrtime.bigint();
+            authn.verifyPassword('wrong password here', stored, function () {
+                var realMs = Number(process.hrtime.bigint() - t0) / 1e6;
+                var t1 = process.hrtime.bigint();
+                authn.dummyVerify('wrong password here', { like: stored }, function () {
+                    var dummyMs = Number(process.hrtime.bigint() - t1) / 1e6;
+                    var ratio = dummyMs / realMs;
+                    // Generous bound: this is a wall-clock assertion on shared CI,
+                    // and the defect it guards was an order of magnitude.
+                    assert.ok(ratio > 0.25 && ratio < 4,
+                        'dummyVerify must be time-comparable when told the cost — ratio was ' + ratio.toFixed(2) + 'x');
+                    done();
+                });
+            });
+        });
+    });
+
+    it('accepts explicit cost parameters', function (t, done) {
+        authn.hashPassword('a real password here', { ln: 14 }, function (err, stored) {
+            var t0 = process.hrtime.bigint();
+            authn.verifyPassword('wrong password here', stored, function () {
+                var realMs = Number(process.hrtime.bigint() - t0) / 1e6;
+                var t1 = process.hrtime.bigint();
+                authn.dummyVerify('wrong password here', { ln: 14 }, function () {
+                    var ratio = (Number(process.hrtime.bigint() - t1) / 1e6) / realMs;
+                    assert.ok(ratio > 0.25 && ratio < 4, 'explicit ln must match — ratio ' + ratio.toFixed(2) + 'x');
+                    done();
+                });
+            });
+        });
+    });
+
+    it('clamps a nonsense cost instead of throwing on the failed-login path', function (t, done) {
+        // An exception here would turn a mistuned parameter into an outage.
+        authn.dummyVerify('pw', { ln: 99 }, function () {
+            authn.dummyVerify('pw', { like: 'not-a-hash' }, function () {
+                done();
+            });
+        });
+    });
+
+    it('still accepts the bare (password, cb) form', function (t, done) {
+        authn.dummyVerify('anything', function () {
+            assert.equal(arguments.length, 0);
+            done();
+        });
+    });
+});
+
 describe('09 - scrypt concurrency gauge', function () {
 
     it('bounds in-flight work and drains the queue', function (t, done) {
