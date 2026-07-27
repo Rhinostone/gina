@@ -580,3 +580,181 @@ describe('08 - session-store v3/v4: idle-check removed, ISO stamps (#B165)', fun
     });
 
 });
+
+
+// ─── 09 — constructor requires options.db; the self-connect branch is gone (#B167) ──
+//
+// The former no-`db` fallback called `cluster.openBucket()` — an SDK v2 API
+// that does not exist on the supported v3/v4 SDKs — so reaching it always
+// threw at bundle init. The constructor now requires `options.db` (the open
+// bucket the model layer created) and fails fast with an actionable error.
+//
+// Negative pins run on comment-stripped source AND deliberately avoid the
+// removed API's name: the new JSDoc and the new error literal both NAME it
+// to explain the removal (the own-comment trap), so absence is asserted on
+// code-unique forms only (`connectOptions`, the Cluster construction, the
+// option plumbing) — tokens no comment or string in the new file carries.
+
+describe('09 - session-store v3/v4: constructor requires options.db (#B167)', function () {
+
+    /**
+     * Compile the CouchbaseStore constructor straight out of the shipped source.
+     *
+     * Same rationale as §07's `extractMethod` — the store cannot be `require`d
+     * in a test — but the constructor closes over different module vars
+     * (`Store`, `bundle`), so it gets its own injector rather than widening
+     * the §07 helper.
+     *
+     * @param   {string}   src - full file source.
+     * @returns {function}       the compiled constructor.
+     * @inner
+     */
+    function extractCtor(src) {
+        var decl    = 'function CouchbaseStore(options)';
+        var declIdx = src.indexOf(decl);
+        assert.ok(declIdx > -1, 'constructor declaration must exist');
+        assert.equal(src.indexOf(decl, declIdx + 1), -1,
+            'constructor must appear exactly once — an extraction matching twice is not a control');
+
+        var open  = src.indexOf('{', declIdx);
+        var depth = 0
+            , end = -1
+        ;
+        for (var i = open; i < src.length; i++) {
+            if (src[i] === '{') {
+                depth++;
+            } else if (src[i] === '}') {
+                depth--;
+                if (depth === 0) { end = i + 1; break; }
+            }
+        }
+        assert.equal(depth, 0, 'braces must balance — an unbalanced slice is not a control');
+
+        var FakeStore = function () {};
+        return new Function('Store', 'bundle',
+            'return (' + src.slice(declIdx, end) + ');'
+        )(FakeStore, 'testbundle');
+    }
+
+    /**
+     * Bucket stand-in matching what the model layer hands back: an object
+     * whose `defaultCollection()` returns the collection the store writes
+     * through. `scope()` is present because the PRE-fix v3 branch called it —
+     * keeping it lets the parity arms run identically against both
+     * generations of the source.
+     *
+     * @returns {object} `{ bucket, coll }`
+     * @inner
+     */
+    function makeBucket() {
+        var coll = { name: 'fake-collection' };
+        return {
+            coll   : coll,
+            bucket : {
+                name              : 'sessions',
+                scope             : function () { return { collection: function () { return coll; } }; },
+                defaultCollection : function () { return coll; }
+            }
+        };
+    }
+
+    [ ['v3', STORE_V3], ['v4', STORE_V4] ].forEach(function (pair) {
+
+        var label = pair[0]
+            , file  = pair[1]
+        ;
+
+        describe(label, function () {
+
+            var src, Ctor;
+            before(function () {
+                src  = fs.readFileSync(file, 'utf8');
+                Ctor = extractCtor(src);
+            });
+
+            // — behavioural: the working config is byte-compatible with before —
+
+            it('an open bucket as options.db becomes the client via defaultCollection()', function () {
+                var f     = makeBucket();
+                var store = new Ctor({ db: f.bucket });
+                assert.strictEqual(store.client, f.coll,
+                    'the client must be the bucket\'s default collection');
+            });
+
+            it('defaults survive: prefix "sess:", ttl null, timeouts 10000', function () {
+                var store = new Ctor({ db: makeBucket().bucket });
+                assert.equal(store.prefix, 'sess:');
+                assert.equal(store.ttl, null);
+                assert.equal(store.client.connectionTimeout, 10000);
+                assert.equal(store.client.operationTimeout, 10000);
+            });
+
+            it('explicit options survive: an empty-string prefix is kept, ttl and timeouts pass through', function () {
+                // prefix '' is a real deployed shape — `null == ''` is false, so
+                // the constructor must keep it rather than defaulting.
+                var store = new Ctor({ db: makeBucket().bucket, prefix: '', ttl: 3600,
+                    connectionTimeout: 2000, operationTimeout: 2500 });
+                assert.equal(store.prefix, '');
+                assert.equal(store.ttl, 3600);
+                assert.equal(store.client.connectionTimeout, 2000);
+                assert.equal(store.client.operationTimeout, 2500);
+            });
+
+            // — behavioural: the broken configs now fail fast and actionably —
+
+            it('no options.db: throws the actionable error, not an SDK TypeError', function () {
+                assert.throws(function () { new Ctor({}); }, function (err) {
+                    assert.ok(err instanceof Error);
+                    assert.match(err.message, /options\.db/, 'error must name the missing option');
+                    assert.match(err.message, /getModel\('session'\)\.getConnection\(\)/,
+                        'error must show the working recipe');
+                    assert.match(err.message, /#B167/, 'error must carry the reference');
+                    return true;
+                });
+            });
+
+            it('a collection-shaped db (no defaultCollection) trips the same guard — the entity-getConnection trap', function () {
+                // An entity’s getConnection(scope, collection) returns a
+                // collection, which has no defaultCollection() — the guard must
+                // catch it with instructions instead of a bare TypeError.
+                var collectionish = { _scope: {}, get: function () {}, upsert: function () {} };
+                assert.throws(function () { new Ctor({ db: collectionish }); }, function (err) {
+                    assert.match(err.message, /options\.db/, 'wrong-shape db must hit the actionable guard');
+                    return true;
+                });
+            });
+
+            it('no options at all: same guard (options defaulted to {})', function () {
+                assert.throws(function () { new Ctor(); }, /options\.db/);
+            });
+
+            // — source pins: the dead branch and its plumbing are globally gone —
+
+            it('no self-connect code survives (code-unique tokens, comment-stripped)', function () {
+                var active = src.replace(/\/\/[^\n]*/g, '');
+                assert.ok(active.indexOf('connectOptions') < 0,
+                    'the option-plumbing local must be gone');
+                assert.ok(active.indexOf('new Couchbase.Cluster') < 0,
+                    'the SDK-v2-era Cluster construction must be gone');
+                assert.ok(active.indexOf('hasOwnProperty("host")') < 0,
+                    'the dead connection-option parsing must be gone');
+                assert.ok(active.indexOf("require('couchbase')") < 0,
+                    'the store must never open its own SDK connection');
+            });
+
+            it('the client comes from options.db.defaultCollection() exactly once', function () {
+                assert.equal(src.split('options.db.defaultCollection()').length - 1, 1,
+                    'the guard-then-assign shape must be the single client source');
+            });
+
+            it('the guard tests both presence and bucket shape', function () {
+                assert.match(src,
+                    /if \( !options\.db \|\| typeof\(options\.db\.defaultCollection\) != 'function' \)/,
+                    'guard must reject a missing db AND a non-bucket db');
+            });
+
+        });
+
+    });
+
+});

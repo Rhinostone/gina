@@ -58,23 +58,30 @@ module.exports = function(session, bundle){
     /**
      * Initialize CouchbaseStore with the given `options`.
      *
-     * @param {Object} options
-     *      {
-     *          host: 127.0.0.1:8091 (default) -- Can be one or more address:ports, separated by semi-colon, or an array
-     *          username: '',   -- Should be same as bucket name, if provided
-     *          password: '',
-     *          bucket: 'default' (default)
-     *          cachefile: ''
-     *          ttl: 86400,
-     *          prefix: 'sess',
-     *          operationTimeout:2000,
-                connectionTimeout:2000,
-     *      }
+     * The store does not open its own connection. `options.db` is REQUIRED and
+     * must be the already-open Couchbase bucket the model layer created from
+     * the bundle's `session` connector entry — obtained with
+     * `getModel('session').getConnection()`. Session documents go through the
+     * bucket's default collection.
+     *
+     * #B167 — the former self-connect fallback (host/hosts/username/password/
+     * bucket/cachefile options) was removed: it called `cluster.openBucket()`,
+     * an SDK v2 API that does not exist on the supported v3/v4 SDKs, so
+     * reaching it always threw at bundle init. The options that only fed that
+     * path were removed with it.
+     *
+     * @class CouchbaseStore
+     * @constructor
+     * @param {object}  options
+     * @param {object}  options.db                        - Open Couchbase bucket (required).
+     * @param {number}  [options.ttl=null]                - Expiry in seconds. Unset, the cookie's maxAge applies, then one day.
+     * @param {string}  [options.prefix='sess:']          - Document key prefix.
+     * @param {number}  [options.connectionTimeout=10000] - Connect-time timeout in ms.
+     * @param {number}  [options.operationTimeout=10000]  - Per-operation timeout in ms.
      * @api public
      */
 
     function CouchbaseStore(options) {
-        var self = this;
 
         options = options || {};
         Store.call(this, options);
@@ -82,66 +89,18 @@ module.exports = function(session, bundle){
             ? 'sess:'
             : options.prefix;
 
-        var connectOptions = {};
-        if (options.hasOwnProperty("host")) {
-            connectOptions.host = options.host;
-        } else if (options.hasOwnProperty("hosts")) {
-            connectOptions.host = options.hosts;
+        if ( !options.db || typeof(options.db.defaultCollection) != 'function' ) {
+            throw new Error('['+ bundle +'][SessionStore v4] `options.db` is required and must be an already-open '
+                + 'Couchbase bucket: new CouchbaseStore({ db: getModel(\'session\').getConnection() }) — the '
+                + 'zero-argument getConnection() on the model, not an entity\'s getConnection(scope, collection), '
+                + 'which returns a collection. The former self-connect fallback (host/bucket/username/password '
+                + 'options) was removed: it relied on the SDK v2 openBucket() API, absent from SDK v3/v4 (#B167).');
         }
 
-        if (options.hasOwnProperty("username")) {
-            connectOptions.username = options.username;
-        }
+        this.client = options.db.defaultCollection();
 
-        if (options.hasOwnProperty("password")) {
-            connectOptions.password = options.password;
-        }
-
-        if (options.hasOwnProperty("bucket")) {
-            connectOptions.bucket = options.bucket;
-        }
-
-        if (options.hasOwnProperty("cachefile")) {
-            connectOptions.cachefile = options.cachefile;
-        }
-
-        if (options.hasOwnProperty("connectionTimeout")) {
-            connectOptions.connectionTimeout = options.connectionTimeout;
-        }
-
-        if (options.hasOwnProperty("operationTimeout")) {
-            connectOptions.operationTimeout = options.operationTimeout;
-        }
-
-        if (options.hasOwnProperty("db")) {
-            connectOptions.db = options.db; // DB Instance
-        }
-
-        if ( typeof(connectOptions.db) != 'undefined' ) {
-            // var conn = connectOptions.db;
-            // var scope = conn.scope(conn.name);
-            // var coll  = ( typeof(bundle) != 'undefined' ) ? scope.collection(bundle) :  scope._bucket.defaultCollection();
-            //var coll = connectOptions.db.collection(bundle);
-            var coll = connectOptions.db.defaultCollection();
-            //var coll  = ( typeof(bundle) != 'undefined' ) ? bucket.collection(bundle) : bucket.defaultCollection();
-
-            this.client = coll;
-        } else {
-            var Couchbase = require('couchbase');
-            var cluster = new Couchbase.Cluster(connectOptions.host);
-
-            this.client = cluster.openBucket(connectOptions.bucket, connectOptions.password, function(err) {
-                if (err) {
-                    console.log("Could not connect to couchbase with bucket: " + connectOptions.bucket);
-                    self.emit('disconnect');
-                } else {
-                    self.emit('connect');
-                }
-            });
-        }
-
-        this.client.connectionTimeout = connectOptions.connectionTimeout || 10000;
-        this.client.operationTimeout = connectOptions.operationTimeout || 10000;
+        this.client.connectionTimeout = options.connectionTimeout || 10000;
+        this.client.operationTimeout = options.operationTimeout || 10000;
 
         this.ttl = options.ttl || null;
     }

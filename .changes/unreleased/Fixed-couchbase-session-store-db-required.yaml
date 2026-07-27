@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The Couchbase session store now requires `options.db` — the already-open bucket the model layer creates from the `session` connector entry (`getModel(''session'').getConnection()`) — and fails fast with an actionable error when it is missing or not a bucket, instead of crashing at bundle init inside a dead self-connect path that called the SDK v2 `openBucket()` API, absent from the supported v3/v4 SDKs. The connection options that only fed that dead path (`host`, `hosts`, `username`, `password`, `bucket`, `cachefile`) were removed with it.'
+time: 2026-07-27T17:11:37+01:00
