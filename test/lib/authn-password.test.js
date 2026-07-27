@@ -317,6 +317,43 @@ describe('04 - malformed and hostile stored hashes', function () {
         });
     });
 
+    it('refuses a SHORT stored key — it would shrink the comparison width', function (t, done) {
+        // Regression: verifyPassword derives exactly `hash.length` bytes, so a
+        // 1-byte stored key compared 1 byte. Measured before the floor: 1 of 60
+        // random passwords authenticated against a 1-byte key. A truncated
+        // column or a partial write produces exactly this.
+        var oneByte = '$scrypt$ln=14,r=8,p=1$YWJjZGVmZ2hpamtsbW5vcA$YQ';
+        assert.equal(authn._parseScryptPhc(oneByte), null, 'a 1-byte key must not parse');
+        var hits = 0;
+        var tries = 40;
+        (function next(i) {
+            if (i === tries) {
+                assert.equal(hits, 0, 'no password may authenticate against a short stored key');
+                done();
+                return;
+            }
+            authn.verifyPassword('candidate-' + i, oneByte, function (err, ok) {
+                if (ok) { hits++; }
+                next(i + 1);
+            });
+        })(0);
+    });
+
+    it('refuses a short stored SALT', function () {
+        assert.equal(authn._parseScryptPhc('$scrypt$ln=14,r=8,p=1$YWJj$' + 'A'.repeat(43)), null);
+    });
+
+    it('control: a genuine full-length hash still parses and verifies', function (t, done) {
+        // The floor must reject corruption without rejecting real hashes.
+        authn.hashPassword('a real password here', FAST, function (err, hash) {
+            assert.ok(authn._parseScryptPhc(hash), 'a genuine hash must still parse');
+            authn.verifyPassword('a real password here', hash, function (e2, ok) {
+                assert.equal(ok, true);
+                done();
+            });
+        });
+    });
+
     it('rejects a non-string stored value without throwing', function (t, done) {
         authn.verifyPassword('any password here', null, function (err, ok) {
             assert.equal(err, null);
@@ -513,6 +550,49 @@ describe('08 - dummyVerify', function () {
 
     it('throws synchronously without a callback', function () {
         assert.throws(function () { authn.dummyVerify('pw'); }, /requires a callback function/);
+    });
+});
+
+describe('03b - unicode normalisation', function () {
+
+    // The same character, two valid encodings: a single code point vs a base
+    // letter plus a combining mark. A keyboard, an OS and a browser can each
+    // produce a different one.
+    var COMPOSED   = 'paéssword-long';        // é as U+00E9
+    var DECOMPOSED = 'paéssword-long';       // e + U+0301
+
+    it('fixture sanity: the two forms differ in bytes but are NFC-equal', function () {
+        assert.notEqual(COMPOSED, DECOMPOSED);
+        assert.equal(COMPOSED.normalize('NFC'), DECOMPOSED.normalize('NFC'));
+    });
+
+    it('a password registered composed verifies when submitted decomposed', function (t, done) {
+        // Regression: without normalisation the user is locked out of their own
+        // account with no explanation, purely by switching device.
+        authn.hashPassword(COMPOSED, FAST, function (err, hash) {
+            authn.verifyPassword(DECOMPOSED, hash, function (e2, ok) {
+                assert.equal(ok, true, 'NFC-equal passwords must authenticate');
+                done();
+            });
+        });
+    });
+
+    it('and the reverse direction', function (t, done) {
+        authn.hashPassword(DECOMPOSED, FAST, function (err, hash) {
+            authn.verifyPassword(COMPOSED, hash, function (e2, ok) {
+                assert.equal(ok, true);
+                done();
+            });
+        });
+    });
+
+    it('control: normalisation does not make DIFFERENT passwords equal', function (t, done) {
+        authn.hashPassword(COMPOSED, FAST, function (err, hash) {
+            authn.verifyPassword('paèssword-long', hash, function (e2, ok) {
+                assert.equal(ok, false, 'è is a different character, not a different encoding of é');
+                done();
+            });
+        });
     });
 });
 

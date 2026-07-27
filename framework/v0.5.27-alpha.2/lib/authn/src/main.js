@@ -208,7 +208,49 @@ function setMaxConcurrentHashes(n) {
 }
 
 /**
+ * Minimum accepted lengths, in bytes, for the SALT and KEY fields of a stored
+ * hash.
+ *
+ * A stored hash is attacker-controlled once the credential store is — and it is
+ * also whatever a bad migration or a truncated column left behind. Since
+ * {@link verifyPassword} derives exactly as many bytes as the stored key holds,
+ * a SHORT key silently weakens the comparison to that many bytes: measured, a
+ * 1-byte stored key authenticated 1 of 60 random passwords. Anything below
+ * these floors was not minted here, so it is rejected rather than compared.
+ *
+ * @constant
+ * @type {number}
+ * @inner
+ * @private
+ */
+var MIN_STORED_KEY_BYTES = 16;
+/** @constant {number} Minimum stored salt length in bytes. @inner @private */
+var MIN_STORED_SALT_BYTES = 8;
+
+/**
+ * Normalise a password to Unicode NFC.
+ *
+ * The same accented character has more than one valid encoding — `é` as a
+ * single code point, or `e` followed by a combining acute. A keyboard, an
+ * operating system and a browser can each produce a different one, so a user
+ * who registers on one device and signs in from another otherwise submits
+ * bytes that will never match, and is locked out of their own account with no
+ * explanation. Normalising both sides of the comparison removes that.
+ *
+ * @param {string} password
+ * @returns {string}
+ * @inner
+ * @private
+ */
+function normalizePassword(password) {
+    return password.normalize('NFC');
+}
+
+/**
  * Reject anything that is not a usable password string.
+ *
+ * The byte cap is applied AFTER normalisation, since normalising can change the
+ * encoded length.
  *
  * @param {*} password
  * @returns {?Error} the error, or `null` when acceptable.
@@ -222,7 +264,7 @@ function checkPasswordInput(password) {
     if (password.length === 0) {
         return new Error('[gina authn] password must not be empty');
     }
-    if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) {
+    if (Buffer.byteLength(normalizePassword(password), 'utf8') > MAX_PASSWORD_BYTES) {
         return new Error('[gina authn] password exceeds ' + MAX_PASSWORD_BYTES + ' bytes — reject it in your form validation before hashing');
     }
     return null;
@@ -300,6 +342,7 @@ function hashPassword(password, options, cb) {
 
     var salt = crypto.randomBytes(SALT_BYTES);
     var N    = Math.pow(2, ln);
+    var pw   = normalizePassword(password);
 
     withSlot(function (release) {
         // node's default maxmem (32 MiB) is below what these parameters need, so
@@ -307,7 +350,7 @@ function hashPassword(password, options, cb) {
         // documented working-set formula; the headroom multiplier covers node's
         // own bookkeeping.
         var maxmem = 128 * N * r * 2;
-        crypto.scrypt(password, salt, KEY_BYTES, { N: N, r: r, p: p, maxmem: maxmem }, function (err, derived) {
+        crypto.scrypt(pw, salt, KEY_BYTES, { N: N, r: r, p: p, maxmem: maxmem }, function (err, derived) {
             release();
             if (err) {
                 return cb(err);
@@ -344,7 +387,12 @@ function parseScryptPhc(stored) {
     }
     var salt = Buffer.from(m[4], 'base64');
     var hash = Buffer.from(m[5], 'base64');
-    if (salt.length === 0 || hash.length === 0) {
+    // Length floors, not merely non-emptiness: verifyPassword derives exactly
+    // `hash.length` bytes, so a short stored key shrinks the comparison to that
+    // width. Measured before this guard: a 1-byte key authenticated 1 of 60
+    // random passwords. We mint 32/16, so anything below these floors is
+    // corruption or forgery either way.
+    if (salt.length < MIN_STORED_SALT_BYTES || hash.length < MIN_STORED_KEY_BYTES) {
         return null;
     }
     return { ln: ln, r: r, p: p, salt: salt, hash: hash };
@@ -446,7 +494,7 @@ function verifyPassword(password, stored, cb) {
             });
         }
         return Promise.resolve()
-            .then(function () { return argon2.verify(stored, password); })
+            .then(function () { return argon2.verify(stored, normalizePassword(password)); })
             .then(function (ok) { cb(null, ok === true); })
             .catch(function () { cb(null, false); });
     }
@@ -458,7 +506,7 @@ function verifyPassword(password, stored, cb) {
                 cb(new Error('[gina authn] this hash is bcrypt, which gina verifies through your project\'s own package. Run: npm install bcrypt'));
             });
         }
-        return bcrypt.compare(password, stored, function (err, ok) {
+        return bcrypt.compare(normalizePassword(password), stored, function (err, ok) {
             if (err) {
                 return cb(null, false);
             }
@@ -472,9 +520,10 @@ function verifyPassword(password, stored, cb) {
     }
 
     var N = Math.pow(2, parsed.ln);
+    var pwNorm = normalizePassword(password);
     withSlot(function (release) {
         var maxmem = 128 * N * parsed.r * 2;
-        crypto.scrypt(password, parsed.salt, parsed.hash.length, { N: N, r: parsed.r, p: parsed.p, maxmem: maxmem }, function (err, derived) {
+        crypto.scrypt(pwNorm, parsed.salt, parsed.hash.length, { N: N, r: parsed.r, p: parsed.p, maxmem: maxmem }, function (err, derived) {
             release();
             if (err) {
                 return cb(err);
@@ -564,7 +613,7 @@ function dummyVerify(password, options, cb) {
     if (!isFinite(p) || p < 1 || p > 16)     { p  = SCRYPT_PARAMS.p; }
 
     var pw = (typeof password === 'string' && password.length > 0 && Buffer.byteLength(password, 'utf8') <= MAX_PASSWORD_BYTES)
-        ? password
+        ? normalizePassword(password)
         : 'x';
     var salt = crypto.randomBytes(SALT_BYTES);
     var N    = Math.pow(2, ln);

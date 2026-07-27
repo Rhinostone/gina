@@ -26,12 +26,29 @@
  * invalid attempts, for a minimum of 30 minutes (or until identity is confirmed
  * out of band, which is {@link Lockout#reset}).
  *
+ * **Normalise the key, or the threshold multiplies.** Counters are indexed by
+ * the exact string given. If the key comes from user input — an email typed
+ * into a form — then `a@x.com`, `A@x.com` and `a@X.com` are three separate
+ * counters, and an attacker gets the threshold once per spelling. Measured:
+ * three failures across those spellings against a threshold of three left the
+ * account unlocked. Pass `normalizeKey` (or lower-case it yourself) whenever
+ * the key is user-supplied. There is no safe default here — a user id or an
+ * opaque token may legitimately be case-sensitive, so gina will not guess.
+ *
  * **State lives in memory by default**, which is per-process: two replicas keep
  * independent counters, so an attacker distributing attempts across N replicas
  * gets N times the threshold. That is a real and documented degradation, not a
  * silent one — pass a shared `store` for multi-replica correctness. The store
  * contract is deliberately the callback shape the job and audit store seams
  * already use.
+ *
+ * **The memory store grows with distinct keys.** Every key an attacker invents
+ * costs an entry until its window expires (measured: 5000 keys, 5000 entries),
+ * so hostile traffic can inflate it. It is deliberately NOT capped: evicting
+ * entries under pressure would let an attacker flush a victim's counter by
+ * flooding, turning a memory bound into a lockout bypass — strictly worse than
+ * the memory it saves. Bound key CREATION upstream with request-rate limiting,
+ * or use a persistent store with its own eviction policy.
  *
  * @module lib/authn/lockout
  *
@@ -224,6 +241,7 @@ function checkKey(key) {
  * @param {number}   [options.windowMs=1800000]    - failures older than this stop counting.
  * @param {number}   [options.sweepMs=300000]      - memory-store sweep interval.
  * @param {object}   [options.store]               - shared store; `{get, set, del[, close]}`, callback-shaped.
+ * @param {function} [options.normalizeKey]        - `fn(key) -> key`, applied before every lookup. Use it whenever the key is user-supplied, or case variance multiplies the threshold.
  * @param {boolean}  [options.audit=true]          - emit an `auth.lockout` audit record on the transition into locked.
  * @returns {object} the engine — `check` / `recordFailure` / `recordSuccess` / `reset` / `close`.
  * @throws {Error} on an invalid option or an incomplete store.
@@ -231,6 +249,11 @@ function checkKey(key) {
  *
  * @example <caption>Multi-replica: back it with a shared store</caption>
  * var lockout = lib.authn.createLockout({ store: myRedisBackedStore });
+ *
+ * @example <caption>Keying on an email — normalise, or the threshold multiplies</caption>
+ * var lockout = lib.authn.createLockout({
+ *     normalizeKey: function (k) { return k.trim().toLowerCase(); }
+ * });
  */
 function createLockout(options) {
     options = options || {};
@@ -254,6 +277,32 @@ function createLockout(options) {
 
     if (Math.floor(maxAttempts) !== maxAttempts) {
         throw new Error('[gina authn] createLockout: `maxAttempts` must be a whole number — got: ' + JSON.stringify(options.maxAttempts));
+    }
+
+    var normalizeKey = options.normalizeKey;
+    if (typeof normalizeKey !== 'undefined' && typeof normalizeKey !== 'function') {
+        throw new Error('[gina authn] createLockout: `normalizeKey` must be a function — got: ' + JSON.stringify(options.normalizeKey));
+    }
+
+    /**
+     * Apply the caller's key normaliser, if any. A normaliser that throws or
+     * returns a non-string is ignored rather than allowed to break a login.
+     *
+     * @param {string} key
+     * @returns {string}
+     * @inner
+     * @private
+     */
+    function norm(key) {
+        if (!normalizeKey) {
+            return key;
+        }
+        try {
+            var out = normalizeKey(key);
+            return (typeof out === 'string' && out.length > 0) ? out : key;
+        } catch (err) {
+            return key;
+        }
     }
 
     var store = options.store;
@@ -365,7 +414,7 @@ function createLockout(options) {
             if (keyErr) {
                 return process.nextTick(function () { cb(keyErr); });
             }
-            store.get(key, function (err, entry) {
+            store.get(norm(key), function (err, entry) {
                 if (err) {
                     return cb(err);
                 }
@@ -392,6 +441,7 @@ function createLockout(options) {
             if (keyErr) {
                 return process.nextTick(function () { cb(keyErr); });
             }
+            key = norm(key);
             withKeyLock(chains, key, function (release) {
             var now = Date.now();
             store.get(key, function (err, entry) {
@@ -458,6 +508,7 @@ function createLockout(options) {
             // Serialized with recordFailure: a delete that lands between a
             // concurrent failure's read and its write would otherwise be
             // resurrected by that write.
+            key = norm(key);
             withKeyLock(chains, key, function (release) {
                 store.del(key, function (err) {
                     release();
@@ -482,6 +533,7 @@ function createLockout(options) {
             if (keyErr) {
                 return process.nextTick(function () { cb(keyErr); });
             }
+            key = norm(key);
             withKeyLock(chains, key, function (release) {
                 store.del(key, function (err) {
                     release();

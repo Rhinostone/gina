@@ -406,6 +406,85 @@ describe('04b - concurrency: the counter update is serialized per key', function
     });
 });
 
+describe('04c - key normalisation', function () {
+
+    it('normalizeKey collapses case and whitespace variants onto one counter', function (t, done) {
+        // Regression: counters are indexed by the exact string, so a key taken
+        // from user input gives an attacker the threshold once per spelling.
+        var lo = makeLockout({
+            maxAttempts: 3, lockMs: 60000,
+            normalizeKey: function (k) { return k.trim().toLowerCase(); }
+        });
+        var seen = 0;
+        [ 'a@x.com', 'A@x.com', ' a@X.com ' ].forEach(function (k) {
+            lo.recordFailure(k, function () {
+                if (++seen === 3) {
+                    lo.check('a@x.com', function (err, state) {
+                        assert.equal(state.attempts, 3, 'all spellings must share a counter');
+                        assert.equal(state.locked, true);
+                        done();
+                    });
+                }
+            });
+        });
+    });
+
+    it('control: WITHOUT normalizeKey the variants stay separate', function (t, done) {
+        // Proves the test above measures the option rather than some incidental
+        // collapsing — and documents the default honestly.
+        var lo = makeLockout({ maxAttempts: 3, lockMs: 60000 });
+        var seen = 0;
+        [ 'a@x.com', 'A@x.com', 'a@X.com' ].forEach(function (k) {
+            lo.recordFailure(k, function () {
+                if (++seen === 3) {
+                    lo.check('a@x.com', function (err, state) {
+                        assert.equal(state.attempts, 1, 'no default normalisation — a user id may be case-sensitive');
+                        assert.equal(state.locked, false);
+                        done();
+                    });
+                }
+            });
+        });
+    });
+
+    it('applies to check, recordSuccess and reset as well as recordFailure', function (t, done) {
+        var lo = makeLockout({
+            maxAttempts: 2, lockMs: 60000,
+            normalizeKey: function (k) { return k.toLowerCase(); }
+        });
+        lo.recordFailure('A@x.com', function () {
+            lo.recordFailure('a@x.com', function () {
+                lo.check('A@X.COM', function (err, state) {
+                    assert.equal(state.locked, true, 'check must normalise too');
+                    lo.reset('A@X.com', function () {
+                        lo.check('a@x.com', function (e2, s2) {
+                            assert.equal(s2.locked, false, 'reset must normalise too');
+                            done();
+                        });
+                    });
+                });
+            });
+        });
+    });
+
+    it('refuses a non-function normalizeKey', function () {
+        assert.throws(function () { authn.createLockout({ normalizeKey: 'lower' }); },
+            /`normalizeKey` must be a function/);
+    });
+
+    it('a throwing normaliser falls back to the raw key rather than breaking login', function (t, done) {
+        var lo = makeLockout({
+            maxAttempts: 2, lockMs: 60000,
+            normalizeKey: function () { throw new Error('bad normaliser'); }
+        });
+        lo.recordFailure('a@x.com', function (err, state) {
+            assert.equal(err, null, 'a broken normaliser must not surface as a lockout error');
+            assert.equal(state.attempts, 1);
+            done();
+        });
+    });
+});
+
 describe('05 - the store contract', function () {
 
     /** A minimal conforming store that records what it was asked to do. */
