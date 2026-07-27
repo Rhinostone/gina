@@ -68,6 +68,7 @@
 
 var crypto  = require('crypto');
 var lockout = require('./lockout');
+var totp    = require('./totp');
 
 /**
  * Current scrypt cost parameters.
@@ -638,7 +639,14 @@ module.exports = {
     validatePasswordPolicy  : validatePasswordPolicy,
     setMaxConcurrentHashes  : setMaxConcurrentHashes,
     createLockout           : lockout.createLockout,
+    generateTotpSecret      : totp.generateTotpSecret,
+    generateTotp            : totp.generateTotp,
+    verifyTotp              : totp.verifyTotp,
+    otpauthURL              : totp.otpauthURL,
     // test seams — may change without notice
+    _base32Encode           : totp._base32Encode,
+    _base32Decode           : totp._base32Decode,
+    _hotp                   : totp._hotp,
     _createMemoryStore      : lockout._createMemoryStore,
     _DEFAULT_MAX_ATTEMPTS   : lockout._DEFAULT_MAX_ATTEMPTS,
     _DEFAULT_LOCK_MS        : lockout._DEFAULT_LOCK_MS,
