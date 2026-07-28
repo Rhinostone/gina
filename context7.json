@@ -1,0 +1,40 @@
+{
+  "$schema": "https://context7.com/schema/context7.json",
+  "projectTitle": "Gina",
+  "description": "Node.js MVC framework with no Express dependency, built-in HTTP/2, a multi-bundle architecture and scope-based data isolation.",
+  "branch": "master",
+  "excludeFolders": [
+    ".changes",
+    ".github",
+    "test",
+    "node_modules",
+    "framework/v[^/]+/node_modules",
+    "framework/v[^/]+/core/asset/plugin/dist",
+    "resources",
+    "services"
+  ],
+  "excludeFiles": [
+    "CONTRIBUTING.md",
+    "GOVERNANCE.md",
+    "AUTHORS"
+  ],
+  "rules": [
+    "Controllers render with self.render(data) for HTML and self.renderJSON(data) for JSON. Never use res.send(), res.json() or res.end() — gina does not expose an Express response API.",
+    "Routes are declared per bundle in config/routing.json as { \"rule-name\": { \"method\": \"GET\", \"url\": \"/users/:id\", \"param\": { \"control\": \"getUser\" } } }. Never register routes in code with app.get()/app.post().",
+    "Gina has no Express dependency. Do not assume Express middleware, req/res helpers or app.get() routing. app.use() appears only when a bundle registers plugin middleware inside onInitialize.",
+    "A project contains one or more bundles; the bundle is the unit of deployment, with its own controllers, models, config, templates and port. Start one with: gina bundle:start <bundle> @<project>.",
+    "CLI scope is positional, never a flag: 'gina <group>:<action> <bundle> @<project>' is bundle-scoped and 'gina <group>:<action> @<project>' is project-wide. Do not invent --scope; scope means data isolation (local/beta/production/testing).",
+    "Return HTTP errors from a controller with self.throwError(res, code, msg); shorter overloads such as self.throwError(err) exist. Do not write a status code and error body onto the response directly.",
+    "Entity methods expose .onComplete(cb) as their public contract. Use .once() and never .on() for entity trigger listeners, and call removeAllListeners([name]) before every .once() registration.",
+    "Never call underscore-prefixed methods or properties from bundle code. The _ prefix marks framework-internal API that is not covered by any compatibility promise.",
+    "Read gina JSON config with the injected global requireJSON(path), never require(). Gina config files legitimately contain // and /* */ comments, which Node's JSON loader rejects.",
+    "Config templates substitute ${variable}, not {variable}. Substitution is single-pass and does not self-resolve, so every placeholder key — including derived ones — must already exist in the dictionary.",
+    "In bundle code console is shadowed by gina's logger (var console = lib.logger). Use console.debug/warn/error/emerg for output; never write to process.stdout directly.",
+    "Inter-bundle HTTP calls go through self.query() from the controller, which carries gina's HTTP/2 client retry and session handling. Do not reach for fetch() or a raw http request.",
+    "Build framework-internal paths with the injected global _(path, isAbsolute). When a local variable named path already exists in the file, import Node's path module as nodePath.",
+    "A controller is a constructor whose actions are assigned as this.action = function(req, res). Capture 'var self = this;' at the top and call self.render()/self.query() from inside actions — an action is not invoked with the controller as its this."
+  ],
+  "previousVersions": [
+    "v0.5.26"
+  ]
+}
