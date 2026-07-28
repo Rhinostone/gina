@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the SQLite session store expiring the very session it was asked to refresh. `touch()` stamped `now + ttl` without first checking the resolved ttl, so as a session neared its expiry — express-session''s `cookie.maxAge` is a decaying remainder, which truncates to zero in the final second and turns negative once expired — the store wrote an already-past expiry and ended the session early. It now performs no write and returns cleanly on a non-positive ttl, matching the Redis, MongoDB and ScyllaDB stores, which already guarded this. Sessions with a positive ttl are refreshed exactly as before.'
-time: 2026-07-27T10:06:53+01:00

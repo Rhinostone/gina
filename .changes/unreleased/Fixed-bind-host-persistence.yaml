@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed `bind_host` persistence: a value written by `gina framework:set --bind-host=` was silently reverted to the loopback default by the very next CLI invocation (the settings regeneration had a disk-to-env read-back for every connection key except `bind_host`) and by every container bootstrap (`gina-init` rewrote settings.json with a hardcoded loopback value). The persisted value now survives both paths; `GINA_BIND_HOST` still takes precedence when set, and unresolved template placeholders are skipped rather than preserved.'
-time: 2026-07-26T10:10:41+01:00

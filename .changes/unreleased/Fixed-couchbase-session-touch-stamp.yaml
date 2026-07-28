@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'Fixed the Couchbase session store''s `touch()`: an internal idle-check compared an elapsed value in milliseconds against a TTL in seconds, so it fired roughly 1000x sooner than intended and left `lastModified` un-refreshed on most calls — even though every `touch()` extends the document''s expiry regardless. The stamp now tracks each extension, which keeps the client-side session countdown measuring from the right origin. The SDK 4 store additionally writes `lastModified` as an ISO 8601 UTC string, matching the redis, sqlite, mongodb and scylladb session stores; it previously wrote a zone-less local-time value that the browser re-parsed in its own timezone, skewing the countdown by the offset between them.'
-time: 2026-07-26T20:59:35+01:00
