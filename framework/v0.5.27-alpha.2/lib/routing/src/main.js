@@ -1016,7 +1016,21 @@ function Routing() {
     }
 
     /**
+     * #B168 — once-per-process latch for the proxied-context degrade warning in
+     * getRoute(): the resolver sits on the per-request hot path, so the abnormal
+     * state is reported once rather than per call (under dev-mode hot-reload the
+     * module re-evaluates, so the warning may reappear per reload cycle).
+     * @private
+     */
+    var _proxyHostDegradeWarned = false;
+
+    /**
      * @function getRoute
+     *
+     * On the server, a proxied-context call resolves the route's proxy hostname
+     * from the worker global with an envConf fallback; when neither holds a value
+     * the route degrades to its direct hostname (route.isProxyHost is flipped
+     * false) instead of failing, and a once-per-process warning is emitted.
      *
      * @param {string} rule e.g.: [ <scheme>:// ]<name>[ @<bundle> ][ /<environment> ]
      * @param {object} params - substituted into the route's `:placeholders`; on a GET route, leftover keys that are neither reserved nor declared in the rule's `requirements` are appended to `route.url` as query parameters (a rule with no `requirements` block is safe — the block is optional)
@@ -1108,11 +1122,32 @@ function Routing() {
                 route.proxy_hostname  = process.gina.PROXY_HOSTNAME || config.envConf._proxyHostname;
                 // console.debug("[getRoute#1]["+isProxyHost+"] process.gina.PROXY_HOSTNAME ("+ process.gina.PROXY_HOSTNAME  +") VS config.envConf._proxyHostname ("+ config.envConf._proxyHostname +")");
             }
-            route.proxy_host      = route.proxy_hostname.replace(/^(https|http)\:\/\//, '');
+            // #B168 — on the server, BOTH sources above are framework-produced falsy
+            // states: the worker global is boot-set only from a proxy config carrying a
+            // hostname (and otherwise first written by a proxied request), while the
+            // envConf fallback is deliberately written null for a request classified
+            // direct. With the worker-wide proxied latch true and both unset, the
+            // unguarded rewrite below crashed every server-side getRoute() while the
+            // state lasted. Degrade to the route's direct hostname instead — and flip
+            // route.isProxyHost too: toUrl() keys on it, so leaving it true would
+            // stringify the unset value straight into the emitted URL.
+            if (route.proxy_hostname) {
+                route.proxy_host      = route.proxy_hostname.replace(/^(https|http)\:\/\//, '');
+            } else {
+                delete route.proxy_hostname;
+                route.isProxyHost = false;
+                if (!_proxyHostDegradeWarned) {
+                    _proxyHostDegradeWarned = true;
+                    console.warn('[ RoutingHelper::getRoute() ] Proxied context is active but no proxy hostname is resolvable (worker global and envConf fallback both unset) - falling back to the route direct hostname. Warned once per process.');
+                }
+            }
 
         } else if (
             !isGFFCtx
             && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
+            // #B168 — the typeof gate admits a defined-but-falsy value (typeof null is
+            // 'object'); require a truthy hostname before the rewrite below
+            && process.gina.PROXY_HOSTNAME
         ) {
             route.proxy_hostname  = process.gina.PROXY_HOSTNAME;
             route.proxy_host      = route.proxy_hostname.replace(/^(https|http)\:\/\//, '');

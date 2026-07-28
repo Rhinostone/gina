@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Server-side getRoute() no longer crashes when a proxied context is active while no proxy hostname is resolvable (worker global and envConf fallback both unset): the route degrades to its direct hostname (route.isProxyHost flips false so toUrl() cannot stringify an unset value into the emitted URL) and a once-per-process warning names the degraded state; the url template filters hold getRoute''s own resolution so their per-request override can never force an unset value over it, and the non-proxied branch now requires a truthy worker global (its typeof gate admitted null).'
+time: 2026-07-28T11:41:12+01:00

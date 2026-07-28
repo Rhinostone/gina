@@ -749,3 +749,243 @@ describe('09 - #B132 getRoute not-found names the bundle + table size', function
             'gina.min.js must ship the enriched not-found message (rebuild the bundle if this fails)');
     });
 });
+
+
+// ─── 10 — #B168: proxied-context degrade when no proxy hostname is resolvable ──
+//
+// getRoute()'s server branch resolves route.proxy_hostname from the worker global
+// with an envConf fallback — and BOTH are framework-produced falsy states (the
+// global is boot-set only from a proxy config carrying a hostname, otherwise first
+// written by a proxied request; the envConf fallback is deliberately written null
+// for a request classified direct). With the worker-wide proxied latch true and
+// both unset, the unguarded `.replace` rewrite threw
+// `TypeError: Cannot read properties of null (reading 'replace')` on EVERY
+// server-side getRoute() while the state lasted. Fix: truthiness-guard the rewrite
+// and degrade to the route's direct hostname — flipping route.isProxyHost too,
+// because toUrl() keys on that flag and would otherwise stringify the unset value
+// straight into the emitted URL. A once-per-process warning names the degraded
+// state. The non-proxied worker-global branch is hardened the same way (its
+// typeof gate admitted a defined-but-falsy value).
+//
+// Coverage: source pins + REAL-module behavioural drives (the §07 harness) + an
+// extracted-source subtract per guarded branch + dist-fidelity pins (lib/routing
+// is browser-bundled; the warn literal survives minification).
+
+B120_TABLE['pxguard@testb'] = { method: 'GET', url: '/pxguard', bundle: 'testb', hostname: 'https://direct.internal:3999', webroot: '/', param: { control: 'render', file: 'pxguard' }, requirements: {}, middleware: [] };
+
+describe('10 - #B168 getRoute: proxied-context degrade when no proxy hostname is resolvable', function() {
+
+    // comment-stripped source, so negative pins can't trip on rationale text
+    var activeSrc10 = src.split('\n').filter(function (l) {
+        return !/^\s*(\/\/|\*|\/\*)/.test(l);
+    }).join('\n');
+
+    function resetProxyState() {
+        setContext('isProxyHost', false);
+        delete process.gina.PROXY_HOSTNAME;
+        delete getContext('gina').config.envConf._proxyHostname;
+    }
+
+    // -- source pins --
+
+    it('source: the proxied rewrite is truthiness-guarded (guard immediately gates the replace)', function() {
+        assert.match(src, /if \(route\.proxy_hostname\) \{\s*\n\s*route\.proxy_host\s+= route\.proxy_hostname\.replace/,
+            'the proxied-arm rewrite must sit behind a truthy route.proxy_hostname guard');
+    });
+
+    it('source: the degrade drops the unset key, flips the flag, and latches the warn', function() {
+        var delIdx  = src.indexOf('delete route.proxy_hostname;');
+        var flipIdx = src.indexOf('route.isProxyHost = false;');
+        var warnIdx = src.indexOf('_proxyHostDegradeWarned = true;');
+        assert.ok(delIdx > -1 && flipIdx > -1 && warnIdx > -1, 'all three degrade statements must exist');
+        assert.ok(delIdx < flipIdx && flipIdx < warnIdx, 'degrade order: drop key, flip flag, latch warn');
+        assert.ok(src.indexOf('var _proxyHostDegradeWarned = false;') > -1,
+            'the warn latch must be a module-scope var (once per process)');
+    });
+
+    it('source: the non-proxied worker-global branch requires a truthy value (anchored to the gate close)', function() {
+        assert.match(src, /typeof\(process\.gina\.PROXY_HOSTNAME\) != 'undefined'[\s\S]{0,400}?&& process\.gina\.PROXY_HOSTNAME\s*\n\s*\) \{/,
+            'the else-if gate must add a truthy conjunct after the typeof check, closing the condition');
+    });
+
+    it('source: the old typeof-only gate shape is gone (comment-stripped)', function() {
+        assert.doesNotMatch(activeSrc10, /typeof\(process\.gina\.PROXY_HOSTNAME\) != 'undefined'\s*\n\s*\) \{/,
+            'no bare typeof-gated else-if may remain — typeof admits a defined-but-falsy value');
+    });
+
+    it('source: the client arm is unchanged', function() {
+        assert.ok(src.indexOf("route.proxy_hostname  = window.location.protocol +'//'+ document.location.hostname;") > -1,
+            'the browser arm must keep resolving from window.location (it cannot be unset)');
+    });
+
+    // -- behavioural (real module; §07 harness context) --
+    // NOTE: this warn test MUST be the first degrade-triggering real-module test in
+    // the file — the latch is once-per-process by design.
+
+    it('FIXED (real module): the degrade warn fires ONCE across two degraded calls', function() {
+        resetProxyState();
+        setContext('isProxyHost', true);
+        getContext('gina').config.envConf._proxyHostname = null;
+        var warns = [];
+        var origWarn = console.warn;
+        console.warn = function (m) { warns.push(String(m)); };
+        try {
+            routingInstance.getRoute('pxguard@testb', {});
+            routingInstance.getRoute('pxguard@testb', {});
+        } finally {
+            console.warn = origWarn;
+            resetProxyState();
+        }
+        var mine = warns.filter(function (m) { return m.indexOf('no proxy hostname is resolvable') > -1; });
+        assert.equal(mine.length, 1, 'the degrade warn must be latched once per process');
+    });
+
+    it('FIXED (real module): proxied latch + both sources unset returns a direct-host route', function() {
+        resetProxyState();
+        setContext('isProxyHost', true);
+        getContext('gina').config.envConf._proxyHostname = null;   // the deliberately-written null
+        try {
+            var route = routingInstance.getRoute('pxguard@testb', {});
+            assert.equal(route.isProxyHost, false, 'the degraded route must not claim a proxied host');
+            assert.ok(!('proxy_hostname' in route), 'no unset proxy_hostname key may survive on the route');
+            assert.equal(route.toUrl(), 'https://direct.internal:3999/pxguard',
+                'toUrl() must emit the route direct hostname — no throw, no stringified unset value');
+        } finally { resetProxyState(); }
+    });
+
+    it('FIXED (real module): an unwritten envConf fallback (undefined) degrades identically', function() {
+        resetProxyState();
+        setContext('isProxyHost', true);   // envConf._proxyHostname never written
+        try {
+            var route = routingInstance.getRoute('pxguard@testb', {});
+            assert.equal(route.isProxyHost, false);
+            assert.equal(route.toUrl(), 'https://direct.internal:3999/pxguard');
+        } finally { resetProxyState(); }
+    });
+
+    it('control (real module): a truthy worker global keeps full proxied behaviour', function() {
+        resetProxyState();
+        setContext('isProxyHost', true);
+        process.gina.PROXY_HOSTNAME = 'https://public.example';
+        try {
+            var route = routingInstance.getRoute('pxguard@testb', {});
+            assert.equal(route.isProxyHost, true);
+            assert.equal(route.proxy_hostname, 'https://public.example');
+            assert.equal(route.proxy_host, 'public.example');
+            assert.equal(route.toUrl(), 'https://public.example/pxguard');
+        } finally { resetProxyState(); }
+    });
+
+    it('control (real module): the envConf fallback still resolves when the global is unset', function() {
+        resetProxyState();
+        setContext('isProxyHost', true);
+        getContext('gina').config.envConf._proxyHostname = 'http://fallback.example';
+        try {
+            var route = routingInstance.getRoute('pxguard@testb', {});
+            assert.equal(route.isProxyHost, true, 'a usable envConf fallback must keep the proxied behaviour');
+            assert.equal(route.proxy_hostname, 'http://fallback.example');
+            assert.equal(route.toUrl(), 'http://fallback.example/pxguard');
+        } finally { resetProxyState(); }
+    });
+
+    it('FIXED (real module): a null worker global no longer crashes the non-proxied branch', function() {
+        resetProxyState();
+        process.gina.PROXY_HOSTNAME = null;   // typeof null == 'object' — passed the old gate
+        try {
+            var route = routingInstance.getRoute('pxguard@testb', {});
+            assert.equal(route.isProxyHost, false);
+            assert.ok(!('proxy_hostname' in route), 'a falsy global must not be stamped onto the route');
+        } finally { resetProxyState(); }
+    });
+
+    it('control (real module): a truthy global still stamps the non-proxied route (unchanged secondary behaviour)', function() {
+        resetProxyState();
+        process.gina.PROXY_HOSTNAME = 'https://public.example';
+        try {
+            var route = routingInstance.getRoute('pxguard@testb', {});
+            assert.equal(route.isProxyHost, false, 'the secondary branch never flips the flag');
+            assert.equal(route.proxy_hostname, 'https://public.example');
+            assert.equal(route.proxy_host, 'public.example');
+        } finally { resetProxyState(); }
+    });
+
+    // -- extracted-source subtracts: execute the SHIPPED block bytes, then the same
+    //    bytes with each guard perturbed back to the pre-fix reachability --
+
+    function extractProxyBlock() {
+        var startIdx = src.indexOf('route.isProxyHost = isProxyHost;');
+        assert.ok(startIdx > -1, 'extraction control: start anchor not found');
+        var endIdx = src.indexOf('if ( /\\,/.test(route.url) ) {', startIdx);
+        assert.ok(endIdx > startIdx, 'extraction control: end anchor not found after start');
+        var block = src.substring(startIdx, endIdx);
+        assert.ok(block.indexOf('proxy_hostname') > -1, 'extraction control: block must contain the proxy resolution');
+        // declaration form, not the bare word — the block's own rationale comment names toUrl()
+        assert.ok(block.indexOf('route.toUrl = function') === -1, 'extraction control: block must not over-slice into the toUrl definition');
+        return block;
+    }
+
+    function runProxyBlock(block, opts) {
+        var fn = new Function('route', 'isProxyHost', 'isGFFCtx', 'config', 'process', 'console', '_proxyHostDegradeWarned',
+            block + '\nreturn route;');
+        return fn(opts.route, opts.isProxyHost, false, opts.config,
+            { gina: opts.gina }, { warn: function () {}, debug: function () {} }, false);
+    }
+
+    it('extracted shipped block: proxied latch + both sources unset degrades without throwing', function() {
+        var route = runProxyBlock(extractProxyBlock(), {
+            route: { url: '/pxguard' }, isProxyHost: true,
+            config: { envConf: { _proxyHostname: null } }, gina: {}
+        });
+        assert.equal(route.isProxyHost, false);
+        assert.ok(!('proxy_hostname' in route));
+    });
+
+    it('SUBTRACT (proxied guard perturbed to always-true = the pre-fix reachability): the block throws the production TypeError', function() {
+        var block     = extractProxyBlock();
+        var perturbed = block.replace('if (route.proxy_hostname) {', 'if (true) {');
+        assert.notEqual(perturbed, block, 'perturbation control: the replace must have changed the block');
+        assert.throws(
+            function () {
+                runProxyBlock(perturbed, {
+                    route: { url: '/pxguard' }, isProxyHost: true,
+                    config: { envConf: { _proxyHostname: null } }, gina: {}
+                });
+            },
+            function (err) { return err instanceof TypeError && /reading 'replace'/.test(err.message); },
+            'the unguarded rewrite must throw the production TypeError on a both-unset proxied call'
+        );
+    });
+
+    it('SUBTRACT (truthy conjunct perturbed away = the pre-fix typeof-only gate): a null global throws in the block', function() {
+        var block     = extractProxyBlock();
+        var perturbed = block.replace('\n            && process.gina.PROXY_HOSTNAME\n', '\n');
+        assert.notEqual(perturbed, block, 'perturbation control: the replace must have changed the block');
+        assert.throws(
+            function () {
+                runProxyBlock(perturbed, {
+                    route: { url: '/pxguard' }, isProxyHost: false,
+                    config: { envConf: {} }, gina: { PROXY_HOSTNAME: null }
+                });
+            },
+            function (err) { return err instanceof TypeError && /reading 'replace'/.test(err.message); },
+            'the typeof-only gate must admit null and crash on the rewrite'
+        );
+    });
+
+    // -- dist fidelity: lib/routing is browser-bundled — the degrade must reach both
+    //    built artifacts (the warn string literal survives minification) --
+
+    it('dist: gina.js carries the degrade warn literal', function() {
+        var DIST_JS = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.js');
+        var dist = require('fs').readFileSync(DIST_JS, 'utf8');
+        assert.ok(dist.indexOf('no proxy hostname is resolvable') > -1,
+            'gina.js must contain the degrade warn (rebuild the bundle if this fails)');
+    });
+
+    it('dist: gina.min.js carries the degrade warn literal', function() {
+        var DIST_MIN = path.join(FW, 'core/asset/plugin/dist/vendor/gina/js/gina.min.js');
+        var dist = require('fs').readFileSync(DIST_MIN, 'utf8');
+        assert.ok(dist.indexOf('no proxy hostname is resolvable') > -1,
+            'gina.min.js must contain the degrade warn (rebuild the bundle if this fails)');
+    });
+});

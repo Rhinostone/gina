@@ -356,8 +356,21 @@ function NunjucksFilters(conf) {
             // latch/global, byte-identical.
             url.isProxyHost = isProxyHost;
             if (isProxyHost) {
+                // #B168 — hold getRoute's own resolution: with no per-request slot and
+                // no worker global, the override below must not replace a usable
+                // envConf-derived value with an unset one
+                var _routeProxyHostname = url.proxy_hostname;
                 url.proxy_hostname    = (isGFFCtx) ? window.location.protocol +'//'+ document.location.hostname : ( (ctx.req && ctx.req._ginaProxyHostname) || process.gina.PROXY_HOSTNAME );
                 url.proxy_host        = url.hostname.replace(/(https|http)\:\/\//, '');
+                if ( !url.proxy_hostname ) {
+                    url.proxy_hostname = _routeProxyHostname;
+                    if ( !url.proxy_hostname ) {
+                        // #B168 — nothing resolvable anywhere: degrade to the route's
+                        // direct hostname; toUrl() keys on isProxyHost, so leaving it
+                        // true would stringify the unset value into the emitted URL
+                        url.isProxyHost = false;
+                    }
+                }
             }
             url = url.toUrl();
 
