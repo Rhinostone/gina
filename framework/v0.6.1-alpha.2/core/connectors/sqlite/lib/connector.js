@@ -43,15 +43,13 @@ function SqliteConnector(conf) {
     var _err  = null;
 
     var init = function(conf) {
+        // Resolve the SQLite driver through the shared seam — node:sqlite on
+        // Node (>= 22.5.0), bun:sqlite behind an adapter on Bun. See lib/sqlite-driver.js.
         var DatabaseSync;
         try {
-            DatabaseSync = require('node:sqlite').DatabaseSync;
+            DatabaseSync = require('./../../../../lib/sqlite-driver').getDatabaseSync();
         } catch (e) {
-            _err = new Error(
-                '[SqliteConnector] node:sqlite requires Node.js >= 22.5.0. '
-                + 'Current: ' + process.version + '\n'
-                + e.message
-            );
+            _err = new Error('[SqliteConnector] ' + e.message);
             return;
         }
 

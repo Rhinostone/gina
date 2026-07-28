@@ -81,16 +81,14 @@ function noop() {}
 module.exports = function SqliteJobStore(connConf, bundle) {
     connConf = connConf || {};
 
-    // Require node:sqlite — available as a built-in since Node 22.5.0, zero npm deps.
+    // Resolve the SQLite driver through the shared seam — node:sqlite on
+    // Node (built-in since 22.5.0, zero npm deps), bun:sqlite behind an
+    // adapter on Bun. See lib/sqlite-driver.js.
     var DatabaseSync;
     try {
-        DatabaseSync = require('node:sqlite').DatabaseSync;
+        DatabaseSync = require('./../../../../lib/sqlite-driver').getDatabaseSync();
     } catch (e) {
-        throw new Error(
-            '[SqliteJobStore] node:sqlite requires Node.js >= 22.5.0. '
-            + 'Current: ' + process.version + '\n'
-            + e.message
-        );
+        throw new Error('[SqliteJobStore] ' + e.message);
     }
 
     // Resolve DB path: connectors.json `file` > default per-bundle file. The

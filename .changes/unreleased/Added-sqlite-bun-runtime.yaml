@@ -1,0 +1,3 @@
+kind: Added
+body: 'SQLite support under the Bun runtime — the sqlite ORM connector, session store, async-job store and the framework state store now resolve the Bun built-in `bun:sqlite` behind a `node:sqlite`-shaped adapter when `node:sqlite` is absent (Bun does not implement it; previously the connector and both stores failed at boot under Bun, and the state store silently fell back to JSON). Node resolution is unchanged (`node:sqlite` is still tried first), and transient/permanent connector-error classification reads both drivers identically.'
+time: 2026-07-29T00:07:09+01:00

@@ -38,9 +38,9 @@ describe('01 - SQLite connector: lib/connector.js source', function() {
         assert.ok(/module\.exports\s*=\s*SqliteConnector/.test(src));
     });
 
-    it('requires node:sqlite with a try/catch guard', function() {
-        assert.ok(/require\('node:sqlite'\)/.test(src));
-        // guard block: catch on Node < 22.5
+    it('resolves the SQLite driver through lib/sqlite-driver with a try/catch guard', function() {
+        assert.ok(/require\('\.\/\.\.\/\.\.\/\.\.\/\.\.\/lib\/sqlite-driver'\)\.getDatabaseSync\(\)/.test(src));
+        // guard block: catch when no SQLite driver exists in this runtime
         assert.ok(/catch\s*\(/.test(src));
     });
 

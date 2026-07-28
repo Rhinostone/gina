@@ -99,8 +99,9 @@ function StateStore() {
     /**
      * Open (or reuse) the SQLite connection and ensure the schema exists.
      *
-     * Falls back to null when `node:sqlite` is unavailable (Node < 22.5.0)
-     * or when `GINA_HOMEDIR` is not yet set.
+     * Falls back to null when no SQLite driver is available in this runtime
+     * (Node < 22.5.0 — under Bun, `bun:sqlite` is resolved via the shared
+     * `lib/sqlite-driver` seam) or when `GINA_HOMEDIR` is not yet set.
      *
      * @returns {object|null} DatabaseSync instance or null
      */
@@ -112,9 +113,9 @@ function StateStore() {
 
         var DatabaseSync;
         try {
-            DatabaseSync = require('node:sqlite').DatabaseSync;
+            DatabaseSync = require('./sqlite-driver').getDatabaseSync();
         } catch(e) {
-            return null; // Node < 22.5.0 — fall through to JSON path
+            return null; // no SQLite driver in this runtime — fall through to JSON path
         }
 
         var dbPath = nodePath.join(homeDir, 'gina.db');

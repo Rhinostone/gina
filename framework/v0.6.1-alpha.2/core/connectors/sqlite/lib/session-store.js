@@ -91,16 +91,14 @@ module.exports = function(session, bundle) {
         var defaultDbPath = _(getPath('gina').home + '/sessions-' + bundle + '.db', true);
         var dbPath = options.database || connConf.database || defaultDbPath;
 
-        // Require node:sqlite — available as a built-in since Node 22.5.0, zero npm deps.
+        // Resolve the SQLite driver through the shared seam — node:sqlite on
+        // Node (built-in since 22.5.0, zero npm deps), bun:sqlite behind an
+        // adapter on Bun. See lib/sqlite-driver.js.
         var DatabaseSync;
         try {
-            DatabaseSync = require('node:sqlite').DatabaseSync;
+            DatabaseSync = require('./../../../../lib/sqlite-driver').getDatabaseSync();
         } catch(e) {
-            throw new Error(
-                '[SqliteStore] node:sqlite requires Node.js >= 22.5.0. '
-                + 'Current: ' + process.version + '\n'
-                + e.message
-            );
+            throw new Error('[SqliteStore] ' + e.message);
         }
 
         this.db = new DatabaseSync(dbPath);
