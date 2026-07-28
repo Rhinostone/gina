@@ -1203,11 +1203,15 @@ describe('#COMPLY2 slice 2 — audit-trail boot registrar (fail-fast lint + gate
 
     // ---- the contiguous-span lock for the replica below ----
 
-    it('the lint span is CONTIGUOUS and fully mirrored: exactly 8 unconditional throws, in pinned order, + 1 gated', function () {
-        assert.equal((lintSpan.match(/throw new Error/g) || []).length, 8,
+    it('the lint span is CONTIGUOUS and fully mirrored: exactly 12 unconditional throws, in pinned order, + 4 gated', function () {
+        // Realigned for #COMPLY2 slice 3 (tamper-evidence chain): +4 unconditional
+        // chain-shape conjuncts, +3 gated guards (chain+store, no-signing-key,
+        // cross-bundle shared-file). The count is the tripwire: an added/removed
+        // lint conjunct must trip it and force a replica re-diff.
+        assert.equal((lintSpan.match(/throw new Error/g) || []).length, 12,
             'an added/removed lint conjunct must trip this count and force a replica re-diff');
-        assert.equal((gateSpan.match(/throw new Error/g) || []).length, 1,
-            'the gated span carries exactly the unresolved-projectPath guard');
+        assert.equal((gateSpan.match(/throw new Error/g) || []).length, 4,
+            'the gated span carries the unresolved-projectPath guard + the three slice-3 chain guards');
 
         // Every conjunct, in source order — the gap-free lock the replica mirrors.
         var conjuncts = [
@@ -1218,7 +1222,11 @@ describe('#COMPLY2 slice 2 — audit-trail boot registrar (fail-fast lint + gate
             '`settings.json > audit.actorKey` must be a non-empty string',
             '`settings.json > audit.events` must be an object',
             '`settings.json > audit.events.authz` must be a boolean',
-            '`store` and `file` are mutually exclusive'
+            '`store` and `file` are mutually exclusive',
+            '`settings.json > audit.chain` must be an object',
+            '`settings.json > audit.chain.enabled` must be a boolean',
+            '`settings.json > audit.chain.secret` must be a non-empty string',
+            'carries an unresolved `${...}` placeholder'
         ];
         var at = 0;
         conjuncts.forEach(function (lit) {
@@ -1228,6 +1236,12 @@ describe('#COMPLY2 slice 2 — audit-trail boot registrar (fail-fast lint + gate
         });
         assert.ok(gateSpan.indexOf('could not derive the log dir — `projectPath` is unresolved') > -1,
             'the gated projectPath guard');
+        assert.ok(gateSpan.indexOf('`audit.chain` requires the file backend') > -1,
+            'the gated chain+store refusal — the store seam has no ordering obligation');
+        assert.ok(gateSpan.indexOf('no signing key is configured') > -1,
+            'the gated fail-closed key requirement');
+        assert.ok(gateSpan.indexOf('resolves the SAME audit file') > -1,
+            'the gated cross-bundle shared-file refusal — two writers fork a linear chain');
     });
 
     // ---- pure-logic replica: the lint + the destination derivation ----
@@ -1267,6 +1281,21 @@ describe('#COMPLY2 slice 2 — audit-trail boot registrar (fail-fast lint + gate
         }
         if ( _auditSettings.store && _auditSettings.file ) {
             throw new Error('`settings.json > audit`: `store` and `file` are mutually exclusive.');
+        }
+        // #COMPLY2 slice 3 — the chain-shape conjuncts (unconditional, like the rest).
+        if ( typeof(_auditSettings.chain) != 'undefined' ) {
+            if ( typeof(_auditSettings.chain) != 'object' || _auditSettings.chain === null || Array.isArray(_auditSettings.chain) ) {
+                throw new Error('`settings.json > audit.chain` must be an object.');
+            }
+            if ( typeof(_auditSettings.chain.enabled) != 'undefined' && typeof(_auditSettings.chain.enabled) != 'boolean' ) {
+                throw new Error('`settings.json > audit.chain.enabled` must be a boolean.');
+            }
+            if ( typeof(_auditSettings.chain.secret) != 'undefined' && ( typeof(_auditSettings.chain.secret) != 'string' || _auditSettings.chain.secret === '' ) ) {
+                throw new Error('`settings.json > audit.chain.secret` must be a non-empty string.');
+            }
+            if ( typeof(_auditSettings.chain.secret) == 'string' && /\$\{/.test(_auditSettings.chain.secret) ) {
+                throw new Error('`settings.json > audit.chain.secret` carries an unresolved placeholder.');
+            }
         }
         if ( !_auditEnabled ) { return { enabled: false }; }
 
@@ -1361,6 +1390,30 @@ describe('#COMPLY2 slice 2 — audit-trail boot registrar (fail-fast lint + gate
         var out = auditRegistrarReplica({ enabled: true, store: 'auditDb', events: { authz: false }, actorKey: 'email' }, '/p', 'w', 'p');
         assert.deepEqual(out, { enabled: true, actorKey: 'email', eventsAuthz: false, store: 'auditDb' });
         assert.equal('file' in out, false, 'the connector path derives no file');
+    });
+
+    // ---- #COMPLY2 slice 3: the chain-shape conjuncts (replica fixtures) ----
+
+    it('replica: a malformed `audit.chain` block refuses the boot — object shape, strict-bool enabled', function () {
+        assert.throws(function () { auditRegistrarReplica({ chain: [] }, '/p', 'w', 'p'); },              /audit\.chain` must be an object/);
+        assert.throws(function () { auditRegistrarReplica({ chain: 'on' }, '/p', 'w', 'p'); },            /audit\.chain` must be an object/);
+        assert.throws(function () { auditRegistrarReplica({ chain: { enabled: 'true' } }, '/p', 'w', 'p'); }, /audit\.chain\.enabled` must be a boolean/,
+            'a truthy string would leave tamper-evidence silently OFF — the silent-OFF class again');
+        assert.throws(function () { auditRegistrarReplica({ chain: { enabled: 1 } }, '/p', 'w', 'p'); },  /audit\.chain\.enabled` must be a boolean/);
+    });
+
+    it('replica: a malformed or unresolved `audit.chain.secret` refuses the boot', function () {
+        assert.throws(function () { auditRegistrarReplica({ chain: { secret: '' } }, '/p', 'w', 'p'); },  /audit\.chain\.secret` must be a non-empty string/);
+        assert.throws(function () { auditRegistrarReplica({ chain: { secret: 42 } }, '/p', 'w', 'p'); },  /audit\.chain\.secret` must be a non-empty string/);
+        assert.throws(function () { auditRegistrarReplica({ chain: { secret: '${secret:MY_KEY}' } }, '/p', 'w', 'p'); }, /unresolved/,
+            'an unresolved placeholder means the named variable is not set — fail closed, never sign with the literal');
+    });
+
+    it('replica: the chain shapes are linted even when audit is DISABLED, and a well-formed block passes through', function () {
+        assert.throws(function () { auditRegistrarReplica({ enabled: false, chain: { enabled: 'yes' } }, '/p', 'w', 'p'); }, /audit\.chain\.enabled/,
+            'a malformed chain block with the trail OFF is still an author error');
+        var out = auditRegistrarReplica({ enabled: true, chain: { enabled: true, secret: 'k'.repeat(32) } }, '/srv/app', 'web', 'prod');
+        assert.equal(out.file, '/srv/app/logs/audit-web-prod.jsonl', 'a valid chain block never disturbs the destination derivation');
     });
 
     // ---- the settings template ships the block DISABLED + coherent ----

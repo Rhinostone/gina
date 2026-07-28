@@ -501,3 +501,112 @@ describe('11 - replica: getUrl path-form precedence + per-request isProxyHost in
         assert.equal(computeGetUrlIsProxyHost(undefined, false, true), true, 'req-less render keeps the latch');
     });
 });
+
+
+// ─── 12 — #B168: the getUrl override must never force an UNSET proxy_hostname ──
+//
+// The #B152 slot-first override runs after getRoute() and re-points url.isProxyHost
+// + url.proxy_hostname. In a slot-less render with the sticky latch true and the
+// worker global unset, it assigned an unset value while forcing isProxyHost true —
+// toUrl() then stringified it into the emitted URL ('undefined/...'), and it also
+// overwrote a usable envConf-derived resolution getRoute had just produced. The fix
+// holds getRoute's own resolution before the override, restores it when the
+// override resolved nothing, and degrades isProxyHost to false only when nothing
+// resolved anywhere — composing with getRoute's #B168 degrade (which guarantees a
+// self-consistent route: either isProxyHost true with a truthy proxy_hostname, or
+// isProxyHost false).
+
+describe('12 - #B168 getUrl override: hold-and-restore guard (no forced-unset proxy_hostname)', function() {
+
+    var HOLD    = 'var _routeProxyHostname = url.proxy_hostname;';
+    var RESTORE = 'url.proxy_hostname = _routeProxyHostname;';
+    var GUARD   = 'if ( !url.proxy_hostname ) {';
+    var FLIP    = 'url.isProxyHost = false;';
+
+    function pinHoldAndRestore(src, label) {
+        var holdIdx    = src.indexOf(HOLD);
+        var slotIdx    = src.indexOf(SLOT_PXHOST);
+        var restoreIdx = src.indexOf(RESTORE);
+        var flipIdx    = src.indexOf(FLIP);
+        var toUrlIdx   = src.indexOf('url = url.toUrl();');
+        assert.ok(holdIdx > -1, label + ': the hold of getRoute\'s resolution must exist');
+        assert.ok(slotIdx > -1 && restoreIdx > -1 && flipIdx > -1 && toUrlIdx > -1, label + ': all anchors must exist');
+        assert.ok(holdIdx < slotIdx, label + ': the hold must precede the slot-first override');
+        assert.ok(slotIdx < restoreIdx && restoreIdx < flipIdx, label + ': override, then restore, then degrade-flip');
+        assert.ok(flipIdx < toUrlIdx, label + ': the whole guard must complete before toUrl()');
+        assert.equal(countOccurrences(src, GUARD), 2, label + ': outer unresolved-guard + inner nothing-anywhere guard');
+    }
+
+    it('swig-filters: hold-and-restore guard present, ordered, before toUrl', function() {
+        pinHoldAndRestore(swigSrc, 'swig');
+    });
+
+    it('nunjucks-filters: hold-and-restore guard present, ordered, before toUrl (mirror)', function() {
+        pinHoldAndRestore(nunjSrc, 'nunjucks');
+    });
+
+    // -- decision-table replica of the guarded override (mirrors the shipped block) --
+
+    function overrideReplica(routeState, ctxReq, globalPXH, filterIsProxyHost) {
+        var url = { hostname: routeState.hostname, isProxyHost: routeState.isProxyHost };
+        if ('proxy_hostname' in routeState) { url.proxy_hostname = routeState.proxy_hostname; }
+        url.isProxyHost = filterIsProxyHost;
+        if (filterIsProxyHost) {
+            var _routeProxyHostname = url.proxy_hostname;
+            url.proxy_hostname = ( (ctxReq && ctxReq._ginaProxyHostname) || globalPXH );
+            url.proxy_host = url.hostname.replace(/(https|http)\:\/\//, '');
+            if ( !url.proxy_hostname ) {
+                url.proxy_hostname = _routeProxyHostname;
+                if ( !url.proxy_hostname ) {
+                    url.isProxyHost = false;
+                }
+            }
+        }
+        return url;
+    }
+
+    var ROUTE_DIRECT   = { hostname: 'https://direct.internal:3999', isProxyHost: false };
+    var ROUTE_RESOLVED = { hostname: 'https://direct.internal:3999', isProxyHost: true, proxy_hostname: 'http://fallback.example' };
+
+    it('replica: a true slot wins (per-request truth, unchanged)', function() {
+        var url = overrideReplica(ROUTE_RESOLVED, { _ginaIsProxyHost: true, _ginaProxyHostname: 'https://public.example' }, undefined, true);
+        assert.equal(url.isProxyHost, true);
+        assert.equal(url.proxy_hostname, 'https://public.example');
+    });
+
+    it('replica: a false slot degrades to the config-host branch (the #B152 raw victim, unchanged)', function() {
+        var url = overrideReplica(ROUTE_RESOLVED, { _ginaIsProxyHost: false, headers: {} }, 'https://stale.example', false);
+        assert.equal(url.isProxyHost, false, 'the raw victim must keep the direct-host branch');
+    });
+
+    it('replica: slot-less with a set global keeps the legacy read (unchanged)', function() {
+        var url = overrideReplica(ROUTE_RESOLVED, undefined, 'https://public.example', true);
+        assert.equal(url.isProxyHost, true);
+        assert.equal(url.proxy_hostname, 'https://public.example');
+    });
+
+    it('FIXED replica: slot-less + unset global keeps getRoute\'s own envConf-derived resolution', function() {
+        var url = overrideReplica(ROUTE_RESOLVED, undefined, undefined, true);
+        assert.equal(url.isProxyHost, true);
+        assert.equal(url.proxy_hostname, 'http://fallback.example',
+            'the override must not replace a usable resolution with an unset one');
+    });
+
+    it('FIXED replica: nothing resolvable anywhere degrades isProxyHost (no stringified unset host)', function() {
+        var url = overrideReplica(ROUTE_DIRECT, undefined, undefined, true);
+        assert.equal(url.isProxyHost, false, 'with nothing resolvable the route must fall back to its direct hostname');
+        assert.ok(!url.proxy_hostname, 'no truthy proxy_hostname may be fabricated');
+    });
+
+    it('SUBTRACT (pre-fix shape, no hold/restore): the override forces the unset value and the latch', function() {
+        // the pre-#B168 block: unconditional assign, no guard
+        var url = { hostname: ROUTE_RESOLVED.hostname, isProxyHost: ROUTE_RESOLVED.isProxyHost, proxy_hostname: ROUTE_RESOLVED.proxy_hostname };
+        url.isProxyHost = true;
+        url.proxy_hostname = ( (undefined) || undefined );
+        url.proxy_host = url.hostname.replace(/(https|http)\:\/\//, '');
+        assert.equal(url.isProxyHost, true, 'pre-fix: the latch stays forced');
+        assert.equal(typeof url.proxy_hostname, 'undefined', 'pre-fix: the usable resolution is overwritten');
+        assert.equal('' + url.proxy_hostname, 'undefined',
+            'pre-fix: toUrl()\'s hostname coercion emits the literal "undefined" prefix');
+    });
+});

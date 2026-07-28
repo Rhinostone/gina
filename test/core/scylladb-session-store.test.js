@@ -59,7 +59,7 @@ describe('01 - ScylladbStore: factory + driver loading', function() {
         assert.ok(/connName\s*=\s*session\.name/.test(src));
     });
 
-    it('default ttl is 86400 (one day) when not configured', function() {
+    it('oneDay constant (86400) survives as the set()/touch() last resort', function() {
         assert.ok(/var oneDay\s*=\s*86400/.test(src));
     });
 

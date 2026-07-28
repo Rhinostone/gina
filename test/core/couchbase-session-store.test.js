@@ -366,3 +366,395 @@ describe('06 - session-store.v4: get() handles JsonTranscoder pre-decoded object
         assert.equal(args.length, 0, 'no-session path passes no arguments to fn');
     });
 });
+
+
+// ─── 07 — touch() stamps lastModified unconditionally (#B165) ────────────────
+
+/**
+ * Compile a multi-line prototype method straight out of the shipped source.
+ *
+ * The couchbase stores cannot be `require`d from a test: they load `core/gna` at
+ * module scope (needs a live bundle context) and resolve `debug` through the
+ * global `_()` / `getPath('project')` helpers. Executing the shipped bytes beats
+ * hand-writing a replica, which would silently drift from the source it mirrors.
+ * Brace-matched rather than regex-captured because the body is multi-line.
+ *
+ * @param   {string}   src  - full file source.
+ * @param   {string}   decl - declaration prefix, e.g. `CouchbaseStore.prototype.touch`.
+ * @returns {function}        the compiled method; closure vars are injected here.
+ * @inner
+ */
+function extractMethod(src, decl) {
+    var declIdx = src.indexOf(decl);
+    assert.ok(declIdx > -1, 'declaration must exist: ' + decl);
+    assert.equal(src.indexOf(decl, declIdx + 1), -1,
+        'declaration must appear exactly once — an extraction matching twice is not a control: ' + decl);
+
+    var fnStart = src.indexOf('function', declIdx);
+    var open    = src.indexOf('{', fnStart);
+    assert.ok(open > -1, 'method body must have an opening brace');
+
+    var depth = 0
+        , end = -1
+    ;
+    for (var i = open; i < src.length; i++) {
+        if (src[i] === '{') {
+            depth++;
+        } else if (src[i] === '}') {
+            depth--;
+            if (depth === 0) { end = i + 1; break; }
+        }
+    }
+    assert.equal(depth, 0, 'braces must balance — an unbalanced slice is not a control');
+    assert.ok(end > open, 'method body must terminate');
+
+    // `oneDay`, `noop` and `debug` are module-scope closure vars in the store.
+    return new Function('oneDay', 'noop', 'debug',
+        'return (' + src.slice(fnStart, end) + ');'
+    )(86400, function () {}, function () {});
+}
+
+/**
+ * Minimal stand-in for the store instance: `touch()` reads `this.prefix`,
+ * `this.ttl` and `this.client` only.
+ *
+ * @param   {number|null} ttl - the value `this.ttl` resolves to.
+ * @returns {object}            store stand-in; `_upserts` records every write.
+ * @inner
+ */
+function makeStore(ttl) {
+    var upserts = [];
+    return {
+        prefix   : 'sess:',
+        ttl      : ttl,
+        client   : {
+            upsert: function (sid, sess, opts) {
+                upserts.push({ sid: sid, sess: sess, opts: opts });
+                return Promise.resolve({ cas: '1' });
+            }
+        },
+        _upserts : upserts
+    };
+}
+
+var ISO_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+[ ['v3', STORE_V3], ['v4', STORE_V4] ].forEach(function (pair) {
+
+    var label = pair[0]
+        , file  = pair[1]
+    ;
+
+    describe('07 - session-store.' + label + ': touch() stamps lastModified unconditionally (#B165)', function () {
+
+        var touch;
+        before(function () {
+            touch = extractMethod(fs.readFileSync(file, 'utf8'), 'CouchbaseStore.prototype.touch');
+        });
+
+        it('re-stamps a RECENT lastModified — the exact case the removed idle-check skipped', function (t, done) {
+            // maxAge 3600000 -> ttl 3600 (seconds); the stamp is 1000ms old. The
+            // removed check compared elapsed MILLISECONDS against ttl SECONDS
+            // (1000 > 3600 -> false), so it left the stamp untouched while the
+            // upsert below still extended the document's expiry. That divergence
+            // is the defect: post-fix the stamp tracks every extension.
+            var store    = makeStore(null)
+                , previous = new Date(Date.now() - 1000).toISOString()
+                , sess     = { cookie: { maxAge: 3600000 }, lastModified: previous }
+            ;
+
+            touch.call(store, 'abc', sess, function (err) {
+                assert.equal(err, null, 'touch must succeed');
+                assert.notEqual(sess.lastModified, previous,
+                    'lastModified must be re-stamped even when the session was touched moments ago');
+                assert.match(sess.lastModified, ISO_UTC,
+                    'stamp must be ISO 8601 UTC — the browser re-parses it for the session countdown');
+                done();
+            });
+        });
+
+        it('extends expiry on every touch, independent of the stamp', function (t, done) {
+            var store = makeStore(null)
+                , sess  = { cookie: { maxAge: 3600000 }, lastModified: new Date().toISOString() }
+            ;
+
+            touch.call(store, 'abc', sess, function () {
+                assert.equal(store._upserts.length, 1, 'exactly one write per touch');
+                assert.deepEqual(store._upserts[0].opts, { expiry: 3600 },
+                    'expiry must be refreshed unconditionally — this is why the stamp must be too');
+                assert.equal(store._upserts[0].sid, 'sess:abc', 'prefix must be applied to the key');
+                done();
+            });
+        });
+
+        it('a long-idle session is still stamped (no regression in the direction the old check did fire)', function (t, done) {
+            var store    = makeStore(null)
+                , previous = new Date(Date.now() - 90000000).toISOString()
+                , sess     = { cookie: { maxAge: 3600000 }, lastModified: previous }
+            ;
+
+            touch.call(store, 'abc', sess, function () {
+                assert.notEqual(sess.lastModified, previous, 'long-idle session must be re-stamped');
+                assert.match(sess.lastModified, ISO_UTC, 'stamp stays ISO 8601 UTC');
+                done();
+            });
+        });
+
+        it('does not stamp when ttl resolves to 0 — the retained `ttl > 0` guard', function (t, done) {
+            var store    = makeStore(null)
+                , previous = new Date(Date.now() - 1000).toISOString()
+                , sess     = { cookie: { maxAge: 0 }, lastModified: previous }
+            ;
+
+            touch.call(store, 'abc', sess, function () {
+                assert.equal(sess.lastModified, previous,
+                    'a session with no positive ttl must keep its stamp — only the idle-check was removed');
+                done();
+            });
+        });
+
+        it('serialises the stamped session, so the refreshed value is what gets written', function (t, done) {
+            var store = makeStore(null)
+                , sess  = { cookie: { maxAge: 3600000 }, lastModified: new Date(Date.now() - 1000).toISOString() }
+            ;
+
+            touch.call(store, 'abc', sess, function () {
+                var written = JSON.parse(store._upserts[0].sess);
+                assert.equal(written.lastModified, sess.lastModified,
+                    'the persisted payload must carry the refreshed stamp, not the stale one');
+                done();
+            });
+        });
+
+    });
+
+});
+
+
+// ─── 08 — the idle-check is gone from the source (#B165) ────────────────────
+
+describe('08 - session-store v3/v4: idle-check removed, ISO stamps (#B165)', function () {
+
+    /**
+     * Comments are stripped before every negative assertion: the fix's own
+     * explanatory comments deliberately NAME the removed construct, and a
+     * negative pin cannot tell a code reference from a prose one.
+     *
+     * @param   {string} file
+     * @returns {string} source with `//` comments removed.
+     * @inner
+     */
+    function activeSrc(file) {
+        return fs.readFileSync(file, 'utf8').replace(/\/\/[^\n]*/g, '');
+    }
+
+    [ ['v3', STORE_V3], ['v4', STORE_V4] ].forEach(function (pair) {
+
+        var label = pair[0]
+            , file  = pair[1]
+        ;
+
+        it(label + ': no elapsed-vs-ttl comparison survives in live code', function () {
+            var src = activeSrc(file);
+            assert.ok(src.indexOf('timeElapsed') < 0,
+                label + ': the ms-vs-seconds comparison must be gone, not merely corrected');
+            assert.ok(src.indexOf('currentDate') < 0,
+                label + ': its operand must be gone too, so no partial revival is possible');
+        });
+
+        it(label + ': touch() stamps with toISOString()', function () {
+            var src       = activeSrc(file)
+                , touchIdx  = src.indexOf('CouchbaseStore.prototype.touch')
+                , touchBody = src.slice(touchIdx)
+            ;
+            assert.match(touchBody, /sess\.lastModified\s*=\s*new Date\(\)\.toISOString\(\);/,
+                label + ': touch() must stamp an unambiguous UTC value');
+        });
+
+        it(label + ': no zone-less isoDateTime stamp remains in live code', function () {
+            var src = activeSrc(file);
+            assert.ok(src.indexOf("format('isoDateTime')") < 0,
+                label + ': a zone-less local-time stamp is re-parsed as browser-local and skews the countdown');
+        });
+
+    });
+
+});
+
+
+// ─── 09 — constructor requires options.db; the self-connect branch is gone (#B167) ──
+//
+// The former no-`db` fallback called `cluster.openBucket()` — an SDK v2 API
+// that does not exist on the supported v3/v4 SDKs — so reaching it always
+// threw at bundle init. The constructor now requires `options.db` (the open
+// bucket the model layer created) and fails fast with an actionable error.
+//
+// Negative pins run on comment-stripped source AND deliberately avoid the
+// removed API's name: the new JSDoc and the new error literal both NAME it
+// to explain the removal (the own-comment trap), so absence is asserted on
+// code-unique forms only (`connectOptions`, the Cluster construction, the
+// option plumbing) — tokens no comment or string in the new file carries.
+
+describe('09 - session-store v3/v4: constructor requires options.db (#B167)', function () {
+
+    /**
+     * Compile the CouchbaseStore constructor straight out of the shipped source.
+     *
+     * Same rationale as §07's `extractMethod` — the store cannot be `require`d
+     * in a test — but the constructor closes over different module vars
+     * (`Store`, `bundle`), so it gets its own injector rather than widening
+     * the §07 helper.
+     *
+     * @param   {string}   src - full file source.
+     * @returns {function}       the compiled constructor.
+     * @inner
+     */
+    function extractCtor(src) {
+        var decl    = 'function CouchbaseStore(options)';
+        var declIdx = src.indexOf(decl);
+        assert.ok(declIdx > -1, 'constructor declaration must exist');
+        assert.equal(src.indexOf(decl, declIdx + 1), -1,
+            'constructor must appear exactly once — an extraction matching twice is not a control');
+
+        var open  = src.indexOf('{', declIdx);
+        var depth = 0
+            , end = -1
+        ;
+        for (var i = open; i < src.length; i++) {
+            if (src[i] === '{') {
+                depth++;
+            } else if (src[i] === '}') {
+                depth--;
+                if (depth === 0) { end = i + 1; break; }
+            }
+        }
+        assert.equal(depth, 0, 'braces must balance — an unbalanced slice is not a control');
+
+        var FakeStore = function () {};
+        return new Function('Store', 'bundle',
+            'return (' + src.slice(declIdx, end) + ');'
+        )(FakeStore, 'testbundle');
+    }
+
+    /**
+     * Bucket stand-in matching what the model layer hands back: an object
+     * whose `defaultCollection()` returns the collection the store writes
+     * through. `scope()` is present because the PRE-fix v3 branch called it —
+     * keeping it lets the parity arms run identically against both
+     * generations of the source.
+     *
+     * @returns {object} `{ bucket, coll }`
+     * @inner
+     */
+    function makeBucket() {
+        var coll = { name: 'fake-collection' };
+        return {
+            coll   : coll,
+            bucket : {
+                name              : 'sessions',
+                scope             : function () { return { collection: function () { return coll; } }; },
+                defaultCollection : function () { return coll; }
+            }
+        };
+    }
+
+    [ ['v3', STORE_V3], ['v4', STORE_V4] ].forEach(function (pair) {
+
+        var label = pair[0]
+            , file  = pair[1]
+        ;
+
+        describe(label, function () {
+
+            var src, Ctor;
+            before(function () {
+                src  = fs.readFileSync(file, 'utf8');
+                Ctor = extractCtor(src);
+            });
+
+            // — behavioural: the working config is byte-compatible with before —
+
+            it('an open bucket as options.db becomes the client via defaultCollection()', function () {
+                var f     = makeBucket();
+                var store = new Ctor({ db: f.bucket });
+                assert.strictEqual(store.client, f.coll,
+                    'the client must be the bucket\'s default collection');
+            });
+
+            it('defaults survive: prefix "sess:", ttl null, timeouts 10000', function () {
+                var store = new Ctor({ db: makeBucket().bucket });
+                assert.equal(store.prefix, 'sess:');
+                assert.equal(store.ttl, null);
+                assert.equal(store.client.connectionTimeout, 10000);
+                assert.equal(store.client.operationTimeout, 10000);
+            });
+
+            it('explicit options survive: an empty-string prefix is kept, ttl and timeouts pass through', function () {
+                // prefix '' is a real deployed shape — `null == ''` is false, so
+                // the constructor must keep it rather than defaulting.
+                var store = new Ctor({ db: makeBucket().bucket, prefix: '', ttl: 3600,
+                    connectionTimeout: 2000, operationTimeout: 2500 });
+                assert.equal(store.prefix, '');
+                assert.equal(store.ttl, 3600);
+                assert.equal(store.client.connectionTimeout, 2000);
+                assert.equal(store.client.operationTimeout, 2500);
+            });
+
+            // — behavioural: the broken configs now fail fast and actionably —
+
+            it('no options.db: throws the actionable error, not an SDK TypeError', function () {
+                assert.throws(function () { new Ctor({}); }, function (err) {
+                    assert.ok(err instanceof Error);
+                    assert.match(err.message, /options\.db/, 'error must name the missing option');
+                    assert.match(err.message, /getModel\('session'\)\.getConnection\(\)/,
+                        'error must show the working recipe');
+                    assert.match(err.message, /#B167/, 'error must carry the reference');
+                    return true;
+                });
+            });
+
+            it('a collection-shaped db (no defaultCollection) trips the same guard — the entity-getConnection trap', function () {
+                // An entity’s getConnection(scope, collection) returns a
+                // collection, which has no defaultCollection() — the guard must
+                // catch it with instructions instead of a bare TypeError.
+                var collectionish = { _scope: {}, get: function () {}, upsert: function () {} };
+                assert.throws(function () { new Ctor({ db: collectionish }); }, function (err) {
+                    assert.match(err.message, /options\.db/, 'wrong-shape db must hit the actionable guard');
+                    return true;
+                });
+            });
+
+            it('no options at all: same guard (options defaulted to {})', function () {
+                assert.throws(function () { new Ctor(); }, /options\.db/);
+            });
+
+            // — source pins: the dead branch and its plumbing are globally gone —
+
+            it('no self-connect code survives (code-unique tokens, comment-stripped)', function () {
+                var active = src.replace(/\/\/[^\n]*/g, '');
+                assert.ok(active.indexOf('connectOptions') < 0,
+                    'the option-plumbing local must be gone');
+                assert.ok(active.indexOf('new Couchbase.Cluster') < 0,
+                    'the SDK-v2-era Cluster construction must be gone');
+                assert.ok(active.indexOf('hasOwnProperty("host")') < 0,
+                    'the dead connection-option parsing must be gone');
+                assert.ok(active.indexOf("require('couchbase')") < 0,
+                    'the store must never open its own SDK connection');
+            });
+
+            it('the client comes from options.db.defaultCollection() exactly once', function () {
+                assert.equal(src.split('options.db.defaultCollection()').length - 1, 1,
+                    'the guard-then-assign shape must be the single client source');
+            });
+
+            it('the guard tests both presence and bucket shape', function () {
+                assert.match(src,
+                    /if \( !options\.db \|\| typeof\(options\.db\.defaultCollection\) != 'function' \)/,
+                    'guard must reject a missing db AND a non-bucket db');
+            });
+
+        });
+
+    });
+
+});
