@@ -205,7 +205,15 @@ function Mongodb(conn, infos) {
         var name = arr[arr.length - 1].replace(/\.json$/i, '');
 
         if (!entities[entityName]) return;
-        if (typeof entities[entityName].prototype[name] !== 'undefined') return;
+        if (typeof entities[entityName].prototype[name] !== 'undefined') {
+            // Own property = user code in the entity .js wins (designed intent).
+            // Inherited name = the file is silently shadowed (e.g. gina's
+            // Object.prototype count()) — warn so the skip is diagnosable (#B173).
+            if ( !Object.prototype.hasOwnProperty.call(entities[entityName].prototype, name) ) {
+                console.warn('[Mongodb] skipping pipeline method \'' + name + '\' (' + source + '): the name is inherited on the ' + entityName + ' prototype chain (EventEmitter, entity base API, or gina\'s Object.prototype helpers like count()) — calls would run the inherited member instead. Rename the file, e.g. \'' + name + 'Rows.json\'.');
+            }
+            return;
+        }
 
         var rawSource = fs.readFileSync(source).toString();
 

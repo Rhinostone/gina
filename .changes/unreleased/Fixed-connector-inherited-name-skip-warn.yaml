@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Query files whose names collide with an inherited prototype member — for example `count.sql`, shadowed by the framework''s global `count()` helper — were silently skipped by the mysql, postgresql, sqlite, duckdb, scylladb, and mongodb connectors, with calls falling through to the inherited member. The skip is now reported at startup with the file path and a rename hint (e.g. `countRows.sql`); a file matching a method the entity class itself defines still skips silently, by design (user code wins).'
+time: 2026-07-29T18:28:40+01:00
