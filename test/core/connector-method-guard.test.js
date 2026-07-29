@@ -21,10 +21,15 @@
  *       connector source and EXECUTED against the real `utils/prototypes` +
  *       EventEmitter chain: inherited name → skip + warn; own property →
  *       skip + NO warn; fresh name → attach (fall-through) + no warn.
- *
- * Couchbase is deliberately NOT covered: it attaches unconditionally (a
- * colliding name shadows the inherited member instead of being skipped) and
- * is out of #B173's scope.
+ * §03 — #B174 (couchbase): the attach is deliberately UNCONDITIONAL — the
+ *       opposite polarity: a colliding name overwrites/shadows the existing
+ *       member instead of being skipped. Its guard warns WITHOUT skipping:
+ *       own-member overwrite (stamped entity props, a previously attached
+ *       query method) or a non-`Object.prototype` inherited shadow (the
+ *       EventEmitter API) → warn; `Object.prototype` members (gina's
+ *       count()/functionCount()) → silent — there the file winning is the
+ *       desired outcome. Same extract-and-execute harness; EVERY case must
+ *       still fall through to ATTACH (the guard contains no return).
  */
 
 var assert = require('node:assert');
@@ -218,5 +223,153 @@ describe('02 - #B173 behavioural: the REAL guard block, executed', function() {
         var out = runGuard(oldGuard, makeEntities(), 'count', '/models/db/x/count.x', warns);
         assert.notStrictEqual(out, 'ATTACH', 'old guard also skips');
         assert.strictEqual(warns.length, 0, 'old guard is silent - the #B173 defect');
+    });
+});
+
+var couchbaseSource = fs.readFileSync(
+    path.join(fwPath, 'core', 'connectors', 'couchbase', 'index.js')
+).toString();
+
+/**
+ * Couchbase-shaped fixture — the prototype exactly as `readSource()` sees it
+ * at the attach site: fresh proto chained through EventEmitter (per
+ * `lib/inherits` — `Object.create(parent.prototype)`), carrying the stamped
+ * base props of `index.js:234-:247` / `:484-:492` plus one previously
+ * attached query method. Entity base-API methods are constructor-INSTANCE
+ * assigned in `core/model/entity.js` and are therefore invisible on this
+ * chain — measured, not assumed (#B174 probe).
+ * @returns {object} entities map with one Report entity
+ * @inner
+ */
+function makeCouchbaseEntities() {
+    var proto = Object.create(EventEmitter.prototype);
+    proto.name               = 'Report';
+    proto.model              = 'm';
+    proto._collection        = 'report';
+    proto.getCluster         = function() {};
+    proto.bulkInsert         = function() {};
+    proto.previouslyAttached = function() { return 'first-file'; };
+    return { Report: { prototype: proto } };
+}
+
+describe('03 - #B174 couchbase: unconditional attach warns on clobber/shadow', function() {
+
+    var block = extractGuardBlock(couchbaseSource);
+
+    it('03.0 - fixture sanity: EventEmitter + gina helpers inherited, stamps own', function() {
+        var proto = makeCouchbaseEntities().Report.prototype;
+        assert.strictEqual(typeof proto.on, 'function');
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(proto, 'on'), false);
+        assert.strictEqual(typeof proto.count, 'function');
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(proto, 'count'), false);
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(proto, 'getCluster'), true);
+        assert.strictEqual(typeof proto.zzFresh, 'undefined');
+    });
+
+    it('03.1 - source pins: warn-guard precedes the attach, never skips', function() {
+        var src = couchbaseSource;
+        var guardAt  = src.indexOf(GUARD_OPEN);
+        var attachAt = src.indexOf('entities[entityName].prototype[name] = function()');
+
+        // Guard present, attach present, guard sits BEFORE the attach
+        assert.notStrictEqual(guardAt, -1, 'warn-guard missing');
+        assert.notStrictEqual(attachAt, -1, 'unconditional attach missing');
+        assert.ok(guardAt < attachAt, 'guard must precede the attach');
+
+        // The guard is warn-ONLY: no return anywhere inside the block, so
+        // nothing can ever skip the attach (behavior byte-identical).
+        assert.doesNotMatch(block, /\breturn\b/, 'guard must not skip');
+
+        // Discrimination + prefix + remedy
+        assert.notStrictEqual(block.indexOf('Object.prototype.hasOwnProperty.call(entities[entityName].prototype, name)'), -1);
+        assert.notStrictEqual(block.indexOf("console.warn('[couchbase] query method"), -1);
+        assert.notStrictEqual(block.indexOf('Rename the file'), -1);
+        assert.notStrictEqual(block.indexOf('Rows.sql'), -1);
+
+        // #B174 marker in the guard comment; couchbase never uses the six's
+        // skip vocabulary (it does not skip)
+        assert.notStrictEqual(src.indexOf('#B174'), -1, '#B174 marker missing');
+        assert.strictEqual(src.indexOf('skipping query method'), -1,
+            'couchbase must not carry the six-connector skip warn');
+    });
+
+    describe('03.2 - behavioural: the REAL guard block, executed', function() {
+
+        it("inherited 'on' (EventEmitter) - ATTACH + shadow warn", function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'on', '/models/db/n1ql/report/on.sql', warns);
+            assert.strictEqual(out, 'ATTACH', 'must fall through to attachment');
+            assert.strictEqual(warns.length, 1, 'exactly one warn');
+            assert.notStrictEqual(warns[0].indexOf('shadows an inherited member'), -1);
+            assert.notStrictEqual(warns[0].indexOf("'on'"), -1, 'warn names the method');
+            assert.notStrictEqual(warns[0].indexOf('/models/db/n1ql/report/on.sql'), -1, 'warn names the file');
+            assert.notStrictEqual(warns[0].indexOf('Report'), -1, 'warn names the entity');
+            assert.notStrictEqual(warns[0].indexOf('Rename the file'), -1, 'warn carries the remedy');
+        });
+
+        it("inherited 'emit' (EventEmitter) - ATTACH + shadow warn", function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'emit', '/models/db/n1ql/report/emit.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 1);
+            assert.notStrictEqual(warns[0].indexOf('shadows an inherited member'), -1);
+        });
+
+        it("own 'getCluster' (stamped entity prop) - ATTACH + overwrite warn", function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'getCluster', '/models/db/n1ql/report/getCluster.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 1);
+            assert.notStrictEqual(warns[0].indexOf('overwrites an existing own member'), -1);
+        });
+
+        it("own 'previouslyAttached' (duplicate query method) - ATTACH + overwrite warn", function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'previouslyAttached', '/models/db/n1ql/report/previouslyAttached.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 1);
+            assert.notStrictEqual(warns[0].indexOf('overwrites an existing own member'), -1);
+        });
+
+        it("inherited 'count' (gina Object.prototype helper) - ATTACH, SILENT", function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'count', '/models/db/n1ql/report/count.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 0,
+                'shadowing count() is the desired outcome on couchbase - must stay silent');
+        });
+
+        it("inherited 'functionCount' - ATTACH, SILENT", function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'functionCount', '/models/db/n1ql/report/functionCount.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 0);
+        });
+
+        it("native 'toString' (Object.prototype) - ATTACH, SILENT (documented exemption)", function() {
+            // Deliberate: the exemption is own-on-Object.prototype, which
+            // includes natives - a toString.sql folly shadows deterministically
+            // with no warn. Pinned so the edge stays a decision, not a drift.
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'toString', '/models/db/n1ql/report/toString.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 0);
+        });
+
+        it('fresh name - ATTACH, no warn', function() {
+            var warns = [];
+            var out = runGuard(block, makeCouchbaseEntities(), 'countRows', '/models/db/n1ql/report/countRows.sql', warns);
+            assert.strictEqual(out, 'ATTACH');
+            assert.strictEqual(warns.length, 0);
+        });
+    });
+
+    it('03.z - control: extraction MISSES the pre-#B174 source shape', function() {
+        // Validates the instrument: the pre-fix couchbase carried NO guard -
+        // the same extraction against that shape must fail, so a green 03.1
+        // is meaningful (red-first shape).
+        var preFix = "                }\n\n\n                entities[entityName].prototype[name] = function() {";
+        assert.throws(function() { extractGuardBlock(preFix); },
+            'extraction must fail on the guard-less pre-fix shape');
     });
 });

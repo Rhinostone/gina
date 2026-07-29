@@ -492,6 +492,21 @@ function Couchbase(conn, infos) {
                     entities[entityName].prototype.getCluster     = getCluster;
                 }
 
+                // #B174: the attach below is deliberately UNCONDITIONAL — a colliding
+                // name overwrites/shadows the existing member (the documented exception
+                // to the six-connector skip guard, see #B173). Warn when that collision
+                // clobbers machinery: an own member (a stamped entity property like
+                // `name`/`getCluster`, or a previously attached query method) or an
+                // inherited member NOT on `Object.prototype` (the EventEmitter API —
+                // an `on.sql` file breaks event wiring for this entity). Shadowing
+                // gina's `Object.prototype` helpers (`count()`/`functionCount()`) is
+                // the desired outcome and stays silent. Warn only — never skip.
+                if (typeof entities[entityName].prototype[name] !== 'undefined') {
+                    var _isOwnMember = Object.prototype.hasOwnProperty.call(entities[entityName].prototype, name);
+                    if ( _isOwnMember || !Object.prototype.hasOwnProperty.call(Object.prototype, name) ) {
+                        console.warn('[couchbase] query method \'' + name + '\' (' + source + ') on the ' + entityName + ' entity ' + (_isOwnMember ? 'overwrites an existing own member (a stamped entity property or a previously attached query method)' : 'shadows an inherited member on the prototype chain (e.g. the EventEmitter API)') + ' — the query file WINS and the original member becomes unreachable on this entity. Rename the file, e.g. \'' + name + 'Rows.sql\'.');
+                    }
+                }
 
                 entities[entityName].prototype[name] = function() {
                     // #B11 fix: recover the entity singleton when called via util.promisify
