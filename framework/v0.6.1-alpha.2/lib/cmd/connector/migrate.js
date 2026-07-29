@@ -73,7 +73,7 @@ function Migrate(opt, cmd) {
      * @constant
      * @type {string[]}
      */
-    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai', 'scylladb', 'mongodb'];
+    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai', 'scylladb', 'mongodb', 'duckdb'];
 
     /**
      * Canonical `$schema` URL injected by the `missing-schema` auto-fix.

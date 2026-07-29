@@ -8008,7 +8008,7 @@ describe('71 - #INS10 capture gates honour the instrumentation window', function
     });
 
     it('every connector query-capture gate ORs the window onto envIsDev (dev preserved)', function() {
-        ['couchbase', 'mysql', 'postgresql', 'sqlite', 'mongodb', 'scylladb'].forEach(function(c) {
+        ['couchbase', 'mysql', 'postgresql', 'sqlite', 'mongodb', 'scylladb', 'duckdb'].forEach(function(c) {
             var src = fs.readFileSync(path.join(FW, 'core/connectors/' + c + '/index.js'), 'utf8');
             assert.ok(/envIsDev\s*\|\|\s*\(process\.gina && process\.gina\._inspectorWindowUntil > Date\.now\(\)\)/.test(src),
                 c + ' must OR the window predicate onto envIsDev');

@@ -630,7 +630,7 @@ declare namespace gina {
 
     /** A single connector entry in `connectors.json` */
     interface ConnectorEntry {
-        connector?: 'couchbase' | 'mongodb' | 'scylladb' | 'mysql' | 'postgresql' | 'sqlite' | 'redis' | 'ai';
+        connector?: 'couchbase' | 'mongodb' | 'scylladb' | 'mysql' | 'postgresql' | 'sqlite' | 'duckdb' | 'redis' | 'ai';
         protocol?: string;
         host?: string;
         port?: number;

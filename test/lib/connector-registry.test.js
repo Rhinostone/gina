@@ -8,7 +8,7 @@
  * Tests cover:
  *   (a) module shape — public exports, DRIVER_MAP + AI_DRIVER_MAP keys
  *   (b) DRIVER_MAP entries — couchbase, redis, mysql, postgresql,
- *       mongodb, scylladb, sqlite (builtin)
+ *       mongodb, scylladb, duckdb, sqlite (builtin)
  *   (c) AI_DRIVER_MAP entries — anthropic + 10 OpenAI-compatible schemes
  *   (d) getDriver() / getAIDriver() behaviour — known + unknown inputs
  *   (e) getDriverTypes() / getAISchemes() behaviour — stable orderings
@@ -81,15 +81,19 @@ describe('02 - DRIVER_MAP entries', function () {
         assert.deepEqual(registry.DRIVER_MAP.scylladb, { npm: 'cassandra-driver', range: '>=4.0.0' });
     });
 
+    it('maps duckdb → @duckdb/node-api >=1.5.5-r.0 <2 (prerelease-aware — caret ranges match nothing)', function () {
+        assert.deepEqual(registry.DRIVER_MAP.duckdb, { npm: '@duckdb/node-api', range: '>=1.5.5-r.0 <2' });
+    });
+
     it('flags sqlite as builtin (node:sqlite)', function () {
         assert.equal(registry.DRIVER_MAP.sqlite.builtin, true);
         assert.match(registry.DRIVER_MAP.sqlite.note, /node:sqlite/);
     });
 
-    it('has no surprise keys — exactly 7 connector types', function () {
+    it('has no surprise keys — exactly 8 connector types', function () {
         assert.deepEqual(
             Object.keys(registry.DRIVER_MAP).sort(),
-            ['couchbase', 'mongodb', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']
+            ['couchbase', 'duckdb', 'mongodb', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']
         );
     });
 });
@@ -213,7 +217,7 @@ describe('06 - getDriverTypes / getAISchemes', function () {
     it('getDriverTypes preserves declaration order', function () {
         assert.deepEqual(
             registry.getDriverTypes(),
-            ['couchbase', 'redis', 'mysql', 'postgresql', 'mongodb', 'scylladb', 'sqlite']
+            ['couchbase', 'redis', 'mysql', 'postgresql', 'mongodb', 'scylladb', 'duckdb', 'sqlite']
         );
     });
 

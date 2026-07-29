@@ -1,0 +1,470 @@
+/*
+ * This file is part of the gina package.
+ * Copyright (c) 2009-2026 Rhinostone <contact@gina.io>
+ *
+ * For the full copyright and license information, please view the LICENSE
+ * file that was distributed with this source code.
+ */
+'use strict';
+
+var fs        = require('fs');
+var sqlParser = require('./../sql-parser'); // #SQL1 state-machine comment stripper
+var lib       = require('./../../../lib') || require.cache[require.resolve('./../../../lib')];
+var inherits  = lib.inherits;
+var console   = lib.logger;
+
+/**
+ * DuckDB ORM connector — embedded analytical (columnar / OLAP) store.
+ *
+ * Wires entity classes with SQL methods read from the bundle's `sql/` directory.
+ * SQL files use DuckDB syntax with positional placeholders — `?` and `$1` are both
+ * accepted by the engine; args are bound positionally as an array either way.
+ * Backed by the DuckDBConnection passed from DuckdbConnector.onReady.
+ *
+ * Bundle model layout:
+ * ```
+ * models/
+ *   <database>/
+ *     entities/
+ *       ReportEntity.js        ← entity class
+ *     sql/
+ *       Report/
+ *         findById.sql         ← SELECT … WHERE id = ?
+ *         totals.sql           ← WITH … SELECT … (CTEs are fine)
+ *         insert.sql
+ * ```
+ *
+ * SQL file format:
+ * ```sql
+ * / *
+ *  * @param {string}  $1   report id
+ *  * @return {object}
+ *  * /
+ * SELECT * FROM reports WHERE id = ?
+ * ```
+ *
+ * `@return` annotation controls result shape:
+ *   {object}  → first row or null
+ *   {Array}   → all rows (default for row-returning statements)
+ *   {boolean} → rowsChanged > 0 (write) / rows.length > 0 (row-returning)
+ *   {number}  → first key of first row (COUNT(*) queries)
+ *   (none)    → { changes } for write ops; all rows otherwise
+ *
+ * Row values come from the driver's JSON-safe getter (`getRowObjectsJson()`):
+ * BIGINT / HUGEINT / DECIMAL / DATE / TIMESTAMP arrive as STRINGS (same behaviour
+ * as the pg driver's bigint/numeric handling) so results always survive
+ * JSON.stringify. `{number}` coercion Number()s the COUNT string.
+ *
+ * Row-returning statements are recognised beyond bare SELECT: WITH (CTEs),
+ * FROM-first, SUMMARIZE, PIVOT/UNPIVOT, DESCRIBE and SHOW all return rows in
+ * DuckDB's dialect — a bare ^SELECT test would route them to the write path,
+ * where the driver reports rowsChanged 0 and the rows would be silently lost.
+ *
+ * Methods return a native Promise with `.onComplete(cb)` for backward compatibility.
+ *
+ * @class Duckdb
+ * @constructor
+ * @param {object} conn  - DuckDBConnection from DuckdbConnector.onReady
+ * @param {object} infos - { model, bundle, database, scope }
+ * @returns {object}     - Entity class map: { ReportEntity: Constructor, … }
+ */
+function Duckdb(conn, infos) {
+    var envIsDev    = ( /^true$/i.test(process.env.NODE_ENV_IS_DEV) ) ? true : false;
+    var isCacheless = (process.env.NODE_ENV_IS_DEV == 'false') ? false : true;
+
+    // #QI1 — in-memory index map built from indexes.sql at startup.
+    // Keys are lowercase table names; values are [{ name, primary }].
+    // null when no indexes.sql exists (grey N/A badge in Inspector).
+    var _knownIndexes = null;
+    /** @type {boolean} #QI2 — true after live introspection has populated _knownIndexes */
+    var _liveIntrospected = false;
+
+    // -------------------------------------------------------------------------
+    // init — load entities + SQL methods
+    // -------------------------------------------------------------------------
+    var init = function(conn, infos) {
+        var EntitySuperClass = null;
+        var entitiesPath     = getPath('bundle') + '/models/' + infos.database + '/entities';
+        var files            = [];
+        var entities         = {};
+        var entityName       = '';
+        var Entity           = null;
+        var className        = null;
+        var filename         = null;
+
+        // EntitySuperClass ────────────────────────────────────────────────────
+        filename = getPath('gina').core + '/model/entity.js';
+        if (isCacheless) {
+            delete require.cache[require.resolve(_(filename, true))];
+        }
+        EntitySuperClass = require(_(filename, true));
+
+        // Entity JS files ─────────────────────────────────────────────────────
+        if (!fs.existsSync(entitiesPath)) {
+            new _(entitiesPath).mkdirSync();
+        }
+        files = fs.readdirSync(entitiesPath);
+
+        for (var f = 0, fLen = files.length; f < fLen; ++f) {
+            if ( /^\./.test(files[f]) || !/\.js$/i.test(files[f]) ) continue;
+
+            if (isCacheless) {
+                delete require.cache[require.resolve(_(entitiesPath + '/' + files[f], true))];
+            }
+
+            entityName = files[f].replace(/\.js$/i, '');
+            className  = entityName.substring(0, 1).toUpperCase() + entityName.substring(1);
+
+            Entity = require(_(entitiesPath + '/' + files[f], true));
+            if (typeof Entity !== 'function') continue;
+
+            Entity = inherits(Entity, EntitySuperClass);
+
+            Entity.prototype.name        = className;
+            Entity.prototype.model       = infos.model;
+            Entity.prototype.bundle      = infos.bundle;
+            Entity.prototype.database    = infos.database;
+            Entity.prototype._collection = entityName;
+            Entity.prototype._scope      = infos.scope || process.env.NODE_SCOPE;
+            Entity.prototype._filename   = _(entitiesPath + '/' + files[f], true);
+
+            entities[className] = Entity;
+        }
+
+        // SQL method files ────────────────────────────────────────────────────
+        var sqlDir = _(getPath('bundle') + '/models/' + infos.database + '/sql');
+        if (fs.existsSync(sqlDir)) {
+            var sqlEntries = fs.readdirSync(sqlDir);
+            for (var s = 0, sLen = sqlEntries.length; s < sLen; s++) {
+                if ( /^\./.test(sqlEntries[s]) ) continue;
+                loadSQL(entities, conn, _(sqlDir + '/' + sqlEntries[s]));
+            }
+
+            // #QI1 — load indexes.sql if present
+            var indexesFile = _(sqlDir + '/indexes.sql', true);
+            if (fs.existsSync(indexesFile)) {
+                try {
+                    var indexesSrc = fs.readFileSync(indexesFile).toString();
+                    _knownIndexes = sqlParser.parseCreateIndexes(indexesSrc);
+                } catch (e) {
+                    console.warn('[duckdb] Failed to parse indexes.sql: ' + e.message);
+                    _knownIndexes = {};
+                }
+            }
+        }
+
+        // #QI2 — live index introspection listener (dev mode only).
+        // The /_gina/indexes endpoint emits this event; the connector responds
+        // with live index data from duckdb_indexes(), updating _knownIndexes
+        // so all subsequent QI entries benefit automatically.
+        if (envIsDev) {
+            process.on('inspector#indexes', function(_cb) {
+                if (_liveIntrospected) {
+                    return _cb(null, 'duckdb', infos.database, _knownIndexes);
+                }
+                try {
+                    conn.runAndReadAll('SELECT index_name, table_name, is_unique, sql FROM duckdb_indexes()').then(
+                        function(reader) {
+                            var map = {};
+                            var rows = reader.getRowObjectsJson();
+                            for (var r = 0, rLen = rows.length; r < rLen; r++) {
+                                var tbl = String(rows[r].table_name).toLowerCase();
+                                var idx = rows[r].index_name;
+                                var def = rows[r].sql || '';
+                                if (!map[tbl]) map[tbl] = [];
+                                map[tbl].push({
+                                    name: idx,
+                                    primary: /PRIMARY KEY/i.test(def),
+                                    // #QI Phase C.2 — parse the indexed columns out of the CREATE INDEX text
+                                    columns: sqlParser.parseIndexDefColumns(def)
+                                });
+                            }
+                            // Merge live data into _knownIndexes (live wins)
+                            if (_knownIndexes === null) _knownIndexes = {};
+                            var tables = Object.keys(map);
+                            for (var i = 0; i < tables.length; i++) {
+                                _knownIndexes[tables[i]] = map[tables[i]];
+                            }
+                            _liveIntrospected = true;
+                            _cb(null, 'duckdb', infos.database, _knownIndexes);
+                        },
+                        function(err) {
+                            _cb(err, 'duckdb', infos.database, _knownIndexes);
+                        }
+                    );
+                } catch (e) {
+                    _cb(e, 'duckdb', infos.database, _knownIndexes);
+                }
+            });
+        }
+
+        return entities;
+    };
+
+
+    // -------------------------------------------------------------------------
+    // loadSQL — walk the sql/ entry (directory per entity or flat file)
+    // -------------------------------------------------------------------------
+    var loadSQL = function(entities, conn, sqlPath) {
+        var stat = fs.statSync(sqlPath);
+
+        if (stat.isDirectory()) {
+            // sql/<EntityName>/methodName.sql
+            var arr        = sqlPath.split(/\//g);
+            var entityName = arr[arr.length - 1];
+            entityName = entityName.charAt(0).toUpperCase() + entityName.slice(1);
+
+            var sqlFiles = fs.readdirSync(sqlPath);
+            for (var f = 0, fLen = sqlFiles.length; f < fLen; f++) {
+                if ( /^\./.test(sqlFiles[f]) || !/\.sql$/i.test(sqlFiles[f]) ) continue;
+                readSQL(entities, conn, entityName, _(sqlPath + '/' + sqlFiles[f], true));
+            }
+        } else {
+            // flat file: <EntityName>_<methodName>.sql
+            readSQL(entities, conn, null, sqlPath);
+        }
+    };
+
+
+    // -------------------------------------------------------------------------
+    // readSQL — parse one .sql file and attach a method to the entity
+    // -------------------------------------------------------------------------
+    var readSQL = function(entities, conn, entityName, source) {
+        var arr  = source.split(/\//g);
+        var name = arr[arr.length - 1].replace(/\.sql$/i, '');
+
+        // Infer entity from flat filename prefix when not given
+        if (!entityName) {
+            var parts = name.split('_');
+            if (parts.length < 2) return;
+            entityName = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+            name       = parts.slice(1).join('_');
+        }
+
+        if (!entities[entityName]) return;
+        if (typeof entities[entityName].prototype[name] !== 'undefined') return;
+
+        // ── Parse the SQL file ────────────────────────────────────────────────
+        var rawSource = fs.readFileSync(source).toString();
+
+        var returnType = null;
+        var retMatch   = rawSource.match(/@return\s+\{([^}]+)\}/);
+        if (retMatch) returnType = retMatch[1].trim().toLowerCase();
+
+        var paramTypes = [];
+        var ptMatches  = rawSource.match(/@param\s+\{([^}]+)\}/g);
+        if (ptMatches) {
+            for (var pt = 0; pt < ptMatches.length; pt++) {
+                paramTypes.push(ptMatches[pt].match(/\{([^}]+)\}/)[1].trim().toLowerCase());
+            }
+        }
+
+        // #SQL1 — state-machine stripper handles nested comments and
+        // -- / // inside string literals correctly
+        var queryString = sqlParser.stripComments(rawSource)
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        if (!queryString) return;
+
+        // DuckDB-dialect row-returning detection. A bare ^SELECT test (the
+        // mysql/postgresql form) would route WITH (CTEs), FROM-first,
+        // SUMMARIZE, PIVOT/UNPIVOT, DESCRIBE and SHOW through the write path —
+        // measured on the driver: run() reports rowsChanged 0 for a WITH query
+        // and the rows are silently lost. Analytics SQL leans on CTEs, so the
+        // classifier covers the dialect's row-returning statement heads.
+        var isRowReturning = /^\s*(SELECT|WITH|FROM|SUMMARIZE|PIVOT|UNPIVOT|DESCRIBE|SHOW)\b/i.test(queryString);
+        var trigger        = 'DUCKDB:' + entityName.toLowerCase() + '#' + name;
+
+        // ── Helper: coerce a driver result to the annotated return type ───────
+        //
+        // Row-returning → a DuckDBResultReader; rows via getRowObjectsJson()
+        //                 (JSON-safe: BIGINT/DECIMAL/DATE/TIMESTAMP as strings)
+        // Write         → a DuckDBMaterializedResult; rowsChanged is the
+        //                 affected-row count (plain number)
+        // ─────────────────────────────────────────────────────────────────────
+        var coerce = function(result) {
+            if (isRowReturning) {
+                var rows = result.getRowObjectsJson();
+
+                if (returnType === 'object') {
+                    return (rows.length > 0) ? rows[0] : null;
+                }
+                if (returnType === 'boolean') {
+                    return rows.length > 0;
+                }
+                if (returnType === 'number' && /count\s*\(/i.test(queryString)) {
+                    if (rows.length > 0 && typeof rows[0] === 'object') {
+                        var keys = Object.keys(rows[0]);
+                        return (keys.length > 0) ? Number(rows[0][keys[0]]) : 0;
+                    }
+                    return 0;
+                }
+                // {array} or no annotation — all rows, normalised to null when empty
+                return rows.length > 0 ? rows : null;
+            }
+
+            // Write op
+            if (returnType === 'boolean') return result.rowsChanged > 0;
+            if (returnType === 'number')  return result.rowsChanged;
+            // Default: normalised write result (DuckDB has no insertId analog)
+            return { changes: result.rowsChanged };
+        };
+
+        // ── Entity method ─────────────────────────────────────────────────────
+        entities[entityName].prototype[name] = function() {
+            var args = Array.prototype.slice.call(arguments);
+            var _mainCallback = null;
+
+            // Trailing-function detection (util.promisify / explicit callback)
+            if (typeof args[args.length - 1] === 'function') {
+                _mainCallback = args.pop();
+            }
+
+            // Positional type casting from @param annotations
+            for (var t = 0, tLen = paramTypes.length; t < tLen && t < args.length; t++) {
+                switch (paramTypes[t]) {
+                    case 'number':
+                    case 'integer': args[t] = parseInt(args[t], 10);                          break;
+                    case 'float':   args[t] = parseFloat(String(args[t]).replace(/,/, '.')); break;
+                    case 'string':  args[t] = String(args[t]);                                break;
+                }
+            }
+
+            if (envIsDev) {
+                console.debug('[ ' + trigger + ' ] ' + queryString);
+                if (args.length > 0) {
+                    console.debug('[ ' + trigger + ' ] params: ' + JSON.stringify(args));
+                }
+            }
+
+            // ── QI — dev-mode query instrumentation ──────────────────────────
+            var _devLog = null, _queryEntry = null;
+            // #INS10 — capture during a prod instrumentation window too (not just dev mode).
+            if (envIsDev || (process.gina && process.gina._inspectorWindowUntil > Date.now())) {
+                var _alsStore = process.gina && process.gina._queryALS
+                    ? process.gina._queryALS.getStore() : null;
+                _devLog = _alsStore ? _alsStore._devQueryLog : null;
+                if (_devLog) {
+                    // #QI1 — resolve indexes from _knownIndexes map
+                    // #QI Phase C — annotate per-index column coverage vs the WHERE filter
+                    var _indexes = null;
+                    // #QI Phase C.3 - emit table + whereColumns even without indexes.sql
+                    var _tbl = sqlParser.extractTargetTable(queryString);
+                    var _whereColumns = sqlParser.extractWhereColumns(queryString);
+                    if (_knownIndexes !== null) {
+                        var _tblIdx = (_tbl && _knownIndexes[_tbl]) ? _knownIndexes[_tbl] : [];
+                        var _cov = sqlParser.annotateCoverage(_tblIdx, queryString);
+                        _indexes = _cov.indexes;
+                        _whereColumns = _cov.whereColumns;
+                    }
+                    _queryEntry = {
+                        type        : 'DUCKDB',
+                        trigger     : entityName.toLowerCase() + '#' + name,
+                        statement   : String(queryString),
+                        params      : args.length > 0 ? args.slice() : [],
+                        durationMs  : 0,
+                        resultCount : 0,
+                        resultSize  : 0,
+                        indexes     : _indexes,
+                        whereColumns: _whereColumns,
+                        table       : _tbl || null,
+                        error       : null,
+                        source      : source || '',
+                        origin      : infos.bundle,
+                        connector   : 'duckdb'
+                    };
+                    _queryEntry._startMs = Date.now();
+                    _devLog.push(_queryEntry);
+                }
+            }
+
+            // ── Option B — native Promise with .onComplete() shim ─────────────
+            //
+            // @duckdb/node-api is natively async (Promise-based) — no
+            // setTimeout(0) needed. The Promise resolves inside the driver's
+            // own then-chain, giving callers the same timing guarantees as the
+            // mysql / postgresql connectors.
+            // ─────────────────────────────────────────────────────────────────
+            if (_mainCallback === null) {
+                var _resolve, _reject, _internalData;
+
+                var _promise = new Promise(function(resolve, reject) {
+                    _resolve = resolve;
+                    _reject  = reject;
+                });
+
+                _promise.onComplete = function(cb) {
+                    _promise.then(
+                        function()    { cb(null, _internalData); },
+                        function(err) { cb(err); }
+                    );
+                    return _promise;
+                };
+
+                var _driverCall = isRowReturning
+                    ? conn.runAndReadAll(queryString, args)
+                    : conn.run(queryString, args);
+
+                _driverCall.then(
+                    function(result) {
+                        if (_queryEntry) {
+                            _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
+                            // _startMs is kept for the Flow tab timeline (#FI)
+                        }
+                        var raw = coerce(result);
+                        if (_queryEntry) {
+                            _queryEntry.resultCount = raw ? (Array.isArray(raw) ? raw.length : 1) : 0;
+                            try { _queryEntry.resultSize = raw ? JSON.stringify(raw).length : 0; } catch(_e) { _queryEntry.resultSize = 0; }
+                        }
+                        _internalData = raw;
+                        _resolve(raw);
+                    },
+                    function(err) {
+                        if (_queryEntry) {
+                            _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
+                            _queryEntry.error = err.message || String(err);
+                        }
+                        err.message = '[ ' + source + ' ]\n' + err.message;
+                        _reject(lib.connectorError.stamp(err));
+                    }
+                );
+
+                return _promise;
+
+            } else {
+                // Direct callback path (util.promisify or explicit callback)
+                var _driverCall2 = isRowReturning
+                    ? conn.runAndReadAll(queryString, args)
+                    : conn.run(queryString, args);
+
+                _driverCall2.then(
+                    function(result) {
+                        if (_queryEntry) {
+                            _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
+                        }
+                        var raw = coerce(result);
+                        if (_queryEntry) {
+                            _queryEntry.resultCount = raw ? (Array.isArray(raw) ? raw.length : 1) : 0;
+                            try { _queryEntry.resultSize = raw ? JSON.stringify(raw).length : 0; } catch(_e) { _queryEntry.resultSize = 0; }
+                        }
+                        _mainCallback(null, raw);
+                    },
+                    function(err) {
+                        if (_queryEntry) {
+                            _queryEntry.durationMs = Date.now() - _queryEntry._startMs;
+                            _queryEntry.error = err.message || String(err);
+                        }
+                        err.message = '[ ' + source + ' ]\n' + err.message;
+                        _mainCallback(lib.connectorError.stamp(err));
+                    }
+                );
+            }
+        };
+    };
+
+
+    return init(conn, infos);
+}
+
+module.exports = Duckdb;

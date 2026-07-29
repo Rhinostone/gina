@@ -61,7 +61,7 @@ function Remove(opt, cmd) {
      * @constant
      * @type {string[]}
      */
-    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai', 'scylladb', 'mongodb'];
+    var ALLOWED_CONNECTOR_TYPES = ['couchbase', 'mysql', 'postgresql', 'sqlite', 'redis', 'ai', 'scylladb', 'mongodb', 'duckdb'];
 
     /**
      * Parse positionals, validate scope, scan for usages, write the

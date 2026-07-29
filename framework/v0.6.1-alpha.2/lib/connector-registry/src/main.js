@@ -64,6 +64,11 @@ var DRIVER_MAP = {
     postgresql : { npm: 'pg',               range: '>=8.0.0' },
     mongodb    : { npm: 'mongodb',          range: '>=7.0.0' },
     scylladb   : { npm: 'cassandra-driver', range: '>=4.0.0' },
+    // Every published @duckdb/node-api version carries an `-r.N` prerelease
+    // suffix, so a caret range matches NOTHING (npm E404) and this floor is
+    // tuple-frozen (semver excludes prereleases of other version tuples) —
+    // bump it on driver updates like any other row.
+    duckdb     : { npm: '@duckdb/node-api',  range: '>=1.5.5-r.0 <2' },
     sqlite     : { builtin: true, note: 'Node.js >= 22.5.0 built-in (node:sqlite)' }
 };
 
@@ -137,7 +142,7 @@ function getAIDriver(scheme) {
  *
  * @example
  * lib.connectorRegistry.getDriverTypes();
- * // → ['couchbase', 'redis', 'mysql', 'postgresql', 'mongodb', 'scylladb', 'sqlite']
+ * // → ['couchbase', 'redis', 'mysql', 'postgresql', 'mongodb', 'scylladb', 'duckdb', 'sqlite']
  *
  * @returns {string[]}
  */

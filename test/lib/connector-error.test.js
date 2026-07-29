@@ -16,7 +16,7 @@
  *  - §03 proves totality: exotic / hostile error shapes never make classify throw.
  *  - §04 exercises stamp(): in-place, additive, idempotent, non-object safe,
  *    frozen-object safe.
- *  - §05 pins the wiring: all six datastore connectors stamp at their error
+ *  - §05 pins the wiring: all seven datastore connectors stamp at their error
  *    sites, and lib/index.js registers the module via a plain require.
  *
  * Usage: node --test test/lib/connector-error.test.js
@@ -233,6 +233,7 @@ describe('#CE1 §05 — wiring: every connector stamps, and lib registers the mo
         'mongodb'    : { needle: 'lib.connectorError.stamp(err)',   count: 2 },
         'mysql'      : { needle: 'lib.connectorError.stamp(err)',   count: 2 },
         'postgresql' : { needle: 'lib.connectorError.stamp(err)',   count: 2 },
+        'duckdb'     : { needle: 'lib.connectorError.stamp(err)',   count: 2 },
         'scylladb'   : { needle: 'lib.connectorError.stamp(err)',   count: 2 },
         'sqlite'     : { needle: 'lib.connectorError.stamp(e)',     count: 2 },
         'couchbase'  : { needle: 'lib.connectorError.stamp',        count: 2 }
