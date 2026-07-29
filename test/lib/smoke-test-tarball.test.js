@@ -17,8 +17,10 @@
  *     differ from the requested --start-port-from) and asserts HTTP 200 + the
  *     greeting.
  *
- * `smoke_in_container.js` is NEVER require()'d here — it calls `main()` on load
- * (which would run `npm install -g`); it is only read as text for source-pins.
+ * `smoke_in_container.js` is only read as TEXT here, for source-pins. It is now
+ * guarded behind `require.main === module` too (so requiring it never runs a
+ * smoke), and its pure SQLite-fixture builders are exercised by their own suite —
+ * test/lib/smoke-in-container-fixture.test.js.
  */
 
 'use strict';
@@ -122,8 +124,8 @@ describe('smoke gate — in-container source invariants', function () {
         assert.match(CONT_SRC, /readJSON\(projectsPath\)\[PROJECT\]/);
     });
 
-    it('scaffolds exactly the two requested bundles: api + frontend', function () {
-        assert.match(CONT_SRC, /BUNDLES\s*=\s*\['api',\s*'frontend'\]/);
+    it('scaffolds exactly the three requested bundles: api + frontend + db', function () {
+        assert.match(CONT_SRC, /BUNDLES\s*=\s*\['api',\s*'frontend',\s*'db'\]/);
     });
 
     it('asserts HTTP 200 with the boilerplate greeting', function () {
