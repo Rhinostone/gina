@@ -3,7 +3,7 @@
   "url": "https://context7.com/gina-io/gina",
   "public_key": "pk_MGD4ulFUKUHnxmzFGuWc8",
   "projectTitle": "Gina",
-  "description": "Node.js MVC framework with no Express dependency, built-in HTTP/2, a multi-bundle architecture and scope-based data isolation.",
+  "description": "MVC framework for Node.js and Bun with built-in HTTP/2, multi-bundle architecture, and scope-based data isolation — no Express dependency.",
   "branch": "master",
   "excludeFolders": [
     ".changes",
