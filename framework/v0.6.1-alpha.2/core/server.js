@@ -5204,7 +5204,7 @@ function Server(options) {
                             return false;
                         }
 
-                        var liner = new require('stream').Transform({objectMode: true});
+                        var liner = require('stream').Transform({objectMode: true});
 
                         liner._transform = function (chunk, encoding, done) {
                             // #B103 (2026-07-20) — pass the Buffer through VERBATIM. The historical

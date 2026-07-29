@@ -75,7 +75,7 @@ Model = function(namespace){
                 //console.log("CONF READY ", model, conf.path/** conf*/);
                 //TODO - More tries & catches...
                 //Getting Entities Manager.
-                var entitiesManager = new require(conf.path)();
+                var entitiesManager = require(conf.path)();
                 //var Entities = entitiesManager[model];
 
                 //For now, I just need the F..ing entity name.

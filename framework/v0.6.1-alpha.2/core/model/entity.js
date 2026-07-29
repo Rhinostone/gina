@@ -451,9 +451,14 @@ function EntitySuper(conn, caller, injected) {
     }
 
     var setListener = function() {
-        arguments = arguments[0];
+        // Bun/JSC rejects assigning to `arguments` outright ("Invalid assignment
+        // target"), where V8 permits it in sloppy mode. `_args` carries what the
+        // reassignment used to put in `arguments` — but ONLY this scope's own reads
+        // are rewritten: the `arguments` inside the nested `.on(evt, function(){...})`
+        // callbacks below refer to each CALLBACK's own arguments and must stay as-is.
+        var _args = arguments[0];
 
-        var args = Array.prototype.slice.call(arguments);
+        var args = Array.prototype.slice.call(_args);
         var trigger = args.splice(0, 1)[0];
 
         if ( !/\#/.test(trigger) ) {

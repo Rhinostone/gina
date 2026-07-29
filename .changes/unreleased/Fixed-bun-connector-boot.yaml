@@ -1,0 +1,11 @@
+kind: Fixed
+body: 'Fixed two Bun-only crashes that stopped a bundle declaring ANY connector from
+  booting. `new require(mod)(args)` parses as `(new require(mod))(args)`, and Bun''s
+  `require` has no constructor slot, so model loading aborted with `function is not
+  a constructor`; and the entity loader reassigned `arguments`, which Bun''s parser
+  rejects outright with `Invalid assignment target`. Both repairs are no-ops on Node
+  by construction — the plain call is exactly what Node was already doing — so only
+  Bun behaviour changes. The release smoke now boots a SQLite-backed bundle and
+  round-trips a real query on every Node leg and on the Bun CI leg, so connector
+  support is gated rather than assumed.'
+time: 2026-07-29T02:36:56+01:00
