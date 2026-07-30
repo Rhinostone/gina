@@ -197,8 +197,17 @@ module.exports = function renderJSON(jsonObj, deps) {
 
 
         //catching errors
+        // #B172 rider — the errno half carries the same statusCodes[...] guard as
+        // its render-swig/render-v1 siblings: an errno-only payload (no usable
+        // `status`) used to enter the branch and assign statusCode = undefined,
+        // which the HTTP/1.1 response.end() below rejects (the empty catch then
+        // swallows it — the response was never sent) and the HTTP/2 statusCode
+        // setter throws on. Guarded, such a payload is served as a normal 200
+        // with the payload in the body — measured wire-identical to dropping
+        // the errno clause on every input.
         if (
             typeof(jsonObj.errno) != 'undefined' && response.statusCode == 200
+                && typeof(local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status]) != 'undefined'
             ||
             typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200
                 && typeof(local.options.conf.server.coreConfiguration.statusCodes[jsonObj.status]) != 'undefined'
@@ -519,7 +528,14 @@ module.exports = function renderJSON(jsonObj, deps) {
             if (!stream.headersSent) {
                 var _streamHeaders = {
                     'content-type': local.options.conf.server.coreConfiguration.mime['json'] + '; charset='+ local.options.conf.encoding,
-                    ':status': 200
+                    // #B172 — honour the status resolved above (jsonObj.status →
+                    // response.statusCode). This frame is built for the raw
+                    // stream.respond(), which bypasses the compat layer, and the
+                    // pending-header merge below cannot supply `:status`
+                    // (setHeader(':status', …) throws ERR_HTTP2_PSEUDOHEADER_NOT_ALLOWED)
+                    // — so a literal here silently served every JSON error as 200.
+                    // Matches the HEAD branch above and the swig/nunjucks delegates.
+                    ':status': response.statusCode || 200
                 };
                 if (_cc) _streamHeaders['cache-control'] = _cc;
                 // Merge response headers pre-set earlier in the pipeline (e.g. CORS headers

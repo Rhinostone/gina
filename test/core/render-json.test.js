@@ -341,3 +341,267 @@ describe('06 - responseDto dev warn checks the SERVED contract (#B110)', functio
         assert.match(getSrc(), /jsonObj = _respDto\.apply\(jsonObj\)/);
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 07 - HTTP/2 body :status honours response.statusCode (#B172)
+// ---------------------------------------------------------------------------
+// The engine-agnostic status resolution (`response.statusCode = jsonObj.status`)
+// ran correctly, but the HTTP/2 body branch built its header frame with a
+// LITERAL `':status': 200` — and the pending-header merge below it only fills
+// keys not already present, while `res.setHeader(':status', …)` throws
+// ERR_HTTP2_PSEUDOHEADER_NOT_ALLOWED anyway, so the resolved code could never
+// reach the wire. Every renderJSON({status: 4xx}) was served as 200 on a
+// genuine HTTP/2 stream. The HEAD branch in the same file already used
+// `response.statusCode || 200`; the body branch now matches it.
+//
+// Strategy: controller.render-json.js cannot be require()d standalone (it
+// loads the lib registry + framework globals at module scope), so the body
+// branch is EXTRACTED from the shipped source via brace-matching and executed
+// as real bytes against a stream.respond() spy — no drift-prone replica. The
+// extraction is control-gated (the anchor appears exactly once; the brace
+// walk balances).
+describe('07 - HTTP/2 body :status honours response.statusCode (#B172)', function() {
+
+    var _src;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    // NOTE the anchor's spacing is load-bearing: the HEAD branch spells its
+    // guard `if ( !stream.headersSent ) {` — only the body branch uses the
+    // space-free form, which keeps the anchor unique.
+    var BODY_ANCHOR = 'if (!stream.headersSent) {';
+
+    /**
+     * Brace-match-extract a block from `open` to its balanced close.
+     * @param {string} src
+     * @param {string} open - the opening anchor (must contain the first `{`)
+     * @returns {string}
+     * @inner
+     */
+    function extractBlock(src, open) {
+        var start = src.indexOf(open);
+        assert.notStrictEqual(start, -1, 'anchor not found: ' + open);
+        assert.strictEqual(src.indexOf(open, start + 1), -1, 'anchor not unique: ' + open);
+        var i = src.indexOf('{', start);
+        var depth = 0;
+        for (; i < src.length; i++) {
+            if (src[i] === '{') depth++;
+            else if (src[i] === '}') {
+                depth--;
+                if (depth === 0) return src.slice(start, i + 1);
+            }
+        }
+        throw new Error('unbalanced block for anchor: ' + open);
+    }
+
+    /**
+     * Compile + run the REAL extracted body-branch bytes against a
+     * stream.respond() spy.
+     * @param {object} opts - { statusCode, pendingHeaders, cc, trailers }
+     * @returns {{responded: (object|null), respondOptions: *}}
+     * @inner
+     */
+    function runBodyBranch(opts) {
+        var block = extractBlock(getSrc(), BODY_ANCHOR);
+        var responded = null, respondOptions;
+        var stream = {
+            headersSent : false,
+            destroyed   : false,
+            closed      : false,
+            once        : function() {},
+            respond     : function(h, o) { responded = h; respondOptions = o; stream.headersSent = true; }
+        };
+        var response = {
+            statusCode : opts.statusCode,
+            getHeaders : function() { return opts.pendingHeaders || {}; }
+        };
+        var local = { options: { conf: {
+            encoding: 'utf-8',
+            server: { coreConfiguration: { mime: { json: 'application/json' } } }
+        } } };
+        /* eslint-disable no-new-func */
+        var fn = new Function('stream', 'local', '_cc', 'response', '_trailers', block);
+        fn(stream, local, opts.cc || null, response, opts.trailers || null);
+        return { responded: responded, respondOptions: respondOptions };
+    }
+
+    // ── source pins ──
+
+    it('the body branch frame reads response.statusCode (no hardcoded 200)', function() {
+        var block = extractBlock(getSrc(), BODY_ANCHOR);
+        assert.ok(block.indexOf("':status': response.statusCode || 200") > -1,
+            "expected `':status': response.statusCode || 200` in the body branch");
+        assert.strictEqual(block.indexOf("':status': 200"), -1,
+            'the hardcoded `:status: 200` literal must be gone from the body branch');
+    });
+
+    it('the whole file carries no hardcoded `:status: 200` literal left', function() {
+        assert.strictEqual(getSrc().indexOf("':status': 200"), -1,
+            'no frame in render-json may hardcode the status');
+    });
+
+    // ── behavioural: the real bytes, both directions ──
+
+    it('a resolved non-200 statusCode reaches the HTTP/2 frame', function() {
+        var h = runBodyBranch({ statusCode: 404 });
+        assert.ok(h.responded, 'stream.respond() should have been called');
+        assert.strictEqual(h.responded[':status'], 404);
+    });
+
+    it('a 200 statusCode still ships 200', function() {
+        var h = runBodyBranch({ statusCode: 200 });
+        assert.strictEqual(h.responded[':status'], 200);
+    });
+
+    it('an unset statusCode falls back to 200', function() {
+        var h = runBodyBranch({ statusCode: undefined });
+        assert.strictEqual(h.responded[':status'], 200);
+    });
+
+    it('pending response headers still merge and cannot clobber :status', function() {
+        var h = runBodyBranch({ statusCode: 500, pendingHeaders: { 'access-control-allow-origin': '*' } });
+        assert.strictEqual(h.responded[':status'], 500);
+        assert.strictEqual(h.responded['access-control-allow-origin'], '*');
+    });
+
+    it('cache-control + content-type survive on a non-200 frame', function() {
+        var h = runBodyBranch({ statusCode: 404, cc: 'private, max-age=60' });
+        assert.strictEqual(h.responded[':status'], 404);
+        assert.strictEqual(h.responded['cache-control'], 'private, max-age=60');
+        assert.strictEqual(h.responded['content-type'], 'application/json; charset=utf-8');
+    });
+
+    // ── subtract: the pre-fix literal shape drops the code (documents #B172) ──
+
+    it('subtract — a hardcoded-200 frame ignores the resolved statusCode', function() {
+        // Hand-built pre-fix shape: same merge, literal status. Proves the test
+        // discriminates — the defect was the literal, not the merge.
+        var _streamHeaders = { 'content-type': 'application/json', ':status': 200 };
+        var _pendingHeaders = {};
+        for (var _rhk in _pendingHeaders) {
+            if (!(_rhk in _streamHeaders)) _streamHeaders[_rhk] = _pendingHeaders[_rhk];
+        }
+        assert.strictEqual(_streamHeaders[':status'], 200,
+            'the pre-fix shape serves 200 no matter what statusCode resolved to');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 08 - the errno half of the status branch is guarded (#B172 rider)
+// ---------------------------------------------------------------------------
+// `{errno: X}` with no usable `status` used to enter the branch and assign
+// `response.statusCode = jsonObj.status` — i.e. undefined. On HTTP/1.1 the
+// later response.end() then throws ERR_HTTP_INVALID_STATUS_CODE, which the
+// empty catch below swallows: the response is never sent and the client
+// hangs. On HTTP/2 the compat statusCode setter throws at assignment → the
+// branch's catch → 500. The swig and v1 delegates already guard their errno
+// halves with the same statusCodes[...] conjunct (and were measured safe);
+// render-json was the only delegate without it. With the guard, an
+// errno-only payload skips the branch and is served as a normal 200 with the
+// payload in the body — measured wire-identical to dropping the clause on
+// every input.
+//
+// This block is ALSO the HTTP/1.1 arm of #B172: on h1 the compat layer
+// serves response.statusCode directly, so asserting the resolution here is
+// asserting the h1 wire.
+describe('08 - the errno half of the status branch is guarded (#B172 rider)', function() {
+
+    var _src;
+    function getSrc() { return _src || (_src = fs.readFileSync(SOURCE, 'utf8')); }
+
+    var STATUS_ANCHOR = '//catching errors';
+
+    /**
+     * Extract the status-resolution if-block (condition + body) and compile
+     * it into a runnable function over real bytes.
+     * @returns {function(object, object): {statusCode: *}}
+     * @inner
+     */
+    function makeResolver() {
+        var src = getSrc();
+        var start = src.indexOf(STATUS_ANCHOR);
+        assert.notStrictEqual(start, -1, 'status anchor not found');
+        assert.strictEqual(src.indexOf(STATUS_ANCHOR, start + 1), -1, 'status anchor not unique');
+        var ifIdx = src.indexOf('if (', start);
+        var p = src.indexOf('(', ifIdx), depth = 0, i = p;
+        for (; i < src.length; i++) {
+            if (src[i] === '(') depth++;
+            else if (src[i] === ')') { depth--; if (depth === 0) break; }
+        }
+        var bOpen = src.indexOf('{', i); depth = 0;
+        var j = bOpen;
+        for (; j < src.length; j++) {
+            if (src[j] === '{') depth++;
+            else if (src[j] === '}') { depth--; if (depth === 0) break; }
+        }
+        var block = src.slice(ifIdx, j + 1);
+        var quiet = { error: function() {}, warn: function() {}, info: function() {} };
+        /* eslint-disable no-new-func */
+        var fn = new Function('jsonObj', 'response', 'local', 'console', block + '\nreturn response;');
+        return function(jsonObj, statusCodeIn) {
+            var response = { statusCode: (typeof statusCodeIn !== 'undefined') ? statusCodeIn : 200, statusMessage: '' };
+            var local = { options: { conf: { server: {
+                protocol: 'http/1.1',
+                coreConfiguration: { statusCodes: { 200: 'OK', 404: 'Not Found', 500: 'Internal Server Error' } }
+            } } } };
+            return fn(jsonObj, response, local, quiet);
+        };
+    }
+
+    // ── source pin: the guard conjunct sits on the errno half, like the siblings ──
+
+    it('the errno half carries the statusCodes[...] conjunct (sibling parity)', function() {
+        assert.match(getSrc(),
+            /typeof\(jsonObj\.errno\) != 'undefined' && response\.statusCode == 200\s*&& typeof\(local\.options\.conf\.server\.coreConfiguration\.statusCodes\[jsonObj\.status\]\) != 'undefined'/,
+            'expected the errno half guarded exactly like render-swig/render-v1');
+    });
+
+    // ── behavioural: real extracted bytes ──
+
+    it('errno-only payload no longer poisons statusCode (stays 200)', function() {
+        var resolve = makeResolver();
+        assert.strictEqual(resolve({ errno: 5 }).statusCode, 200);
+    });
+
+    it('errno + invalid status skips the branch (stays 200)', function() {
+        var resolve = makeResolver();
+        assert.strictEqual(resolve({ errno: 5, status: 9999 }).statusCode, 200);
+    });
+
+    it('errno + valid non-200 status still resolves the status', function() {
+        var resolve = makeResolver();
+        assert.strictEqual(resolve({ errno: 5, status: 404 }).statusCode, 404);
+    });
+
+    it('status-only payloads are untouched by the guard (regression)', function() {
+        var resolve = makeResolver();
+        assert.strictEqual(resolve({ status: 404 }).statusCode, 404);
+        assert.strictEqual(resolve({ status: 200 }).statusCode, 200);
+        assert.strictEqual(resolve({ status: 9999 }).statusCode, 200);
+        assert.strictEqual(resolve({ ok: true }).statusCode, 200);
+    });
+
+    it('a pre-set non-200 statusCode is never overridden by errno', function() {
+        var resolve = makeResolver();
+        assert.strictEqual(resolve({ errno: 5 }, 403).statusCode, 403);
+    });
+
+    // ── subtract: the unguarded pre-fix condition poisons statusCode ──
+
+    it('subtract — without the conjunct, errno-only assigns statusCode = undefined', function() {
+        // The pre-fix condition shape, run against the same body semantics:
+        // entering via the bare errno half assigns jsonObj.status verbatim.
+        var jsonObj = { errno: 5 };
+        var response = { statusCode: 200 };
+        if (
+            typeof(jsonObj.errno) != 'undefined' && response.statusCode == 200
+            ||
+            typeof(jsonObj.status) != 'undefined' && jsonObj.status != 200
+        ) {
+            response.statusCode = jsonObj.status;
+        }
+        assert.strictEqual(response.statusCode, undefined,
+            'the unguarded shape poisons statusCode — this is the defect the guard closes');
+    });
+});
