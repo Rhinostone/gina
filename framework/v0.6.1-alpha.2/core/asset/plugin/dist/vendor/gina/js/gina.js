@@ -10185,7 +10185,10 @@ function ValidatorPlugin(rules, data, formId, culture) {
     /**
      * XML Request - isGFFCtx only
      * */
-    var xhr         = null;
+    // #B175: no module-scope XHR anymore — send() creates a fresh LOCAL XHR
+    // per submit (see send()). The shared instance was the stale-handler
+    // replay vector: re-open()ing it fired the previous submit's handler.
+    // was: var xhr         = null;
     var xhrOptions  = {
         'url'               : '',
         'method'            : 'GET',
@@ -11352,9 +11355,22 @@ function ValidatorPlugin(rules, data, formId, culture) {
         options.method  = method;
         options.url     = url;
 
-        if (!xhr) {
-            xhr = setupXhr(options);
-        }
+        // #B175: one XHR per send. The module-scope XHR (created once at
+        // validator init) was reused for every submit, and re-open()ing a
+        // completed XHR synchronously replays the PREVIOUS submit's
+        // still-assigned `onreadystatechange` handler (readyState 4 → 1):
+        // that stale closure re-disabled the PREVIOUS form's submit trigger
+        // and re-stamped its `data-gina-form-loading`, with no release path
+        // (its readyState-4 release never comes — the handler is replaced
+        // right below). A fresh LOCAL XHR per send makes handler, state and
+        // lifecycle per-submit; nested handlers close over this local, never
+        // the module var (the file-removal path already does exactly this
+        // with `let xhr = setupXhr(...)`).
+        // was:
+        // if (!xhr) {
+        //     xhr = setupXhr(options);
+        // }
+        var xhr = setupXhr();
 
         // to upload, use `multipart/form-data` for `enctype`
         var enctype = $target.getAttribute('enctype') || options.headers['Content-Type'];
@@ -11417,6 +11433,26 @@ function ValidatorPlugin(rules, data, formId, culture) {
         }
 
         if (xhr) {
+            // #B175 fail-safe release: `loadend` fires on success, error,
+            // timeout and abort alike — the lock armed below (submit trigger
+            // disabled + `data-gina-form-loading`) must never outlive its
+            // request. Idempotent with the readyState-4 release; one listener
+            // per XHR (fresh per send), so nothing accumulates.
+            if ( typeof(xhr.addEventListener) == 'function' ) {
+                xhr.addEventListener('loadend', function onSendSettled() {
+                    $form.isSending = false;
+                    $form.sent = false;
+                    if ($submitTrigger) {
+                        // For A tag: aria-disabled=true
+                        if ( /^A$/i.test($submitTrigger.tagName) ) {
+                            $submitTrigger.removeAttribute('aria-disabled');
+                        } else {
+                            $submitTrigger.removeAttribute('disabled');
+                        }
+                    }
+                    $form.target.removeAttribute('data-gina-form-loading');
+                });
+            }
             // catching ready state cb
             // Data loading ...
             if ( /^(1|3)$/.test(xhr.readyState) ) {
@@ -11433,7 +11469,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
             //handleXhrResponse(xhr, $target, id, $form, hFormIsRequired);
             xhr.onreadystatechange = function onValidationCallback(event) {
                 $form.isSubmitting = false;
-                $form.isSending = false;
+                // #B175: `isSending` is no longer cleared here — this handler
+                // first fires at readyState 1 (synchronously at open()), so an
+                // early clear made the flag false for almost the whole request
+                // while its name promises "a request is in flight". It now
+                // spans send() → settled: cleared in the readyState-4 release
+                // below and in the `loadend` fail-safe above.
+                // was: $form.isSending = false;
 
                 // limit send trigger to 1 sec to prevent from double clicks
                 // setTimeout( function onSent() {
@@ -11467,6 +11509,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 if (xhr.readyState == 4) {
 
                     $form.sent = false;
+                    $form.isSending = false; // #B175 — see the note at the handler top
                     if ($submitTrigger) {
                         // For A tag: aria-disabled=true
                         if ( /^A$/i.test($submitTrigger.tagName) ) {
@@ -12070,7 +12113,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                 $form.eventData.ontimeout = result;
 
-                $form.target.setAttribute('data-gina-form-loading', false);
+                // #B175: remove the attribute — `setAttribute(..., false)`
+                // wrote the string "false", which is attribute-PRESENT and
+                // truthy for any presence or non-empty-string check.
+                // was: $form.target.setAttribute('data-gina-form-loading', false);
+                $form.target.removeAttribute('data-gina-form-loading');
 
                 // intercept upload
                 if ( /^gina\-upload/i.test(id) ) {
@@ -13646,19 +13693,24 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 }
 
 
-                // setting up AJAX
-                if (window.XMLHttpRequest) { // Mozilla, Safari, ...
-                    xhr = new XMLHttpRequest();
-                } else if (window.ActiveXObject) { // IE
-                    try {
-                        xhr = new ActiveXObject("Msxml2.XMLHTTP");
-                    } catch (e) {
-                        try {
-                            xhr = new ActiveXObject("Microsoft.XMLHTTP");
-                        }
-                        catch (e) {}
-                    }
-                }
+                // #B175: no init-time XHR — send() creates a fresh local XHR
+                // per submit (setupXhr() carries the same browser fallbacks).
+                // This block was the source of the shared instance every
+                // submit then reused.
+                // was:
+                // // setting up AJAX
+                // if (window.XMLHttpRequest) { // Mozilla, Safari, ...
+                //     xhr = new XMLHttpRequest();
+                // } else if (window.ActiveXObject) { // IE
+                //     try {
+                //         xhr = new ActiveXObject("Msxml2.XMLHTTP");
+                //     } catch (e) {
+                //         try {
+                //             xhr = new ActiveXObject("Microsoft.XMLHTTP");
+                //         }
+                //         catch (e) {}
+                //     }
+                // }
 
 
 
