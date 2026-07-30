@@ -10714,6 +10714,29 @@ function ValidatorPlugin(rules, data, formId, culture) {
     };
 
     /**
+     * #B178 — announcement text for a field's error container.
+     * The container renders one `<p>` per rule message; visually they stack as
+     * blocks, but `textContent` concatenates them with NO separator, so an
+     * aria-live announcement read multiple messages as one run-on string.
+     * Joins the per-message texts with '. ' instead; falls back to the raw
+     * `textContent` when the container has no `<p>` children.
+     * @inner
+     * @param {object} $err - the error-message container element
+     * @returns {string} announcement text
+     */
+    var getA11yAnnounceText = function($err) {
+        var $msgs = $err.getElementsByTagName('p');
+        if ( !$msgs.length ) {
+            return $err.textContent;
+        }
+        var parts = [];
+        for (var m = 0, mLen = $msgs.length; m < mLen; ++m) {
+            parts.push($msgs[m].textContent);
+        }
+        return parts.join('. ');
+    };
+
+    /**
      * handleErrorsDisplay
      * Attention: if you are going to handle errors display by hand, set data to `null` to prevent Toolbar refresh with empty data
      *
@@ -10890,9 +10913,14 @@ function ValidatorPlugin(rules, data, formId, culture) {
                 }
 
                 // injecting error messages
+                // #B178 — two rules can carry byte-identical message text (e.g. a
+                // coercion paired with its validator); render each distinct text once.
+                // Dev bookkeeping below still records every key.
+                var _renderedMsgs = {};
                 for (var e in errors[name]) {
 
-                    if (e != 'stack') { // ignore stack for display
+                    if (e != 'stack' && typeof(_renderedMsgs[ errors[name][e] ]) == 'undefined') { // ignore stack for display
+                        _renderedMsgs[ errors[name][e] ] = true;
                         $msg = document.createElement('p');
                         $msg.appendChild( document.createTextNode(errors[name][e]) );
                         $err.appendChild($msg);
@@ -10930,7 +10958,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     && $err
                     && $el !== document.activeElement
                 ) {
-                    announceA11yError($form, $err.textContent);
+                    announceA11yError($form, getA11yAnnounceText($err));
                 }
 
             } else if (
@@ -11023,8 +11051,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         //         rule: errorMsg
                         //     }
                         // }
+                        // #B178 — distinct-text dedup, parity with the first-error branch
+                        var _renderedMsgs = {};
                         for (var e in errors[name]) {
-                            if (e != 'stack') { // ignore stack for display (parity with the first-error branch, #B89)
+                            if (e != 'stack' && typeof(_renderedMsgs[ errors[name][e] ]) == 'undefined') { // ignore stack for display (parity with the first-error branch, #B89)
+                                _renderedMsgs[ errors[name][e] ] = true;
                                 $msg = document.createElement('p');
                                 $msg.appendChild( document.createTextNode(errors[name][e]) );
                                 $err.appendChild($msg);
@@ -11065,7 +11096,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     && $err
                     && $el !== document.activeElement
                 ) {
-                    announceA11yError($form, $err.textContent);
+                    announceA11yError($form, getA11yAnnounceText($err));
                 }
             }
 

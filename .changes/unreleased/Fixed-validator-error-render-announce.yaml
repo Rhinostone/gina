@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Validator error rendering: screen-reader announcements now join multiple rule messages with a sentence separator instead of running them together as one string (the visible stacked layout is unchanged), and two rules carrying byte-identical resolved message text render once instead of twice — a coercion paired with its validator no longer shows the same sentence duplicated. The dev inspector still records every error key.'
+time: 2026-07-30T05:14:37+01:00
