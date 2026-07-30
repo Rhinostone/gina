@@ -4,6 +4,7 @@
  */
 const fs                    = require('fs');
 const crypto                = require('crypto');
+const nodePath              = require('path'); // #B179: used for path-traversal boundary enforcement
 const { execSync, exec }    = require('child_process');
 const {EventEmitter}        = require('events');
 // #B10 fix: engine.io is only needed when options.ioServer is configured (WebSocket support).
@@ -161,6 +162,43 @@ function _readInstrumentBody(req, cb) {
         catch (e) { _finish(new Error('invalid JSON body')); }
     });
     req.on('error', function(e) { _finish(e); });
+}
+
+/**
+ * Confines a resolved filename to its intended base directory, rejecting
+ * path-traversal escapes (`../`) that would otherwise canonicalise outside it.
+ * Both paths are normalised with `path.resolve`, then a separator-aware
+ * containment check is applied so a base of `/srv/app/lib` cannot be bypassed
+ * by a sibling such as `/srv/app/lib-secrets`. Purely lexical (no symlink
+ * following).
+ *
+ * Engine-local mirror of the canonical `confineToBase` in `core/server.js`
+ * (declared inside `Server()`, so it is not reachable from this module). Keep
+ * the two behaviourally identical — `test/core/server-static-traversal.test.js`
+ * extracts the server.js copy by its declaration string and drives it directly,
+ * and `test/core/inspector-traversal.test.js` does the same for this one.
+ *
+ * @inner
+ * @private
+ * @memberof module:gina/core/server.isaac
+ * @param {string} filename - The concatenated candidate filesystem path
+ * @param {string} base     - The intended base directory
+ * @returns {string|null} The canonical in-base path, or `null` when it escapes `base`
+ * @example
+ * confineToBase('/srv/app/js/lib/../../../config/secret.json', '/srv/app/js/lib'); // → null
+ * confineToBase('/srv/app/js/lib/app.js', '/srv/app/js/lib');                      // → '/srv/app/js/lib/app.js'
+ */
+var confineToBase = function(filename, base) {
+    if ( typeof(filename) != 'string' || typeof(base) != 'string' || base.length === 0 ) {
+        return null;
+    }
+    var _resolvedBase = nodePath.resolve(base);
+    var _resolvedFile = nodePath.resolve(filename);
+    // separator-aware containment: identical to base, or a proper child of it
+    if ( _resolvedFile === _resolvedBase || _resolvedFile.indexOf(_resolvedBase + nodePath.sep) === 0 ) {
+        return _resolvedFile;
+    }
+    return null;
 }
 
 /**
@@ -1624,7 +1662,15 @@ function ServerEngineClass(options) {
                 var _inspExt  = _inspPath.split('.').pop();
                 var _inspFile = _(_inspBase + '/' + _inspPath, true);
 
-                if (fs.existsSync(_inspFile)) {
+                // #B179 — reject any path that canonicalises outside the Inspector
+                // asset root, BEFORE any fs access. `_inspPath` is taken straight
+                // off `request.url` with no `..` handling, and `_()` NORMALISES
+                // traversal (helpers/path.js:87) rather than rejecting it — so a
+                // request-target carrying a literal `..` otherwise resolves to any
+                // absolute path the bundle process can read. Falls through to the
+                // same 404 as a missing file — no distinct signal. Mirrors the #B64
+                // static-resolver guard in server.js.
+                if (confineToBase(_inspFile, _inspBase) !== null && fs.existsSync(_inspFile)) {
                     var _inspBinary = /^(woff2?|png|ico|gif|jpe?g)$/.test(_inspExt);
                     var _inspHeaders = _setPoweredByHeader({
                         'content-type': _inspMime[_inspExt] || 'application/octet-stream',

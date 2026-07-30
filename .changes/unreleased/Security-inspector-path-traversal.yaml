@@ -1,0 +1,3 @@
+kind: Security
+body: 'Fixed a path traversal in the dev-mode Inspector handler (`/_gina/inspector/*`): a request target containing a literal `../` escaped the Inspector asset root and read any file the bundle process could reach, including application config and credentials. Both engines were affected (isaac and Express), and the endpoint carries no IP allowlist. The resolved path is now confined to the Inspector asset root — anything resolving outside it falls through to the same 404 as a missing file, matching the existing static-resolver guard. Only bundles running in dev mode were affected; production bundles never expose this handler, and the URL-encoded `%2e%2e` form was never affected because the handler does not decode.'
+time: 2026-07-31T00:47:54+01:00

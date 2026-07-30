@@ -4360,7 +4360,15 @@ function Server(options) {
                 var _bmExt = _bmPath.split('.').pop();
                 var _bmFile = _(_bmBase + '/' + _bmPath, true);
 
-                if (fs.existsSync(_bmFile)) {
+                // #B179 — reject any path that canonicalises outside the Inspector
+                // asset root, BEFORE any fs access. `_bmPath` is taken straight off
+                // `request.url` with no `..` handling, and `_()` NORMALISES
+                // traversal (helpers/path.js:87) rather than rejecting it — so a
+                // request-target carrying a literal `..` otherwise resolves to any
+                // absolute path the bundle process can read. Falls through to the
+                // same 404 as a missing file — no distinct signal. Same guard as
+                // the #B64 static resolvers above.
+                if (confineToBase(_bmFile, _bmBase) !== null && fs.existsSync(_bmFile)) {
                     var _bmBinary = /^(woff2?|png|ico|gif|jpe?g)$/.test(_bmExt);
                     response.setHeader('content-type', _bmMime[_bmExt] || 'application/octet-stream');
                     response.setHeader('cache-control', 'no-cache, no-store, must-revalidate');
