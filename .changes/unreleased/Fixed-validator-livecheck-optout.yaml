@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'A form declaring `data-gina-form-live-check-enabled="false"` still got live-checking whenever it had resolvable rules: both consumer gates evaluated the boolean inside the regex test, so the truthy string `"false"` short-circuited to the rules count and the opt-out never opted out. The gates now test the attribute alone and check the rules count separately — an explicit `"false"` genuinely disables live-check (which is what the framework''s own warnings have been advising all along). Also declares a previously implicit global in the submit-trigger state updater.'
+time: 2026-07-30T01:04:00+01:00

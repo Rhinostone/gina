@@ -6220,8 +6220,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
         var updateSelect = function($el, $form) {
             $el.setAttribute('data-value', $el.value);
             // If Live check enabled, proceed to silent validation
+            // #B176: the `&&` used to sit INSIDE test() — an explicit
+            // `data-gina-form-live-check-enabled="false"` (a truthy string)
+            // short-circuited to the rules-count boolean, which stringifies
+            // to "true" and matched, so the opt-out never opted out.
+            // was: /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0)
             if (
-                /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0)
+                /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) && $form.rules.count() > 0
                 // && typeof($form.isBeingReseted) == 'undefined'
             ) {
                 var localField = {}, $localField = {}, $localForm = null;
@@ -7523,7 +7528,11 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
         instance.$forms[_id]['binded']  = true;
         // If Live check enabled, proceed to silent validation
-        if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0) ) {
+        // #B176: same inside-test() `&&` defect as the change-handler gate —
+        // an explicit "false" opt-out still enabled live-check. See the note
+        // at the sibling site.
+        // was: if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0) ) {
+        if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) && $form.rules.count() > 0 ) {
             console.debug('silent validation mode on');
             var validationInfo  = getFormValidationInfos($form.target, $form.rules);
             var fields          = validationInfo.fields;
@@ -7556,7 +7565,7 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
     var updateSubmitTriggerState = function($formInstanceOrTarget, isFormValid) {
         //console.debug('submitTrigger[isFormValid='+ isFormValid +']: ', $formInstance.submitTrigger)
-        $formInstance = null;
+        var $formInstance = null; // #B176: was an implicit global (undeclared assignment)
         if ( $formInstanceOrTarget instanceof HTMLFormElement ) { //  is target DOMobject
             var id = $formInstanceOrTarget.getAttribute('id');
             $formInstance =  instance.$forms[id];
