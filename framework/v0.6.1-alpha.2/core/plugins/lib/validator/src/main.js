@@ -6223,7 +6223,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
             // #B176: the `&&` used to sit INSIDE test() — an explicit
             // `data-gina-form-live-check-enabled="false"` (a truthy string)
             // short-circuited to the rules-count boolean, which stringifies
-            // to "true" and matched, so the opt-out never opted out.
+            // to "true" and matched, so THIS gate ignored the opt-out.
+            // Scope (measured at the fix's parent): only this gate and the
+            // bindForm silent-validation gate were defective. The three
+            // registerForLiveChecking sites already tested the attribute
+            // alone, so an opted-out form never got text as-you-type — the
+            // pre-fix behaviour was an incoherent middle, not a wholesale
+            // ignore. Do not restate this as "the opt-out did nothing".
             // was: /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0)
             if (
                 /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) && $form.rules.count() > 0
@@ -7529,8 +7535,13 @@ function ValidatorPlugin(rules, data, formId, culture) {
         instance.$forms[_id]['binded']  = true;
         // If Live check enabled, proceed to silent validation
         // #B176: same inside-test() `&&` defect as the change-handler gate —
-        // an explicit "false" opt-out still enabled live-check. See the note
-        // at the sibling site.
+        // an explicit "false" opt-out still ran THIS bind-time silent
+        // validation pass (it did NOT enable text as-you-type; the three
+        // registerForLiveChecking sites were already strict). Note this gate
+        // also swallowed the `else if` below, which exists precisely to serve
+        // the opted-out case: the trigger still ended enabled either way,
+        // because updateSubmitTriggerState forces its show branch when
+        // live-check is off. See the scope note at the sibling site.
         // was: if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled && $form.rules.count() > 0) ) {
         if ( /^(true)$/i.test($form.target.dataset.ginaFormLiveCheckEnabled) && $form.rules.count() > 0 ) {
             console.debug('silent validation mode on');
