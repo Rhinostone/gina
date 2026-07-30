@@ -3013,6 +3013,42 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
      * @type {Object.<string, boolean>}
      */
     var _labelWarnings = {};
+    /**
+     * #B178 — errors-key / label-key alias fill for app-supplied labels.
+     *
+     * Four rule families consult a SPECIFIC label key while writing the error
+     * under a GENERIC one (the NaN branch of the float coercion, and the
+     * min/max variants of the three Length families), so the key an app can
+     * OBSERVE in a field's `errors` object is not the key the catalog is
+     * consulted under — translating the observable key was a silent no-op.
+     * This copies each app-supplied generic onto the specifics the app did
+     * not supply itself. English defaults are never touched here; an
+     * app-supplied specific key always wins over its generic.
+     * @inner
+     * @param {object} labels - app-supplied label map (extended in place)
+     * @returns {object} the same map, alias keys filled
+     */
+    var _labelAliasFill = function(labels) {
+        // consulted (specific) key <- supplied (observable/generic) key
+        var aliasMap = {
+            'toFloatNAN'         : 'toFloat',
+            'isNumberMinLength'  : 'isNumberLength',
+            'isNumberMaxLength'  : 'isNumberLength',
+            'isIntegerMinLength' : 'isIntegerLength',
+            'isIntegerMaxLength' : 'isIntegerLength',
+            'isStringMinLength'  : 'isStringLength',
+            'isStringMaxLength'  : 'isStringLength'
+        };
+        for (var specific in aliasMap) {
+            if (
+                typeof(labels[specific]) == 'undefined'
+                && typeof(labels[aliasMap[specific]]) != 'undefined'
+            ) {
+                labels[specific] = labels[aliasMap[specific]];
+            }
+        }
+        return labels;
+    };
     local.errorLabels = _defaultErrorLabels;
     // #i18n (server) — resolve built-in rule labels from the bundle catalog's
     // `_validator.<rule>` namespace for the negotiated `culture`. Mirrors the client
@@ -3031,7 +3067,11 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                     if (_vFound && typeof(_vFound) === 'object') { _vNode = _vFound; break; }
                 }
             }
-            if (_vNode) { local.errorLabels = merge(JSON.clone(_vNode), _defaultErrorLabels); }
+            if (_vNode) {
+                // #B178 — fill consulted-key aliases from the app's observable keys first
+                _vNode = _labelAliasFill(JSON.clone(_vNode));
+                local.errorLabels = merge(JSON.clone(_vNode), _defaultErrorLabels);
+            }
         }
     }
     // #i18n (client) — overlay built-in rule labels for the negotiated culture.
@@ -3064,9 +3104,12 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         }
         // apply lowest-precedence layer first, then let each higher layer win per key
         if (_catalogLabels) {
+            // #B178 — alias fill on a copy, so the whispered config object is never mutated
+            _catalogLabels = _labelAliasFill(JSON.clone(_catalogLabels));
             local.errorLabels = merge(JSON.clone(_catalogLabels), local.errorLabels);
         }
         if (_cultureLabels) {
+            _cultureLabels = _labelAliasFill(JSON.clone(_cultureLabels));
             local.errorLabels = merge(JSON.clone(_cultureLabels), local.errorLabels);
         }
     }
@@ -4112,7 +4155,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             }
 
             if (!isValid) {
-                errors[alias] = replace(this.error || errorMessage || local.errorLabels[alias], this, alias);
+                // #B178 — numbered aliases (is1, is2, ...) have no per-alias default
+                // label: fall back to the shared base label instead of an empty message
+                errors[alias] = replace(this.error || errorMessage || local.errorLabels[alias] || local.errorLabels['is'], this, alias);
                 if ( typeof(errorStack) != 'undefined' )
                     errors['stack'] = errorStack;
             }
@@ -5029,8 +5074,13 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             try {
                 for (let v in gina.forms.validators) {
                     filename = '/validators/'+ v + '/main.js';
-                    // setting default local error
-                    local.errorLabels[v] = 'Condition not satisfied';
+                    // setting default local error — #B178: only when the app has not
+                    // already supplied one (catalog or setErrorLabels); the former
+                    // unconditional assignment clobbered app translations for every
+                    // user-validator key
+                    if ( typeof(local.errorLabels[v]) == 'undefined' ) {
+                        local.errorLabels[v] = 'Condition not satisfied';
+                    }
                     // converting Buffer to string
                     if ( isGFFCtx ) {
                         //userValidatorError = String.fromCharCode.apply(null, new Uint16Array(gina.forms.validators[v].data));
@@ -5251,8 +5301,25 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         return target
     }
 
+    /**
+     * Override error labels per rule key — an app-supplied key wins over the
+     * culture catalog and the English defaults for this validator instance.
+     *
+     * #B178 — the supplied map is alias-filled first, so translating an
+     * OBSERVABLE errors key (e.g. the float coercion's key, or a Length
+     * family's generic key) also covers the specific label keys the engine
+     * actually consults (its NaN variant, the min/max variants). A supplied
+     * specific key still wins over its generic. Note the passed object is
+     * extended in place (it already was, via the merge).
+     *
+     * @param {Object.<string, string>} errorLabels - rule key to label text
+     * @returns {void}
+     * @example
+     * validator.setErrorLabels({ toFloat: 'Doit etre un nombre valide' });
+     */
     self['setErrorLabels'] = function (errorLabels) {
         if ( typeof(errorLabels) != 'undefined') {
+            _labelAliasFill(errorLabels);
             local.errorLabels = merge(errorLabels, local.errorLabels)
         }
     }
