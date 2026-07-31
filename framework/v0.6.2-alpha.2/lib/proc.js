@@ -527,6 +527,16 @@ function Proc(bundle, proc, usePidFile){
         generator.createFileFromDataSync( JSON.stringify(runningProcs, null, 2), runningProcsPath);
     }
 
+    /**
+     * Remove the running-process record matching `pid` from the
+     * `~/.gina/procs.json` registry. Entries are keyed by bundle name and
+     * matched here by their `pid` field; the matched entry is removed under
+     * its own key, whatever bundle this instance was constructed for.
+     *
+     * @param {number} pid - PID of the process whose record must be dropped
+     *
+     * @private
+     * */
     var removeRunningProc = function(pid) {
         var runningProcsPath = _(GINA_HOMEDIR + '/procs.json', true)
             , runningProcsPathObj = new _(runningProcsPath)
@@ -536,7 +546,11 @@ function Proc(bundle, proc, usePidFile){
             runningProcs = requireJSON(runningProcsPath);
             for (let name in runningProcs) {
                 if (runningProcs[name].pid == pid) {
-                    delete runningProcs[bundle];
+                    // Fixed #B180: was `delete runningProcs[bundle]` — the constructor's
+                    // closure-captured parameter, so the delete targeted the constructing
+                    // instance's own key instead of the entry matched by pid: dead records
+                    // survived (and a live one was destroyed when the keys differed).
+                    delete runningProcs[name];
                     generator.createFileFromDataSync( JSON.stringify(runningProcs, null, 2), runningProcsPath);
                     break;
                 }

@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Dead process records are now removed from the `~/.gina/procs.json` registry under the right key. `removeRunningProc()` matched the entry to drop by pid but deleted under the constructing bundle key: self-removal worked by accident, while a non-coinciding dismissal rewrote the dead `gina-*` record back to disk — accumulating stale entries, a documented cause of daemon/boot confusion — and could destroy a live record instead (degrading `gina stop`, whose graceful-kill path locates the daemon through this registry). Pre-existing stale entries are not retroactively cleaned; with the daemon stopped, clearing the file once is safe.'
+time: 2026-07-31T03:19:29+01:00
