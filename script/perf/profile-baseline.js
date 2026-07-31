@@ -270,12 +270,24 @@ function fixture() {
         ''
     ].join('\n'));
 
-    // NOTE — the scaffold's index.js is deliberately left UNTOUCHED: every
-    // WebSocket-handler registration shape (onInitialize/onWebSocket AND the
-    // declarative `method: "ws"` route) — and even a pure onInitialize
-    // passthrough — made the isolated boot exit 0 silently during bring-up
-    // (staked as bug candidates). The ws arm profiles the codec standalone
-    // via ws-codec-server.js instead.
+    // NOTE — the scaffold's index.js is left UNTOUCHED and the ws arm profiles
+    // the codec standalone via ws-codec-server.js.
+    //
+    // ⚠️ The bring-up reason for this was REFUTED on 2026-07-31 (#B182). The
+    // bring-up recorded that every WebSocket-handler registration shape — and
+    // even a pure onInitialize passthrough — made the isolated boot exit 0
+    // silently. A verbatim re-run of the documented shapes on fresh, uncontam-
+    // inated scenes booted ALIVE in 11/11 arms (seeded AND self-bootstrapping
+    // homes; dev/h1, prod/h1, prod/h2; stock, pure passthrough, the documented
+    // express-session wire-in, programmatic app.onWebSocket, and the declarative
+    // `method: "ws"` + channels/<name>.js route), each with a firing control.
+    // The bring-up's readings were almost certainly confounded by cumulative
+    // scene state — a project env.json left in place from an earlier arm, i.e.
+    // #B181, which IS real (unguarded envConf[bundle][env] at config.js:355).
+    //
+    // So an IN-BUNDLE ws arm is available whenever one is wanted (it is what
+    // #P36's re-arm measurement needs); the standalone codec server remains the
+    // right instrument for isolating codec self-time, which is why it stays.
 
     // NOTE — deliberately NO render-cache config and NO env.json: a warm-cache
     // replay BYPASSES the #P37 candidates (getAssets + the replace passes), so
