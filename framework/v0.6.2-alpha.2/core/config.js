@@ -1158,6 +1158,18 @@ function Config(opt, contextResetNeeded) {
                     newContent[app][env].projectName = self.projectName;
                 }
 
+                // #B181(a) — `host` is the one key the substitution dictionary below
+                // reads off this block that a project can only supply from its own
+                // env.json; the framework template now carries the same `localhost`
+                // default the CLI writes, so a partial block resolves instead of
+                // leaving `${host}` unsubstituted inside the credentials paths.
+                // Report the omission rather than defaulting silently — and test the
+                // RAW `content` block, since the merged one always carries the
+                // default by this point and could never satisfy the condition.
+                if ( typeof(content[app][env].host) == 'undefined' ) {
+                    console.warn('[CONFIG]['+ app +']['+ env +'] no `host` declared in the project env.json — defaulting to `'+ newContent[app][env].host +'`');
+                }
+
 
 
                 // replacement for {bundle}@{project}
