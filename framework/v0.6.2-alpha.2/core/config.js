@@ -783,9 +783,19 @@ function Config(opt, contextResetNeeded) {
             //     newContent[app][env].bundlesPath = newContent[app][env].sources;
             // }
             tmpSettings = {};
-            newContent[app][env].bundlesPath = bundlesPath;
 
             if ( typeof(content[app][env]) != "undefined" ) {
+                // #B183 — this assignment MUST stay inside the guard. `newContent`
+                // is a deep clone of `content` (see its declaration at the top of
+                // this function), so `newContent[app][env]` is undefined for
+                // exactly the apps this guard rejects: an app declared in the
+                // project env.json but NOT for the env being started. Assigning it
+                // one line earlier — outside the guard meant to protect it — threw
+                // an opaque `TypeError: Cannot set properties of undefined (setting
+                // 'bundlesPath')` and killed the boot at exit 143, ~750 lines before
+                // the #B181(b) refusal that names the bundle, the env and the
+                // env.json path could ever fire.
+                newContent[app][env].bundlesPath = bundlesPath;
                 try {
                     // reverted: async readdir (#P33) breaks synchronous Config init contract
                     configFiles = fs.readdirSync(_(appPath + '/config'));
@@ -1234,8 +1244,15 @@ function Config(opt, contextResetNeeded) {
                     return;
                 }
 
+            } else {
+                //Else not in the scenario.
+                // #B183 — the app IS declared in the project env.json, but not for
+                // the env being started, so it is skipped here. Say so: without it
+                // the bundle would simply never load, with nothing explaining why.
+                // The STARTING bundle additionally refuses the boot further down,
+                // in loadBundleConfig (#B181(b)).
+                console.warn('[CONFIG]['+ app +']['+ env +'] no `'+ env +'` block in the project env.json — skipping this bundle for this environment');
             }
-            //Else not in the scenario.
 
         }//EO for.
 

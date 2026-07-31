@@ -35,6 +35,24 @@
  *       degenerate shapes refuse; a well-formed conf does NOT (the control
  *       that would catch a guard which over-fires).
  * §03 — the defensive setter guard.
+ * §04 — #B183: the fourth shape, which §02 could only assert as a REPLICA.
+ *
+ * ── §04, and why it exists ───────────────────────────────────────────────────
+ * §02's "a bundle present but MISSING the env block refuses" arm passed while
+ * the live boot still died, ~750 lines earlier, with an opaque
+ * `TypeError: Cannot set properties of undefined (setting 'bundlesPath')` at
+ * exit 143. The replica models the guard PREDICATE faithfully; it does not
+ * model the CHOREOGRAPHY that has to reach it. `loadWithTemplate` assigned
+ * `newContent[app][env].bundlesPath` one line BEFORE the
+ * `if ( typeof(content[app][env]) != "undefined" )` guard that exists to
+ * protect exactly that dereference — and since `newContent` is a deep clone of
+ * `content`, that property is undefined for precisely the apps the guard
+ * rejects. Measured live 2026-07-31 (#B183): env.json declaring only
+ * `demo.dev`, booted at `prod`, died at `config.js:786:46`.
+ *
+ * §04 therefore pins the ORDERING at the source (a structural invariant — the
+ * assignment must sit inside the guarded block) AND drives a real boot, which
+ * is the only arm that can observe the choreography at all.
  */
 var { describe, it } = require('node:test');
 var assert = require('node:assert/strict');
@@ -190,5 +208,258 @@ describe('#B181(b) §03 — setServerCoreConf refuses a missing block with a NAM
         assert.match(S.substring(guardAt, writeAt), /throw new Error\(/);
         assert.ok(S.substring(guardAt, writeAt).indexOf('setServerCoreConf') > -1,
             'the thrown message names the failing call so a direct caller is not left with an opaque deref');
+    });
+});
+
+// ─── 04 — #B183: the bundlesPath deref must sit INSIDE the guard ─────────────
+// Comment-stripped, so neither the `//` block explaining the fix nor the
+// commented-out legacy assignments a few lines above can satisfy a pin.
+var ACTIVE = SRC.split('\n').filter(function (l) {
+    return !/^\s*(\/\/|\*|\/\*)/.test(l);
+}).join('\n');
+
+var W_START = ACTIVE.indexOf('var loadWithTemplate = function(userConf, template, callback)');
+var W_END   = ACTIVE.indexOf('}//EO for.', W_START);
+var W       = ACTIVE.substring(W_START, W_END);
+
+var B183_GUARD  = 'if ( typeof(content[app][env]) != "undefined" ) {';
+var B183_ASSIGN = 'newContent[app][env].bundlesPath = bundlesPath;';
+
+describe('#B183 §04a — source: the deref is ordered inside the guard that protects it', function () {
+
+    it('extraction control: the region resolves and each anchor appears exactly once', function () {
+        assert.ok(W_START > -1, 'the loadWithTemplate declaration must exist');
+        assert.ok(W_END > W_START, 'the per-app for-loop terminator must follow it');
+        assert.equal(W.split(B183_GUARD).length - 1, 1,
+            'the env-block guard must appear exactly once in the loop — a second copy would make the ordering pin ambiguous');
+        assert.equal(W.split(B183_ASSIGN).length - 1, 1,
+            'the bundlesPath assignment must appear exactly once (the `= bundlesPath = appSrcPath` rewrite is a different statement)');
+    });
+
+    it('the guard OPENS before the assignment it protects (the #B183 fix)', function () {
+        var guardAt  = W.indexOf(B183_GUARD);
+        var assignAt = W.indexOf(B183_ASSIGN);
+        assert.ok(guardAt > -1 && assignAt > -1, 'both anchors must resolve');
+        assert.ok(guardAt < assignAt,
+            'newContent is a deep clone of content, so newContent[app][env] is undefined for exactly the apps '
+            + 'this guard rejects; assigning bundlesPath before the guard threw an opaque '
+            + '"Cannot set properties of undefined" and killed the boot at exit 143 (#B183)');
+    });
+
+    // NB: anchored on the warn's OWN literal, not on a bare `} else {` +
+    // `console.warn(` pair. Validated red-first: the bare-token form PASSED
+    // against the pre-fix bytes, because this ~500-line loop body already
+    // contains other else branches and other console.warn calls (the #B181(a)
+    // host warn among them) — it discriminated nothing.
+    var B183_WARN = "no `'+ env +'` block in the project env.json";
+
+    it('a bundle skipped for the booting env is reported rather than silently dropped', function () {
+        var guardAt = W.indexOf(B183_GUARD);
+        var warnAt  = W.indexOf(B183_WARN);
+        assert.ok(warnAt > -1, 'the skip warn must exist — a dropped bundle is otherwise invisible');
+        assert.ok(warnAt > guardAt, 'the warn belongs to the guard\'s else branch, so it must follow the guard');
+        assert.ok(W.substring(guardAt, warnAt).indexOf('} else {') > -1,
+            'the warn must sit in an else branch attached to the env-block guard, not on the guarded path');
+        var stmt = W.substring(W.lastIndexOf('console.warn(', warnAt), warnAt);
+        assert.match(stmt, /\[CONFIG\]\['\+\s*app\s*\+'\]\['\+\s*env\s*\+'\]/,
+            'the warn must name the bundle AND the env, or an operator cannot tell which block is missing');
+    });
+});
+
+// ─── 04b — the live arm: the choreography a replica cannot reach ─────────────
+// Daemonless, self-bootstrapping isolated home (HOME override, GINA_HOMEDIR
+// deleted, nothing seeded from the real ~/.gina), dev env so the bundle boots
+// from src and no release build is needed. One fresh scene per arm.
+var os    = require('os');
+var net   = require('net');
+var { spawn, spawnSync } = require('child_process');
+
+var GINA_ROOT = path.resolve(FW, '..', '..');
+var CLI       = path.join(GINA_ROOT, 'bin', 'cli');
+var CONTAINER = path.join(GINA_ROOT, 'bin', 'gina-container');
+var BUNDLE    = 'demo';
+
+/**
+ * Builds a throwaway scene: isolated home + registered project/bundle/view.
+ * @param   {number} portFrom - port allocation baseline for this scene
+ * @returns {object} scene handle
+ */
+function makeScene(portFrom) {
+    var stamp = Date.now() + '' + portFrom;
+    var home  = path.join(fs.realpathSync(os.tmpdir()), 'gina-b183-' + stamp);
+    var scene = {
+        PROJ      : 'b183' + stamp,
+        HOME      : home,
+        CWD       : home + '-cwd',
+        GINA_HOME : path.join(home, '.gina'),
+        PROJ_DIR  : path.join(home, 'proj'),
+        portFrom  : portFrom
+    };
+    // Neutral cwd: not the repo (the CLI auto-link drops a stray `gina`
+    // symlink at a repo cwd) and not the fake home itself.
+    scene.ENV = Object.assign({}, process.env, { HOME: scene.HOME, GINA_LOG_STDOUT: 'true' });
+    delete scene.ENV.GINA_HOMEDIR;
+    delete scene.ENV.NODE_OPTIONS;
+    return scene;
+}
+
+function cli(scene, args) {
+    return spawnSync(process.execPath, [CLI].concat(args), {
+        env: scene.ENV, cwd: scene.CWD, encoding: 'utf8', timeout: 120000
+    });
+}
+
+/** Scaffolds the scene, verified through on-disk state (CLI exit codes are not trusted). */
+function scaffold(scene) {
+    fs.mkdirSync(scene.PROJ_DIR, { recursive: true });
+    fs.mkdirSync(scene.CWD, { recursive: true });
+    cli(scene, ['project:add', '@' + scene.PROJ, '--path=' + scene.PROJ_DIR]);
+
+    var projects = path.join(scene.GINA_HOME, 'projects.json');
+    assert.ok(fs.existsSync(projects), 'project:add did not bootstrap the isolated home');
+    var registered = JSON.parse(fs.readFileSync(projects, 'utf8'))[scene.PROJ];
+    assert.ok(registered, 'project:add did not register @' + scene.PROJ);
+    assert.ok(String(registered.path).indexOf(scene.HOME) === 0,
+        'sandbox breach: the project resolved OUTSIDE the throwaway home (' + registered.path + ')');
+
+    // The CLI auto-link is unreliable under an isolated home; without it the
+    // bundle's require('gina') dies MODULE_NOT_FOUND before it logs a byte.
+    fs.mkdirSync(path.join(scene.PROJ_DIR, 'node_modules'), { recursive: true });
+    if (!fs.existsSync(path.join(scene.PROJ_DIR, 'node_modules', 'gina'))) {
+        fs.symlinkSync(GINA_ROOT, path.join(scene.PROJ_DIR, 'node_modules', 'gina'));
+    }
+
+    cli(scene, ['bundle:add', BUNDLE, '@' + scene.PROJ, '--start-port-from=' + scene.portFrom]);
+    var rev = JSON.parse(fs.readFileSync(path.join(scene.GINA_HOME, 'ports.reverse.json'), 'utf8'));
+    assert.ok(rev[BUNDLE + '@' + scene.PROJ], 'bundle:add did not register ' + BUNDLE + '@' + scene.PROJ);
+
+    cli(scene, ['view:add', BUNDLE, '@' + scene.PROJ]);
+    scene.port = rev[BUNDLE + '@' + scene.PROJ].dev['http/1.1'].http;
+    scene.envJson = path.join(scene.PROJ_DIR, 'env.json');
+    assert.ok(fs.existsSync(scene.envJson), 'the scaffold must produce a project env.json');
+}
+
+/**
+ * Boots the bundle and settles on whichever comes first: the port opening
+ * (alive) or the process exiting (refused/crashed). On the alive path it
+ * DRAINS and waits for the exit before resolving, so no child outlives the test.
+ *
+ * ⚠️ `spawn` returns the gina-container LAUNCHER; the bundle runs as a separate
+ * `gina: <bundle>@<project>` process. The launcher forwards SIGTERM to it —
+ * SIGKILL is NOT forwardable, so killing the launcher outright ORPHANS the
+ * bundle, which then keeps the test runner alive to its timeout (measured).
+ * Always drain with SIGTERM; SIGKILL is only a last resort.
+ *
+ * @returns {Promise<{alive: boolean, exitCode: (number|null), txt: string}>}
+ */
+function boot(scene, deadlineMs) {
+    return new Promise(function (resolve) {
+        var out = { alive: false, exitCode: null, txt: '', settled: false };
+        var p = spawn(process.execPath, [CONTAINER, BUNDLE, '@' + scene.PROJ], {
+            env: Object.assign({}, scene.ENV, { NODE_ENV: 'dev' }),
+            cwd: scene.CWD, stdio: ['ignore', 'pipe', 'pipe']
+        });
+        var poll = null, cap = null, grace = null;
+        scene.proc = p;
+        p.stdout.on('data', function (d) { out.txt += d; });
+        p.stderr.on('data', function (d) { out.txt += d; });
+
+        function done() {
+            if (out.settled) { return; }
+            out.settled = true;
+            clearInterval(poll);
+            clearTimeout(cap);
+            clearTimeout(grace);
+            resolve(out);
+        }
+        p.on('exit', function (code) { out.exitCode = code; done(); });
+
+        function drain() {
+            clearInterval(poll);
+            clearTimeout(cap);
+            try { p.kill('SIGTERM'); } catch (e) { return done(); }
+            grace = setTimeout(function () {
+                try { p.kill('SIGKILL'); } catch (e) { /* already gone */ }
+                done();
+            }, 10000);
+        }
+
+        poll = setInterval(function () {
+            var s = new net.Socket();
+            s.setTimeout(500);
+            s.on('connect', function () { s.destroy(); out.alive = true; drain(); });
+            s.on('error',   function () { s.destroy(); });
+            s.on('timeout', function () { s.destroy(); });
+            s.connect(scene.port, '127.0.0.1');
+        }, 300);
+        cap = setTimeout(drain, deadlineMs);
+    });
+}
+
+/**
+ * Removes the throwaway scene. The whole isolated home is deleted, so no
+ * `project:rm` is needed (and skipping it avoids a CLI call that can stall).
+ * @param {object} scene
+ * @param {object} [out] - boot() result, used to reach a surviving bundle child
+ */
+function teardown(scene, out) {
+    var launcherStuck = scene.proc && scene.proc.exitCode === null;
+    if (launcherStuck) {
+        try { scene.proc.kill('SIGTERM'); } catch (e) { /* already gone */ }
+        // The bundle child is a separate process the launcher may not have
+        // reaped; its pid is on the mount line. Only reached when the launcher
+        // was still up, so this cannot target an unrelated recycled pid.
+        var m = out && out.txt && out.txt.match(/\[ FRAMEWORK \]\[ (\d+) \]/);
+        if (m) { try { process.kill(parseInt(m[1], 10), 'SIGTERM'); } catch (e) { /* gone */ } }
+    }
+    try { fs.rmSync(scene.HOME, { recursive: true, force: true }); } catch (e) { /* best effort */ }
+    try { fs.rmSync(scene.CWD,  { recursive: true, force: true }); } catch (e) { /* best effort */ }
+}
+
+describe('#B183 §04b — live: a bundle declared for another env refuses, it does not crash', function () {
+
+    it('CONTROL: the pristine scaffold boots — the arm that proves the harness works', async function () {
+        var scene = makeScene(10200);
+        var r = null;
+        try {
+            scaffold(scene);
+            r = await boot(scene, 40000);
+            assert.equal(r.alive, true,
+                'the unmutated scene must come up, or a dead #B183 arm would prove nothing about #B183.\n' + r.txt.slice(-1500));
+        } finally {
+            teardown(scene, r);
+        }
+    });
+
+    it('a bundle declared ONLY for another env refuses with the named message, not an opaque deref', async function () {
+        var scene = makeScene(10220);
+        var r = null;
+        try {
+            scaffold(scene);
+            // Single variable vs the control: drop the booting env's block,
+            // leaving the bundle declared (for the other env) but not for `dev`.
+            var conf = JSON.parse(fs.readFileSync(scene.envJson, 'utf8').split('\n')
+                .filter(function (l) { return !/^\s*\/\//.test(l); }).join('\n'));
+            assert.ok(conf[BUNDLE] && conf[BUNDLE].dev,
+                'fixture precondition: the scaffold must declare a `dev` block to remove');
+            delete conf[BUNDLE].dev;
+            assert.ok(Object.keys(conf[BUNDLE]).length > 0,
+                'the bundle must remain DECLARED — an empty bundle object is #B181(b), a different shape');
+            fs.writeFileSync(scene.envJson, JSON.stringify(conf, null, 4));
+
+            r = await boot(scene, 40000);
+
+            assert.equal(r.alive, false, 'the boot must not come up on a bundle with no block for this env');
+            assert.equal(r.exitCode, 1,
+                'it must refuse cleanly (exit 1), not die as an uncaughtException (exit 143)');
+            assert.ok(r.txt.indexOf("setting 'bundlesPath'") === -1,
+                'the #B183 deref must be gone — this is the regression assertion');
+            assert.ok(r.txt.indexOf('no configuration block for this bundle/env') > -1,
+                'the #B181(b) refusal must now be REACHABLE for this shape');
+            assert.ok(r.txt.indexOf('skipping this bundle for this environment') > -1,
+                'the skip must be reported for the env that has no block');
+        } finally {
+            teardown(scene, r);
+        }
     });
 });
