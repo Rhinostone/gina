@@ -37,6 +37,7 @@
     "A controller is a constructor whose actions are assigned as this.action = function(req, res). Capture 'var self = this;' at the top and call self.render()/self.query() from inside actions — an action is not invoked with the controller as its this."
   ],
   "previousVersions": [
+    "v0.6.0",
     "v0.5.26"
   ]
 }

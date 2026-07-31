@@ -515,6 +515,7 @@ describe('11 - source pins: aria-live region', function () {
     it('announces on the blur path only (gated on fieldName + focus-gone + not a warning)', function () {
         assert.match(mainSrc, /announce a blur-time committed error through the form's polite/);
         assert.match(mainSrc, /\$el !== document\.activeElement/);
-        assert.match(mainSrc, /announceA11yError\(\$form, \$err\.textContent\)/);
+        // #B178 — the announce text is separator-joined from the per-message <p> nodes
+        assert.match(mainSrc, /announceA11yError\(\$form, getA11yAnnounceText\(\$err\)\)/);
     });
 });

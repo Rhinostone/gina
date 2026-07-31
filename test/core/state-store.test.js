@@ -41,8 +41,8 @@ describe('01 - StateStore: source structure', function() {
         assert.ok(/StateStore\._instance/.test(src));
     });
 
-    it('requires node:sqlite with a try/catch guard', function() {
-        assert.ok(/require\('node:sqlite'\)/.test(src));
+    it('resolves the SQLite driver through lib/sqlite-driver with a try/catch guard', function() {
+        assert.ok(/require\('\.\/sqlite-driver'\)\.getDatabaseSync\(\)/.test(src));
         assert.ok(/catch\s*\(/.test(src));
     });
 

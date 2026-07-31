@@ -139,7 +139,7 @@ describe('03 - schema enum mirrors', function () {
         assert.match(src, /var ALLOWED_CONNECTOR_TYPES\s*=\s*\[/);
     });
 
-    it('ALLOWED_CONNECTOR_TYPES contains the seven schema enum values', function () {
+    it('ALLOWED_CONNECTOR_TYPES contains the eight schema enum values', function () {
         assert.match(src, /'couchbase'/);
         assert.match(src, /'mysql'/);
         assert.match(src, /'postgresql'/);
@@ -147,6 +147,7 @@ describe('03 - schema enum mirrors', function () {
         assert.match(src, /'redis'/);
         assert.match(src, /'ai'/);
         assert.match(src, /'scylladb'/);
+        assert.match(src, /'duckdb'/);
     });
 
     it('declares ALLOWED_SCOPES', function () {
@@ -155,7 +156,7 @@ describe('03 - schema enum mirrors', function () {
 
     it('schema/connectors.json enum is the source of truth', function () {
         var enumValues = schema.definitions.connector.properties.connector.enum;
-        assert.deepStrictEqual(enumValues.sort(), ['ai', 'couchbase', 'mongodb', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']);
+        assert.deepStrictEqual(enumValues.sort(), ['ai', 'couchbase', 'duckdb', 'mongodb', 'mysql', 'postgresql', 'redis', 'scylladb', 'sqlite']);
     });
 
     it('schema scope enum is [local, beta, production, testing]', function () {

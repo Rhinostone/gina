@@ -29,10 +29,21 @@
  *      the v0.3.8 "broken global install" regression class).
  *   2. `gina version` runs and prints a version.
  *   3. `gina project:add` scaffolds a project.
- *   4. `gina bundle:add api` + `gina bundle:add frontend` scaffold two bundles.
- *   5. Both bundles BOOT to a listening HTTP server via the daemonless launcher
- *      `gina-container` (no framework socket / port-8124 daemon needed) and
- *      answer HTTP 200 with the boilerplate greeting.
+ *   4. `gina bundle:add api` + `frontend` + `db` scaffold three bundles.
+ *   4b. The `db` bundle gets a SQLite connector fixture (connectors.json entry +
+ *      entity + SQL files + a probe route) — see `sqliteFixtureFiles()`.
+ *   5. All three bundles BOOT to a listening HTTP server via the daemonless
+ *      launcher `gina-container` (no framework socket / port-8124 daemon needed)
+ *      and answer HTTP 200 with the boilerplate greeting.
+ *   6. The `db` bundle round-trips a real SQLite CREATE → INSERT → SELECT through
+ *      the shipped ORM connector and reports the resolved driver.
+ *
+ * Why the SQLite leg exists (the connector coverage boundary, measured 2026-07-28):
+ * no CI leg — Node or Bun — exercised ANY connector, so "Bun is a supported,
+ * CI-gated runtime" only ever meant install → boot → HTTP 200 on a CONNECTOR-FREE
+ * scaffold. SQLite is the one connector that needs zero npm install (it resolves
+ * through `lib/sqlite-driver`: `node:sqlite` on Node, a `bun:sqlite` adapter on
+ * Bun), so it is the cheapest possible guard for that whole surface.
  *
  * Exit codes: 0 — all checks passed; 1 — a check failed (the orchestrator turns
  * a non-zero exit into a loud red "DO NOT PUBLISH").
@@ -66,12 +77,31 @@ var TARBALL          = process.env.GINA_SMOKE_TARBALL || '/tmp/gina.tgz';
 var EXPECTED_VERSION = process.env.GINA_SMOKE_VERSION  || '';
 var PROJECT          = 'smoke';
 var PROJECT_DIR      = path.join(os.tmpdir(), 'gina-smoke-project');
-var BUNDLES          = ['api', 'frontend'];   // added in this order; first → webroot "/"
-var PORT_BASE        = 9700;                   // api 9700, frontend 9800 (hints; resolved from state)
+var BUNDLES          = ['api', 'frontend', 'db'];   // added in this order; each gets its own webroot
+var PORT_BASE        = 9700;                   // api 9700, frontend 9800, db 9900 (hints; resolved from state)
 var GREETING         = 'Hello World';          // boilerplate config/app.json greeting
 var GINA_HOME        = path.join(os.homedir(), '.gina');
 var BOOT_TIMEOUT_MS  = 40000;                  // a cold container boot is slower than a warm host
 var POLL_INTERVAL_MS = 300;
+
+// -- SQLite connector leg -----------------------------------------------------
+// Carried by its OWN bundle so `api` + `frontend` stay pristine: their
+// "a plain scaffold boots and serves" assertion remains an untouched control, and
+// a SQLite regression fails exactly one bundle instead of tainting all three.
+var DB_BUNDLE  = 'db';                                             // bundle carrying the fixture
+var DB_ENTRY   = 'smokedb';                                        // connectors.json key — MUST equal `database`
+var DB_FILE    = path.join(os.tmpdir(), 'gina-smoke-smokedb.sqlite'); // explicit `file`, asserted verbatim
+var DB_NS      = 'probe';                                          // routing namespace → controller.probe.js
+var DB_ENTITY  = 'probe';                                          // entities/probe.js → sql/probe/
+var DB_ROUTE   = 'sqlite-probe';                                   // routing.json rule name + url segment
+var DB_ACTION  = 'sqliteProbe';                                    // param.control
+var DB_TABLE   = 'smoke_probe';
+// The resolved driver constructor. `DatabaseSync` is node:sqlite's native class;
+// `BunDatabaseSync` is the bun:sqlite adapter (lib/sqlite-driver.js). Both are
+// accepted on purpose — the adapter SELF-RETIRES if Bun ever ships node:sqlite
+// (oven-sh/bun#20412), and pinning the Bun leg to the adapter name would then go
+// red exactly when the good thing happens.
+var DB_DRIVERS = ['DatabaseSync', 'BunDatabaseSync'];
 
 var booted = [];   // [{ name, proc, stdout, stderr, exit }] — SIGKILLed on shutdown
 
@@ -143,6 +173,211 @@ function httpGet(useScheme, port, reqPath) {
 function readJSON(file) { return JSON.parse(fs.readFileSync(file, 'utf8')); }
 
 /**
+ * Reads a scaffolded bundle CONFIG json. Unlike {@link readJSON} this tolerates
+ * the leading `// bundle needs to be restarted on changes !!` line the boilerplate
+ * ships — plain `JSON.parse` throws on it. Only FULL-LINE `//` comments are
+ * stripped, so the `https://` inside `$schema` survives.
+ *
+ * Mirrors `parseConfigJSON` in test/integration/container-boot.test.js.
+ *
+ * @param   {string} file  Absolute path to the config json.
+ * @returns {object} The parsed config.
+ */
+function readConfigJSON(file) {
+    var src = fs.readFileSync(file, 'utf8')
+        .split('\n')
+        .filter(function (line) { return !/^\s*\/\//.test(line); })
+        .join('\n');
+    return JSON.parse(src);
+}
+
+// ---------------------------------------------------------------------------
+// SQLite connector fixture
+// ---------------------------------------------------------------------------
+
+/**
+ * Builds the SQLite fixture written into the `db` bundle after `bundle:add`.
+ *
+ * Pure — returns `bundle-relative path → file content` and touches no disk, so
+ * the shape is unit-testable without a container (test/lib/smoke-in-container-fixture.test.js).
+ *
+ * The layout is the one the shipped docs teach (the link-shortener tutorial):
+ * a connectors.json entry, an entity class whose body stays empty, and one `.sql`
+ * file per method. The SQLite connector discovers every method from the `.sql`
+ * filenames at boot and attaches it to the entity prototype
+ * (`core/connectors/sqlite/index.js`).
+ *
+ * `database` deliberately equals the entry key: two independent code paths
+ * auto-create the models dir — one from the entry key (`core/model/index.js`),
+ * one from `database` (`core/connectors/sqlite/index.js`) — so a mismatch
+ * silently creates two directories and the SQL is loaded into neither.
+ *
+ * `file` is set explicitly rather than left to default (`~/.gina/<v>/<database>.sqlite`)
+ * for three reasons: it exercises the `conf.file` branch a real deployment uses,
+ * it keeps the probe DB out of `~/.gina`, and it makes the path assertable verbatim.
+ * A real file (not `:memory:`) is used so the connector's WAL/synchronous pragmas
+ * actually engage against a disk-backed database.
+ *
+ * @returns {Object<string, string>} Bundle-relative path → file content.
+ */
+function sqliteFixtureFiles() {
+    var modelDir = 'models/' + DB_ENTRY;
+    var files    = {};
+
+    // Replaces the `$schema`-only scaffold stub. NOTE a connectors.json with no
+    // object-valued keys boots green and silent (the #B29 guard short-circuits),
+    // so a typo here would NOT fail the boot — which is exactly why the gate
+    // asserts on the HTTP response body rather than on "the bundle started".
+    var connectors = { '$schema': 'https://gina.io/schema/connectors.json' };
+    connectors[DB_ENTRY] = {
+        connector : 'sqlite',
+        database  : DB_ENTRY,
+        file      : DB_FILE
+    };
+    files['config/connectors.json'] = JSON.stringify(connectors, null, 2) + '\n';
+
+    // The class body stays empty on purpose — every method comes from the .sql
+    // files below. The entity CLASS name is derived from this FILENAME by the
+    // connector (probe.js → Probe), not from the exported function's name.
+    files[modelDir + '/entities/' + DB_ENTITY + '.js'] = [
+        '/**',
+        ' * Probe entity — SQL methods are attached from ' + modelDir + '/sql/' + DB_ENTITY + '/',
+        ' * at boot by the SQLite connector. Written by script/smoke_in_container.js.',
+        ' */',
+        'function ProbeEntity() {}',
+        '',
+        'module.exports = ProbeEntity;',
+        ''
+    ].join('\n');
+
+    files[modelDir + '/sql/' + DB_ENTITY + '/insert.sql'] = [
+        '/*',
+        ' * @param {string} ?',
+        ' */',
+        'INSERT INTO ' + DB_TABLE + ' (token) VALUES (?)',
+        ''
+    ].join('\n');
+
+    // `@return {object}` selects stmt.get() — the first row, or null.
+    files[modelDir + '/sql/' + DB_ENTITY + '/findByToken.sql'] = [
+        '/*',
+        ' * @param  {string} ?',
+        ' * @return {object}',
+        ' */',
+        'SELECT token FROM ' + DB_TABLE + ' WHERE token = ?',
+        ''
+    ].join('\n');
+
+    // A namespaced controller is required: without `namespace` the router loads
+    // controllers/controller.js, whose scaffold declares no actions at all.
+    files['controllers/controller.' + DB_NS + '.js'] = sqliteProbeController();
+
+    return files;
+}
+
+/**
+ * The probe table's DDL. Owned by the HARNESS, not by a `.sql` fixture file.
+ *
+ * MEASURED 2026-07-29 (node:24 container): the SQLite connector PRE-COMPILES every
+ * `.sql` file at boot (`core/connectors/sqlite/index.js` → `readSQL`), so a
+ * statement naming a table that does not exist yet fails `conn.prepare()` and its
+ * error is LATCHED in `stmtError` for the whole process lifetime — a `setup.sql`
+ * invoked later from an action creates the table but cannot rescue the already
+ * failed statements. Real deployments migrate before the app starts; seeding here
+ * mirrors that and keeps the fixture's SQL realistic.
+ *
+ * @returns {string} `CREATE TABLE IF NOT EXISTS` for the probe table.
+ */
+function sqliteSchemaSql() {
+    return [
+        'CREATE TABLE IF NOT EXISTS ' + DB_TABLE + ' (',
+        '    id    INTEGER PRIMARY KEY AUTOINCREMENT,',
+        '    token TEXT    NOT NULL UNIQUE',
+        ')'
+    ].join('\n');
+}
+
+/**
+ * Source of the probe controller written into the `db` bundle.
+ *
+ * The action drives the full ORM path (CREATE → INSERT → SELECT) and additionally
+ * reports the live connection's identity, so the gate has POSITIVE evidence the
+ * expected driver is engaged rather than merely "nothing threw".
+ *
+ * The failure branch dumps `Object.keys(db)` because the entity key is registered
+ * at runtime (`lib/model.js` `updateModel`) — if that contract ever moves, the
+ * smoke says which keys DO exist instead of just reporting a TypeError.
+ *
+ * @returns {string} JavaScript source for `controllers/controller.<DB_NS>.js`.
+ */
+function sqliteProbeController() {
+    return [
+        '/**',
+        ' * DbProbeController — the SQLite connector leg of the container smoke.',
+        ' * Written by script/smoke_in_container.js; not part of the scaffold.',
+        ' */',
+        'function DbProbeController() {',
+        '    var self = this;',
+        '',
+        '    this.' + DB_ACTION + ' = async function(req, res) {',
+        '        var db = null;',
+        '        try {',
+        '            db        = getModel(\'' + DB_ENTRY + '\');',
+        '            var token = \'tok-\' + Date.now() + \'-\' + process.pid;',
+        '',
+        '            await db.' + DB_ENTITY + '.insert(token);',
+        '            var row  = await db.' + DB_ENTITY + '.findByToken(token);',
+        '            var conn = db.getConnection();',
+        '',
+        '            self.renderJSON({',
+        '                sqlite   : \'ok\',',
+        '                written  : token,',
+        '                readBack : (row && row.token) || null,',
+        '                driver   : (conn && conn.constructor) ? conn.constructor.name : null,',
+        '                file     : (conn && conn._file) || null,',
+        '                runtime  : (process.versions && process.versions.bun)',
+        '                    ? (\'bun \' + process.versions.bun)',
+        '                    : (\'node \' + process.version)',
+        '            });',
+        '        } catch (e) {',
+        '            // renderJSON() takes ONE argument — there is no status-code',
+        '            // parameter (core/controller/controller.js), so this stays 200',
+        '            // on purpose and the gate asserts on the BODY.',
+        '            self.renderJSON({',
+        '                sqlite    : \'error\',',
+        '                error     : (e && e.message) || String(e),',
+        '                modelKeys : db ? Object.keys(db) : null',
+        '            });',
+        '        }',
+        '    };',
+        '}',
+        '',
+        'module.exports = DbProbeController;',
+        ''
+    ].join('\n');
+}
+
+/**
+ * The routing rule MERGED into the `db` bundle's scaffolded routing.json.
+ *
+ * Merged rather than overwritten so the scaffold's own `homepage` rule survives —
+ * the greeting assertion for this bundle must keep testing the SCAFFOLD's route,
+ * not one this script wrote.
+ *
+ * @returns {object} `{ '<DB_ROUTE>': { namespace, url, method, param } }`
+ */
+function sqliteRoutingRule() {
+    var rule = {};
+    rule[DB_ROUTE] = {
+        namespace : DB_NS,
+        url       : '/' + DB_ROUTE,
+        method    : 'GET',
+        param     : { control: DB_ACTION }
+    };
+    return rule;
+}
+
+/**
  * Runs a gina CLI command. The exit status is informational ONLY — callers
  * verify success via the on-disk state files, because the first-run home
  * bootstrap exits non-zero on a benign in-process MQ ECONNRESET teardown.
@@ -201,6 +436,62 @@ function diagnostics(rec) {
     return 'container exit: ' + JSON.stringify(rec.exit) + ' — ' + note + '\n' +
            'stdout (' + rec.stdout.length + 'b):\n' + (rec.stdout || '(empty)') + '\n---\n' +
            'stderr (' + rec.stderr.length + 'b):\n' + (rec.stderr || '(empty)');
+}
+
+/**
+ * Dumps a booted bundle's captured streams WITHOUT {@link diagnostics}'s boot
+ * verdict — that verdict ("still running at deadline — a stalled boot") is
+ * correct only before a bundle binds, and actively misleading for a failure
+ * observed AFTER it is already serving.
+ *
+ * @inner
+ * @param {object} rec  A {@link bootBundle} record.
+ * @returns {string}
+ */
+function streams(rec) {
+    return 'stdout (' + rec.stdout.length + 'b):\n' + (rec.stdout || '(empty)') + '\n---\n' +
+           'stderr (' + rec.stderr.length + 'b):\n' + (rec.stderr || '(empty)');
+}
+
+/**
+ * Creates the probe table in {@link DB_FILE} before any bundle boots — see
+ * {@link sqliteSchemaSql} for why the harness owns the schema.
+ *
+ * Driver resolution mirrors `lib/sqlite-driver.js` (node:sqlite first, bun:sqlite
+ * under Bun) but is deliberately LOCAL and independent: the harness must not have
+ * to locate the installed framework tree, and keeping the two resolutions separate
+ * means the bundle's own resolution stays the thing actually under measurement.
+ *
+ * @inner
+ * @returns {{ok: boolean, kind: (string|undefined), error: (string|undefined)}}
+ */
+function seedSqliteSchema() {
+    var Database = null;
+    var kind     = null;
+    var nodeErr  = null;
+
+    try {
+        Database = require('node:sqlite').DatabaseSync;
+        kind     = 'node:sqlite';
+    } catch (e) {
+        nodeErr = e;
+        try {
+            Database = require('bun:sqlite').Database;
+            kind     = 'bun:sqlite';
+        } catch (e2) {
+            return { ok: false, error: 'no synchronous SQLite driver in this runtime — ' +
+                'node:sqlite: ' + nodeErr.message + ' | bun:sqlite: ' + e2.message };
+        }
+    }
+
+    try {
+        var db = new Database(DB_FILE);
+        db.exec(sqliteSchemaSql());
+        db.close();
+        return { ok: true, kind: kind };
+    } catch (e) {
+        return { ok: false, error: 'could not seed ' + DB_FILE + ' via ' + kind + ': ' + e.message };
+    }
 }
 
 function shutdown() {
@@ -286,6 +577,37 @@ async function main() {
         ok('bundle ' + b + ' scaffolded');
     }
 
+    // 4b. Write the SQLite connector fixture into the `db` bundle.
+    //     Done AFTER bundle:add and BEFORE any boot: connectors.json and
+    //     routing.json are read once at boot and are NOT hot-reloaded, so writing
+    //     them now sidesteps the restart the scaffold's own header warns about.
+    var dbDir    = path.join(PROJECT_DIR, 'src', DB_BUNDLE);
+    var fixture  = sqliteFixtureFiles();
+    var relPaths = Object.keys(fixture);
+    for (var fx = 0; fx < relPaths.length; fx++) {
+        var target = path.join(dbDir, relPaths[fx]);
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.writeFileSync(target, fixture[relPaths[fx]]);
+    }
+
+    // routing.json is MERGED, never clobbered — the scaffold's `homepage` rule is
+    // what the greeting assertion below tests for this bundle.
+    var dbRoutingPath = path.join(dbDir, 'config', 'routing.json');
+    var dbRouting     = readConfigJSON(dbRoutingPath);
+    var probeRule     = sqliteRoutingRule();
+    var ruleNames     = Object.keys(probeRule);
+    for (var rn = 0; rn < ruleNames.length; rn++) {
+        dbRouting[ruleNames[rn]] = probeRule[ruleNames[rn]];
+    }
+    fs.writeFileSync(dbRoutingPath, JSON.stringify(dbRouting, null, 2) + '\n');
+    ok('sqlite fixture written into the ' + DB_BUNDLE + ' bundle (' + (relPaths.length + 1) + ' files, db=' + DB_FILE + ')');
+
+    // 4c. Seed the schema BEFORE the boot — the connector pre-compiles every .sql
+    //     file at boot, so the tables its statements name must already exist.
+    var seeded = seedSqliteSchema();
+    if (!seeded.ok) { fail('could not prepare the sqlite fixture database: ' + seeded.error); return die(1); }
+    ok('sqlite schema seeded via ' + seeded.kind + ' at ' + DB_FILE);
+
     // 5. Boot each bundle and verify it serves — SEQUENTIALLY, one at a time.
     //    gina-container is one-bundle-per-container by design (the k8s model).
     //    Booting two bundles of the same project CONCURRENTLY races on the shared
@@ -333,10 +655,81 @@ async function main() {
             return die(1);
         }
         ok(name + ' serving HTTP 200 with greeting at ' + scheme + '://127.0.0.1:' + port + webroot);
+
+        // 6. SQLite connector round-trip — the connector coverage gate.
+        //    `webroot` is already normalised with a trailing slash and config.js
+        //    prefixes every route url with it, so never hardcode the path here.
+        if (name === DB_BUNDLE) {
+            var probeUrl = webroot + DB_ROUTE;
+            var probeRes = await httpGet(scheme, port, probeUrl);
+            if (probeRes.status !== 200) {
+                fail('GET ' + scheme + '://127.0.0.1:' + port + probeUrl + ' returned ' + probeRes.status +
+                     (probeRes.err ? ' (' + probeRes.err + ')' : '') +
+                     '\nbody: ' + (probeRes.body || '(empty)').substring(0, 600) + '\n' + streams(rec));
+                return die(1);
+            }
+            var probeBody;
+            try { probeBody = JSON.parse(probeRes.body); }
+            catch (e) {
+                fail('sqlite probe did not return JSON.\nbody: ' + (probeRes.body || '(empty)').substring(0, 600));
+                return die(1);
+            }
+            if (probeBody.sqlite !== 'ok') {
+                fail('sqlite probe reported failure: ' + JSON.stringify(probeBody) + '\n' + streams(rec));
+                return die(1);
+            }
+            // Positive evidence, not absence-of-error: the value written must come
+            // back out of the database, so a stubbed/no-op query cannot pass.
+            if (!probeBody.written || probeBody.readBack !== probeBody.written) {
+                fail('sqlite round-trip mismatch — wrote ' + JSON.stringify(probeBody.written) +
+                     ' but read back ' + JSON.stringify(probeBody.readBack));
+                return die(1);
+            }
+            if (DB_DRIVERS.indexOf(probeBody.driver) < 0) {
+                fail('unexpected SQLite driver ' + JSON.stringify(probeBody.driver) +
+                     ' — expected one of ' + DB_DRIVERS.join(' | ') + '.\n' +
+                     'Under Bun this should be the bun:sqlite adapter unless Bun has shipped node:sqlite.');
+                return die(1);
+            }
+            // Proves the CONFIGURED entry was used and not a defaulted path.
+            if (probeBody.file !== DB_FILE) {
+                fail('sqlite connector opened ' + JSON.stringify(probeBody.file) +
+                     ' but connectors.json configured ' + JSON.stringify(DB_FILE));
+                return die(1);
+            }
+            ok('sqlite connector round-trip OK — driver ' + probeBody.driver +
+               ', db ' + probeBody.file + ' (' + probeBody.runtime + ')');
+        }
     }
 
-    log('ALL CHECKS PASSED on node ' + process.version);
+    log('ALL CHECKS PASSED on ' + (IS_BUN ? ('bun ' + (process.versions.bun || '')) : ('node ' + process.version)));
     return die(0);
 }
 
-main().catch(function (e) { fail('unexpected error: ' + (e && e.stack ? e.stack : e)); die(1); });
+// Guarded so the fixture builders above can be required by
+// test/lib/smoke-in-container-fixture.test.js without booting the smoke.
+// MEASURED both directions before relying on it: `require.main === module` is
+// true when run directly under BOTH node:24 and oven/bun:1.3.14, and false when
+// required from node:test — so this can neither skip the smoke in a container nor
+// run it inside the suite.
+if (require.main === module) {
+    main().catch(function (e) { fail('unexpected error: ' + (e && e.stack ? e.stack : e)); die(1); });
+}
+
+module.exports = {
+    sqliteFixtureFiles   : sqliteFixtureFiles,
+    sqliteProbeController: sqliteProbeController,
+    sqliteRoutingRule    : sqliteRoutingRule,
+    sqliteSchemaSql      : sqliteSchemaSql,
+    readConfigJSON       : readConfigJSON,
+    BUNDLES              : BUNDLES,
+    DB_BUNDLE            : DB_BUNDLE,
+    DB_ENTRY             : DB_ENTRY,
+    DB_FILE              : DB_FILE,
+    DB_NS                : DB_NS,
+    DB_ENTITY            : DB_ENTITY,
+    DB_ROUTE             : DB_ROUTE,
+    DB_ACTION            : DB_ACTION,
+    DB_TABLE             : DB_TABLE,
+    DB_DRIVERS           : DB_DRIVERS
+};

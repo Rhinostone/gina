@@ -15,7 +15,7 @@
         "connector": {
           "type": "string",
           "description": "Connector driver type. Required when the key name does not match a built-in connector name (e.g. key \"session\" with connector \"redis\").",
-          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb", "mongodb"]
+          "enum": ["couchbase", "mysql", "postgresql", "sqlite", "redis", "ai", "scylladb", "mongodb", "duckdb"]
         },
         "version": {
           "type": "string",
@@ -39,7 +39,7 @@
         },
         "database": {
           "type": "string",
-          "description": "Database, bucket, or keyspace name. Also used as the model directory name under models/. Required for Couchbase, MySQL, PostgreSQL, SQLite, ScyllaDB."
+          "description": "Database, bucket, or keyspace name. Also used as the model directory name under models/. Required for Couchbase, MySQL, PostgreSQL, SQLite, ScyllaDB, DuckDB."
         },
         "contactPoints": {
           "type": ["array", "string"],
@@ -89,8 +89,13 @@
         },
         "file": {
           "type": "string",
-          "description": "SQLite only. Database file path. Defaults to ~/.gina/{version}/{database}.sqlite. Use \":memory:\" for in-memory databases.",
-          "examples": [":memory:", "/data/app.sqlite"]
+          "description": "SQLite and DuckDB only. Database file path. Defaults to ~/.gina/{version}/{database}.sqlite (SQLite) or ~/.gina/{version}/{database}.duckdb (DuckDB). Use \":memory:\" for in-memory databases.",
+          "examples": [":memory:", "/data/app.sqlite", "/data/analytics.duckdb"]
+        },
+        "readOnly": {
+          "type": "boolean",
+          "description": "DuckDB only. Open the database in read-only mode (driver access_mode READ_ONLY). The engine refuses writes, and any number of read-only processes can share one file — while a read-write process holds a DuckDB file, no other process can open it at all. Defaults to false.",
+          "default": false
         },
         "idleTimeout": {
           "type": "number",

@@ -54,14 +54,31 @@ function announceA11yError(win, $form, text) {
     return _live;
 }
 
-// --- Replica of the refresh-branch: rebuild $err from errors[name] (stack-skipped), then the
-//     guarded announce. `announce` toggles the #B89 addition for the subtract test. ---
+// --- Replica of the refresh-branch: rebuild $err from errors[name] (stack-skipped,
+//     #B178 distinct-text dedup), then the guarded announce with #B178's joined text.
+//     `announce` toggles the #B89 addition for the subtract test. ---
+
+// #B178 replica of getA11yAnnounceText — per-message texts joined with '. '
+function getA11yAnnounceText($err) {
+    var $msgs = $err.getElementsByTagName('p');
+    if ( !$msgs.length ) {
+        return $err.textContent;
+    }
+    var parts = [];
+    for (var m = 0, mLen = $msgs.length; m < mLen; ++m) {
+        parts.push($msgs[m].textContent);
+    }
+    return parts.join('. ');
+}
+
 function refreshBranch(win, $form, $el, errors, name, fieldName, isWarning, activeEl, opts) {
     opts = opts || {};
     var $err = win.document.createElement('div');
     $err.className = 'form-item-error-message';
+    var _renderedMsgs = {};                                  // #B178 distinct-text dedup
     for (var e in errors[name]) {
-        if (e != 'stack') {                                  // #B89 parity with first-error branch
+        if (e != 'stack' && typeof(_renderedMsgs[ errors[name][e] ]) == 'undefined') { // #B89 parity with first-error branch
+            _renderedMsgs[ errors[name][e] ] = true;
             var $msg = win.document.createElement('p');
             $msg.appendChild( win.document.createTextNode(errors[name][e]) );
             $err.appendChild($msg);
@@ -74,7 +91,7 @@ function refreshBranch(win, $form, $el, errors, name, fieldName, isWarning, acti
         && typeof(fieldName) != 'undefined'
         && $err
         && $el !== activeEl ) {
-        announceA11yError(win, $form, $err.textContent);
+        announceA11yError(win, $form, getA11yAnnounceText($err));
     }
     return $err;
 }
@@ -171,8 +188,9 @@ describe('04 - source pins: the production refresh branch matches the replicas',
         assert.match(mainSrc, /_live\.textContent\s*=\s*text/, 'announce must REPLACE textContent so a changed string re-announces');
     });
 
-    it('the announceA11yError($form, $err.textContent) call now appears in BOTH the first-error and refresh branches', function () {
-        var calls = mainSrc.match(/announceA11yError\(\s*\$form\s*,\s*\$err\.textContent\s*\)/g) || [];
+    it('the joined-text announce call now appears in BOTH the first-error and refresh branches', function () {
+        // #B178 — the announce argument is getA11yAnnounceText($err), not raw textContent
+        var calls = mainSrc.match(/announceA11yError\(\s*\$form\s*,\s*getA11yAnnounceText\(\s*\$err\s*\)\s*\)/g) || [];
         assert.equal(calls.length, 2, 'first-error branch + refresh branch (#B89)');
     });
 
@@ -180,8 +198,7 @@ describe('04 - source pins: the production refresh branch matches the replicas',
         var b89 = mainSrc.indexOf('#B89 — re-announce the REFRESHED message');
         assert.ok(b89 >= 0, 'expected the #B89 refresh-announce comment');
         // the guard (mirrors the first-error announce) sits between the marker and the call
-        var callIdx  = mainSrc.indexOf('announceA11yError( $form, $err.textContent )', b89);
-        if (callIdx < 0) callIdx = mainSrc.indexOf('announceA11yError($form, $err.textContent)', b89);
+        var callIdx  = mainSrc.indexOf('announceA11yError($form, getA11yAnnounceText($err))', b89);
         assert.ok(callIdx > b89, 'the announce call follows the #B89 marker');
         var guard = mainSrc.slice(b89, callIdx);
         assert.match(guard, /!isWarning/, 'committed errors only');
@@ -190,7 +207,8 @@ describe('04 - source pins: the production refresh branch matches the replicas',
     });
 
     it('the `stack` skip guard now appears in BOTH message loops (first-error + refresh)', function () {
-        var guards = mainSrc.match(/if\s*\(\s*e\s*!=\s*'stack'\s*\)/g) || [];
+        // #B178 — the guard gained the distinct-text dedup conjunct
+        var guards = mainSrc.match(/if\s*\(\s*e\s*!=\s*'stack'\s*&&\s*typeof\(_renderedMsgs\[/g) || [];
         assert.ok(guards.length >= 2, 'both writer branches must skip the stack key (parity, #B89)');
     });
 });
