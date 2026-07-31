@@ -348,10 +348,21 @@ function Config(opt, contextResetNeeded) {
      * @param {string} env - Environment name
      * @param {string} scope - Scope name
      * @param {object} conf - Core server configuration object
+     * @throws {Error} When `envConf` carries no block for `bundle`/`env` — i.e.
+     *                 the project's `env.json` never declared it (#B181(b)).
+     *                 The boot path guards this at the `loadBundleConfig` call
+     *                 site, which can refuse through its callback; this throw
+     *                 is the defense-in-depth for any other caller.
      */
     this.setServerCoreConf = function(bundle, env, scope, conf) {
         self.env    = env;
         self.scope  = scope;
+        // #B181(b) — a NAMED failure beats the opaque
+        // `Cannot read properties of undefined (reading '<env>')` deref that
+        // this line produced when env.json declared no block for the bundle.
+        if ( !self.envConf[bundle] || !self.envConf[bundle][env] ) {
+            throw new Error('setServerCoreConf(`'+ bundle +'`, `'+ env +'`): no env.json configuration block for this bundle/env');
+        }
         self.envConf[bundle][env].server['coreConfiguration'] = conf;
     }
 
@@ -1509,6 +1520,27 @@ function Config(opt, contextResetNeeded) {
         ;
         console.debug('[CONFIG][loadBundleConfig] Loading `'+ bundle +'/'+ env +':'+ scope +'` configuration, please wait ...');
 
+
+        // #B181(b) — the bundle list is built inside the env.json template-merge
+        // loop, so an env.json that is empty, ABSENT (userConf stays false), or
+        // that declares only bundles missing from manifest.json yields an EMPTY
+        // list; `bundles[b]` is then undefined and `bundle` falls back to
+        // startingApp above — a bundle `envConf` was never populated for. The
+        // setServerCoreConf call below would deref `envConf[bundle][env]` and
+        // die as an uncaughtException naming neither env.json nor the bundle.
+        // Refuse here instead, matching the #B132 routing.json refusal further
+        // down this same function (callback(err) leads to process.exit(1)), so
+        // an external supervisor retries while a release tree settles. This
+        // predicate can only be true in a configuration that ALREADY crashed,
+        // so it cannot refuse a boot that works today.
+        if ( !conf[bundle] || !conf[bundle][env] ) {
+            var _envBlockMsg = '[ ' + bundle + ' ][ ' + env + ' ] no configuration block for this bundle/env in '
+                + self.executionPath + '/env.json ('
+                + ( self.userConf ? 'the file declares no `'+ bundle +'.'+ env +'` block' : 'file NOT FOUND' )
+                + ') — every bundle must be declared there for the env it starts in; refusing to start';
+            console.error(_envBlockMsg);
+            return callback(new Error(_envBlockMsg));
+        }
 
         self.setServerCoreConf(bundle, env, scope, conf.core);
 
