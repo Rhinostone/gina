@@ -1,3 +1,0 @@
-kind: Fixed
-body: 'The Couchbase connector attaches every N1QL query file unconditionally, so a file named after an existing member — a stamped entity property like `getCluster`, a previously attached query method, or an inherited member such as EventEmitter''s `on` — silently overwrote or shadowed that member for the entity. The clobber is now reported at startup with the file path and a rename hint (e.g. `onRows.sql`); shadowing the framework''s global `count()`/`functionCount()` helpers stays silent, by design (there the query file winning is the point). Attachment behavior is unchanged — the warning never skips the file.'
-time: 2026-07-30T00:33:30+01:00
