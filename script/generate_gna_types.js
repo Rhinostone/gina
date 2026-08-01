@@ -388,7 +388,7 @@ const SECTIONS = [
       names: ['run'] },
     { header: 'Env helpers',
       names: ['getUserHome', 'getEnvVar', 'getEnvVars', 'setEnvVar',
-              'getProtected', 'filterArgs', 'getLogDir', 'getRunDir', 'getTmpDir',
+              'getProtected', 'filterArgs', 'importEnvVars', 'getLogDir', 'getRunDir', 'getTmpDir',
               'getBundleStartingArgv', 'getVendorsConfig', 'setVendorsConfig',
               'defineDefault', 'parseTimeout', 'merge'] },
     { header: 'ApiError',

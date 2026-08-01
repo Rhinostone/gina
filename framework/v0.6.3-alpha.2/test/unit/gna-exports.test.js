@@ -94,7 +94,7 @@ const GLOBAL_EXPORTS = [
     // Env helpers
     'getUserHome',
     'getEnvVar', 'getEnvVars', 'setEnvVar',
-    'getProtected', 'filterArgs',
+    'getProtected', 'filterArgs', 'importEnvVars',
     'getLogDir', 'getRunDir', 'getTmpDir',
     'getBundleStartingArgv',
     'getVendorsConfig', 'setVendorsConfig',

@@ -93,8 +93,14 @@ function MainHelper(opt) {
         var _topic = ( typeof(process.argv[2]) != 'undefined' ) ? process.argv[2] : '';
         var _isFrameworkScopedCmd = ( _topic.indexOf(':') < 0 || /^framework:/.test(_topic) );
 
-        if ( typeof(process.env['gina']) == 'undefined') {
-            process.env['gina'] = {}
+        // Init target fixed (#B160-sibling): this guarded process.ENV['gina']
+        // — an object assigned to process.env coerces to the junk string
+        // "[object Object]", exported to every child — while the
+        // argv-promotion loop below writes process['gina'], a latent
+        // TypeError for any embedder calling filterArgs() before the first
+        // setEnvVar().
+        if ( typeof(process['gina']) == 'undefined') {
+            process['gina'] = {}
         }
 
         var newArgv = {};
@@ -157,19 +163,44 @@ function MainHelper(opt) {
         if (!setget)
             process.argv = newArgv;
 
-        //Cleaning the rest.
+        // Cleaning the rest — the env sweep, extracted to importEnvVars() so
+        // bin/cli can run an early keep-mode visibility pass before its
+        // home/settings/host resolution block. Move semantics here: swept
+        // keys leave process.env, exactly as before the extraction.
+        importEnvVars();
+
+        setContext('envVars', process['gina']);
+    }
+
+    /**
+     * importEnvVars
+     * Imports every `GINA_*` / `VENDOR_*` / `USER_*` key from `process.env`
+     * into the framework environment (`process.gina`). With `keep` falsy —
+     * the sweep, run by `filterArgs()` — each imported key is DELETED from
+     * `process.env`. With `keep` truthy — the early visibility pass in
+     * `bin/cli` — `process.env` is left untouched, so the later sweep still
+     * runs its move semantics and the post-sweep state (shell values winning
+     * over in-bootstrap `setEnvVar` writes) is unchanged. Idempotent in both
+     * modes.
+     *
+     * @param {boolean} [keep] - Import without deleting from `process.env`
+     */
+    importEnvVars = function(keep) {
+        if ( typeof(process['gina']) == 'undefined') {
+            process['gina'] = {}
+        }
         for (let e in process.env) {
             if (
-                e.substring(0, 5) === 'GINA_' || // 6?
+                e.substring(0, 5) === 'GINA_' ||
                 e.substring(0, 7) === 'VENDOR_' ||
                 e.substring(0, 5) === 'USER_'
                 ) {
                 process['gina'][e] = process.env[e];
-                delete process.env[e]
+                if (!keep) {
+                    delete process.env[e]
+                }
             }
         }
-
-        setContext('envVars', process['gina']);
     }
 
     /**

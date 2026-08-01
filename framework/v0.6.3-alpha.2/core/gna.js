@@ -2457,6 +2457,21 @@ gna.getProtected = getProtected;
 gna.filterArgs = filterArgs;
 
 /**
+ * Import `GINA_*` / `VENDOR_*` / `USER_*` keys from `process.env` into the
+ * framework environment (`process.gina`). Move semantics by default — the
+ * `filterArgs()` sweep deletes each imported key from `process.env`. Pass
+ * `keep=true` for the early visibility pass (`bin/cli` runs it before its
+ * home/settings/host resolution) that leaves `process.env` intact for the
+ * later sweep. Idempotent in both modes.
+ *
+ * @param {boolean} [keep] - Import without deleting from `process.env`
+ * @returns {void}
+ * @example
+ *   importEnvVars(true); // process.gina.GINA_ENV === 'dev'; process.env.GINA_ENV intact
+ */
+gna.importEnvVars = importEnvVars;
+
+/**
  * Resolve the log directory — `GINA_LOGDIR` / `LOGDIR` / prefix `var/log`
  * with fallback to `~/.gina/log`. Creates it if missing.
  *

@@ -1009,6 +1009,7 @@ declare namespace gina {
     const getTmpDir: typeof globalThis.getTmpDir;
     const getUserHome: typeof globalThis.getUserHome;
     const getVendorsConfig: typeof globalThis.getVendorsConfig;
+    const importEnvVars: typeof globalThis.importEnvVars;
     const isWin32: typeof globalThis.isWin32;
     const joinContext: typeof globalThis.joinContext;
     const log: typeof globalThis.log;

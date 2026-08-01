@@ -82,6 +82,7 @@ module.exports = {
     get setEnvVar()             { return global.setEnvVar; },
     get getProtected()          { return global.getProtected; },
     get filterArgs()            { return global.filterArgs; },
+    get importEnvVars()         { return global.importEnvVars; },
     get getLogDir()             { return global.getLogDir; },
     get getRunDir()             { return global.getRunDir; },
     get getTmpDir()             { return global.getTmpDir; },

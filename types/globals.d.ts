@@ -213,6 +213,8 @@ declare global {
     function getProtected(): string[];
     /** Promote `--key=value` argv flags to env vars, then strip them from `argv`. */
     function filterArgs(): void;
+    /** Import `GINA_*`/`VENDOR_*`/`USER_*` keys from `process.env` into `process.gina`; `keep=true` leaves `process.env` intact (the `bin/cli` early visibility pass), default deletes them (the `filterArgs()` sweep). */
+    function importEnvVars(keep?: boolean): void;
     function getUserHome(): string;
     function getLogDir(): string;
     function getRunDir(): string;
