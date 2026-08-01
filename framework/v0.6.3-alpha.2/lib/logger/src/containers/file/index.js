@@ -31,6 +31,19 @@ function FileContainer(opt, loggers) {
     var processProperties = null;
     var filenames   = {};
 
+    /**
+     * Resolves the framework's connection settings for the file container.
+     *
+     * Runs before the framework globals are guaranteed to exist (see the
+     * "hack for early calls" block below), so every global read is guarded.
+     *
+     * @inner
+     * @param {object} opt - Logger options; mqPort/hostV4/bindHost are filled in here.
+     * @returns {void}
+     *
+     * @example
+     * init({ });
+     */
     function init(opt) {
 
         // ---------- BO - hack for early calls
@@ -52,7 +65,22 @@ function FileContainer(opt, loggers) {
 
         var settings = { mq_port: 8125, host_v4: '127.0.0.1' };
         try {
-            settings = require( getUserHome() + '/.gina/' + shortVersion + '/settings.json');
+            // #B160-sibling (3) — honour GINA_HOMEDIR so an isolated home resolves
+            // its OWN settings instead of the invoking user's. The variable already
+            // carries the `/.gina` segment (bin/cli, bin/gina-init both compose it
+            // as `home + '/.gina'`), so it replaces that whole prefix, not just the
+            // home.
+            // Three tiers, and process.env is load-bearing rather than defensive:
+            // this container is constructed BEFORE bin/cli imports the OS env into
+            // process.gina (measured: process.gina is empty here, while
+            // process.env.GINA_HOMEDIR still holds the value), so the framework-env
+            // tier alone would never fire on the CLI path. Framework env still wins
+            // where it is populated (bundle processes, gina-container), matching the
+            // two-tier read used by the secrets backend and resolveHttpHost.
+            var _ginaHome = (typeof getEnvVar === 'function' && getEnvVar('GINA_HOMEDIR'))
+                || process.env.GINA_HOMEDIR
+                || (getUserHome() + '/.gina');
+            settings = require( _ginaHome + '/' + shortVersion + '/settings.json');
         } catch (err) {}
 
         opt.mqPort = settings.mq_port;

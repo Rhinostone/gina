@@ -15,6 +15,20 @@ function MQSpeaker(opt, loggers, cb) {
 
 
 
+    /**
+     * Resolves the framework's connection settings, then starts the speaker.
+     *
+     * Runs before the framework globals are guaranteed to exist (see the
+     * "hack for early calls" block below), so every global read is guarded.
+     *
+     * @inner
+     * @param {object} opt - Logger options; mqPort/hostV4/bindHost are filled in here.
+     * @param {function} cb - Passed through to startMQSpeaker.
+     * @returns {*} Whatever startMQSpeaker() returns.
+     *
+     * @example
+     * init({ }, function(err, speaker) { });
+     */
     function init(opt, cb) {
 
         // ---------- BO - hack for early calls
@@ -36,7 +50,22 @@ function MQSpeaker(opt, loggers, cb) {
 
         var settings = { mq_port: 8125, host_v4: '127.0.0.1' };
         try {
-            settings = require( getUserHome() + '/.gina/' + shortVersion + '/settings.json');
+            // #B160-sibling (3) — honour GINA_HOMEDIR so an isolated home resolves
+            // its OWN settings instead of the invoking user's. The variable already
+            // carries the `/.gina` segment (bin/cli, bin/gina-init both compose it
+            // as `home + '/.gina'`), so it replaces that whole prefix, not just the
+            // home.
+            // Three tiers, and process.env is load-bearing rather than defensive:
+            // this container is constructed BEFORE bin/cli imports the OS env into
+            // process.gina (measured: process.gina is empty here, while
+            // process.env.GINA_HOMEDIR still holds the value), so the framework-env
+            // tier alone would never fire on the CLI path. Framework env still wins
+            // where it is populated (bundle processes, gina-container), matching the
+            // two-tier read used by the secrets backend and resolveHttpHost.
+            var _ginaHome = (typeof getEnvVar === 'function' && getEnvVar('GINA_HOMEDIR'))
+                || process.env.GINA_HOMEDIR
+                || (getUserHome() + '/.gina');
+            settings = require( _ginaHome + '/' + shortVersion + '/settings.json');
         } catch (err) {}
 
         // Guard: settings.mq_port may be an unresolved template placeholder (e.g. '${}'
