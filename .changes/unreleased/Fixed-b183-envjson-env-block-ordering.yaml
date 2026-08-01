@@ -1,9 +1,0 @@
-kind: Fixed
-body: 'Starting a bundle in an environment its project `env.json` block does not
-  cover now refuses cleanly (exit 1), naming the bundle, the environment and the
-  resolved `env.json` path. It previously died with an opaque `TypeError: Cannot
-  set properties of undefined (setting ''bundlesPath'')` at exit 143, which named
-  neither the file nor the bundle. A bundle that is declared for other
-  environments but not the one being started is now also reported as skipped,
-  instead of disappearing from the boot with nothing explaining why.'
-time: 2026-08-01T00:12:14+01:00
