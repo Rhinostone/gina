@@ -1355,7 +1355,7 @@ function Server(options) {
                     throw new Error('[ SERVER ] `settings.json > audit.chain.secret` must be a non-empty string.');
                 }
                 if ( typeof(_auditSettings.chain.secret) == 'string' && /\$\{/.test(_auditSettings.chain.secret) ) {
-                    throw new Error('[ SERVER ] `settings.json > audit.chain.secret` carries an unresolved `${...}` placeholder — the named variable is not set at config-load time. Note that `${secret:GINA_*}` names can never resolve (the CLI moves every GINA_* variable out of process.env before config load); use a non-GINA variable name, or set GINA_AUDIT_SECRET.');
+                    throw new Error('[ SERVER ] `settings.json > audit.chain.secret` carries an unresolved `${...}` placeholder — only the anchored `${secret:KEY}` form is substituted at config load; bare `${VAR}` and mixed strings pass through as literals. Use `${secret:KEY}` with the variable exported in the environment the bundle starts from, or set GINA_AUDIT_SECRET.');
                 }
             }
             var _auditChainEnabled = !!( _auditSettings.chain && _auditSettings.chain.enabled === true );

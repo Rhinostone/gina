@@ -100,3 +100,21 @@ describe('audit:verify §02 — the handler contracts (source pins)', function (
         assert.match(VERIFY_ACTIVE, /process\.env\.GINA_AUDIT_SECRET/);
     });
 });
+
+
+describe('audit:verify §03 — the ${secret:VAR} branch reads the framework environment first (#B156)', function () {
+
+    it('the placeholder read is two-tier: getEnvVar(m[1]) behind a typeof guard, then process.env[m[1]]', function () {
+        // audit:verify is an OFFLINE command, so it runs in the freshly-swept
+        // bin/cli process: a shell-exported key lives in the framework
+        // environment (process.gina), not process.env. The read must consult
+        // getEnvVar first or a GINA_-prefixed placeholder can never resolve.
+        assert.match(VERIFY_ACTIVE, /typeof\(getEnvVar\) == 'function' && getEnvVar\(m\[1\]\)/);
+        assert.match(VERIFY_ACTIVE, /process\.env\[m\[1\]\]/);
+    });
+
+    it('the not-set message names the environment and drops the retired never-resolves caveat', function () {
+        assert.match(VERIFY_SRC, /is not set in this environment/);
+        assert.doesNotMatch(VERIFY_SRC, /can never resolve/);
+    });
+});

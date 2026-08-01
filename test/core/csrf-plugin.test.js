@@ -1543,3 +1543,50 @@ describe('14 - #CSRF3 source inspection: pre-filter ordering and primitives', fu
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 15 — GINA_CSRF_SECRET through the framework env reader (#B156 class)
+// ---------------------------------------------------------------------------
+// The secret's env tier read process.env directly, which filterArgs() (bin/cli)
+// empties of every GINA_* key. In bundle processes the gna.js ctx mirror
+// repopulates process.env, so the tier worked there by rescue; the two-tier
+// read makes it robust wherever the factory runs.
+
+describe('15 - GINA_CSRF_SECRET through the framework env reader (#B156 class)', function () {
+
+    var savedEnvSecret, hadGetEnvVar, savedGetEnvVar;
+
+    beforeEach(function () {
+        savedEnvSecret = process.env.GINA_CSRF_SECRET;
+        hadGetEnvVar   = Object.prototype.hasOwnProperty.call(global, 'getEnvVar');
+        savedGetEnvVar = global.getEnvVar;
+    });
+
+    afterEach(function () {
+        if (typeof savedEnvSecret === 'undefined') delete process.env.GINA_CSRF_SECRET;
+        else process.env.GINA_CSRF_SECRET = savedEnvSecret;
+        if (hadGetEnvVar) global.getEnvVar = savedGetEnvVar;
+        else delete global.getEnvVar;
+    });
+
+    it('factory resolves the secret through getEnvVar when process.env was swept', function () {
+        delete process.env.GINA_CSRF_SECRET;
+        global.getEnvVar = function (key) {
+            return (key === 'GINA_CSRF_SECRET') ? TEST_SECRET : undefined;
+        };
+        assert.doesNotThrow(function () { Csrf(); });
+    });
+
+    it('still throws fail-closed when neither the framework env nor process.env carries it', function () {
+        delete process.env.GINA_CSRF_SECRET;
+        global.getEnvVar = function () { return undefined; };
+        assert.throws(function () { Csrf(); }, /GINA_CSRF_SECRET env var is required/);
+    });
+
+    it('source pin: the env tier is two-tier — getEnvVar behind a typeof guard, process.env as fallback', function () {
+        var pluginSrc = fs.readFileSync(PLUGIN, 'utf8');
+        assert.match(pluginSrc, /typeof getEnvVar === 'function' && getEnvVar\('GINA_CSRF_SECRET'\)/);
+        assert.match(pluginSrc, /process\.env\.GINA_CSRF_SECRET/);
+    });
+});

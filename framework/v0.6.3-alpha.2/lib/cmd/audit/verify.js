@@ -23,10 +23,10 @@ var CmdHelper = require('./../helper');
  * `<project>/logs/audit-<bundle>-<env>.jsonl`).
  *
  * Key resolution: `settings.json > audit.chain.secret` (a `${secret:VAR}`
- * placeholder is resolved from `process.env[VAR]` — config-load substitution
- * does not run offline, and `${secret:GINA_*}` names can never resolve
- * because the CLI sweeps GINA_* out of process.env), then `GINA_AUDIT_SECRET`
- * through the framework env reader.
+ * placeholder is resolved here because config-load substitution does not run
+ * offline — read from the framework env reader first, then `process.env[VAR]`,
+ * so GINA_-prefixed names swept out of process.env by the CLI still resolve,
+ * #B156), then `GINA_AUDIT_SECRET` through the same two-tier read.
  *
  * Exit codes: `0` chain intact (warnings, if any, are printed — read them) ·
  * `1` chain BROKEN · `2` usage/config error (no trail file, no key, bad --env).
@@ -191,9 +191,11 @@ function Verify(opt, cmd) {
 
     /**
      * Resolves the signing key: `audit.chain.secret` (literal, or a
-     * `${secret:VAR}` placeholder resolved from `process.env[VAR]`), then
-     * `GINA_AUDIT_SECRET` through the framework env reader (direct
-     * `process.env` fallback for non-CLI contexts).
+     * `${secret:VAR}` placeholder read from the framework env reader first,
+     * then `process.env[VAR]` — the CLI sweep moves GINA_*-prefixed keys out
+     * of `process.env`, so the two-tier read is what lets a shell-exported
+     * variable resolve in this offline process, #B156), then
+     * `GINA_AUDIT_SECRET` through the same two-tier read.
      *
      * @inner
      * @private
@@ -212,9 +214,9 @@ function Verify(opt, cmd) {
         if ( secret ) {
             var m = secret.match(/^\$\{secret:([^}]+)\}$/);
             if ( m ) {
-                secret = process.env[m[1]] || null;
+                secret = ( typeof(getEnvVar) == 'function' && getEnvVar(m[1]) ) || process.env[m[1]] || null;
                 if ( !secret ) {
-                    console.error('`audit.chain.secret` names `${secret:'+ m[1] +'}` but `'+ m[1] +'` is not set in this shell. Export it, or set GINA_AUDIT_SECRET. (Note: `${secret:GINA_*}` names can never resolve — the CLI sweeps GINA_* out of process.env.)');
+                    console.error('`audit.chain.secret` names `${secret:'+ m[1] +'}` but `'+ m[1] +'` is not set in this environment. Export it before running the command, or set GINA_AUDIT_SECRET.');
                     process.exit(2);
                     return false;
                 }

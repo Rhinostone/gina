@@ -632,3 +632,90 @@ describe('12 - getRequiredKeys enumeration', function () {
         assert.equal(resolvedPaths.length, 2);   // mixed not substituted, not counted
     });
 });
+
+
+// ---------------------------------------------------------------------------
+// 14 — env backend framework-environment tier (#B156)
+// ---------------------------------------------------------------------------
+// filterArgs() (bin/cli) moves every GINA_*/VENDOR_*/USER_* key out of
+// process.env into the framework environment (process.gina), so in CLI and
+// daemon processes a swept key is only visible through the getEnvVar global.
+// The env backend therefore reads the framework environment FIRST and falls
+// back to process.env for processes that never ran the sweep (containers,
+// embedders, this test process).
+
+describe('14 - env backend framework-environment tier (#B156)', function () {
+
+    var hadGetEnvVar, savedGetEnvVar;
+
+    beforeEach(function () {
+        hadGetEnvVar   = Object.prototype.hasOwnProperty.call(global, 'getEnvVar');
+        savedGetEnvVar = global.getEnvVar;
+    });
+
+    afterEach(function () {
+        if (hadGetEnvVar) global.getEnvVar = savedGetEnvVar;
+        else delete global.getEnvVar;
+        delete process.env.GINA_B156_SWEPT;
+        delete process.env.B156_BOTH;
+        delete process.env.B156_PLAIN;
+        delete process.env.B156_NOREADER;
+    });
+
+    it('resolves a swept key through getEnvVar when process.env no longer carries it', function () {
+        // The defect this section locks out: a shell-exported GINA_* key is
+        // deleted from process.env by the sweep; only the framework
+        // environment still holds it.
+        delete process.env.GINA_B156_SWEPT;
+        global.getEnvVar = function (key) {
+            return (key === 'GINA_B156_SWEPT') ? 'from-framework-env' : undefined;
+        };
+        var conf = { token: '${secret:GINA_B156_SWEPT}' };
+        secrets.resolve(conf);
+        assert.equal(conf.token, 'from-framework-env');
+    });
+
+    it('the framework-environment tier wins when both carry the key', function () {
+        process.env.B156_BOTH = 'from-process-env';
+        global.getEnvVar = function (key) {
+            return (key === 'B156_BOTH') ? 'from-framework-env' : undefined;
+        };
+        var conf = { v: '${secret:B156_BOTH}' };
+        secrets.resolve(conf);
+        assert.equal(conf.v, 'from-framework-env');
+    });
+
+    it('falls through to process.env when the framework environment lacks the key', function () {
+        process.env.B156_PLAIN = 'from-process-env';
+        global.getEnvVar = function () { return undefined; };
+        var conf = { v: '${secret:B156_PLAIN}' };
+        secrets.resolve(conf);
+        assert.equal(conf.v, 'from-process-env');
+    });
+
+    it('keeps working with no framework reader present at all (never-swept processes)', function () {
+        delete global.getEnvVar;
+        process.env.B156_PLAIN = 'plain';
+        var conf = { v: '${secret:B156_PLAIN}' };
+        secrets.resolve(conf);
+        assert.equal(conf.v, 'plain');
+    });
+
+    it('stays fail-closed when neither tier carries the key', function () {
+        global.getEnvVar = function () { return undefined; };
+        delete process.env.B156_NOREADER;
+        var thrown = null;
+        try { secrets.resolve({ v: '${secret:B156_NOREADER}' }); }
+        catch (e) { thrown = e; }
+        assert.ok(thrown, 'resolve must throw');
+        assert.equal(thrown.message, 'Secret resolution failed');
+        assert.equal(thrown._ginaSecretKey, 'B156_NOREADER');
+        assert.ok(Object.keys(thrown).indexOf('_ginaSecretKey') < 0, 'key stays non-enumerable');
+    });
+
+    it('source pin: the backend reads getEnvVar behind a typeof guard, process.env as the fallback', function () {
+        var envSrc = fs.readFileSync(path.join(SECRETS_PATH, 'src/backends/env.js'), 'utf8');
+        assert.match(envSrc, /typeof getEnvVar === 'function' && getEnvVar\(key\)/);
+        assert.match(envSrc, /process\.env\[key\]/);
+    });
+});

@@ -436,10 +436,13 @@ var SESSIONLESS_MESSAGE =
  *   1. `opts.secret` — factory override (test harness only).
  *   2. `settings.json > csrf.secret` — resolver-compatible config slot.
  *      `${secret:KEY}` placeholders are filled by `lib/secrets` at
- *      config-load time from `process.env[KEY]`, so this slot lets
- *      consumers name the env var anything they like.
- *   3. `process.env.GINA_CSRF_SECRET` — back-compat direct env read.
- *      Always honoured when set, regardless of (2).
+ *      config-load time (framework environment first, then the raw
+ *      process environment), so this slot lets consumers name the env
+ *      var anything they like.
+ *   3. `GINA_CSRF_SECRET` — back-compat env read, through the framework
+ *      env reader first, then the raw process environment (#B156 class:
+ *      the CLI sweep empties process.env of GINA_* keys). Always
+ *      honoured when set, regardless of (2).
  *
  * @example
  *   // settings.json — recommended shape:
@@ -483,7 +486,8 @@ function Csrf(opts) {
                  ? opts.secret
                  : (typeof defaults.secret === 'string' && defaults.secret)
                    ? defaults.secret
-                   : process.env.GINA_CSRF_SECRET;
+                   : ( (typeof getEnvVar === 'function' && getEnvVar('GINA_CSRF_SECRET'))
+                       || process.env.GINA_CSRF_SECRET );
     if (typeof secret !== 'string' || !secret) {
         throw new Error(
             '[gina csrf] GINA_CSRF_SECRET env var is required'

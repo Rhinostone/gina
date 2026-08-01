@@ -177,7 +177,7 @@
             "secret": {
               "type": "string",
               "minLength": 1,
-              "description": "The HMAC signing key. A literal, or a `${secret:VAR}` placeholder resolved at config load (VAR must NOT be GINA_-prefixed — the CLI sweeps GINA_* out of process.env before config load; use GINA_AUDIT_SECRET for the environment path instead). Optional here: when omitted the key is read from the GINA_AUDIT_SECRET environment variable. A key shorter than 32 characters boots with a warning. Enabling the chain with no key from either source refuses the boot."
+              "description": "The HMAC signing key. A literal, or a `${secret:VAR}` placeholder resolved at config load — the variable is read from the framework environment first, then `process.env`, so GINA_-prefixed names resolve too (before 0.6.3 the CLI sweep made them unresolvable). Optional here: when omitted the key is read from the GINA_AUDIT_SECRET environment variable. A key shorter than 32 characters boots with a warning. Enabling the chain with no key from either source refuses the boot."
             }
           }
         }

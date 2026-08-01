@@ -9,27 +9,39 @@
 
 /**
  * @module lib/secrets/backends/env
- * @description `process.env`-backed resolver for `${secret:KEY}` placeholders.
- * Reads the raw value from `process.env[key]`. Throws the generic
- * `'Secret resolution failed'` Error when the env var is unset or empty —
- * the user-facing message intentionally omits the key name. The key is
- * attached non-enumerably to the thrown Error as `_ginaSecretKey` so
- * callers can log it at debug level without leaking it through `toString()`.
+ * @description Environment-backed resolver for `${secret:KEY}` placeholders.
+ * Reads the framework environment first (`getEnvVar(key)`, when the global
+ * is present), then falls back to the raw `process.env[key]` — `filterArgs()`
+ * (`bin/cli`) moves every `GINA_*`/`VENDOR_*`/`USER_*` key out of
+ * `process.env` into `process.gina`, so in CLI and daemon processes a swept
+ * key is only visible through `getEnvVar`. Never-swept processes
+ * (containers, embedders, tests) resolve through `process.env` as before.
+ * Throws the generic `'Secret resolution failed'` Error when neither tier
+ * yields a non-empty string — the user-facing message intentionally omits
+ * the key name. The key is attached non-enumerably to the thrown Error as
+ * `_ginaSecretKey` so callers can log it at debug level without leaking it
+ * through `toString()`.
  */
 
 /**
- * Resolve a secret key against `process.env`.
+ * Resolve a secret key against the framework environment, then `process.env`.
  *
  * @memberof module:lib/secrets/backends/env
  * @function resolve
  * @param {string} key - Placeholder key, e.g. `'DB_PASSWORD'`
- * @returns {string} Non-empty env-var value
- * @throws {Error} `'Secret resolution failed'` when `process.env[key]` is unset or empty
+ * @returns {string} Non-empty string value from `getEnvVar(key)` or `process.env[key]`
+ * @throws {Error} `'Secret resolution failed'` when neither tier carries a non-empty string
  *
  * @example
  * var env = require('./backends/env');
  * process.env.DB_PASSWORD = 's3cret';
  * env.resolve('DB_PASSWORD'); // → 's3cret'
+ *
+ * @example
+ * // In a CLI/daemon process, a shell-exported GINA_* key was swept out of
+ * // process.env into the framework environment — the getEnvVar tier finds it:
+ * // process.gina.GINA_API_TOKEN === 'tok';  delete process.env.GINA_API_TOKEN;
+ * env.resolve('GINA_API_TOKEN'); // → 'tok'  (#B156)
  *
  * @example
  * delete process.env.MISSING;
@@ -41,7 +53,10 @@
  * }
  */
 function resolve(key) {
-    var value = process.env[key];
+    // #B156 — framework-environment tier first. Boolean values a sweep may
+    // have coerced ("true"/"false") fail the string check below, keeping the
+    // non-empty-STRING contract identical on both tiers.
+    var value = (typeof getEnvVar === 'function' && getEnvVar(key)) || process.env[key];
     if (typeof value !== 'string' || value === '') {
         var err = new Error('Secret resolution failed');
         Object.defineProperty(err, '_ginaSecretKey', {
