@@ -7210,6 +7210,20 @@ function ValidatorPlugin(rules, data, formId, culture) {
                         $form.send(result['data']);
                     }
                 } else {
+                    // #B192 — release the submit latch. A rejected submit sends nothing, so it
+                    // never reaches the XHR settle (`xhr.onreadystatechange`), which was the only
+                    // other site clearing `isSubmitting`. Left latched, the live-check field
+                    // listener hard-returns on every subsequent keystroke, `updateSubmitTriggerState`
+                    // never runs again and the submit trigger keeps `aria-disabled="true"` +
+                    // `gina-form-submit-disabled` until the page is reloaded — and because the flag
+                    // lives on the `$forms[id]` object rather than a listener closure, it survives a
+                    // full unbind/rebind too. This branch IS the terminal no-send outcome; the valid
+                    // branch above deliberately keeps the latch until send() settles, which is what
+                    // keeps live-check quiet during a real in-flight submit.
+                    if ( instance.$forms[_id] ) {
+                        instance.$forms[_id].isSubmitting = false;
+                    }
+
                     // #A11Y1 (slice 3) — failed submit: move focus to the first invalid field so
                     // assistive tech announces it (accessible name + aria-invalid + the
                     // aria-errormessage text). DOM order; hidden / unfocusable fields are skipped.
