@@ -100,8 +100,19 @@ describe('02 - Factory wiring', function () {
         assert.doesNotMatch(NF_CODE, /SwigFilters\.(instance|initialized)/);
     });
 
-    it('refreshes instance._options with JSON.clone(conf) on every call', function () {
-        assert.match(NF_SRC, /NunjucksFilters\.instance\._options\s*=\s*JSON\.clone\(\s*conf\s*\)/);
+    it('refreshes instance._options by REFERENCE on every call (#P39)', function () {
+        // #P39 realignment — the former per-call deep clone of `conf` was
+        // measured as pure waste (the stash has no writer beyond this
+        // assignment, and the wrapper's `.options` is already the render's
+        // per-request local.options). The pin now locks the reference stash,
+        // and the comment-stripped negative locks the clone OUT of the
+        // getInstance body so it cannot silently return.
+        assert.match(NF_SRC, /NunjucksFilters\.instance\._options\s*=\s*conf\s*;/);
+        var giStart = NF_CODE.indexOf('var getInstance = function()');
+        var giEnd   = NF_CODE.indexOf('return NunjucksFilters.instance', giStart);
+        assert.ok(giStart > -1 && giEnd > giStart, 'getInstance body must resolve in comment-stripped code');
+        assert.equal(NF_CODE.slice(giStart, giEnd).indexOf('JSON.clone') , -1,
+            'no clone may sit on the per-call stash path');
     });
 
     it('lazy-loads the merge lib via GINA_FRAMEWORK_DIR', function () {

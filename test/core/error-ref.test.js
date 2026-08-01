@@ -336,15 +336,22 @@ describe('#ERRREF §04 — the wire carries the ref; the log pairs it with the f
     function runControllerBlock(isLocal, errorObject, msg, code, calls) {
         var mintFn = new Function('crypto', CTRL_MINT[0] + '\nreturn _mintErrorRef;')(crypto);
         var cons   = { error: function () { calls.push(Array.prototype.slice.call(arguments).join(' ')); } };
+        // #CE1 stand-ins: the extracted window now carries the opt-in
+        // transient error-field swap; provide its bindings with the feature
+        // OFF (the shipped default), so this suite keeps testing exactly the
+        // #ERRREF composition on the real bytes. The feature-ON path is
+        // covered end-to-end by test/core/transient-errors.test.js §03.
         var fn = new Function(
             '_mintErrorRef', '_isLocalScope', 'errorObject', 'msg', 'code',
             'standardErrorMessage', 'bundleConf', 'req', 'res', 'console', 'JSON',
+            '_transient503Applied', '_teConf', 'statusCodes',
             CB_SRC + '\nreturn { errorObject: errorObject, errOutput: errOutput };');
         return fn(
             mintFn, isLocal, errorObject, msg, code,
             'Internal Server Error', { bundle: 'fixturebundle' },
             { method: 'POST', url: '/api/fixture', _ginaReqId: 'REQ-FIXTURE-2' },
-            { statusCode: code }, cons, JSON);
+            { statusCode: code }, cons, JSON,
+            false, null, { '503': 'Service Unavailable' });
     }
 
     it('NON-local: wire body has ref + NO stack; the log has the SAME ref + the full stack (the closed gap)', function () {

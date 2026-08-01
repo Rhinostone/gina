@@ -215,6 +215,28 @@
           "type": "boolean",
           "description": "When true, the HTTP/2 server also accepts HTTP/1.1 connections (ALPN negotiation). Defaults to true."
         },
+        "transientErrors": {
+          "type": "object",
+          "description": "Opt-in rendering of transient datastore failures as 503 + Retry-After. When enabled, a connector error stamped isTransient that would render as HTTP 500 through throwError renders as 503 with a Retry-After header and a clean user-facing error message instead. Explicit non-500 statuses and permanent errors are never upgraded. A malformed block warns at boot and leaves the feature off — it never refuses a boot.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "Master switch. Must be strictly boolean true to turn the upgrade on — any other type or value leaves it off. Defaults to false."
+            },
+            "retryAfter": {
+              "type": "integer",
+              "description": "Delta-seconds value emitted as the Retry-After header on upgraded 503 responses. Integer between 1 and 86400; out-of-range or non-integer values are ignored with a boot warning. Defaults to 30.",
+              "minimum": 1,
+              "maximum": 86400
+            },
+            "message": {
+              "type": "string",
+              "description": "User-facing text placed in the error field of upgraded 503 responses. Non-empty string; empty or non-string values are ignored with a boot warning. Defaults to the standard 503 status text (Service Unavailable).",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        },
         "warmup": {
           "type": "array",
           "description": "List of upstream URLs to pre-establish HTTP/2 sessions at bundle startup. Reduces latency on the first real request.",
