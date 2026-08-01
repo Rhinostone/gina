@@ -8888,3 +8888,128 @@ describe('81 - Inspector per-tab BroadcastChannel data binding (#INS)', function
         assert.strictEqual(applied[0].p, 1);
     });
 });
+
+
+describe('82 - extractIndexes: nested scan containers — IntersectScan/UnionScan/OrderedIntersectScan (`scans`) + DistinctScan (`scan`) (#B193)', function() {
+
+    // Same extraction pattern as §30: pull the REAL function out of the connector
+    // source by brace-counting and eval it — no replica to drift.
+    var extractIndexes;
+    var fnSrc = '';
+    try {
+        var src = fs.readFileSync(path.join(FW, 'core/connectors/couchbase/index.js'), 'utf8');
+        var fnStart = src.indexOf('var extractIndexes = function(profile)');
+        if (fnStart > -1) {
+            var body = src.substring(fnStart);
+            var braceDepth = 0, fnEnd = -1;
+            for (var i = body.indexOf('{'); i < body.length; i++) {
+                if (body[i] === '{') braceDepth++;
+                if (body[i] === '}') braceDepth--;
+                if (braceDepth === 0) { fnEnd = i + 1; break; }
+            }
+            if (fnEnd > -1) {
+                fnSrc = body.substring(0, fnEnd);
+                eval(fnSrc);  // defines extractIndexes in this scope
+            }
+        }
+    } catch (e) {
+        // extraction failure surfaces via the first assertion below
+    }
+
+    // -- fixture helpers (shapes taken from real EXPLAIN output) --
+    function seq(op) {
+        return { executionTimings: { '#operator': 'Sequence', '~children': [ op, { '#operator': 'Fetch', keyspace: 'sample' } ] } };
+    }
+    function idxScan(name) {
+        return { '#operator': 'IndexScan3', index: name, keyspace: 'sample' };
+    }
+    function names(result) {
+        return (result || []).map(function(ix) { return ix.name; });
+    }
+
+    it('extractIndexes function was successfully extracted from connector', function() {
+        assert.ok(typeof extractIndexes === 'function', 'extractIndexes should be a callable function');
+        assert.ok(fnSrc.length > 0, 'expected a non-empty extracted source');
+    });
+
+    // -- controls: the function CAN report an index / an empty plan reads [] --
+    // (both must stay green pre-fix AND post-fix — they isolate the wrapper
+    //  operator as the only variable in the discriminator cases below)
+    it('control: a plain IndexScan3 is reported (the instrument can fire)', function() {
+        assert.deepStrictEqual(names(extractIndexes(seq(idxScan('idx_a')))), ['idx_a']);
+    });
+
+    it('control: a plan with no scan operators reads [] (the no-index reading is real)', function() {
+        var r = extractIndexes({ executionTimings: { '#operator': 'Sequence', '~children': [
+            { '#operator': 'Filter' }, { '#operator': 'FinalProject' }
+        ] } });
+        assert.ok(Array.isArray(r));
+        assert.strictEqual(r.length, 0);
+    });
+
+    // -- discriminators: the four measured multi-index/nested operators (#B193) --
+    // Pre-fix each returned [] — the Inspector then rendered the red "no index —
+    // full bucket scan" badge + banner for a query the planner had already served
+    // with MULTIPLE indexes: a false negative that invites a pointless (and
+    // write-amplifying) index build.
+    it('IntersectScan: both child IndexScan3 nodes under `scans` are reported', function() {
+        var r = extractIndexes(seq({ '#operator': 'IntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_b') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_b']);
+    });
+
+    it('UnionScan: both child IndexScan3 nodes under `scans` are reported', function() {
+        var r = extractIndexes(seq({ '#operator': 'UnionScan', scans: [ idxScan('idx_a'), idxScan('idx_b') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_b']);
+    });
+
+    it('OrderedIntersectScan: `scans` children are reported (same family, absent from the original report)', function() {
+        var r = extractIndexes(seq({ '#operator': 'OrderedIntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_d') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_d']);
+    });
+
+    it('DistinctScan: the SINGULAR `scan` container is walked', function() {
+        var r = extractIndexes(seq({ '#operator': 'DistinctScan', scan: idxScan('idx_c') }));
+        assert.deepStrictEqual(names(r), ['idx_c']);
+    });
+
+    it('nested composite: a UnionScan of an IntersectScan recurses through scans-in-scans', function() {
+        var r = extractIndexes(seq({ '#operator': 'UnionScan', scans: [
+            { '#operator': 'IntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_b') ] },
+            idxScan('idx_c')
+        ] }));
+        assert.deepStrictEqual(names(r), ['idx_a', 'idx_b', 'idx_c']);
+    });
+
+    it('dedupe: the same index appearing in two scans collapses to one entry (seen[] holds)', function() {
+        var r = extractIndexes(seq({ '#operator': 'IntersectScan', scans: [ idxScan('idx_a'), idxScan('idx_a') ] }));
+        assert.deepStrictEqual(names(r), ['idx_a']);
+    });
+
+    it('the primary flag is computed unchanged on nested nodes', function() {
+        var r = extractIndexes(seq({ '#operator': 'IntersectScan', scans: [
+            { '#operator': 'PrimaryScan3', index: '#primary', keyspace: 'sample' },
+            idxScan('idx_a')
+        ] }));
+        assert.deepStrictEqual(r.map(function(ix) { return ix.name + ':' + ix.primary; }),
+            ['#primary:true', 'idx_a:false']);
+    });
+
+    // -- source pins: the fix cannot be silently reverted --
+    it('source pin: the walker visits the singular `scan` container', function() {
+        assert.ok(fnSrc.indexOf("node['scan']") > -1, "expected a `node['scan']` clause in extractIndexes");
+    });
+
+    it('source pin: the walker visits the `scans` array behind an Array.isArray guard', function() {
+        assert.match(fnSrc, /node\['scans'\] && Array\.isArray\(node\['scans'\]\)/);
+    });
+
+    it('source pin: the #B193 rationale comment marks the clauses', function() {
+        assert.ok(fnSrc.indexOf('#B193') > -1, 'expected the #B193 marker comment in extractIndexes');
+    });
+
+    it('roster pin: the walker dispatches walk() at exactly five sites (root + 4 containers)', function() {
+        // ~child, ~children[i], scan, scans[j], walk(root) — a silent fifth
+        // container (or a dropped one) changes this count. Pre-fix the count was 3.
+        assert.strictEqual((fnSrc.match(/walk\(/g) || []).length, 5);
+    });
+});

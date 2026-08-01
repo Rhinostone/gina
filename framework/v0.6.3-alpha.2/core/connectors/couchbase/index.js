@@ -38,6 +38,12 @@ function Couchbase(conn, infos) {
      * - `ExpressionScan` / `KeyScan` — USE KEYS direct KV lookup (green badge,
      *   reported as "KV lookup (USE KEYS)")
      *
+     * Recursion covers the four child containers plans actually use: `~child`,
+     * `~children`, plus (#B193) the nested-scan containers `scans`
+     * (IntersectScan / UnionScan / OrderedIntersectScan) and `scan`
+     * (DistinctScan) — so a plan the planner serves with MULTIPLE indexes
+     * reports all of them instead of reading as "no index".
+     *
      * @inner
      * @param {object} profile - The plan object (meta.profile or EXPLAIN row)
      * @returns {Array<{name: string, primary: boolean}>|null} Array of index descriptors,
@@ -75,6 +81,20 @@ function Couchbase(conn, infos) {
             if (node['~children'] && Array.isArray(node['~children'])) {
                 for (var i = 0; i < node['~children'].length; i++) {
                     walk(node['~children'][i]);
+                }
+            }
+            // #B193 — the multi-index operators nest their child scans under
+            // `scans` (IntersectScan / UnionScan / OrderedIntersectScan) or
+            // `scan` (DistinctScan), NOT ~child/~children. Unwalked, every
+            // multi-index plan returned [] and the Inspector rendered it as
+            // "no index — full bucket scan" — a false negative that invites a
+            // pointless (write-amplifying) index build for a query the planner
+            // was already serving with several indexes. seen[] above already
+            // dedupes an index appearing in more than one child scan.
+            if (node['scan'])  walk(node['scan']);
+            if (node['scans'] && Array.isArray(node['scans'])) {
+                for (var j = 0; j < node['scans'].length; j++) {
+                    walk(node['scans'][j]);
                 }
             }
         };
