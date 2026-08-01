@@ -9013,3 +9013,121 @@ describe('82 - extractIndexes: nested scan containers — IntersectScan/UnionSca
         assert.strictEqual((fnSrc.match(/walk\(/g) || []).length, 5);
     });
 });
+
+
+describe('83 - tab-layout preview: every preset tab has a label + color; unknown tabs humanize, never "undefined" (#B194)', function() {
+
+    // dist copy, same as §44's getJs() — the SPA is served from dist verbatim.
+    var _js83;
+    function js83() { return _js83 || (_js83 = fs.readFileSync(path.join(BM_DIR, 'inspector.js'), 'utf8')); }
+
+    // Extract an object literal `var NAME = {...};` by brace counting.
+    function extractObj(name) {
+        var src = js83();
+        var at = src.indexOf('var ' + name + ' = {');
+        if (at < 0) return null;
+        var body = src.substring(at), depth = 0;
+        for (var i = body.indexOf('{'); i < body.length; i++) {
+            if (body[i] === '{') depth++;
+            if (body[i] === '}') depth--;
+            if (depth === 0) return body.substring(0, i + 1);
+        }
+        return null;
+    }
+    // Extract a `function name(...) {...}` by brace counting.
+    function extractFn(name) {
+        var src = js83();
+        var at = src.indexOf('function ' + name + '(');
+        if (at < 0) return null;
+        var body = src.substring(at), depth = 0;
+        for (var i = body.indexOf('{'); i < body.length; i++) {
+            if (body[i] === '{') depth++;
+            if (body[i] === '}') depth--;
+            if (depth === 0) return body.substring(0, i + 1);
+        }
+        return null;
+    }
+
+    var TAB_LAYOUTS, TAB_PREVIEW_LABELS, TAB_PREVIEW_COLORS, pillLabel, pillColor;
+    try {
+        /* jshint evil: true */
+        eval(extractObj('TAB_LAYOUTS'));
+        eval(extractObj('TAB_PREVIEW_LABELS'));
+        eval(extractObj('TAB_PREVIEW_COLORS'));
+        var _fL = extractFn('pillLabel'), _fC = extractFn('pillColor');
+        if (_fL) eval('pillLabel = ' + _fL);
+        if (_fC) eval('pillColor = ' + _fC);
+    } catch (e) { /* surfaced by the assertions below */ }
+
+    it('the three structures extract from the dist SPA', function() {
+        assert.ok(TAB_LAYOUTS && TAB_PREVIEW_LABELS && TAB_PREVIEW_COLORS, 'expected TAB_LAYOUTS + both preview maps');
+    });
+
+    it('control: the six original tabs are mapped (label + color) — pre-existing behaviour preserved', function() {
+        ['data', 'view', 'logs', 'forms', 'query', 'flow'].forEach(function(tab) {
+            assert.equal(typeof TAB_PREVIEW_LABELS[tab], 'string', tab + ' label');
+            assert.equal(typeof TAB_PREVIEW_COLORS[tab], 'string', tab + ' color');
+        });
+    });
+
+    // -- the class invariant (#B194): a tab CANNOT enter a preset without map entries.
+    //    Pre-fix this failed on stream + events — both were added to all three
+    //    presets but neither map, so the preview rendered the literal string
+    //    "undefined" as their pill text (and --pill-color:undefined).
+    it('every tab named in ANY preset has a label AND a color (roster completeness)', function() {
+        Object.keys(TAB_LAYOUTS).forEach(function(preset) {
+            TAB_LAYOUTS[preset].forEach(function(tab) {
+                assert.equal(typeof TAB_PREVIEW_LABELS[tab], 'string',
+                    'preset "' + preset + '" tab "' + tab + '" has no TAB_PREVIEW_LABELS entry');
+                assert.equal(typeof TAB_PREVIEW_COLORS[tab], 'string',
+                    'preset "' + preset + '" tab "' + tab + '" has no TAB_PREVIEW_COLORS entry');
+            });
+        });
+    });
+
+    it('the two newer tabs carry their display labels', function() {
+        assert.equal(TAB_PREVIEW_LABELS.stream, 'Stream');
+        assert.equal(TAB_PREVIEW_LABELS.events, 'Events');
+    });
+
+    // -- the fallback helpers: an UNKNOWN tab humanizes instead of rendering "undefined"
+    it('pillLabel: mapped tabs resolve from the map, unknown tabs humanize', function() {
+        assert.equal(typeof pillLabel, 'function', 'expected a pillLabel helper');
+        assert.equal(pillLabel('query'), 'Query');
+        assert.equal(pillLabel('stream'), 'Stream');
+        assert.equal(pillLabel('metrics'), 'Metrics', 'an unmapped tab renders its capitalized name');
+        assert.notEqual(String(pillLabel('metrics')), 'undefined');
+    });
+
+    it('pillColor: mapped tabs resolve from the map, unknown tabs get the neutral color', function() {
+        assert.equal(typeof pillColor, 'function', 'expected a pillColor helper');
+        assert.equal(pillColor('flow'), 'var(--accent)');
+        assert.equal(pillColor('metrics'), 'var(--text-dim)', 'an unmapped tab gets a neutral pill color');
+    });
+
+    it('renderLayoutPreview routes BOTH render sites through the helpers (count pins)', function() {
+        var src = js83();
+        // visible + hidden pill loops: 2 pillLabel( + 2 pillColor( call sites
+        // (the '(' excludes the definitions, which match 'function pillLabel(').
+        assert.equal((src.match(/pillLabel\(/g) || []).length, 3, 'definition + 2 call sites');
+        assert.equal((src.match(/pillColor\(/g) || []).length, 3, 'definition + 2 call sites');
+        // the maps are read ONLY inside the helpers now — a bare map read at a
+        // render site is the "undefined"-class regression this section kills.
+        assert.equal((src.match(/TAB_PREVIEW_LABELS\[/g) || []).length, 1, 'one read, inside pillLabel');
+        assert.equal((src.match(/TAB_PREVIEW_COLORS\[/g) || []).length, 1, 'one read, inside pillColor');
+    });
+
+    // -- the same-family cap (#B194): the custom-order validator derives its bound
+    //    from the roster instead of the stale literal 6 (with 7-8 visible tabs a
+    //    saved custom order was rejected on read and never survived a reload).
+    it('getCustomOrder bounds the saved array by the preset roster length, not a literal 6', function() {
+        var src = js83();
+        assert.ok(src.indexOf('arr.length <= TAB_LAYOUTS.balanced.length') > -1,
+            'expected the roster-derived bound');
+        assert.equal(src.indexOf('arr.length <= 6'), -1, 'the stale literal-6 bound must be gone');
+    });
+
+    it('the roster-derived bound admits a full 8-tab custom order today', function() {
+        assert.equal(TAB_LAYOUTS.balanced.length, 8, 'all three presets carry 8 tabs today');
+    });
+});

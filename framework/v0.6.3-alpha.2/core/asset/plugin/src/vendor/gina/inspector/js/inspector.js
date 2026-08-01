@@ -1568,8 +1568,12 @@
             var raw = localStorage.getItem(CUSTOM_ORDER_KEY);
             if (raw) {
                 var arr = JSON.parse(raw);
-                // Accept arrays of 1-6 known tab names (tabs may be hidden)
-                if (Array.isArray(arr) && arr.length >= 1 && arr.length <= 6) return arr;
+                // Accept 1..N tab names where N is the full preset roster
+                // (tabs may be hidden, so shorter is fine). #B194 — this bound
+                // was a stale literal 6: once the roster grew to 8 tabs, a
+                // custom order saved with 7-8 visible tabs was rejected here
+                // on every read and never survived a reload.
+                if (Array.isArray(arr) && arr.length >= 1 && arr.length <= TAB_LAYOUTS.balanced.length) return arr;
             }
         } catch (e) {}
         return null;
@@ -1727,7 +1731,9 @@
         logs:  'var(--text-dim)',
         forms: 'var(--warn)',
         query: 'var(--num)',
-        flow:  'var(--accent)'
+        flow:  'var(--accent)',
+        stream: 'var(--str)',
+        events: 'var(--warn)'
     };
 
     /**
@@ -1737,8 +1743,36 @@
      */
     var TAB_PREVIEW_LABELS = {
         data: 'Data', view: 'View', logs: 'Logs',
-        forms: 'Forms', query: 'Query', flow: 'Flow'
+        forms: 'Forms', query: 'Query', flow: 'Flow',
+        stream: 'Stream', events: 'Events'
     };
+
+    /**
+     * Resolve a tab's preview-pill label. #B194 — the two newer tabs (stream,
+     * events) were added to every TAB_LAYOUTS preset but not to the preview
+     * maps, so their pills rendered the literal string "undefined". The maps
+     * now carry them, and this fallback humanizes any FUTURE tab that misses
+     * the map (capitalized tab name), so the class cannot fire again.
+     *
+     * @inner
+     * @param {string} tab - Tab name (e.g. 'query')
+     * @returns {string} Display label for the preview pill
+     */
+    function pillLabel(tab) {
+        return TAB_PREVIEW_LABELS[tab] || (tab.charAt(0).toUpperCase() + tab.slice(1));
+    }
+
+    /**
+     * Resolve a tab's preview-pill color, falling back to the neutral dim
+     * color for a tab absent from the map (see {@link pillLabel} — #B194).
+     *
+     * @inner
+     * @param {string} tab - Tab name
+     * @returns {string} CSS color value for the pill's --pill-color
+     */
+    function pillColor(tab) {
+        return TAB_PREVIEW_COLORS[tab] || 'var(--text-dim)';
+    }
 
     /**
      * Render a row of tiny colored pills into `#bm-layout-preview` showing
@@ -1766,16 +1800,16 @@
             var isHidden = hidden.indexOf(tab) !== -1;
             if (!isHidden) {
                 if (!visibleFirst) html += '<span class="bm-lp-arrow">\u203A</span>';
-                html += '<span class="bm-lp-pill" style="--pill-color:' + TAB_PREVIEW_COLORS[tab] + '">'
-                      + TAB_PREVIEW_LABELS[tab] + '</span>';
+                html += '<span class="bm-lp-pill" style="--pill-color:' + pillColor(tab) + '">'
+                      + pillLabel(tab) + '</span>';
                 visibleFirst = false;
             }
         }
         // Append hidden tabs as dimmed pills
         for (var h = 0; h < hidden.length; h++) {
             if (!visibleFirst) html += '<span class="bm-lp-arrow bm-lp-arrow-dim">\u203A</span>';
-            html += '<span class="bm-lp-pill bm-lp-pill-hidden" style="--pill-color:' + TAB_PREVIEW_COLORS[hidden[h]] + '">'
-                  + TAB_PREVIEW_LABELS[hidden[h]] + '</span>';
+            html += '<span class="bm-lp-pill bm-lp-pill-hidden" style="--pill-color:' + pillColor(hidden[h]) + '">'
+                  + pillLabel(hidden[h]) + '</span>';
             visibleFirst = false;
         }
         el.innerHTML = html;
