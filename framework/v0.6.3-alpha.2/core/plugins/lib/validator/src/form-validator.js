@@ -1573,6 +1573,30 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             return self[this.name]
         }
 
+        /**
+         * Check if value is a whole number.
+         *  - valid if the value is a number with no fractional part
+         *  - a numeric string is accepted as-is (this rule does NOT cast, unlike `isNumber`)
+         *  - if the value is blank, no bound test is done: valid if not required
+         *
+         * Optional bounds constrain the LENGTH of the value's string form — the same
+         * arity contract as `isString`/`isNumber`: `[N]` (or the scalar `N`) supplies
+         * `minLength` only, and an exact length needs `[N, N]` since the exact-length
+         * branch fires only when `minLength === maxLength`.
+         *
+         * #B198 — the bounds measure `val.toString().length`, never `val.length`. This
+         * rule accepts a real `Number` (`+val === +val` passes for one), and
+         * `Number.prototype.length` is `undefined`, so `val.length` made both bounds
+         * silently inert on any numeric value — no error, no warn, `valid` left true.
+         * Numbers reach here from JSON request bodies and from a preceding `toInteger`
+         * (which leaves `Math.round()`'s real Number on `this.value`), so the browser
+         * path was affected too. `isNumber` has always measured `toString().length`.
+         *
+         *  @param {number} [ minLength ]
+         *  @param {number} [ maxLength ]
+         *
+         *  @returns {object} result
+         * */
         self[el]['isInteger'] = function(minLength, maxLength) {
             var val             = this.value
                 , isValid       = false
@@ -1586,11 +1610,14 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
                 isValid = true;
                 if ( !errors['isRequired'] && val != '' ) {
                     // if so also test max and min length if defined
-                    if (minLength && typeof(minLength) == 'number' && val.length < minLength) {
+                    // #B198 - was: `val.length`, which is `undefined` on a real Number
+                    // (this rule accepts one, and never casts), so both bounds were
+                    // silently inert. Measure the string form, as `isNumber` does.
+                    if (minLength && typeof(minLength) == 'number' && val.toString().length < minLength) {
                         isMinLength = false;
                         this['size'] = minLength;
                     }
-                    if (maxLength && typeof(maxLength) == 'number' && val.length > maxLength) {
+                    if (maxLength && typeof(maxLength) == 'number' && val.toString().length > maxLength) {
                         isMaxLength = false;
                         this['size'] = maxLength;
                     }
