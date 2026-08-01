@@ -1576,7 +1576,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
         /**
          * Check if value is a whole number.
          *  - valid if the value is a number with no fractional part
-         *  - a numeric string is accepted as-is (this rule does NOT cast, unlike `isNumber`)
+         *  - a numeric string is accepted; the value is cast to a `Number` on the way
+         *    OUT, after the bounds have been evaluated — whereas `isNumber` casts on
+         *    the way IN, before its own bounds. That ordering difference is why the
+         *    two rules must measure length differently at the bound site (see #B198)
          *  - if the value is blank, no bound test is done: valid if not required
          *
          * Optional bounds constrain the LENGTH of the value's string form — the same
