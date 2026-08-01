@@ -405,4 +405,54 @@ describe('requirementToSchema — un-collapses validator:: into a real JSON Sche
         assert.deepEqual(introspect.rulesToSchemaFragment({ isString: [null, 9] }), { type: 'string', maxLength: 9 });
         assert.deepEqual(introspect.rulesToSchemaFragment({}), { type: 'string' });
     });
+
+    // #B201 — the three bound forms that were silently dropped
+    it('#B201: the scalar isString form maps to minLength (engine arity: N === [N])', function () {
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isString: 8 }), { type: 'string', minLength: 8 });
+    });
+
+    it('#B201: isInteger digit bounds annotate — description + x-gina-digitBounds, NO value facets', function () {
+        var frag = introspect.rulesToSchemaFragment({ isInteger: [2, 4] });
+        assert.deepEqual(frag, {
+            type: 'integer',
+            description: '2-4 digits (string-form length; a negative sign counts)',
+            'x-gina-digitBounds': { min: 2, max: 4 }
+        });
+        // the rejected mappings must NOT appear: minimum/maximum are wrong for
+        // negatives (the sign counts), minLength is inert on a numeric type.
+        assert.equal(typeof frag.minimum,   'undefined');
+        assert.equal(typeof frag.maximum,   'undefined');
+        assert.equal(typeof frag.minLength, 'undefined');
+    });
+
+    it('#B201: scalar / exact / max-only digit-bound arities', function () {
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isInteger: 5 }), {
+            type: 'integer',
+            description: 'at least 5 digits (string-form length; a negative sign counts)',
+            'x-gina-digitBounds': { min: 5 }
+        });
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isInteger: [3, 3] }), {
+            type: 'integer',
+            description: 'exactly 3 digits (string-form length; a negative sign counts)',
+            'x-gina-digitBounds': { min: 3, max: 3 }
+        });
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isNumber: [null, 6] }), {
+            type: 'number',
+            description: 'at most 6 digits (string-form length; a negative sign counts)',
+            'x-gina-digitBounds': { max: 6 }
+        });
+    });
+
+    it('#B201 CONTROL: the bare-true forms stay exactly as before (no annotation)', function () {
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isInteger: true }), { type: 'integer' });
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isNumber: true }),  { type: 'number' });
+        assert.deepEqual(introspect.rulesToSchemaFragment({ isString: true }),  { type: 'string' });
+    });
+
+    it('#B201: the annotations flow through requirementToSchema (the consumer entry point)', function () {
+        var frag = introspect.requirementToSchema('validator::{ isInteger: [2, 4] }');
+        assert.equal(frag.type, 'integer');
+        assert.deepEqual(frag['x-gina-digitBounds'], { min: 2, max: 4 });
+        assert.match(frag.description, /2-4 digits/);
+    });
 });

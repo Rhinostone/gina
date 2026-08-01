@@ -175,9 +175,61 @@ var requirementToPattern = function(raw) {
 };
 
 /**
+ * #B201 — annotates a numeric-type schema fragment with the rule's DIGIT bounds.
+ *
+ * `isInteger` / `isNumber` bounds constrain the LENGTH OF THE VALUE'S STRING
+ * FORM (a negative sign counts toward it), not the value's range — so they are
+ * deliberately NOT mapped to `minimum`/`maximum` (wrong for any negative:
+ * digit bounds [2,4] admit `[-999,-1] ∪ [10,9999]`, which no single range
+ * expresses) nor to `minLength`/`maxLength` (string-only assertions, inert on
+ * numeric types — a documented bound nothing enforces). Instead the fragment
+ * gains an honest human-readable `description` plus a namespaced
+ * machine-readable `x-gina-digitBounds` extension; both bundle:openapi and
+ * bundle:mcp copy fragment keys verbatim, so the annotations reach the
+ * generated schemas as-is.
+ *
+ * @inner
+ * @param   {object} s - the fragment being built (mutated)
+ * @param   {number|Array|boolean} v - the rule's declared value
+ * @returns {undefined}
+ */
+var annotateDigitBounds = function(s, v) {
+    var min = null, max = null;
+    if ( typeof(v) === 'number' ) {
+        min = v; // scalar N supplies minLength only — same arity contract as isString
+    } else if ( Array.isArray(v) ) {
+        if ( typeof(v[0]) === 'number' ) min = v[0];
+        if ( typeof(v[1]) === 'number' ) max = v[1];
+    }
+    if ( min === null && max === null ) return; // bare `true` — nothing declared
+
+    var bounds = {};
+    var text = null;
+    if ( min !== null && max !== null ) {
+        text = (min === max) ? ('exactly ' + min + ' digits') : (min + '-' + max + ' digits');
+    } else if ( min !== null ) {
+        text = 'at least ' + min + ' digits';
+    } else {
+        text = 'at most ' + max + ' digits';
+    }
+    if ( min !== null ) bounds.min = min;
+    if ( max !== null ) bounds.max = max;
+
+    s.description = text + ' (string-form length; a negative sign counts)';
+    s['x-gina-digitBounds'] = bounds;
+};
+
+/**
  * Maps a single-field form-validator rules-object to a JSON Schema fragment
  * (the inverse of the DTO builder's toRules, for the curated vocabulary). Pure
  * and inline — routing-introspect does not require lib.dto (its purity contract).
+ *
+ * Length bounds (#B201): `isString` maps its scalar and array forms to real
+ * `minLength`/`maxLength` facets (`isString: 8` === `isString: [8]` — the
+ * scalar supplies a minimum, per the engine's arity contract). `isInteger` /
+ * `isNumber` digit bounds are annotated via {@link annotateDigitBounds}
+ * (description + `x-gina-digitBounds`) rather than mapped to value facets —
+ * see that function's JSDoc for why both facet mappings would be wrong.
  *
  * @memberof module:gina/lib/routing-introspect
  * @param   {object} rules - e.g. `{ isEmail: true, isString: [7] }`
@@ -186,6 +238,12 @@ var requirementToPattern = function(raw) {
  * @example
  * rulesToSchemaFragment({ isEmail: true, isString: [7] });
  * // { type: 'string', format: 'email', minLength: 7 }
+ *
+ * @example
+ * rulesToSchemaFragment({ isInteger: [2, 4] });
+ * // { type: 'integer',
+ * //   description: '2-4 digits (string-form length; a negative sign counts)',
+ * //   'x-gina-digitBounds': { min: 2, max: 4 } }
  */
 var rulesToSchemaFragment = function(rules) {
     var s = {};
@@ -201,10 +259,14 @@ var rulesToSchemaFragment = function(rules) {
                 if ( Array.isArray(v) ) {
                     if ( typeof(v[0]) === 'number' ) s.minLength = v[0];
                     if ( typeof(v[1]) === 'number' ) s.maxLength = v[1];
+                } else if ( typeof(v) === 'number' ) {
+                    // #B201 - the scalar form was silently dropped; the engine
+                    // treats `isString: 8` as a minimum, identical to `[8]`.
+                    s.minLength = v;
                 }
                 break;
-            case 'isInteger': s.type = 'integer'; break;
-            case 'isNumber':  s.type = 'number';  break;
+            case 'isInteger': s.type = 'integer'; annotateDigitBounds(s, v); break;
+            case 'isNumber':  s.type = 'number';  annotateDigitBounds(s, v); break;
             case 'isBoolean': s.type = 'boolean'; break;
             case 'isDate':    s.type = 'string';  s.format = 'date'; break;
             case 'isInList':  if ( Array.isArray(v) ) s.enum = v.slice(); break;
