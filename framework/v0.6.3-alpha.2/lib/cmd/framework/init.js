@@ -1155,7 +1155,19 @@ function Initialize(opt) {
                 // ps-independent (works on minimal images without procps, and under
                 // Bun) and parses/trims the pid so a trailing newline can't break the
                 // check. Mirrors lib/cmd/framework/reset.js detectRunning.
-                let pid = parseInt(String(fs.readFileSync(filename)).trim(), 10);
+                let pid = null;
+                try {
+                    pid = parseInt(String(fs.readFileSync(filename)).trim(), 10);
+                } catch (readErr) {
+                    // An unreadable run dir entry must never abort the whole init
+                    // chain: a nested directory throws EISDIR, an entry removed by a
+                    // concurrent prune throws ENOENT, an unreadable one EACCES. Skip
+                    // it instead of throwing out of the loop — and deliberately do NOT
+                    // prune it, since the rmSync branches below are only safe for
+                    // entries whose content was actually read.
+                    console.debug('Skipping unreadable run dir entry `'+ filename +'` ['+ ( readErr && readErr.code || readErr ) +']');
+                    continue;
+                }
                 if (!pid || isNaN(pid)) {
                     filenameObj.rmSync();
                     continue;

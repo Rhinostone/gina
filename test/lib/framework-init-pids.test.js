@@ -161,3 +161,175 @@ describe('02 - run-dir prune logic', function() {
     });
 
 });
+
+
+// ---------------------------------------------------------------------------
+// 03 — unreadable run-dir entry guard (source structure)
+//
+// checkRunningPids enumerates EVERY non-dot entry of the run dir and reads it as
+// a pidfile. An entry that cannot be read — a nested directory (EISDIR), an entry
+// pruned by a concurrent run (ENOENT), an unreadable one (EACCES) — used to throw
+// straight out of the loop, aborting the whole framework:init chain and failing
+// the command that triggered it. A run dir with a `gina/` child directory is not
+// hypothetical: getRunDir's fallbacks compose both `<prefix>/var/run` and
+// `<prefix>/var/run/gina`, so the un-suffixed parent enumerates the suffixed
+// child as one of its entries.
+// ---------------------------------------------------------------------------
+describe('03 - unreadable run-dir entry guard', function() {
+
+    /** Slice the read-failure catch handler, end-anchored on the statement that
+     *  follows it (`if (!pid`) so the window cannot drift into the prune branch. */
+    function readFailureHandler() {
+        var blk   = checkRunningPidsBlock();
+        var start = blk.indexOf('catch (readErr) {');
+        var end   = blk.indexOf('if (!pid', start);
+        assert.ok(start > -1 && end > start, 'could not slice the read-failure handler');
+        return blk.slice(start, end);
+    }
+
+    it('wraps the pidfile read in a try/catch', function() {
+        // Ordering pins are computed on the COMMENT-STRIPPED block: the block's own
+        // explanatory comment names process.kill(pid, 0) ahead of the read, which
+        // would otherwise satisfy the probe anchor at the wrong offset.
+        var clean  = stripComments(checkRunningPidsBlock());
+        var readAt = clean.indexOf('fs.readFileSync(filename)');
+        assert.ok(readAt > -1, 'expected the pidfile read');
+        var tryAt = clean.lastIndexOf('try {', readAt);
+        assert.ok(tryAt > -1, 'expected a try block opening before the pidfile read');
+        var catchAt = clean.indexOf('catch (readErr) {', readAt);
+        assert.ok(catchAt > readAt, 'expected the read-failure catch clause after the pidfile read');
+        // The liveness probe has its own try/catch (EPERM/ESRCH); the read guard must
+        // be a DISTINCT one that opens before the read, not that same block reused.
+        var killAt = clean.indexOf('process.kill(pid, 0);');
+        assert.ok(killAt > catchAt, 'the liveness probe must follow the read guard, not share it');
+    });
+
+    it('skips an unreadable entry instead of throwing out of the loop', function() {
+        var handler = stripComments(readFailureHandler());
+        assert.ok(handler.indexOf('continue;') > -1, 'expected the read-failure handler to continue the loop');
+    });
+
+    it('never prunes an entry it could not read', function() {
+        // The rmSync branches are only safe for entries whose CONTENT was read
+        // (empty/garbage pid, or a dead process). Pruning on a read failure would
+        // delete a live bundle's pidfile on a transient EACCES — and rmSync on the
+        // nested run directory would destroy a sibling install's pidfiles.
+        var handler = stripComments(readFailureHandler());
+        assert.ok(handler.indexOf('rmSync') < 0, 'expected NO prune in the read-failure handler');
+        // Control: the prune does still exist in the block as a whole.
+        assert.ok(stripComments(checkRunningPidsBlock()).indexOf('filenameObj.rmSync()') > -1,
+            'the garbage/stale prune must remain outside the read-failure handler');
+    });
+
+});
+
+
+// ---------------------------------------------------------------------------
+// 04 — unreadable run-dir entry guard (real-filesystem behaviour)
+// ---------------------------------------------------------------------------
+describe('04 - run-dir walk over a real directory', function() {
+
+    var os = require('os');
+
+    /** Build a throwaway run dir, hand it to fn, and always remove it. */
+    function withRunDir(entries, fn) {
+        var dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gina-rundir-'));
+        try {
+            Object.keys(entries).forEach(function(name) {
+                var target = path.join(dir, name);
+                if (entries[name] === '<dir>') {
+                    fs.mkdirSync(target);
+                } else if (entries[name] === '<dangling-symlink>') {
+                    fs.symlinkSync(path.join(dir, 'no-such-target-' + name), target);
+                } else {
+                    fs.writeFileSync(target, entries[name]);
+                }
+            });
+            return fn(dir);
+        } finally {
+            fs.rmSync(dir, { recursive: true, force: true });
+        }
+    }
+
+    /** Pre-fix loop body: every non-dot entry read UNGUARDED. */
+    function walkUnguarded(runDir) {
+        var seen  = [];
+        var files = fs.readdirSync(runDir);
+        for (let f in files) {
+            if ( /^\./.test(files[f]) ) { continue; }
+            let filename = path.join(runDir, files[f]);
+            let pid = parseInt(String(fs.readFileSync(filename)).trim(), 10);
+            seen.push(files[f] + ':' + pid);
+        }
+        return seen.sort();
+    }
+
+    /** Post-fix loop body: the read guarded -> continue, never pruning. */
+    function walkGuarded(runDir) {
+        var seen = [], skipped = [];
+        var files = fs.readdirSync(runDir);
+        for (let f in files) {
+            if ( /^\./.test(files[f]) ) { continue; }
+            let filename = path.join(runDir, files[f]);
+            let pid = null;
+            try {
+                pid = parseInt(String(fs.readFileSync(filename)).trim(), 10);
+            } catch (readErr) {
+                skipped.push(files[f] + ':' + readErr.code);
+                continue;
+            }
+            seen.push(files[f] + ':' + pid);
+        }
+        return { seen: seen.sort(), skipped: skipped.sort() };
+    }
+
+    it('instrument: reading a directory as a file really does throw EISDIR', function() {
+        // Validates the FIXTURE before any conclusion rests on it — if this stopped
+        // throwing, every arm below would pass for the wrong reason.
+        withRunDir({ 'gina': '<dir>' }, function(dir) {
+            var err = null;
+            try { fs.readFileSync(path.join(dir, 'gina')); } catch (e) { err = e; }
+            assert.ok(err, 'expected reading a directory to throw');
+            assert.ok(['EISDIR', 'EPERM'].indexOf(err.code) > -1,   // POSIX / win32
+                'expected EISDIR (POSIX), got ' + err.code);
+        });
+    });
+
+    it('pre-fix: a nested run directory aborts the whole walk (the defect)', function() {
+        withRunDir({ 'api@demo.pid': '111', 'gina': '<dir>', 'web@demo.pid': '222' }, function(dir) {
+            var err = null;
+            try { walkUnguarded(dir); } catch (e) { err = e; }
+            assert.ok(err, 'expected the unguarded walk to throw on the nested directory');
+            assert.equal(err.code, 'EISDIR');
+        });
+    });
+
+    it('post-fix: the same run dir walks clean, reporting the entry as skipped', function() {
+        withRunDir({ 'api@demo.pid': '111', 'gina': '<dir>', 'web@demo.pid': '222' }, function(dir) {
+            var res = walkGuarded(dir);
+            assert.deepEqual(res.seen, ['api@demo.pid:111', 'web@demo.pid:222'],
+                'both real pidfiles must still be processed');
+            assert.deepEqual(res.skipped, ['gina:EISDIR']);
+        });
+    });
+
+    it('post-fix: an entry that vanishes before the read is skipped, not fatal', function() {
+        // A dangling symlink reproduces the readdir-then-vanish race deterministically:
+        // enumerated by readdirSync, ENOENT on read.
+        withRunDir({ 'api@demo.pid': '111', 'ghost@demo.pid': '<dangling-symlink>' }, function(dir) {
+            var res = walkGuarded(dir);
+            assert.deepEqual(res.seen, ['api@demo.pid:111']);
+            assert.deepEqual(res.skipped, ['ghost@demo.pid:ENOENT']);
+        });
+    });
+
+    it('subtract: with no unreadable entry, guarded and unguarded walks agree', function() {
+        // The guard must change NOTHING for a normal run dir.
+        withRunDir({ 'api@demo.pid': '111', 'web@demo.pid': '222\n', '.DS_Store': 'x' }, function(dir) {
+            var guarded = walkGuarded(dir);
+            assert.deepEqual(guarded.seen, walkUnguarded(dir), 'guarded walk must match the unguarded one');
+            assert.deepEqual(guarded.skipped, [], 'nothing to skip in a healthy run dir');
+        });
+    });
+
+});
