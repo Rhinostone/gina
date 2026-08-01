@@ -744,6 +744,21 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         //      ./namespace/page.html (GOOD)
 
         if ( !fs.existsSync(path) ) {
+            if (isRenderingCustomError) {
+                // #B191 — never dump a routing rule while rendering a CUSTOM
+                // ERROR page: the rule in scope is the failing route's (or
+                // the injected error route's), correct by construction, and
+                // the generic diagnostic below misdirected operators toward
+                // editing valid configuration. Name the template that failed
+                // and hand off to throwError — its re-entry guard serves the
+                // built-in error page without looping through this branch.
+                msg = 'could not open the custom error template "'+ path +'"'
+                    + ' — falling back to the built-in error page.';
+                err = new ApiError(msg, 500);
+                console.error(err.stack);
+                self.throwError(err);
+                return;
+            }
             msg = 'could not open "'+ path +'"' +
                         '\n1) The requested file does not exists in your templates/html (check your template directory). Can you find: '+path +
                         '\n2) Check the following rule in your `'+localOptions.conf.bundlePath+'/config/routing.json` and look around `param` to make sure that nothing is wrong with your file declaration: '+

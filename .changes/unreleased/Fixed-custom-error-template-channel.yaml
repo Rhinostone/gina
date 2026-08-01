@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Fixed the custom-error renderer discarding its resolved error template whenever the dispatch reset flag was absent — the render delegates then fell back to the failing route''s own file, producing a bare-path "could not open" error and a routing-rule dump that misdirected diagnosis toward correct configuration while the real failure was upstream. The resolved template now reaches the render unconditionally, the error dispatch works on a clone of the injected route instead of mutating shared routing configuration, and a custom error template that cannot be opened falls back to the built-in error page with a message naming the template instead of a routing dump.'
+time: 2026-08-01T13:29:17+01:00

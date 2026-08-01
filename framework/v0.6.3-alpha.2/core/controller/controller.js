@@ -6164,6 +6164,21 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             errOptions = merge(localOptions, local.options);
 
 
+        } else if ( typeof(req.routing.param.file) != 'undefined' && req.routing.param.file ) {
+            // #B191 — the resolved error template must never depend on the
+            // reset flag: the server-side throwError twin (server.js) sets
+            // `param.file` but not `isLocalOptionResetNeeded`, and the flag
+            // used to ride a SHARED routing object overlapping errors could
+            // strip. A falsy read here left errOptions null, so the render
+            // delegates fell back to the FAILING route's own `file` and
+            // built a bare, un-rooted template path — surfacing an upstream
+            // failure as a bogus "check your routing.json" misdirection.
+            // `path: null` mirrors the reset branch: custom paths ignore
+            // the namespace.
+            errOptions = merge({
+                file: req.routing.param.file,
+                path: null
+            }, local.options);
         }
         // #B190 — stamp the HTTP status on the response before the render
         // dispatch. The swig and v1 delegates recompute it downstream from
@@ -6772,7 +6787,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
                     if (!local.options.isRenderingCustomError) {
                         var eRule = 'custom-error-page@'+ bundle;
-                        var routeObj = bundleConf.content.routing[eRule];
+                        // #B191 — dispatch on a CLONE: the shared routing
+                        // entry must not carry per-error state. The stamps
+                        // below (and renderCustomError's own param deletes)
+                        // used to mutate `bundleConf.content.routing[eRule]`
+                        // directly, racing overlapping errors on the shared
+                        // object; lib/routing getRoute() already clones for
+                        // the server-side twin's dispatch.
+                        var routeObj = JSON.clone(bundleConf.content.routing[eRule]);
                         routeObj.rule = eRule;
                         //routeObj.url = decodeURI(local.req.url);/// avoid %20
                         routeObj.param.title = ( typeof(eData.title) != 'undefined' ) ? eData.title : 'Error ' + eData.status;
