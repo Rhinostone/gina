@@ -94,7 +94,18 @@ function SwigFilters(conf) {
 
     var getInstance = function() {
         if (conf) {
-            self.options = SwigFilters.instance._options = JSON.clone(conf);
+            // #P39 — stash by REFERENCE. The former per-call deep copy of the
+            // whole wrapper (whose `.options` is the render's `local.options`,
+            // itself already private per request — #M1) doubled the single
+            // heaviest clone in the render profile for zero isolation gain:
+            // `_options` is never written outside this assignment (the merge in
+            // getUrl/getWebroot fills a fresh `{}` target and only READS this),
+            // and `req`/`res` always passed by reference anyway (the cloner
+            // bails on non-plain constructors). `self.options` is kept in the
+            // chain for the boot-branch shape parity, but note `self` here is a
+            // throwaway per-call object — `SwigFilters.instance` is what every
+            // consumer reads.
+            self.options = SwigFilters.instance._options = conf;
         }
 
         return SwigFilters.instance

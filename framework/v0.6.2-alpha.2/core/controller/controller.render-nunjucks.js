@@ -661,8 +661,12 @@ function registerGinaFilters(env, self, local, localOptions, req, res) {
         typeof(process.gina) != 'undefined' && typeof(process.gina.PROXY_HOSTNAME) != 'undefined'
     ) ? true : false;
 
+    // #P39 — `options` passed by REFERENCE, mirroring render-swig: the filter
+    // singleton only READS the stash, and the former per-render deep copy of
+    // the whole `local.options` (routing tables + templates + settings + forms
+    // + locales) was one of the heaviest CPU sites in the render profile.
     var filters = nunjucksFilters({
-        options:     JSON.clone(localOptions),
+        options:     localOptions,
         isProxyHost: isProxyHost,
         throwError:  self.throwError,
         req:         req,

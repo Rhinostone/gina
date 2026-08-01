@@ -34,10 +34,13 @@ function JSONClone(source, target) {
         throw err;
     }
 
+    // #P39 — a dead sibling allocation was removed here: a per-recursion-level
+    // key array was built and never read, feeding the GC one throwaway array
+    // per cloned node (measured at ~50% of render CPU being spent in this
+    // function, every allocation in the hot loop counts).
     var i               = 0
         , srcObjProps   = Object.getOwnPropertyNames(source)
         , len           = srcObjProps.length || 0
-        , keys          = Object.keys(source)
         , warn          = null
     ;
 
@@ -99,7 +102,7 @@ function JSONClone(source, target) {
 
         i++;
     }
-    i = null; len = null; keys = null;
+    i = null; len = null;
 
     return target;
 }

@@ -102,6 +102,108 @@ var _mintErrorRef = function(supplied) {
     }
     return crypto.randomBytes(3).toString('hex').toUpperCase();
 };
+
+// #P39 — per-culture locale-resolution memo. setOptions used to build TWO
+// Collections per request over the boot-loaded region sets (a full deep copy
+// of ~500 nested records each time, plus one 16-char id minted per record —
+// ~750 webcrypto calls) to answer two lookups: language → region set, and
+// country → one row. The lookups are pure functions of boot-static data
+// (`getContext('gina').locales` is set once at bundle start), so they are
+// memoized at module level. The memo holds only references into that
+// process-global context — no request state — and rebuilds whenever the
+// context array's identity changes (or when dev-mode eviction re-requires
+// this module, where a rebuild costs one pass over the language rows).
+var _localesIdxSrc = null;
+var _localesIdx    = null;
+var _localeRowMemo = null;
+
+/**
+ * Language index over the boot-loaded locales context.
+ * Maps a language code to its `{ lang, content }` row — first row wins on a
+ * duplicate language, matching the historical first-match lookup semantics.
+ *
+ * @private
+ * @returns {object} lang → locales row (shared, pristine — callers must not mutate)
+ */
+var _resolveLocalesIndex = function() {
+    var src = getContext('gina').locales;
+    if (_localesIdxSrc !== src || !_localesIdx) {
+        _localesIdxSrc = src;
+        _localesIdx    = {};
+        _localeRowMemo = {};
+        for (var i = 0, len = src.length; i < len; ++i) {
+            if ( typeof(_localesIdx[src[i].lang]) == 'undefined' ) {
+                _localesIdx[src[i].lang] = src[i];
+            }
+        }
+    }
+    return _localesIdx;
+};
+
+/**
+ * Country-row lookup within a language's region set, memoized per
+ * `<lang>|<ISO>` culture pair (misses are memoized too).
+ *
+ * Region rows key countries by UPPERCASE `isoShort` (ISO 3166-1 alpha-2 —
+ * #B101), so a strict compare after `toUpperCase()` matches what the former
+ * case-insensitive whole-string lookup resolved on this data.
+ *
+ * @private
+ * @param {array}  contentRows - a language's region set (the index row's `.content`)
+ * @param {string} langCode    - the language the rows were resolved FOR (fallback-resolved lang keys consistently)
+ * @param {string} countryCode - ISO 3166-1 alpha-2 country code, any case
+ * @returns {object|null} the shared pristine row, or null when the country is not in the set
+ */
+var _resolveLocaleRow = function(contentRows, langCode, countryCode) {
+    var iso = countryCode.toUpperCase();
+    var key = langCode + '|' + iso;
+    if ( typeof(_localeRowMemo[key]) != 'undefined' ) {
+        return _localeRowMemo[key];
+    }
+    var row = null;
+    for (var i = 0, len = contentRows.length; i < len; ++i) {
+        if ( contentRows[i] && contentRows[i].isoShort === iso ) {
+            row = contentRows[i];
+            break;
+        }
+    }
+    _localeRowMemo[key] = row;
+    return row;
+};
+
+/**
+ * Defines `conf.locales` as a LAZY, self-replacing accessor: the request's
+ * own deep copy of the region set is materialized on first read and cached
+ * on the request's conf object from then on.
+ *
+ * The render path itself never reads `conf.locales` — its only framework
+ * reader is `self.getLocales()` — so the common request pays nothing, while
+ * a request that does read it gets exactly the isolation the former eager
+ * per-request copy provided (a fresh deep copy, safe to mutate). Whole-conf
+ * consumers (`self.getConfig()`, serializers) materialize it through the
+ * accessor transparently. The accessor is enumerable and writable-through
+ * (assignment replaces it with a plain value), and configurable so a second
+ * `setOptions()` on the same request re-defines it cleanly.
+ *
+ * @private
+ * @param {object} conf    - the request's conf (the router's per-request shallow copy)
+ * @param {array}  srcRows - the resolved language's region set (shared, pristine)
+ * @returns {void}
+ */
+var _defineLazyLocales = function(conf, srcRows) {
+    Object.defineProperty(conf, 'locales', {
+        configurable: true,
+        enumerable: true,
+        get: function() {
+            var rows = JSON.clone(srcRows);
+            Object.defineProperty(this, 'locales', { configurable: true, enumerable: true, writable: true, value: rows });
+            return rows;
+        },
+        set: function(v) {
+            Object.defineProperty(this, 'locales', { configurable: true, enumerable: true, writable: true, value: v });
+        }
+    });
+};
 var _isProdScope    = process.env.NODE_SCOPE_IS_PRODUCTION && process.env.NODE_SCOPE_IS_PRODUCTION.toLowerCase() === 'true';
 
 
@@ -835,24 +937,32 @@ function SuperController(options) {
             var userLangCode    = userCultureCode[0];
             var userCountryCode = userCultureCode[1];
 
-            var locales         = new Collection( getContext('gina').locales );
+            // #P39 — memoized language index over the boot-static locales
+            // context (was: a per-request Collection deep-copying every region
+            // set and minting an id per record, twice, to answer two lookups).
+            var localesIdx      = _resolveLocalesIndex();
+            var userLangRow     = localesIdx[userLangCode];
             var userLocales     = null;
 
             try {
-                userLocales = locales.findOne({ lang: userLangCode }).content;
+                userLocales = userLangRow.content;
             } catch (err) {
                 // #B100 — guarded fallback: the old blind `region.shortCode` deref
                 // threw here when the `region` block was absent, and the unguarded
-                // fallback `findOne().content` threw when the resolved language
-                // was not in the loaded region set.
+                // fallback lookup threw when the resolved language was not in the
+                // loaded region set.
                 var _fallbackLang    = getLocaleFallbackLang(local.options.conf);
                 console.warn('language code `'+ userLangCode +'` not handled by current locales setup: replacing by default: `'+ _fallbackLang +'`');
-                var _fallbackLocales = locales.findOne({ lang: _fallbackLang }) || locales.findOne({ lang: 'en' });
+                var _fallbackLocales = localesIdx[_fallbackLang] || localesIdx['en'];
                 userLocales = ( _fallbackLocales && _fallbackLocales.content ) ? _fallbackLocales.content : [];
             }
 
             // user locales list
-            local.options.conf.locales = userLocales;
+            // #P39 — materialized lazily: the request's own deep copy is built
+            // on first read (see _defineLazyLocales), so a request that never
+            // reads `conf.locales` — the common case — no longer pays a copy
+            // of the whole region set.
+            _defineLazyLocales(local.options.conf, userLocales);
 
             // user locale
             // #B101 — region rows key countries by `isoShort` (uppercase ISO
@@ -862,8 +972,12 @@ function SuperController(options) {
             // a filter whose only key is undefined-valued serializes to `{}`
             // and matches everything. A country-less culture (bare `en`) now
             // resolves to an explicit `{}` instead.
+            // #P39 — the row comes from the culture memo (shared, pristine) and
+            // is deep-copied per request: the `.date` write a few lines below —
+            // and anything a template or an action does to `page.view.locale` —
+            // must never reach a sibling request.
             options.conf.locale = ( typeof(userCountryCode) == 'string' && userCountryCode.length > 0 )
-                ? ( new Collection(userLocales).findOne({ isoShort: userCountryCode.toUpperCase() }) || {} )
+                ? ( JSON.clone( _resolveLocaleRow(userLocales, userLangCode, userCountryCode) || {} ) )
                 : {};
 
             // current date
@@ -5337,15 +5451,19 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
         if ( typeof(shortCountryCode) != 'undefined' ) {
             shortCountryCode = shortCountryCode.toLowerCase();
-            var locales         = new Collection( getContext('gina').locales );
+            // #P39 — memoized language index (was: a per-call Collection deep-
+            // copying every region set). The rows handed on are shared and
+            // pristine; the only consumer below is the getCountries projection,
+            // which builds fresh output rows and never writes into its input.
+            var localesIdx = _resolveLocalesIndex();
 
             try {
-                userLocales = locales.findOne({ lang: shortCountryCode }).content
+                userLocales = localesIdx[shortCountryCode].content
             } catch (err) {
                 // #B100 — same guarded fallback as the setOptions locale bridge.
                 var _fallbackLang    = getLocaleFallbackLang(local.options.conf);
                 console.warn('language code `'+ shortCountryCode +'` not handled to setup locales: replacing by `'+ _fallbackLang +'`');
-                var _fallbackLocales = locales.findOne({ lang: _fallbackLang }) || locales.findOne({ lang: 'en' });
+                var _fallbackLocales = localesIdx[_fallbackLang] || localesIdx['en'];
                 userLocales = ( _fallbackLocales && _fallbackLocales.content ) ? _fallbackLocales.content : [];
             }
         }

@@ -780,8 +780,20 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
 
         // Setup swig default filters
+        // #P39 — `options` is passed by REFERENCE. The former per-render deep
+        // copy here was one of the two heaviest CPU sites in the whole render
+        // path (the payload carries the all-bundle routing tables, the full
+        // templates conf, settings, forms and locales), and it bought nothing:
+        // SwigFilters' `_options` write-set is empty beyond the stash itself —
+        // every filter only READS it — and the request path already shares
+        // `conf.routing` / `conf.reverseRouting` / `conf.forms` by reference
+        // (setOptions grafts the shared per-worker objects), so the filters see
+        // the same objects the controller itself uses. The stash-then-await
+        // interleave window is unchanged: with the copy, an interleaved render
+        // overwrote the singleton with ITS copy; by reference it overwrites it
+        // with ITS options — same wrongness class, zero new exposure.
         var filters = SwigFilters({
-            options     : JSON.clone(localOptions),
+            options     : localOptions,
             isProxyHost : isProxyHost,
             throwError  : self.throwError,
             req         : req,

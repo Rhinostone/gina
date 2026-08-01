@@ -1,0 +1,12 @@
+kind: Changed
+body: 'Render and request-path CPU overhead is sharply reduced: the per-render
+  deep copies of the request options (template-filter configuration and render
+  envelope) are replaced by reference passing after their write surfaces were
+  measured empty, the per-request locale lookups are memoized with the
+  request-local copy materialized lazily on first read, and the id generator
+  sizes its entropy batch to the requested length (one webcrypto call per
+  16-char id instead of three). Measured on the profiling harness: 4.4x render
+  throughput on the baseline workload (10.7 to 2.4 ms per render), deep-clone
+  CPU share 50.31% to 1.81%, GC time down ~18x. No API change; the browser
+  bundle changed, so bundles pick the id-generator half up on rebuild.'
+time: 2026-08-01T01:43:40+01:00

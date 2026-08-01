@@ -2772,7 +2772,7 @@ if ( ( typeof(module) !== 'undefined' ) && module.exports ) {
 
 var _alphabet = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
 var _mask = 63;  // smallest (2^n - 1) >= 62 — rejects 62,63 (~3% waste, no bias)
-var _step = 7;   // ceil(1.6 * 63 * 4 / 62) — enough random bytes per iteration
+var _step = 7;   // ceil(1.6 * 63 * 4 / 62) — random bytes per iteration for the DEFAULT size 4 (#P39: larger sizes compute their own)
 
 /**
  * Generate a cryptographically secure random ID.
@@ -2782,10 +2782,19 @@ var _step = 7;   // ceil(1.6 * 63 * 4 / 62) — enough random bytes per iteratio
  */
 function uuid(size) {
     size = size || 4;
+    // #P39 — size the random-byte batch to the REQUESTED length, the same
+    // formula customAlphabet() below already uses for its default size. The
+    // fixed 7-byte batch was sized for the 4-char default, so uuid(16) — the
+    // form lib/collection mints per item — needed ~3 webcrypto calls per id;
+    // one right-sized call replaces them. Each getRandomValues call pays a
+    // full randomFillSync regardless of byte count, so the cost is the call
+    // count, not the bytes. Output distribution is untouched: the bitmask
+    // rejection below is applied per byte exactly as before.
+    var step = (size <= 4) ? _step : Math.ceil(1.6 * (_mask + 1) * size / _alphabet.length);
     var id = '';
     while (true) {
-        var bytes = crypto.getRandomValues(new Uint8Array(_step));
-        for (var j = 0; j < _step; j++) {
+        var bytes = crypto.getRandomValues(new Uint8Array(step));
+        for (var j = 0; j < step; j++) {
             var idx = bytes[j] & _mask;
             if (idx < 62) {
                 id += _alphabet[idx];

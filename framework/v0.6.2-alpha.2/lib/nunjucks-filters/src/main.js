@@ -110,7 +110,13 @@ function NunjucksFilters(conf) {
 
     var getInstance = function() {
         if (conf) {
-            self.options = NunjucksFilters.instance._options = JSON.clone(conf);
+            // #P39 — stash by REFERENCE, mirroring lib/swig-filters: `_options`
+            // has no writer beyond this assignment (the getUrl/getWebroot merge
+            // fills a fresh `{}` target), the wrapper's `.options` is the
+            // render's per-request `local.options` (#M1), and `req`/`res` were
+            // by-reference through the former deep copy anyway. The per-call
+            // copy was pure CPU waste on every render.
+            self.options = NunjucksFilters.instance._options = conf;
         }
         return NunjucksFilters.instance;
     };

@@ -264,7 +264,17 @@ describe('03 - country-locale lookup keys on isoShort (#B101)', function() {
     // ---- source pins --------------------------------------------------------
 
     it('filters the region rows on isoShort with an uppercase-normalized code', function() {
-        assert.match(CTRL_SRC, /findOne\(\s*\{\s*isoShort\s*:\s*userCountryCode\.toUpperCase\(\)\s*\}\s*\)/);
+        // #P39 realignment — the lookup moved from a per-request Collection
+        // findOne into the memoized _resolveLocaleRow helper. The semantics
+        // this pin locks are unchanged: the region rows are keyed on isoShort,
+        // and the incoming country code is uppercase-normalized before the
+        // compare (rows carry UPPERCASE ISO 3166-1 alpha-2 — #B101).
+        assert.match(CTRL_SRC, /_resolveLocaleRow\(\s*userLocales\s*,\s*userLangCode\s*,\s*userCountryCode\s*\)/,
+            'the pinned ternary must resolve the row through the culture memo');
+        assert.match(CTRL_SRC, /var\s+iso\s*=\s*countryCode\.toUpperCase\(\)/,
+            'the helper must normalize the incoming code to uppercase');
+        assert.match(CTRL_SRC, /\.isoShort\s*===\s*iso/,
+            'the helper must key the compare on isoShort');
     });
 
     it('the dead `short` filter is gone file-wide', function() {
@@ -285,10 +295,34 @@ describe('03 - country-locale lookup keys on isoShort (#B101)', function() {
     var Collection = require('lib/collection');
     var EN_ROWS    = require(path.join(FW, 'core/locales/dist/region/en.json'));
 
-    // Verbatim-lifted NEW lookup (locked to the shipped statement by the pins).
+    // #P39 realignment — the lookup executes the EXTRACTED shipped bytes of
+    // _resolveLocaleRow (no replica to drift), wrapped in the shipped ternary
+    // + per-request clone semantics. The helper closes over the module-level
+    // _localeRowMemo, injected here as a Function parameter with a fresh memo
+    // per call so arms stay independent.
+    function extractResolveLocaleRow() {
+        var decl  = 'var _resolveLocaleRow = function(contentRows, langCode, countryCode) {';
+        var start = CTRL_SRC.indexOf(decl);
+        assert.ok(start > -1, 'extraction control: the _resolveLocaleRow declaration must exist');
+        assert.equal(CTRL_SRC.indexOf(decl, start + 1), -1,
+            'extraction control: the declaration must appear exactly once');
+        var i = start + decl.length; // the decl string ends with `{` — start just past it
+        var depth = 1;
+        while (depth > 0 && i < CTRL_SRC.length) {
+            var ch = CTRL_SRC[i];
+            if (ch === '{') { depth++; }
+            else if (ch === '}') { depth--; }
+            i++;
+        }
+        assert.equal(depth, 0, 'extraction control: braces must balance');
+        var fnSrc = CTRL_SRC.slice(start + 'var _resolveLocaleRow = '.length, i);
+        return new Function('_localeRowMemo', 'return (' + fnSrc + ');')({});
+    }
+
     function newLocaleLookup(userLocales, userCountryCode) {
+        var resolveRow = extractResolveLocaleRow();
         return ( typeof(userCountryCode) == 'string' && userCountryCode.length > 0 )
-            ? ( new Collection(userLocales).findOne({ isoShort: userCountryCode.toUpperCase() }) || {} )
+            ? ( JSON.clone( resolveRow(userLocales, 'en', userCountryCode) || {} ) )
             : {};
     }
 
@@ -323,6 +357,23 @@ describe('03 - country-locale lookup keys on isoShort (#B101)', function() {
 
     it('an unknown country code degrades to {} via the || {} guard', function() {
         assert.deepEqual(newLocaleLookup(EN_ROWS, 'ZZ'), {});
+    });
+
+    it('#P39 — the memo returns a consistent row, and each request gets its OWN copy', function() {
+        // One extraction, one shared memo — the second lookup is the memo-HIT
+        // path; the per-request JSON.clone is what isolates the .date write
+        // (and any app mutation) from sibling requests.
+        var resolveRow = extractResolveLocaleRow();
+        var hitA = JSON.clone( resolveRow(EN_ROWS, 'en', 'US') || {} );
+        var hitB = JSON.clone( resolveRow(EN_ROWS, 'en', 'US') || {} );
+        assert.equal(hitA.isoShort, 'US');
+        assert.deepEqual(hitA, hitB, 'memo hit must resolve the same record');
+        hitA.date = { now: 'mutated-by-request-A' };
+        hitA.currency.alphacode = 'XXX';
+        assert.equal(typeof hitB.date, 'undefined', 'request B must not see request A\'s date write');
+        assert.equal(hitB.currency.alphacode, 'USD', 'nested subtrees must be isolated per request too');
+        assert.equal(EN_ROWS.filter(function(r){ return r.isoShort === 'US'; })[0].currency.alphacode, 'USD',
+            'the pristine source row must never be touched');
     });
 
     it('SUBTRACT — the pre-fix `short` filter could NEVER match a real code', function() {
