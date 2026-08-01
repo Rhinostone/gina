@@ -249,23 +249,31 @@ describe('05 - DISCLOSED behavior changes', function () {
 });
 
 
-// 06 — residuals this fix does NOT close (pinned honestly so they are not mistaken for coverage)
-describe('06 - RESIDUAL (not closed by #B198): the val != "" gate swallows the Number 0', function () {
+// 06 — the #B198 residual, CLOSED by #B199 (sanctioned flip: this section was
+// written to pin the residual and flip when the strict-gate decision landed —
+// its original title said "not closed by #B198" for exactly this reason).
+describe('06 - #B199: the bounds gate no longer swallows the Number 0', function () {
 
-    it('the Number 0 still bypasses the bounds entirely', function () {
-        // `0 != ''` is FALSE in JS, so the whole bound block is skipped for 0.
-        ok(vf('n', 0).isInteger(2), 'characterization: the Number 0 records no bound error');
+    it('the Number 0 hits the bounds (the loose != \'\' swallow is gone)', function () {
+        // Pre-#B199: `0 != ''` was FALSE (loose coercion), so the whole bound
+        // block was skipped for 0. Strict !== ends the conflation.
+        ko(vf('n', 0).isInteger(2), 'isIntegerLength');
     });
 
-    it('CONTROL: the STRING "0" does hit the bounds', function () {
+    it('CONTROL: the STRING "0" hits the bounds (it always did)', function () {
         ko(vf('n', '0').isInteger(2), 'isIntegerLength');
     });
 
-    it('isNumber shares the residual identically — it is not isInteger-specific', function () {
-        ok(vf('n', 0).isNumber(2), 'isNumber(2) on the Number 0 also records nothing');
+    it('isNumber is healed identically — including its coerced string "0"', function () {
+        ko(vf('n', 0).isNumber(2), 'isNumberLength');
+        // isNumber casts '0' -> 0 on ENTRY, so pre-#B199 even the string form
+        // was swallowed there (unlike isInteger, which never casts on entry).
+        ko(vf('n', '0').isNumber(2), 'isNumberLength');
     });
 
-    it('a non-zero single-digit Number DOES fire (so the residual is 0-specific, not Number-wide)', function () {
+    it('a non-zero single-digit Number fires, and the EMPTY STRING still bypasses (the designed contract)', function () {
         ko(vf('n', 5).isInteger(2), 'isIntegerLength');
+        // '' stays adjudicated by isRequired alone (#B78) — strict preserves it.
+        ok(vf('n', '').isInteger(2), 'the literal empty string keeps its bypass');
     });
 });

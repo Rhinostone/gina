@@ -1358,7 +1358,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
             // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
             // required+empty field records only isRequired, not a second 'invalid' message.
-            if ( this.value == '' ) {
+            // #B199 - strict: only the literal empty string is "empty". The loose ==
+            // let 0, -0, false and [] coerce equal and ride this bypass, so e.g. a
+            // JSON body's 0 in this field PASSED the rule outright.
+            if ( this.value === '' ) {
                 isValid = true;
             }
 
@@ -1400,7 +1403,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
             // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
             // required+empty field records only isRequired, not a second 'invalid' message.
-            if ( this.value == '' ) {
+            // #B199 - strict: only the literal empty string is "empty". The loose ==
+            // let 0, -0, false and [] coerce equal and ride this bypass, so e.g. a
+            // JSON body's 0 in this field PASSED the rule outright.
+            if ( this.value === '' ) {
                 isValid = true;
             }
 
@@ -1506,7 +1512,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
             if ( +val === +val ) {
                 isValid = true;
-                if ( !errors['isRequired'] && val != '' ) {
+                // #B199 - strict !== : the loose != let the Number 0 (and -0/[] — and
+                // '0', which the entry cast turns into 0) coerce equal to '' and skip
+                // the bounds. Only the literal empty string bypasses.
+                if ( !errors['isRequired'] && val !== '' ) {
                     len = val.toString().length;
                     // if so also test max and min length if defined
                     if (minLength && typeof(minLength) == 'number' && len < minLength) {
@@ -1611,7 +1620,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
             // test if val is a number
             if ( +val === +val && val % 1 === 0 ) {
                 isValid = true;
-                if ( !errors['isRequired'] && val != '' ) {
+                // #B199 - strict !== : the loose != let the Number 0 (and -0/[]) coerce
+                // equal to '' and skip the bounds. Only the literal empty string bypasses.
+                if ( !errors['isRequired'] && val !== '' ) {
                     // if so also test max and min length if defined
                     // #B198 - was: `val.length`, which is `undefined` on a real Number
                     // (this rule accepts one, and never casts), so both bounds were
@@ -1792,7 +1803,10 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
 
             // #B78 - an empty value is adjudicated by isRequired alone: bypass on empty so a
             // required+empty field records only isRequired, not a second 'invalid' message.
-            if ( this.value == '' ) {
+            // #B199 - strict: only the literal empty string is "empty". The loose ==
+            // let 0, -0, false and [] coerce equal and ride this bypass, so e.g. a
+            // JSON body's 0 in this field PASSED the rule outright.
+            if ( this.value === '' ) {
                 isValid = true
             }
 
