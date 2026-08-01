@@ -4723,7 +4723,9 @@ function FormValidatorUtil(data, $fields, xhrOptions, fieldsSet, culture) {
          *      // OR
          *      "isString": [7, 40] // Means at least 7 chars length and maximum 40 chars length
          *      // OR
-         *      "isString": [7] // Means is strickly equal to 7 chars length, same as [7,7]
+         *      "isString": [7] // Means at least 7 chars length, same as 7 above: a one-element array supplies minLength only
+         *      // OR
+         *      "isString": [7, 7] // Means strictly equal to 7 chars length
          *  }
          * }
          * @param {number|undefined} [ minLength ]
