@@ -155,10 +155,15 @@ function MCPStart(opt, cmd) {
         // Loud, one-time notice about the tools that look session-scoped.
         warnSessionScopedTools(mcpDoc.tools);
 
-        // Framework package version — the user-facing server version.
+        // Framework package version — the user-facing server version. Read
+        // GINA_DIR through the framework env reader first: the CLI sweep
+        // empties process.env of GINA_* keys, so the direct read alone made
+        // every CLI-launched server degrade to the '0.0.0' catch below.
         var packVersion = null;
         try {
-            var packPath = _(process.env.GINA_DIR + '/package.json', true);
+            var ginaDir  = (typeof getEnvVar === 'function' && getEnvVar('GINA_DIR'))
+                           || process.env.GINA_DIR;
+            var packPath = _(ginaDir + '/package.json', true);
             packVersion = require(packPath).version;
         } catch (pkgErr) {
             packVersion = '0.0.0';
@@ -364,15 +369,16 @@ function MCPStart(opt, cmd) {
      * Resolves the HTTP bind host. Precedence:
      *   1. `--http-host=<host>` CLI flag
      *   2. `mcp.json > server > httpHost`
-     *   3. `process.env.GINA_HOST_V4` — INERT under the CLI. `filterArgs()`
-     *      moves every GINA_* key into `process.gina` and deletes it from
-     *      `process.env`, so this read is always undefined there.
-     *      Deliberately NOT converted to `getEnvVar` the way the auth-token
-     *      tier was: `host_v4` is the address clients CONNECT to (commonly a
-     *      LAN address), never a bind address — reviving this tier would move
-     *      the default bind OFF loopback and expose the transport. The correct
-     *      replacement is `bind_host` / `GINA_BIND_HOST`, tracked separately.
-     *   4. `'127.0.0.1'` — in practice the effective default, per (3).
+     *   3. `GINA_BIND_HOST` — the framework env reader first, then the raw
+     *      process environment (for embedders that never ran the CLI sweep).
+     *      This is the control plane's dedicated BIND key, same bind/connect
+     *      separation as `bin/cli`. The former `GINA_HOST_V4` tier was
+     *      removed (#B157): it was inert under the CLI (the sweep empties
+     *      the process environment of GINA_* keys), and reviving it would
+     *      have moved the default bind OFF loopback — `host_v4` is the
+     *      address clients CONNECT to (commonly a LAN address), never a
+     *      bind address.
+     *   4. `'127.0.0.1'`
      *
      * @private
      * @param   {object} mcpDoc
@@ -384,7 +390,10 @@ function MCPStart(opt, cmd) {
         if (mcpDoc && mcpDoc.server && typeof(mcpDoc.server.httpHost) === 'string' && mcpDoc.server.httpHost) {
             return mcpDoc.server.httpHost;
         }
-        var env = process.env.GINA_HOST_V4;
+        // #B157 — bind_host, never host_v4: the string guard below also keeps
+        // a sweep-coerced boolean from ever reaching the bind.
+        var env = (typeof getEnvVar === 'function' && getEnvVar('GINA_BIND_HOST'))
+                  || process.env.GINA_BIND_HOST;
         if (typeof(env) === 'string' && env) return env;
         return '127.0.0.1';
     };

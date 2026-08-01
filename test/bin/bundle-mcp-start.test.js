@@ -269,11 +269,18 @@ describe('10 - HTTP bind host/port resolvers', function () {
         assert.match(argsSrc, /"--http-port"/);
     });
 
-    it('resolveHttpHost follows CLI → manifest → GINA_HOST_V4 → 127.0.0.1', function () {
+    it('resolveHttpHost follows CLI → manifest → GINA_BIND_HOST → 127.0.0.1', function () {
         assert.match(handlerSrc, /self\.params\s*\[[^\]]*['"]http-host['"]/);
         assert.match(handlerSrc, /mcpDoc\.server\.httpHost/);
-        assert.match(handlerSrc, /process\.env\.GINA_HOST_V4/);
+        assert.match(handlerSrc, /typeof getEnvVar === 'function' && getEnvVar\('GINA_BIND_HOST'\)/);
+        assert.match(handlerSrc, /process\.env\.GINA_BIND_HOST/);
         assert.match(handlerSrc, /return\s+['"]127\.0\.0\.1['"];/);
+    });
+
+    it('the retired GINA_HOST_V4 tier is gone — a connect address must never become the bind default (#B157)', function () {
+        // Access-prefix form: the JSDoc may name the retired tier bare, the
+        // code must never read it again.
+        assert.doesNotMatch(handlerSrc, /process\.env\.GINA_HOST_V4/);
     });
 
     it('resolveHttpPort follows CLI → manifest → 0 (OS-assigned)', function () {
@@ -520,5 +527,110 @@ describe('16 - secrets.resolve against synthetic mcp.json', function () {
         };
         secretsLib.resolve(doc);
         assert.deepStrictEqual(secretsLib.getResolvedPaths(doc), ['server.authToken']);
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 17 — resolveHttpHost behavioral: the bind_host tier (#B157)
+// ---------------------------------------------------------------------------
+// The handler's resolvers are closure-private, so the shipped bytes are
+// brace-walk-extracted and executed directly (the extract-and-execute
+// discipline): no replica to drift, and the extraction is control-gated.
+
+describe('17 - resolveHttpHost behavioral: the bind_host tier (#B157)', function () {
+
+    var DECL = 'var resolveHttpHost = function(mcpDoc) {';
+    var fnSrc = null;
+
+    /** Brace-walk from the declaration: started-flag form (the decl carries
+     *  its own opening brace here, but the walker must not assume it). */
+    function extractFn(src, decl) {
+        var at = src.indexOf(decl);
+        if (at < 0) return null;
+        var depth = 0, started = false, i = src.indexOf('function', at);
+        for (var p = i; p < src.length; p++) {
+            if (src[p] === '{') { depth++; started = true; }
+            else if (src[p] === '}') { depth--; }
+            if (started && depth === 0) return src.substring(i, p + 1);
+        }
+        return null;
+    }
+
+    it('extraction controls: declaration appears exactly once, braces balance', function () {
+        var at = handlerSrc.indexOf(DECL);
+        assert.ok(at > -1, 'declaration not found');
+        assert.equal(handlerSrc.indexOf(DECL, at + 1), -1, 'declaration must be unique');
+        fnSrc = extractFn(handlerSrc, DECL);
+        assert.ok(fnSrc, 'brace walk must terminate at depth 0');
+        assert.match(fnSrc, /return\s+['"]127\.0\.0\.1['"];/, 'slice must reach the default return');
+    });
+
+    function run(selfObj, getEnvVarImpl, fakeProcess, mcpDoc) {
+        var make = new Function('self', 'getEnvVar', 'process',
+            'return (' + fnSrc + ');');
+        return make(selfObj, getEnvVarImpl, fakeProcess)(mcpDoc);
+    }
+
+    it('CLI flag wins over everything', function () {
+        var host = run({ params: { 'http-host': '1.2.3.4' } },
+            function () { return '10.0.0.5'; },
+            { env: { GINA_BIND_HOST: '172.16.0.9' } },
+            { server: { httpHost: '5.6.7.8' } });
+        assert.equal(host, '1.2.3.4');
+    });
+
+    it('manifest httpHost wins over the env tiers', function () {
+        var host = run({ params: {} },
+            function () { return '10.0.0.5'; },
+            { env: { GINA_BIND_HOST: '172.16.0.9' } },
+            { server: { httpHost: '5.6.7.8' } });
+        assert.equal(host, '5.6.7.8');
+    });
+
+    it('GINA_BIND_HOST resolves through the framework env reader (swept processes)', function () {
+        var host = run({ params: {} },
+            function (key) { return (key === 'GINA_BIND_HOST') ? '10.0.0.5' : undefined; },
+            { env: {} },
+            {});
+        assert.equal(host, '10.0.0.5');
+    });
+
+    it('GINA_BIND_HOST falls back to process.env (never-swept embedders)', function () {
+        var host = run({ params: {} },
+            undefined,                                   // no framework reader at all
+            { env: { GINA_BIND_HOST: '172.16.0.9' } },
+            {});
+        assert.equal(host, '172.16.0.9');
+    });
+
+    it('defaults to loopback when nothing is set', function () {
+        var host = run({ params: {} }, undefined, { env: {} }, {});
+        assert.equal(host, '127.0.0.1');
+    });
+
+    it('a GINA_HOST_V4 value must NOT become the bind — the connect address stays dead here', function () {
+        // The security lock: host_v4 is what clients CONNECT to (commonly a
+        // LAN address); reviving it as a bind tier would move the default
+        // bind off loopback.
+        var host = run({ params: {} }, undefined,
+            { env: { GINA_HOST_V4: '9.9.9.9' } },
+            {});
+        assert.equal(host, '127.0.0.1');
+    });
+});
+
+
+// ---------------------------------------------------------------------------
+// 18 — GINA_DIR read is two-tier (the 0.0.0 version-banner fix)
+// ---------------------------------------------------------------------------
+
+describe('18 - GINA_DIR read is two-tier', function () {
+
+    it('the package.json path derives from getEnvVar first, process.env as fallback', function () {
+        // Pre-fix the CLI process read process.env.GINA_DIR — always undefined
+        // after the sweep — so packVersion degraded to "0.0.0" on every run.
+        assert.match(handlerSrc, /typeof getEnvVar === 'function' && getEnvVar\('GINA_DIR'\)/);
+        assert.match(handlerSrc, /process\.env\.GINA_DIR/);
     });
 });
