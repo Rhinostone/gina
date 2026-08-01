@@ -1525,6 +1525,37 @@ isBundleMounted(projects, bundlesPath, getContext('bundle'), function onBundleMo
                                     console.warn('[render-cache] config validation skipped: ' + (rcErr.message || rcErr));
                                 }
 
+                                // #CE1 — `server.transientErrors` boot-time shape check
+                                // (warn-only, NEVER fatal: the opt-in governs how a
+                                // transient datastore error RENDERS — a bad value must
+                                // not refuse a boot, and the controller-side reader
+                                // (`controller.js` `_getTransientErrorsConf()`, kept in
+                                // sync with these rules) independently falls back to
+                                // the same defaults at request time).
+                                try {
+                                    var _teBlock = null;
+                                    try {
+                                        _teBlock = config.getInstance()[gna.core.startingApp][env].server.transientErrors;
+                                    } catch (teConfErr) { _teBlock = null; }
+                                    if ( typeof(_teBlock) != 'undefined' && _teBlock !== null ) {
+                                        if ( typeof(_teBlock) != 'object' || Array.isArray(_teBlock) ) {
+                                            console.warn('[transient-errors] `server.transientErrors` must be an object — ignoring the whole block (feature off)');
+                                        } else {
+                                            if ( typeof(_teBlock.enabled) != 'undefined' && _teBlock.enabled !== true && _teBlock.enabled !== false ) {
+                                                console.warn('[transient-errors] `server.transientErrors.enabled` must be a strict boolean — treating as disabled');
+                                            }
+                                            if ( typeof(_teBlock.retryAfter) != 'undefined' && !( typeof(_teBlock.retryAfter) == 'number' && isFinite(_teBlock.retryAfter) && Math.floor(_teBlock.retryAfter) === _teBlock.retryAfter && _teBlock.retryAfter >= 1 && _teBlock.retryAfter <= 86400 ) ) {
+                                                console.warn('[transient-errors] `server.transientErrors.retryAfter` must be an integer between 1 and 86400 seconds — using the default (30)');
+                                            }
+                                            if ( typeof(_teBlock.message) != 'undefined' && ( typeof(_teBlock.message) != 'string' || _teBlock.message.length === 0 ) ) {
+                                                console.warn('[transient-errors] `server.transientErrors.message` must be a non-empty string — falling back to the standard status text');
+                                            }
+                                        }
+                                    }
+                                } catch (teErr) {
+                                    console.warn('[transient-errors] config validation skipped: ' + (teErr.message || teErr));
+                                }
+
                                 // setting default global middlewares
                                 if ( typeof(instance.use) == 'function' ) {
 

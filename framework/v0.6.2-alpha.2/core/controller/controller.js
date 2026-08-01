@@ -103,6 +103,52 @@ var _mintErrorRef = function(supplied) {
     return crypto.randomBytes(3).toString('hex').toUpperCase();
 };
 
+/**
+ * #CE1 — resolves the bundle's `server.transientErrors` block into its
+ * effective values. Total: never throws, and tolerates any malformed shape
+ * by falling back to the documented defaults (the boot-time warn pass in
+ * `core/gna.js` names each ignored key once at startup — keep both sites'
+ * rules in sync). Strictness rules:
+ *   - `enabled` must be strictly boolean `true` — any other type or value
+ *     leaves the feature off (an error-rendering opt-in must never turn on
+ *     by accident);
+ *   - `retryAfter` must be an integer within 1..86400 seconds, else 30;
+ *   - `message` must be a non-empty string, else null (the caller falls
+ *     back to the standard status text).
+ *
+ * @private
+ * @param {object} bundleConf - the per-request bundle configuration
+ * @returns {{enabled: boolean, retryAfter: number, message: (string|null)}} effective values
+ */
+var _getTransientErrorsConf = function(bundleConf) {
+    var out = { enabled: false, retryAfter: 30, message: null };
+    try {
+        var block = bundleConf && bundleConf.server && bundleConf.server.transientErrors;
+        if ( !block || typeof(block) != 'object' ) {
+            return out;
+        }
+        out.enabled = ( block.enabled === true );
+        if (
+            typeof(block.retryAfter) == 'number'
+            && isFinite(block.retryAfter)
+            && Math.floor(block.retryAfter) === block.retryAfter
+            && block.retryAfter >= 1
+            && block.retryAfter <= 86400
+        ) {
+            out.retryAfter = block.retryAfter;
+        }
+        if ( typeof(block.message) == 'string' && block.message.length > 0 ) {
+            out.message = block.message;
+        }
+    } catch (confReadErr) {
+        // hostile getters on a user-supplied config object — keep the
+        // defaults; rendering of the request error must not be derailed
+        // by a config-read failure (same total-function bar as
+        // lib/connector-error.classify()).
+    }
+    return out;
+};
+
 // #P39 — per-culture locale-resolution memo. setOptions used to build TWO
 // Collections per request over the boot-loaded region sets (a full deep copy
 // of ~500 nested records each time, plus one 16-char id minted per record —
@@ -6169,6 +6215,19 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *   - `throwError(code, err)` — 2-arg form: HTTP status + Error|string
      *   - `throwError(res, code, msg)` — internal 3-arg form used by the router
      *
+     * #CE1 — transient upgrade (opt-in): when the bundle sets
+     * `server.transientErrors.enabled: true` and any call argument carries
+     * `isTransient === true` (a `lib/connector-error`-stamped datastore
+     * error), a resolution that would render 500 renders 503 instead, with
+     * a `Retry-After: <server.transientErrors.retryAfter>` header (default
+     * 30s) and the user-facing `error` field set to
+     * `server.transientErrors.message` (default: the standard 503 status
+     * text). Explicit non-500 statuses are never upgraded; `message` and
+     * `stack` keep their existing scope semantics, and the #ERRREF pairing
+     * line below keeps the full pre-strip detail server-side. Deliberately
+     * NOT mirrored in the server-side throwError twin (core/server.js):
+     * stamped connector errors surface through controller actions only.
+     *
      * Late calls: when throwError fires after a response terminal exit has
      * already released the per-request refs (`local.res` is null — e.g. an
      * entity/query callback resuming after a redirect() sent its 301), the
@@ -6187,6 +6246,68 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      *          rendering stack, or a late call on a released response)
      * */
     this.throwError = function(res, code, msg) {
+
+        // #CE1 — capture the transient-classified error source (if any)
+        // BEFORE the call-shape normalizations below reassign res/code/msg.
+        // Only `lib/connector-error.stamp()`ed datastore errors carry
+        // `isTransient === true`, so scanning the raw call arguments is an
+        // unambiguous, total probe (guarded against hostile getters).
+        var _transientSrc = null;
+        var _teConf = null;            // resolved lazily, only when a 500 would upgrade
+        var _transient503Applied = false;
+        try {
+            for (var _ti = 0; _ti < arguments.length && _ti < 3; _ti++) {
+                if ( arguments[_ti] && typeof(arguments[_ti]) == 'object' && arguments[_ti].isTransient === true ) {
+                    _transientSrc = arguments[_ti];
+                    break;
+                }
+            }
+        } catch (_teScanErr) {}
+
+        /**
+         * #CE1 — opt-in transient upgrade: with `server.transientErrors.enabled`,
+         * a transient connector failure that would render as 500 renders as
+         * 503 + `Retry-After` instead; any explicit non-500 status is
+         * respected. Applied at BOTH status-resolution sites below.
+         *
+         * @inner
+         * @param {number|string} resolvedCode - the status the resolution chain settled on
+         * @returns {number|string} 503 when the upgrade applies, else `resolvedCode` unchanged
+         */
+        var _maybeUpgradeTransient503 = function(resolvedCode) {
+            if ( _transientSrc && resolvedCode == 500 ) {
+                if (_teConf === null) {
+                    _teConf = _getTransientErrorsConf(local.options.conf);
+                }
+                if (_teConf.enabled) {
+                    _transient503Applied = true;
+                    return 503;
+                }
+            }
+            return resolvedCode;
+        };
+
+        /**
+         * #CE1 — an upgraded 503 advertises when to retry. A single early
+         * setHeader survives every downstream egress: the JSON writeHead
+         * calls merge per-key (Retry-After is never overwritten), the HTML
+         * fallback writeHead does the same, and the renderCustomError →
+         * render pipeline forwards res.getHeaders() into the HTTP/2 frame
+         * (#H8). Idempotent — safe to call at both upgrade sites; no-ops
+         * unless the upgrade fired.
+         *
+         * @inner
+         * @param {object} targetRes - the normalized live response
+         * @returns {void}
+         */
+        var _setTransientRetryAfterHeader = function(targetRes) {
+            if ( !_transient503Applied || !targetRes || typeof(targetRes.setHeader) != 'function' ) {
+                return;
+            }
+            try {
+                targetRes.setHeader('Retry-After', String(_teConf.retryAfter));
+            } catch (_teHdrErr) {}
+        };
 
         // 2-arg form (statusCode, Error|string) — without this shift, the
         // downstream Error/string branch coerces code via /^\d{3}$/.test(String(code))
@@ -6257,6 +6378,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             msg    = ( !/^\d+$/.test(code) && typeof(msg) == 'undefined' ) ?  code : msg;
             // Preserve an explicitly passed 3-digit HTTP status code; fall back to res.status or 500
             code    = ( /^\d{3}$/.test(String(code)) ) ? code : ( res && typeof(res.status) != 'undefined' ) ? res.status : 500;
+            // #CE1 — a transient datastore failure resolving to 500 upgrades
+            // to 503 when the bundle opted in (explicit non-500 preserved above)
+            code    = _maybeUpgradeTransient503(code);
 
             if ( typeof(statusCodes[code]) != 'undefined' ) {
                 standardErrorMessage = statusCodes[code];
@@ -6360,6 +6484,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             responseHeaders = res.getHeaders() || local.res.getHeaders();
         }
         // var responseHeaders = res.getHeaders() || local.res.getHeaders();
+        // #CE1 — first upgrade site fired above: `res` is the normalized live
+        // response by this point, so the Retry-After header lands here, ahead
+        // of every branch (JSON writeHead trio, HTML fallback, custom pages).
+        _setTransientRetryAfterHeader(res);
         var req             = local.req;
         var next            = local.next;
         if (!headersSent()) {
@@ -6392,6 +6520,12 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 if ( typeof(code) == 'object' && !msg && typeof(code.status) != 'undefined' && typeof(code.error) != 'undefined' ) {
                     msg     = code.error || code.message;
                     code    = code.status || 500;
+                    // #CE1 — second upgrade site: the 2-arg errorObj shape
+                    // resolves its status only here, after the early header
+                    // point above — so this site sets its own header too
+                    // (idempotent with the first call).
+                    code    = _maybeUpgradeTransient503(code);
+                    _setTransientRetryAfterHeader(res);
                 }
                 if ( typeof(statusCodes[code]) != 'undefined' ) {
                     standardErrorMessage = statusCodes[code];
@@ -6435,6 +6569,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                         message: msg.message || msg,
                         stack: msg.stack
                     }
+                }
+
+                // #CE1 — on an upgraded 503 the user-facing `error` field
+                // carries the configured (or standard) service-unavailable
+                // text instead of the raw datastore error; `message`/`stack`
+                // keep their existing scope semantics, and the full detail
+                // stays in the #ERRREF pairing line below.
+                if ( _transient503Applied && errorObject ) {
+                    errorObject.error = _teConf.message || standardErrorMessage || statusCodes['503'];
                 }
 
                 // #ERRREF — mint/honour the incident ref + the ONE full-detail
@@ -6498,6 +6641,14 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
                 );
                 if ( errorObject ) {
                     errorObject.ref = _errRef;
+                }
+
+                // #CE1 — custom error pages (eData) get the clean
+                // service-unavailable text on an upgraded 503; the eData
+                // merge below carries it. The inline fallback page keeps
+                // rendering the thrown error's own fields, as before.
+                if ( _transient503Applied && errorObject ) {
+                    errorObject.error = _teConf.message || standardErrorMessage || statusCodes['503'];
                 }
 
                 if ( errorObject && errorObject != 'null' && /object/i.test(typeof(errorObject)) ) {
