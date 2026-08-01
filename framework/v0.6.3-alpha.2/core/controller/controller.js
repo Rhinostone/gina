@@ -6098,6 +6098,9 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Render a custom error page defined in `routing.json` via `req.routing.param.error`.
      * Sets `local.options.isRenderingCustomError = true` so the render pipeline
      * bypasses the normal rendering-stack guard.
+     * Stamps `res.statusCode` from the error's `status` — when it is a known
+     * status code — before dispatching, so every render delegate serves the
+     * custom page with the real HTTP status (#B190).
      *
      * @param {object}   req  - Incoming request (reads `req.routing.param`)
      * @param {object}   res  - Server response
@@ -6162,6 +6165,29 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
 
 
         }
+        // #B190 — stamp the HTTP status on the response before the render
+        // dispatch. The swig and v1 delegates recompute it downstream from
+        // the page data, but the nunjucks and the async delegates only read
+        // the already-set `res.statusCode || 200` at their write sites — so
+        // without this stamp a configured custom error page is served as
+        // HTTP 200 there (live-measured 2026-08-01: nunjucks 200 vs swig 500
+        // on the same fixture).
+        var _eStatusCodes = local.options.conf
+            && local.options.conf.server
+            && local.options.conf.server.coreConfiguration
+            && local.options.conf.server.coreConfiguration.statusCodes
+            || null;
+        if (
+            data
+            && data.status
+            && res
+            && !res.headersSent
+            && _eStatusCodes
+            && typeof(_eStatusCodes[ data.status ]) != 'undefined'
+        ) {
+            res.statusCode = data.status;
+        }
+
         delete local.options.namespace;
         self.render(data, displayInspector, errOptions);
     }

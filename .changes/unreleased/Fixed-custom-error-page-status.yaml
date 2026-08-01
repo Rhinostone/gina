@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Custom error pages are now served with their real HTTP status on every template engine. A page configured through the routing error param / errorFiles mechanism was rendered with status 200 by the nunjucks and async render delegates — only the swig and v1 delegates recompute the status from the page data downstream — because renderCustomError never stamped the response status before dispatching. It now stamps the response status from the error status code (when the code is a known status code, and never after headers are sent), so a configured 500 or 404 page answers 500 or 404 on the wire instead of 200, and a transient-failure 503 upgrade carries a coherent Retry-After alongside its custom page (#B190).'
+time: 2026-08-01T06:10:22+01:00
