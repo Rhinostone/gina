@@ -6663,7 +6663,8 @@ describe('56 - Refresh button soft refresh (live indexes, reveal, passive agent)
             /!_passiveAgentEs\s*\|\|\s*_passiveAgentEs\.readyState\s*===\s*2/.test(body),
             'expected readyState === 2 (CLOSED) or null check'
         );
-        assert.ok(/tryAgentPassive\(\)/.test(body), 'expected tryAgentPassive() call');
+        assert.ok(/tryAgentPassive\(\s*_channelBase/.test(body),
+            'expected tryAgentPassive(_channelBase …) — the reopen stays on the currently-followed bundle (#B205)');
     });
 
     it('Shift+click triggers window.opener.location.reload()', function() {
@@ -9130,4 +9131,263 @@ describe('83 - tab-layout preview: every preset tab has a label + color; unknown
     it('the roster-derived bound admits a full 8-tab custom order today', function() {
         assert.equal(TAB_LAYOUTS.balanced.length, 8, 'all three presets carry 8 tabs today');
     });
+});
+
+
+// ── 84 — bundle-follow: server channels re-point on bundle crossing (#B205) ──
+// In a proxy-routed multi-bundle project the Inspector's server-side channels
+// (/_gina/logs SSE + passive /_gina/agent SSE) used to stay pinned to the
+// bundle they were derived from at open time. A bundle the Inspector was never
+// opened from therefore never saw a /_gina/* hit, its per-process dev-capture
+// activation flag never latched, and every page it served rendered with no
+// flow/queries — the Flow tab showed "No timeline data for this request.".
+// The fix: each applied payload's environment.webroot drives
+// _followBundleChannels(), which closes + re-opens the live channels against
+// the new bundle's base; the /_gina/* hit latches that bundle's capture.
+// The earlier pid-guard section's local replica stays valid for its
+// webroot-less fixtures (behaviour unchanged there); the new webroot-aware
+// branch is covered here by executing the EXTRACTED shipped bytes.
+
+describe('84 - bundle-follow: server channels re-point on bundle crossing (#B205)', function() {
+
+    var INSPECTOR_84 = path.join(BM_DIR, 'inspector.js');
+    var _src84;
+    function getSrc84() { return _src84 || (_src84 = fs.readFileSync(INSPECTOR_84, 'utf8')); }
+
+    /**
+     * Brace-matched extraction of a function's shipped bytes (started-flag
+     * walker — safe here because none of the extracted bodies carry braces
+     * inside string/regex literals). Throws on not-found / duplicate decl /
+     * unbalanced braces so a silent mis-extraction cannot vacuously pass.
+     */
+    function extractFn84(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    // ── Source pins ──────────────────────────────────────────────────────
+
+    it('declares the bundle-follow module state', function() {
+        var src = getSrc84();
+        assert.match(src, /var _serverLogsEs = null;/);
+        assert.match(src, /var _channelBase = null;/);
+        assert.match(src, /var _livePidWebroot = null;/);
+    });
+
+    it('tryServerLogs keeps the shared resolver and accepts an explicit base', function() {
+        var src = getSrc84();
+        var i = src.indexOf('function tryServerLogs(baseOverride)');
+        assert.ok(i > -1, 'tryServerLogs must take the baseOverride param');
+        var j = src.indexOf('es.onmessage', i);
+        assert.ok(j > i, 'end anchor (es.onmessage) must follow the declaration');
+        var blk = src.slice(i, j);
+        var res = blk.indexOf('var base = resolveBundleBase();');
+        var ovr = blk.indexOf("typeof baseOverride === 'string'");
+        assert.ok(res > -1, 'the shared resolver stays the default');
+        assert.ok(ovr > res, 'the override guard must follow (not replace) the resolver');
+    });
+
+    it('tryServerLogs keeps a single live stream and records the base', function() {
+        var src = getSrc84();
+        var i = src.indexOf('function tryServerLogs(baseOverride)');
+        var blk = src.slice(i, src.indexOf('es.onmessage', i));
+        assert.ok(blk.indexOf('_serverLogsEs.close()') > -1, 'previous stream must be closed on re-point');
+        assert.ok(blk.indexOf('_serverLogsEs = es;') > -1, 'the live stream handle must be kept');
+        assert.match(blk, /_channelBase\s*=\s*base;/, 'the connected base must be recorded');
+    });
+
+    it('tryAgentPassive accepts the override, closes the previous stream, records the base', function() {
+        var src = getSrc84();
+        var i = src.indexOf('function tryAgentPassive(baseOverride)');
+        assert.ok(i > -1, 'tryAgentPassive must take the baseOverride param');
+        var j = src.indexOf("es.addEventListener('data'", i);
+        assert.ok(j > i, 'end anchor (data listener) must follow the declaration');
+        var blk = src.slice(i, j);
+        var res = blk.indexOf('var base = resolveBundleBase();');
+        var ovr = blk.indexOf("typeof baseOverride === 'string'");
+        assert.ok(res > -1 && ovr > res, 'resolver stays the default; override follows it');
+        assert.ok(blk.indexOf('_passiveAgentEs.close()') > -1, 'previous stream must be closed on re-point');
+        assert.match(blk, /_channelBase\s*=\s*base;/, 'the connected base must be recorded');
+    });
+
+    it('pollData drives the bundle-follow after the stale gate, before the label update', function() {
+        var src = getSrc84();
+        var pd = src.indexOf('function pollData');
+        assert.ok(pd > -1);
+        var stale  = src.indexOf('if (_isStaleSource(gd)) return;', pd);
+        var follow = src.indexOf('_followBundleChannels(gd);', pd);
+        var label  = src.indexOf("qs('#bm-label').textContent", pd);
+        assert.ok(stale > pd, 'stale gate inside pollData');
+        assert.ok(follow > stale, 'follow must run only on payloads that pass the stale gate');
+        assert.ok(label > follow, 'follow must run as part of the apply (before the label update)');
+    });
+
+    it('_followBundleChannels never re-points in agent mode (source pin)', function() {
+        var src = getSrc84();
+        var fn = extractFn84(src, 'function _followBundleChannels(gd)');
+        assert.ok(fn.indexOf("if (source === 'agent') return;") > -1,
+            'agent mode (?target=) is an explicit binding — never re-pointed');
+    });
+
+    it('_isStaleSource narrows to same-bundle pid mismatches (source pin)', function() {
+        var src = getSrc84();
+        var fn = extractFn84(src, 'function _isStaleSource(gd)');
+        var same = fn.indexOf('if (!p || p === _livePid) return false;');
+        var wr   = fn.indexOf('_normWebroot(_gdWebroot(gd))');
+        var tail = fn.indexOf('return true;');
+        assert.ok(same > -1, 'same-pid / pid-less payloads still pass first');
+        assert.ok(wr > same, 'the webroot comparison follows the pid checks');
+        assert.ok(tail > wr, 'only a same-webroot (or webroot-less) pid mismatch stays stale');
+    });
+
+    // ── Behavioral — the EXTRACTED shipped bytes are executed ─────────────
+
+    it('extraction controls: every construct extracts exactly once with balanced braces', function() {
+        var src = getSrc84();
+        var decls = [
+            'function _normWebroot(w)',
+            'function _gdWebroot(gd)',
+            'function _gdPid(gd)',
+            'function _isStaleSource(gd)',
+            'function _followBundleChannels(gd)'
+        ];
+        for (var d = 0; d < decls.length; d++) {
+            var fn = extractFn84(src, decls[d]);
+            assert.ok(/^function /.test(fn) && /\}$/.test(fn), 'clean extraction for ' + decls[d]);
+        }
+    });
+
+    it('_normWebroot: root forms collapse, trailing slashes strip, non-strings are unknown', function() {
+        var norm = new Function('return (' + extractFn84(getSrc84(), 'function _normWebroot(w)') + ');')();
+        assert.strictEqual(norm('/'), '');
+        assert.strictEqual(norm(''), '');
+        assert.strictEqual(norm('/admin'), '/admin');
+        assert.strictEqual(norm('/admin/'), '/admin');
+        assert.strictEqual(norm('/admin///'), '/admin');
+        assert.strictEqual(norm(undefined), null);
+        assert.strictEqual(norm(3), null);
+    });
+
+    it('_gdWebroot: gina view first, user view fallback, non-string is null', function() {
+        var src = getSrc84();
+        var wrFn = new Function('return (' + extractFn84(src, 'function _gdWebroot(gd)') + ');')();
+        assert.strictEqual(wrFn({ gina: { environment: { webroot: '/admin' } } }), '/admin');
+        assert.strictEqual(wrFn({ user: { environment: { webroot: '/' } } }), '/');
+        assert.strictEqual(wrFn({ user: { environment: {} } }), null);
+        assert.strictEqual(wrFn(null), null);
+    });
+
+    /** Run the shipped _isStaleSource with injected guard state. */
+    function runStale(livePid, livePidWebroot, gd) {
+        var src = getSrc84();
+        var runner = new Function('livePid', 'livePidWebroot', 'gd',
+            'var _livePid = livePid; var _livePidWebroot = livePidWebroot;' +
+            'var _gdPid = (' + extractFn84(src, 'function _gdPid(gd)') + ');' +
+            'var _gdWebroot = (' + extractFn84(src, 'function _gdWebroot(gd)') + ');' +
+            'var _normWebroot = (' + extractFn84(src, 'function _normWebroot(w)') + ');' +
+            'var _isStaleSource = (' + extractFn84(src, 'function _isStaleSource(gd)') + ');' +
+            'return _isStaleSource(gd);');
+        return runner(livePid, livePidWebroot, gd);
+    }
+
+    /** Payload fixture: user-view environment with optional webroot / pid. */
+    function gdWith(webroot, pid) {
+        var env = {};
+        if (typeof webroot !== 'undefined') env.webroot = webroot;
+        if (typeof pid !== 'undefined') env['gina pid'] = pid;
+        return { user: { environment: env } };
+    }
+
+    it('staleness: a different pid on ANOTHER webroot passes — a bundle crossing, not staleness', function() {
+        // live channel on the root bundle; the tab moved to the /admin bundle
+        assert.strictEqual(runStale(223, '', gdWith('/admin', 999)), false);
+        // and the reverse crossing
+        assert.strictEqual(runStale(223, '/admin', gdWith('/', 999)), false);
+    });
+
+    it('staleness: same-webroot restarts and webroot-less payloads still read stale', function() {
+        // same bundle ('/' normalises to ''), older process — a pre-restart snapshot
+        assert.strictEqual(runStale(223, '', gdWith('/', 999)), true);
+        // payload without webroot — back-compat: pid comparison alone decides
+        assert.strictEqual(runStale(223, '', gdWith(undefined, 999)), true);
+        // live webroot unknown — conservative: keep the pid-only verdict
+        assert.strictEqual(runStale(223, null, gdWith('/admin', 999)), true);
+        // unchanged verdicts: same pid, and no live pid at all
+        assert.strictEqual(runStale(223, '', gdWith('/', 223)), false);
+        assert.strictEqual(runStale(null, null, gdWith('/', 999)), false);
+    });
+
+    /** Run the shipped _followBundleChannels with an injected scope + spies. */
+    function runFollow(scope) {
+        var src = getSrc84();
+        var runner = new Function('scope',
+            'var source = scope.source;' +
+            'var _channelBase = scope.channelBase;' +
+            'var _passiveAgentEs = scope.passiveEs;' +
+            'var _serverLogsEs = scope.logsEs;' +
+            'var _normWebroot = (' + extractFn84(src, 'function _normWebroot(w)') + ');' +
+            'var _gdWebroot = (' + extractFn84(src, 'function _gdWebroot(gd)') + ');' +
+            'var calls = { passive: [], logs: [] };' +
+            'var tryAgentPassive = function (b) { calls.passive.push(b); };' +
+            'var tryServerLogs   = function (b) { calls.logs.push(b); };' +
+            'var _followBundleChannels = (' + extractFn84(src, 'function _followBundleChannels(gd)') + ');' +
+            '_followBundleChannels(scope.gd);' +
+            'return { channelBase: _channelBase, calls: calls };');
+        return runner(scope);
+    }
+
+    it('follow: a crossing re-points exactly the channels that are open, to the new base', function() {
+        // passive stream open (opener mode)
+        var r1 = runFollow({ source: 'opener-window', channelBase: '', passiveEs: {}, logsEs: null,
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(r1.calls.passive, ['/admin']);
+        assert.deepStrictEqual(r1.calls.logs, []);
+        assert.strictEqual(r1.channelBase, '/admin');
+        // logs stream open (bound mode)
+        var r2 = runFollow({ source: 'broadcast', channelBase: '/admin', passiveEs: null, logsEs: {},
+            gd: gdWith('/') });
+        assert.deepStrictEqual(r2.calls.passive, []);
+        assert.deepStrictEqual(r2.calls.logs, ['']);
+        assert.strictEqual(r2.channelBase, '');
+        // both open (refresh-button can leave both live)
+        var r3 = runFollow({ source: 'broadcast', channelBase: '', passiveEs: {}, logsEs: {},
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(r3.calls.passive, ['/admin']);
+        assert.deepStrictEqual(r3.calls.logs, ['/admin']);
+    });
+
+    it('follow: agent mode, unknown webroot, and an unchanged base are all no-ops', function() {
+        var agent = runFollow({ source: 'agent', channelBase: '', passiveEs: {}, logsEs: {},
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(agent.calls, { passive: [], logs: [] });
+        assert.strictEqual(agent.channelBase, '');
+        var unknown = runFollow({ source: 'broadcast', channelBase: '', passiveEs: {}, logsEs: {},
+            gd: gdWith(undefined) });
+        assert.deepStrictEqual(unknown.calls, { passive: [], logs: [] });
+        assert.strictEqual(unknown.channelBase, '');
+        var same = runFollow({ source: 'broadcast', channelBase: '/admin', passiveEs: {}, logsEs: {},
+            gd: gdWith('/admin/') });   // trailing slash still the same base
+        assert.deepStrictEqual(same.calls, { passive: [], logs: [] });
+        assert.strictEqual(same.channelBase, '/admin');
+    });
+
+    it('follow: adopts the new base even when no channel is open', function() {
+        var r = runFollow({ source: 'broadcast', channelBase: '', passiveEs: null, logsEs: null,
+            gd: gdWith('/admin') });
+        assert.deepStrictEqual(r.calls, { passive: [], logs: [] });
+        assert.strictEqual(r.channelBase, '/admin');
+    });
+
 });

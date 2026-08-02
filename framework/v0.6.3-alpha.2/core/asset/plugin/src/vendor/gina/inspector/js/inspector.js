@@ -199,6 +199,20 @@
      *  rendered before a bundle restart) cannot override live data. Null in pure
      *  opener/localStorage mode, which leaves the guard inert. */
     var _livePid = null;
+    /** @type {?string} Normalised webroot of the bundle that established {@link _livePid}
+     *  (recorded by {@link _noteLivePid}). Lets {@link _isStaleSource} tell a stale
+     *  same-bundle snapshot (same webroot, older pid) from a payload of a DIFFERENT
+     *  bundle of a proxy-routed multi-bundle project (different webroot — the monitored
+     *  tab legitimately crossed a bundle boundary, not staleness). Null until known. (#B205) */
+    var _livePidWebroot = null;
+    /** @type {?EventSource} Live `/_gina/logs` SSE stream — kept module-level so
+     *  {@link _followBundleChannels} can close and re-open it against another bundle's
+     *  base when the monitored tab navigates across bundles. (#B205) */
+    var _serverLogsEs = null;
+    /** @type {?string} Normalised base path the server-side channels (`/_gina/logs` and
+     *  the passive `/_gina/agent` stream) are currently pointed at. Compared against each
+     *  applied payload's webroot by {@link _followBundleChannels}. (#B205) */
+    var _channelBase = null;
     /** @type {boolean} When true, Data tab renders raw JSON instead of a tree */
     var rawMode = false;
     /** @type {string} Highest severity level received since last clear (drives log-dot) */
@@ -3683,16 +3697,52 @@
     }
 
     /**
+     * Extract the bundle webroot from a `__ginaData` payload, reading
+     * `gina.environment` first then falling back to `user.environment`
+     * (mirrors {@link _gdPid}). Both render delegates emit it.
+     *
+     * @inner
+     * @param   {?Object} gd  A parsed `__ginaData` payload.
+     * @returns {?string} The webroot (e.g. `'/'` or `'/admin'`), or null when absent.
+     */
+    function _gdWebroot(gd) {
+        try {
+            var e = (gd && gd.gina && gd.gina.environment)
+                 || (gd && gd.user && gd.user.environment) || null;
+            var w = e ? e.webroot : null;
+            return (typeof w === 'string') ? w : null;
+        } catch (e) { return null; }
+    }
+
+    /**
+     * Normalise a webroot/base path for comparison and URL building: strip
+     * every trailing slash so `'/'` and `''` both mean the root and
+     * `'/admin/'` equals `'/admin'`. Non-strings normalise to null (unknown).
+     *
+     * @inner
+     * @param   {?string} w  A webroot or base path.
+     * @returns {?string} The normalised base (`''` for the root), or null.
+     */
+    function _normWebroot(w) {
+        return (typeof w === 'string') ? w.replace(/\/+$/, '') : null;
+    }
+
+    /**
      * Record the live bundle pid from an agent-delivered payload. The agent
      * (SSE/WS) channel always reflects the running process, so its pid is the
      * freshness reference {@link _isStaleSource} compares polled snapshots against.
+     * Also records which bundle the pid belongs to ({@link _livePidWebroot}) so
+     * the guard can tell a restart from a bundle crossing (#B205).
      *
      * @inner
      * @param {?Object} gd  A parsed `__ginaData` payload from the agent channel.
      */
     function _noteLivePid(gd) {
         var p = _gdPid(gd);
-        if (p) _livePid = p;
+        if (p) {
+            _livePid = p;
+            _livePidWebroot = _normWebroot(_gdWebroot(gd));
+        }
     }
 
     /**
@@ -3705,6 +3755,13 @@
      * Inert (returns false) until an agent pid is known, preserving the pure
      * opener/localStorage behaviour.
      *
+     * A pid mismatch only means "stale" WITHIN one bundle: in a proxy-routed
+     * multi-bundle project, a payload from another bundle (different webroot,
+     * necessarily a different process/pid) is the monitored tab legitimately
+     * crossing a bundle boundary — it must pass so the Inspector can follow
+     * ({@link _followBundleChannels}). Only same-webroot pid mismatches are
+     * treated as stale (#B205).
+     *
      * @inner
      * @param   {?Object} gd  The polled `__ginaData` payload.
      * @returns {boolean} True when `gd` belongs to a different (stale) process.
@@ -3712,7 +3769,12 @@
     function _isStaleSource(gd) {
         if (!_livePid) return false;
         var p = _gdPid(gd);
-        return !!(p && p !== _livePid);
+        if (!p || p === _livePid) return false;
+        // #B205 — a different pid under a DIFFERENT webroot is another bundle,
+        // not a stale snapshot of this one: let it through.
+        var wr = _normWebroot(_gdWebroot(gd));
+        if (wr !== null && _livePidWebroot !== null && wr !== _livePidWebroot) return false;
+        return true;
     }
 
     /**
@@ -3726,6 +3788,10 @@
      *
      * If the source is lost (e.g. bundle restart killed the opener page),
      * attempts to re-acquire it via {@link tryOpener} or {@link tryLocalStorage}.
+     *
+     * Each applied payload also drives {@link _followBundleChannels}, which
+     * re-points the server-side SSE channels when the monitored tab crossed
+     * onto another bundle of the project (#B205).
      *
      * @inner
      */
@@ -3774,6 +3840,12 @@
             lastGdStr = str;
             ginaData = gd;
             var env = (gd.user && gd.user.environment) || {};
+            // #B205 — follow the monitored tab across bundles: when this payload
+            // belongs to another bundle (different webroot), re-point the
+            // server-side channels at it. Hitting its Inspector endpoints also
+            // activates that bundle's dev capture, so Flow/Query data starts
+            // flowing for its pages.
+            _followBundleChannels(gd);
             qs('#bm-label').textContent = (env.bundle || '?') + '@' + (env.env || '?');
             qs('#bm-dot').className = 'bm-dot ok';
             // Update window title with the inspected page URL
@@ -4175,20 +4247,36 @@
      * log entries from the bundle process. Entries are merged into the same logs[]
      * array used by client-side console capture and engine.io push.
      *
+     * At most one stream is live: a re-point ({@link _followBundleChannels})
+     * closes the previous stream before connecting to the new bundle (#B205).
+     *
      * @inner
      * @private
+     * @param {string} [baseOverride]  Explicit bundle base to connect to —
+     *   passed by the bundle-follow re-point; omitted at init, where the
+     *   shared resolver derives the base.
      */
-    function tryServerLogs() {
+    function tryServerLogs(baseOverride) {
         if (typeof EventSource === 'undefined') return;
 
         // Derive the SSE URL via the shared 3-fallback resolver so /_gina/logs
         // reaches the monitored bundle in proxy-routed multi-bundle setups (was a
         // bare pathname strip that misrouted to the proxy's default bundle).
         var base = resolveBundleBase();
+        // #B205 — bundle-follow re-points pass the target base explicitly.
+        if (typeof baseOverride === 'string') base = baseOverride;
         var url  = base + '/_gina/logs';
+
+        // #B205 — single live stream: close the previous one on re-point.
+        if (_serverLogsEs) {
+            try { _serverLogsEs.close(); } catch (e) {}
+            _serverLogsEs = null;
+        }
 
         try {
             var es = new EventSource(url);
+            _serverLogsEs = es;
+            _channelBase  = base;
             es.onmessage = function (ev) {
                 if (paused) return;
                 try {
@@ -4204,6 +4292,46 @@
                 // EventSource reconnects automatically; nothing to do
             };
         } catch (e) {}
+    }
+
+    // ── Bundle-follow: re-point server channels on bundle crossing (#B205) ──
+
+    /**
+     * Follow the monitored tab across the bundles of a proxy-routed
+     * multi-bundle project. Every applied `__ginaData` payload names its
+     * bundle's webroot; when it differs from the base the server-side channels
+     * are pointed at ({@link _channelBase}), the live `/_gina/logs` SSE and/or
+     * the passive `/_gina/agent` SSE are closed and re-opened against the new
+     * bundle's base, so that:
+     *
+     *  - server logs stream from the bundle actually serving the monitored
+     *    page (they previously stayed pinned to the open-time bundle), and
+     *  - the new bundle's dev capture activates: its Inspector endpoints latch
+     *    the per-process activation flag that gates the request timeline
+     *    (Flow tab) and the query log (Query tab). Without the re-point, a
+     *    bundle the Inspector was never opened from kept rendering with no
+     *    flow/queries — the Flow tab showed "No timeline data for this
+     *    request." for every page that bundle served.
+     *
+     * The page that evidences the crossing rendered BEFORE the new bundle's
+     * capture activated, so its own timeline is unavoidably absent — Flow and
+     * Query data appear from the next render on. Agent mode (`?target=`) is an
+     * explicit binding and is never re-pointed.
+     *
+     * @inner
+     * @param {?Object} gd  The just-applied `__ginaData` payload.
+     */
+    function _followBundleChannels(gd) {
+        if (source === 'agent') return;
+        var wr = _normWebroot(_gdWebroot(gd));
+        if (wr === null || wr === _channelBase) return;
+        var hadPassive = !!_passiveAgentEs;
+        var hadLogs    = !!_serverLogsEs;
+        // Adopt the new base even when no channel is open (e.g. EventSource
+        // unsupported), so the comparison above stays meaningful.
+        _channelBase = wr;
+        if (hadPassive) tryAgentPassive(wr);
+        if (hadLogs)    tryServerLogs(wr);
     }
 
     // ── Remote data source via /_gina/agent SSE ─────────────────────────
@@ -4478,10 +4606,13 @@
      * passive mode succeeds `tryServerLogs()` is skipped to avoid duplicates.
      *
      * @inner
+     * @param {string} [baseOverride]  Explicit bundle base to connect to —
+     *   passed by the bundle-follow re-point ({@link _followBundleChannels})
+     *   and the refresh-button reopen; omitted at init.
      * @returns {boolean} `true` when a subscription was opened, `false` when
      *   the environment is unsupported or the URL cannot be derived.
      */
-    function tryAgentPassive() {
+    function tryAgentPassive(baseOverride) {
         if (typeof EventSource === 'undefined') return false;
         // Agent mode already covers data + logs via the primary tryAgent stream.
         if (source === 'agent') return false;
@@ -4491,11 +4622,20 @@
         // tryAgentPassive only runs when source !== 'agent' (i.e. no ?target=),
         // so this falls through to the opener-pathname fallback as before.
         var base = resolveBundleBase();
+        // #B205 — bundle-follow re-points pass the target base explicitly.
+        if (typeof baseOverride === 'string') base = baseOverride;
         var url = base + '/_gina/agent';
+
+        // #B205 — single live stream: close the previous one on re-point.
+        if (_passiveAgentEs) {
+            try { _passiveAgentEs.close(); } catch (e) {}
+            _passiveAgentEs = null;
+        }
 
         try {
             var es = new EventSource(url);
             _passiveAgentEs = es;
+            _channelBase = base;
 
             es.addEventListener('data', function (ev) {
                 try {
@@ -5479,7 +5619,9 @@
                     && (!_passiveAgentEs || _passiveAgentEs.readyState === 2)) {
                     try { if (_passiveAgentEs) _passiveAgentEs.close(); } catch (e) {}
                     _passiveAgentEs = null;
-                    tryAgentPassive();
+                    // #B205 — keep the re-opened stream on the currently-followed
+                    // bundle instead of re-deriving from the opener's deep path.
+                    tryAgentPassive(_channelBase !== null ? _channelBase : undefined);
                 }
 
                 if (ev.shiftKey) {
