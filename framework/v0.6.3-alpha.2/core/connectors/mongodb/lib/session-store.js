@@ -138,6 +138,7 @@ module.exports = function(session, bundle) {
      * @param {string} [options.collection] - Sessions collection (default 'sessions').
      * @param {number} [options.ttl]        - Default TTL seconds (default: connectors.json ttl;
      *                                        unset → cookie maxAge drives expiry, else 86400).
+     *                                        Must be > 0 when set — non-positive refuses (#B207).
      * @throws {Error} when `database` is missing.
      */
     function MongodbStore(options) {
@@ -145,6 +146,19 @@ module.exports = function(session, bundle) {
         Store.call(this, options);
 
         this.collection = (options.collection != null) ? options.collection : (connConf.collection || 'sessions');
+        // #B207 — a non-positive ttl is refused at construction: `ttl: 0` used
+        // to collapse to the maxAge fallback through double truthiness (options
+        // preserve + `this.ttl ||` at every use site), silently meaning "unset",
+        // while a RESOLVED ttl <= 0 reached backend-specific semantics. A ttl
+        // is a positive number of seconds, or unset.
+        if (options.ttl != null && !(options.ttl > 0)) {
+            throw new Error('[' + bundle + '][MongodbStore] `ttl` must be a positive number of seconds or unset — got '
+                + JSON.stringify(options.ttl) + ' (store options). `ttl: 0` is not supported (it previously behaved as unset).');
+        }
+        if (connConf.ttl != null && !(connConf.ttl > 0)) {
+            throw new Error('[' + bundle + '][MongodbStore] `ttl` must be a positive number of seconds or unset — got '
+                + JSON.stringify(connConf.ttl) + ' (connectors.json session entry). `ttl: 0` is not supported (it previously behaved as unset).');
+        }
         // #B163 — was `connConf.ttl || oneDay`: the implicit one-day default made the
         // cookie-maxAge fallback in set()/touch() unreachable; unset now stays null (couchbase parity).
         this.ttl        = (options.ttl        != null) ? options.ttl        : (connConf.ttl        || null);
@@ -268,6 +282,13 @@ module.exports = function(session, bundle) {
         if ('function' !== typeof fn) fn = noop;
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
+
+        // #B207 — a resolved ttl <= 0 means the session is already at/past its
+        // expiry: writing an immediately-expired document is pointless. No-op
+        // for parity with the sibling stores (mirrors the #B166 touch() guard).
+        if (ttl <= 0) {
+            return fn(null);
+        }
 
         if (ttl > 0) {
             sess.lastModified = new Date().toISOString();

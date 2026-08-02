@@ -123,7 +123,7 @@
         },
         "ttl": {
           "type": "number",
-          "description": "Redis, SQLite, MongoDB and ScyllaDB session stores. Default TTL in seconds for session entries. When omitted, the session record follows the cookie's `maxAge`, falling back to 86400 only when the cookie has none. The Couchbase stores read `ttl` as a constructor option only, never from this file."
+          "description": "Redis, SQLite, MongoDB and ScyllaDB session stores. Default TTL in seconds for session entries. When omitted, the session record follows the cookie's `maxAge`, falling back to 86400 only when the cookie has none. Must be a positive number of seconds — a non-positive value (including 0) is refused at bundle init. The Couchbase stores read `ttl` as a constructor option only, never from this file."
         },
         "cluster": {
           "type": "array",

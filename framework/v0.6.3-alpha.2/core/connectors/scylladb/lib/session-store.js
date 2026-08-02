@@ -134,12 +134,26 @@ module.exports = function(session, bundle) {
      * @param {string}   [options.table]           - Sessions table name (default: connectors.json → 'sessions').
      * @param {number}   [options.ttl]             - Default TTL seconds (default: connectors.json ttl;
      *                                              unset → cookie maxAge drives expiry, else 86400).
+     *                                              Must be > 0 when set — non-positive refuses (#B207).
      */
     function ScylladbStore(options) {
         options = options || {};
         Store.call(this, options);
 
         this.table = (options.table != null) ? options.table : (connConf.table || 'sessions');
+        // #B207 — a non-positive ttl is refused at construction: `ttl: 0` used
+        // to collapse to the maxAge fallback through double truthiness (options
+        // preserve + `this.ttl ||` at every use site), silently meaning "unset",
+        // while a RESOLVED ttl <= 0 reached backend-specific semantics. A ttl
+        // is a positive number of seconds, or unset.
+        if (options.ttl != null && !(options.ttl > 0)) {
+            throw new Error('[' + bundle + '][ScylladbStore] `ttl` must be a positive number of seconds or unset — got '
+                + JSON.stringify(options.ttl) + ' (store options). `ttl: 0` is not supported (it previously behaved as unset).');
+        }
+        if (connConf.ttl != null && !(connConf.ttl > 0)) {
+            throw new Error('[' + bundle + '][ScylladbStore] `ttl` must be a positive number of seconds or unset — got '
+                + JSON.stringify(connConf.ttl) + ' (connectors.json session entry). `ttl: 0` is not supported (it previously behaved as unset).');
+        }
         // #B163 — was `connConf.ttl || oneDay`: the implicit one-day default made the
         // cookie-maxAge fallback in set()/touch() unreachable; unset now stays null (couchbase parity).
         this.ttl   = (options.ttl   != null) ? options.ttl   : (connConf.ttl   || null);
@@ -218,6 +232,14 @@ module.exports = function(session, bundle) {
         if ('function' !== typeof fn) fn = noop;
         var maxAge = sess.cookie && sess.cookie.maxAge;
         var ttl    = this.ttl || ('number' === typeof maxAge ? maxAge / 1000 | 0 : oneDay);
+
+        // #B207 — a resolved ttl <= 0 must never reach CQL: `USING TTL 0`
+        // stores the row WITHOUT expiry (immortal), and a negative TTL is a
+        // server error. No-op — the existing record dies on its original
+        // schedule (mirrors the #B166 touch() guard).
+        if (ttl <= 0) {
+            return fn(null);
+        }
 
         if (ttl > 0) {
             sess.lastModified = new Date().toISOString();

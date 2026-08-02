@@ -71,7 +71,7 @@ module.exports = function(session, bundle){
      * @constructor
      * @param {object}  options
      * @param {object}  options.db                        - Open Couchbase bucket (required).
-     * @param {number}  [options.ttl=null]                - Expiry in seconds. Unset, the cookie's maxAge applies, then one day.
+     * @param {number}  [options.ttl=null]                - Expiry in seconds. Unset, the cookie's maxAge applies, then one day. Must be > 0 when set — non-positive refuses (#B207).
      * @param {string}  [options.prefix='sess:']          - Document key prefix.
      * @param {number}  [options.connectionTimeout=10000] - Connect-time timeout in ms.
      * @param {number}  [options.operationTimeout=10000]  - Per-operation timeout in ms.
@@ -99,6 +99,15 @@ module.exports = function(session, bundle){
         this.client.connectionTimeout = options.connectionTimeout || 10000;
         this.client.operationTimeout = options.operationTimeout || 10000;
 
+        // #B207 — parity with the redis/sqlite/mongodb/scylladb stores: a
+        // non-positive ttl is refused at construction. couchbase collapsed 0
+        // at the constructor and still upserted a ZERO expiry — a document
+        // that never expires — when the cookie's decaying maxAge resolved to
+        // <= 0 at set()/touch().
+        if (options.ttl != null && !(options.ttl > 0)) {
+            throw new Error('['+ bundle +'][SessionStore v3] `ttl` must be a positive number of seconds or unset — got '
+                + JSON.stringify(options.ttl) + ' (store options). `ttl: 0` is not supported (it previously behaved as unset).');
+        }
         this.ttl = options.ttl || null;
     }
 
@@ -190,6 +199,15 @@ module.exports = function(session, bundle){
                     : oneDay)
                 ;
 
+            // #B207 — a resolved ttl <= 0 (decaying cookie.maxAge at/past
+            // expiry) must never reach the SDK: a zero expiry stores the
+            // document WITHOUT expiration, and a negative one is SDK-version-
+            // dependent. No-op — the existing record keeps its original
+            // expiry (mirrors the #B166 guard the sibling stores carry).
+            if (ttl <= 0) {
+                return fn(null);
+            }
+
             if (ttl > 0) {
                 sess.lastModified = new Date().toISOString();
             }
@@ -241,7 +259,9 @@ module.exports = function(session, bundle){
      * Also re-stamps `sess.lastModified` (ISO 8601, UTC) whenever `ttl > 0`.
      * The stamp is unconditional by design: the `upsert` extends the document's
      * expiry on every call, and the client-side session countdown derives its
-     * origin from that stamp, so it must track every extension (#B165).
+     * origin from that stamp, so it must track every extension (#B165). A
+     * resolved ttl <= 0 is a no-op — never extend with a non-positive
+     * expiry (#B207).
      *
      * @param {String} sid
      * @param {Session} sess
@@ -258,6 +278,13 @@ module.exports = function(session, bundle){
                 ? maxAge / 1000 | 0
                 : oneDay)
             ;
+
+        // #B207 — same guard as set(): never extend with a non-positive
+        // expiry (zero = the document never expires; negative is SDK-version-
+        // dependent). The #B166 sibling-store guards are identical.
+        if (ttl <= 0) {
+            return fn(null);
+        }
 
         // #B165 — an idle-check used to gate this stamp. It compared an elapsed
         // value in MILLISECONDS against `ttl` in SECONDS, so it fired ~1000x too
