@@ -5970,9 +5970,13 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
      * Replay a previously paused request (see `pauseRequest()`). Reads the `haltedRequest`
      * snapshot from `requestStorage` (defaulting to `req.session`), restores the original
      * url / method / data / params onto the live request, then re-dispatches it: a GET is
-     * replayed by redirecting to the resolved url; a non-GET is re-dispatched in-process to
-     * the original controller action (crossing namespaces via `requireController()` when
-     * needed). The snapshot is cleared from storage once consumed. For a GET replay, the
+     * replayed by redirecting to the byte-exact halted URL — query string included —
+     * whenever a live session exists (#B215; with no live session the URL is recomposed
+     * from the route pattern plus the snapshotted params, or the halted data as query
+     * params — the composed URL being the data's only travel channel there); a non-GET is
+     * re-dispatched in-process to the original controller action (crossing namespaces via
+     * `requireController()` when needed). The snapshot is cleared from storage once
+     * consumed. For a GET replay, the
      * halted request's extra data rides the session flash channel (`inheritedData`,
      * consumed one-shot by the next routed GET) whenever a live session exists — a custom
      * `requestStorage` with no live session degrades to a plain replay without the data.
@@ -6043,7 +6047,23 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         if (data.count() > 0) {
             dataAsParams = JSON.clone(haltedRequest.data);
         }
-        var url             = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params||dataAsParams).url;
+        // #B215 — replay the byte-exact halted URL (query string included) whenever a
+        // live session exists. The recompose below only carries query keys captured
+        // into `req.params` during the original match (keys declared in BOTH the
+        // rule's `requirements` AND `param`): a key bound in `param` only substitutes
+        // its `:key` placeholders at match-commit yet never reaches req.params, and an
+        // undeclared key never does either — so the GET replay arrived query-less,
+        // matched anyway, and rendered literal `:key` template paths as a 500. The
+        // inheritedData flash cannot heal that: router.js merges it into req.get AFTER
+        // matching. `haltedRequest.url` is stamped by every pauseRequest(), so
+        // in-flight pre-#B215 snapshots replay correctly too. The session-less flow
+        // keeps the recompose: with no session the flash cannot carry the halted data,
+        // and the composed URL's query params are its only travel channel.
+        // was: var url = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params||dataAsParams).url;
+        var hasLiveSession  = ( typeof(req.session) != 'undefined' && req.session ) ? true : false;
+        var url             = ( hasLiveSession && typeof(haltedRequest.url) != 'undefined' && haltedRequest.url )
+                                ? haltedRequest.url
+                                : lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params||dataAsParams).url;
         var requiredController = self; // by default;
         if ( req.routing.namespace != haltedRequest.routing.namespace ) {
             try {

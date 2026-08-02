@@ -4649,7 +4649,7 @@ describe('39 - resumeRequest replays a halted GET request (behavioral)', functio
     });
 
     it('defaults storage to req.session when requestStorage is omitted', function() {
-        withStubbedRoute('/resolved', function () {
+        withStubbedRoute('/resolved', function (routeCalls) {
             var session = { haltedRequest: haltedGet() };
             var inst    = makeInstance39({ session: session });
             var redirectCalls = [];
@@ -4657,7 +4657,10 @@ describe('39 - resumeRequest replays a halted GET request (behavioral)', functio
 
             inst.resumeRequest();   // no explicit storage → reads req.session
 
-            assert.equal(session.haltedRequestUrlResumed, '/resolved');
+            // #B215: with a live session the GET replay uses the byte-exact
+            // haltedRequest.url — the recompose (stubbed here) is not consulted.
+            assert.equal(routeCalls.length, 0, 'raw-URL branch: getRoute not called');
+            assert.equal(session.haltedRequestUrlResumed, '/orders/42');
             assert.equal(redirectCalls.length, 1, 'redirected via the session-held snapshot');
         });
     });
