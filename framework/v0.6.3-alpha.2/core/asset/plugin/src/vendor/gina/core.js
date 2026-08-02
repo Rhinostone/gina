@@ -224,6 +224,7 @@ require([
     "gina/validator",
     "gina/popin",
     "gina/storage",
+    "gina/nav",
 
     // lib
     "utils/dom",
@@ -315,6 +316,49 @@ require([
         }
     };
     bootValidator();
+
+    // Boot the navigation handler (#SPA1 — Tier 1) so the declarative
+    // `data-gina-nav` API is active WITHOUT bundle code calling
+    // `new gina.nav()` — the sibling of the popin/validator boots above,
+    // with one deliberate difference: navigation is OPT-IN PER PROJECT
+    // (SPA design decision 3 — upgrading gina must not change navigation
+    // behaviour on existing pages). The shim therefore constructs ONLY when
+    // the page carries a `data-gina-nav` swap-region marker; the `"false"`
+    // value is the per-LINK opt-out spelling and does not opt a page in.
+    // Pages without the marker stay byte-identical: no listener, no
+    // `gina.nav` publish, no history/scroll changes. Gated on
+    // `isFrameworkLoaded` like its siblings — by then the DOM is ready
+    // (onGinaLoaded runs from the DOMContentLoaded-driven scheduler), so the
+    // marker query observes the rendered page.
+    var _navBootTries = 0;
+    var bootNav = function () {
+        try {
+            if ( !window['gina'] || !window['gina']['isFrameworkLoaded'] ) {
+                if ( _navBootTries++ < 100 ) {
+                    (window['setTimeout'] || function (fn) { fn(); })(bootNav, 50);
+                }
+                return;
+            }
+            if ( window['gina']['hasNavHandler'] ) {
+                return;
+            }
+            if (
+                typeof(document.querySelector) != 'function'
+                || !document.querySelector('[data-gina-nav]:not([data-gina-nav="false"])')
+            ) {
+                return;
+            }
+            var Nav = require('gina/nav');
+            if ( typeof(Nav) == 'function' ) {
+                new Nav({}).on('ready', function () {});
+            }
+        } catch (navBootErr) {
+            if ( typeof(console) != 'undefined' && console.error ) {
+                console.error('[gina] nav boot failed', navBootErr.stack || navBootErr);
+            }
+        }
+    };
+    bootNav();
 });
 
 function getDependencies(gina, cb) {

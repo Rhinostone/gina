@@ -30,6 +30,7 @@
     // removed: toolbar is no longer bundled — the statusbar.html shim provides ginaToolbar in dev mode
     "gina/popin"            : "vendor/gina/popin/main",
     "gina/link"             : "vendor/gina/link/main",
+    "gina/nav"              : "vendor/gina/nav/main",
     "gina/storage"          : "../../../plugins/lib/storage/src/main",
     "gina/validator"        : "../../../plugins/lib/validator/src/main"
   },
