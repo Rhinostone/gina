@@ -149,7 +149,7 @@
         },
         "useScopeAndCollections": {
           "type": "boolean",
-          "description": "Couchbase only. Enable scope and collection support (SDK v3+). Defaults to true.",
+          "description": "Couchbase only. Accepted but currently inert — the connector partitions data via _scope/_collection document fields (one bucket, default collection); named-collection KV access is available per call via entity.getConnection(scope, collection). Reserved for a possible future native scope/collection routing mode.",
           "default": true
         },
         "timeouts": {

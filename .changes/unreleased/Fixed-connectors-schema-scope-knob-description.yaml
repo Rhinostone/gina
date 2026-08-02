@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'Corrected the published schema/connectors.json description of the couchbase `useScopeAndCollections` option: it claimed "Enable scope and collection support (SDK v3+)" while the option is accepted but currently inert. The connector partitions data via `_scope`/`_collection` document fields (one bucket, default collection); named-collection KV access is available per call via `entity.getConnection(scope, collection)`; the option is reserved for a possible future native scope/collection routing mode.'
+time: 2026-08-02T02:58:22+01:00
