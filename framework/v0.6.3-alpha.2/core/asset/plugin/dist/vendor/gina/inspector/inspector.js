@@ -2269,7 +2269,12 @@
     /**
      * #QI2 — Fetch live index data from the /_gina/indexes endpoint.
      * Called when the Query tab renders queries with N/A index badges.
-     * On success, caches the result and re-renders the Query tab.
+     * On success, caches the result and re-renders the Query tab's tree
+     * root (`#tree-query`) — the container {@link renderTab} owns. It must
+     * never replace the scroll wrapper's children instead: `#tree-query`
+     * lives INSIDE the wrapper, so a wrapper-level write destroys it and
+     * every later `renderTab('query')` bails on the missing container —
+     * freezing the Query pane and badge until the Inspector reloads (#B222).
      *
      * @inner
      */
@@ -2289,13 +2294,15 @@
                 if (xhr.status === 200) {
                     try {
                         _liveIndexes = JSON.parse(xhr.responseText);
-                        // Re-render query tab if we have queries
+                        // Re-render query tab if we have queries — into
+                        // #tree-query, the container renderTab() owns (#B222).
+                        // Writing the scroll wrapper here instead destroyed
+                        // #tree-query (a child of the wrapper), after which
+                        // every later renderTab('query') bailed on the missing
+                        // container and the Query pane froze until reload.
                         if (_lastQueries) {
-                            var el = document.getElementById('tab-query');
-                            if (el) {
-                                var content = el.querySelector('.bm-scroll-area');
-                                if (content) content.innerHTML = renderQueryContent(_lastQueries);
-                            }
+                            var panel = qs('#tree-query');
+                            if (panel) panel.innerHTML = renderQueryContent(_lastQueries);
                         }
                     } catch (e) { _liveIndexes = { connectors: {} }; }
                 }

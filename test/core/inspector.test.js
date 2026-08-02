@@ -9391,3 +9391,115 @@ describe('84 - bundle-follow: server channels re-point on bundle crossing (#B205
     });
 
 });
+
+
+// ── 85 — fetchLiveIndexes re-render must target #tree-query (#B222) ──────────
+
+describe('85 - fetchLiveIndexes success re-render targets #tree-query, never the scroll-area wrapper (#B222)', function() {
+
+    // The Query tab shell nests the render container INSIDE the scroll wrapper:
+    //   <div class="bm-scroll-area" data-tab="query"><div id="tree-query">…</div></div>
+    // renderTab('query') writes #tree-query and BAILS silently when it is absent
+    // (`var treeEl = qs('#tree-' + name); if (!treeEl) return;`). So a re-render
+    // that replaces the WRAPPER's innerHTML destroys #tree-query and freezes the
+    // Query pane + badge for every later payload (navigation, XHR, refresh
+    // button) until the Inspector window itself is reloaded — the #B222 bug.
+    // The live-index fetch fires whenever a rendered query still has
+    // `indexes: null` (EXPLAIN pending / unsupported), so the freeze armed on
+    // most first renders and re-armed on every refresh-button click.
+
+    var INSPECTOR_85 = path.join(BM_DIR, 'inspector.js');
+    var SHELL_85     = path.join(BM_DIR, 'index.html');
+    var SRC_COPY_85  = path.join(FW, 'core/asset/plugin/src/vendor/gina/inspector/js/inspector.js');
+    var _src85;
+    function getSrc85() { return _src85 || (_src85 = fs.readFileSync(INSPECTOR_85, 'utf8')); }
+
+    /** Same started-flag brace walker as §84 (no braces inside string literals here). */
+    function extractFn85(src, decl) {
+        var i = src.indexOf(decl);
+        if (i < 0) throw new Error('decl not found: ' + decl);
+        if (src.indexOf(decl, i + 1) > -1) throw new Error('decl not unique: ' + decl);
+        var depth = 0, started = false, j = i;
+        for (; j < src.length; j++) {
+            var c = src[j];
+            if (c === '{') { depth++; started = true; }
+            else if (c === '}') {
+                depth--;
+                if (started && depth === 0) { j++; break; }
+            }
+        }
+        if (!started || depth !== 0) throw new Error('unbalanced braces for: ' + decl);
+        return src.slice(i, j);
+    }
+
+    // ── Premise (control that documents WHY the wrapper write is destructive) ──
+
+    it('shell premise: #tree-query is nested inside the query scroll-area wrapper', function() {
+        var shell = fs.readFileSync(SHELL_85, 'utf8');
+        var wrap = shell.indexOf('class="bm-scroll-area" data-tab="query"');
+        assert.ok(wrap > -1, 'query scroll-area wrapper must exist in the shell');
+        var root = shell.indexOf('id="tree-query"', wrap);
+        assert.ok(root > -1 && root - wrap < 200,
+            '#tree-query must sit inside the query scroll-area (this nesting is what makes a wrapper innerHTML write destroy the render container)');
+    });
+
+    it('renderTab bails silently on a missing tree container (the freeze mechanism)', function() {
+        var blk = extractFn85(getSrc85(), 'function renderTab(name)');
+        assert.match(blk, /var treeEl = qs\('#tree-' \+ name\);\s*\n\s*if \(!treeEl\) return;/,
+            'renderTab must early-return on a missing #tree-<name> — the pin documents why destroying #tree-query freezes the pane');
+    });
+
+    // ── The fix: re-render into the container renderTab owns ──────────────
+
+    it('fetchLiveIndexes success re-render targets #tree-query', function() {
+        var blk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
+        var re = blk.indexOf("qs('#tree-query')");
+        assert.ok(re > -1, 'the re-render must query #tree-query (the container renderTab owns)');
+        assert.ok(blk.indexOf('renderQueryContent(_lastQueries)', re) > re,
+            'the #tree-query lookup must feed the renderQueryContent re-render');
+    });
+
+    it('fetchLiveIndexes never touches the scroll-area wrapper', function() {
+        // Block-scoped negative: the wrapper class is legitimately used elsewhere
+        // (fold-state capture/restore, scroll-position restore) — only the
+        // fetchLiveIndexes block must not reference it.
+        var blk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
+        assert.ok(blk.indexOf('bm-scroll-area') < 0,
+            'the live-index re-render must not target the scroll wrapper — replacing its children destroys #tree-query');
+    });
+
+    // ── Behavioral: drive the extracted onload against a fake DOM ─────────
+
+    it('extracted onload writes the tree root, not the wrapper (real bytes, no replica)', function() {
+        var fnBlk = extractFn85(getSrc85(), 'function fetchLiveIndexes()');
+        var onload = extractFn85(fnBlk, 'xhr.onload = function()');
+        // Fake DOM: a wrapper containing the tree root, both recording writes.
+        var treeEl = { innerHTML: '' };
+        var wrapEl = { innerHTML: '', querySelector: function (sel) { return sel === '.bm-scroll-area' ? wrapEl : null; } };
+        var tabEl  = { querySelector: function (sel) { return sel === '.bm-scroll-area' ? wrapEl : null; } };
+        var doc = { getElementById: function (id) { return id === 'tab-query' ? tabEl : null; } };
+        var qsFake = function (sel) { return sel === '#tree-query' ? treeEl : null; };
+        var runner = new Function('xhr', 'document', 'qs', 'renderQueryContent', '_lastQueries',
+            "var _liveIndexes = null; var _liveIndexesFetching = true; var __on = (" + onload.replace(/^xhr\.onload = /, '') + "); __on(); return { liveIndexes: _liveIndexes, fetching: _liveIndexesFetching };");
+        var out = runner(
+            { status: 200, responseText: '{"connectors":{}}' },
+            doc, qsFake,
+            function () { return 'RENDERED_CARDS'; },
+            [ { type: 'SQL', statement: 'SELECT 1', indexes: null } ]
+        );
+        assert.strictEqual(out.fetching, false, 'onload must clear the fetching flag');
+        assert.deepStrictEqual(out.liveIndexes, { connectors: {} }, 'onload must cache the parsed index payload');
+        assert.strictEqual(treeEl.innerHTML, 'RENDERED_CARDS',
+            'the re-render must land in #tree-query (pre-fix bytes wrote the wrapper instead, destroying the tree root)');
+        assert.strictEqual(wrapEl.innerHTML, '', 'the scroll wrapper children must be left alone');
+    });
+
+    // ── Build-step lock: the served dist copy is the src, verbatim ────────
+
+    it('dist inspector.js is byte-identical to src (verbatim-copy build step)', function() {
+        var src  = fs.readFileSync(SRC_COPY_85, 'utf8');
+        var dist = getSrc85();
+        assert.strictEqual(dist, src, 'dist/vendor/gina/inspector/inspector.js must be the verbatim src copy');
+    });
+
+});
