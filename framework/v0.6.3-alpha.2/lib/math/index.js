@@ -194,10 +194,24 @@ function MathHelper() {
         }
     }
 
+    /**
+     * Serialize an object or array into a stable string for checksumming.
+     *
+     * Plain objects become sorted `key:value` pairs joined with `,` (function
+     * properties skipped); arrays become the JSON of a sorted copy. Both forms
+     * are member-order-insensitive, and the input is never mutated.
+     *
+     * @private
+     * @param {object|array} obj
+     * @returns {string} serialized form
+     * */
     var objectToString = function(obj) {
         var str = '';
         if (Array.isArray(obj)) {
-            obj = JSON.stringify(obj.sort(), null, 0);
+            // #B208 — serialize a sorted COPY into `str`: the previous assignment
+            // targeted `obj` and returned the still-empty `str`, collapsing every
+            // array input to the checksum of '' — and `sort()` mutated the caller's array.
+            str = JSON.stringify(obj.slice().sort(), null, 0);
         } else {
             var arr = [], i = 0;
             for (let k in obj) {

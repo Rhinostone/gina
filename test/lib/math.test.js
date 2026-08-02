@@ -207,3 +207,53 @@ describe('05 - math.checkSumSync — file/data dispatch on extension-shaped tail
         );
     });
 });
+
+describe('06 - math.checkSumSync — array and object serialization', function () {
+    // #B208 — the array branch of the serializer assigned its JSON to the wrong
+    // variable and returned the empty string, so EVERY array input collapsed to
+    // the checksum of '' (all arrays collided), and it sorted the caller's array
+    // in place. Arrays must produce a real, order-insensitive content sum.
+    var crypto = require('crypto');
+
+    var sha1 = function (data) {
+        return crypto.createHash('sha1').update(data, 'utf8').digest('hex');
+    };
+
+    it('different arrays produce different checksums', function () {
+        assert.notEqual(
+            math.checkSumSync(['user@example.com'], 'sha1'),
+            math.checkSumSync(['completely', 'different', 'values'], 'sha1')
+        );
+    });
+
+    it('an array checksum is not the empty-string hash', function () {
+        assert.notEqual(math.checkSumSync(['user@example.com'], 'sha1'), sha1(''));
+    });
+
+    it('an array checksum is the hash of the JSON of a sorted copy', function () {
+        assert.equal(
+            math.checkSumSync(['b', 'a'], 'sha1'),
+            sha1(JSON.stringify(['a', 'b']))
+        );
+    });
+
+    it('an array checksum is order-insensitive', function () {
+        assert.equal(
+            math.checkSumSync(['b', 'a'], 'sha1'),
+            math.checkSumSync(['a', 'b'], 'sha1')
+        );
+    });
+
+    it('does not mutate the input array', function () {
+        var input = ['b', 'a'];
+        math.checkSumSync(input, 'sha1');
+        assert.deepEqual(input, ['b', 'a']);
+    });
+
+    it('an object checksum is key-order-insensitive (control)', function () {
+        assert.equal(
+            math.checkSumSync({ a: 1, b: 2 }, 'sha1'),
+            math.checkSumSync({ b: 2, a: 1 }, 'sha1')
+        );
+    });
+});
