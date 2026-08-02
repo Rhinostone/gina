@@ -17669,6 +17669,18 @@ function ValidatorPlugin(rules, data, formId, culture) {
                     && !/^(true|false)$/.test($target[i].value)
                     ) {
                         fields[name] = false;
+                    } else if ( // #B221: same collection arm as getFormValidationInfos --
+                        // an unchecked non-boolean radio group with a truthy isRequired
+                        // is collected as an empty value so the submit-path validation
+                        // can adjudicate it (see the twin arm there for the rationale).
+                        $target[i].type == 'radio'
+                        && rules
+                        && typeof(rules[name]) != 'undefined'
+                        && /^true$/i.test(rules[name].isRequired)
+                        && typeof(rules[name].isBoolean) == 'undefined'
+                        && typeof(fields[name]) == 'undefined'
+                    ) {
+                        fields[name] = '';
                     }
 
                 } else {
@@ -17825,8 +17837,17 @@ function ValidatorPlugin(rules, data, formId, culture) {
     /**
      * getFormValidationInfos
      *
+     * Collects a form's named, non-disabled controls into a name->value map
+     * (`fields`) plus a name->DOM-handle map (`$fields`). Radio groups: a
+     * checked member's value is collected by the boolean/legacy arms; an
+     * unchecked non-boolean group whose rule declares a truthy `isRequired`
+     * is collected as an empty string (#B221) so the rule engine can
+     * adjudicate it; any other unchecked group stays absent (native parity;
+     * boolean-declared groups are owned by the force-false arm).
+     *
      * @param {object} $form - form target (DOMObject), not the instance
      * @param {object} [rules]
+     * @param {boolean} [isOnResetMode=false] - resets hidden/text values to their defaults while walking
      *
      * @returns {object} { .fields, .$fields, .rules }
      */
@@ -17982,6 +18003,28 @@ function ValidatorPlugin(rules, data, formId, culture) {
 
                 ) {
                     fields[name] = false;
+                } else if ( // #B221: an unchecked non-boolean radio group with a
+                    // declared truthy isRequired never entered `fields`, so no
+                    // rule (isRequired above all) could adjudicate it -- and a
+                    // radio-group-only form short-circuited the whole pass
+                    // (fields count == 0 reads as nothing-to-validate). Collect
+                    // it as an empty value so the engine's generic emptiness
+                    // test fires. A checked member is always collected by the
+                    // arms above; the already-collected guard keeps this arm
+                    // from resetting it when an unchecked member iterates after
+                    // the checked one. Groups with no rule, isRequired:false,
+                    // or an isBoolean declaration keep the legacy
+                    // absent-when-unchecked shape (boolean groups are owned by
+                    // the force-false arm above; optional groups bypass on
+                    // empty anyway, so their wire shape stays byte-identical).
+                    $form[i].type == 'radio'
+                    && rules
+                    && typeof(rules[name]) != 'undefined'
+                    && /^true$/i.test(rules[name].isRequired)
+                    && typeof(rules[name].isBoolean) == 'undefined'
+                    && typeof(fields[name]) == 'undefined'
+                ) {
+                    fields[name] = '';
                 }
 
             } else {
