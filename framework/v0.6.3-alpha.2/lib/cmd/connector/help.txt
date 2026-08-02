@@ -300,7 +300,7 @@
     comments are lost on rewrite.
 
     Driver resolution uses the framework's built-in driver range table
-    (see `lib/cmd/connector/add.js` DRIVER_MAP):
+    (see `lib/connector-registry/src/main.js` DRIVER_MAP):
 
       couchbase     → couchbase            >= 3.0.0
       redis         → ioredis              >= 5.0.0
