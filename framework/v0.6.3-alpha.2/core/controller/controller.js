@@ -5899,7 +5899,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
     /**
      * Snapshot the current request as a `haltedRequest` and store it in `requestStorage`.
      * Typically called before redirecting to a login page so the original request can be
-     * replayed after authentication via `resumeRequest()`.
+     * replayed after authentication via `resumeRequest()`. The snapshotted `url` is the
+     * byte-exact incoming URL — `req.originalUrl` when the engine preserves it (the isaac
+     * engine strips the query string from `req.url` before controllers run; express's own
+     * `originalUrl` is native), falling back to `req.url` for requests without it.
      *
      * @param {object} data               - Current action data to preserve
      * @param {object} [requestStorage]   - Storage target; defaults to `req.session`
@@ -5927,7 +5930,15 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
             , res           = local.res
             , next          = local.next
             , haltedRequest = {
-                url     : req.url,
+                // #B219 — the isaac engine strips the query string from req.url before
+                // controllers run (the query is parsed into req.get); the byte-exact
+                // incoming URL survives on req.originalUrl, stamped as the engine
+                // listener's first statement. Express sets originalUrl natively and does
+                // not strip. Snapshot the preserved URL so the #B215 byte-exact replay
+                // actually carries the query; bare/harness requests without the property
+                // keep the historical req.url source.
+                // was: url     : req.url,
+                url     : req.originalUrl || req.url,
                 routing : req.routing,
                 method  : req.method.toLowerCase(),
                 data    : JSON.clone(data)
@@ -6056,7 +6067,10 @@ if ( /^local$/i.test(process.env.NODE_SCOPE) ) {
         // matched anyway, and rendered literal `:key` template paths as a 500. The
         // inheritedData flash cannot heal that: router.js merges it into req.get AFTER
         // matching. `haltedRequest.url` is stamped by every pauseRequest(), so
-        // in-flight pre-#B215 snapshots replay correctly too. The session-less flow
+        // in-flight pre-#B215 snapshots replay correctly too (#B219: since the isaac
+        // engine strips the query from req.url before controllers run, pauseRequest
+        // snapshots req.originalUrl — pre-#B219 isaac snapshots are path-only and
+        // replay exactly as captured). The session-less flow
         // keeps the recompose: with no session the flash cannot carry the halted data,
         // and the composed URL's query params are its only travel channel.
         // was: var url = lib.routing.getRoute(haltedRequest.routing.rule, haltedRequest.params||dataAsParams).url;
