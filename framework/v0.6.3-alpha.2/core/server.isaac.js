@@ -2057,19 +2057,38 @@ function ServerEngineClass(options) {
                         localAsset = _strippedRoutingAsset;
                     }
                 }
+                // Slice 3 (SPA Tier 1) — per-variant weak ETag, computed once at init by
+                // core/server.js beside the maps themselves (#B212 single-builder);
+                // ONE weak tag per variant covers this fast-path's content-encoded
+                // file representations too. Kept in sync with the engine-agnostic
+                // server.js handler per the /_gina/* endpoint rule.
+                var _routingAssetEtag = ( request._ginaIsProxyHost === true && options.clientRoutingAssets )
+                    ? options.clientRoutingAssets.strippedEtag
+                    : ( options.clientRoutingAssets ? options.clientRoutingAssets.fullEtag : null );
                 response.setHeader('content-type', localAsset.mime);
                 response.setHeader('vary', 'Origin');
                 // #B66 — a shared cache must not cross-serve the stripped (proxied) and
-                // full (raw) variants under the same URL; mark the proxied variant private.
-                response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, max-age=86400' : 'public, max-age=86400');
+                // full (raw) variants under the same URL; mark the proxied variant
+                // private. Slice 3 (SPA Tier 1): `no-cache` = revalidate-before-use — each
+                // page boot costs one conditional GET (usually a 304), so a restart's
+                // new route table reaches returning browsers immediately instead of
+                // after the old 24h max-age window.
+                response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, no-cache' : 'public, no-cache');
                 response.setHeader('x-content-type-options', 'nosniff');
                 response.setHeader('x-frame-options', 'DENY');
                 response.setHeader('x-xss-protection', '1; mode=block');
+                if (_routingAssetEtag) {
+                    response.setHeader('etag', _routingAssetEtag);
+                }
                 // #HDR8 Phase 2 — gated on settings.json > server.hidePoweredBy
                 // (inline form because this site uses setHeader instead of the
                 // writeHead object-literal headers shape that _setPoweredByHeader covers)
                 if (!options.hidePoweredBy) {
                     response.setHeader('X-Powered-By', 'Gina/'+ GINA_VERSION);
+                }
+                if ( _routingAssetEtag && request.headers['if-none-match'] === _routingAssetEtag ) {
+                    response.statusCode = 304;
+                    return response.end();
                 }
 
                 var filename  =  _(localAsset.path +'/'+ localAsset.file, true);

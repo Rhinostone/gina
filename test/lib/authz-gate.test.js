@@ -731,35 +731,61 @@ describe('§09 — the slice-2 boot lint (pure-logic replica of the FULL core/se
     });
 });
 
-describe('§10 — the client-served routing blob strips the authorization keys (core/server.js — the shared #B212 builder, both engines)', function () {
+describe('§10 — the client-served routing blob withholds the authorization keys (core/server.js — the shared #B212 ALLOWLIST builder, both engines)', function () {
 
-    // Verbatim-lifted from the core/server.js buildClientRoutingAssets loop body
-    // (#B212 — the build moved there from server.isaac.js so both engines serve
-    // the same strip; isaac now consumes the built maps for its file fast-path).
+    // Replica of core/server.js buildClientRoutingAssets' per-route cut
+    // (#B212 moved the build there from server.isaac.js; Slice 3 (#SPA1)
+    // rebuilt it as an ALLOWLIST, so the #COMPLY1/#COMPLY10 withholding is
+    // structural — an authorization key is simply never named, and neither is
+    // any FUTURE key). Mirrors the shipped roster + URL-binding param filter.
     function stripLikeIsaac(route) {
-        const { _comment, middleware, ...clean } = route;
-        if ( clean.param && typeof(clean.param) == 'object' ) {
-            const { requireAuth, roles, policy, ...cleanParam } = clean.param;
-            clean.param = cleanParam;
+        var ROUTE_KEYS = ['url', 'method', 'webroot', 'bundle', 'hostname', 'host', 'negotiate'];
+        if ( !route || typeof(route) != 'object' ) return route;
+        var clean = {};
+        for (var i = 0; i < ROUTE_KEYS.length; i++) {
+            if ( typeof(route[ROUTE_KEYS[i]]) != 'undefined' ) clean[ROUTE_KEYS[i]] = route[ROUTE_KEYS[i]];
+        }
+        if ( route.requirements && typeof(route.requirements) == 'object' ) {
+            clean.requirements = {};
+            for (var rk in route.requirements) {
+                if ( !/^validator\:\:/i.test(String(route.requirements[rk])) ) clean.requirements[rk] = route.requirements[rk];
+            }
+        }
+        if ( route.param && typeof(route.param) == 'object' ) {
+            clean.param = {};
+            var urlVars = String(route.url || '').match(/\:[-_a-zA-Z0-9]+/g) || [];
+            for (var v = 0; v < urlVars.length; v++) {
+                var name = urlVars[v].substr(1);
+                if ( typeof(route.param[name]) != 'undefined' ) clean.param[name] = route.param[name];
+            }
+            if ( typeof(route.param.control) == 'string' && /^redirect$/i.test(route.param.control) ) {
+                clean.isRedirect = true;
+            }
         }
         return clean;
     }
 
-    it('01. source pin — the boot-built blob rebuilds param without requireAuth/roles/policy', function () {
-        assert.match(SERVER_SRC, /const \{ requireAuth, roles, policy, \.\.\.cleanParam \} = clean\.param;/);
-        assert.match(SERVER_SRC, /clean\.param = cleanParam;/);
+    it('01. source pin — the builder is an explicit allowlist, and the authorization keys are not on it', function () {
+        var fnIdx = SERVER_SRC.indexOf('function buildClientRoutingAssets(');
+        assert.ok(fnIdx > -1, 'the shared builder');
+        var rosterIdx = SERVER_SRC.indexOf("['url', 'method', 'webroot', 'bundle', 'hostname', 'host', 'negotiate']", fnIdx);
+        assert.ok(rosterIdx > fnIdx, 'the route-level allowlist roster');
+        // no roster entry names an authorization key — structural withholding
+        var roster = "['url', 'method', 'webroot', 'bundle', 'hostname', 'host', 'negotiate']";
+        assert.ok(roster.indexOf('requireAuth') < 0 && roster.indexOf('roles') < 0
+               && roster.indexOf('policy') < 0 && roster.indexOf('public') < 0);
     });
 
-    it('02. DECISIVE — the strip runs BEFORE the #B66 stripped variant is derived, so BOTH client blobs inherit it', function () {
-        var stripIdx   = SERVER_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;');
-        var derivedIdx = SERVER_SRC.indexOf('var _routingStripped = JSON.clone(_routing);');
-        assert.ok(stripIdx > -1, 'the strip');
-        assert.ok(derivedIdx > -1, 'the #B66 host-stripped derivation');
-        assert.ok(stripIdx < derivedIdx,
-            'stripping after the derivation would leave the proxied-client blob carrying the keys');
+    it('02. DECISIVE — the #B66 stripped variant is derived AFTER the allowlist cut, so BOTH client blobs inherit it', function () {
+        var fnIdx      = SERVER_SRC.indexOf('function buildClientRoutingAssets(');
+        var rosterIdx  = SERVER_SRC.indexOf("['url', 'method', 'webroot', 'bundle', 'hostname', 'host', 'negotiate']", fnIdx);
+        var derivedIdx = SERVER_SRC.indexOf('var _routingStripped = JSON.clone(_routing);', fnIdx);
+        assert.ok(rosterIdx > fnIdx, 'the allowlist cut');
+        assert.ok(derivedIdx > rosterIdx,
+            'deriving the stripped variant before the cut would leave the proxied-client blob carrying withheld keys');
     });
 
-    it('03. replica — only the three authorization keys are dropped; the client contract survives', function () {
+    it('03. replica — the authorization keys are withheld; the MEASURED client contract survives', function () {
         var served = stripLikeIsaac({
             method    : 'GET',
             url       : '/web/admin',
@@ -771,10 +797,13 @@ describe('§10 — the client-served routing blob strips the authorization keys 
         assert.equal(typeof served.param.requireAuth, 'undefined');
         assert.equal(typeof served.param.roles, 'undefined');
         assert.equal(typeof served.param.policy, 'undefined');
-        // The keys the client-side matcher / toUrl actually read all survive:
-        assert.equal(served.param.control, 'panel');
-        assert.equal(served.param.file, 'admin');
-        assert.equal(served.param.path, '/x');
+        // Slice 3 (#SPA1, operator-gated): the dispatch keys are server-side
+        // contracts too — the measured client readers are url/webroot/bundle/
+        // host(name), URL-placeholder bindings, requirements key-presence and
+        // the derived isRedirect. control/file/path no longer ship.
+        assert.equal(typeof served.param.control, 'undefined');
+        assert.equal(typeof served.param.file, 'undefined');
+        assert.equal(typeof served.param.path, 'undefined');
         assert.equal(served.url, '/web/admin');
         assert.equal(served.webroot, '/web/', 'webroot is load-bearing for the client toUrl path (#B66)');
         // ...and the pre-existing strips still hold:
@@ -782,7 +811,7 @@ describe('§10 — the client-served routing blob strips the authorization keys 
         assert.equal(typeof served._comment, 'undefined');
     });
 
-    it('04. a param-less route flows through the strip untouched (guarded)', function () {
+    it('04. a param-less route flows through with its allowlisted keys only (guarded)', function () {
         var served = stripLikeIsaac({ method: 'GET', url: '/x' });
         assert.equal(served.url, '/x');
         assert.equal(typeof served.param, 'undefined');
@@ -1496,12 +1525,21 @@ describe('§15 — #COMPLY10 deny-by-default: source pins', function () {
         assert.ok(SERVER_SRC.indexOf('process.gina._authConf.byBundle') > -1
                && SERVER_SRC.indexOf('? process.gina._authConf.byBundle : {}') > -1, 'reads the existing map first, so an earlier bundle is not erased');
     });
-    it('15.5 - the client-served routing blob strips `public` too', function () {
-        assert.ok(SERVER_SRC.indexOf('delete cleanParam.public;') > -1, '`public` is stripped');
-        // The #COMPLY1 destructuring line must stay byte-identical — §10 pins it.
-        // (#B212 — the strip lives in core/server.js's buildClientRoutingAssets now.)
-        assert.ok(SERVER_SRC.indexOf('const { requireAuth, roles, policy, ...cleanParam } = clean.param;') > -1,
-            'the pinned #COMPLY1 strip line is untouched');
+    it('15.5 - the client-served routing blob withholds `public` too (structural under the allowlist)', function () {
+        // Slice 3 (#SPA1): the builder is an ALLOWLIST (§10 pins it), so
+        // `public` — like every authorization key — is withheld by not being
+        // named. The old `delete cleanParam.public;` denylist statement is
+        // gone WITH the denylist; assert the withholding structurally instead:
+        // the roster names no authorization key, and the param filter ships
+        // URL-placeholder bindings only.
+        var fnIdx = SERVER_SRC.indexOf('function buildClientRoutingAssets(');
+        assert.ok(fnIdx > -1, 'the shared builder (#B212)');
+        var rosterIdx = SERVER_SRC.indexOf("['url', 'method', 'webroot', 'bundle', 'hostname', 'host', 'negotiate']", fnIdx);
+        assert.ok(rosterIdx > fnIdx, 'the allowlist roster');
+        // the param cut keeps only `:placeholder`-named binding entries — no
+        // dispatch or authorization key can ride through it
+        assert.ok(SERVER_SRC.indexOf("String(_src.url || '').match(/\\:[-_a-zA-Z0-9]+/g)", fnIdx) > fnIdx,
+            'the URL-binding param filter');
     });
     it('15.6 - the shipped settings template ships the mode OFF', function () {
         assert.match(SETTINGS_SRC, /"requireAuthByDefault":\s*false/, 'fail-closed default in the template');

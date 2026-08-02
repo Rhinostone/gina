@@ -6619,7 +6619,12 @@ function Routing() {
         route.toUrl = function (ignoreWebRoot) {
 
             var urlProps = null;
-            if ( /^redirect$/i.test(this.param.control) ) {
+            // Slice 3 (#SPA1) — the client-served map ships the derived boolean
+            // `isRedirect` instead of `param.control` (a dispatch key that stays
+            // server-side); server-side routes still carry the full `param`, so
+            // both forms are honoured. The `this.param &&` guard also keeps a
+            // param-less route from throwing here.
+            if ( this.isRedirect === true || /^redirect$/i.test(this.param && this.param.control) ) {
                 urlProps = self.getUrlProps(this.bundle, (env||GINA_ENV));
             }
 
@@ -24756,6 +24761,16 @@ function getDependencies(gina, cb) {
 
         try {
             response    = await fetch(filenameOrUrl);
+            // #B213 — `fetch` resolves on HTTP error statuses (it only rejects on
+            // network failure), and the framework's own 404 page is valid JSON —
+            // so without this guard a 404/5xx body (an engine missing the asset,
+            // a restart window) was silently installed AS the routing table and
+            // every client-side getRoute/toUrl failed from there. Throwing here
+            // routes the failure into the existing catch, which dispatches the
+            // deps.loaded error path instead of poisoning gina.config.
+            if ( !response.ok ) {
+                throw new Error('[ROUTING] HTTP '+ response.status +' fetching '+ filenameOrUrl);
+            }
             result      = await response.text();
             if ( typeof(gina) == 'undefined' ) {
                 gina = {}

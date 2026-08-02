@@ -12,20 +12,23 @@ var src; // lazily loaded — avoids repeated readFileSync calls
 describe('01 - V8 arm64 regression: const not var for object rest destructuring', function() {
 
     it('source uses const (not var) for routing object rest destructuring', function() {
-        // #B212 — the routing rest-destructuring moved to core/server.js's
-        // buildClientRoutingAssets (built once, both engines); the const-not-var
-        // V8 arm64 guard follows the line to its new home. The negative half is
-        // asserted on BOTH files so a revert cannot reappear in either.
+        // #B212 moved the map build to core/server.js's buildClientRoutingAssets;
+        // Slice 3 (#SPA1) then rebuilt the full-map cut as an allowlist, so the
+        // `{ _comment, middleware, ...clean }` rest-destructuring is gone with the
+        // denylist. The const-not-var V8 arm64 guard re-anchors on the SURVIVING
+        // rest-destructuring — the #B66 host/hostname drop, kept verbatim in the
+        // builder. The negative half is asserted on BOTH files so a `var` rest
+        // form cannot reappear in either.
         var serverSrc = fs.readFileSync(path.join(require('../fw'), 'core/server.js'), 'utf8');
         var isaacSrc  = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            /const\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(serverSrc),
-            'expected `const { _comment, middleware, ...clean }` — was changed from `var` to fix V8 arm64 hang'
+            /const\s*\{\s*host\s*,\s*hostname\s*,\s*\.\.\.cleanStripped\s*\}/.test(serverSrc),
+            'expected `const { host, hostname, ...cleanStripped }` — the rest-destructuring stays const (V8 arm64 hang guard)'
         );
         assert.ok(
-            !/var\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(serverSrc)
-            && !/var\s*\{\s*_comment\s*,\s*middleware\s*,\s*\.\.\.clean\s*\}/.test(isaacSrc),
-            '`var { _comment, middleware, ...clean }` must not appear — causes V8 hang on arm64 Node 25'
+            !/var\s*\{\s*[^}]*\.\.\.[a-zA-Z]/.test(serverSrc)
+            && !/var\s*\{\s*[^}]*\.\.\.[a-zA-Z]/.test(isaacSrc),
+            'a `var { ..., ...rest }` object rest-destructuring must not appear — causes V8 hang on arm64 Node 25'
         );
     });
 
@@ -2999,11 +3002,11 @@ describe('16 - #B66 host-stripped routing.json for proxied clients source struct
             'the proxied branch must select the stripped asset');
     });
 
-    it('marks the proxied (stripped) response private, RAW (full) public', function() {
+    it('marks the proxied (stripped) response private, RAW (full) public — revalidating since Slice 3 (#SPA1)', function() {
         var s = getSrc();
         assert.ok(
-            s.indexOf("response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, max-age=86400' : 'public, max-age=86400');") > -1,
-            'expected a private-if-proxied / public-if-raw cache-control branch (a shared cache must not cross-serve variants)');
+            s.indexOf("response.setHeader('cache-control', ( request._ginaIsProxyHost === true ) ? 'private, no-cache' : 'public, no-cache');") > -1,
+            'expected a private-if-proxied / public-if-raw cache-control branch with no-cache (ETag revalidation — the 24h staleness window is closed)');
     });
 
 });
@@ -3022,7 +3025,8 @@ describe('16b - #B66 host-stripped routing.json: pure-logic replica', function()
         return a;
     }
     function cacheControl(isProxy) {
-        return (isProxy === true) ? 'private, max-age=86400' : 'public, max-age=86400';
+        // Slice 3 (#SPA1): no-cache + per-variant ETag — revalidate each boot
+        return (isProxy === true) ? 'private, no-cache' : 'public, no-cache';
     }
 
     // neutral fixture route (internal host+port), framework-generic
@@ -3063,9 +3067,9 @@ describe('16b - #B66 host-stripped routing.json: pure-logic replica', function()
         assert.equal(selectAsset(true, full, undefined).file, 'routing.json');
     });
 
-    it('cache-control: private when proxied, public when raw', function() {
-        assert.equal(cacheControl(true),  'private, max-age=86400');
-        assert.equal(cacheControl(false), 'public, max-age=86400');
+    it('cache-control: private when proxied, public when raw (no-cache — Slice 3 revalidation)', function() {
+        assert.equal(cacheControl(true),  'private, no-cache');
+        assert.equal(cacheControl(false), 'public, no-cache');
     });
 
     it('SUBTRACT: without the strip, the internal host survives in the served blob (the leak)', function() {

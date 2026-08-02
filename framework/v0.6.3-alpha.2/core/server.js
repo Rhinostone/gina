@@ -452,41 +452,83 @@ function _readInstrumentBody(req, cb) {
  *
  * Runs once at boot over a bounded route table — not a hot path.
  *
+ * Slice 3 (#SPA1) rebuilt the cut as an ALLOWLIST. The previous shape was a
+ * destructuring-rest DENYLIST (strip `_comment`/`middleware`, then the
+ * #COMPLY1 `requireAuth`/`roles`/`policy` + #COMPLY10 `public` authorization
+ * keys) — but `schema/routing.json` is `additionalProperties: true` at both
+ * the route and `param` levels, so under a denylist every FUTURE key shipped
+ * to any anonymous browser by default; that is exactly how `csrfExempt`,
+ * `param.dto` and `queryTimeout` reached the wire. Under the allowlist the
+ * authorization strip is structural: a key that is not named simply never
+ * ships. The client contract kept here is the MEASURED reader set — client
+ * `getRoute`/`toUrl` read `url`/`webroot`/`bundle`/`hostname` (+ `host` on
+ * raw deployments), iterate `param` for URL-placeholder bindings, test
+ * `requirements` key-presence, and branch on the route being a redirect;
+ * `negotiate` is the content-negotiation capability flag the navigation
+ * layer needs. Everything else — dispatch keys (`param.control`/`file`/
+ * `path`/`title`/…), `cache`, `csrfExempt`, `scopes`, `namespace`,
+ * `middlewareIgnored`, `validator::` requirement bodies — is a server-side
+ * contract and stays home.
+ *
  * @private
  * @param {object} allRoutes - The boot-time global (all-bundles) route table (`options.conf.routing`)
  * @returns {{full: object, stripped: object}} The client-safe full map and the #B66 host-stripped variant (both fresh clones — the live config is never touched)
  */
 function buildClientRoutingAssets(allRoutes) {
-    // replaced: delete operator + for...in — destructuring rest builds clean objects (#P21, #P22)
-    var _routing = JSON.clone(allRoutes);
-    var _routingKeys = Object.keys(_routing);
+    var _all = JSON.clone(allRoutes);
+    var _routing = {};
+    // Route-level allowlist — the measured client contract (see the JSDoc above).
+    var _clientRouteKeys = ['url', 'method', 'webroot', 'bundle', 'hostname', 'host', 'negotiate'];
+    var _routingKeys = Object.keys(_all);
     for (var ri = 0; ri < _routingKeys.length; ++ri) {
-        const { _comment, middleware, ...clean } = _routing[_routingKeys[ri]];
-        // #COMPLY1 — the authorization keys are server-side contracts, stripped from
-        // the client-served map: `roles` (and later `policy`) name the bundle's
-        // authorization model — a disclosure to the browser — and `requireAuth`
-        // rides along for consistency. The browser bundle reads none of them
-        // (measured: zero readers in the client src AND in the built artifacts).
-        // `_routing` is a JSON.clone, so rebuilding `param` here can never touch the
-        // live config; the #B66 stripped variant below is cloned FROM this map, so
-        // it inherits the strip.
-        if ( clean.param && typeof(clean.param) == 'object' ) {
-            const { requireAuth, roles, policy, ...cleanParam } = clean.param;
-            // #COMPLY10 — `public` is an authorization key too: under deny-by-default
-            // the set of public routes IS the authentication surface, so serving the
-            // markers hands an anonymous client a free recon map of what it can reach.
-            // Stripped with `delete` rather than by joining the destructuring above,
-            // for two independent reasons: `public` is a strict-mode RESERVED WORD, so
-            // the bare binding form is a SyntaxError (only a renamed binding compiles);
-            // and a separate statement leaves the destructuring line byte-identical to
-            // what the #COMPLY1 tests pin. The `#P21`/`#P22` note at the top of this
-            // loop moved AWAY from `delete` for V8 hidden-class reasons on hot paths —
-            // this loop runs once at boot over a bounded route table, so that rationale
-            // does not apply here.
-            delete cleanParam.public;
-            clean.param = cleanParam;
+        var _src   = _all[_routingKeys[ri]];
+        var _clean = {};
+        if ( !_src || typeof(_src) != 'object' ) {
+            _routing[_routingKeys[ri]] = _src;
+            continue;
         }
-        _routing[_routingKeys[ri]] = clean;
+        for (var ki = 0; ki < _clientRouteKeys.length; ++ki) {
+            if ( typeof(_src[_clientRouteKeys[ki]]) != 'undefined' ) {
+                _clean[_clientRouteKeys[ki]] = _src[_clientRouteKeys[ki]];
+            }
+        }
+        // `requirements` — plain-regex entries only: the client toUrl reads KEY
+        // PRESENCE (to keep a declared URL variable out of the query string);
+        // a `validator::{...}` body is a server-side validation spec and a
+        // disclosure of the bundle's validation model.
+        if ( _src.requirements && typeof(_src.requirements) == 'object' ) {
+            var _cleanReq = {};
+            var _reqKeys = Object.keys(_src.requirements);
+            for (var qi = 0; qi < _reqKeys.length; ++qi) {
+                if ( !/^validator\:\:/i.test(String(_src.requirements[_reqKeys[qi]])) ) {
+                    _cleanReq[_reqKeys[qi]] = _src.requirements[_reqKeys[qi]];
+                }
+            }
+            _clean.requirements = _cleanReq;
+        }
+        // `param` — URL-placeholder BINDINGS only. A param entry is a binding
+        // iff the route's own url declares `:key` (the client getRoute uses the
+        // binding regex to split URL variables from appended query params);
+        // every other param key is dispatch/authorization vocabulary
+        // (`control`, `file`, `path`, `title`, the #COMPLY1/#COMPLY10 keys, …)
+        // and is a server-side contract. The one dispatch FACT the client
+        // toUrl branches on — "is this a redirect route" — ships as the
+        // derived boolean `isRedirect` instead of the `control` value.
+        if ( _src.param && typeof(_src.param) == 'object' ) {
+            var _bindings = {};
+            var _urlVars  = String(_src.url || '').match(/\:[-_a-zA-Z0-9]+/g) || [];
+            for (var vi = 0; vi < _urlVars.length; ++vi) {
+                var _varName = _urlVars[vi].substr(1);
+                if ( typeof(_src.param[_varName]) != 'undefined' ) {
+                    _bindings[_varName] = _src.param[_varName];
+                }
+            }
+            _clean.param = _bindings;
+            if ( typeof(_src.param.control) == 'string' && /^redirect$/i.test(_src.param.control) ) {
+                _clean.isRedirect = true;
+            }
+        }
+        _routing[_routingKeys[ri]] = _clean;
 
         // reverseRouting is done on the frontend side
 
@@ -830,6 +872,18 @@ function Server(options) {
                 full     : JSON.stringify(_clientRoutingAssets.full),
                 stripped : JSON.stringify(_clientRoutingAssets.stripped)
             };
+            // Slice 3 (#SPA1) — weak per-variant ETags, computed once: the maps are
+            // boot-static, and the serve paths answer If-None-Match with a 304 under
+            // `no-cache` (revalidate) semantics. This closes the staleness window the
+            // old `max-age=86400` left open — a returning browser could dispatch on a
+            // day-old table for up to 24h after a restart. Weak tags (`W/"…"`) so ONE
+            // tag per variant covers isaac's content-encoded file representations too.
+            self._clientRoutingAssets.fullEtag =
+                'W/"' + crypto.createHash('sha1').update(self._clientRoutingAssets.full).digest('hex').substr(0, 16) + '"';
+            self._clientRoutingAssets.strippedEtag =
+                'W/"' + crypto.createHash('sha1').update(self._clientRoutingAssets.stripped).digest('hex').substr(0, 16) + '"';
+            serverOpt.clientRoutingAssets.fullEtag     = self._clientRoutingAssets.fullEtag;
+            serverOpt.clientRoutingAssets.strippedEtag = self._clientRoutingAssets.strippedEtag;
 
             Engine = require('./server.' + ((typeof (serverOpt.engine) != 'undefined' && serverOpt.engine != '') ? serverOpt.engine : 'express'));
             var engine = new Engine(serverOpt);
@@ -4162,14 +4216,26 @@ function Server(options) {
                         && process.gina._proxyRequireForwarded !== true )
                     || request.headers['x-forwarded-host']
                 ) ? true : false;
+                var _croutEtag = ( _croutProxied === true )
+                    ? self._clientRoutingAssets.strippedEtag
+                    : self._clientRoutingAssets.fullEtag;
                 response.setHeader('content-type', 'application/json; charset=utf8');
                 response.setHeader('vary', 'Origin');
                 // #B66 — a shared cache must not cross-serve the stripped (proxied) and
-                // full (raw) variants under the same URL; mark the proxied variant private.
-                response.setHeader('cache-control', ( _croutProxied === true ) ? 'private, max-age=86400' : 'public, max-age=86400');
+                // full (raw) variants under the same URL; mark the proxied variant
+                // private. Slice 3 (#SPA1): `no-cache` = revalidate-before-use — the
+                // per-variant weak ETag turns each page boot into one conditional GET
+                // (usually a 304), so a restart's new route table reaches returning
+                // browsers immediately instead of after a 24h max-age window.
+                response.setHeader('cache-control', ( _croutProxied === true ) ? 'private, no-cache' : 'public, no-cache');
                 response.setHeader('x-content-type-options', 'nosniff');
                 response.setHeader('x-frame-options', 'DENY');
                 response.setHeader('x-xss-protection', '1; mode=block');
+                response.setHeader('etag', _croutEtag);
+                if ( request.headers['if-none-match'] === _croutEtag ) {
+                    response.statusCode = 304;
+                    return response.end();
+                }
                 response.statusCode = 200;
                 return response.end( ( _croutProxied === true ) ? self._clientRoutingAssets.stripped : self._clientRoutingAssets.full );
             }

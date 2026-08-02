@@ -1228,7 +1228,12 @@ function Routing() {
         route.toUrl = function (ignoreWebRoot) {
 
             var urlProps = null;
-            if ( /^redirect$/i.test(this.param.control) ) {
+            // Slice 3 (#SPA1) — the client-served map ships the derived boolean
+            // `isRedirect` instead of `param.control` (a dispatch key that stays
+            // server-side); server-side routes still carry the full `param`, so
+            // both forms are honoured. The `this.param &&` guard also keeps a
+            // param-less route from throwing here.
+            if ( this.isRedirect === true || /^redirect$/i.test(this.param && this.param.control) ) {
                 urlProps = self.getUrlProps(this.bundle, (env||GINA_ENV));
             }
 
