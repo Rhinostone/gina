@@ -877,8 +877,8 @@ describe('11 - layout cache atomic temp+rename (race fix, 2026-05-11)', function
     it('post-asset-injection write: writeFile target is a temp file, then rename onto newLayoutFilename', function() {
         var src = fs.readFileSync(SOURCE, 'utf8');
         assert.ok(
-            /await\s+fs\.promises\.writeFile\(\s*_layoutTmpAssets\s*,\s*layout\s*\)/.test(src),
-            'expected `await fs.promises.writeFile(_layoutTmpAssets, layout)` at the post-asset write'
+            /await\s+fs\.promises\.writeFile\(\s*_layoutTmpAssets\s*,\s*_persistedLayout\s*\)/.test(src),
+            'expected `await fs.promises.writeFile(_layoutTmpAssets, _persistedLayout)` at the post-asset write (#SPA1 fragment composition)'
         );
         assert.ok(
             /await\s+fs\.promises\.rename\(\s*_layoutTmpAssets\s*,\s*newLayoutFilename\s*\)/.test(src),

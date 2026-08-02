@@ -304,6 +304,10 @@ module.exports = async function render(userData, displayInspector, errOptions, d
         , plugin            = null
         // By default
         , isWithoutLayout   = (localOptions.isWithoutLayout) ? true : false
+        // #SPA1 fragment-parent roster — populated only for a layoutless render
+        // of an extends template (derived in the extends block, composed into
+        // the fragments/ cache parent at the priming + post-asset writes).
+        , fragmentBlockRoster = null
         , stream            = null
     ;
 
@@ -481,7 +485,14 @@ module.exports = async function render(userData, displayInspector, errOptions, d
     }
     pageContentObj = null;
 
-    cacheKey = 'swig:' + localOptions.bundle + subFolder +'/'+ data.page.view.file;
+    // #SPA1 — the compiled-template cache is shape-dimensioned: a layoutless
+    // (fragment) compile of an extends template resolves against a block-roster
+    // parent instead of the real layout, so the two shapes must never share a
+    // slot (first-shape-wins collision otherwise). isWithoutLayout is final
+    // here: the implicit extends-less auto-set runs above, and the later
+    // layout-not-found fallbacks only fire for templates that never reach this
+    // cache (its write requires an extends directive).
+    cacheKey = 'swig:' + localOptions.bundle + subFolder +'/'+ data.page.view.file + ( (isWithoutLayout) ? ':fragment' : '' );
     // Retrieve layoutPath from content
     if (
         hasLayoutInPath
@@ -498,7 +509,32 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 layoutPath = extendFound[0].match(/(\"|\')(.*)(\"|\')/)[0].replace(/(\"|\')/g, '');
 
                 // adding layout
-                var newLayoutPath = 'swig' + subFolder  +'/'+ layoutPath;
+                // #SPA1 — a layoutless (fragment) render of an extends template
+                // must NOT target the shared full-page cached layout: the
+                // post-asset persist below stores THIS render's assembled
+                // `layout`, which for a fragment is the (empty) nolayout shell —
+                // written over the shared file it blanks the parent every
+                // full-page render compiles from, so child blocks extend a
+                // block-less parent and are discarded. Fragments get their own
+                // `fragments/` namespace, primed from the child's OWN block
+                // roster so its blocks keep placeholders to fill.
+                if ( isWithoutLayout ) {
+                    var _fragBlockRe    = /\{\%-?\s*block\s+([A-Za-z0-9_-]+)/g;
+                    var _fragBlockNames = [];
+                    var _fragMatch      = null;
+                    while ( (_fragMatch = _fragBlockRe.exec(_templateContent)) !== null ) {
+                        if ( _fragBlockNames.indexOf(_fragMatch[1]) < 0 ) {
+                            _fragBlockNames.push(_fragMatch[1]);
+                        }
+                    }
+                    var _fragLines = [];
+                    for (var _fragI = 0, _fragLen = _fragBlockNames.length; _fragI < _fragLen; ++_fragI) {
+                        _fragLines.push('{% block '+ _fragBlockNames[_fragI] +' %}{% endblock %}');
+                    }
+                    fragmentBlockRoster = _fragLines.join('\n');
+                    _fragBlockRe = null; _fragBlockNames = null; _fragMatch = null; _fragLines = null;
+                }
+                var newLayoutPath = 'swig' + subFolder + ( (isWithoutLayout) ? '/fragments/' : '/' ) + layoutPath;
                 newLayoutFilename = _(cachePath +'/'+ localOptions.bundle +'/'+ newLayoutPath, true);
 
                 // In dev/cacheless mode we always refresh the cached layout;
@@ -548,7 +584,16 @@ module.exports = async function render(userData, displayInspector, errOptions, d
 
                     // replaced: openSync/readFileSync/writeSync/closeSync — async read + write (#P29, #P31)
                     // buffer = Buffer.from( fs.readFileSync(localOptions.template.html + '/'+ layoutPath) ); // replaced: CVE-2023-25345
-                    buffer = await fs.promises.readFile(localOptions.template.html + '/'+ layoutPath);
+                    // #SPA1 — the fragments/ parent primes from the child's block
+                    // roster, never from the original layout file (the roster is
+                    // what lets the child's blocks render; the shell tail is
+                    // appended by the post-asset persist further below).
+                    if ( isWithoutLayout && fragmentBlockRoster !== null ) {
+                        buffer = fragmentBlockRoster;
+                    }
+                    else {
+                        buffer = await fs.promises.readFile(localOptions.template.html + '/'+ layoutPath);
+                    }
                     // Atomic write: temp file + rename. rename(2) on POSIX is
                     // atomic on the same filesystem, so concurrent readers at
                     // the post-priming readFile below never see the target
@@ -1758,10 +1803,20 @@ module.exports = async function render(userData, displayInspector, errOptions, d
                 // a temp file and renaming onto target is atomic on POSIX, so
                 // readers always see either the prior content or the new
                 // content.
+                // #SPA1 — a fragment render persists the child's block roster
+                // ahead of the assembled shell: the roster keeps placeholders
+                // for the child's blocks, and the shell tail (xhr-inputs /
+                // scripts) still rides the fragment response after them. The
+                // write lands in the fragments/ namespace, so the full-page
+                // cached layout is never touched by a fragment render.
+                var _persistedLayout = ( isWithoutLayout && fragmentBlockRoster !== null )
+                    ? fragmentBlockRoster + '\n' + layout
+                    : layout;
                 var _layoutTmpAssets = newLayoutFilename + '.tmp.' + process.pid + '.' + Date.now() + '.' + Math.random().toString(36).slice(2);
-                await fs.promises.writeFile(_layoutTmpAssets, layout);
+                await fs.promises.writeFile(_layoutTmpAssets, _persistedLayout);
                 await fs.promises.rename(_layoutTmpAssets, newLayoutFilename);
                 _layoutTmpAssets = null;
+                _persistedLayout = null;
             }
 
             // Last compilation before rendering
