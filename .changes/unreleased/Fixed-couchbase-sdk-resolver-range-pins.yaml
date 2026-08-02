@@ -1,0 +1,3 @@
+kind: Fixed
+body: 'The couchbase connector and session-store SDK-major resolvers now derive the SDK major as the dependency pin''s first integer: range pins like `~4.5.0` or `>=4.5` previously mangled to `~4`/`>=4`, slipped past the SDK-v2 floor and refused to boot with a misdirecting "supported couchbase SDK majors are 3 and 4" error. A digit-less pin (`*`, `latest`) now refuses with an error naming the pin, and a project package.json without a `dependencies` key no longer crashes the resolver.'
+time: 2026-08-02T03:18:27+01:00
